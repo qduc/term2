@@ -303,7 +303,9 @@ it.sequential('app shortcuts remain active when owner is input', async () => {
 });
 
 it.sequential('rejects exactly once and bridges an immediate rejection reason before the editor is ready', async () => {
-  await renderHarness({ inputOwner: { kind: 'approval' } });
+  // The composition flag is already true when Enter arrives: handleReject
+  // flipped it on the `n` keypress, before the reason is submitted.
+  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForRejectionReason: true });
 
   await fireInput('nneeds review', {});
   await fireInput('', { return: true });
@@ -312,6 +314,33 @@ it.sequential('rejects exactly once and bridges an immediate rejection reason be
   expect(mocks.replaceInput).toHaveBeenCalledWith('needs review');
   expect(mocks.submitRejectionReason).toHaveBeenCalledTimes(1);
   expect(mocks.submitRejectionReason).toHaveBeenCalledWith('needs review');
+});
+
+it.sequential('drops an orphaned bridged reason so y approves the replacement approval head', async () => {
+  // The approval the user pressed n on settled or was replaced while they were
+  // typing (head change retires the composition, so the flag is false again).
+  // The stale bridge must not swallow y — the replacement approval owns input.
+  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
+
+  await fireInput('nunsafe change', {});
+  await fireInput('y', {});
+
+  expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+  expect(mocks.onReject).toHaveBeenCalledTimes(1);
+  expect(mocks.submitRejectionReason).not.toHaveBeenCalled();
+});
+
+it.sequential('does not submit an orphaned bridged reason to a replacement approval head on Enter', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
+
+  await fireInput('nunsafe change', {});
+  await fireInput('', { return: true });
+
+  expect(mocks.submitRejectionReason).not.toHaveBeenCalled();
+  expect(mocks.onApprove).not.toHaveBeenCalled();
+  // The stale reason is dropped from the composer rather than left to leak
+  // into a later turn or another composition.
+  expect(mocks.replaceInput).toHaveBeenLastCalledWith('');
 });
 
 it.sequential('does not let the rejection-reason bridge consume manager keys', async () => {

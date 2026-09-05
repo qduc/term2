@@ -24,6 +24,7 @@ export type DiskModelCacheEntry = {
 };
 
 export const MODEL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+export const MODEL_CACHE_STALE_GRACE_MS = 24 * 60 * 60 * 1000; // 24 hours fallback ceiling for last-known-good
 
 export type FetchModelsDeps = {
   settingsService: ISettingsService;
@@ -36,7 +37,12 @@ export type FetchModelsDeps = {
 
 type FetchFn = typeof fetch;
 
-const cache = new Map<string, ModelInfo[]>();
+type MemoryCacheEntry = {
+  models: ModelInfo[];
+  timestamp: number;
+};
+
+const cache = new Map<string, MemoryCacheEntry>();
 
 let testCacheDir: string | null = null;
 let testClock: (() => number) | null = null;
@@ -61,6 +67,18 @@ export function getModelCacheDir(customDir?: string): string {
 export function getModelCacheFilePath(provider: string, customDir?: string): string {
   const safeName = provider.replace(/[^a-zA-Z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16).padStart(2, '0')}_`);
   return path.join(getModelCacheDir(customDir), `${safeName}.json`);
+}
+
+/**
+ * Determines whether candidate models list represents a strict subset of previous models.
+ * An empty list or a list with strictly fewer models containing only IDs from previous is degraded.
+ */
+export function isStrictSubsetModels(candidates: ModelInfo[], previous: ModelInfo[]): boolean {
+  if (previous.length === 0) return false;
+  if (candidates.length === 0) return true;
+  if (candidates.length >= previous.length) return false;
+  const previousIds = new Set(previous.map((m) => m.id));
+  return candidates.every((m) => previousIds.has(m.id));
 }
 
 function readDiskCache(
@@ -95,7 +113,7 @@ function readDiskCache(
     if (age < 0 || age >= ttlMs) {
       return null;
     }
-    if (!Array.isArray(parsed.models)) {
+    if (!Array.isArray(parsed.models) || parsed.models.length === 0) {
       return null;
     }
     for (const m of parsed.models) {
@@ -117,6 +135,9 @@ function writeDiskCache(
   nowFn?: () => number,
   loggingService?: ILoggingService,
 ): void {
+  if (!models || models.length === 0) {
+    return;
+  }
   const dir = getModelCacheDir(cacheDir);
   const targetFile = getModelCacheFilePath(provider, cacheDir);
   const baseName = path.basename(targetFile, '.json');
@@ -166,20 +187,30 @@ export async function fetchModels(
   const { settingsService, loggingService } = deps;
   const provider = providerOverride || settingsService.get('agent.provider');
   const cacheKey = provider;
+  const now = deps.now ?? testClock ?? Date.now;
+  const ttlMs = deps.ttlMs ?? MODEL_CACHE_TTL_MS;
 
   // 1. In-memory cache hit
-  if (cache.has(cacheKey)) {
-    return cache.get(cacheKey) as ModelInfo[];
+  const memCached = cache.get(cacheKey);
+  if (memCached) {
+    const age = now() - memCached.timestamp;
+    if (age >= 0 && age < ttlMs && memCached.models.length > 0) {
+      return memCached.models;
+    }
+    cache.delete(cacheKey);
   }
 
   // 2. Disk cache hit
   const diskCached = readDiskCache(provider, deps.cacheDir, deps.now, deps.ttlMs, loggingService);
-  if (diskCached) {
-    cache.set(cacheKey, diskCached);
+  if (diskCached && diskCached.length > 0) {
+    cache.set(cacheKey, { models: diskCached, timestamp: now() });
     return diskCached;
   }
 
-  // 3. Cache miss: fetch from provider
+  // 3. Cache miss: read previous disk cache within fallback grace period as last-known-good
+  const previous = readDiskCache(provider, deps.cacheDir, deps.now, MODEL_CACHE_STALE_GRACE_MS, loggingService);
+
+  const startTime = now();
   try {
     const providerDef = getProvider(provider);
     if (!providerDef) {
@@ -190,14 +221,72 @@ export async function fetchModels(
       { settingsService, loggingService, signal: deps.signal },
       fetchImpl,
     );
-    const models: ModelInfo[] = rawModels.map((m) => ({
+    let models: ModelInfo[] = rawModels.map((m) => ({
       ...m,
       provider,
       contextWindow: getModelContextWindow(provider, m.id),
     }));
 
-    cache.set(cacheKey, models);
-    writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
+    let isDegraded = previous !== null && previous.length > 0 && isStrictSubsetModels(models, previous);
+
+    if (isDegraded) {
+      loggingService.warn('Suspect degraded model list received from provider; attempting immediate retry', {
+        provider,
+        receivedCount: models.length,
+        previousCount: previous!.length,
+      });
+      try {
+        const retryRaw = await providerDef.fetchModels(
+          { settingsService, loggingService, signal: deps.signal },
+          fetchImpl,
+        );
+        const retryModels: ModelInfo[] = retryRaw.map((m) => ({
+          ...m,
+          provider,
+          contextWindow: getModelContextWindow(provider, m.id),
+        }));
+        if (!isStrictSubsetModels(retryModels, previous!)) {
+          models = retryModels;
+          isDegraded = false;
+          loggingService.info?.('Model listing recovered on retry', {
+            provider,
+            recoveredCount: models.length,
+          });
+        }
+      } catch (retryError) {
+        loggingService.warn('Model listing retry failed', {
+          provider,
+          error: String(retryError),
+        });
+      }
+    }
+
+    if (isDegraded && previous && previous.length > 0) {
+      loggingService.warn('Provider returned degraded model list; preserving last-known-good catalog', {
+        provider,
+        receivedCount: models.length,
+        previousCount: previous.length,
+      });
+      // Do not write degraded models to disk cache.
+      // Retain expired disk cache file so subsequent sessions retry upstream.
+      cache.set(cacheKey, { models: previous, timestamp: now() });
+      return previous;
+    }
+
+    if (models.length > 0) {
+      cache.set(cacheKey, { models, timestamp: now() });
+      writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
+    } else {
+      loggingService.warn('Provider returned empty model catalog; skipping disk cache write', { provider });
+    }
+
+    loggingService.debug?.('Fetched models from provider', {
+      provider,
+      count: models.length,
+      durationMs: now() - startTime,
+      degraded: isDegraded,
+    });
+
     return models;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -260,9 +349,9 @@ export function clearModelCache(provider?: string, opts?: { cacheDir?: string })
 }
 
 export function getModelDefaultReasoningLevel(provider: string, modelId: string): string | undefined {
-  const models = cache.get(provider);
-  if (!models) return undefined;
-  const model = models.find((m) => m.id === modelId);
+  const entry = cache.get(provider);
+  if (!entry) return undefined;
+  const model = entry.models.find((m) => m.id === modelId);
   return model?.default_reasoning_level;
 }
 

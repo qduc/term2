@@ -72,3 +72,19 @@ describe('renderToolsHeader', () => {
     expect(header([])).toBe('');
   });
 });
+
+describe('renderToolsHeader scriptedReturnShape', () => {
+  it('renders a declared return shape for an essential tool', () => {
+    const text = header([tool({ name: 'read_file', scriptedReturnShape: '{ content: string, truncated: boolean }' })]);
+
+    expect(text).toContain('- tools.read_file()');
+    expect(text).toContain('returns { content: string, truncated: boolean }');
+  });
+
+  it('keeps non-essential tools name-only even when they declare a shape', () => {
+    const text = header([tool({ name: 'session_list', scriptedReturnShape: '{ sessions: object[] }' })]);
+
+    expect(text).toContain('- tools.session_list');
+    expect(text).not.toContain('returns { sessions: object[] }');
+  });
+});

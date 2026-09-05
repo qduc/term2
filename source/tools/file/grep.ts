@@ -209,6 +209,8 @@ export const createGrepToolDefinition = (
   return {
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
+    scriptedReturnShape:
+      'string: newline-delimited "path:line: text" match lines; "No matches found." when none; a trailing "Note:" line when the result was capped',
     parameters: searchParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,

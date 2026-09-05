@@ -8,6 +8,7 @@ import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-appr
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolRegistry } from '../../types.js';
 import { createFindFilesToolDefinition } from '../../file/glob.js';
+import { createSessionBrowserToolDefinitions } from '../../session-browser/session-browser-tools.js';
 import { trimToolOutput } from '../../../utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../../../utils/output/bound-tool-result.js';
 
@@ -137,4 +138,99 @@ describe('run_code -> grep scripted cap, end to end', () => {
       await fs.rm(dir, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe('run_code -> session tools return structured values on the scripted path', () => {
+  const browserEnvelope = {
+    sessions: [
+      {
+        id: 'abc123',
+        shortRef: 'abc123',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        firstUserMessage: 'first',
+        messageCount: 2,
+      },
+    ],
+    scope: 'project',
+    total: 1,
+    omitted: 0,
+    unavailable: 0,
+    charsUsed: 200,
+  };
+  const browser = {
+    list: () => browserEnvelope,
+    search: () => ({
+      results: [],
+      scope: 'project',
+      total: 0,
+      omitted: 0,
+      unavailable: 0,
+      skippedMessageCount: 0,
+      charsUsed: 100,
+    }),
+    read: () => ({
+      scope: 'project',
+      session: { id: 'abc123' },
+      items: [],
+      total: 0,
+      omitted: 0,
+      skippedMessageCount: 0,
+      charsUsed: 120,
+    }),
+  };
+
+  const buildRunCode = () => {
+    const sessionTools = createSessionBrowserToolDefinitions(browser as never);
+    const registry = sessionTools as ToolRegistry;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    for (const tool of sessionTools) {
+      approvalPolicyRegistry.register({
+        toolName: tool.name,
+        parameters: tool.parameters,
+        needsApproval: tool.needsApproval,
+      });
+    }
+    const runCode = createRunCodeToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      getToolRegistry: () => registry,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry,
+    });
+    return { runCode, registry };
+  };
+
+  it('delivers envelope fields to the script, not a JSON string it must parse', async () => {
+    const { runCode } = buildRunCode();
+    const output = String(
+      await runCode.execute({
+        code: `const r = await tools.session_list({ limit: 5 });
+               return {
+                 isString: typeof r === 'string',
+                 keys: r && typeof r === 'object' ? Object.keys(r).sort() : null,
+                 firstSessionId: r.sessions?.[0]?.id ?? null,
+                 total: r.total,
+               };`,
+        timeout_ms: 60_000,
+      } as never),
+    );
+
+    expect(output).not.toContain('Script failed');
+    expect(output).toContain('"isString":false');
+    expect(output).toContain('"firstSessionId":"abc123"');
+    expect(output).toContain('"total":1');
+  }, 30_000);
+
+  it('keeps the direct-call output format a serialized JSON string', async () => {
+    const { registry } = buildRunCode();
+    const list = registry.find((tool) => tool.name === 'session_list')!;
+    const direct = String(await list.execute({ limit: 5 }, {}, undefined));
+    expect(JSON.parse(direct)).toEqual(browserEnvelope);
+  });
 });

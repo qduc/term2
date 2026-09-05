@@ -399,6 +399,8 @@ export function createBackgroundShellJobToolDefinitions(
   const definitions: BackgroundShellJobToolDefinitions = {
     get: {
       name: 'get_shell_job',
+      scriptedReturnShape:
+        'JSON string (JSON.parse first): { jobId, status: job lifecycle | "background_job_active" | "not_found", command?, output?, tail?, error?, message? }',
       description:
         'Get the non-blocking status and bounded output of a background shell job. Do not use this to poll a running job; completion is delivered automatically.',
       parameters: getBackgroundShellJobParameters,
@@ -414,6 +416,8 @@ export function createBackgroundShellJobToolDefinitions(
     },
     cancel: {
       name: 'cancel_shell_job',
+      scriptedReturnShape:
+        'JSON string (JSON.parse first): { jobId, status: job lifecycle | "not_found", command?, output?, error? }',
       description: 'Request cancellation of a running background shell job without waiting for it to exit.',
       parameters: getBackgroundShellJobParameters,
       needsApproval: () => false,
@@ -431,6 +435,8 @@ export function createBackgroundShellJobToolDefinitions(
   if (output) {
     definitions.monitor = {
       name: 'monitor_shell_job',
+      scriptedReturnShape:
+        'JSON string (JSON.parse first): { watchId, jobId, status: "monitoring"|"not_found"|"error", error? } — stop it with tools.cancel_shell_monitor({ watch_id })',
       description:
         "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; inside run_code, stop the watch with tools.cancel_shell_monitor(...). Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
       parameters: monitorShellJobParameters,
@@ -471,6 +477,7 @@ export function createBackgroundShellJobToolDefinitions(
     };
     definitions.cancelMonitor = {
       name: 'cancel_shell_monitor',
+      scriptedReturnShape: 'JSON string (JSON.parse first): { watchId, status: "cancelled"|"not_found" }',
       description: 'Stop a shell monitor watch so it stops delivering shell_output notifications.',
       parameters: cancelShellMonitorParameters,
       needsApproval: () => false,

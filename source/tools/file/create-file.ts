@@ -107,6 +107,8 @@ export function createCreateFileToolDefinition(deps: {
   return {
     name: TOOL_NAME_CREATE_FILE,
     description: CREATE_FILE_DESCRIPTION,
+    scriptedReturnShape:
+      'string status: "Created <path>" | "Overwrote <path>" on success; "Error: \u2026" on failure (approval denials reject instead)',
     effect: 'mutating',
     canRequireApproval: true,
     parameters: createFileParametersSchema,

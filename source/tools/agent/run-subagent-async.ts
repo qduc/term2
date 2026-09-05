@@ -253,6 +253,8 @@ export function createGetSubagentResultToolDefinition(
 ): ToolDefinition<typeof getSubagentResultSchema> {
   return {
     name: 'get_subagent_result',
+    scriptedReturnShape:
+      'text report (Status:/finalText/diff/validation lines) when the run settled; JSON string (JSON.parse first): { status: "background_run_active"|"background_run_waiting_for_answer"|"failed", ... } for unfinished or failed lookups',
     description:
       'Retrieve the final result of a background subagent run started with run_subagent using execution: "background". ' +
       'Provide the runId returned by that background launch. Active background runs are refused rather than awaited. ' +
@@ -407,6 +409,8 @@ export function createGetSubagentStatusToolDefinition(
 ): ToolDefinition<typeof getSubagentStatusSchema> {
   return {
     name: 'get_subagent_status',
+    scriptedReturnShape:
+      'text status lines when the run(s) exist; JSON string (JSON.parse first): { status: "failed", error: { code, message } } when the lookup itself errors',
     description:
       'Non-blocking status of one async subagent run (runId provided) or all runs (runId omitted). ' +
       'Use this to answer a mid-run "what is it doing" question without blocking your turn. ' +
@@ -496,6 +500,8 @@ export function createSendMessageToolDefinition(
 ): ToolDefinition<typeof sendMessageSchema> {
   return {
     name: 'send_message',
+    scriptedReturnShape:
+      'JSON string (JSON.parse first): { ok: true, runId, status, delivery } | { ok: false, code: "question_pending"|"mailbox_full"|\u2026, ... }',
     description:
       'Queue non-blocking steering for an active async execution run addressed by its active name or canonical runId; this does NOT wait for a result. ' +
       'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
@@ -517,6 +523,8 @@ export function createCancelRunToolDefinition(
 ): ToolDefinition<typeof cancelRunSchema> {
   return {
     name: 'cancel_run',
+    scriptedReturnShape:
+      'JSON string (JSON.parse first): { ok: true, runId, status: "cancelling" } | { ok: false, code: "not_active", target }',
     description:
       'Request non-blocking two-phase cancellation of an active async run by active name or canonical runId. This does NOT wait for the result. ' +
       'It returns cancelling immediately; the runner later settles through the normal completion path with truthful partial work, tool, diff, and validation evidence. ' +

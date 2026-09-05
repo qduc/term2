@@ -78,6 +78,8 @@ export const createWebFetchToolDefinition = (deps: {
   return {
     name: 'web_fetch',
     description: WEB_FETCH_DESCRIPTION,
+    scriptedReturnShape:
+      'string: "Title: \u2026\nURL: \u2026" plus page markdown and truncation/continuation notes; "Error: \u2026" on failure',
     parameters: webFetchSchema,
     parallelSafe: true,
     needsApproval: () => false,

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../types.js';
 import type { SessionBrowser } from '../../services/conversation/session-browser.js';
 import { boundedJsonFailure, fitsSerializedText } from '../../utils/output/bounded-json.js';
-import { resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
+import { isScriptedToolCall, resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
 import {
   getCallIdFromItem,
   getOutputText,
@@ -22,12 +22,14 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
       'List prior locally persisted sessions for the current project. `total` is the number of browsable sessions in scope; `omitted` counts list entries dropped only because the output budget could not fit them (entries beyond `limit` are excluded by `total`).',
       z.object({ limit, maxChars }).strict(),
       (params) => browser.list(params),
+      '{ sessions: { id: string, shortRef: string, createdAt: string, updatedAt: string, firstUserMessage?: string, model?: string, provider?: string, messageCount: number }[], scope: string, total: number, omitted: number, unavailable: number, charsUsed: number } | { error: { code: string, message: string } }',
     ),
     definition(
       'session_search',
       "Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript. Each match's `updatedAt` is the session's last-write timestamp, not per-message time.",
       z.object({ query: z.string().refine((value) => /\S/.test(value)), limit, maxChars }).strict(),
       (params) => browser.search(params),
+      '{ results: { sessionId: string, shortRef: string, kind: string, messageIndex: number, snippet: { text: string, truncated: boolean }, updatedAt: string }[], scope: string, total: number, omitted: number, unavailable: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string } }',
     ),
     definition(
       'session_read',
@@ -44,6 +46,7 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
             });
         }),
       (params) => browser.read(params),
+      '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, text: string, textOffset: number, totalTextChars: number, complete: boolean }[], nextCursor?: string, total: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string } }',
     ),
   ];
 }
@@ -53,15 +56,23 @@ function definition<S extends z.ZodTypeAny>(
   description: string,
   parameters: S,
   execute: (params: z.infer<S>) => unknown,
+  scriptedReturnShape: string,
 ): ToolDefinition<S> {
   return {
     name,
     description,
     parameters,
+    scriptedReturnShape,
     preserveSerializedOutput: true,
     needsApproval: () => false,
-    execute: async (params) => {
-      const result = JSON.stringify(await execute(params));
+    execute: async (params, context) => {
+      const value = await execute(params);
+      // A scripted call receives the structured envelope directly; the
+      // serialized-JSON-string form exists to bound what enters model
+      // context, and a script would otherwise have to JSON.parse every
+      // result before reading its fields.
+      if (isScriptedToolCall(context)) return value;
+      const result = JSON.stringify(value);
       const budget = (params as { maxChars?: number }).maxChars ?? 12_000;
       return fitsSerializedText(result, { maxChars: budget, maxBytes: resolveToolResultMaxBytes() })
         ? result

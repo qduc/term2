@@ -283,6 +283,34 @@ it.sequential('tools without a post-execute policy return their ordinary result'
   expect(pending.snapshot().entries).toEqual([]);
 });
 
+it.sequential('delivers a preserveSerializedOutput tool raw structured value to a scripted call', async () => {
+  const serialized = JSON.stringify({ text: 'first\nsecond', charsUsed: 42 });
+  const structured = { text: 'first\nsecond', charsUsed: 42 };
+  const definition = createToolDefinition({
+    preserveSerializedOutput: true,
+    execute: async (_params: any, context: unknown) => {
+      const scripted =
+        !!context && typeof context === 'object' && (context as { scripted?: unknown }).scripted === true;
+      return scripted ? structured : serialized;
+    },
+  });
+  const { deps } = createDeps({ settingsValues: { 'shell.maxOutputChars': 10 } });
+  const tool = buildTestTool(definition, deps);
+
+  // Direct path: self-bounded serialized output survives untouched.
+  expect(await tool.invoke({}, JSON.stringify({ value: 'ignored' }), { toolCall: { callId: 'call-direct' } })).toBe(
+    serialized,
+  );
+  // Scripted path: the raw structured value reaches the script, so session
+  // tools returning envelopes on the scripted path are not flattened to
+  // "[object Object]" by the String() coercion.
+  expect(
+    await tool.invoke({ scripted: true }, JSON.stringify({ value: 'ignored' }), {
+      toolCall: { callId: 'call-scripted' },
+    }),
+  ).toEqual(structured);
+});
+
 it.sequential('preserves self-bounded serialized tool output unchanged', async () => {
   const serialized = JSON.stringify({ text: 'first\nsecond', charsUsed: 42 });
   const definition = createToolDefinition({

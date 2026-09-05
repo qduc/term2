@@ -21,6 +21,11 @@ import { createMockSettingsService } from '../../../services/settings/settings-s
 import { createCreateFileToolDefinition } from '../../file/create-file.js';
 import { createApplyPatchToolDefinition } from '../../file/apply-patch.js';
 import { createReadFileToolDefinition } from '../../file/read-file.js';
+import { getAgentDefinition } from '../../../agent.js';
+import { SessionBrowser } from '../../../services/conversation/session-browser.js';
+import { BackgroundShellRegistry } from '../../../services/shell/background-shell-registry.js';
+import { BackgroundShellOutputStore } from '../../../services/shell/background-shell-output-store.js';
+import { BackgroundShellWatches } from '../../../services/shell/background-shell-watches.js';
 import * as shellOutput from '../../../utils/shell/shell-output.js';
 import { ExecutionContext } from '../../../services/execution-context.js';
 
@@ -1464,3 +1469,126 @@ describe('run_code nested-call instrumentation', () => {
     expect(existsSync(logPath)).toBe(false);
   });
 });
+
+describe('scripted return contracts', () => {
+  it('includes a declared scriptedReturnShape in tools.describe output', async () => {
+    const output = await run(
+      [tool({ name: 'inspect', scriptedReturnShape: '{ ok: boolean, count?: number }' })],
+      'return await tools.describe("inspect");',
+    );
+
+    expect(output).toContain('"name":"inspect"');
+    expect(output).toContain('"scriptedReturnShape":"{ ok: boolean, count?: number }"');
+  });
+
+  it('declares a return shape for every tool every app registry can expose to a script', () => {
+    const registries = appRegistries();
+    expect(registries.length).toBeGreaterThan(0);
+
+    const missing = new Map<string, string[]>();
+    const anchors = new Map<string, string[]>();
+    for (const { label, tools } of registries) {
+      const scriptable = tools.filter((definition) => !RUN_CODE_PROHIBITED_TOOLS.has(definition.name));
+      expect(scriptable.length).toBeGreaterThan(0);
+      const withoutShape = scriptable
+        .filter((definition) => !definition.scriptedReturnShape || definition.scriptedReturnShape.trim() === '')
+        .map((definition) => definition.name)
+        .sort();
+      if (withoutShape.length > 0) missing.set(label, withoutShape);
+
+      // Anchor tools prove each registry exercises the guard where a regression
+      // would otherwise hide behind a differently composed tool set.
+      const anchorsForLabel: string[] = [];
+      if (label.includes('gpt-4o')) {
+        anchorsForLabel.push('search_replace', 'session_read', 'memory_retrieve');
+      } else if (label.includes('gpt-5.6')) {
+        anchorsForLabel.push('apply_patch');
+      }
+      for (const anchor of anchorsForLabel) {
+        if (!scriptable.some((definition) => definition.name === anchor)) {
+          anchors.set(label, [...(anchors.get(label) ?? []), `${anchor} (absent)`]);
+        }
+      }
+    }
+
+    const summary = [...missing].map(([label, names]) => `${label}: ${names.join(', ')}`).join('\n');
+    expect(summary).toBe('');
+    const anchorSummary = [...anchors].map(([label, names]) => `${label}: ${names.join(', ')}`).join('\n');
+    expect(anchorSummary).toBe('');
+  });
+});
+
+function appRegistries(): Array<{ label: string; tools: ToolRegistry }> {
+  const build = (model: string): ToolRegistry => {
+    const settingsService = createMockSettingsService({
+      'agent.model': model,
+      'agent.smartModel': model,
+      'app.searchViaShell': 'off',
+      enable_agent_workflow: true,
+      'sandbox.enabled': true,
+    });
+    const executionContext = new ExecutionContext();
+    const backgroundShellRegistry = new BackgroundShellRegistry();
+    const store = new BackgroundShellOutputStore();
+    const backgroundShellOutput = {
+      store,
+      watches: new BackgroundShellWatches({ store, scheduler: { schedule: () => 0, cancel: () => {} } }),
+    };
+    const skillsService = {
+      getAvailableSkillsForModel: () => [{ name: 'measurement', location: '/tmp/measurement', body: '' }],
+      getSkillCatalog: () => '',
+    } as any;
+    const sessionBrowser = new SessionBrowser(() => ({ projectPath: process.cwd() }));
+    const status = {
+      runId: 'measurement',
+      role: 'worker',
+      status: 'completed',
+      task: 'measurement',
+      taskPreview: 'measurement',
+      startedAt: 0,
+      elapsedMs: 0,
+      toolCounts: {},
+    } as any;
+    return getAgentDefinition(
+      {
+        settingsService,
+        loggingService: logging(),
+        executionContext,
+        askMentor: async () => 'mentor',
+        runSubagent: async () => ({ finalText: 'subagent' }),
+        runSubagentAsync: async () => ({
+          runId: 'measurement',
+          role: 'worker',
+          status: 'running',
+          task: 'measurement',
+        }),
+        getSubagentResult: async () => ({
+          agentId: 'measurement',
+          role: 'worker',
+          status: 'completed',
+          finalText: 'subagent',
+          filesChanged: [],
+          toolsUsed: [],
+        }),
+        getSubagentStatus: () => status,
+        sendSubagentMessage: () => ({ ok: true, runId: 'measurement', status: 'running', delivery: 'queued' }),
+        cancelSubagentRun: () => ({ ok: true, runId: 'measurement', status: 'cancelling' }),
+        getAskUserAnswer: () => 'answer',
+        skillsService,
+        agentRuntime: { agent: () => ({} as never) },
+        backgroundShellRegistry: backgroundShellRegistry as never,
+        backgroundShellOutput,
+        sessionBrowser,
+        requestSessionRollover: () => ({} as never),
+        configureTaskCheckIn: () => ({} as never),
+        setTaskCheckInPolicy: () => {},
+      },
+      model,
+    ).tools as ToolRegistry;
+  };
+
+  return [
+    { label: 'standard full capability gpt-4o', tools: build('gpt-4o') },
+    { label: 'standard full capability gpt-5.6', tools: build('gpt-5.6') },
+  ];
+}

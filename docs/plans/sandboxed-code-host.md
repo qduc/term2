@@ -224,6 +224,32 @@ too. Both external reviews flagged that a script can currently loop on
    transformation phase. Reasoning:
    `.coord/sandboxed-code-host/FINDINGS-typed-namespace.md`.
 
+## Measured evidence on the nested-deny rule (2026-09-05)
+
+The shell-inside-vs-outside experiment (`.coord/orch/exp-shell/RESULTS.md`)
+built a configuration where `shell` was reachable *only* from inside scripts,
+and it is unshippable for one reason: nested dispatch denies anything that is
+not `auto_approve` (`run-code.ts:357`), because a script cannot prompt. Shell
+approval is command-dependent, so that configuration turns "needs approval"
+into hard failure. **The nested-deny rule, not the sandbox, is what bounds
+which tools can live inside scripts** — so open question 2 above decides more
+than an ID format.
+
+Two cautions for anyone validating a change here:
+
+- **A benchmark run with `--auto-approve` cannot see this.** Across 14 cells,
+  `shell_nested` reached 45 in a single run while `shell_nested_denied` stayed
+  0 — the denial path never fired. Keep denied-by-approval as a metric
+  separate from failures, or a broken design reports as working.
+- **`maxCalls: 200` per script is close.** Fan-out runs hit 191 and 351 nested
+  dispatches. Making nested calls more attractive pushes scripts into that
+  ceiling, and a cap collision fails mid-run.
+
+Reusable: a per-nested-call JSONL logger (`{tool, sessionId, timestamp,
+outcome}`, outcome `success | failure | denied-by-approval`, gated on
+`TERM2_NESTED_CALL_LOG`, hooking the existing `record(...)` helper with no
+control-flow change) is archived in `.coord/orch/archive/shell-both/work.diff`.
+
 ## Provenance
 
 - `REVIEW-run-code-review-gemini.md`, `REVIEW-run-code-review-codex.md` — first-pass

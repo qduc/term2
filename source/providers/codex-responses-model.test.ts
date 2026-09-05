@@ -625,10 +625,17 @@ it('CodexResponsesTransport marks opaque context_management 500s as session-disa
 
 it('does not attribute a generic server_error 500 to context compaction without context-management evidence', async () => {
   const sessionState = { disabled: false };
+  // `server_error` must appear in the *serialized* error, which is what the
+  // classifier inspects. Error.message is non-enumerable, so putting the
+  // marker only in `new Error('server_error')` leaves JSON.stringify output
+  // without it and the test passes even on the pre-fix classifier. Carry it
+  // in enumerable fields, the shape a real OpenAI 5xx has.
   const error = Object.assign(new Error('server_error'), {
     status: 500,
-    error: { message: 'Model is at capacity' },
+    error: { message: 'Model is at capacity', type: 'server_error', code: 'server_error' },
   });
+  expect(JSON.stringify(error)).toMatch(/server_error/);
+  expect(JSON.stringify(error)).not.toMatch(/context[_ ]management/i);
   const client = {
     responses: {
       create: async () => {

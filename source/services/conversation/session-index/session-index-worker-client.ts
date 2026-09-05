@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { ProbeCapabilityResult } from './session-index-schema.js';
 import type { IndexedListResult, IndexedResolveResult, ReconcileResult } from './session-index-database.js';
-import type { WorkerRequest, WorkerResponse } from './session-index-worker.js';
+import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
 
 export interface SessionIndexWorkerClientOptions {
   workerFactory?: (workerFile: string) => Worker;
@@ -84,13 +84,13 @@ export class SessionIndexWorkerClient {
     this.#pending.clear();
   }
 
-  #send<T>(req: Omit<WorkerRequest, 'id'>): Promise<T> {
+  #send<T>(req: WorkerRequestPayload): Promise<T> {
     if (this.#closed) {
       return Promise.reject(new Error('SessionIndexWorkerClient is closed'));
     }
 
     const id = this.#nextRequestId++;
-    const payload = { id, ...req } as WorkerRequest;
+    const payload: WorkerRequest = { id, ...req };
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {

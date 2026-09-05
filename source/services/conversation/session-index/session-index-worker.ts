@@ -2,19 +2,20 @@ import { parentPort } from 'node:worker_threads';
 import { SessionIndexDatabase } from './session-index-database.js';
 import { setConversationsDirForTest } from '../conversation-persistence.js';
 
-export type WorkerRequest =
-  | { id: number; type: 'init'; dbPath: string; sourceDirectory: string }
-  | { id: number; type: 'probe' }
-  | { id: number; type: 'reconcile' }
-  | { id: number; type: 'list'; options: { projectPath: string; sshHost?: string } }
+export type WorkerRequestPayload =
+  | { type: 'init'; dbPath: string; sourceDirectory: string }
+  | { type: 'probe' }
+  | { type: 'reconcile' }
+  | { type: 'list'; options: { projectPath: string; sshHost?: string } }
   | {
-      id: number;
       type: 'resolve';
       reference: string;
       options: { projectPath: string; sshHost?: string; currentSessionId?: string };
     }
-  | { id: number; type: 'get_revision'; sessionId: string }
-  | { id: number; type: 'close' };
+  | { type: 'get_revision'; sessionId: string }
+  | { type: 'close' };
+
+export type WorkerRequest = { id: number } & WorkerRequestPayload;
 
 export type WorkerResponse = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string };
 

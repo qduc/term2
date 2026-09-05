@@ -113,11 +113,18 @@ export class SessionIndexDatabase {
   }
 
   initialize(): void {
-    if (!isSchemaCurrent(this.#db, this.#sourceDirectory)) {
+    if (isSchemaCurrent(this.#db, this.#sourceDirectory)) {
+      return;
+    }
+    const initTx = this.#db.transaction(() => {
+      if (isSchemaCurrent(this.#db, this.#sourceDirectory)) {
+        return;
+      }
       dropSchema(this.#db);
       createSchema(this.#db);
       writeMetadata(this.#db, this.#sourceDirectory);
-    }
+    });
+    initTx.immediate();
   }
 
   reconcile(): ReconcileResult {
@@ -178,7 +185,7 @@ export class SessionIndexDatabase {
     }
 
     if (toDeleteIds.length > 0) {
-      deleteTx(toDeleteIds);
+      deleteTx.immediate(toDeleteIds);
       deletedCount = toDeleteIds.length;
     }
 
@@ -352,7 +359,7 @@ export class SessionIndexDatabase {
         }
       });
 
-      commitSessionTx();
+      commitSessionTx.immediate();
     }
 
     return {

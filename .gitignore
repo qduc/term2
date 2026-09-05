@@ -29,6 +29,7 @@ Thumbs.db
 
 # Parallel-work git worktrees (see AGENTS.md)
 .worktrees/
+.coord/
 
 # Cache
 .cache/

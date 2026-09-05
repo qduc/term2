@@ -129,6 +129,8 @@ export const createReadCodeOutlineToolDefinition = (
   return {
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
+    scriptedReturnShape:
+      'string: formatted code outline of the target file; "WARNING target_too_large", an empty-outline note, or "Error: \u2026" on failure',
     parameters: readCodeOutlineParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,

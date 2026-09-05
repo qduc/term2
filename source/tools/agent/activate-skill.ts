@@ -37,6 +37,8 @@ export const createActivateSkillToolDefinition = (
   return {
     name: 'activate_skill',
     description: ACTIVATE_SKILL_DESCRIPTION,
+    scriptedReturnShape:
+      'string: the activated skill\u2019s instructions wrapped in <skill_content>; "Error: Skill \u0027<name>\u0027 not found." on failure',
     parameters: activateSkillSchema,
     parallelSafe: true,
     needsApproval: () => false, // Safe operation

@@ -214,6 +214,12 @@ function describeTool(tool: AnyToolDefinition): JsonValue {
     name: tool.name,
     description: tool.description,
     parameters,
+    // The scripted-path return contract. Agents discover it here before
+    // calling, and the tools header renders the same string for essential
+    // tools, so both surfaces stay consistent.
+    ...(typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+      ? { scriptedReturnShape: tool.scriptedReturnShape }
+      : {}),
   } as JsonValue;
 }
 

@@ -97,6 +97,8 @@ export const createWebSearchToolDefinition = (deps: {
   return {
     name: 'web_search',
     description: WEB_SEARCH_DESCRIPTION,
+    scriptedReturnShape:
+      'string: markdown-formatted search results; "Error: \u2026" when no provider is configured or the search fails',
     parameters: webSearchSchema,
     parallelSafe: true,
     needsApproval: () => false, // Web search is read-only, safe operation

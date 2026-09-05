@@ -57,6 +57,7 @@ export function createConfigureTaskCheckInToolDefinition(
 ): ToolDefinition {
   return {
     name: 'configure_task_check_in',
+    scriptedReturnShape: 'JSON string (JSON.parse first): { ok: true, message? } | { ok: false, error }',
     description:
       'Configure or mute proactive check-ins for an active background shell job or subagent. ' +
       'Use this to mute future check-ins when a task is expected to run quietly until completion, or to adjust how frequently or when next you want to be checked in on.',

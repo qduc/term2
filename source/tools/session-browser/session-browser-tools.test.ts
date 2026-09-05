@@ -99,3 +99,15 @@ it('executes session_read at the tool boundary with the pinned serialized envelo
   expect(forward.omitted).toBe(5);
   expect(rawForward.length).toBeLessThanOrEqual(512);
 });
+
+it('returns structured values to a scripted call and keeps the direct path serialized', async () => {
+  const list = createSessionBrowserToolDefinitions(browser)[0]!;
+  const direct = (await list.execute({ limit: 5 }, {}, undefined)) as string;
+  expect(typeof direct).toBe('string');
+  expect(JSON.parse(direct)).toEqual(browser.list({}));
+
+  const scripted = (await list.execute({ limit: 5 }, { scripted: true }, undefined)) as unknown;
+  expect(typeof scripted).toBe('object');
+  expect(scripted).toEqual(browser.list({}));
+  expect(JSON.stringify(scripted)).toBe(direct);
+});

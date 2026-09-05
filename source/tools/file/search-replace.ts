@@ -287,6 +287,8 @@ export function createSearchReplaceToolDefinition(deps: {
   return {
     name: 'search_replace',
     description: SEARCH_REPLACE_DESCRIPTION,
+    scriptedReturnShape:
+      'string: one status line per operation, newline-joined — "Updated <path> (N match)" | "Created <path> (new file)" | "Error: \u2026"',
     effect: 'mutating',
     canRequireApproval: true,
     parameters: searchReplaceParametersSchema,

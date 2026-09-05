@@ -97,6 +97,29 @@ const id = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .describe('Stable lowercase memory identifier.');
+
+/**
+ * Scripted-path return contracts. Every memory tool serializes its structured
+ * envelope to a JSON string on every path (the envelope's `charsUsed` field
+ * exists to fit the model-context budget), so a script must JSON.parse a
+ * result before reading its fields. Keyed by tool name; the run_code
+ * registry-completeness test fails when a new memory tool has no entry here.
+ */
+const MEMORY_SCRIPTED_RETURN_SHAPES: Record<string, string> = {
+  memory_list:
+    'JSON string (JSON.parse first): { scope: "all", global: { id, title, summary, tags, createdAt, updatedAt }[], project: { id, title, summary, tags, createdAt, updatedAt }[], omitted: { global: number, project: number }, charsUsed: number }',
+  memory_get:
+    'JSON string (JSON.parse first): { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt }, charsUsed: number }; oversized content pages instead carry content: { offset, totalChars, text, nextCursor? } beside memory metadata',
+  memory_search:
+    'JSON string (JSON.parse first): { results: { scope, memory: { id, title, summary, tags, createdAt, updatedAt }, matchedFields: string[], available: boolean, contentSnippet?: string }[], omitted: number, charsUsed: number }',
+  memory_retrieve:
+    'JSON string (JSON.parse first): { memories: { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt } }[], unavailableIds: { scope, id }[], omittedIds: { scope, id }[], omittedIdCount: number, unavailableIdCount: number, charsUsed: number }',
+  memory_synthesize:
+    'JSON string (JSON.parse first): { objective, queries: string[], memories: { scope, memory(full), matchedQueries: string[] }[], unavailableIds: { scope, id, matchedQueries }[], omittedIds: { scope, id, matchedQueries }[], omittedIdCount: number, unavailableIdCount: number, charsUsed: number }',
+  memory_create: 'JSON string (JSON.parse first): { scope, memory }',
+  memory_update: 'JSON string (JSON.parse first): { scope, memory }',
+  memory_delete: 'JSON string (JSON.parse first): { scope, deleted: boolean }',
+};
 const fields = {
   title: z.string().optional(),
   summary: z.string().optional(),
@@ -134,6 +157,7 @@ function definition<S extends z.ZodObject<any>>(
   return {
     name,
     description,
+    scriptedReturnShape: MEMORY_SCRIPTED_RETURN_SHAPES[name],
     parameters,
     preserveSerializedOutput: [
       'memory_list',

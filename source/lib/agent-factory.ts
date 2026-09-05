@@ -203,15 +203,18 @@ export function buildAgentTools({
                 executeAgain: executeOriginal,
               })
             : result;
-          if (definition.preserveSerializedOutput) {
-            return String(finalResult ?? '');
-          }
           // A scripted call's result goes to the script, not into model
           // context, so neither the trim nor its String() coercion applies.
           // Without this a tool returning fields reaches the script as the
-          // literal "[object Object]".
+          // literal "[object Object]". This precedes the preserveSerializedOutput
+          // coercion: self-bounded tools (session browser) now return their
+          // structured envelope on the scripted path, and String() would
+          // flatten that object back to "[object Object]".
           if (isScriptedToolCall(_context)) {
             return finalResult;
+          }
+          if (definition.preserveSerializedOutput) {
+            return String(finalResult ?? '');
           }
           const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
           // Structured content-part results (read_file images) carry no single

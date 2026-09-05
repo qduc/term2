@@ -266,4 +266,26 @@ describe('NestedApprovalOwner', () => {
     await expect(waiting.promise).resolves.toMatchObject({ kind: 'approved' });
     expect(events).toEqual(['grant', 'dispatch', 'published-null']);
   });
+
+  it('publishes the next request when an approved dispatch starts', async () => {
+    const owner = new NestedApprovalOwner();
+    const snapshots: Array<string | null> = [];
+    owner.subscribe((snapshot) => snapshots.push(snapshot?.requestId ?? null));
+    let releaseFirst!: (value: string) => void;
+    const first = request(owner, 'first', {
+      dispatch: () =>
+        new Promise<string>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    });
+    const second = request(owner, 'second');
+
+    await owner.decide('first', { answer: 'y' });
+    await vi.waitFor(() => expect(owner.getSnapshot()?.requestId).toBe('second'));
+    expect(snapshots).toEqual([null, 'first', 'first', 'second']);
+    await owner.decide('second', { answer: 'n' });
+    releaseFirst('effect');
+    await expect(first.promise).resolves.toMatchObject({ kind: 'approved' });
+    await expect(second.promise).resolves.toMatchObject({ kind: 'denied' });
+  });
 });

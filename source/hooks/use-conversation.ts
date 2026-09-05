@@ -20,6 +20,7 @@ import type { BackgroundTask } from '../services/subagents/subagent-notification
 import type { BackgroundTaskControlDetails } from '../services/session/background-task-control.js';
 import { needsBackgroundTaskClock } from '../components/layout/background-task-clock.js';
 import type {
+  BackgroundSubagentApprovalEntry,
   BackgroundSubagentApprovalSnapshot,
   BackgroundSubagentApprovalResolutionRequest,
 } from '../services/approval/background-subagent-approval-queue.js';
@@ -64,6 +65,19 @@ const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   }
   return null;
 };
+
+function sameBackgroundApprovalIdentity(
+  left: BackgroundSubagentApprovalEntry,
+  right: BackgroundSubagentApprovalEntry,
+): boolean {
+  return (
+    left.runId === right.runId &&
+    left.generation === right.generation &&
+    left.toolCallId === right.toolCallId &&
+    left.toolName === right.toolName &&
+    left.argumentsText === right.argumentsText
+  );
+}
 
 const dummySettingsService = {
   get: () => 'openai',
@@ -186,8 +200,13 @@ export const useConversation = ({
   const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
   const [nestedApproval, setNestedApproval] = useState(() => conversationService.getNestedApprovalSnapshot?.() ?? null);
   const [nestedRejectionRequestId, setNestedRejectionRequestId] = useState<string | null>(null);
+  const [backgroundRejectionEntry, setBackgroundRejectionEntry] = useState<BackgroundSubagentApprovalEntry | null>(
+    null,
+  );
   const waitingForRejectionReason =
-    uiWaitingForRejectionReason || nestedApproval?.requestId === nestedRejectionRequestId;
+    uiWaitingForRejectionReason ||
+    nestedApproval?.requestId === nestedRejectionRequestId ||
+    backgroundRejectionEntry !== null;
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -252,10 +271,23 @@ export const useConversation = ({
       const snapshot = readBackgroundApproval();
       setBackgroundSubagentApproval(snapshot);
       if (snapshot.pendingCount > 0) {
+        // A background approval takes prompt ownership even when the nested
+        // composer was already open. Keep the composer active, but retarget
+        // it to the effective background source instead of leaking the nested
+        // request's rejection reason into that source.
+        if (nestedRejectionRequestId !== null) {
+          setNestedRejectionRequestId(null);
+          setBackgroundRejectionEntry(snapshot.current);
+        } else if (
+          backgroundRejectionEntry &&
+          (!snapshot.current || !sameBackgroundApprovalIdentity(backgroundRejectionEntry, snapshot.current))
+        ) {
+          setBackgroundRejectionEntry(snapshot.current);
+        }
         notifier?.approvalNeeded();
       }
     });
-  }, [conversationService, readBackgroundApproval, notifier]);
+  }, [conversationService, readBackgroundApproval, notifier, nestedRejectionRequestId, backgroundRejectionEntry]);
 
   const resolveBackgroundSubagentApproval = useCallback(
     (request: BackgroundSubagentApprovalResolutionRequest) =>
@@ -558,13 +590,19 @@ export const useConversation = ({
 
   const setWaitingForRejectionReason = useCallback(
     (value: boolean) => {
+      const backgroundEntry = readBackgroundApproval().current;
+      if (backgroundEntry && pendingApproval === null) {
+        setBackgroundRejectionEntry(value ? backgroundEntry : null);
+        if (value) setNestedRejectionRequestId(null);
+        return;
+      }
       if (nestedApproval && pendingApproval === null) {
         setNestedRejectionRequestId(value ? nestedApproval.requestId : null);
         return;
       }
       dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
     },
-    [nestedApproval, pendingApproval, setNestedRejectionRequestId],
+    [nestedApproval, pendingApproval, readBackgroundApproval, setBackgroundRejectionEntry, setNestedRejectionRequestId],
   );
 
   const setWaitingForAskUserAnswer = useCallback((value: boolean) => {

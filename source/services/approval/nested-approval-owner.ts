@@ -184,14 +184,22 @@ export class NestedApprovalOwner {
     // approve-wins half of the cancellation race.
     entry.state = 'executing';
     this.#remove(requestId);
+    let dispatchStarted = false;
     try {
       entry.request.grant(decision);
       const dispatch = entry.request.dispatch();
+      dispatchStarted = true;
+      // The approved request is no longer the pending UI surface as soon as
+      // dispatch has begun. Do not make the next request wait for a slow tool.
+      this.#publish();
       entry.resolve({ kind: 'approved', result: await dispatch });
     } catch (error) {
       entry.resolve({ kind: 'failed', error });
+    } finally {
+      // A grant or synchronous dispatch failure still needs to clear any
+      // displayed request for observers that were not notified above.
+      if (!dispatchStarted) this.#publish();
     }
-    this.#publish();
   }
 
   #publish(): void {

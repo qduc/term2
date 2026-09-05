@@ -63,6 +63,69 @@ it.sequential('useConversation observes background task snapshots for the compos
   expect(observer).toBeNull();
 });
 
+it.sequential('retargets a nested rejection composer when a background approval arrives', async () => {
+  let backgroundListener: (() => void) | null = null;
+  let nestedObserver: ((snapshot: any) => void) | null = null;
+  let backgroundSnapshot: any = { revision: 0, current: null, pendingCount: 0, closed: false };
+  const nestedSnapshot = {
+    requestId: 'nested-1',
+    sessionId: 'session-1',
+    outerRunId: 'run-1',
+    nestedCallId: 'nested-1',
+    toolName: 'create_file',
+    preparedArguments: { path: '/outside/nested.txt' },
+    authorityContext: {},
+    approval: { agentName: 'Nested', toolName: 'create_file', argumentsText: '{}', rawInterruption: null },
+  };
+  const conversationService = {
+    sessionId: 'rejection-owner-hook',
+    backgroundSubagentTasks: { getSnapshot: () => [] },
+    setBackgroundSubagentTaskObserver: () => {},
+    backgroundTaskControl: { listDetails: () => [], listForegroundTransferCandidates: () => [] },
+    backgroundSubagentApprovals: {
+      getSnapshot: () => backgroundSnapshot,
+      subscribe: (listener: () => void) => {
+        backgroundListener = listener;
+        return () => {
+          backgroundListener = null;
+        };
+      },
+    },
+    getNestedApprovalSnapshot: () => nestedSnapshot,
+    setNestedApprovalObserver: (observer: ((snapshot: any) => void) | null) => {
+      nestedObserver = observer;
+    },
+    setPendingInteractionObserver: () => {},
+    setRetryCallback: () => {},
+  } as any;
+  let setReason: (value: boolean) => void = () => {};
+  let current: { waiting: boolean; nested: any } = { waiting: false, nested: null };
+  const Harness = () => {
+    const state = useConversation({ conversationService, loggingService, historyService });
+    setReason = state.setWaitingForRejectionReason;
+    current = { waiting: state.waitingForRejectionReason, nested: state.nestedApproval };
+    return <Text>{state.waitingForRejectionReason ? 'reason' : 'idle'}</Text>;
+  };
+
+  const renderer = await renderInAct(<Harness />);
+  expect(renderer.lastFrame()).toBe('idle');
+  act(() => setReason(true));
+  expect(renderer.lastFrame()).toBe('reason');
+
+  backgroundSnapshot = {
+    revision: 1,
+    current: { runId: 'background-1', generation: 1, toolCallId: 'b1', toolName: 'create_file', argumentsText: '{}' },
+    pendingCount: 1,
+    closed: false,
+  };
+  act(() => backgroundListener?.());
+
+  expect(renderer.lastFrame()).toBe('reason');
+  expect(current.nested).toEqual(nestedSnapshot);
+  expect(nestedObserver).toBeTruthy();
+  act(() => renderer.unmount());
+});
+
 it.sequential('does not tick now for retained terminal background details after linger', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
   vi.setSystemTime(1_000_000);

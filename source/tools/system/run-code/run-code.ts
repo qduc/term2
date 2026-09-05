@@ -23,8 +23,9 @@ import {
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderToolsHeader } from './tools-header.js';
-import { resolveWorkspacePath } from '../../utils.js';
+import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
+import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
@@ -397,12 +398,15 @@ export function createRunCodeToolDefinition(
             normalized = parsed.data;
           }
 
+          const authorityRoot = getCwd();
+          const preparedParams = await bindPreparedArguments(name, normalized, authorityRoot);
+          const physicalRoot = await resolveWorkspacePathPhysically(authorityRoot, authorityRoot);
           return {
             tool,
-            params: bindPreparedArguments(name, normalized, getCwd()),
+            params: preparedParams,
             originalParams: normalized,
-            authorityRoot: getCwd(),
-            authorityMeaning: fingerprint(bindPreparedArguments(name, normalized, getCwd())),
+            authorityRoot,
+            authorityMeaning: fingerprint({ physicalRoot, params: preparedParams }),
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
@@ -445,15 +449,18 @@ export function createRunCodeToolDefinition(
                   ),
                 },
                 signal: nestedContext.signal as AbortSignal,
-                revalidateAuthority: () => {
+                revalidateAuthority: async () => {
                   const currentRoot = getCwd();
-                  const currentMeaning = bindPreparedArguments(
+                  const currentMeaning = await bindPreparedArguments(
                     prepared.tool.name,
                     prepared.originalParams,
                     currentRoot,
                   );
+                  const currentPhysicalRoot = await resolveWorkspacePathPhysically(currentRoot, currentRoot);
                   return (
-                    currentRoot === prepared.authorityRoot && fingerprint(currentMeaning) === prepared.authorityMeaning
+                    currentRoot === prepared.authorityRoot &&
+                    fingerprint({ physicalRoot: currentPhysicalRoot, params: currentMeaning }) ===
+                      prepared.authorityMeaning
                   );
                 },
                 revalidate: async () => {
@@ -594,11 +601,14 @@ export function createRunCodeToolDefinition(
   return definition;
 }
 
-function bindPreparedArguments(toolName: string, params: unknown, cwd: string): unknown {
+async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return params;
   const record = params as Record<string, unknown>;
-  const bindPath = (value: unknown): unknown =>
-    typeof value === 'string' ? resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true }) : value;
+  const bindPath = async (value: unknown): Promise<unknown> => {
+    if (typeof value !== 'string') return value;
+    const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+    return (await resolveWorkspacePathPhysically(value, cwd)) ?? lexicalPath;
+  };
   const pathTools = new Set([
     'read_file',
     'create_file',
@@ -610,17 +620,34 @@ function bindPreparedArguments(toolName: string, params: unknown, cwd: string): 
     'code_context_search',
   ]);
   if (!pathTools.has(toolName)) return params;
-  if (toolName === 'apply_patch' && Array.isArray(record.operations)) {
-    return {
-      ...record,
-      operations: record.operations.map((operation) => {
-        if (!operation || typeof operation !== 'object') return operation;
-        const item = operation as Record<string, unknown>;
-        return { ...item, path: bindPath(item.path), ...(item.moveTo ? { moveTo: bindPath(item.moveTo) } : {}) };
-      }),
-    };
+  if (toolName === 'apply_patch' && typeof record.patch === 'string') {
+    return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
   }
-  return 'path' in record ? { ...record, path: bindPath(record.path) } : params;
+  return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;
+}
+
+async function bindPatchPaths(patch: string, bindPath: (value: unknown) => Promise<unknown>): Promise<string> {
+  let parsed;
+  try {
+    parsed = parseUpstreamApplyPatch(patch);
+  } catch {
+    return patch;
+  }
+
+  const targetPaths = parsed.operations.flatMap((operation) => [
+    operation.path,
+    ...('moveTo' in operation && operation.moveTo ? [operation.moveTo] : []),
+  ]);
+  let targetIndex = 0;
+  const lines = patch.replace(/\r\n?/g, '\n').split('\n');
+  const prefixes = ['*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '];
+  for (let index = 0; index < lines.length; index += 1) {
+    const prefix = prefixes.find((candidate) => lines[index].startsWith(candidate));
+    if (!prefix) continue;
+    const bound = await bindPath(targetPaths[targetIndex++]);
+    lines[index] = prefix + String(bound);
+  }
+  return lines.join('\n');
 }
 
 function fingerprint(value: unknown): string {

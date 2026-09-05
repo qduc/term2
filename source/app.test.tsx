@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   resolveAdmissionConfirmation: vi.fn<any>(),
   setWaitingForRejectionReason: vi.fn(),
   setWaitingForAskUserAnswer: vi.fn(),
+  resolveBackgroundSubagentApproval: vi.fn(),
   stopProcessing: vi.fn(),
   addSystemMessage: vi.fn(),
   sendUserMessage: vi.fn(),
@@ -79,6 +80,8 @@ const mocks = vi.hoisted(() => ({
     waitingForAskUserAnswer: false,
     isProcessing: false,
     backgroundTaskDetails: [] as any[],
+    nestedApproval: null as any,
+    backgroundSubagentApproval: null as any,
   },
   setTerminalTitle: vi.fn(),
 }));
@@ -157,6 +160,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
       lastUsage: null,
       lastCodexRateLimit: null,
       pendingApproval: mocks.conversationState.pendingApproval,
+      nestedApproval: mocks.conversationState.nestedApproval,
       waitingForApproval: mocks.conversationState.waitingForApproval,
       waitingForRejectionReason: mocks.conversationState.waitingForRejectionReason,
       waitingForAskUserAnswer: mocks.conversationState.waitingForAskUserAnswer,
@@ -165,6 +169,8 @@ vi.mock('./hooks/use-conversation.js', () => ({
       setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
       isProcessing: mocks.conversationState.isProcessing,
       backgroundTaskDetails: mocks.conversationState.backgroundTaskDetails ?? [],
+      backgroundSubagentApproval: mocks.conversationState.backgroundSubagentApproval,
+      resolveBackgroundSubagentApproval: mocks.resolveBackgroundSubagentApproval,
       thinkingStartedAt: null,
       toolCallStreamingInfo: null,
       sendUserMessage: mocks.sendUserMessage,
@@ -330,6 +336,7 @@ beforeEach(() => {
   mocks.submitConversationTurn.mockResolvedValue(false);
   mocks.setWaitingForRejectionReason.mockReset();
   mocks.setWaitingForAskUserAnswer.mockReset();
+  mocks.resolveBackgroundSubagentApproval.mockReset();
   mocks.stopProcessing.mockReset();
   mocks.addSystemMessage.mockReset();
   mocks.sendUserMessage.mockReset();
@@ -385,6 +392,8 @@ beforeEach(() => {
   mocks.conversationState.waitingForRejectionReason = false;
   mocks.conversationState.waitingForAskUserAnswer = false;
   mocks.conversationState.isProcessing = false;
+  mocks.conversationState.nestedApproval = null;
+  mocks.conversationState.backgroundSubagentApproval = null;
 });
 
 describe('App orchestration', () => {
@@ -593,6 +602,55 @@ describe('App orchestration', () => {
 
     expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(true);
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it.sequential('routes a rejection reason to the background prompt that takes ownership', async () => {
+    mocks.conversationState.nestedApproval = {
+      requestId: 'nested-1',
+      approval: { agentName: 'Nested', toolName: 'create_file', argumentsText: '{}', rawInterruption: null },
+    };
+    const services = createServices();
+    const view = await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      mocks.bottomAreaProps.onReject();
+      await Promise.resolve();
+    });
+    expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(true);
+
+    mocks.conversationState.waitingForRejectionReason = true;
+    mocks.conversationState.backgroundSubagentApproval = {
+      revision: 2,
+      current: {
+        runId: 'background-1',
+        generation: 1,
+        toolCallId: 'background-call-1',
+        toolName: 'create_file',
+        argumentsText: '{}',
+      },
+      pendingCount: 1,
+      closed: false,
+    };
+    await rerenderInAct(
+      view,
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.bottomAreaProps.onSubmit({ text: 'background reason', images: [] });
+    });
+
+    expect(mocks.resolveBackgroundSubagentApproval).toHaveBeenCalledWith({
+      revision: 2,
+      entry: mocks.conversationState.backgroundSubagentApproval.current,
+      decision: { answer: 'no', rejectionReason: 'background reason' },
+    });
+    expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
+    expect(mocks.resolveBackgroundSubagentApproval).not.toHaveBeenCalledWith(
+      expect.objectContaining({ entry: expect.objectContaining({ runId: 'nested-1' }) }),
+    );
   });
 
   it.sequential('clears input after slash command actions unless they return false', async () => {

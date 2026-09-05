@@ -120,6 +120,23 @@ async function resolvePhysicalPath(targetPath: string): Promise<string | undefin
 }
 
 /**
+ * Resolve a path using the same existing-ancestor semantics as the physical
+ * containment check, without enforcing lexical workspace containment.
+ *
+ * Approval continuations use this to bind the path that was inspected to the
+ * physical referent that will be dispatched. A missing leaf is still
+ * meaningful: its existing ancestor (including symlinks) is resolved and the
+ * missing suffix is appended.
+ */
+export async function resolveWorkspacePathPhysically(
+  targetPath: string,
+  baseDir: string = getActiveWorkspaceRoot(),
+): Promise<string | undefined> {
+  const lexicalPath = resolveWorkspacePath(targetPath, baseDir, { allowOutsideWorkspace: true });
+  return resolvePhysicalPath(lexicalPath);
+}
+
+/**
  * Whether a filesystem write resolves physically within the workspace.
  *
  * This is intentionally separate from resolveWorkspacePath: lexical

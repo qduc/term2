@@ -1,7 +1,9 @@
 import { it, expect } from 'vitest';
 import * as path from 'path';
 import { homedir } from 'os';
-import { isProtectedHookPath, resolveWorkspacePath } from './utils.js';
+import { isProtectedHookPath, resolveWorkspacePath, resolveWorkspacePathPhysically } from './utils.js';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 
 it('resolveWorkspacePath: expands ~ to home directory', () => {
@@ -15,6 +17,20 @@ it('resolveWorkspacePath: expands ~ to home directory', () => {
   // Test ~ expansion
   const resolvedHome = resolveWorkspacePath('~', workspace, { allowOutsideWorkspace: true });
   expect(resolvedHome).toBe(home);
+});
+
+it('resolveWorkspacePathPhysically: preserves the existing ancestor for a missing create target', async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), 'term2-physical-workspace-'));
+  const outside = await mkdtemp(path.join(tmpdir(), 'term2-physical-outside-'));
+  try {
+    await symlink(outside, path.join(workspace, 'link'));
+    await expect(resolveWorkspacePathPhysically('link/new.txt', workspace)).resolves.toBe(
+      path.join(outside, 'new.txt'),
+    );
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });
 
 it('protects both user and project hook directories from silent writes', () => {

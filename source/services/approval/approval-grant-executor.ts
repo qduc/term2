@@ -14,6 +14,7 @@ import type { NestedToolCompatibilityState } from '../session/nested-tool-compat
 import type { ILoggingService } from '../service-interfaces.js';
 import { getToolInfoFromInterruption } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
+import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
 
 export type ApprovalGrantExecutorDeps = {
   sessionId: string;
@@ -61,10 +62,10 @@ export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: Appro
     deps.nestedCompatibility,
   );
   const allowReadFolderForSession = isReadFileSessionApproveAnswer(input.answer) && supportsFolderSessionRead(toolName);
-  const editSessionGrant = getEditSessionGrant(input.answer, toolName, parsedArguments);
+  const editSessionGrants = getEditSessionGrants(input.answer, toolName, parsedArguments);
   const isApproved = isDockerRequest
     ? dockerDecision
-    : input.answer === 'y' || deniedRead || allowReadFolderForSession || editSessionGrant !== null;
+    : input.answer === 'y' || deniedRead || allowReadFolderForSession || editSessionGrants.length > 0;
 
   if (isApproved && allowReadFolderForSession) {
     const folder = resolveSessionReadFolder(toolName, parsedArguments);
@@ -73,9 +74,11 @@ export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: Appro
       else deps.nestedCompatibility?.readAccess.allowFolder(deps.sessionId, folder);
     }
   }
-  if (isApproved && editSessionGrant && deps.sessionAccess) {
-    if (editSessionGrant.kind === 'file') deps.sessionAccess.allowEditFile(editSessionGrant.path);
-    else deps.sessionAccess.allowEditFolder(editSessionGrant.path);
+  if (isApproved && deps.sessionAccess) {
+    for (const editSessionGrant of editSessionGrants) {
+      if (editSessionGrant.kind === 'file') deps.sessionAccess.allowEditFile(editSessionGrant.path);
+      else deps.sessionAccess.allowEditFolder(editSessionGrant.path);
+    }
   }
   if (isApproved && deniedRead && input.interruption) {
     applyDeniedReadDecision(deps, input.answer, input.interruption, input.callId);
@@ -102,22 +105,18 @@ export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: Appro
   };
 }
 
-function getEditSessionGrant(
+function getEditSessionGrants(
   answer: string,
   toolName: string | undefined,
   args: Record<string, unknown> | null,
-): { kind: 'file' | 'folder'; path: string } | null {
-  if (toolName !== 'apply_patch' && toolName !== 'create_file' && toolName !== 'search_replace') return null;
-  const operation = Array.isArray(args?.operations) ? args.operations[0] : args;
-  const rawPath =
-    operation && typeof operation === 'object' && typeof (operation as { path?: unknown }).path === 'string'
-      ? (operation as { path: string }).path
-      : undefined;
-  if (!rawPath) return null;
-  const target = path.resolve(rawPath);
-  if (answer === 'allow-edit-file-session') return { kind: 'file', path: target };
-  if (answer === 'allow-edit-folder-session') return { kind: 'folder', path: path.dirname(target) };
-  return null;
+): Array<{ kind: 'file' | 'folder'; path: string }> {
+  if (answer !== 'allow-edit-file-session' && answer !== 'allow-edit-folder-session') return [];
+  return extractToolTargetPaths(toolName ?? '', args).map((rawPath) => {
+    const target = path.resolve(getActiveWorkspaceRoot(), rawPath);
+    return answer === 'allow-edit-file-session'
+      ? { kind: 'file' as const, path: target }
+      : { kind: 'folder' as const, path: path.dirname(target) };
+  });
 }
 
 function applyDeniedReadDecision(

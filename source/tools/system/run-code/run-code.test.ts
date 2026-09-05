@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -18,6 +18,9 @@ import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
 import { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
 import { SessionAccessState } from '../../../services/session/session-access-state.js';
 import { createMockSettingsService } from '../../../services/settings/settings-service.mock.js';
+import { createCreateFileToolDefinition } from '../../file/create-file.js';
+import { createApplyPatchToolDefinition } from '../../file/apply-patch.js';
+import { ExecutionContext } from '../../../services/execution-context.js';
 
 const workspace = process.cwd();
 const noopFormatter = (() => []) as unknown as AnyToolDefinition['formatCommandMessage'];
@@ -103,49 +106,176 @@ describe('run_code', () => {
     expect(effects).toEqual([]);
   });
 
+  it('denies a nested call when an approved symlink retargets while approval waits', async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'term2-run-code-workspace-'));
+    const targetADir = mkdtempSync(join('/tmp', 'term2-run-code-target-a-'));
+    const targetBDir = mkdtempSync(join('/tmp', 'term2-run-code-target-b-'));
+    const linkPath = join(workspaceDir, 'link');
+    const targetA = join(targetADir, 'file.txt');
+    const targetB = join(targetBDir, 'file.txt');
+    writeFileSync(targetA, 'a');
+    writeFileSync(targetB, 'b');
+    symlinkSync(targetADir, linkPath);
+
+    try {
+      const settings = createMockSettingsService({});
+      const access = new SessionAccessState(settings);
+      const createFile = createCreateFileToolDefinition({
+        loggingService: logging(),
+        settingsService: settings,
+        executionContext: ExecutionContext.pin(workspaceDir),
+        sessionAccess: access,
+      });
+      const approvalRegistry = new ToolApprovalPolicyRegistry();
+      approvalRegistry.register({
+        toolName: createFile.name,
+        parameters: createFile.parameters,
+        needsApproval: createFile.needsApproval as AnyToolDefinition['needsApproval'],
+      });
+      const owner = new NestedApprovalOwner();
+      let tools: ToolRegistry = [createFile];
+      const runCode = createRunCodeToolDefinition({
+        loggingService: logging(),
+        getToolRegistry: () => tools,
+        getCwd: () => workspaceDir,
+        approvalPolicyRegistry: approvalRegistry,
+      });
+      const grant = vi.spyOn(access, 'allowEditFile');
+      tools = [createFile, runCode];
+      bindRunCodeRegistry(tools);
+      bindRunCodeNestedApprovalOwner(tools, owner);
+      const result = runCode.execute(
+        { code: "return await tools.create_file({ path: 'link/file.txt', content: 'effect', overwrite: true });" },
+        { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+      );
+      await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
+      unlinkSync(linkPath);
+      symlinkSync(targetBDir, linkPath);
+      await owner.decide(owner.getSnapshot()!.requestId, { answer: 'allow-edit-file-session' });
+
+      await expect(result).resolves.toContain('Tool execution was not approved');
+      expect(grant).not.toHaveBeenCalled();
+      expect(readFileSync(targetA, 'utf8')).toBe('a');
+      expect(readFileSync(targetB, 'utf8')).toBe('b');
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      rmSync(targetADir, { recursive: true, force: true });
+      rmSync(targetBDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses a real session edit grant for a later matching auto-approved call', async () => {
-    const access = new SessionAccessState(createMockSettingsService({}));
-    const effects: string[] = [];
-    const approvalRegistry = new ToolApprovalPolicyRegistry();
-    const protectedTool = tool({
-      name: 'create_file',
-      parameters: z.object({ path: z.string() }),
-      needsApproval: (params) => !access.allowsEdit((params as { path: string }).path, workspace),
-      execute: (params) => {
-        effects.push((params as { path: string }).path);
-        return 'created';
-      },
-    });
-    approvalRegistry.register({
-      toolName: 'create_file',
-      parameters: protectedTool.parameters,
-      needsApproval: protectedTool.needsApproval,
-    });
-    const owner = new NestedApprovalOwner();
-    let tools: ToolRegistry = [protectedTool];
-    const runCode = createRunCodeToolDefinition({
-      loggingService: logging(),
-      getToolRegistry: () => tools,
-      getCwd: () => workspace,
-      approvalPolicyRegistry: approvalRegistry,
-      sessionAccess: access,
-    });
-    tools = [protectedTool, runCode];
-    bindRunCodeRegistry(tools);
-    bindRunCodeNestedApprovalOwner(tools, owner);
-    const result = runCode.execute(
-      {
-        code: "await tools.create_file({ path: '../outside.txt' }); return await tools.create_file({ path: '../outside.txt' });",
-      },
-      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
-    );
-    await vi.waitFor(() =>
-      expect(owner.getSnapshot()?.approval.outsideWorkspaceEdit).toMatchObject({ folder: expect.any(String) }),
-    );
-    await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
-    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'allow-edit-file-session' });
-    await expect(result).resolves.toContain('created');
-    expect(effects).toHaveLength(2);
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'term2-run-code-grant-workspace-'));
+    const outsideDir = mkdtempSync(join('/tmp', 'term2-run-code-grant-outside-'));
+    const matchingPath = join(outsideDir, 'matching.txt');
+    const nonmatchingPath = join(outsideDir, 'nonmatching.txt');
+    try {
+      const access = new SessionAccessState(createMockSettingsService({}));
+      const editGrant = vi.spyOn(access, 'allowEditFile');
+      const createFile = createCreateFileToolDefinition({
+        loggingService: logging(),
+        settingsService: createMockSettingsService({}),
+        executionContext: ExecutionContext.pin(workspaceDir),
+        sessionAccess: access,
+      });
+      const approvalRegistry = new ToolApprovalPolicyRegistry();
+      approvalRegistry.register({
+        toolName: createFile.name,
+        parameters: createFile.parameters,
+        needsApproval: createFile.needsApproval as AnyToolDefinition['needsApproval'],
+      });
+      const owner = new NestedApprovalOwner();
+      let tools: ToolRegistry = [createFile];
+      const runCode = createRunCodeToolDefinition({
+        loggingService: logging(),
+        getToolRegistry: () => tools,
+        getCwd: () => workspaceDir,
+        approvalPolicyRegistry: approvalRegistry,
+        sessionAccess: access,
+      });
+      tools = [createFile, runCode];
+      bindRunCodeRegistry(tools);
+      bindRunCodeNestedApprovalOwner(tools, owner);
+      const result = runCode.execute(
+        {
+          code:
+            'await tools.create_file({ path: ' +
+            JSON.stringify(matchingPath) +
+            ", content: 'matching' }); try { await tools.create_file({ path: " +
+            JSON.stringify(nonmatchingPath) +
+            ", content: 'nonmatching' }); } catch { return 'nonmatching denied'; }",
+        },
+        { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+      );
+      await vi.waitFor(() =>
+        expect(owner.getSnapshot()?.approval.outsideWorkspaceEdit).toMatchObject({ folder: expect.any(String) }),
+      );
+      const firstRequestId = owner.getSnapshot()!.requestId;
+      await owner.decide(firstRequestId, { answer: 'allow-edit-file-session' });
+      await vi.waitFor(() => expect(owner.getSnapshot()?.requestId).not.toBe(firstRequestId));
+      await owner.decide(owner.getSnapshot()!.requestId, { answer: 'n' });
+
+      await expect(result).resolves.toContain('nonmatching denied');
+      expect(editGrant).toHaveBeenCalledTimes(1);
+      expect(readFileSync(matchingPath, 'utf8')).toBe('matching');
+      expect(existsSync(nonmatchingPath)).toBe(false);
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exposes canonical apply_patch targets to the session grant choice', async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'term2-run-code-patch-workspace-'));
+    const outsideDir = mkdtempSync(join('/tmp', 'term2-run-code-patch-outside-'));
+    const targetPath = join(outsideDir, 'created.txt');
+    try {
+      const settings = createMockSettingsService({});
+      const access = new SessionAccessState(settings);
+      const applyPatch = createApplyPatchToolDefinition({
+        loggingService: logging(),
+        settingsService: settings,
+        executionContext: ExecutionContext.pin(workspaceDir),
+        sessionAccess: access,
+      });
+      const approvalRegistry = new ToolApprovalPolicyRegistry();
+      approvalRegistry.register({
+        toolName: applyPatch.name,
+        parameters: applyPatch.parameters,
+        needsApproval: applyPatch.needsApproval as AnyToolDefinition['needsApproval'],
+      });
+      const owner = new NestedApprovalOwner();
+      let tools: ToolRegistry = [applyPatch];
+      const runCode = createRunCodeToolDefinition({
+        loggingService: logging(),
+        getToolRegistry: () => tools,
+        getCwd: () => workspaceDir,
+        approvalPolicyRegistry: approvalRegistry,
+        sessionAccess: access,
+      });
+      tools = [applyPatch, runCode];
+      bindRunCodeRegistry(tools);
+      bindRunCodeNestedApprovalOwner(tools, owner);
+      const code =
+        'return await tools.apply_patch({ patch: ' +
+        JSON.stringify('*** Begin Patch\n*** Add File: ' + targetPath + '\n+created by patch\n*** End Patch') +
+        ' });';
+      const result = runCode.execute(
+        { code },
+        { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+      );
+
+      await vi.waitFor(() =>
+        expect(owner.getSnapshot()?.approval.outsideWorkspaceEdit).toMatchObject({ path: targetPath }),
+      );
+      await owner.decide(owner.getSnapshot()!.requestId, { answer: 'allow-edit-file-session' });
+
+      await expect(result).resolves.toContain('Created');
+      expect(readFileSync(targetPath, 'utf8')).toBe('created by patch\n');
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 
   it('waits on the real nested owner, approves once, and resumes the same script', async () => {

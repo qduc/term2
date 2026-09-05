@@ -100,7 +100,10 @@ export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams
 export function extractPatchPaths(patch: unknown): string[] {
   if (typeof patch !== 'string' || !patch.trimStart().startsWith(BEGIN_PATCH)) return [];
   try {
-    return parseUpstreamApplyPatch(patch).operations.map((op) => op.path);
+    return parseUpstreamApplyPatch(patch).operations.flatMap((op) => [
+      op.path,
+      ...('moveTo' in op && op.moveTo ? [op.moveTo] : []),
+    ]);
   } catch {
     return [];
   }

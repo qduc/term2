@@ -370,6 +370,34 @@ it.sequential('nests the last three tool calls under its running task, one line 
   expect(toolLines[2]).toContain('└');
 });
 
+it.sequential('renders recent tool calls for a control task', async () => {
+  const controlTask = {
+    kind: 'subagent' as const,
+    id: 'sub-1',
+    role: 'explorer',
+    task: 'inspect source',
+    taskPreview: 'inspect source',
+    status: 'running' as const,
+    startedAt: 1_000,
+    elapsedMs: 1_000,
+    toolCounts: { glob: 1, read_file: 1 },
+    lastTool: { label: 'glob pattern=**/*.ts', state: 'running' as const },
+    recentTools: [
+      { label: 'read_file path=source/app.ts', state: 'success' as const },
+      { label: 'glob pattern=**/*.ts', state: 'running' as const },
+    ],
+  };
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[controlTask]} now={2_000} />);
+  const lines = (renderer.lastFrame() ?? '').split('\n');
+  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
+  const toolLines = lines.slice(taskLine + 1).filter((line) => line.includes('read_file') || line.includes('glob'));
+  expect(toolLines).toHaveLength(2);
+  expect(toolLines[0]).toContain('✔');
+  expect(toolLines[0]).toContain('read_file path=source/app.ts');
+  expect(toolLines[1]).toContain('▶');
+  expect(toolLines[1]).toContain('glob pattern=**/*.ts');
+});
+
 it.sequential('marks a settled tool call with its outcome', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'success' } })]} now={1_000} />,

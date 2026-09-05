@@ -3,7 +3,10 @@ import type { BackgroundShellJob } from '../shell/background-shell-registry.js';
 import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from '../shell/background-shell-registry.js';
 import type { SubagentCancelAcknowledgement, SubagentRunHandle, SubagentRunStatus } from '../subagents/types.js';
 import type { ForegroundSubagentCandidate } from '../subagents/nested-runner.js';
-import type { BackgroundSubagentNotificationPort } from '../subagents/subagent-notification-store.js';
+import type {
+  BackgroundSubagentNotificationPort,
+  BackgroundSubagentTaskTool,
+} from '../subagents/subagent-notification-store.js';
 import {
   BACKGROUND_SHELL_QUIET_AFTER_MS,
   BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
@@ -42,6 +45,8 @@ export type BackgroundTaskControlDetails =
       pendingToolCounts?: Record<string, number>;
       model?: { provider: string; id: string; contextWindow?: number };
       latestUsage?: SubagentRunStatus['latestUsage'];
+      lastTool?: BackgroundSubagentTaskTool;
+      recentTools?: BackgroundSubagentTaskTool[];
     }
   | {
       kind: 'shell';
@@ -302,11 +307,15 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
   #subagentDetails(status: SubagentRunStatus): Extract<BackgroundTaskControlDetails, { kind: 'subagent' }> | null {
     if (status.status === 'not_found') return null;
     const { runId, activityState, waitingReason, lastActivityAt, lastObservation, model, ...details } = status;
+    const notificationTask = this.#notifications.getTask?.(runId);
+    const subagentTask = notificationTask && notificationTask.kind !== 'shell' ? notificationTask : undefined;
     return {
       kind: 'subagent',
       id: runId,
       ...details,
       status: status.status as Exclude<SubagentRunStatus['status'], 'not_found'>,
+      ...(subagentTask?.lastTool ? { lastTool: subagentTask.lastTool } : {}),
+      ...(subagentTask?.recentTools ? { recentTools: subagentTask.recentTools } : {}),
       activity: normalizeBackgroundTaskActivity({
         status: status.status,
         activityState:

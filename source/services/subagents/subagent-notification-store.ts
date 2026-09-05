@@ -189,6 +189,7 @@ export interface BackgroundSubagentNotificationPort {
   enqueueUserControl(
     notification: Omit<BackgroundUserControlNotification, 'kind' | 'messageId' | 'requestedAt'>,
   ): boolean;
+  getTask?(id: string): BackgroundTask | undefined;
 }
 
 /** Read-only lifecycle projection used by the background-tasks UI. */
@@ -402,6 +403,11 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   getTaskSnapshot(): readonly BackgroundTask[] {
     this.#purgeExpiredTasks();
     return [...this.#tasks.values()];
+  }
+
+  getTask(id: string): BackgroundTask | undefined {
+    this.#purgeExpiredTasks();
+    return this.#tasks.get(id);
   }
 
   #purgeExpiredTasks(): void {

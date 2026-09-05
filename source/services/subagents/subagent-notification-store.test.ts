@@ -855,3 +855,18 @@ it('records a notification for a real async registry run and nothing for its sta
   ]);
   registry.dispose();
 });
+
+it('retrieves a live task by id via getTask', () => {
+  const store = makeStore();
+  store.recordLifecycle(started({ agentId: 'run-1' }));
+  store.recordLifecycle(toolStarted({ agentId: 'run-1', toolName: 'read_file', arguments: { path: 'source/app.ts' } }));
+
+  expect(store.getTask('run-1')).toEqual(
+    expect.objectContaining({
+      runId: 'run-1',
+      lastTool: { label: 'read_file path=source/app.ts', state: 'running' },
+      recentTools: [{ label: 'read_file path=source/app.ts', state: 'running' }],
+    }),
+  );
+  expect(store.getTask('unknown')).toBeUndefined();
+});

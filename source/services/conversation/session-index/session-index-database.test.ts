@@ -723,8 +723,9 @@ describe('SessionIndexDatabase', () => {
         expect(res.session.records[0].text.length).toBe(1_000_000);
         expect(res.session.records[0].text).toBe(largeText);
       }
-      // Bounded retrieval time: 1MB message should be retrieved in < 100ms
-      expect(elapsedMs).toBeLessThan(500);
+      // Direct SQLite query and row materialization for a 1MB message measures 0.8-8ms.
+      // Tightened to 25ms to tolerate CI scheduling jitter while catching any retrieval regressions.
+      expect(elapsedMs).toBeLessThan(25);
     } finally {
       index.close();
     }

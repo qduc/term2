@@ -584,6 +584,7 @@ describe('bindRunCodeRegistry', () => {
     const definition = createRunCodeToolDefinition({
       loggingService: logging(),
       getCwd: () => workspace,
+      approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
     });
 
     const output = String(

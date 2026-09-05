@@ -59,6 +59,7 @@ import {
 } from '../subagents/subagent-notification-store.js';
 import { BackgroundTaskControl, type BackgroundTaskControlPort } from './background-task-control.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import {
   PostExecutePendingRegistry,
   type PostExecuteDecisionRequest,
@@ -175,6 +176,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   /** Owned-root OpenAI checkpoint diagnostic seam. */
   openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
+  /** Active graph policy authority; test callers may supply an isolated registry explicitly. */
+  approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;
@@ -313,6 +316,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     openAIRootFreshTurnSelectorParityObserver,
     openAIRootCheckpointLifecycleObserver,
     toolOwnership,
+    approvalPolicyRegistry: suppliedApprovalPolicyRegistry,
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
     sessionAccess,
@@ -332,6 +336,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
   const resolvedBackgroundShellEventSinkHost = asBackgroundShellEventSinkHost(agentClient);
+  // Real AgentClient instances always expose their graph-owned registry. Keep
+  // compatibility/test clients usable without reviving the process singleton;
+  // this fallback is an isolated empty registry, not production authority.
+  const approvalPolicyRegistry =
+    suppliedApprovalPolicyRegistry ?? agentClient.getApprovalPolicyRegistry?.() ?? new ToolApprovalPolicyRegistry();
 
   // Background (async) subagent runs settle whenever they settle, including
   // while the conversation is idle and no per-turn sink is attached.
@@ -752,6 +761,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity,
     openAIRootFreshTurnSelectorParityObserver,
     sessionAccess,
+    approvalPolicyRegistry,
     postExecutePending,
     setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),
     toolCallMarkers,

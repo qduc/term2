@@ -18,6 +18,7 @@ import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../contracts/session-rollover.js';
+import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -67,6 +68,7 @@ export class AgentConfiguration implements AgentSource {
   #provider: string;
   #isTransientClient: boolean;
   #editor: ReturnType<typeof createEditorImpl>;
+  #approvalPolicyRegistry: ToolApprovalPolicyRegistry;
 
   // Service references (for #buildFactoryDeps)
   // Callback for side effects before rebuild
@@ -127,6 +129,7 @@ export class AgentConfiguration implements AgentSource {
     this.#requestSessionRollover = deps.requestSessionRollover;
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
+    this.#approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -210,12 +213,13 @@ export class AgentConfiguration implements AgentSource {
   }
 
   // Build the factory deps (used by buildAgent and for agent rebuilds)
-  #buildFactoryDeps(): AgentFactoryDeps {
+  #buildFactoryDeps(approvalPolicyRegistry = this.#approvalPolicyRegistry): AgentFactoryDeps {
     return {
       settings: this.#settings,
       logger: this.#logger,
       executionContext: this.#executionContext,
       editor: this.#editor,
+      approvalPolicyRegistry,
       providerId: this.#provider,
       serviceTierOverrideForNextRequest: this.#serviceTierOverrideForNextRequest,
       createMentor: (...args) => this.#getSubagentBridge()!.createMentor(...args),
@@ -260,19 +264,25 @@ export class AgentConfiguration implements AgentSource {
     return this.#buildFactoryDeps();
   }
 
+  get approvalPolicyRegistry(): ToolApprovalPolicyRegistry {
+    return this.#approvalPolicyRegistry;
+  }
+
   // Rebuild the agent with current config
   rebuildAgent(): void {
     if (this.#isTransientClient) return;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
     const buildResult = buildAgent(
       {
         model: this.#model,
         reasoningEffort: this.#reasoningEffort as any,
         temperature: this.#temperature,
       },
-      this.#buildFactoryDeps(),
+      this.#buildFactoryDeps(approvalPolicyRegistry),
     );
     this.#agent = buildResult.agent;
     this.#model = buildResult.resolvedModel;
+    this.#approvalPolicyRegistry = approvalPolicyRegistry;
   }
 
   /** Subscribe to settings changes that affect agent definition and rebuild automatically. */

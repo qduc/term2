@@ -20,6 +20,7 @@ import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import type { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { PostExecutePauseCapability, ToolExecutionLifecyclePort } from '../tools/types.js';
 import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
@@ -907,6 +908,10 @@ export class AgentClient {
         toolCounts: {},
       }
     );
+  }
+
+  getApprovalPolicyRegistry(): ToolApprovalPolicyRegistry {
+    return this.#agentConfig.approvalPolicyRegistry;
   }
 
   listBackgroundSubagentStatuses(): SubagentRunStatus[] {

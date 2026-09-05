@@ -3,10 +3,16 @@ import { createSessionRuntimeInternals as createProductionSessionRuntimeInternal
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
-) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+) =>
+  createProductionSessionRuntimeInternals({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 const mockLogger = {
   info: () => {},

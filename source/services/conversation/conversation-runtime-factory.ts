@@ -7,6 +7,7 @@ import type {
 import { createSessionRuntime, type SessionRuntime } from '../../core/index.js';
 import { createConversationAdapterForRuntime } from './conversation-adapter-factory.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import type { PostExecutePendingRegistry } from '../session/post-execute-pending-registry.js';
 import type { PostExecutePauseCapability } from '../session/post-execute-pause-capability.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
@@ -41,6 +42,7 @@ export type CreateConversationRuntimeOptions = {
   openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
+  approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;

@@ -196,6 +196,21 @@ it.sequential('rebuildAgent updates agent and model after setModel', () => {
   expect(newModel, 'model was updated').toBe('gpt-4o-mini');
 });
 
+it.sequential('rebuildAgent gives the new graph a policy registry without mutating the old graph', async () => {
+  ensureProviderRegistered();
+  const { deps } = createDeps();
+  const config = new AgentConfiguration({ model: 'mock-model' }, deps);
+  const oldRegistry = config.approvalPolicyRegistry;
+  oldRegistry.register({ toolName: 'old-graph-only', needsApproval: () => true });
+
+  config.rebuildAgent();
+
+  const newRegistry = config.approvalPolicyRegistry;
+  expect(newRegistry).not.toBe(oldRegistry);
+  await expect(oldRegistry.evaluate({ toolName: 'old-graph-only', args: {} })).resolves.toEqual({ kind: 'prompt' });
+  await expect(newRegistry.evaluate({ toolName: 'old-graph-only', args: {} })).resolves.toEqual({ kind: 'unknown' });
+});
+
 it.sequential('rebuildAgent is no-op for transient client', () => {
   ensureProviderRegistered();
 

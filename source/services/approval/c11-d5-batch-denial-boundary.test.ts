@@ -56,6 +56,7 @@ it.fails('records a batch-denied tool call as rejected, not approved (C11-D5 rec
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    policyRegistry: toolApprovalPolicyRegistry,
     nestedCompatibility: makeNestedCompatibility(),
   });
 

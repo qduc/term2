@@ -3,10 +3,15 @@ import { createSessionRuntime as createProductionSessionRuntime } from './sessio
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import type { BackgroundSubagentApprovalPauseSink } from '../subagents/foreground-subagent-lease.js';
 
 const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
-  createProductionSessionRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+  createProductionSessionRuntime({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 const noop = () => {};
 

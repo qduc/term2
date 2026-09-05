@@ -72,6 +72,7 @@ import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
 import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
 import type { SessionBrowser } from './services/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from './contracts/session-rollover.js';
+import { ToolApprovalPolicyRegistry } from './services/approval/tool-approval-policy-registry.js';
 import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
@@ -200,6 +201,7 @@ export const getAgentDefinition = (
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     executionContext?: ExecutionContext;
+    approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
     askMentor?: (question: string) => Promise<string>;
     runSubagent?: (
       params: ForegroundRunSubagentParams,
@@ -252,6 +254,7 @@ export const getAgentDefinition = (
     settingsService,
     loggingService,
     executionContext,
+    approvalPolicyRegistry,
     askMentor,
     runSubagent,
     runSubagentAsync,
@@ -274,6 +277,7 @@ export const getAgentDefinition = (
     configureTaskCheckIn,
     setTaskCheckInPolicy,
   } = deps;
+  const resolvedApprovalPolicyRegistry = approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
@@ -612,6 +616,7 @@ export const getAgentDefinition = (
       createRunCodeToolDefinition({
         loggingService,
         getCwd: () => executionContext?.getCwd() || process.cwd(),
+        approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
       }),
     );
   }

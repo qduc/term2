@@ -85,6 +85,7 @@ import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-s
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -110,6 +111,7 @@ export interface TurnWorkflowDeps {
   openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   batchCoordinator?: ToolApprovalBatchCoordinator;
   postExecutePending: PostExecutePendingRegistry;
   setActivePostExecuteRunId?: (runId: string | null) => void;
@@ -155,6 +157,7 @@ export class TurnWorkflow {
         logger: deps.logger,
         sessionId: deps.sessionId,
         sessionAccess: deps.sessionAccess,
+        policyRegistry: deps.approvalPolicyRegistry,
         isCurrent: (token) => deps.generationGuard.isCurrent(token),
         hookLifecycle: deps.hookLifecycle,
         hookEvents: deps.hookEvents,
@@ -671,6 +674,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        approvalPolicyRegistry: this.deps.approvalPolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,
       },
     );
@@ -1253,6 +1257,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        approvalPolicyRegistry: this.deps.approvalPolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,
       },
     );

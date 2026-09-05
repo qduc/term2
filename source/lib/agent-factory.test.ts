@@ -22,6 +22,7 @@ import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
 import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 import { getAgentDefinition } from '../agent.js';
 import { isDirectlyCallable, RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
+import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -88,6 +89,7 @@ const createDeps = (
       editor,
       providerId: overrides.providerId ?? 'openai',
       serviceTierOverrideForNextRequest: overrides.serviceTierOverrideForNextRequest ?? null,
+      approvalPolicyRegistry: overrides.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry(),
       executionContext: overrides.executionContext,
       createMentor: overrides.createMentor ?? (async () => 'mentor-response'),
       runSubagent: overrides.runSubagent ?? (async () => ({ finalText: 'subagent-response' })),
@@ -573,6 +575,63 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
     diff: '@@ -0,0 +1 @@\n+x',
   });
   expect(tempResult).toBe(false);
+});
+
+it.sequential('registers the final native apply_patch policy for nested consumers', async () => {
+  const { deps } = createDeps({ providerId: 'openai' });
+
+  buildAgent({ model: 'gpt-5.1' }, deps);
+
+  await expect(
+    deps.approvalPolicyRegistry.evaluate({
+      toolName: 'apply_patch',
+      args: { type: 'create_file', path: 'inside.txt', diff: '' },
+    }),
+  ).resolves.toEqual({ kind: 'auto_approve' });
+  await expect(
+    deps.approvalPolicyRegistry.evaluate({
+      toolName: 'apply_patch',
+      args: { type: 'delete_file', path: 'inside.txt', diff: '' },
+    }),
+  ).resolves.toEqual({ kind: 'prompt' });
+});
+
+it.sequential('keeps approval policies isolated between coexisting tool graphs', async () => {
+  const createPolicyTool = (requiresApproval: boolean): ToolDefinition<any> => ({
+    name: 'graph_policy_test',
+    description: 'graph policy test',
+    parameters: z.object({}),
+    canRequireApproval: true,
+    needsApproval: () => requiresApproval,
+    execute: async () => 'ok',
+    formatCommandMessage: () => [],
+  });
+  const first = createDeps({ approvalPolicyRegistry: new ToolApprovalPolicyRegistry() });
+  const second = createDeps({ approvalPolicyRegistry: new ToolApprovalPolicyRegistry() });
+
+  buildAgentTools({
+    toolDefinitions: [createPolicyTool(false)],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps: first.deps,
+  });
+  buildAgentTools({
+    toolDefinitions: [createPolicyTool(true)],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps: second.deps,
+  });
+
+  await expect(
+    first.deps.approvalPolicyRegistry.evaluate({ toolName: 'graph_policy_test', args: {} }),
+  ).resolves.toEqual({
+    kind: 'auto_approve',
+  });
+  await expect(
+    second.deps.approvalPolicyRegistry.evaluate({ toolName: 'graph_policy_test', args: {} }),
+  ).resolves.toEqual({
+    kind: 'prompt',
+  });
 });
 
 it.sequential('YOLO bypasses native apply_patch approval for paths outside the workspace', async () => {

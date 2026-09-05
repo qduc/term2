@@ -9,7 +9,7 @@ import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
-import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { ToolApprovalPolicyRegistry, toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
@@ -67,6 +67,7 @@ const makeDeps = (
   toolOwnership?: ToolOwnershipRegistry,
   sandboxEnabled: boolean = true,
   chat: () => Promise<string> = async () => '{"results":[]}',
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry = toolApprovalPolicyRegistry,
 ) => {
   const conversationStore = new ConversationStore();
   const agentClient: any = { chat };
@@ -109,6 +110,7 @@ const makeDeps = (
     shellAutoApproval,
     logger,
     sessionId: 's1',
+    approvalPolicyRegistry,
     nestedCompatibility,
     toolCallMarkers: new ToolCallMarkerStore(),
   };
@@ -383,6 +385,30 @@ it('auto_approve outcome for valid read-only interruptions registered with the p
   }
 });
 
+it('uses the active graph registry instead of the exported singleton', async () => {
+  const graphRegistry = new ToolApprovalPolicyRegistry();
+  graphRegistry.register({ toolName: 'read_file', needsApproval: () => false });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'read_file',
+        callId: 'graph-read-1',
+        arguments: { path: 'README.md' },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-graph-read' },
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps('off', undefined, true, undefined, graphRegistry),
+  );
+
+  expect(outcome.kind).toBe('auto_approve');
+  if (outcome.kind === 'auto_approve') expect(outcome.callId).toBe('graph-read-1');
+});
+
 it('always mode auto-approves editor interruptions without consulting the policy registry', async () => {
   const stream = makeStream({
     interruptions: [
@@ -632,7 +658,14 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
   });
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
+    {
+      approvalFlow,
+      shellAutoApproval,
+      logger,
+      sessionId: 's1',
+      approvalPolicyRegistry: toolApprovalPolicyRegistry,
+      nestedCompatibility,
+    },
   );
 
   expect(outcome.kind).toBe('auto_approve');
@@ -896,7 +929,14 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
 
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },
-    { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility },
+    {
+      approvalFlow,
+      shellAutoApproval,
+      logger,
+      sessionId: 's1',
+      approvalPolicyRegistry: toolApprovalPolicyRegistry,
+      nestedCompatibility,
+    },
   );
 
   expect(outcome.kind).toBe('approval_required');

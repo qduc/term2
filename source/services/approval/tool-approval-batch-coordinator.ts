@@ -22,7 +22,7 @@ import {
 } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import { toolApprovalPolicyRegistry, type ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
+import type { ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import {
   isDockerHostControlShellApproval,
   isUnsandboxedShell,
@@ -47,7 +47,7 @@ export interface ToolApprovalBatchCoordinatorDeps {
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
   nestedCompatibility?: NestedToolCompatibilityState;
-  policyRegistry?: ToolApprovalPolicyRegistry;
+  policyRegistry: ToolApprovalPolicyRegistry;
   isCurrent?: (token: number) => boolean;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
@@ -64,7 +64,7 @@ export class ToolApprovalBatchCoordinator {
   readonly #policyRegistry: ToolApprovalPolicyRegistry;
 
   constructor(private readonly deps: ToolApprovalBatchCoordinatorDeps) {
-    this.#policyRegistry = deps.policyRegistry ?? toolApprovalPolicyRegistry;
+    this.#policyRegistry = deps.policyRegistry;
   }
 
   async *stageBatch(input: ToolApprovalBatchStageInput): AsyncGenerator<ConversationEvent, BatchStageResult, void> {

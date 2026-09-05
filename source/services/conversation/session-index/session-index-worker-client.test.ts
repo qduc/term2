@@ -98,6 +98,12 @@ describe('SessionIndexWorkerClient', () => {
           text: 'response',
         });
       }
+
+      // Search
+      const searchResult = await client.search({ query: 'first', projectPath: '/project' });
+      expect(searchResult.matches).toHaveLength(1);
+      expect(searchResult.matches[0].sessionId).toBe('session-1');
+      expect(searchResult.matches[0].snippet.text).toContain('first message');
     } finally {
       await client.close();
     }

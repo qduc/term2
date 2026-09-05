@@ -101,10 +101,11 @@ describe('SessionIndexDatabase', () => {
       expect(tables).toContain('source_inventory');
       expect(tables).toContain('sessions');
       expect(tables).toContain('messages');
+      expect(tables).toContain('messages_fts');
 
       const meta = index.database.prepare('SELECT key, value FROM index_metadata').all() as any[];
       const metaMap = new Map(meta.map((m) => [m.key, m.value]));
-      expect(metaMap.get('schema_version')).toBe('2');
+      expect(metaMap.get('schema_version')).toBe('3');
       expect(metaMap.get('projection_version')).toBe('1');
       expect(metaMap.get('source_directory')).toBe(convDir);
 
@@ -120,7 +121,7 @@ describe('SessionIndexDatabase', () => {
     try {
       index1.initialize();
       // Manually set an outdated schema_version in metadata
-      index1.database.prepare("UPDATE index_metadata SET value = '1' WHERE key = 'schema_version'").run();
+      index1.database.prepare("UPDATE index_metadata SET value = '2' WHERE key = 'schema_version'").run();
       // Insert a dummy row into source_inventory
       index1.database
         .prepare(
@@ -138,7 +139,7 @@ describe('SessionIndexDatabase', () => {
       const meta = index2.database.prepare("SELECT value FROM index_metadata WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(meta.value).toBe('2');
+      expect(meta.value).toBe('3');
       // The dummy row should be dropped during rebuild
       const rowCount = index2.database.prepare('SELECT COUNT(*) as count FROM source_inventory').get() as {
         count: number;
@@ -726,6 +727,184 @@ describe('SessionIndexDatabase', () => {
       // Direct SQLite query and row materialization for a 1MB message measures 0.8-8ms.
       // Tightened to 25ms to tolerate CI scheduling jitter while catching any retrieval regressions.
       expect(elapsedMs).toBeLessThan(25);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('serves search via FTS5 trigram candidate index with exact scoring and scope isolation', () => {
+    writeSession('session-apple', '/project-food', undefined, 'I love eating crisp apples in Autumn');
+    writeSession('session-orange', '/project-food', undefined, 'Fresh orange juice is sweet and delicious');
+    writeSession('session-other', '/project-tools', undefined, 'Apples are not used as tools');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      // Query with term >= 3 chars matching food project
+      const res = index.search({ query: 'apples', projectPath: '/project-food' });
+      expect(res.matches.length).toBe(1);
+      expect(res.matches[0]!.sessionId).toBe('session-apple');
+      expect(res.matches[0]!.score).toBe(2); // lower.includes('apples')
+      expect(res.matches[0]!.snippet.text).toContain('apples');
+      expect(res.scope).toBe('/project-food');
+      expect(res.unavailable).toBe(0);
+
+      // Multi-term query (OR matching in FTS)
+      const multi = index.search({ query: 'apples orange', projectPath: '/project-food' });
+      expect(multi.matches.length).toBe(2);
+      const sessionIds = multi.matches.map((m) => m.sessionId).sort();
+      expect(sessionIds).toEqual(['session-apple', 'session-orange']);
+
+      // Scope isolation: search in tools project should only see session-other
+      const tools = index.search({ query: 'apples', projectPath: '/project-tools' });
+      expect(tools.matches.length).toBe(1);
+      expect(tools.matches[0]!.sessionId).toBe('session-other');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('falls back to scoped-text search for short terms and mixed terms without replaying logs', () => {
+    writeSession('session-short-1', '/project-short', undefined, 'Go language and C language');
+    writeSession('session-short-2', '/project-short', undefined, 'Python and Rust language');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      // Short term: 'c' has length 1 (< 3 chars, trigram cannot index it)
+      const resShort = index.search({ query: 'c', projectPath: '/project-short' });
+      expect(resShort.matches.length).toBe(1);
+      expect(resShort.matches[0]!.sessionId).toBe('session-short-1');
+      expect(resShort.matches[0]!.snippet.text).toContain('C language');
+
+      // Short term: 'go' has length 2 (< 3 chars)
+      const resGo = index.search({ query: 'go', projectPath: '/project-short' });
+      expect(resGo.matches.length).toBe(1);
+      expect(resGo.matches[0]!.sessionId).toBe('session-short-1');
+
+      // Mixed term: 'rust c' contains length 4 and length 1 terms
+      const resMixed = index.search({ query: 'rust c', projectPath: '/project-short' });
+      expect(resMixed.matches.length).toBe(2);
+      const matchedIds = resMixed.matches.map((m) => m.sessionId).sort();
+      expect(matchedIds).toEqual(['session-short-1', 'session-short-2']);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('preserves atomic synchronization between messages and messages_fts under interrupted transactions', () => {
+    writeSession('session-atom-1', '/project-atom', undefined, 'atomic initial test');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      const initialSearch = index.search({ query: 'atomic', projectPath: '/project-atom' });
+      expect(initialSearch.matches.length).toBe(1);
+
+      const msgCountInitial = index.database.prepare('SELECT count(*) as c FROM messages').get() as { c: number };
+      const ftsCountInitial = index.database.prepare('SELECT count(*) as c FROM messages_fts').get() as { c: number };
+      expect(ftsCountInitial.c).toBe(msgCountInitial.c);
+
+      // Simulate a crashed/aborted transaction during refresh
+      expect(() => {
+        index.database.transaction(() => {
+          index.database.prepare('DELETE FROM messages WHERE session_id = ?').run('session-atom-1');
+          index.database
+            .prepare(
+              'INSERT INTO messages (session_id, projected_ordinal, original_message_index, kind, original_text, normalized_text) VALUES (?, ?, ?, ?, ?, ?)',
+            )
+            .run('session-atom-1', 0, 0, 'user', 'aborted transaction text', 'aborted transaction text');
+          throw new Error('Simulated power loss during session commit');
+        })();
+      }).toThrow('Simulated power loss during session commit');
+
+      // Both messages and messages_fts must remain intact and identical to initial state
+      const msgCountAfter = index.database.prepare('SELECT count(*) as c FROM messages').get() as { c: number };
+      const ftsCountAfter = index.database.prepare('SELECT count(*) as c FROM messages_fts').get() as { c: number };
+      expect(msgCountAfter.c).toBe(msgCountInitial.c);
+      expect(ftsCountAfter.c).toBe(msgCountInitial.c);
+
+      // Search state must NOT have leaked the aborted text
+      const searchAborted = index.search({ query: 'aborted', projectPath: '/project-atom' });
+      expect(searchAborted.matches.length).toBe(0);
+
+      // Search state must still return the committed text
+      const searchOriginal = index.search({ query: 'atomic', projectPath: '/project-atom' });
+      expect(searchOriginal.matches.length).toBe(1);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('explains query plans and measures selective, broad, short, and mixed workloads', () => {
+    writeSession(
+      'session-perf-1',
+      '/project-perf',
+      undefined,
+      'distinctive_quantum_computation and algorithmic theory',
+    );
+    writeSession(
+      'session-perf-2',
+      '/project-perf',
+      undefined,
+      'general computer science and algorithmic theory with ai',
+    );
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      // 1. Selective workload (rare >= 3 char term)
+      const qpSelective = index.explainQueryPlan('distinctive_quantum_computation', { projectPath: '/project-perf' });
+      expect(qpSelective.strategy).toBe('fts5');
+      expect(
+        qpSelective.plan.some((p) => p.detail.includes('VIRTUAL TABLE') || p.detail.includes('messages_fts')),
+      ).toBe(true);
+
+      const startSelective = performance.now();
+      const resSelective = index.search({ query: 'distinctive_quantum_computation', projectPath: '/project-perf' });
+      const elapsedSelective = performance.now() - startSelective;
+      expect(resSelective.matches.length).toBe(1);
+      expect(elapsedSelective).toBeLessThan(50);
+
+      // 2. Broad workload (common >= 3 char term)
+      const qpBroad = index.explainQueryPlan('algorithmic theory', { projectPath: '/project-perf' });
+      expect(qpBroad.strategy).toBe('fts5');
+      expect(qpBroad.plan.some((p) => p.detail.includes('VIRTUAL TABLE') || p.detail.includes('messages_fts'))).toBe(
+        true,
+      );
+
+      const startBroad = performance.now();
+      const resBroad = index.search({ query: 'algorithmic theory', projectPath: '/project-perf' });
+      const elapsedBroad = performance.now() - startBroad;
+      expect(resBroad.matches.length).toBe(2);
+      expect(elapsedBroad).toBeLessThan(50);
+
+      // 3. Short workload (< 3 char term, e.g. "ai")
+      const qpShort = index.explainQueryPlan('ai', { projectPath: '/project-perf' });
+      expect(qpShort.strategy).toBe('scoped_text');
+      expect(
+        qpShort.plan.some((p) => p.detail.includes('idx_sessions_scope_updated') || p.detail.includes('sessions')),
+      ).toBe(true);
+
+      const startShort = performance.now();
+      const resShort = index.search({ query: 'ai', projectPath: '/project-perf' });
+      const elapsedShort = performance.now() - startShort;
+      expect(resShort.matches.length).toBe(1);
+      expect(elapsedShort).toBeLessThan(50);
+
+      // 4. Mixed workload (>= 3 chars and < 3 chars, e.g. "computer ai")
+      const qpMixed = index.explainQueryPlan('computer ai', { projectPath: '/project-perf' });
+      expect(qpMixed.strategy).toBe('scoped_text');
+
+      const startMixed = performance.now();
+      const resMixed = index.search({ query: 'computer ai', projectPath: '/project-perf' });
+      const elapsedMixed = performance.now() - startMixed;
+      expect(resMixed.matches.length).toBe(1);
+      expect(elapsedMixed).toBeLessThan(50);
     } finally {
       index.close();
     }

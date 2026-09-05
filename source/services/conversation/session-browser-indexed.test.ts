@@ -183,6 +183,99 @@ describe('SessionBrowser Indexed Backend', () => {
         await indexService.close();
       }
     });
+
+    it('achieves exact result parity with canonical browser for search queries across match membership, order, snippets, counts, and output budgets', async () => {
+      writeSession('session-11111111', '/workspace/project-a', undefined, 'apple banana cherry pie');
+      writeSession(
+        'session-22222222',
+        '/workspace/project-a',
+        undefined,
+        'apple cider and banana bread',
+        'session-11111111',
+      );
+      writeSession('session-33333333', '/workspace/project-b', undefined, 'apple in different project');
+      writeSession('session-44444444', '/workspace/project-a', undefined, 'go language and c language runtime');
+
+      // Add corrupt and invalid logs to test unavailable parity in search results
+      fs.writeFileSync(path.join(dir, 'corrupt-search.jsonl'), 'CORRUPTED_JSON\n');
+      fs.writeFileSync(
+        path.join(dir, 'invalid-scope-search.jsonl'),
+        JSON.stringify({
+          v: 3,
+          seq: 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          event: {
+            type: 'session_init',
+            id: 'invalid-scope-search',
+            createdAt: 'invalid-date',
+            projectPath: '/workspace/project-a',
+          },
+        }) + '\n',
+      );
+
+      const currentSessionId = 'session-22222222';
+      const getContext = (): SessionBrowserContext => ({
+        projectPath: '/workspace/project-a',
+        currentSessionId,
+      });
+
+      const indexService = new SessionIndexService({
+        conversationsDir: dir,
+        dbPath,
+        backend,
+      });
+
+      const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+      const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+      try {
+        // 1. Selective search (>= 3 char term matching 1 session)
+        const canSelective = canonicalBrowser.search({ query: 'cherry' });
+        const indSelective = await indexedBrowser.search({ query: 'cherry' });
+        expect(indSelective).toEqual(canSelective);
+
+        // 2. Broad search with multi-session ranking and currentSessionId demotion
+        // session-22222222 contains 'apple' but is currentSessionId, so it must sort after session-11111111
+        const canBroad = canonicalBrowser.search({ query: 'apple' });
+        const indBroad = await indexedBrowser.search({ query: 'apple' });
+        expect(indBroad).toEqual(canBroad);
+
+        // 3. Short-term search (< 3 chars, e.g. "c")
+        const canShort = canonicalBrowser.search({ query: 'c' });
+        const indShort = await indexedBrowser.search({ query: 'c' });
+        expect(indShort).toEqual(canShort);
+
+        // 4. Mixed-term search (>= 3 chars and < 3 chars, e.g. "go c")
+        const canMixed = canonicalBrowser.search({ query: 'go c' });
+        const indMixed = await indexedBrowser.search({ query: 'go c' });
+        expect(indMixed).toEqual(canMixed);
+
+        // 5. Output budget constraint with omitted count
+        const canBudget = canonicalBrowser.search({ query: 'apple banana', maxChars: 600 });
+        const indBudget = await indexedBrowser.search({ query: 'apple banana', maxChars: 600 });
+        expect(indBudget).toEqual(canBudget);
+
+        // 6. Limit constraint: total is full match count before limit
+        const canLimit = canonicalBrowser.search({ query: 'apple banana', limit: 1 });
+        const indLimit = await indexedBrowser.search({ query: 'apple banana', limit: 1 });
+        expect(indLimit).toEqual(canLimit);
+
+        // 7. No match
+        const canNone = canonicalBrowser.search({ query: 'nonexistentqueryterm' });
+        const indNone = await indexedBrowser.search({ query: 'nonexistentqueryterm' });
+        expect(indNone).toEqual(canNone);
+
+        // 8. Scope isolation: search for 'different' should return 0 in project-a
+        const canDiff = canonicalBrowser.search({ query: 'different' });
+        const indDiff = await indexedBrowser.search({ query: 'different' });
+        expect(indDiff).toEqual(canDiff);
+        expect((indDiff as any).total).toBe(0);
+      } finally {
+        await canonicalBrowser.close();
+        await indexedBrowser.close();
+        await indexService.close();
+      }
+    });
   });
 
   // Direct backend is used because fs.readFileSync and crypto.createHash spies cannot observe calls across the worker thread boundary.
@@ -671,6 +764,59 @@ describe('SessionBrowser Indexed Backend', () => {
       hashSpy.mockRestore();
       await restartBrowser.close();
       await restartService.close();
+    }
+  });
+
+  it('replays zero logs and zero hashes on indexed search including short-term fallback', async () => {
+    writeSession('session-search-zero-1', '/project', undefined, 'unique_term_for_fts search payload');
+    writeSession('session-search-zero-2', '/project', undefined, 'short term go language runtime');
+
+    const service = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+    const res = await service.reconcile();
+    expect(res.ok).toBe(true);
+
+    const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+    const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService: service });
+
+    const realReadFileSync = fs.readFileSync;
+    let jsonlReadCount = 0;
+    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: any, options: any) => {
+      if (typeof filePath === 'string' && filePath.endsWith('.jsonl')) {
+        jsonlReadCount++;
+      }
+      return realReadFileSync(filePath, options);
+    });
+
+    const realCreateHash = crypto.createHash;
+    let sha256Calls = 0;
+    const hashSpy = vi.spyOn(crypto, 'createHash').mockImplementation((algo: string, options?: any) => {
+      if (algo === 'sha256') sha256Calls++;
+      return realCreateHash(algo, options);
+    });
+
+    try {
+      // 1. FTS5 search path: 0 jsonl reads and 0 hashes
+      jsonlReadCount = 0;
+      sha256Calls = 0;
+      const ftsRes = (await browser.search({ query: 'unique_term_for_fts' })) as any;
+      expect(ftsRes.results.length).toBe(2);
+      expect(ftsRes.results.every((r: any) => r.sessionId === 'session-search-zero-1')).toBe(true);
+      expect(jsonlReadCount).toBe(0);
+      expect(sha256Calls).toBe(0);
+
+      // 2. Short-term fallback search path: 0 jsonl reads and 0 hashes
+      jsonlReadCount = 0;
+      sha256Calls = 0;
+      const shortRes = (await browser.search({ query: 'go' })) as any;
+      expect(shortRes.results.length).toBe(2);
+      expect(shortRes.results.every((r: any) => r.sessionId === 'session-search-zero-2')).toBe(true);
+      expect(jsonlReadCount).toBe(0);
+      expect(sha256Calls).toBe(0);
+    } finally {
+      readSpy.mockRestore();
+      hashSpy.mockRestore();
+      await browser.close();
+      await service.close();
     }
   });
 });

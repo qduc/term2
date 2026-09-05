@@ -16,6 +16,7 @@ import {
 import { matchCenteredSnippet } from '../../utils/output/text-snippet.js';
 import { createHash } from 'node:crypto';
 import { SessionIndexService } from './session-index/session-index-service.js';
+import { SNIPPET_CHARS, scoreText, termsFor } from './session-search-helpers.js';
 
 export const MIN_SESSION_BROWSER_CHARS = 512;
 export const MAX_SESSION_BROWSER_CHARS = 12_000;
@@ -23,7 +24,6 @@ const DEFAULT_INDEX_CHARS = 12_000;
 const DEFAULT_READ_CHARS = 12_000;
 const DEFAULT_LIMIT = 10;
 const DEFAULT_READ_LIMIT = 20;
-const SNIPPET_CHARS = 240;
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
@@ -186,15 +186,20 @@ export class SessionBrowser {
     return this.#listCanonical(input);
   }
 
-  search(input: SessionSearchInput) {
-    const budget = input.maxChars ?? DEFAULT_INDEX_CHARS;
+  search(input: SessionSearchInput): unknown | Promise<unknown> {
+    if (this.#backend === 'indexed') {
+      return this.#searchIndexed(input);
+    }
+    return this.#searchCanonical(input);
+  }
+
+  #searchCanonical(input: SessionSearchInput) {
     const terms = termsFor(input.query);
     const browsed = this.conversations();
     let unavailable = browsed.unavailable;
     const conversations = browsed.conversations;
     const shortRefs = uniqueConversationShortRefs(conversations);
     let skippedMessageCount = 0;
-    const currentSessionId = this.getContext().currentSessionId;
     const matches: Array<{
       sessionId: string;
       shortRef: string;
@@ -226,6 +231,51 @@ export class SessionBrowser {
           });
       }
     }
+    return this.#pageSearchResult(
+      matches,
+      browsed.scope,
+      unavailable,
+      skippedMessageCount,
+      input.limit,
+      input.maxChars,
+    );
+  }
+
+  async #searchIndexed(input: SessionSearchInput): Promise<unknown> {
+    const service = this.#getIndexService();
+    const context = this.getContext();
+    const indexed = await service.search(input.query, context);
+    if (indexed !== null) {
+      return this.#pageSearchResult(
+        indexed.matches,
+        indexed.scope,
+        indexed.unavailable,
+        indexed.skippedMessageCount,
+        input.limit,
+        input.maxChars,
+      );
+    }
+    return this.#searchCanonical(input);
+  }
+
+  #pageSearchResult(
+    matches: Array<{
+      sessionId: string;
+      shortRef: string;
+      kind: Kind;
+      messageIndex: number;
+      snippet: { text: string; truncated: boolean };
+      updatedAt: string;
+      score: number;
+    }>,
+    scope: string,
+    unavailable: number,
+    skippedMessageCount: number,
+    limit: number | undefined,
+    maxChars: number | undefined,
+  ) {
+    const budget = maxChars ?? DEFAULT_INDEX_CHARS;
+    const currentSessionId = this.getContext().currentSessionId;
     matches.sort((a, b) => {
       // Demote the live session so its self-referential matches (the query text
       // appears in its own transcript while the agent is searching) cannot
@@ -241,10 +291,10 @@ export class SessionBrowser {
         a.messageIndex - b.messageIndex
       );
     });
-    const selected = matches.slice(0, clamp(input.limit, DEFAULT_LIMIT));
+    const selected = matches.slice(0, clamp(limit, DEFAULT_LIMIT));
     const result = {
       results: [] as Array<Record<string, unknown>>,
-      scope: browsed.scope,
+      scope,
       total: matches.length,
       omitted: 0,
       unavailable,
@@ -738,20 +788,6 @@ function contextKey(context: SessionBrowserContext) {
 }
 function clamp(value: number | undefined, fallback: number) {
   return Math.max(1, Math.min(50, value ?? fallback));
-}
-function termsFor(query: string) {
-  return query
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((term) => term.toLowerCase());
-}
-function scoreText(text: string, terms: string[]) {
-  const lower = text.toLowerCase();
-  return terms.reduce(
-    (total, term) => total + (lower === term ? 100 : lower.startsWith(term) ? 20 : lower.includes(term) ? 2 : 0),
-    0,
-  );
 }
 function prefixSnippet(text: string) {
   if (text.length <= SNIPPET_CHARS) return text;

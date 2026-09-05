@@ -2,6 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSessionRolloverToolDefinition, sessionRolloverParameters } from './session-rollover-tool.js';
 
 describe('session_rollover tool', () => {
+  it('guides short durable handoffs and checks live work before drafting', () => {
+    const tool = createSessionRolloverToolDefinition(() => ({
+      ok: true,
+      status: 'rollover_requested',
+      rolloverId: 'r',
+    }));
+    expect(tool.description).toContain('8,000');
+    expect(tool.description).toContain('background work');
+    expect(tool.description).toContain('session-owned');
+    expect(sessionRolloverParameters.shape.brief.description).toContain('delta');
+  });
   it('validates the bounded strict request and records it without approval', async () => {
     const request = vi.fn(() => ({ ok: true as const, status: 'rollover_requested' as const, rolloverId: 'r1' }));
     const tool = createSessionRolloverToolDefinition(request);

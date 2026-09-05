@@ -11,7 +11,13 @@ import {
 
 export const sessionRolloverParameters = z
   .object({
-    brief: z.string().max(8_000),
+    brief: z
+      .string()
+      .max(8_000)
+      .describe(
+        'Keep well below 8,000 characters. Give the next open step, unfinished decisions, completed effects, and durable paths/commits. ' +
+          'When a canonical artifact already holds the state, write a short delta and pointer instead of copying it.',
+      ),
     reason: z.enum(['context_pressure', 'task_boundary']).optional(),
   })
   .strict();
@@ -22,7 +28,9 @@ export function createSessionRolloverToolDefinition(
   return {
     name: 'session_rollover',
     description:
-      'Request an idle-boundary rotation into a fresh session. Include a concise handoff brief with completed work, open work, and durable-state pointers.',
+      'Request an idle-boundary rotation into a fresh session. Live background work blocks rotation: let it settle before drafting a brief. ' +
+      'Keep the brief well below the 8,000-character limit using durable-state pointers and the next open step. ' +
+      'Old job and subagent handles are session-owned; save their useful results to durable artifacts rather than promising the successor can query those handles.',
     parameters: sessionRolloverParameters,
     terminateAfterExecution: (result) =>
       typeof result === 'string' &&

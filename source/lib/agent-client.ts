@@ -65,6 +65,7 @@ import {
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
+import { isCodexCompactionIncompatible } from '../providers/codex-compact.js';
 import {
   estimateContext,
   resolveCompactionThreshold,
@@ -113,6 +114,7 @@ export class AgentClient {
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #applicationRunLoop: ApplicationRunLoop;
   #contextCompactionSessionState: ContextCompactionSessionState = { disabled: false };
+  #unavailableCodexCompaction = new WeakSet<StreamedModelTurn>();
   #maxTurns: number;
   #retryAttempts: number;
   #retryCallback: (() => void) | null = null;
@@ -192,8 +194,8 @@ export class AgentClient {
     onStarted: (provider: string) => void;
     manual: boolean;
   }): Promise<
-    | { kind: 'unchanged' }
-    | { kind: 'failed'; provider: string }
+    | { kind: 'unchanged'; nativeUnavailable?: boolean }
+    | { kind: 'failed'; provider: string; nativeUnavailable?: boolean }
     | { kind: 'compacted'; history: ProviderInputItem[]; modelInput: ProviderInputItem[] }
   > {
     const catalog = getCatalogModel('codex', input.model);
@@ -219,11 +221,14 @@ export class AgentClient {
       if (deferred) return { kind: 'unchanged' };
     }
     const streamed = await this.#resolveStreamedModel(input.model);
+    if (!input.manual && this.#unavailableCodexCompaction.has(streamed)) {
+      return { kind: 'unchanged', nativeUnavailable: true };
+    }
     if (!streamed.compactHistory) {
       this.#logger.warn('Codex compact endpoint is unavailable; continuing with uncompacted history', {
         model: input.model,
       });
-      return { kind: 'unchanged' };
+      return { kind: 'unchanged', nativeUnavailable: true };
     }
     input.onStarted('codex');
     try {
@@ -235,13 +240,20 @@ export class AgentClient {
       if (history.length === 0) {
         throw new Error('Codex compact endpoint returned an empty history');
       }
+      this.#unavailableCodexCompaction.delete(streamed);
       return { kind: 'compacted', history, modelInput: history };
     } catch (error) {
+      if (input.signal?.aborted) throw error;
+      const nativeUnavailable = isCodexCompactionIncompatible(error);
+      if (nativeUnavailable) this.#unavailableCodexCompaction.add(streamed);
       this.#logger.warn('Codex compact endpoint failed; continuing with uncompacted history', {
+        eventType: 'context_compaction.native_failed',
         model: input.model,
         error: error instanceof Error ? error.message : String(error),
+        automaticRetry: nativeUnavailable ? 'disabled_for_model_instance' : 'eligible',
+        recovery: nativeUnavailable ? 'Manual /compact retries; auto mode can use local compaction.' : 'unchanged',
       });
-      return { kind: 'failed', provider: 'codex' };
+      return { kind: 'failed', provider: 'codex', nativeUnavailable };
     }
   }
 
@@ -270,7 +282,7 @@ export class AgentClient {
           supportsContextCompactionModel(model) &&
           !this.#contextCompactionSessionState.disabled;
         if (provider === 'codex' && mode !== 'local') {
-          return this.#compactCodexHistory({
+          const native = await this.#compactCodexHistory({
             history,
             model,
             automaticCompactionsThisRun,
@@ -278,6 +290,9 @@ export class AgentClient {
             onStarted,
             manual: false,
           });
+          if (mode !== 'auto' || !('nativeUnavailable' in native && native.nativeUnavailable)) return native;
+          // Auto was explicitly selected. Keep the existing local safe-cut and
+          // opaque-history checks; a rejected native call never discards history.
         }
         if (mode === 'native' || (mode === 'auto' && openaiInlineNative)) return { kind: 'unchanged' as const };
 
@@ -350,6 +365,14 @@ export class AgentClient {
               reason: outcome.reason,
               renderedInputTokens: outcome.estimate.renderedInputTokens,
             });
+            if (outcome.reason === 'no_complete_cold_turn') {
+              return {
+                kind: 'unchanged' as const,
+                notice:
+                  'Local compaction cannot shorten this history yet: it preserves the newest two user turns and needs an older completed turn. ' +
+                  'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe boundary after background work settles. Do not repeat completed work or manufacture user turns to force compaction.',
+              };
+            }
           }
           return { kind: 'unchanged' as const };
         }

@@ -20,6 +20,8 @@ import { SessionAccessState } from '../../../services/session/session-access-sta
 import { createMockSettingsService } from '../../../services/settings/settings-service.mock.js';
 import { createCreateFileToolDefinition } from '../../file/create-file.js';
 import { createApplyPatchToolDefinition } from '../../file/apply-patch.js';
+import { createReadFileToolDefinition } from '../../file/read-file.js';
+import * as shellOutput from '../../../utils/shell/shell-output.js';
 import { ExecutionContext } from '../../../services/execution-context.js';
 
 const workspace = process.cwd();
@@ -707,6 +709,95 @@ describe('run_code', () => {
     expect(output).toContain('Result:\nanswer');
     expect(output).toContain('[truncated: output exceeded');
     expect(output.length).toBeLessThanOrEqual(30_000);
+  });
+
+  it('preserves a clipped final result in a readable artifact without repeating tool effects', async () => {
+    const execute = vi.fn(() => 'x'.repeat(35_000) + '\nTAIL-EVIDENCE');
+    const output = await run([tool({ name: 'effect', execute })], 'return await tools.effect({value:"once"});');
+    const artifact = output.match(/Full output saved to `([^`]+)`/)?.[1];
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(output.length).toBeLessThanOrEqual(30_000);
+    expect(output).not.toContain('TAIL-EVIDENCE');
+    expect(artifact).toBeDefined();
+    try {
+      expect(readFileSync(artifact!, 'utf8')).toContain('TAIL-EVIDENCE');
+      expect(readFileSync(artifact!, 'utf8')).toContain('[1 tool call: effect]');
+    } finally {
+      if (artifact) rmSync(artifact);
+    }
+  });
+
+  it('keeps successful effects successful when output artifact storage fails', async () => {
+    const save = vi.spyOn(shellOutput, 'saveOutputArtifact').mockRejectedValue(new Error('disk full'));
+    const execute = vi.fn(() => 'x'.repeat(35_000));
+    try {
+      const output = await run([tool({ name: 'effect', execute })], 'return await tools.effect({value:"once"});');
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(output).toContain('Full output could not be saved');
+      expect(output).toContain('Do not repeat completed tool effects');
+      expect(output).not.toContain('Script failed');
+      expect(output.length).toBeLessThanOrEqual(30_000);
+    } finally {
+      save.mockRestore();
+    }
+  });
+
+  it('does not create artifacts for short final output', async () => {
+    const save = vi.spyOn(shellOutput, 'saveOutputArtifact');
+    try {
+      expect(await run([], 'return "small";')).toContain('Result:\nsmall');
+      expect(save).not.toHaveBeenCalled();
+    } finally {
+      save.mockRestore();
+    }
+  });
+
+  it('keeps the whole bounded-batch result when one independent tool rejects', async () => {
+    const code = `const results = await Promise.allSettled([tools.echo({value:"ok"}), tools.broken({value:"bad"})]);
+      return results.map((r) => r.status === "fulfilled" ? {value:r.value} : {error:r.reason.message});`;
+    const output = await run(
+      [
+        tool({ name: 'echo', parallelSafe: true }),
+        tool({
+          name: 'broken',
+          parallelSafe: true,
+          execute: () => {
+            throw new Error('missing file');
+          },
+        }),
+      ],
+      code,
+    );
+    expect(output).toContain('echo:ok');
+    expect(output).toContain('missing file');
+    expect(output).toContain('2 tool calls');
+  });
+
+  it('runs the advertised bounded read example against real file results', async () => {
+    const directory = mkdtempSync(join(workspace, '.run-code-example-'));
+    try {
+      writeFileSync(join(directory, 'a.ts'), 'hello'.repeat(1000));
+      const example = build([])
+        .description.split('Example: `')[1]!
+        .slice(0, -1)
+        .replace('"a.ts"', JSON.stringify(join(directory, 'a.ts')))
+        .replace('"b.ts"', JSON.stringify(join(directory, 'b.ts')));
+      const output = await run([createReadFileToolDefinition() as AnyToolDefinition], example);
+      expect(output).toContain('hello');
+      expect(output).toContain('File not found');
+      expect(output).not.toContain('Script failed');
+      expect(output.length).toBeLessThan(3000);
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
+  });
+
+  it('guides bounded batches and direct literal patches before scripting', () => {
+    const description = build([]).description;
+    expect(description).toContain('Promise.allSettled');
+    expect(description).toContain('30,000');
+    expect(description).toContain('apply_patch directly');
+    expect(description).toContain('template literal');
   });
 
   it('explains that a successful script with no return value produces no result', async () => {

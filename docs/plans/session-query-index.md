@@ -8,7 +8,7 @@ for persistence, resume, and recovery. The database is a derived representation 
 the existing browser projection, not a replacement event store.
 
 Planning baseline: `637b216534a46086eadb06ed713c99a63b38f302`, inspected 2026-09-05.
-This document specified proposed work; M0 and M2a are now implemented, reviewed, and merged (see Landed below). M1–M4 remain proposed.
+This document specified proposed work; M0, M1, M2a, and M2b are now implemented, reviewed, and merged (see Landed below). M3–M4 remain proposed.
 Begin with M0 measurements and driver compatibility, then implement M1–M4 in order.
 M2 first repairs the canonical tail/page contract, then implements indexed reads
 against that repaired contract; baseline parity must not freeze the reported defects.
@@ -23,6 +23,8 @@ Landed:
   Implemented by an agy (gemini-3.8-flash-medium) lane after a handoff from a slower worker; three review rounds (claude), final verdict approve. Indexed backend is OPT-IN via `TERM2_SESSION_BROWSER_BACKEND=indexed`; default stays canonical until M4 gates pass. Reviewer notes that stand as recorded facts for M4: reconciliation is all-or-nothing per call (busy corpora may keep falling back to canonical), the new guard thresholds (5 s busy timeout, 5 s driver timeout, 10 s worker request timeout) still lack recorded evidence, and the messages table holds full text nothing reads until M2b. Review receipts: `~/.agents/runtime/session-query-index/receipts/sqi-m1-review.md`.
 - **M2a (canonical tail/page contract repair) — merged 2026-09-05 (`539aad5a`; commits `569f9e3b`, `d25fd9cc`).**
   Independent review (claude, default model) verdict was changes-required; findings 1/3/5 (UTF-16 per-chunk assertion, executed read-envelope tool test, `omitted` "any reason" wording) were fixed in `d25fd9cc`, finding 2 is a documented test-value note, and finding 4's plan-doc half is this entry. Repaired tail fixture: limit 10 and 20 recover the pre-final-record fact (154/159 chunked pages, no loss, duplication, or reverse ordering); limit 5 correctly excludes it as outside the region. Worker receipts: `~/.agents/runtime/session-query-index/receipts/`.
+- **M2b (indexed reads) — merged 2026-09-06 (merge `b187346c`; commits `b22d6497`, `c12229c3`).**
+  Implemented by the same agy (gemini-3.8-flash-medium) lane; one review round (claude), verdict approve with one required fix — the large-message retrieval guard tightened from 500 ms to 25 ms (direct DB fetch measured 0.8–8 ms for a 1 MB message; end-to-end `SessionBrowser.readSession` 12–77 ms), plus corrected receipt attribution. `SessionBrowser` converges on a shared page-read helper for both backends; 0-replay/0-rehash verified on restart and continuation reads; acceptance tests run parameterized across `direct` and `worker` backends. Coordinator rerun: 8 test files / 144 tests passed, `tsc --noEmit` clean. Review receipt: `~/.agents/runtime/session-query-index/receipts/sqi-m2b-review.md`.
 
 Read the existing retrieval studies for motivation:
 [observed usage](../research/session-retrieval-observed-usage.md) and

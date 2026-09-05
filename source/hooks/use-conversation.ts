@@ -206,7 +206,9 @@ export const useConversation = ({
   const waitingForRejectionReason =
     uiWaitingForRejectionReason ||
     nestedApproval?.requestId === nestedRejectionRequestId ||
-    backgroundRejectionEntry !== null;
+    (backgroundRejectionEntry !== null &&
+      backgroundSubagentApproval.current !== null &&
+      sameBackgroundApprovalIdentity(backgroundRejectionEntry, backgroundSubagentApproval.current));
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -270,7 +272,12 @@ export const useConversation = ({
     return conversationService.backgroundSubagentApprovals.subscribe(() => {
       const snapshot = readBackgroundApproval();
       setBackgroundSubagentApproval(snapshot);
-      if (snapshot.pendingCount > 0) {
+      if (snapshot.current === null) {
+        // A synchronous queue settlement can publish an empty snapshot before
+        // the caller returns from resolve(). Retire the source identity from
+        // every empty/closed snapshot so it cannot keep owning the composer.
+        setBackgroundRejectionEntry(null);
+      } else {
         // A background approval takes prompt ownership even when the nested
         // composer was already open. Keep the composer active, but retarget
         // it to the effective background source instead of leaking the nested
@@ -280,10 +287,14 @@ export const useConversation = ({
           setBackgroundRejectionEntry(snapshot.current);
         } else if (
           backgroundRejectionEntry &&
-          (!snapshot.current || !sameBackgroundApprovalIdentity(backgroundRejectionEntry, snapshot.current))
+          !sameBackgroundApprovalIdentity(backgroundRejectionEntry, snapshot.current)
         ) {
-          setBackgroundRejectionEntry(snapshot.current);
+          // A replacement head is a new prompt, not the source of the reason
+          // being composed. Do not transfer the stored reason to it.
+          setBackgroundRejectionEntry(null);
         }
+      }
+      if (snapshot.pendingCount > 0) {
         notifier?.approvalNeeded();
       }
     });
@@ -590,17 +601,23 @@ export const useConversation = ({
 
   const setWaitingForRejectionReason = useCallback(
     (value: boolean) => {
+      if (!value) {
+        setBackgroundRejectionEntry(null);
+        setNestedRejectionRequestId(null);
+        dispatch({ type: 'interaction/composer_entry', mode: 'none' });
+        return;
+      }
       const backgroundEntry = readBackgroundApproval().current;
       if (backgroundEntry && pendingApproval === null) {
-        setBackgroundRejectionEntry(value ? backgroundEntry : null);
-        if (value) setNestedRejectionRequestId(null);
+        setBackgroundRejectionEntry(backgroundEntry);
+        setNestedRejectionRequestId(null);
         return;
       }
       if (nestedApproval && pendingApproval === null) {
-        setNestedRejectionRequestId(value ? nestedApproval.requestId : null);
+        setNestedRejectionRequestId(nestedApproval.requestId);
         return;
       }
-      dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
+      dispatch({ type: 'interaction/composer_entry', mode: 'rejection_reason' });
     },
     [nestedApproval, pendingApproval, readBackgroundApproval, setBackgroundRejectionEntry, setNestedRejectionRequestId],
   );

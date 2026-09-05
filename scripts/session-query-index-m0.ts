@@ -15,10 +15,10 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 type Args = Record<string, string | boolean>;
-type Operation = { name: string; run: () => unknown };
+type Operation = { name: string; run: () => unknown | Promise<unknown> };
 type Measurement = {
   name: string;
-  condition: 'missing_index';
+  condition: 'missing_index' | 'existing_index_warm';
   samples: number;
   p50Ms: number;
   p95Ms: number;
@@ -210,7 +210,12 @@ function percentile(values: number[], percentileValue: number): number {
   return ordered[Math.max(0, Math.ceil((percentileValue / 100) * ordered.length) - 1)] ?? 0;
 }
 
-async function benchmark(corpus: string, samples: number) {
+async function benchmark(
+  corpus: string,
+  samples: number,
+  backendChoice: 'canonical' | 'indexed' = 'canonical',
+  workerMode: 'worker' | 'direct' = 'worker',
+) {
   const manifest = JSON.parse(fs.readFileSync(path.join(corpus, 'manifest.json'), 'utf8')) as {
     projectPath: string;
     tailFixture: { id: string; fact: string; finalRecord: string };
@@ -220,7 +225,44 @@ async function benchmark(corpus: string, samples: number) {
   const currentId = idFor(
     Number(fs.readdirSync(process.env.TERM2_CONVERSATIONS_DIR).filter((file) => file.endsWith('.jsonl')).length) - 2,
   );
-  const browser = () => new SessionBrowser(() => ({ projectPath: manifest.projectPath, currentSessionId: currentId }));
+
+  let indexService: any = null;
+  let initialBuild: { durationMs: number; dbSizeBytes: number; replayedCount: number } | null = null;
+  if (backendChoice === 'indexed') {
+    const dbPath = path.join(corpus, 'session-index.db');
+    const { SessionIndexService } = await import(
+      '../source/services/conversation/session-index/session-index-service.js'
+    );
+    indexService = new SessionIndexService({
+      conversationsDir: process.env.TERM2_CONVERSATIONS_DIR,
+      dbPath,
+      backend: workerMode,
+    });
+    console.error(`[benchmark] Reconciling index at ${dbPath}...`);
+    const buildStart = performance.now();
+    const buildResult = await indexService.reconcile();
+    if (!buildResult.ok) {
+      throw new Error(`Index reconciliation failed: ${buildResult.error}`);
+    }
+    const durationMs = performance.now() - buildStart;
+    const dbSizeBytes = fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0;
+    console.error(
+      `[benchmark] Index ready: ${durationMs.toFixed(1)}ms, replayed=${
+        buildResult.replayedCount
+      }, size=${dbSizeBytes} bytes`,
+    );
+    initialBuild = {
+      durationMs,
+      dbSizeBytes,
+      replayedCount: buildResult.replayedCount,
+    };
+  }
+
+  const browser = () =>
+    new SessionBrowser(() => ({ projectPath: manifest.projectPath, currentSessionId: currentId }), {
+      backend: backendChoice,
+      indexService,
+    });
   const targetId = idFor(16);
   const operations: Operation[] = [
     { name: 'list', run: () => browser().list({ limit: 10 }) },
@@ -231,22 +273,26 @@ async function benchmark(corpus: string, samples: number) {
     { name: 'read_prefix_initial', run: () => browser().read({ id: targetId.slice(0, 35), limit: 10 }) },
     { name: 'read_previous_initial', run: () => browser().read({ id: 'previous', limit: 10 }) },
     {
-      name: 'read_tail_pre_repair_final_record_anchor',
+      name: 'read_tail_multi_record_anchor',
       run: () => browser().read({ id: manifest.tailFixture.id, from: 'end', limit: 10 }),
     },
     {
       name: 'read_continuation',
-      run: () => {
+      run: async () => {
         const instance = browser();
-        const first = instance.read({ id: targetId, maxChars: 512 }) as { nextCursor?: string };
-        return first.nextCursor ? instance.read({ id: targetId, cursor: first.nextCursor, maxChars: 512 }) : first;
+        const first = (await instance.read({ id: targetId, maxChars: 512 })) as { nextCursor?: string };
+        return first.nextCursor
+          ? await instance.read({ id: targetId, cursor: first.nextCursor, maxChars: 512 })
+          : first;
       },
     },
   ];
   const originalRead = fs.readFileSync;
   const originalReaddir = fs.readdirSync;
   const results: Measurement[] = [];
+  const condition = backendChoice === 'indexed' ? 'existing_index_warm' : 'missing_index';
   for (const operation of operations) {
+    console.error(`[benchmark] Starting operation: ${operation.name}...`);
     const durations: number[] = [];
     let replayCount = 0;
     let replayBytes = 0;
@@ -254,6 +300,7 @@ async function benchmark(corpus: string, samples: number) {
     let peakRssBytes = process.memoryUsage().rss;
     const eventLoopDelays: number[] = [];
     for (let sample = 0; sample < samples; sample += 1) {
+      console.error(`[benchmark]   ${operation.name} sample ${sample + 1}/${samples}...`);
       fs.readFileSync = ((
         file: fs.PathOrFileDescriptor,
         ...rest: Parameters<typeof fs.readFileSync> extends [any, ...infer R] ? R : never[]
@@ -277,7 +324,10 @@ async function benchmark(corpus: string, samples: number) {
         }),
       );
       const start = performance.now();
-      operation.run();
+      const opResult = operation.run();
+      if (opResult && typeof (opResult as Promise<unknown>).then === 'function') {
+        await opResult;
+      }
       durations.push(performance.now() - start);
       fs.readFileSync = originalRead;
       fs.readdirSync = originalReaddir;
@@ -286,7 +336,7 @@ async function benchmark(corpus: string, samples: number) {
     }
     results.push({
       name: operation.name,
-      condition: 'missing_index',
+      condition,
       samples,
       p50Ms: percentile(durations, 50),
       p95Ms: percentile(durations, 95),
@@ -297,22 +347,26 @@ async function benchmark(corpus: string, samples: number) {
       eventLoopDelayP95Ms: percentile(eventLoopDelays, 95),
     });
   }
-  const tail = browser().read({ id: manifest.tailFixture.id, from: 'end', limit: 10 }) as {
+  const tailRes = browser().read({ id: manifest.tailFixture.id, from: 'end', limit: 10 });
+  const tail = (tailRes && typeof (tailRes as Promise<unknown>).then === 'function' ? await tailRes : tailRes) as {
     items?: Array<{ text?: string }>;
   };
   const report = {
-    version: 1,
+    version: 2,
     machine: { hostname: os.hostname(), platform: process.platform, arch: process.arch, node: process.version },
     corpus,
+    backend: backendChoice,
+    workerMode: backendChoice === 'indexed' ? workerMode : undefined,
+    initialBuild: initialBuild ?? undefined,
     conditionStatus: {
-      missing_index: 'measured',
-      existing_index_after_restart: 'deferred: index not implemented',
-      warm_unchanged: 'deferred: index not implemented',
-      one_changed_session: 'deferred: index not implemented',
+      missing_index: backendChoice === 'canonical' ? 'measured' : 'baseline_in_m0',
+      existing_index_after_restart: backendChoice === 'indexed' ? 'measured' : 'deferred',
+      warm_unchanged: backendChoice === 'indexed' ? 'measured' : 'deferred',
+      one_changed_session: 'deferred',
     },
     measurements: results,
     tailFixture: {
-      semantics: 'pre-repair (final-record anchor)',
+      semantics: 'repaired (multi-record tail anchor)',
       recoveredContent: tail.items?.map((item) => item.text).join('\n') ?? null,
       recoveredNeededFact: tail.items?.some((item) => item.text?.includes(manifest.tailFixture.fact)) ?? false,
       pageCount: 1,
@@ -320,8 +374,14 @@ async function benchmark(corpus: string, samples: number) {
     },
     telemetry: { queryTextLogged: false, messageTextLogged: false },
   };
-  fs.writeFileSync(path.join(corpus, 'benchmark.json'), `${JSON.stringify(report, null, 2)}\n`);
+
+  const outFile = backendChoice === 'indexed' ? 'benchmark-indexed.json' : 'benchmark.json';
+  fs.writeFileSync(path.join(corpus, outFile), `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report)}\n`);
+
+  if (indexService) {
+    await indexService.close();
+  }
 }
 
 async function main() {
@@ -329,8 +389,16 @@ async function main() {
   const input = args(rest);
   if (command === 'generate')
     return generate(path.resolve(typeof input.out === 'string' ? input.out : DEFAULT_OUT), numeric(input, 'size', 100));
-  if (command === 'benchmark') return benchmark(path.resolve(required(input, 'corpus')), numeric(input, 'samples', 5));
-  throw new Error('Usage: generate --size 100|1000|10000 --out DIR | benchmark --corpus DIR [--samples N]');
+  if (command === 'benchmark')
+    return benchmark(
+      path.resolve(required(input, 'corpus')),
+      numeric(input, 'samples', 5),
+      (input.backend as 'canonical' | 'indexed') ?? 'canonical',
+      (input['worker-mode'] as 'worker' | 'direct') ?? 'worker',
+    );
+  throw new Error(
+    'Usage: generate --size 100|1000|10000 --out DIR | benchmark --corpus DIR [--samples N] [--backend canonical|indexed] [--worker-mode worker|direct]',
+  );
 }
 
 void main();

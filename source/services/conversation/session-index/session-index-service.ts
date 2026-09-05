@@ -16,6 +16,7 @@ export interface SessionIndexServiceOptions {
   conversationsDir?: string;
   backend?: 'worker' | 'direct';
   workerClient?: SessionIndexWorkerClient;
+  workerTimeoutMs?: number;
   logger?: { warn: (msg: string, meta?: Record<string, unknown>) => void; info?: (msg: string) => void };
 }
 
@@ -30,6 +31,7 @@ export class SessionIndexService {
   readonly #conversationsDir: string;
   readonly #dbPath: string;
   readonly #backend: 'worker' | 'direct';
+  readonly #workerTimeoutMs?: number;
   readonly #logger?: SessionIndexServiceOptions['logger'];
   #workerClient: SessionIndexWorkerClient | null = null;
   #directDb: SessionIndexDatabase | null = null;
@@ -41,6 +43,7 @@ export class SessionIndexService {
     this.#conversationsDir = options?.conversationsDir ?? getConversationsDir();
     this.#dbPath = options?.dbPath ?? resolveDefaultSessionIndexPath(this.#conversationsDir);
     this.#backend = options?.backend ?? 'worker';
+    this.#workerTimeoutMs = options?.workerTimeoutMs;
     this.#logger = options?.logger;
     if (options?.workerClient) {
       this.#workerClient = options.workerClient;
@@ -79,7 +82,9 @@ export class SessionIndexService {
 
       // Worker backend
       if (!this.#workerClient) {
-        this.#workerClient = new SessionIndexWorkerClient(this.#dbPath, this.#conversationsDir);
+        this.#workerClient = new SessionIndexWorkerClient(this.#dbPath, this.#conversationsDir, {
+          timeoutMs: this.#workerTimeoutMs,
+        });
       }
       const probe = await this.#workerClient.probe();
       if (!probe.ok) {

@@ -154,12 +154,12 @@ export function getConversationsDirectoryVersionReadOnly(): string | null {
   return statVersion(getConversationsDir());
 }
 
-function normalizeProjectPath(projectPath: string): string {
+export function normalizeProjectPath(projectPath: string): string {
   const normalized = path.normalize(projectPath);
   return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
 }
 
-function normalizeSshHost(host: string): string {
+export function normalizeSshHost(host: string): string {
   return host.trim().toLowerCase();
 }
 
@@ -351,7 +351,7 @@ export function loadConversationForProject(
 /** Browser-only load that must not trigger directory creation or legacy migration. */
 export function loadConversationForProjectReadOnly(
   id: string,
-  expectedProjectPath: string,
+  expectedProjectPath?: string,
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
   const filePath = getConversationPath(id);

@@ -26,8 +26,8 @@ const SNIPPET_CHARS = 240;
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
-type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
-type ProjectedMessage = { index: number; kind: Kind; text: string };
+export type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
+export type ProjectedMessage = { index: number; kind: Kind; text: string };
 type BrowserError = {
   error: {
     code:
@@ -619,3 +619,11 @@ function isHighSurrogate(value: number) {
 function isLowSurrogate(value: number) {
   return value >= 0xdc00 && value <= 0xdfff;
 }
+
+export {
+  project as projectMessages,
+  updatedAt as sessionUpdatedAt,
+  revision as sessionRevision,
+  isBrowsableSession,
+  prefixSnippet,
+};

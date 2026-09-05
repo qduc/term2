@@ -1,0 +1,430 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { SessionIndexDatabase } from './session-index-database.js';
+import { createConversationLogWriter } from '../../logging/conversation-log-writer.js';
+import { setConversationsDirForTest } from '../conversation-persistence.js';
+
+let tempDir = '';
+let convDir = '';
+let dbPath = '';
+
+const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {}, getCorrelationId: () => undefined } as any;
+
+beforeEach(() => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqi-db-test-'));
+  convDir = path.join(tempDir, 'conversations');
+  fs.mkdirSync(convDir, { recursive: true });
+  dbPath = path.join(tempDir, 'session-index.db');
+  setConversationsDirForTest(convDir);
+});
+
+afterEach(() => {
+  setConversationsDirForTest(null);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+function writeSession(
+  id: string,
+  projectPath: string,
+  sshHost?: string,
+  text = 'hello',
+  rolloverFrom?: string,
+  model?: string,
+  provider?: string,
+) {
+  const writer = createConversationLogWriter({ sessionId: id, dir: convDir, logger });
+  writer.init({
+    id,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    projectPath,
+    sshHost,
+    model: model ?? 'model-x',
+    provider: provider ?? 'provider-y',
+    rolloverFrom,
+  });
+  writer.append({ type: 'user_message', message: { id: `${id}-u`, sender: 'user', text } });
+  writer.append({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'response' }] },
+    state: { previousResponseId: null },
+  });
+  void writer.close();
+}
+
+describe('SessionIndexDatabase', () => {
+  it('passes the FTS5 trigram capability probe on working better-sqlite3', () => {
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const probe = index.probeCapability();
+      expect(probe).toEqual({ ok: true });
+    } finally {
+      index.close();
+    }
+  });
+
+  it('initializes schema v1 tables, metadata, and indexes idempotently', () => {
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.initialize();
+      const tables = index.database
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        .all()
+        .map((r: any) => r.name);
+
+      expect(tables).toContain('index_metadata');
+      expect(tables).toContain('source_inventory');
+      expect(tables).toContain('sessions');
+      expect(tables).toContain('messages');
+
+      const meta = index.database.prepare('SELECT key, value FROM index_metadata').all() as any[];
+      const metaMap = new Map(meta.map((m) => [m.key, m.value]));
+      expect(metaMap.get('schema_version')).toBe('1');
+      expect(metaMap.get('projection_version')).toBe('1');
+      expect(metaMap.get('source_directory')).toBe(convDir);
+
+      // Re-initialization is idempotent
+      expect(() => index.initialize()).not.toThrow();
+    } finally {
+      index.close();
+    }
+  });
+
+  it('reconciles empty directory cleanly with zero sessions', () => {
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const result = index.reconcile();
+      expect(result).toEqual({ ok: true, replayedCount: 0, deletedCount: 0, stable: true });
+
+      const list = index.list({ projectPath: '/project' });
+      expect(list.sessions).toEqual([]);
+      expect(list.total).toBe(0);
+      expect(list.unavailable).toBe(0);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('populates sessions, messages, and inventory with exact fields and indexes', () => {
+    writeSession('session-1', '/project', undefined, 'first query', undefined, 'gpt-4', 'openai');
+    writeSession('session-2', '/project', 'remote-host', 'remote query');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const res = index.reconcile();
+      expect(res.ok).toBe(true);
+      expect(res.replayedCount).toBe(2);
+
+      const inv = index.database.prepare('SELECT * FROM source_inventory ORDER BY session_id').all() as any[];
+      expect(inv).toHaveLength(2);
+      expect(inv[0].session_id).toBe('session-1');
+      expect(inv[0].classification).toBe('loaded');
+      expect(inv[1].session_id).toBe('session-2');
+      expect(inv[1].classification).toBe('loaded');
+
+      const sessions = index.database.prepare('SELECT * FROM sessions ORDER BY id').all() as any[];
+      expect(sessions).toHaveLength(2);
+      expect(sessions[0].id).toBe('session-1');
+      expect(sessions[0].project_path).toBe('/project');
+      expect(sessions[0].ssh_host).toBeNull();
+      expect(sessions[0].model).toBe('gpt-4');
+      expect(sessions[0].provider).toBe('openai');
+      expect(sessions[0].first_user_snippet).toBe('first query');
+      expect(sessions[0].projected_count).toBe(2);
+      expect(sessions[0].skipped_count).toBe(0);
+      expect(typeof sessions[0].projection_revision).toBe('string');
+
+      const messages = index.database
+        .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY projected_ordinal')
+        .all('session-1') as any[];
+      expect(messages).toHaveLength(2);
+      expect(messages[0].projected_ordinal).toBe(0);
+      expect(messages[0].kind).toBe('user');
+      expect(messages[0].original_text).toBe('first query');
+      expect(messages[0].normalized_text).toBe('first query');
+      expect(messages[1].projected_ordinal).toBe(1);
+      expect(messages[1].kind).toBe('assistant');
+      expect(messages[1].original_text).toBe('response');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('replays zero logs when directory is unchanged on subsequent reconcile', () => {
+    writeSession('session-1', '/project');
+    writeSession('session-2', '/project');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const first = index.reconcile();
+      expect(first.replayedCount).toBe(2);
+
+      const second = index.reconcile();
+      expect(second.replayedCount).toBe(0);
+      expect(second.deletedCount).toBe(0);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('refreshes only the single changed session when one file is modified', () => {
+    writeSession('session-1', '/project', undefined, 'original 1');
+    writeSession('session-2', '/project', undefined, 'original 2');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      expect(index.reconcile().replayedCount).toBe(2);
+
+      // Append to session-2
+      const userLine = JSON.stringify({
+        v: 3,
+        seq: 4,
+        ts: '2026-01-01T00:01:00.000Z',
+        event: {
+          type: 'user_message',
+          message: { id: 'session-2-u2', sender: 'user', text: 'new turn' },
+        },
+      });
+      const assistantLine = JSON.stringify({
+        v: 3,
+        seq: 5,
+        ts: '2026-01-01T00:01:01.000Z',
+        event: {
+          type: 'assistant_turn',
+          turn: { items: [{ type: 'assistant_text', text: 'second response' }] },
+          state: { previousResponseId: null },
+        },
+      });
+      fs.appendFileSync(path.join(convDir, 'session-2.jsonl'), `${userLine}\n${assistantLine}\n`);
+
+      const second = index.reconcile();
+      expect(second.replayedCount).toBe(1);
+      expect(second.deletedCount).toBe(0);
+
+      const messages = index.database
+        .prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY projected_ordinal')
+        .all('session-2') as any[];
+      expect(messages).toHaveLength(4);
+      expect(messages[2].original_text).toBe('new turn');
+      expect(messages[3].original_text).toBe('second response');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('removes deleted session and cascades deletion to messages and sessions', () => {
+    writeSession('session-1', '/project');
+    writeSession('session-2', '/project');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      expect(index.reconcile().replayedCount).toBe(2);
+
+      // Delete session-1 file
+      fs.unlinkSync(path.join(convDir, 'session-1.jsonl'));
+
+      const second = index.reconcile();
+      expect(second.replayedCount).toBe(0);
+      expect(second.deletedCount).toBe(1);
+
+      const inv = index.database.prepare('SELECT session_id FROM source_inventory').all() as any[];
+      expect(inv.map((r) => r.session_id)).toEqual(['session-2']);
+
+      const sess = index.database.prepare('SELECT id FROM sessions').all() as any[];
+      expect(sess.map((r) => r.id)).toEqual(['session-2']);
+
+      const msgs = index.database.prepare('SELECT id FROM messages WHERE session_id = ?').all('session-1');
+      expect(msgs).toHaveLength(0);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('records unreadable files in inventory without exposing guessed scope, and accounts for unavailable', () => {
+    writeSession('valid-1', '/project', undefined, 'valid');
+
+    // Create an unreadable / corrupt jsonl file
+    fs.writeFileSync(path.join(convDir, 'corrupt-1.jsonl'), 'NOT_VALID_JSON\n{{{');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const res = index.reconcile();
+      expect(res.ok).toBe(true);
+
+      const inv = index.database.prepare('SELECT session_id, classification FROM source_inventory').all() as any[];
+      const invMap = new Map(inv.map((r) => [r.session_id, r.classification]));
+      expect(invMap.get('valid-1')).toBe('loaded');
+      expect(invMap.get('corrupt-1')).toBe('unreadable');
+
+      // Unreadable file must NOT have rows in sessions
+      const corruptSess = index.database.prepare('SELECT * FROM sessions WHERE id = ?').get('corrupt-1');
+      expect(corruptSess).toBeUndefined();
+
+      // List query must report unavailable = 1
+      const list = index.list({ projectPath: '/project' });
+      expect(list.total).toBe(1);
+      expect(list.sessions).toHaveLength(1);
+      expect(list.unavailable).toBe(1);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('records invalid files (e.g. malformed metadata) in inventory and accounts for unavailable', () => {
+    // Malformed session init with invalid non-UTC timestamp
+    const line = JSON.stringify({
+      v: 3,
+      seq: 1,
+      ts: '2026-01-01T00:00:00.000Z',
+      event: {
+        type: 'session_init',
+        id: 'malformed-1',
+        createdAt: 'INVALID_TIMESTAMP_FORMAT',
+        projectPath: '/project',
+      },
+    });
+    fs.writeFileSync(path.join(convDir, 'malformed-1.jsonl'), `${line}\n`);
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      const invRow = index.database
+        .prepare('SELECT classification FROM source_inventory WHERE session_id = ?')
+        .get('malformed-1') as any;
+      expect(invRow.classification).toBe('invalid');
+
+      const list = index.list({ projectPath: '/project' });
+      expect(list.total).toBe(0);
+      expect(list.unavailable).toBe(1);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('detects mid-replay modifications and preserves stable publication', () => {
+    writeSession('session-1', '/project', undefined, 'hello');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      // Modify file during replay by monkey-patching fs.readFileSync inside replay
+      let intercepted = false;
+      const originalRead = fs.readFileSync;
+      (fs as any).readFileSync = (p: any, ...rest: any[]) => {
+        const content = originalRead(p, ...rest);
+        if (typeof p === 'string' && p.endsWith('session-1.jsonl') && !intercepted) {
+          intercepted = true;
+          // Append while reading
+          fs.appendFileSync(p, '{"v":3,"seq":99,"ts":"2026-01-01T00:00:00.000Z","event":{"type":"unknown"}}\n');
+        }
+        return content;
+      };
+
+      try {
+        const res = index.reconcile();
+        expect(res.stable).toBe(false);
+        expect(res.changedDuringReplay).toContain('session-1');
+
+        // It did not commit the stale projection
+        const inv = index.database.prepare('SELECT * FROM source_inventory WHERE session_id = ?').get('session-1');
+        expect(inv).toBeUndefined();
+      } finally {
+        fs.readFileSync = originalRead;
+      }
+    } finally {
+      index.close();
+    }
+  });
+
+  it('lists sessions isolated by project and SSH scope with short references', () => {
+    writeSession('11111111-0000-4000-8000-000000000001', '/project-a');
+    writeSession('11111111-0000-4000-8000-000000000002', '/project-a');
+    writeSession('22222222-0000-4000-8000-000000000001', '/project-b');
+    writeSession('33333333-0000-4000-8000-000000000001', '/project-a', 'host-1');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      const listA = index.list({ projectPath: '/project-a' });
+      expect(listA.total).toBe(2);
+      expect(listA.sessions.map((s) => s.id)).toEqual([
+        '11111111-0000-4000-8000-000000000002',
+        '11111111-0000-4000-8000-000000000001',
+      ]);
+      expect(listA.sessions[0].shortRef).toMatch(/^11111111-/);
+
+      const listHost = index.list({ projectPath: '/project-a', sshHost: 'host-1' });
+      expect(listHost.total).toBe(1);
+      expect(listHost.sessions[0].id).toBe('33333333-0000-4000-8000-000000000001');
+
+      const listB = index.list({ projectPath: '/project-b' });
+      expect(listB.total).toBe(1);
+      expect(listB.sessions[0].id).toBe('22222222-0000-4000-8000-000000000001');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('resolves exact, prefix, ambiguous, and previous references from indexed metadata', () => {
+    const parentId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const childId = 'bbbbbbbb-0000-4000-8000-000000000001';
+    const siblingPrefixA = 'cccc1111-0000-4000-8000-000000000001';
+    const siblingPrefixB = 'cccc2222-0000-4000-8000-000000000001';
+
+    writeSession(parentId, '/project');
+    writeSession(childId, '/project', undefined, 'child', parentId);
+    writeSession(siblingPrefixA, '/project');
+    writeSession(siblingPrefixB, '/project');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      // Exact ID
+      const exact = index.resolveReference(parentId, { projectPath: '/project' });
+      expect(exact).toEqual({ kind: 'resolved', id: parentId });
+
+      // Unique prefix
+      const prefix = index.resolveReference('bbbbbbbb', { projectPath: '/project' });
+      expect(prefix).toEqual({ kind: 'resolved', id: childId });
+
+      // Ambiguous prefix
+      const ambiguous = index.resolveReference('cccc', { projectPath: '/project' });
+      expect(ambiguous.kind).toBe('ambiguous');
+      if (ambiguous.kind === 'ambiguous') {
+        expect(ambiguous.candidates.map((c) => c.id).sort()).toEqual([siblingPrefixA, siblingPrefixB].sort());
+      }
+
+      // Previous reference
+      const prev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: childId });
+      expect(prev).toEqual({ kind: 'resolved', id: parentId });
+
+      // Previous on session with no predecessor
+      const noPrev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: parentId });
+      expect(noPrev.kind).toBe('not_found');
+
+      // Not found
+      const notFound = index.resolveReference('nonexistent', { projectPath: '/project' });
+      expect(notFound.kind).toBe('not_found');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('returns cached projection revision for session without replaying', () => {
+    writeSession('session-1', '/project');
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+      const rev = index.getRevision('session-1');
+      expect(typeof rev).toBe('string');
+      expect(rev!.length).toBeGreaterThan(5);
+
+      expect(index.getRevision('nonexistent')).toBeNull();
+    } finally {
+      index.close();
+    }
+  });
+});

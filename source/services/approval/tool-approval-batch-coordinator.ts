@@ -163,10 +163,10 @@ export class ToolApprovalBatchCoordinator {
       let llmAdvisory;
       if (yolo) {
         decision = 'approve';
+      } else if (registryDecision.kind === 'interceptor_denied' || registryDecision.kind === 'error') {
+        decision = 'reject';
       } else if (forceHumanApproval) {
         decision = 'prompt';
-      } else if (registryDecision.kind === 'interceptor_denied') {
-        decision = 'reject';
       } else if (registryDecision.kind === 'auto_approve' && !isUnsandboxedShell(toolName, parseResult.arguments)) {
         decision = 'approve';
       } else {

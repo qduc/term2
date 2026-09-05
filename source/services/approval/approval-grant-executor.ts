@@ -62,22 +62,25 @@ export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: Appro
   );
   const allowReadFolderForSession = isReadFileSessionApproveAnswer(input.answer) && supportsFolderSessionRead(toolName);
   const editSessionGrant = getEditSessionGrant(input.answer, toolName, parsedArguments);
+  const isApproved = isDockerRequest
+    ? dockerDecision
+    : input.answer === 'y' || deniedRead || allowReadFolderForSession || editSessionGrant !== null;
 
-  if (allowReadFolderForSession) {
+  if (isApproved && allowReadFolderForSession) {
     const folder = resolveSessionReadFolder(toolName, parsedArguments);
     if (folder) {
       if (deps.sessionAccess) deps.sessionAccess.allowReadFolder(folder);
       else deps.nestedCompatibility?.readAccess.allowFolder(deps.sessionId, folder);
     }
   }
-  if (editSessionGrant && deps.sessionAccess) {
+  if (isApproved && editSessionGrant && deps.sessionAccess) {
     if (editSessionGrant.kind === 'file') deps.sessionAccess.allowEditFile(editSessionGrant.path);
     else deps.sessionAccess.allowEditFolder(editSessionGrant.path);
   }
-  if (deniedRead && input.interruption) {
+  if (isApproved && deniedRead && input.interruption) {
     applyDeniedReadDecision(deps, input.answer, input.interruption, input.callId);
   }
-  if (dockerDecision && isDockerRequest && typeof parsedArguments?.command === 'string') {
+  if (isApproved && dockerDecision && isDockerRequest && typeof parsedArguments?.command === 'string') {
     const cwd = typeof parsedArguments.cwd === 'string' ? parsedArguments.cwd : getActiveWorkspaceRoot();
     const scope =
       input.answer === 'docker-allow-once' ? 'once' : input.answer === 'docker-allow-session' ? 'session' : 'project';
@@ -92,9 +95,7 @@ export function applyApprovalGrant(deps: ApprovalGrantExecutorDeps, input: Appro
     }
   }
   return {
-    isApproved: isDockerRequest
-      ? dockerDecision
-      : input.answer === 'y' || deniedRead || allowReadFolderForSession || editSessionGrant !== null,
+    isApproved,
     isDockerRequest,
     deniedReadDecision: deniedRead,
     parsedArguments,

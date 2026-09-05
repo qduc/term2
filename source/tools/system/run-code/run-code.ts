@@ -23,6 +23,8 @@ import {
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderToolsHeader } from './tools-header.js';
+import { resolveWorkspacePath } from '../../utils.js';
+import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
@@ -68,6 +70,8 @@ export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   // the raw policy registry cannot express for an out-of-band script call.
   'shell',
   'bash',
+  'enter_worktree',
+  'exit_worktree',
 ]);
 
 export const runCodeParametersSchema = z.object({
@@ -111,7 +115,16 @@ const RUN_CODE_DESCRIPTION =
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
-  outcome: 'ok' | 'error' | 'approval_required' | 'unknown_policy' | 'unknown_tool' | 'invalid_params' | 'prohibited';
+  outcome:
+    | 'ok'
+    | 'error'
+    | 'approval_required'
+    | 'unknown_policy'
+    | 'policy_error'
+    | 'interceptor_denied'
+    | 'unknown_tool'
+    | 'invalid_params'
+    | 'prohibited';
   durationMs: number;
   directlyCallable?: boolean;
 }
@@ -277,6 +290,9 @@ function writeNestedCallRecord(tool: string, sessionId: string | undefined, outc
 interface PreparedCall {
   tool: AnyToolDefinition;
   params: unknown;
+  originalParams: unknown;
+  authorityRoot: string;
+  authorityMeaning: string;
   parallelSafe: boolean;
   started: number;
 }
@@ -383,7 +399,10 @@ export function createRunCodeToolDefinition(
 
           return {
             tool,
-            params: normalized,
+            params: bindPreparedArguments(name, normalized, getCwd()),
+            originalParams: normalized,
+            authorityRoot: getCwd(),
+            authorityMeaning: fingerprint(bindPreparedArguments(name, normalized, getCwd())),
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
@@ -419,8 +438,24 @@ export function createRunCodeToolDefinition(
                   argumentsText: JSON.stringify(prepared.params),
                   rawInterruption: null,
                   callId: nestedCallId,
+                  outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
+                    prepared.tool.name,
+                    prepared.params,
+                    prepared.authorityRoot,
+                  ),
                 },
                 signal: nestedContext.signal as AbortSignal,
+                revalidateAuthority: () => {
+                  const currentRoot = getCwd();
+                  const currentMeaning = bindPreparedArguments(
+                    prepared.tool.name,
+                    prepared.originalParams,
+                    currentRoot,
+                  );
+                  return (
+                    currentRoot === prepared.authorityRoot && fingerprint(currentMeaning) === prepared.authorityMeaning
+                  );
+                },
                 revalidate: async () => {
                   const latest = await approvalRegistry.evaluate({
                     toolName: prepared.tool.name,
@@ -459,10 +494,21 @@ export function createRunCodeToolDefinition(
                   } as JsonValue,
                 };
               }
+              if (resolution.kind === 'failed') {
+                record(prepared.tool.name, 'error', prepared.started);
+                return failed(resolution.error instanceof Error ? resolution.error.message : String(resolution.error));
+              }
               record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
               return failed(resolution.message);
             }
-            const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
+            const outcome =
+              decision.kind === 'unknown'
+                ? 'unknown_policy'
+                : decision.kind === 'error'
+                ? 'policy_error'
+                : decision.kind === 'interceptor_denied'
+                ? 'interceptor_denied'
+                : 'approval_required';
             const directlyCallable = isDirectlyCallable(prepared.tool);
             record(prepared.tool.name, outcome, prepared.started, directlyCallable);
             return failed(
@@ -471,10 +517,14 @@ export function createRunCodeToolDefinition(
                     (directlyCallable
                       ? 'Call a tool with a registered approval policy directly instead.'
                       : 'It is not directly callable in this model configuration; use an auto-approved alternative.')
+                : decision.kind === 'interceptor_denied'
+                ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
+                : decision.kind === 'error'
+                ? `"${prepared.tool.name}" approval policy failed and is unavailable from inside a script.`
                 : `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
-                    (directlyCallable
-                      ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
-                      : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
+                  (directlyCallable
+                    ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
+                    : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
             );
           }
 
@@ -542,6 +592,43 @@ export function createRunCodeToolDefinition(
   };
 
   return definition;
+}
+
+function bindPreparedArguments(toolName: string, params: unknown, cwd: string): unknown {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return params;
+  const record = params as Record<string, unknown>;
+  const bindPath = (value: unknown): unknown =>
+    typeof value === 'string' ? resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true }) : value;
+  const pathTools = new Set([
+    'read_file',
+    'create_file',
+    'search_replace',
+    'apply_patch',
+    'grep',
+    'glob',
+    'read_code_outline',
+    'code_context_search',
+  ]);
+  if (!pathTools.has(toolName)) return params;
+  if (toolName === 'apply_patch' && Array.isArray(record.operations)) {
+    return {
+      ...record,
+      operations: record.operations.map((operation) => {
+        if (!operation || typeof operation !== 'object') return operation;
+        const item = operation as Record<string, unknown>;
+        return { ...item, path: bindPath(item.path), ...(item.moveTo ? { moveTo: bindPath(item.moveTo) } : {}) };
+      }),
+    };
+  }
+  return 'path' in record ? { ...record, path: bindPath(record.path) } : params;
+}
+
+function fingerprint(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
@@ -613,6 +700,13 @@ function renderResult(
   if (indirectlyRefused.length > 0) {
     const names = [...new Set(indirectlyRefused.map((call) => call.tool))].join(', ');
     sections.push(`Refused (needs user approval; not directly callable in this model configuration): ${names}`);
+  }
+  const policyFailures = calls.filter(
+    (call) => call.outcome === 'policy_error' || call.outcome === 'interceptor_denied',
+  );
+  if (policyFailures.length > 0) {
+    const names = [...new Set(policyFailures.map((call) => call.tool))].join(', ');
+    sections.push(`Unavailable (approval policy refused or failed; no user approval was requested): ${names}`);
   }
   const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
   const directlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === true);

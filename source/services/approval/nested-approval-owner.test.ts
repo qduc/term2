@@ -15,6 +15,7 @@ const request = (
   callId: string,
   options: {
     revalidate?: () => Promise<'prompt' | 'auto_approve' | 'unknown'>;
+    revalidateAuthority?: () => boolean | Promise<boolean>;
     grant?: () => void;
     dispatch?: () => Promise<string>;
     signal?: AbortSignal;
@@ -36,6 +37,7 @@ const request = (
     approval: approval(callId),
     signal,
     revalidate: options.revalidate ?? (async () => 'prompt'),
+    revalidateAuthority: options.revalidateAuthority,
     grant,
     dispatch,
   });
@@ -117,7 +119,7 @@ describe('NestedApprovalOwner', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it('invalidates consent when the graph or prepared target changes while waiting', async () => {
+  it('invalidates consent when the graph changes while waiting', async () => {
     const owner = new NestedApprovalOwner();
     const graph = {};
     owner.bindGraph(graph);
@@ -140,8 +142,36 @@ describe('NestedApprovalOwner', () => {
       grant,
       dispatch,
     });
-    prepared.path = '/outside/two.txt';
     owner.bindGraph({});
+    await owner.decide('call-1', { answer: 'y' });
+    await expect(promise).resolves.toMatchObject({ kind: 'denied' });
+    expect(grant).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('invalidates consent when the prepared target changes while waiting', async () => {
+    const owner = new NestedApprovalOwner();
+    const graph = {};
+    owner.bindGraph(graph);
+    const prepared = { path: '/workspace/one.txt' };
+    const grant = vi.fn();
+    const dispatch = vi.fn(async () => 'effect');
+    const promise = owner.request({
+      requestId: 'call-1',
+      sessionId: 'session-1',
+      graphIdentity: graph,
+      outerRunId: 'run-1',
+      nestedCallId: 'call-1',
+      toolName: 'read_file',
+      preparedArguments: prepared,
+      authorityContext: {},
+      approval: approval('call-1'),
+      signal: new AbortController().signal,
+      revalidate: async () => 'prompt',
+      grant,
+      dispatch,
+    });
+    prepared.path = '/outside/two.txt';
     await owner.decide('call-1', { answer: 'y' });
     await expect(promise).resolves.toMatchObject({ kind: 'denied' });
     expect(grant).not.toHaveBeenCalled();
@@ -191,5 +221,49 @@ describe('NestedApprovalOwner', () => {
     controller.abort();
     release('effect');
     await expect(waiting.promise).resolves.toEqual({ kind: 'approved', result: 'effect' });
+  });
+
+  it('denies when the prepared authority meaning changes while waiting', async () => {
+    const owner = new NestedApprovalOwner();
+    let authorityValid = true;
+    const waiting = request(owner, 'call-1', { revalidateAuthority: () => authorityValid });
+    authorityValid = false;
+    await owner.decide('call-1', { answer: 'y' });
+    await expect(waiting.promise).resolves.toMatchObject({ kind: 'denied' });
+    expect(waiting.grant).not.toHaveBeenCalled();
+    expect(waiting.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('settles an approved dispatch failure as a failure, not a denial', async () => {
+    const owner = new NestedApprovalOwner();
+    const waiting = request(owner, 'call-1', {
+      dispatch: async () => {
+        throw new Error('after effect');
+      },
+    });
+    await owner.decide('call-1', { answer: 'y' });
+    await expect(waiting.promise).resolves.toMatchObject({ kind: 'failed', error: expect.any(Error) });
+  });
+
+  it('does not publish an observer before an approved grant and dispatch commit', async () => {
+    const owner = new NestedApprovalOwner();
+    const events: string[] = [];
+    owner.subscribe((snapshot) => {
+      if (snapshot === null) {
+        events.push('published-null');
+        throw new Error('observer failed');
+      }
+    });
+    events.length = 0;
+    const waiting = request(owner, 'call-1', {
+      grant: () => events.push('grant'),
+      dispatch: async () => {
+        events.push('dispatch');
+        return 'effect';
+      },
+    });
+    await owner.decide('call-1', { answer: 'y' });
+    await expect(waiting.promise).resolves.toMatchObject({ kind: 'approved' });
+    expect(events).toEqual(['grant', 'dispatch', 'published-null']);
   });
 });

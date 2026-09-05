@@ -71,6 +71,7 @@ export class ConversationService {
   readonly #preparedLeaseTtlMs?: number;
   readonly #activeCancelTimeoutMs?: number;
   readonly #discardOnFailure: boolean;
+  readonly #enableNestedApproval: boolean;
   #eventSink: ConversationEventSink | null = null;
   #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
   #nestedApprovalObserver: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
@@ -93,6 +94,7 @@ export class ConversationService {
     preparedLeaseTtlMs,
     activeCancelTimeoutMs,
     discardOnFailure,
+    enableNestedApproval,
   }: {
     /** Compatibility seam: caller retains ownership of a prebuilt client. */
     agentClient?: ConversationAgentClient;
@@ -118,6 +120,8 @@ export class ConversationService {
     activeCancelTimeoutMs?: number;
     /** Gateway-only failure policy: discard retained work rather than pause it. */
     discardOnFailure?: boolean;
+    /** Interactive-only capability; gateway and headless services default to fail closed. */
+    enableNestedApproval?: boolean;
   }) {
     if (!sessionClientFactory && !agentClient) {
       throw new Error('ConversationService requires an agentClient or sessionClientFactory');
@@ -130,6 +134,7 @@ export class ConversationService {
     this.#preparedLeaseTtlMs = preparedLeaseTtlMs;
     this.#activeCancelTimeoutMs = activeCancelTimeoutMs;
     this.#discardOnFailure = discardOnFailure === true;
+    this.#enableNestedApproval = enableNestedApproval === true;
     this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
     this.#toolCallMarkers = toolCallMarkers ?? new ToolCallMarkerStore();
     this.#deps = deps;
@@ -153,7 +158,7 @@ export class ConversationService {
       discardOnFailure: this.#discardOnFailure,
       sessionId: sessionId ?? 'default',
       sessionStartedAt,
-      enableNestedApproval: true,
+      enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
@@ -244,7 +249,7 @@ export class ConversationService {
       activeCancelTimeoutMs: this.#activeCancelTimeoutMs,
       discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
-      enableNestedApproval: true,
+      enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;

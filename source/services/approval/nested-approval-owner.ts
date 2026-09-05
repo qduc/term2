@@ -15,6 +15,7 @@ export type NestedApprovalRequest = {
   readonly approval: PendingApproval;
   readonly signal: AbortSignal;
   readonly revalidate: () => Promise<NestedApprovalPolicyResult>;
+  readonly revalidateAuthority?: () => Promise<boolean> | boolean;
   readonly grant: (decision: NestedApprovalDecision) => void;
   readonly dispatch: () => Promise<unknown>;
 };
@@ -25,7 +26,8 @@ export type NestedApprovalSnapshot = Omit<
 >;
 export type NestedApprovalResolution =
   | { readonly kind: 'approved'; readonly result: unknown }
-  | { readonly kind: 'denied'; readonly message: string };
+  | { readonly kind: 'denied'; readonly message: string }
+  | { readonly kind: 'failed'; readonly error: unknown };
 export type NestedApprovalDecisionResult = { readonly kind: 'accepted' } | { readonly kind: 'stale' };
 
 type Entry = {
@@ -55,8 +57,15 @@ export class NestedApprovalOwner {
   }
 
   subscribe(observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null): () => void {
+    if (observer && this.#observer && this.#observer !== observer) {
+      throw new Error('NestedApprovalOwner supports one observer at a time.');
+    }
     this.#observer = observer;
-    observer?.(this.getSnapshot());
+    try {
+      observer?.(this.getSnapshot());
+    } catch {
+      // Observer failures are presentation failures; they must not strand a worker.
+    }
     return () => {
       if (this.#observer === observer) this.#observer = null;
     };
@@ -135,7 +144,6 @@ export class NestedApprovalOwner {
       const next = this.#pending.keys().next().value as string | undefined;
       if (next) this.#displayed = next;
     }
-    this.#publish();
     return entry;
   }
 
@@ -150,6 +158,14 @@ export class NestedApprovalOwner {
     } catch {
       policy = 'error';
     }
+    let authorityValid = true;
+    if (entry.request.revalidateAuthority) {
+      try {
+        authorityValid = await entry.request.revalidateAuthority();
+      } catch {
+        authorityValid = false;
+      }
+    }
     // Keep this final check adjacent to grant/dispatch: no await can reopen the race.
     if (
       this.#closed ||
@@ -157,6 +173,7 @@ export class NestedApprovalOwner {
       entry.request.signal.aborted ||
       (this.#graphIdentity && entry.request.graphIdentity !== this.#graphIdentity) ||
       fingerprint(entry.request.preparedArguments) !== entry.preparedArgumentsFingerprint ||
+      !authorityValid ||
       (policy !== 'auto_approve' && policy !== 'prompt')
     ) {
       this.#settle(requestId, denial());
@@ -172,12 +189,17 @@ export class NestedApprovalOwner {
       const dispatch = entry.request.dispatch();
       entry.resolve({ kind: 'approved', result: await dispatch });
     } catch (error) {
-      entry.resolve(denial(error instanceof Error ? error.message : String(error)));
+      entry.resolve({ kind: 'failed', error });
     }
+    this.#publish();
   }
 
   #publish(): void {
-    this.#observer?.(this.getSnapshot());
+    try {
+      this.#observer?.(this.getSnapshot());
+    } catch {
+      // Observer failures are presentation failures; they must not strand a worker.
+    }
   }
 }
 

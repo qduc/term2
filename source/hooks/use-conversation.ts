@@ -142,7 +142,7 @@ export const useConversation = ({
     isProcessing,
     pendingInteractionId,
     waitingForApproval,
-    waitingForRejectionReason,
+    waitingForRejectionReason: uiWaitingForRejectionReason,
     waitingForAskUserAnswer,
     currentAskUserQuestionIndex,
     pendingApproval,
@@ -185,6 +185,9 @@ export const useConversation = ({
   );
   const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
   const [nestedApproval, setNestedApproval] = useState(() => conversationService.getNestedApprovalSnapshot?.() ?? null);
+  const [nestedRejectionRequestId, setNestedRejectionRequestId] = useState<string | null>(null);
+  const waitingForRejectionReason =
+    uiWaitingForRejectionReason || nestedApproval?.requestId === nestedRejectionRequestId;
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -363,13 +366,19 @@ export const useConversation = ({
     if (typeof conversationService.setPendingInteractionObserver !== 'function') return;
     conversationService.setPendingInteractionObserver((snapshot) => {
       dispatch({ type: 'interaction/snapshot', snapshot });
+      if (snapshot !== null) setNestedRejectionRequestId(null);
     });
     return () => conversationService.setPendingInteractionObserver(null);
   }, [conversationService]);
 
   useEffect(() => {
     if (typeof conversationService.setNestedApprovalObserver !== 'function') return;
-    conversationService.setNestedApprovalObserver((snapshot) => setNestedApproval(snapshot));
+    conversationService.setNestedApprovalObserver((snapshot) => {
+      setNestedApproval(snapshot);
+      setNestedRejectionRequestId((requestId) =>
+        requestId !== null && snapshot?.requestId !== requestId ? null : requestId,
+      );
+    });
     return () => conversationService.setNestedApprovalObserver(null);
   }, [conversationService]);
 
@@ -547,9 +556,16 @@ export const useConversation = ({
     dispatch({ type: 'interaction/composer_entry', mode: 'ask_user_answer' });
   }, []);
 
-  const setWaitingForRejectionReason = useCallback((value: boolean) => {
-    dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
-  }, []);
+  const setWaitingForRejectionReason = useCallback(
+    (value: boolean) => {
+      if (nestedApproval && pendingApproval === null) {
+        setNestedRejectionRequestId(value ? nestedApproval.requestId : null);
+        return;
+      }
+      dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
+    },
+    [nestedApproval, pendingApproval, setNestedRejectionRequestId],
+  );
 
   const setWaitingForAskUserAnswer = useCallback((value: boolean) => {
     dispatch({ type: 'interaction/composer_entry', mode: value ? 'ask_user_answer' : 'none' });

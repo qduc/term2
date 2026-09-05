@@ -22,7 +22,13 @@ import {
   type SchemaToolDefinition,
   type ToolRegistry,
 } from '../../types.js';
-import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
+import {
+  createBaseMessage,
+  getCallIdFromItem,
+  getOutputText,
+  isSuccessOutput,
+  normalizeToolArguments,
+} from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
@@ -267,7 +273,12 @@ const FAILURE_PREFIXES = [
 const isUnsuccessfulRunCodeOutput = (output: string): boolean => {
   if (FAILURE_PREFIXES.some((prefix) => output.startsWith(prefix))) return true;
   if (output.startsWith('Result:')) {
-    return output.slice('Result:'.length).trimStart().startsWith('Error:');
+    // The renderer joins the rendered value and the trailing tool-call summary
+    // with a blank line. Evaluate only the value block, using the shared
+    // success heuristic: an 'Error:' text prefix or a JSON value carrying an
+    // 'error' key (string or structured envelope) both read as unsuccessful.
+    const valueBlock = output.slice('Result:'.length).trimStart().split('\n\n')[0];
+    return !isSuccessOutput(valueBlock);
   }
   return false;
 };

@@ -1645,6 +1645,23 @@ describe('run_code M5: syntax-error location and guidance', () => {
     expect(output).toContain('Script failed');
     expect(output).toContain('dynamic import() is unavailable inside the sandbox');
   });
+
+  it('explains end-of-script attribution when a construct is unterminated', async () => {
+    const output = await run([], 'const x = 1;\nconst bad = `${oops`;\nreturn x;');
+
+    expect(output).toContain('Script failed');
+    expect(output).toContain('unterminated');
+    expect(output).toContain('at the end of the script');
+  });
+
+  it('does not attach compile guidance to a SyntaxError thrown at runtime inside the script', async () => {
+    const output = await run([], 'throw new SyntaxError("user-facing boom");');
+
+    expect(output).toContain('Script failed');
+    expect(output).toContain('user-facing boom');
+    expect(output).not.toMatch(/plain JavaScript/);
+    expect(output).not.toContain('Line ');
+  });
 });
 
 describe('run_code M5: persisted command-message telemetry', () => {
@@ -1680,5 +1697,16 @@ describe('run_code M5: persisted command-message telemetry', () => {
     const msg = message('Result:\nError: Invalid patch: the context block was not found\n\n[1 tool call: apply_patch]');
     expect(msg.status).toBe('completed');
     expect(msg.success).toBe(false);
+  });
+
+  it('does not read a structured error envelope under a Result: heading as success', () => {
+    for (const output of [
+      'Result:\n{"error":{"code":"not_found","message":"no such file"}}\n\n[1 tool call: read_file]',
+      'Result:\n{"error":"policy refused"}\n\n[1 tool call: memory_update]',
+    ]) {
+      const msg = message(output);
+      expect(msg.status).toBe('completed');
+      expect(msg.success).toBe(false);
+    }
   });
 });

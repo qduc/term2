@@ -36,8 +36,23 @@ mod.runSessionIndexWorker();
   return new Worker(bootstrap, {
     eval: true,
     workerData: { workerFile },
-    resourceLimits: { maxOldGenerationSizeMb: 8192 },
   });
+}
+
+export const DEFAULT_WORKER_TIMEOUT_MS = 10_000;
+
+export function resolveWorkerTimeoutMs(optionsTimeout?: number): number {
+  if (typeof optionsTimeout === 'number' && Number.isFinite(optionsTimeout) && optionsTimeout > 0) {
+    return optionsTimeout;
+  }
+  const envVal = process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'];
+  if (envVal !== undefined && envVal.trim() !== '') {
+    const parsed = Number(envVal);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_WORKER_TIMEOUT_MS;
 }
 
 export class SessionIndexWorkerClient {
@@ -51,7 +66,7 @@ export class SessionIndexWorkerClient {
   >();
 
   constructor(dbPath: string, sourceDirectory: string, options?: SessionIndexWorkerClientOptions) {
-    this.#timeoutMs = options?.timeoutMs ?? (Number(process.env['TERM2_SESSION_INDEX_TIMEOUT_MS']) || 60_000);
+    this.#timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
     const workerFile = resolveWorkerFile();
     this.#worker = options?.workerFactory?.(workerFile) ?? createDefaultWorker(workerFile);
 

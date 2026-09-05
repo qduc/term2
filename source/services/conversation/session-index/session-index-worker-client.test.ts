@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SessionIndexWorkerClient } from './session-index-worker-client.js';
+import { SessionIndexWorkerClient, resolveWorkerTimeoutMs } from './session-index-worker-client.js';
 import { createConversationLogWriter } from '../../logging/conversation-log-writer.js';
 import { setConversationsDirForTest } from '../conversation-persistence.js';
 
@@ -114,5 +114,49 @@ describe('SessionIndexWorkerClient', () => {
     await client.close();
 
     await expect(client.probe()).rejects.toThrow('closed');
+  });
+
+  it('validates timeoutMs and TERM2_SESSION_INDEX_TIMEOUT_MS cleanly', () => {
+    const origEnv = process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'];
+    try {
+      delete process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'];
+      // Defaults to 10_000ms
+      expect(resolveWorkerTimeoutMs()).toBe(10_000);
+      expect(resolveWorkerTimeoutMs(undefined)).toBe(10_000);
+
+      // Options override
+      expect(resolveWorkerTimeoutMs(25_000)).toBe(25_000);
+
+      // Invalid option values fall back to env or default
+      expect(resolveWorkerTimeoutMs(0)).toBe(10_000);
+      expect(resolveWorkerTimeoutMs(-500)).toBe(10_000);
+      expect(resolveWorkerTimeoutMs(NaN)).toBe(10_000);
+
+      // Environment variable valid positive number
+      process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = '45000';
+      expect(resolveWorkerTimeoutMs()).toBe(45_000);
+
+      // Options take precedence over env
+      expect(resolveWorkerTimeoutMs(15_000)).toBe(15_000);
+
+      // Invalid environment variable values fall back to default
+      process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = '0';
+      expect(resolveWorkerTimeoutMs()).toBe(10_000);
+
+      process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = '-1000';
+      expect(resolveWorkerTimeoutMs()).toBe(10_000);
+
+      process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = 'invalid_number';
+      expect(resolveWorkerTimeoutMs()).toBe(10_000);
+
+      process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = '   ';
+      expect(resolveWorkerTimeoutMs()).toBe(10_000);
+    } finally {
+      if (origEnv !== undefined) {
+        process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'] = origEnv;
+      } else {
+        delete process.env['TERM2_SESSION_INDEX_TIMEOUT_MS'];
+      }
+    }
   });
 });

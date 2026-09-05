@@ -276,6 +276,88 @@ describe('SessionBrowser Indexed Backend', () => {
         await indexService.close();
       }
     });
+
+    it('achieves exact differential parity with canonical browser across Unicode, casing, FTS syntax, and fallback queries', async () => {
+      writeSession(
+        'session-unicode-1',
+        '/project-u',
+        undefined,
+        'İstanbul city guide in Turkey, Straße in Berlin, Ünïcödé tëxt, 日本語のテキスト, happy emoji 😀 test, quantum physics',
+      );
+      writeSession(
+        'session-unicode-2',
+        '/project-u',
+        undefined,
+        'istanbul guide, strasse travel, repeated terms repeat repeat, computer ai research, ta and qu parameters',
+      );
+      writeSession(
+        'session-unicode-other',
+        '/project-other',
+        undefined,
+        'İstanbul and German Straße in different project scope',
+      );
+
+      const getContext = (): SessionBrowserContext => ({
+        projectPath: '/project-u',
+        currentSessionId: 'session-unicode-1',
+      });
+
+      const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+      const indexService = new SessionIndexService({
+        conversationsDir: dir,
+        dbPath,
+        backend,
+      });
+      const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+      try {
+        const testQueries = [
+          'QUANTUM',
+          'quantum',
+          'ISTANBUL',
+          'istanbul',
+          'Straße',
+          'strasse',
+          'Ünïcödé',
+          'tëxt',
+          '日本語',
+          '😀',
+          'foo"bar',
+          'AND',
+          'NEAR',
+          '*',
+          '-dash',
+          'ai',
+          'qu',
+          'ta',
+          'computer ai',
+          'repeat repeat',
+          'nonexistenttermxyz',
+          'Ünïcödé 日本語',
+        ];
+
+        for (const query of testQueries) {
+          // 1. Unconstrained
+          const canUnconstrained = canonicalBrowser.search({ query });
+          const indUnconstrained = await indexedBrowser.search({ query });
+          expect(indUnconstrained).toEqual(canUnconstrained);
+
+          // 2. Limit constrained
+          const canLimit = canonicalBrowser.search({ query, limit: 2 });
+          const indLimit = await indexedBrowser.search({ query, limit: 2 });
+          expect(indLimit).toEqual(canLimit);
+
+          // 3. Budget constrained
+          const canBudget = canonicalBrowser.search({ query, maxChars: 600 });
+          const indBudget = await indexedBrowser.search({ query, maxChars: 600 });
+          expect(indBudget).toEqual(canBudget);
+        }
+      } finally {
+        await canonicalBrowser.close();
+        await indexedBrowser.close();
+        await indexService.close();
+      }
+    });
   });
 
   // Direct backend is used because fs.readFileSync and crypto.createHash spies cannot observe calls across the worker thread boundary.

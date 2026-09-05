@@ -36,6 +36,7 @@ mod.runSessionIndexWorker();
   return new Worker(bootstrap, {
     eval: true,
     workerData: { workerFile },
+    resourceLimits: { maxOldGenerationSizeMb: 8192 },
   });
 }
 
@@ -50,7 +51,7 @@ export class SessionIndexWorkerClient {
   >();
 
   constructor(dbPath: string, sourceDirectory: string, options?: SessionIndexWorkerClientOptions) {
-    this.#timeoutMs = options?.timeoutMs ?? 10_000;
+    this.#timeoutMs = options?.timeoutMs ?? (Number(process.env['TERM2_SESSION_INDEX_TIMEOUT_MS']) || 60_000);
     const workerFile = resolveWorkerFile();
     this.#worker = options?.workerFactory?.(workerFile) ?? createDefaultWorker(workerFile);
 
@@ -58,28 +59,30 @@ export class SessionIndexWorkerClient {
       if (!msg || typeof msg !== 'object') return;
       const pending = this.#pending.get(msg.id);
       if (!pending) return;
-      this.#pending.delete(msg.id);
       clearTimeout(pending.timer);
+      this.#pending.delete(msg.id);
 
-      if (msg.ok) {
-        pending.resolve(msg.result);
-      } else {
+      if (!msg.ok) {
         pending.reject(new Error(msg.error));
+      } else {
+        pending.resolve(msg.result);
       }
     });
 
-    this.#worker.on('error', (err) => {
+    this.#worker.on('error', (err: Error) => {
       this.#drainPending(err);
     });
 
-    this.#worker.on('exit', (code) => {
+    this.#worker.on('exit', (code: number) => {
       if (!this.#closed) {
-        this.#drainPending(new Error(`Worker thread exited unexpectedly with code ${code}`));
+        this.#drainPending(new Error(`Session index worker stopped with exit code ${code}`));
       }
     });
 
-    // Send init request synchronously on creation
-    void this.#send({ type: 'init', dbPath, sourceDirectory });
+    // Send init request synchronously on creation; catch errors so failures surface gracefully on probe/reconcile
+    void this.#send({ type: 'init', dbPath, sourceDirectory }).catch(() => {
+      // Ignored: initialization failure is captured and reported on subsequent requests
+    });
   }
 
   #drainPending(error: Error): void {

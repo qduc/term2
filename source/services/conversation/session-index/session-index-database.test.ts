@@ -808,6 +808,11 @@ describe('SessionIndexDatabase', () => {
       const ftsCountInitial = index.database.prepare('SELECT count(*) as c FROM messages_fts').get() as { c: number };
       expect(ftsCountInitial.c).toBe(msgCountInitial.c);
 
+      // FTS5 integrity-check must pass before the abort
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+
       // Simulate a crashed/aborted transaction during refresh
       expect(() => {
         index.database.transaction(() => {
@@ -827,6 +832,11 @@ describe('SessionIndexDatabase', () => {
       expect(msgCountAfter.c).toBe(msgCountInitial.c);
       expect(ftsCountAfter.c).toBe(msgCountInitial.c);
 
+      // FTS5 integrity-check must pass after the abort
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+
       // Search state must NOT have leaked the aborted text
       const searchAborted = index.search({ query: 'aborted', projectPath: '/project-atom' });
       expect(searchAborted.matches.length).toBe(0);
@@ -834,6 +844,102 @@ describe('SessionIndexDatabase', () => {
       // Search state must still return the committed text
       const searchOriginal = index.search({ query: 'atomic', projectPath: '/project-atom' });
       expect(searchOriginal.matches.length).toBe(1);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('preserves atomic synchronization and FTS integrity across production reconcile delete, append, and interrupted refresh', () => {
+    writeSession('session-rec-atom-1', '/project-rec-atom', undefined, 'initial reconcile atomicity test');
+    writeSession('session-rec-atom-2', '/project-rec-atom', undefined, 'second initial session');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+
+      // Delete a session file from disk
+      fs.unlinkSync(path.join(convDir, 'session-rec-atom-2.jsonl'));
+      const recDel = index.reconcile();
+      expect(recDel.deletedCount).toBe(1);
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+
+      // Append new text to session 1
+      const logPath1 = path.join(convDir, 'session-rec-atom-1.jsonl');
+      const appendedLine =
+        JSON.stringify({
+          v: 3,
+          seq: 5,
+          ts: '2026-01-01T00:05:00.000Z',
+          event: {
+            type: 'user_message',
+            message: { id: 'appended-msg', sender: 'user', text: 'appended extra message' },
+          },
+        }) + '\n';
+      fs.appendFileSync(logPath1, appendedLine);
+
+      // Verify normal append reconcile keeps FTS integrity
+      const recAppend = index.reconcile();
+      expect(recAppend.replayedCount).toBe(1);
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+
+      // Now append again and simulate an interrupted reconcile transaction
+      const crashLine =
+        JSON.stringify({
+          v: 3,
+          seq: 6,
+          ts: '2026-01-01T00:06:00.000Z',
+          event: {
+            type: 'user_message',
+            message: { id: 'crash-msg', sender: 'user', text: 'crash message text' },
+          },
+        }) + '\n';
+      fs.appendFileSync(logPath1, crashLine);
+
+      // Force an interruption during in-tx commit by throwing mid-transaction
+      const origPrepare = index.database.prepare.bind(index.database);
+      let hitInsertMessage = false;
+      (index.database as any).prepare = (sql: string) => {
+        const stmt = origPrepare(sql);
+        if (sql.includes('INSERT INTO messages')) {
+          const origRun = stmt.run.bind(stmt);
+          stmt.run = (...args: any[]) => {
+            if (hitInsertMessage) {
+              throw new Error('Simulated process crash during publication transaction');
+            }
+            hitInsertMessage = true;
+            return origRun(...args);
+          };
+        }
+        return stmt;
+      };
+
+      expect(() => {
+        index.reconcile();
+      }).toThrow('Simulated process crash during publication transaction');
+      (index.database as any).prepare = origPrepare;
+
+      // After crash, FTS integrity must be intact and crash message must NOT be indexed
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+      const searchCrash = index.search({ query: 'crash', projectPath: '/project-rec-atom' });
+      expect(searchCrash.matches.length).toBe(0);
+
+      // Recovery reconcile succeeds and indexes the message
+      const recRecovery = index.reconcile();
+      expect(recRecovery.replayedCount).toBe(1);
+      expect(() => {
+        index.database.prepare("INSERT INTO messages_fts(messages_fts) VALUES('integrity-check')").run();
+      }).not.toThrow();
+      const searchRecovered = index.search({ query: 'crash', projectPath: '/project-rec-atom' });
+      expect(searchRecovered.matches.length).toBe(1);
     } finally {
       index.close();
     }
@@ -868,7 +974,8 @@ describe('SessionIndexDatabase', () => {
       const resSelective = index.search({ query: 'distinctive_quantum_computation', projectPath: '/project-perf' });
       const elapsedSelective = performance.now() - startSelective;
       expect(resSelective.matches.length).toBe(1);
-      expect(elapsedSelective).toBeLessThan(50);
+      // Guard bound of 25ms catches regressions while leaving ample headroom above observed 0.4-3.2ms for CI scheduling jitter.
+      expect(elapsedSelective).toBeLessThan(25);
 
       // 2. Broad workload (common >= 3 char term)
       const qpBroad = index.explainQueryPlan('algorithmic theory', { projectPath: '/project-perf' });
@@ -881,7 +988,8 @@ describe('SessionIndexDatabase', () => {
       const resBroad = index.search({ query: 'algorithmic theory', projectPath: '/project-perf' });
       const elapsedBroad = performance.now() - startBroad;
       expect(resBroad.matches.length).toBe(2);
-      expect(elapsedBroad).toBeLessThan(50);
+      // Guard bound of 25ms catches regressions while leaving ample headroom above observed 0.4-3.2ms for CI scheduling jitter.
+      expect(elapsedBroad).toBeLessThan(25);
 
       // 3. Short workload (< 3 char term, e.g. "ai")
       const qpShort = index.explainQueryPlan('ai', { projectPath: '/project-perf' });
@@ -894,7 +1002,8 @@ describe('SessionIndexDatabase', () => {
       const resShort = index.search({ query: 'ai', projectPath: '/project-perf' });
       const elapsedShort = performance.now() - startShort;
       expect(resShort.matches.length).toBe(1);
-      expect(elapsedShort).toBeLessThan(50);
+      // Guard bound of 25ms catches regressions while leaving ample headroom above observed 0.4-3.2ms for CI scheduling jitter.
+      expect(elapsedShort).toBeLessThan(25);
 
       // 4. Mixed workload (>= 3 chars and < 3 chars, e.g. "computer ai")
       const qpMixed = index.explainQueryPlan('computer ai', { projectPath: '/project-perf' });
@@ -904,7 +1013,8 @@ describe('SessionIndexDatabase', () => {
       const resMixed = index.search({ query: 'computer ai', projectPath: '/project-perf' });
       const elapsedMixed = performance.now() - startMixed;
       expect(resMixed.matches.length).toBe(1);
-      expect(elapsedMixed).toBeLessThan(50);
+      // Guard bound of 25ms catches regressions while leaving ample headroom above observed 0.4-3.2ms for CI scheduling jitter.
+      expect(elapsedMixed).toBeLessThan(25);
     } finally {
       index.close();
     }

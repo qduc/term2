@@ -911,6 +911,11 @@ export class SessionIndexDatabase {
     }>;
   }
 
+  /**
+   * Diagnostic and test surface: returns the chosen candidate search strategy
+   * ('fts5' vs 'scoped_text') and the SQLite EXPLAIN QUERY PLAN rows without executing
+   * the candidate or scoring query.
+   */
   explainQueryPlan(
     query: string,
     options: { projectPath: string; sshHost?: string },

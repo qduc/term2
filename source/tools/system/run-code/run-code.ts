@@ -24,7 +24,7 @@ import {
 } from '../../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
-import { renderToolsHeader } from './tools-header.js';
+import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
@@ -426,7 +426,7 @@ export function createRunCodeToolDefinition(
               const issues = parsed.error.issues
                 .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
                 .join('; ');
-              return failed(`Invalid parameters for "${name}": ${issues}`);
+              return failed(`Invalid parameters for "${name}": ${issues}\nSignature: ${renderCompactSignature(tool)}`);
             }
             normalized = parsed.data;
           }

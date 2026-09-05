@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,6 +51,29 @@ function writeSession(
     state: { previousResponseId: null },
   });
   void writer.close();
+}
+
+function appendTurn(id: string, text: string, seqStart = 4) {
+  const userLine = JSON.stringify({
+    v: 3,
+    seq: seqStart,
+    ts: '2026-01-01T00:01:00.000Z',
+    event: {
+      type: 'user_message',
+      message: { id: `${id}-u${seqStart}`, sender: 'user', text },
+    },
+  });
+  const assistantLine = JSON.stringify({
+    v: 3,
+    seq: seqStart + 1,
+    ts: '2026-01-01T00:01:01.000Z',
+    event: {
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: `reply for ${text}` }] },
+      state: { previousResponseId: null },
+    },
+  });
+  fs.appendFileSync(path.join(convDir, `${id}.jsonl`), `${userLine}\n${assistantLine}\n`);
 }
 
 describe('SessionIndexDatabase', () => {
@@ -426,6 +449,178 @@ describe('SessionIndexDatabase', () => {
 
       expect(index.getRevision('nonexistent')).toBeNull();
     } finally {
+      index.close();
+    }
+  });
+
+  it('calculates unavailable accurately per scope (corrupt files are dir-wide, but invalid sessions are scoped)', () => {
+    // 1 valid session in /project-a
+    writeSession('session-valid-a', '/project-a');
+
+    // 1 invalid session in /project-b (valid jsonl syntax but invalid timestamps so isBrowsableSession fails)
+    const invalidLog = [
+      JSON.stringify({
+        v: 3,
+        seq: 1,
+        ts: '2026-01-01T00:00:00.000Z',
+        event: {
+          type: 'session_init',
+          id: 'session-invalid-b',
+          createdAt: 'not-a-valid-iso-date',
+          projectPath: '/project-b',
+        },
+      }),
+      JSON.stringify({
+        v: 3,
+        seq: 2,
+        ts: '2026-01-01T00:00:01.000Z',
+        event: {
+          type: 'user_message',
+          message: { id: 'u1', sender: 'user', text: 'hello' },
+        },
+      }),
+    ].join('\n');
+    fs.writeFileSync(path.join(convDir, 'session-invalid-b.jsonl'), `${invalidLog}\n`);
+
+    // 1 unreadable file (corrupt JSON syntax)
+    fs.writeFileSync(path.join(convDir, 'corrupted-syntax.jsonl'), 'CORRUPTED_NOT_JSON\n');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      const rec = index.reconcile();
+      expect(rec.ok).toBe(true);
+
+      // List /project-a:
+      // total = 1 (session-valid-a)
+      // unavailable = 1 (only the directory-wide corrupt file; invalid session in /project-b is excluded!)
+      const listA = index.list({ projectPath: '/project-a' });
+      expect(listA.total).toBe(1);
+      expect(listA.unavailable).toBe(1);
+
+      // List /project-b:
+      // total = 0
+      // unavailable = 2 (1 dir-wide corrupt file + 1 invalid session in /project-b)
+      const listB = index.list({ projectPath: '/project-b' });
+      expect(listB.total).toBe(0);
+      expect(listB.unavailable).toBe(2);
+    } finally {
+      index.close();
+    }
+  });
+
+  it('prevents stale replay from overwriting newer version committed by another process', async () => {
+    writeSession('session-stale', '/project', undefined, 'turn 1');
+
+    const index1 = new SessionIndexDatabase(dbPath, convDir);
+    const index2 = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      // Step 1: index1 does initial reconcile (indexes turn 1)
+      const initRes = index1.reconcile();
+      expect(initRes.ok).toBe(true);
+
+      // Step 2: Append turn 1.5 to session-stale so index1 has something to replay
+      appendTurn('session-stale', 'turn 1.5', 4);
+
+      // Step 3: Set up spy on index1 database transaction.
+      // In reconcile(), commitSessionTx is created with db.transaction(() => { ... }) (fn.length === 0).
+      // Right before commitSessionTx.immediate() begins its write transaction,
+      // index2 commits a NEWER version (turn 2) to disk and database.
+      let injected = false;
+      const origTransaction = index1.database.transaction.bind(index1.database);
+      vi.spyOn(index1.database, 'transaction').mockImplementation((fn: any) => {
+        const tx = origTransaction(fn);
+        if (fn.length === 0) {
+          const wrapper = (...args: any[]) => tx(...args);
+          wrapper.immediate = (...args: any[]) => {
+            if (!injected) {
+              injected = true;
+              // Process 2 appends turn 2 to the source file on disk
+              appendTurn('session-stale', 'turn 2', 6);
+
+              // Process 2 reconciles and commits the newer version to the database BEFORE index1 transaction begins
+              const res2 = index2.reconcile();
+              expect(res2.ok).toBe(true);
+            }
+            return tx.immediate(...args);
+          };
+          wrapper.deferred = (...args: any[]) => tx.deferred(...args);
+          wrapper.exclusive = (...args: any[]) => tx.exclusive(...args);
+          return wrapper as any;
+        }
+        return tx;
+      });
+
+      // Run index1's reconcile. Inside commitSessionTx, index1 re-stats the file from disk
+      // and detects that diskVersionInTx !== sourceVersionAfter (the disk version changed
+      // after index1's replay). It aborts the commit and skips overwriting.
+      const res1 = index1.reconcile();
+      expect(res1.ok).toBe(true);
+      expect(res1.stable).toBe(false);
+
+      // Verify that database reflects the newer version from index2 (3 turns = 6 messages),
+      // NOT the stale replay from index1 (2 turns = 4 messages).
+      const sessRow = index2.database
+        .prepare('SELECT projected_count FROM sessions WHERE id = ?')
+        .get('session-stale') as { projected_count: number };
+      expect(sessRow.projected_count).toBe(6);
+    } finally {
+      vi.restoreAllMocks();
+      index1.close();
+      index2.close();
+    }
+  });
+
+  it('recovers cleanly when interrupted between replay and commit with no orphan rows', () => {
+    writeSession('session-interrupt', '/project', undefined, 'turn 1');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      // Reconcile initial state
+      index.reconcile();
+
+      // Append new turn to disk
+      appendTurn('session-interrupt', 'interrupted turn', 4);
+
+      // Simulate an error thrown inside the commit transaction (e.g. unexpected failure or crash)
+      let failedOnce = false;
+      const origPrepare = index.database.prepare.bind(index.database);
+      vi.spyOn(index.database, 'prepare').mockImplementation((sql: string) => {
+        const stmt = origPrepare(sql);
+        if (sql.includes('INSERT INTO sessions')) {
+          return new Proxy(stmt, {
+            get(target, prop, receiver) {
+              if (prop === 'run' && !failedOnce) {
+                return () => {
+                  failedOnce = true;
+                  throw new Error('Simulated crash between replay and commit');
+                };
+              }
+              return Reflect.get(target, prop, receiver);
+            },
+          });
+        }
+        return stmt;
+      });
+
+      expect(() => index.reconcile()).toThrow('Simulated crash between replay and commit');
+
+      // The transaction was rolled back, so there are no orphan rows or corrupt partial writes
+      const msgCount = index.database
+        .prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?')
+        .get('session-interrupt') as { count: number };
+      expect(msgCount.count).toBe(2); // Still original 2 messages, not orphaned
+
+      vi.restoreAllMocks();
+
+      // Subsequent reconcile succeeds cleanly
+      const recovery = index.reconcile();
+      expect(recovery.ok).toBe(true);
+      const msgCountAfter = index.database
+        .prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?')
+        .get('session-interrupt') as { count: number };
+      expect(msgCountAfter.count).toBe(4); // Now 4 messages
+    } finally {
+      vi.restoreAllMocks();
       index.close();
     }
   });

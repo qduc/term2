@@ -85,6 +85,9 @@ export class SessionBrowser {
   }
 
   async close(): Promise<void> {
+    if (this.#indexService) {
+      await this.#indexService.close();
+    }
     if (this.#lazyIndexService) {
       await this.#lazyIndexService.close();
       this.#lazyIndexService = null;
@@ -106,38 +109,24 @@ export class SessionBrowser {
     return this.#listCanonical(input);
   }
 
-  #listCanonical(input: SessionListInput) {
-    const budget = input.maxChars ?? DEFAULT_INDEX_CHARS;
-    const browsed = this.conversations();
-    let unavailable = browsed.unavailable;
-    const conversations = browsed.conversations;
-    const shortRefs = uniqueConversationShortRefs(conversations);
-    const candidates: Array<{ conversation: RestoredState; projection: NonNullable<ReturnType<typeof project>> }> = [];
-    for (const conversation of conversations) {
-      const projection = project(conversation);
-      if (!projection || !isBrowsableSession(conversation)) unavailable++;
-      else candidates.push({ conversation, projection });
-    }
-    const selected = candidates.slice(0, clamp(input.limit, DEFAULT_LIMIT));
+  #pageListResult(
+    scope: string,
+    items: Array<Record<string, unknown>>,
+    total: number,
+    unavailable: number,
+    limit: number | undefined,
+    maxChars: number | undefined,
+  ): unknown {
+    const budget = maxChars ?? DEFAULT_INDEX_CHARS;
+    const selected = items.slice(0, clamp(limit, DEFAULT_LIMIT));
     const result = {
       sessions: [] as Array<Record<string, unknown>>,
-      scope: browsed.scope,
-      total: candidates.length,
+      scope,
+      total,
       omitted: 0,
       unavailable,
     };
-    for (const { conversation, projection } of selected) {
-      const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
-      const item = {
-        id: conversation.id,
-        shortRef: shortRefs.get(conversation.id) ?? conversation.id,
-        createdAt: conversation.createdAt,
-        updatedAt: updatedAt(conversation),
-        ...(firstUser ? { firstUserMessage: prefixSnippet(firstUser.text) } : {}),
-        ...(conversation.model ? { model: conversation.model } : {}),
-        ...(conversation.provider ? { provider: conversation.provider } : {}),
-        messageCount: projection.records.length,
-      };
+    for (const item of selected) {
       const candidate = fitted({ ...result, sessions: [...result.sessions, item], omitted: selected.length }, budget);
       if (candidate) result.sessions = candidate.sessions;
       else result.omitted++;
@@ -145,12 +134,46 @@ export class SessionBrowser {
     return fitted(result, budget) ?? outputBudgetError(budget);
   }
 
+  #listCanonical(input: SessionListInput) {
+    const browsed = this.conversations();
+    let unavailable = browsed.unavailable;
+    const conversations = browsed.conversations;
+    const shortRefs = uniqueConversationShortRefs(conversations);
+    const candidates: Array<Record<string, unknown>> = [];
+    for (const conversation of conversations) {
+      const projection = project(conversation);
+      if (!projection || !isBrowsableSession(conversation)) {
+        unavailable++;
+      } else {
+        const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
+        candidates.push({
+          id: conversation.id,
+          shortRef: shortRefs.get(conversation.id) ?? conversation.id,
+          createdAt: conversation.createdAt,
+          updatedAt: updatedAt(conversation),
+          ...(firstUser ? { firstUserMessage: prefixSnippet(firstUser.text) } : {}),
+          ...(conversation.model ? { model: conversation.model } : {}),
+          ...(conversation.provider ? { provider: conversation.provider } : {}),
+          messageCount: projection.records.length,
+        });
+      }
+    }
+    return this.#pageListResult(browsed.scope, candidates, candidates.length, unavailable, input.limit, input.maxChars);
+  }
+
   async #listIndexed(input: SessionListInput): Promise<unknown> {
     const service = this.#getIndexService();
     const context = this.getContext();
-    const indexed = await service.list(context, input);
+    const indexed = await service.list(context);
     if (indexed !== null) {
-      return indexed;
+      return this.#pageListResult(
+        indexed.scope,
+        indexed.sessions,
+        indexed.total,
+        indexed.unavailable,
+        input.limit,
+        input.maxChars,
+      );
     }
     return this.#listCanonical(input);
   }

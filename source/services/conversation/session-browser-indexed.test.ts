@@ -52,71 +52,73 @@ function writeSession(
 }
 
 describe('SessionBrowser Indexed Backend', () => {
-  it('achieves exact result parity with canonical browser for list and read', async () => {
-    writeSession('session-11111111', '/workspace/project-a', undefined, 'first question');
-    writeSession('session-22222222', '/workspace/project-a', undefined, 'second question', 'session-11111111');
-    writeSession('session-33333333', '/workspace/project-b', undefined, 'other project question');
+  describe.each(['direct', 'worker'] as const)('acceptance parity across backend (%s)', (backend) => {
+    it('achieves exact result parity with canonical browser for list and read', async () => {
+      writeSession('session-11111111', '/workspace/project-a', undefined, 'first question');
+      writeSession('session-22222222', '/workspace/project-a', undefined, 'second question', 'session-11111111');
+      writeSession('session-33333333', '/workspace/project-b', undefined, 'other project question');
 
-    const currentSessionId: string | undefined = 'session-22222222';
-    const getContext = (): SessionBrowserContext => ({
-      projectPath: '/workspace/project-a',
-      currentSessionId,
+      const currentSessionId: string | undefined = 'session-22222222';
+      const getContext = (): SessionBrowserContext => ({
+        projectPath: '/workspace/project-a',
+        currentSessionId,
+      });
+
+      const indexService = new SessionIndexService({
+        conversationsDir: dir,
+        dbPath,
+        backend,
+      });
+
+      const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+      const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+      try {
+        // 1. Parity for list
+        const canonicalList = canonicalBrowser.list({ limit: 10 }) as Record<string, unknown>;
+        const indexedList = (await indexedBrowser.list({ limit: 10 })) as Record<string, unknown>;
+        expect(indexedList).toEqual(canonicalList);
+
+        // 2. Parity for exact read
+        const canonicalReadExact = canonicalBrowser.read({ id: 'session-11111111' });
+        const indexedReadExact = await indexedBrowser.read({ id: 'session-11111111' });
+        expect(indexedReadExact).toEqual(canonicalReadExact);
+
+        // 3. Parity for prefix read
+        const canonicalReadPrefix = canonicalBrowser.read({ id: 'session-11' });
+        const indexedReadPrefix = await indexedBrowser.read({ id: 'session-11' });
+        expect(indexedReadPrefix).toEqual(canonicalReadPrefix);
+
+        // 4. Parity for previous read (rollover predecessor)
+        const canonicalReadPrev = canonicalBrowser.read({ id: 'previous' });
+        const indexedReadPrev = await indexedBrowser.read({ id: 'previous' });
+        expect(indexedReadPrev).toEqual(canonicalReadPrev);
+
+        // 5. Parity for ambiguous reference
+        const canonicalReadAmbiguous = canonicalBrowser.read({ id: 'session' });
+        const indexedReadAmbiguous = await indexedBrowser.read({ id: 'session' });
+        expect(indexedReadAmbiguous).toEqual(canonicalReadAmbiguous);
+
+        // 6. Parity for not-found reference
+        const canonicalReadNotFound = canonicalBrowser.read({ id: 'session-99999999' });
+        const indexedReadNotFound = await indexedBrowser.read({ id: 'session-99999999' });
+        expect(indexedReadNotFound).toEqual(canonicalReadNotFound);
+
+        // 7. Parity for from: "end"
+        const canonicalReadEnd = canonicalBrowser.read({ id: 'session-11111111', from: 'end', limit: 1 });
+        const indexedReadEnd = await indexedBrowser.read({ id: 'session-11111111', from: 'end', limit: 1 });
+        // Clear cursor for structural check since cursor IDs increment independently
+        const stripCursor = (obj: any) => {
+          const copy = { ...obj };
+          delete copy.nextCursor;
+          return copy;
+        };
+        expect(stripCursor(indexedReadEnd)).toEqual(stripCursor(canonicalReadEnd));
+      } finally {
+        await indexedBrowser.close();
+        await indexService.close();
+      }
     });
-
-    const indexService = new SessionIndexService({
-      conversationsDir: dir,
-      dbPath,
-      backend: 'direct',
-    });
-
-    const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
-    const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
-
-    try {
-      // 1. Parity for list
-      const canonicalList = canonicalBrowser.list({ limit: 10 }) as Record<string, unknown>;
-      const indexedList = (await indexedBrowser.list({ limit: 10 })) as Record<string, unknown>;
-      expect(indexedList).toEqual(canonicalList);
-
-      // 2. Parity for exact read
-      const canonicalReadExact = canonicalBrowser.read({ id: 'session-11111111' });
-      const indexedReadExact = await indexedBrowser.read({ id: 'session-11111111' });
-      expect(indexedReadExact).toEqual(canonicalReadExact);
-
-      // 3. Parity for prefix read
-      const canonicalReadPrefix = canonicalBrowser.read({ id: 'session-11' });
-      const indexedReadPrefix = await indexedBrowser.read({ id: 'session-11' });
-      expect(indexedReadPrefix).toEqual(canonicalReadPrefix);
-
-      // 4. Parity for previous read (rollover predecessor)
-      const canonicalReadPrev = canonicalBrowser.read({ id: 'previous' });
-      const indexedReadPrev = await indexedBrowser.read({ id: 'previous' });
-      expect(indexedReadPrev).toEqual(canonicalReadPrev);
-
-      // 5. Parity for ambiguous reference
-      const canonicalReadAmbiguous = canonicalBrowser.read({ id: 'session' });
-      const indexedReadAmbiguous = await indexedBrowser.read({ id: 'session' });
-      expect(indexedReadAmbiguous).toEqual(canonicalReadAmbiguous);
-
-      // 6. Parity for not-found reference
-      const canonicalReadNotFound = canonicalBrowser.read({ id: 'session-99999999' });
-      const indexedReadNotFound = await indexedBrowser.read({ id: 'session-99999999' });
-      expect(indexedReadNotFound).toEqual(canonicalReadNotFound);
-
-      // 7. Parity for from: "end"
-      const canonicalReadEnd = canonicalBrowser.read({ id: 'session-11111111', from: 'end', limit: 1 });
-      const indexedReadEnd = await indexedBrowser.read({ id: 'session-11111111', from: 'end', limit: 1 });
-      // Clear cursor for structural check since cursor IDs increment independently
-      const stripCursor = (obj: any) => {
-        const copy = { ...obj };
-        delete copy.nextCursor;
-        return copy;
-      };
-      expect(stripCursor(indexedReadEnd)).toEqual(stripCursor(canonicalReadEnd));
-    } finally {
-      await indexedBrowser.close();
-      await indexService.close();
-    }
   });
 
   it('replays zero logs on unchanged list and reference resolution, and zero rehash on continuations', async () => {
@@ -258,37 +260,39 @@ describe('SessionBrowser Indexed Backend', () => {
     }
   });
 
-  it('falls back seamlessly to canonical browser when index is corrupt or unavailable', async () => {
-    writeSession('session-fallback', '/project', undefined, 'fallback test msg');
+  describe.each(['direct', 'worker'] as const)('fallback to canonical (%s backend)', (backend) => {
+    it('falls back seamlessly to canonical browser when index is corrupt or unavailable', async () => {
+      writeSession('session-fallback', '/project', undefined, 'fallback test msg');
 
-    const getContext = (): SessionBrowserContext => ({
-      projectPath: '/project',
+      const getContext = (): SessionBrowserContext => ({
+        projectPath: '/project',
+      });
+
+      // Write a corrupt file at dbPath
+      fs.writeFileSync(dbPath, 'CORRUPT_SQLITE_HEADER_GARBAGE');
+
+      const indexService = new SessionIndexService({
+        conversationsDir: dir,
+        dbPath,
+        backend,
+      });
+
+      const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+      try {
+        // list falls back to canonical without throwing!
+        const list = (await browser.list({ limit: 10 })) as any;
+        expect(list.total).toBe(1);
+        expect(list.sessions[0].id).toBe('session-fallback');
+
+        // read falls back to canonical without throwing!
+        const read = (await browser.read({ id: 'session-fallback' })) as any;
+        expect(read.session.id).toBe('session-fallback');
+      } finally {
+        await browser.close();
+        await indexService.close();
+      }
     });
-
-    // Write a corrupt file at dbPath
-    fs.writeFileSync(dbPath, 'CORRUPT_SQLITE_HEADER_GARBAGE');
-
-    const indexService = new SessionIndexService({
-      conversationsDir: dir,
-      dbPath,
-      backend: 'direct',
-    });
-
-    const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
-
-    try {
-      // list falls back to canonical without throwing!
-      const list = (await browser.list({ limit: 10 })) as any;
-      expect(list.total).toBe(1);
-      expect(list.sessions[0].id).toBe('session-fallback');
-
-      // read falls back to canonical without throwing!
-      const read = (await browser.read({ id: 'session-fallback' })) as any;
-      expect(read.session.id).toBe('session-fallback');
-    } finally {
-      await browser.close();
-      await indexService.close();
-    }
   });
 
   it('works with the worker thread client across asynchronous boundaries', async () => {

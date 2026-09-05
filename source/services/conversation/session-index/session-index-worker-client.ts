@@ -133,12 +133,13 @@ export class SessionIndexWorkerClient {
 
   async close(): Promise<void> {
     if (this.#closed) return;
-    this.#closed = true;
     try {
       await this.#send({ type: 'close' });
     } catch {
       // Ignore errors on close
     } finally {
+      this.#closed = true;
+      this.#drainPending(new Error('SessionIndexWorkerClient is closed'));
       await this.#worker.terminate();
     }
   }

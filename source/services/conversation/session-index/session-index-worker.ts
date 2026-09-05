@@ -1,6 +1,5 @@
 import { parentPort } from 'node:worker_threads';
 import { SessionIndexDatabase } from './session-index-database.js';
-import { setConversationsDirForTest } from '../conversation-persistence.js';
 
 export type WorkerRequestPayload =
   | { type: 'init'; dbPath: string; sourceDirectory: string }
@@ -34,7 +33,6 @@ export function runSessionIndexWorker(): void {
         case 'init': {
           if (db) db.close();
           process.env['TERM2_CONVERSATIONS_DIR'] = msg.sourceDirectory;
-          setConversationsDirForTest(msg.sourceDirectory);
           db = new SessionIndexDatabase(msg.dbPath, msg.sourceDirectory);
           parentPort!.postMessage({ id: msg.id, ok: true, result: { initialized: true } } satisfies WorkerResponse);
           break;

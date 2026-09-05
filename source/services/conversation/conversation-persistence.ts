@@ -139,11 +139,12 @@ function statVersion(filePath: string): string | null {
  * The delta sidecar is included because an interrupted live turn can change
  * the restored transcript without changing the canonical JSONL file.
  */
-export function getConversationSourceVersionReadOnly(id: string): string | null {
+export function getConversationSourceVersionReadOnly(id: string, sourceDir?: string): string | null {
   if (!SAFE_SESSION_ID.test(id)) return null;
-  const fileVersion = statVersion(getConversationPath(id));
+  const filePath = sourceDir ? path.join(sourceDir, `${id}.jsonl`) : getConversationPath(id);
+  const fileVersion = statVersion(filePath);
   if (!fileVersion) return null;
-  const sidecarPath = deltaSidecarPathFor(getConversationPath(id));
+  const sidecarPath = deltaSidecarPathFor(filePath);
   const sidecarVersion = fs.existsSync(sidecarPath) ? statVersion(sidecarPath) : 'absent';
   if (!sidecarVersion) return null;
   return JSON.stringify([fileVersion, sidecarVersion]);
@@ -165,20 +166,14 @@ export function normalizeSshHost(host: string): string {
 
 function conversationMatchesProject(
   conversation: RestoredState,
-  expectedProjectPath?: string,
+  expectedProjectPath: string,
   expectedSshHost?: string,
 ): boolean {
-  if (expectedProjectPath === undefined && expectedSshHost === undefined) {
-    return true;
+  if (!conversation.projectPath) {
+    return false;
   }
-
-  if (expectedProjectPath) {
-    if (!conversation.projectPath) {
-      return false;
-    }
-    if (normalizeProjectPath(conversation.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
-      return false;
-    }
+  if (normalizeProjectPath(conversation.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
+    return false;
   }
 
   if (expectedSshHost) {
@@ -322,7 +317,7 @@ export function loadConversation(
     if (!restored.id) {
       restored.id = id;
     }
-    if (!conversationMatchesProject(restored, expectedProjectPath, expectedSshHost)) {
+    if (expectedProjectPath && !conversationMatchesProject(restored, expectedProjectPath, expectedSshHost)) {
       return null;
     }
     return restored;
@@ -351,7 +346,7 @@ export function loadConversationForProject(
 /** Browser-only load that must not trigger directory creation or legacy migration. */
 export function loadConversationForProjectReadOnly(
   id: string,
-  expectedProjectPath?: string,
+  expectedProjectPath: string,
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
   const filePath = getConversationPath(id);
@@ -380,6 +375,33 @@ export function loadConversationForProjectReadOnly(
   } catch (error) {
     // A raw read failure must settle as a typed unreadable result so the CLI
     // can print an actionable diagnostic instead of crashing with an fs stack.
+    return { status: 'unreadable', error };
+  }
+}
+
+/** Unscoped load for indexing that does not check project boundaries. */
+export function loadConversationUnscopedForIndex(id: string, sourceDir?: string): LoadConversationForProjectResult {
+  const filePath = sourceDir ? path.join(sourceDir, `${id}.jsonl`) : getConversationPath(id);
+  if (!fs.existsSync(filePath)) {
+    return { status: 'not_found' };
+  }
+  try {
+    const sourceVersionBefore = getConversationSourceVersionReadOnly(id, sourceDir);
+    const envelopes = readEnvelopes(filePath);
+    const conversation = replayEvents(envelopes);
+    conversation.updatedAt = restoredUpdatedAt(filePath, envelopes);
+    if (!conversation.id) {
+      conversation.id = id;
+    }
+    const sourceVersionAfter = getConversationSourceVersionReadOnly(id, sourceDir);
+    return {
+      status: 'loaded',
+      conversation,
+      ...(sourceVersionBefore && sourceVersionBefore === sourceVersionAfter
+        ? { sourceVersion: sourceVersionBefore }
+        : {}),
+    };
+  } catch (error) {
     return { status: 'unreadable', error };
   }
 }

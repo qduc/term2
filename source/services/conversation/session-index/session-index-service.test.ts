@@ -61,7 +61,7 @@ describe('SessionIndexService', () => {
       expect(service.isAvailable()).toBe(true);
       expect(service.getFallbackReason()).toBeNull();
 
-      const list = (await service.list({ projectPath: '/project' }, { limit: 10 })) as any;
+      const list = (await service.list({ projectPath: '/project' })) as any;
       expect(list).toBeDefined();
       expect(list.total).toBe(2);
       expect(list.scope).toBe('/project');
@@ -104,7 +104,7 @@ describe('SessionIndexService', () => {
     expect(service.isAvailable()).toBe(false);
     expect(service.getFallbackReason()).toBe('FTS5 trigram unsupported');
 
-    const listResult = await service.list({ projectPath: '/project' }, {});
+    const listResult = await service.list({ projectPath: '/project' });
     expect(listResult).toBeNull();
 
     const resolveResult = await service.resolveReference('session-1', { projectPath: '/project' });

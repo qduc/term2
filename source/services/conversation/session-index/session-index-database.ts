@@ -10,7 +10,7 @@ import {
   type ProbeCapabilityResult,
 } from './session-index-schema.js';
 import {
-  loadConversationForProjectReadOnly,
+  loadConversationUnscopedForIndex,
   normalizeProjectPath,
   normalizeSshHost,
   resolveConversationReference,
@@ -129,9 +129,6 @@ export class SessionIndexDatabase {
 
   reconcile(): ReconcileResult {
     this.initialize();
-    if (process.env['TERM2_CONVERSATIONS_DIR'] !== this.#sourceDirectory) {
-      process.env['TERM2_CONVERSATIONS_DIR'] = this.#sourceDirectory;
-    }
 
     let files: string[] = [];
     try {
@@ -204,11 +201,13 @@ export class SessionIndexDatabase {
 
     // Prepared statements for insertion
     const insertInventoryStmt = this.#db.prepare(`
-      INSERT INTO source_inventory (session_id, source_version, classification, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO source_inventory (session_id, source_version, classification, project_path, ssh_host, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         source_version = excluded.source_version,
         classification = excluded.classification,
+        project_path = excluded.project_path,
+        ssh_host = excluded.ssh_host,
         updated_at = excluded.updated_at
     `);
 
@@ -232,9 +231,11 @@ export class SessionIndexDatabase {
 
       replayedCount++;
 
-      // Replay and project using canonical browser projection
-      const loaded = loadConversationForProjectReadOnly(id);
+      // Replay and project using unscoped load for index
+      const loaded = loadConversationUnscopedForIndex(id, this.#sourceDirectory);
       let classification: 'loaded' | 'unreadable' | 'invalid';
+      let sessionProjectPath: string | null = null;
+      let sessionSshHost: string | null = null;
       let sessionRowData: {
         id: string;
         projectPath: string | null;
@@ -257,15 +258,17 @@ export class SessionIndexDatabase {
         normalizedText: string;
       }> = [];
 
-      if (
-        loaded.status === 'unreadable' ||
-        loaded.status !== 'loaded' ||
-        !loaded.conversation.createdAt ||
-        loaded.conversation.id !== id
-      ) {
+      if (loaded.status !== 'loaded' || !loaded.conversation.createdAt || loaded.conversation.id !== id) {
         classification = 'unreadable';
       } else {
         const conversation = loaded.conversation;
+        if (conversation.projectPath) {
+          sessionProjectPath = normalizeProjectPath(conversation.projectPath);
+        }
+        if (conversation.sshHost) {
+          sessionSshHost = normalizeSshHost(conversation.sshHost);
+        }
+
         if (!isBrowsableSession(conversation)) {
           classification = 'invalid';
         } else {
@@ -280,8 +283,8 @@ export class SessionIndexDatabase {
 
             sessionRowData = {
               id: conversation.id,
-              projectPath: conversation.projectPath ? normalizeProjectPath(conversation.projectPath) : null,
-              sshHost: conversation.sshHost ? normalizeSshHost(conversation.sshHost) : null,
+              projectPath: sessionProjectPath,
+              sshHost: sessionSshHost,
               createdAt: conversation.createdAt,
               updatedAt,
               predecessorId: conversation.rolloverFrom ?? null,
@@ -312,8 +315,16 @@ export class SessionIndexDatabase {
       }
 
       // Atomic commit per session with recheck inside transaction
+      let committed = false;
       const commitSessionTx = this.#db.transaction(() => {
-        // Recheck: if another process already updated to this version or newer, skip
+        // Re-STAT the source file from disk inside the serialized write transaction!
+        const diskVersionInTx = this.#getSourceVersion(id);
+        if (diskVersionInTx !== sourceVersionAfter) {
+          // Source file was changed on disk after replay; abort stale commit!
+          return;
+        }
+
+        // Recheck DB: if another process already committed this version or newer, skip
         const currentInDb = this.#db
           .prepare('SELECT source_version FROM source_inventory WHERE session_id = ?')
           .get(id) as { source_version: string } | undefined;
@@ -326,8 +337,8 @@ export class SessionIndexDatabase {
         deleteMessageStmt.run(id);
         deleteSessionStmt.run(id);
 
-        // Update inventory
-        insertInventoryStmt.run(id, sourceVersionAfter, classification, Date.now());
+        // Update inventory with scope info
+        insertInventoryStmt.run(id, sourceVersionAfter, classification, sessionProjectPath, sessionSshHost, Date.now());
 
         // Insert session and messages if loaded
         if (classification === 'loaded' && sessionRowData) {
@@ -357,9 +368,16 @@ export class SessionIndexDatabase {
             );
           }
         }
+        committed = true;
       });
 
       commitSessionTx.immediate();
+      if (!committed) {
+        const diskVersionNow = this.#getSourceVersion(id);
+        if (diskVersionNow !== sourceVersionAfter) {
+          changedDuringReplay.push(id);
+        }
+      }
     }
 
     return {
@@ -400,17 +418,35 @@ export class SessionIndexDatabase {
       projected_count: number;
     }>;
 
-    const unavailableRow = this.#db
+    // Directory-wide unreadable files (corrupt JSON lines)
+    const unreadableRow = this.#db
       .prepare(
         `
         SELECT COUNT(*) as count
         FROM source_inventory
-        WHERE classification IN ('unreadable', 'invalid')
+        WHERE classification = 'unreadable'
       `,
       )
       .get() as { count: number } | undefined;
 
-    const unavailable = unavailableRow?.count ?? 0;
+    // Invalid sessions scoped to current project/SSH context
+    const invalidInScopeRow = this.#db
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM source_inventory
+        WHERE classification = 'invalid'
+          AND (project_path IS NOT NULL AND project_path = ?)
+          AND (
+            (? IS NULL AND ssh_host IS NULL)
+            OR
+            (ssh_host IS NOT NULL AND ssh_host = ?)
+          )
+      `,
+      )
+      .get(normalizedProject, normalizedHost, normalizedHost) as { count: number } | undefined;
+
+    const unavailable = (unreadableRow?.count ?? 0) + (invalidInScopeRow?.count ?? 0);
 
     const shortRefs = uniqueConversationShortRefs(rows.map((r) => ({ id: r.id })));
 

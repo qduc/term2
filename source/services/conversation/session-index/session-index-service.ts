@@ -1,12 +1,13 @@
 import path from 'node:path';
 import { getConversationsDir } from '../conversation-persistence.js';
-import type { SessionBrowserContext, SessionListInput } from '../session-browser.js';
-import { fitSerializedEnvelope, fitsSerializedText, boundedJsonFailure } from '../../../utils/output/bounded-json.js';
-import { SessionIndexDatabase, type IndexedResolveResult, type ReconcileResult } from './session-index-database.js';
+import type { SessionBrowserContext } from '../session-browser.js';
+import {
+  SessionIndexDatabase,
+  type IndexedListResult,
+  type IndexedResolveResult,
+  type ReconcileResult,
+} from './session-index-database.js';
 import { SessionIndexWorkerClient } from './session-index-worker-client.js';
-
-const DEFAULT_INDEX_CHARS = 12_000;
-const DEFAULT_LIMIT = 10;
 
 export interface SessionIndexServiceOptions {
   dbPath?: string;
@@ -23,24 +24,6 @@ export function resolveDefaultSessionIndexPath(conversationsDir: string): string
   return path.join(path.dirname(conversationsDir), 'session-index.db');
 }
 
-function clamp(value: number | undefined, fallback: number): number {
-  return Math.max(1, Math.min(50, value ?? fallback));
-}
-
-function fitted<T extends Record<string, unknown>>(value: T, maxChars: number): T | null {
-  const result = fitSerializedEnvelope((charsUsed) => ({ ...value, charsUsed }), { maxChars });
-  return (result?.value as T | undefined) ?? null;
-}
-
-function outputBudgetError(maxChars: number) {
-  const value = {
-    error: { code: 'output_budget_exceeded', message: 'The requested result cannot fit in the output budget.' },
-  };
-  if (fitsSerializedText(JSON.stringify(value), { maxChars })) return value;
-  const fallback = boundedJsonFailure({ maxChars });
-  return fallback ? JSON.parse(fallback) : 0;
-}
-
 export class SessionIndexService {
   readonly #conversationsDir: string;
   readonly #dbPath: string;
@@ -55,7 +38,7 @@ export class SessionIndexService {
   constructor(options?: SessionIndexServiceOptions) {
     this.#conversationsDir = options?.conversationsDir ?? getConversationsDir();
     this.#dbPath = options?.dbPath ?? resolveDefaultSessionIndexPath(this.#conversationsDir);
-    this.#backend = options?.backend ?? (options?.workerClient ? 'worker' : 'worker');
+    this.#backend = options?.backend ?? 'worker';
     this.#logger = options?.logger;
     if (options?.workerClient) {
       this.#workerClient = options.workerClient;
@@ -148,7 +131,7 @@ export class SessionIndexService {
     }
   }
 
-  async list(context: SessionBrowserContext, input: SessionListInput): Promise<unknown> {
+  async list(context: SessionBrowserContext): Promise<IndexedListResult | null> {
     const ready = await this.ensureReady();
     if (!ready) return null;
 
@@ -157,34 +140,14 @@ export class SessionIndexService {
       return null; // Fall back to canonical on mid-replay change or error
     }
 
-    const budget = input.maxChars ?? DEFAULT_INDEX_CHARS;
-    let indexed;
     try {
       if (this.#backend === 'direct' && this.#directDb) {
-        indexed = this.#directDb.list({ projectPath: context.projectPath, sshHost: context.sshHost });
-      } else {
-        indexed = await this.#workerClient!.list({ projectPath: context.projectPath, sshHost: context.sshHost });
+        return this.#directDb.list({ projectPath: context.projectPath, sshHost: context.sshHost });
       }
+      return await this.#workerClient!.list({ projectPath: context.projectPath, sshHost: context.sshHost });
     } catch {
       return null;
     }
-
-    const selected = indexed.sessions.slice(0, clamp(input.limit, DEFAULT_LIMIT));
-    const result = {
-      sessions: [] as Array<Record<string, unknown>>,
-      scope: indexed.scope,
-      total: indexed.total,
-      omitted: 0,
-      unavailable: indexed.unavailable,
-    };
-
-    for (const item of selected) {
-      const candidate = fitted({ ...result, sessions: [...result.sessions, item], omitted: selected.length }, budget);
-      if (candidate) result.sessions = candidate.sessions;
-      else result.omitted++;
-    }
-
-    return fitted(result, budget) ?? outputBudgetError(budget);
   }
 
   async resolveReference(reference: string, context: SessionBrowserContext): Promise<IndexedResolveResult | null> {

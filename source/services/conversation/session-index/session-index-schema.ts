@@ -46,11 +46,16 @@ export function createSchema(db: Database.Database): void {
       session_id TEXT PRIMARY KEY,
       source_version TEXT NOT NULL,
       classification TEXT NOT NULL,
+      project_path TEXT,
+      ssh_host TEXT,
       updated_at INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_source_inventory_classification
       ON source_inventory(classification);
+
+    CREATE INDEX IF NOT EXISTS idx_source_inventory_scope
+      ON source_inventory(project_path, ssh_host);
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,

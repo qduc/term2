@@ -65,7 +65,11 @@ function numeric(input: Args, name: string, fallback: number): number {
 }
 
 function idFor(index: number): string {
-  return `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
+  // The browser's short-reference generator is quadratic in UUID population.
+  // Keep one UUID target for exact/prefix/previous resolution, but make bulk
+  // corpus IDs safe non-UUID values so this benchmark measures replay/search
+  // scale rather than an unrelated reference-collision algorithm.
+  return index === 16 ? '00000010-0000-4000-8000-000000000000' : `synthetic-${index}`;
 }
 
 function envelope(seq: number, event: unknown, index: number) {
@@ -74,7 +78,7 @@ function envelope(seq: number, event: unknown, index: number) {
 
 function textFor(index: number, record: number): string {
   const tier = index % 3;
-  const chars = tier === 0 ? 180 : tier === 1 ? 1_400 : 5_600;
+  const chars = tier === 0 ? 96 : tier === 1 ? 384 : 1_536;
   const token = index === 17 && record === 0 ? ' SELECTIVE_NEEDLE_17 ' : '';
   return (`common broad corpus text session ${index} record ${record} prefixable continuation ` + token)
     .repeat(Math.ceil(chars / 80))
@@ -124,6 +128,8 @@ function sessionLines(id: string, index: number, rolloverFrom?: string): string[
 
 function generate(out: string, size: number) {
   if (![100, 1_000, 10_000].includes(size)) throw new Error('--size must be one of 100, 1000, 10000');
+  if (new Set(Array.from({ length: size }, (_, index) => idFor(index))).size !== size)
+    throw new Error('Synthetic corpus IDs must be unique.');
   const conversations = path.join(out, 'conversations');
   fs.mkdirSync(conversations, { recursive: true });
   let bytes = 0;

@@ -68,6 +68,56 @@ Its p50/p95 latency is 28.00/29.15 ms above. This is a behavior baseline, not
 an indexed-read oracle; rerun the identical fixture after M2a under the
 repaired multi-record tail contract.
 
+## 1,000 and 10,000-session scaling runs
+
+The corrected corpus retains UUID exact/prefix/`previous` fixtures while using
+safe non-UUID bulk IDs; this avoids benchmarking the browser's separate
+quadratic UUID-short-reference helper. Both runs preserve varied 2/6/12-pair
+transcripts and the same fixed pre-repair tail fixture (one page, returns
+`TAIL_FINAL_RECORD_ANCHOR`, and does not recover the penultimate fact).
+
+| Corpus | Samples | Aggregate bytes | Projected records | Replay bytes / operation | Peak RSS range |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1,000 requested (1,001 including tail) | 3 | 15,057,229 | 13,327 | 326,952,585 | 687,755,264–1,151,311,872 |
+| 10,000 requested (10,001 including tail) | 2 | 152,556,229 | 133,327 | 2,210,778,390 | 2,644,127,744–4,530,810,880 |
+
+All values below are p50/p95 milliseconds (event-loop p95 in parentheses):
+
+| Operation | 1,000 | 10,000 |
+| --- | ---: | ---: |
+| list | 1,581 / 1,760 (1,763) | 40,456 / 58,704 (58,707) |
+| selective search | 1,614 / 1,651 (1,651) | 43,059 / 44,007 (44,007) |
+| broad search | 14,101 / 16,323 (16,323) | 170,748 / 181,235 (181,736) |
+| short-term search | 28,922 / 31,099 (31,100) | 286,142 / 294,753 (294,757) |
+| exact initial read | 1,216 / 1,233 (1,233) | 66,739 / 81,445 (81,446) |
+| prefix initial read | 1,189 / 1,223 (1,223) | 42,369 / 43,127 (43,128) |
+| `previous` initial read | 988 / 1,021 (1,021) | 8,852 / 8,860 (8,860) |
+| tail initial read | 1,289 / 1,328 (1,329) | 37,237 / 37,296 (37,296) |
+| continuation | 1,258 / 1,320 (1,320) | 38,064 / 38,834 (38,834) |
+
+Commands (all exited 0):
+
+```bash
+pnpm exec tsx scripts/session-query-index-m0.ts generate --size 1000 --out /tmp/session-query-index-m0-1000
+pnpm exec tsx scripts/session-query-index-m0.ts benchmark --corpus /tmp/session-query-index-m0-1000 --samples 3
+pnpm exec tsx scripts/session-query-index-m0.ts generate --size 10000 --out /tmp/session-query-index-m0-10000
+NODE_OPTIONS=--max-old-space-size=6144 pnpm exec tsx scripts/session-query-index-m0.ts benchmark --corpus /tmp/session-query-index-m0-10000 --samples 2
+```
+
+The initial 10,000 benchmark exceeded Node's default heap; the successful run
+required a 6 GB old-space limit. Its artifacts are
+`manifest.json` SHA-256 `6c3a769205c3660c7da763e2867ee328976c7beb3a59362ffdbebc240a8b39dd`
+and `benchmark.json` SHA-256 `60c5d268335a8bbb29a0771fa53416d4ea1b698571720a247e567c038db47adf`.
+The 1,000 artifacts are respectively
+`3aee71f9cfe1f709a6962e67fec9ae0309ae9d9af95895b7aedaf0bb8274d919` and
+`f6d4096405f6959d0d797b00ab293fcb575b979f30a01b4e20f3c6ce8ccacbdb`.
+
+These results reinforce, rather than revise, the proposed >=5x warm p95
+target: the missing-index baseline is replay- and event-loop-bound at scale.
+Future warm results must include worker dispatch and demonstrate the target
+without requiring a multi-gigabyte heap; broad and short-term search remain
+separate workloads, not evidence that every indexed query will be sublinear.
+
 ## SQLite runtime decision
 
 No Node-20-compatible SQLite driver is currently declared in `package.json`

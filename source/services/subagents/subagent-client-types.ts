@@ -1,4 +1,5 @@
 import type { ConversationAgentClient, ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 /**
  * Narrow interface SubagentManager needs from the agent client.
@@ -19,5 +20,11 @@ export interface ISubagentClientFactory {
     retryAttempts?: number;
     agentId?: string;
     role?: string;
+    /**
+     * Graph-owned policy authority built alongside the subagent tools.
+     * The transient client exposes it so session composition resolves the
+     * subagent graph's policies instead of an empty registry.
+     */
+    approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
   }): ConversationAgentClient;
 }

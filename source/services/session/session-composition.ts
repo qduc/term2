@@ -336,11 +336,30 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
   const resolvedBackgroundShellEventSinkHost = asBackgroundShellEventSinkHost(agentClient);
-  // Real AgentClient instances always expose their graph-owned registry. Keep
-  // compatibility/test clients usable without reviving the process singleton;
-  // this fallback is an isolated empty registry, not production authority.
-  const approvalPolicyRegistry =
-    suppliedApprovalPolicyRegistry ?? agentClient.getApprovalPolicyRegistry?.() ?? new ToolApprovalPolicyRegistry();
+  // Graph-owned registry resolution. Root AgentClient instances expose the
+  // registry their graph registered into; transient (subagent) clients expose
+  // the subagent graph's registry supplied at creation. Either way this
+  // instance IS the production authority for the session composed here — an
+  // empty registry fails closed (every evaluation is `unknown`) but drifts
+  // outcomes toward prompts/advisories, so both fallbacks warn loudly.
+  // Resolve from the client only when the caller did not supply a registry,
+  // preserving the composition seam's tolerance for null test clients.
+  const clientRegistry = suppliedApprovalPolicyRegistry ? undefined : agentClient?.getApprovalPolicyRegistry?.();
+  if (!suppliedApprovalPolicyRegistry && !clientRegistry) {
+    logger.warn('Session composed without a graph-owned approval policy registry; using an isolated empty registry.', {
+      eventType: 'session.approval_registry_fallback',
+      category: 'approval',
+      sessionId: id,
+    });
+  }
+  const approvalPolicyRegistry = suppliedApprovalPolicyRegistry ?? clientRegistry ?? new ToolApprovalPolicyRegistry();
+  if (approvalPolicyRegistry.size === 0) {
+    logger.warn('Session approval policy registry holds zero policies; every evaluation resolves `unknown`.', {
+      eventType: 'session.approval_registry_empty',
+      category: 'approval',
+      sessionId: id,
+    });
+  }
 
   // Background (async) subagent runs settle whenever they settle, including
   // while the conversation is idle and no per-turn sink is attached.

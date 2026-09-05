@@ -61,10 +61,19 @@ export interface ToolApprovalBatchStageInput {
 }
 
 export class ToolApprovalBatchCoordinator {
-  readonly #policyRegistry: ToolApprovalPolicyRegistry;
+  #policyRegistry: ToolApprovalPolicyRegistry;
 
   constructor(private readonly deps: ToolApprovalBatchCoordinatorDeps) {
     this.#policyRegistry = deps.policyRegistry;
+  }
+
+  /**
+   * Follow the client's active graph after a mid-session rebuild. Called at
+   * fresh-turn boundaries only: an in-flight turn keeps resolving against the
+   * graph that produced its interruptions.
+   */
+  updatePolicyRegistry(registry: ToolApprovalPolicyRegistry): void {
+    this.#policyRegistry = registry;
   }
 
   async *stageBatch(input: ToolApprovalBatchStageInput): AsyncGenerator<ConversationEvent, BatchStageResult, void> {

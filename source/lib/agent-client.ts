@@ -551,6 +551,7 @@ export class AgentClient {
     retryAttempts,
     agentOverride,
     providerOverride,
+    approvalPolicyRegistry,
     deps,
     subagentBridge,
     toolOwnership,
@@ -572,6 +573,11 @@ export class AgentClient {
     retryAttempts?: number;
     agentOverride?: ApplicationAgent;
     providerOverride?: string;
+    /**
+     * Externally built graph registry for transient (agentOverride) clients
+     * whose tools were wrapped outside AgentConfiguration (subagent runs).
+     */
+    approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
     deps: {
       logger: ILoggingService;
       settings: ISettingsService;
@@ -619,7 +625,7 @@ export class AgentClient {
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
     this.#agentConfig = new AgentConfiguration(
-      { model, reasoningEffort, providerOverride, agentOverride },
+      { model, reasoningEffort, providerOverride, agentOverride, approvalPolicyRegistry },
       {
         logger: deps.logger,
         settings: deps.settings,
@@ -689,6 +695,7 @@ export class AgentClient {
           retryAttempts,
           agentId,
           role,
+          approvalPolicyRegistry,
         }: {
           agent: any;
           provider: string;
@@ -696,11 +703,13 @@ export class AgentClient {
           retryAttempts?: number;
           agentId?: string;
           role?: string;
+          approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
         }) =>
           new AgentClient({
             model: agent.model,
             maxTurns,
             retryAttempts,
+            approvalPolicyRegistry,
             deps: {
               logger: deps.logger,
               settings: deps.settings,

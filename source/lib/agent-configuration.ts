@@ -106,6 +106,11 @@ export class AgentConfiguration implements AgentSource {
       temperature?: number;
       providerOverride?: string;
       agentOverride?: ApplicationAgent;
+      /**
+       * Externally built graph registry (subagent runs). A transient client
+       * never builds a graph, so without this its registry stays empty.
+       */
+      approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
     },
     deps: AgentConfigurationDeps,
   ) {
@@ -129,7 +134,7 @@ export class AgentConfiguration implements AgentSource {
     this.#requestSessionRollover = deps.requestSessionRollover;
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
-    this.#approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    this.#approvalPolicyRegistry = config.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
 
     // Create editor
     this.#editor = createEditorImpl({

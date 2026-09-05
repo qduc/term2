@@ -19,6 +19,11 @@ export type ToolApprovalDecision = 'allow' | 'deny';
 export class ToolApprovalPolicyRegistry {
   readonly #policies = new Map<string, ToolApprovalPolicyRegistration>();
 
+  /** Number of registered tool policies; used to detect empty-graph miswiring. */
+  get size(): number {
+    return this.#policies.size;
+  }
+
   register(registration: ToolApprovalPolicyRegistration): void {
     this.#policies.set(registration.toolName, registration);
   }

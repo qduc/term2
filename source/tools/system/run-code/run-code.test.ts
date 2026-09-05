@@ -7,6 +7,7 @@ import {
   bindRunCodeRegistry,
   bindRunCodeNestedApprovalOwner,
   createRunCodeToolDefinition,
+  formatRunCodeCommandMessage,
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
@@ -1627,3 +1628,57 @@ function appRegistries(): Array<{ label: string; tools: ToolRegistry }> {
     { label: 'standard full capability gpt-5.6', tools: build('gpt-5.6') },
   ];
 }
+
+describe('run_code M5: syntax-error location and guidance', () => {
+  it('reports the syntax-error location with an excerpt and JavaScript-only guidance', async () => {
+    const output = await run([], 'const ok = 1;\nconst annotated: number = 2;\nreturn ok;');
+
+    expect(output).toContain('Script failed');
+    expect(output).toContain('Line 2');
+    expect(output).toContain('const annotated: number = 2;');
+    expect(output).toMatch(/plain JavaScript/);
+  });
+
+  it('keeps the dynamic-import limitation visible in the failure instead of enabling it', async () => {
+    const output = await run([], 'await import("node:fs");');
+
+    expect(output).toContain('Script failed');
+    expect(output).toContain('dynamic import() is unavailable inside the sandbox');
+  });
+});
+
+describe('run_code M5: persisted command-message telemetry', () => {
+  const message = (output: string) => {
+    const messages = formatRunCodeCommandMessage(
+      {
+        type: 'tool_result',
+        callId: 'call_m5_telemetry',
+        toolName: TOOL_NAME_RUN_CODE,
+        status: 'completed',
+        output,
+      } as never,
+      0,
+      new Map(),
+    );
+    expect(messages).toHaveLength(1);
+    return messages[0];
+  };
+
+  it('persists a failing script as unsuccessful beside the completed lifecycle status', () => {
+    const msg = message('Script failed: Unexpected end of input\n\n[0 tool calls]');
+    expect(msg.status).toBe('completed');
+    expect(msg.success).toBe(false);
+  });
+
+  it('persists a successful script as successful beside the completed lifecycle status', () => {
+    const msg = message('Result:\n{"doubled":21}\n\n[1 tool call: calc]');
+    expect(msg.status).toBe('completed');
+    expect(msg.success).toBe(true);
+  });
+
+  it('does not read a nested error result under a Result: heading as success', () => {
+    const msg = message('Result:\nError: Invalid patch: the context block was not found\n\n[1 tool call: apply_patch]');
+    expect(msg.status).toBe('completed');
+    expect(msg.success).toBe(false);
+  });
+});

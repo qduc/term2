@@ -249,6 +249,26 @@ function installContextBindings() {
   };
 }
 const resolveResponse = vm.runInContext('(' + installContextBindings.toString() + ')()', context);
+function syntaxErrorDetail(code, err) {
+  var marker = null;
+  var stackLines = err && err.stack ? String(err.stack).split('\n') : [];
+  for (var i = 0; i < stackLines.length; i++) {
+    var match = /^workflow\.js:(\d+)(?::(\d+))?$/.exec(stackLines[i].trim());
+    if (match) { marker = match; break; }
+  }
+  var detail = '';
+  if (marker) {
+    var userLine = Number(marker[1]) - 1;
+    var sourceLines = String(code).split('\n');
+    if (userLine >= 1 && userLine <= sourceLines.length) {
+      var excerpt = sourceLines[userLine - 1].trim();
+      if (excerpt.length > 140) excerpt = excerpt.slice(0, 140) + '...';
+      detail = '\n\nLine ' + userLine + (marker[2] ? ':' + marker[2] : '') + ': ' + excerpt;
+    }
+  }
+  return detail + '\n\nScripts run as plain JavaScript in this sandbox: no TypeScript annotations, no Node imports, and no dynamic import(); patch or file text you embed must be an escaped string inside the script, and an unescaped backtick or template substitution breaks the whole script.';
+}
+
 if (typeof resolveResponse !== 'function') throw new Error('Failed to install sandbox bindings');
 parentPort.on('message', (message) => {
   if (typeof message.type === 'string' && message.type.endsWith('.result')) {
@@ -281,7 +301,14 @@ parentPort.on('message', (message) => {
       );
     finishSend('workflow.complete', { output: serialized.value });
   } catch (err) {
-    finishSend('workflow.error', { error: error(err), syntax: err instanceof SyntaxError });
+    var reported = error(err);
+    if (err instanceof SyntaxError) {
+      reported.message = reported.message + syntaxErrorDetail(workerData.code, err);
+    } else if (reported.message.indexOf('A dynamic import callback was not specified') === 0) {
+      reported.message =
+        reported.message + '\n\ndynamic import() is unavailable inside the sandbox: scripts run as plain JavaScript.';
+    }
+    finishSend('workflow.error', { error: reported, syntax: err instanceof SyntaxError });
   }
 })();
 `;

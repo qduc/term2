@@ -2,7 +2,7 @@
 
 ## Resume here
 
-**Status: plan only (2026-09-06). No code merged; no worktree open.**
+**Status: completed (2026-09-06). Milestones M0 through M4 implemented and merged.**
 
 Planning baseline: `2fb39cb60177a829c673eb278801d2fb6cbb456d`, inspected 2026-09-06.
 
@@ -324,5 +324,21 @@ M2a is read-only and may run before D1-D4 are answered.
 - **Touchpoint count for adding a setting**:
   - **Before M3**: 6 mandatory touchpoints (`SETTING_KEYS`, `DEFAULT_SETTINGS`, `SettingsWithSources`, `SETTING_DESCRIPTIONS`, `CATEGORY_KEYS`, `RUNTIME_MODIFIABLE_SETTINGS`).
   - **After M3**: 5 mandatory touchpoints (`SETTING_DESCRIPTIONS` eliminated as a manual touchpoint — descriptions are now defined directly on the Zod schema field via `.describe(...)` in `settings-schema.ts`).
+
+## Implementation Record: Milestone 4 (2026-09-06)
+
+### Dynamic Provider Suggestions & Registry Synchronization
+- Replaced 7 duplicated/pasted provider suggestion arrays in `VALUE_SUGGESTIONS_BY_KEY` (`agent.mentorProvider`, `agent.subagentExplorerProvider`, `agent.subagentWorkerProvider`, `agent.subagentLibrarianProvider`, `agent.autoApproveProvider`, `tools.editHealingProvider`, `agent.provider`) with `buildProviderSuggestions()`.
+- Provider suggestions are dynamically assembled from:
+  - Registered providers in `getProviderIds()` (and their labels via `getProvider()`)
+  - Active OAuth account providers in `OAUTH_ACCOUNT_PROVIDERS` (ensuring `grok`, which was omitted in the legacy lists, is included)
+  - Custom provider types in `KNOWN_CUSTOM_PROVIDER_TYPES`
+  - Curated human-friendly descriptions for standard providers
+- Generalized provider setting detection via `isProviderSettingKey(key)` covering `agent.provider` and any `*Provider` key.
+- Added tests in `source/utils/value-suggestions.test.ts` verifying:
+  - All registered provider IDs appear in `buildSettingValueSuggestions('agent.provider')`.
+  - All OAuth provider IDs appear in suggestions.
+  - Dynamically registered providers (`upsertProvider`) immediately appear in suggestions without code modifications.
+
 
 

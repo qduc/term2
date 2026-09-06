@@ -5,6 +5,9 @@ import {
   isStringSetting,
   isNumberSetting,
 } from '../services/settings/settings-ui-metadata.js';
+import { getProvider, getProviderIds } from '../providers/index.js';
+import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
+import { KNOWN_CUSTOM_PROVIDER_TYPES } from '../services/settings/settings-schema.js';
 
 export { isSecretSetting, isStringSetting, isNumberSetting };
 
@@ -15,71 +18,74 @@ export type SettingValueSuggestion = {
 
 const MAX_RESULTS = 10;
 
+const CURATED_PROVIDER_DESCRIPTIONS: Record<string, string> = {
+  openai: 'OpenAI official API',
+  openrouter: 'OpenRouter.ai',
+  'openai-compatible': 'Local models/Ollama',
+  anthropic: 'Anthropic Claude',
+  google: 'Google Gemini',
+  codex: 'ChatGPT Codex (OAuth)',
+  grok: 'xAI Grok (OAuth)',
+  'llama.cpp': 'Local llama.cpp server',
+  opencode: 'OpenCode runtime',
+};
+
+export function isProviderSettingKey(key: string): boolean {
+  return key === 'agent.provider' || key.endsWith('Provider');
+}
+
+export function buildProviderSuggestions(): SettingValueSuggestion[] {
+  const providerIds = new Set<string>();
+
+  for (const id of getProviderIds()) {
+    providerIds.add(id);
+  }
+
+  for (const id of OAUTH_ACCOUNT_PROVIDERS) {
+    providerIds.add(id);
+  }
+
+  for (const type of KNOWN_CUSTOM_PROVIDER_TYPES) {
+    providerIds.add(type);
+  }
+
+  const preferredOrder = [
+    'openai',
+    'openrouter',
+    'openai-compatible',
+    'anthropic',
+    'google',
+    'codex',
+    'grok',
+    'llama.cpp',
+    'opencode',
+  ];
+
+  const orderedIds: string[] = [];
+  for (const id of preferredOrder) {
+    if (providerIds.has(id)) {
+      orderedIds.push(id);
+      providerIds.delete(id);
+    }
+  }
+  for (const id of providerIds) {
+    orderedIds.push(id);
+  }
+
+  return orderedIds.map((id) => ({
+    value: id,
+    description: CURATED_PROVIDER_DESCRIPTIONS[id] ?? getProvider(id)?.label,
+  }));
+}
+
 // Curated suggestions for settings where the schema alone can't express them:
-// - Provider fields are `z.string()`, but users benefit from knowing which providers exist.
 // - Temperature / auto-approve model have opinionated presets, not enum values.
 // - Some enum/boolean fields carry custom descriptions that enrich the UX.
 const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
-  'agent.mentorProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
-  'agent.subagentExplorerProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
-  'agent.subagentWorkerProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
-  'agent.subagentLibrarianProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
-  'agent.autoApproveProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
-  'tools.editHealingProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
-  ],
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
   'agent.useFlexServiceTier': [
     { value: 'true', description: 'Enable Flex Service Tier (lower cost)' },
     { value: 'false', description: 'Use standard service tier' },
-  ],
-  'agent.provider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
   ],
   'agent.autoApproveModel': [
     { value: 'gpt-4o-mini', description: 'OpenAI fast model' },
@@ -241,6 +247,9 @@ function autoSuggestFromSchema(key: string): SettingValueSuggestion[] {
  * auto-generated suggestions derived from the Zod schema (enum values, boolean).
  */
 export function buildSettingValueSuggestions(key: string): SettingValueSuggestion[] {
+  if (isProviderSettingKey(key)) {
+    return buildProviderSuggestions();
+  }
   // If we have curated suggestions, use them (they may include descriptions,
   // custom ordering, or non-schema data like known provider list).
   if (VALUE_SUGGESTIONS_BY_KEY[key]) {
@@ -294,7 +303,7 @@ export function filterSettingValueSuggestionsByQuery(
 
   // For string settings without predefined suggestions, allow free-form input.
   if (key && isStringSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
-    const hasPredefined = (VALUE_SUGGESTIONS_BY_KEY[key]?.length ?? 0) > 0;
+    const hasPredefined = isProviderSettingKey(key) || (VALUE_SUGGESTIONS_BY_KEY[key]?.length ?? 0) > 0;
     if (!hasPredefined) {
       results.unshift({
         value: trimmed,

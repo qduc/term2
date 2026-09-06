@@ -632,12 +632,18 @@ if (modelFlagGivenWithoutValue && canUseInteractiveModelPicker) {
 if (modelFlag) {
   const { resolveModelFlag } = await import('./services/models/model-resolution.js');
   const interactivePicker = canUseInteractiveModelPicker
-    ? async (request: { initialQuery: string; lockProvider?: string; bannerLines?: string[] }) => {
+    ? async (request: {
+        initialQuery: string;
+        initialProvider?: string;
+        lockProvider?: string;
+        bannerLines?: string[];
+      }) => {
         const { runModelPickerHost } = await import('./services/models/model-picker-host.js');
         const picked = await runModelPickerHost({
           settingsService: settings,
           loggingService: logger,
           initialQuery: request.initialQuery,
+          initialProvider: request.initialProvider,
           lockProvider: request.lockProvider,
           bannerLines: request.bannerLines,
         });

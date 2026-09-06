@@ -150,6 +150,42 @@ it('locks the tab and shows the fixed-provider message when lockProvider is set'
   }
 });
 
+it('opens on initialProvider so the seeded query matches instead of showing the empty state', async () => {
+  // Regression for `term2 -m <model>`: the picker used to open on the
+  // default provider tab, whose catalog does not contain the typed model,
+  // so the user saw "No models match" although resolution had just located
+  // the match on another provider.
+  const otherProvider = `${providerId}-glm`;
+  registerProvider({
+    id: otherProvider,
+    label: 'Z.ai',
+    fetchModels: async () => [{ id: 'glm-5.3-flash', name: 'GLM 5.3 Flash' }],
+  });
+  try {
+    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    let outcome: StandaloneModelPickerOutcome | undefined;
+    const { lastFrame, stdin } = await renderInAct(
+      <StandaloneModelPickerApp
+        settingsService={settingsService}
+        loggingService={noopLoggingService}
+        initialQuery="glm-5.3-flash"
+        initialProvider={otherProvider}
+        onDone={(o) => (outcome = o)}
+      />,
+    );
+
+    expect(lastFrame()).not.toContain('No models match');
+    expect(lastFrame()).toContain('glm-5.3-flash');
+
+    await send(stdin, '\r');
+    expect(outcome).toEqual({
+      status: 'selected',
+      selection: { modelId: 'glm-5.3-flash', provider: otherProvider },
+    });
+  } finally {
+    unregisterProvider(otherProvider);
+  }
+});
 it('renders banner lines above the menu', async () => {
   const settingsService = createMockSettingsService({ 'agent.provider': providerId });
   const { lastFrame } = await renderInAct(

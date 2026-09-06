@@ -47,6 +47,7 @@ type TestComponentProps = {
   onResults: (results: any) => void;
   settingsService: ReturnType<typeof createMockSettingsService>;
   initialQuery?: string;
+  initialProvider?: string;
   lockProvider?: string;
   modelFetcher?: TestModelFetcher;
 };
@@ -55,6 +56,7 @@ const TestComponent = ({
   onResults,
   settingsService,
   initialQuery,
+  initialProvider,
   lockProvider,
   modelFetcher,
 }: TestComponentProps) => {
@@ -64,6 +66,7 @@ const TestComponent = ({
     settingsService,
     modelFetcher,
     initialQuery,
+    initialProvider,
     lockProvider,
   });
   onResults(state);
@@ -96,6 +99,57 @@ it('falls back to agent.provider when there are no favorites', async () => {
   });
 
   expect(captured.provider).toBe(testProvider);
+});
+
+it('opens on initialProvider even when favorites exist', async () => {
+  // Regression: the --model starter flow seeds the picker with the typed
+  // pattern and the provider whose catalog matched, but the hook used to
+  // prefer the Favorites tab, hiding the match behind a tab switch.
+  const providerA = `test-ia-${Math.random().toString(36).slice(2)}`;
+  const providerB = `test-ib-${Math.random().toString(36).slice(2)}`;
+  registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => []) as any });
+  registerTestProvider({
+    id: providerB,
+    label: providerB,
+    fetchModels: (async () => [{ id: 'glm-5.3-flash' }]) as any,
+  });
+  const settingsService = createMockSettingsService({ 'agent.provider': providerA });
+  toggleFavoriteModel(settingsService, providerA, 'fav-model');
+
+  let captured: any;
+  await flush(() => {
+    render(
+      <TestComponent settingsService={settingsService} initialProvider={providerB} onResults={(r) => (captured = r)} />,
+    );
+  });
+  await waitForIdle(() => captured);
+
+  expect(captured.provider).toBe(providerB);
+  // Fetched catalogs carry pipeline-enriched fields (e.g. contextWindow);
+  // assert the identity contract, not the enrichment defaults.
+  expect(captured.filteredModels).toEqual([expect.objectContaining({ id: 'glm-5.3-flash', provider: providerB })]);
+});
+
+it('lockProvider still wins over initialProvider', async () => {
+  const providerA = `test-la-${Math.random().toString(36).slice(2)}`;
+  const providerB = `test-lb-${Math.random().toString(36).slice(2)}`;
+  registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => []) as any });
+  registerTestProvider({ id: providerB, label: providerB, fetchModels: (async () => []) as any });
+  const settingsService = createMockSettingsService({ 'agent.provider': providerA });
+
+  let captured: any;
+  await flush(() => {
+    render(
+      <TestComponent
+        settingsService={settingsService}
+        initialProvider={providerB}
+        lockProvider={providerA}
+        onResults={(r) => (captured = r)}
+      />,
+    );
+  });
+
+  expect(captured.provider).toBe(providerA);
 });
 
 it('locks the provider tab and disables switching when lockProvider is given', async () => {

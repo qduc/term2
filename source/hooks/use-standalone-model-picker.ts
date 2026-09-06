@@ -31,10 +31,17 @@ export const useStandaloneModelPicker = (deps: {
   settingsService: ISettingsService;
   modelFetcher?: ModelFetcher;
   initialQuery?: string;
+  /**
+   * Provider tab to open on, ahead of the Favorites/agent.provider fallbacks:
+   * the --model starter flow passes the provider of its top-ranked match, so
+   * the seeded query matches in the catalog this picker loads first (it
+   * fetches only the active tab's catalog). lockProvider still wins.
+   */
+  initialProvider?: string;
   /** When set, the tab is locked to this provider and cannot be switched. */
   lockProvider?: string;
 }) => {
-  const { loggingService, settingsService, modelFetcher, lockProvider } = deps;
+  const { loggingService, settingsService, modelFetcher, initialProvider, lockProvider } = deps;
   const catalogSession = useMemo(
     () => new ModelCatalogSession({ settingsService, loggingService, fetcher: modelFetcher }),
     [settingsService, loggingService, modelFetcher],
@@ -47,10 +54,11 @@ export const useStandaloneModelPicker = (deps: {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const getInitialProvider = useCallback(() => {
     if (lockProvider) return lockProvider;
+    if (initialProvider) return initialProvider;
     if (getFavoriteModelInfos(settingsService).length > 0) return FAVORITES_TAB_ID;
     const raw = settingsService.get('agent.provider');
     return typeof raw === 'string' ? raw : null;
-  }, [lockProvider, settingsService]);
+  }, [lockProvider, initialProvider, settingsService]);
   const [provider, setProvider] = useState<string | null>(() => getInitialProvider());
   const [scrollOffset, setScrollOffset] = useState(0);
   const isInitialLoadRef = useRef(true);

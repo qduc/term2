@@ -280,6 +280,56 @@ it('Tab inserts the selected suggestion without submitting or closing the frame'
   expect(controller.getSnapshot().editor.text.startsWith('/settings shell.timeout ')).toBe(true);
   expect(controller.getSnapshot().editor.text.length).toBeGreaterThan(25);
 });
+
+// Phase B: a field commits its draft, so Enter on a blank free-form draft is
+// an inline validation error, not a silent close. environment.nodeEnv has no
+// current value in the mock and no curated suggestions, so nothing is
+// selectable and the accept must keep the frame open with the error visible.
+it('Enter on an empty free-form draft reports an inline error and keeps the frame open', async () => {
+  const intentHost = vi.fn(
+    ({ intentRequest }): IntentResult => ({
+      id: intentRequest.id,
+      sourceFrameId: intentRequest.sourceFrameId,
+      ok: true,
+    }),
+  );
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService();
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  const valueText = '/settings environment.nodeEnv ';
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: valueText, cursor: valueText.length });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('settings_value');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(intentHost).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().stack).toHaveLength(1);
+  expect(controller.getSnapshot().stack[0]?.kind).toBe('settings_value');
+  expect((view.lastFrame() ?? '').includes('Type a value before applying')).toBe(true);
+});
+
 // A free-form string frame is a field: Home/End move the editor cursor inside
 // the value, and Enter applies the FULL value text (not binding.query, which
 // truncates at the cursor). environment.nodeEnv is a real free-form string

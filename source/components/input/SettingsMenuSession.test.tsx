@@ -122,6 +122,135 @@ it('selecting a plain key pushes a settings_value child as one transaction, rest
   expect(controller.getSnapshot().editor).toMatchObject({ text: '/settings shell.time', cursor: 20 });
 });
 
+// Phase B field seeding (D4: free-form strings only): memory.directory is a
+// free-form string setting (z.string, no curated suggestions) reachable from
+// the settings list, so selecting it opens its value frame as a field
+// prefilled with the current value. The seeded text is ordinary value text:
+// Escape still restores the exact pre-selection filter through the child's Back.
+it('selecting a free-form string setting seeds its value frame with the current value', async () => {
+  const controller = buildController();
+  const settingsService = createMockSettingsService({ 'memory.directory': '/data/memory-store' });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  const filterText = '/settings memory.dir';
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: filterText, cursor: filterText.length });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('settings');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  const child = controller.getSnapshot().stack.at(-1);
+  expect(child?.kind).toBe('settings_value');
+  if (child?.kind !== 'settings_value') throw new Error('expected settings_value child');
+  expect(child.settingKey).toBe('memory.directory');
+  expect(child.binding.query).toBe('/data/memory-store');
+  expect(controller.getSnapshot().editor).toMatchObject({
+    text: '/settings memory.directory /data/memory-store',
+    cursor: '/settings memory.directory /data/memory-store'.length,
+  });
+
+  await act(async () => {
+    controller.escape();
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack).toHaveLength(1);
+  expect(controller.getSnapshot().stack[0]?.kind).toBe('settings');
+  expect(controller.getSnapshot().editor).toMatchObject({ text: filterText, cursor: filterText.length });
+});
+it('does not seed a model-backed key even though it is a free-form string', async () => {
+  const controller = buildController();
+  const settingsService = createMockSettingsService({ 'agent.smartModel': 'claude-sonnet-x' });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  const filterText = '/settings agent.smart';
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: filterText, cursor: filterText.length });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  const child = controller.getSnapshot().stack.at(-1);
+  // agent.smartModel routes to the settings-backed model frame, which owns its
+  // own selection state — the value text stays empty there (no seeding).
+  expect(child?.kind).toBe('model');
+  expect(controller.getSnapshot().editor.text).toBe('/settings agent.smartModel ');
+  expect(controller.getSnapshot().editor.text).not.toContain('claude-sonnet-x');
+});
+
+it('keeps curated string settings on the picker flow without seeding', async () => {
+  const controller = buildController();
+  const settingsService = createMockSettingsService({ 'webSearch.provider': 'tavily' });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  const filterText = '/settings webSearch.prov';
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: filterText, cursor: filterText.length });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  const child = controller.getSnapshot().stack.at(-1);
+  expect(child?.kind).toBe('settings_value');
+  if (child?.kind !== 'settings_value') throw new Error('expected settings_value child');
+  expect(child.settingKey).toBe('webSearch.provider');
+  expect(child.binding.query).toBe('');
+  expect(controller.getSnapshot().editor.text).toBe('/settings webSearch.provider ');
+});
+
 it('pressing Space on a boolean setting toggles it in place without opening a child menu', async () => {
   const intentHost = vi.fn(({ intentRequest }) => ({
     id: intentRequest.id,

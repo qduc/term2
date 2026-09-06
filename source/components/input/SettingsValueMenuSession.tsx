@@ -33,12 +33,12 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
       // A free-form string frame is a field, not a picker: Enter applies the
       // whole value text from the value-region start. binding.query is
       // truncated at the cursor, so Home/End (or left/right) cursor moves
-      // would otherwise silently drop the tail of what was typed.
+      // would otherwise silently drop the tail of what was typed. A blank
+      // draft returns undefined and the accept branch reports it inline.
       if (settingsValue.isFreeFormString) {
         const editor = controller.getSnapshot().editor;
         const draft = editor.text.slice(frame.binding.replacement.start).trim();
-        if (draft) return parseSettingValueForKey(frame.settingKey, draft);
-        return suggestion ? parseSettingValueForKey(frame.settingKey, suggestion.value) : undefined;
+        return draft ? parseSettingValueForKey(frame.settingKey, draft) : undefined;
       }
 
       const typedValueText = frame.binding.query;
@@ -118,6 +118,15 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
             setApplyError(null);
             const parsedValue = resolveTypedOrSelectedValue();
             if (parsedValue === undefined) {
+              // A field commits its draft; an empty draft has nothing to
+              // apply. Keep the frame open and report instead of silently
+              // closing (the old undefined path looked like a successful
+              // no-op commit). Choices that genuinely cannot apply typed
+              // text still close as before.
+              if (settingsValue.isFreeFormString) {
+                setApplyError('Type a value before applying');
+                return keep();
+              }
               return { stack: { type: 'close-top' } };
             }
             const persistence = settingsService.isRuntimeModifiable(frame.settingKey) ? 'runtime' : 'restart';

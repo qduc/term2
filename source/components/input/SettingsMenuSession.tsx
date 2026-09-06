@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import { getModelSettingConfig } from '../../utils/ai/model-settings.js';
+import { buildSettingValueSuggestions, isSecretSetting, isStringSetting } from '../../utils/value-suggestions.js';
 import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 import { SETTINGS_RESET_TRIGGER } from './triggers.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
@@ -16,33 +17,60 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'settings' }>> & {
   };
 };
 
-// One transaction: replace the active key range with `<key> `, move the
-// cursor after the delimiter, and push the settings-backed child (value or
-// model) with a Back that restores this exact pre-selection editor snapshot.
-// The controller does not wait for trigger detection to rediscover the
-// child — see "Settings parent-to-child transition" in the menu redesign plan.
+// One transaction: replace the active key range with `<key> ` (plus a seeded
+// field draft for free-form string settings), move the cursor to the end, and
+// push the settings-backed child (value or model) with a Back that restores
+// this exact pre-selection editor snapshot. The controller does not wait for
+// trigger detection to rediscover the child — see "Settings parent-to-child
+// transition" in the menu redesign plan.
+//
+// Field seeding (Phase B, D4: free-form strings only): selecting a string
+// setting with no curated suggestions opens its value frame as a field
+// prefilled with the current value, so a change is an in-place edit rather
+// than a full retype. Curated strings keep list navigation (their list is
+// still the primary surface) and stored credentials are never echoed back
+// into the buffer, so neither seeds. The seeded text is ordinary value text
+// from the controller's point of view: reconciliation re-derives the binding
+// from the current editor, so only this push-time frame construction differs
+// from the unseeded path.
 const pushChildEffect = (
   frame: Extract<MenuFrame, { kind: 'settings' }>,
   key: string,
   currentEditor: EditorSnapshot,
+  currentValue: unknown,
 ): MenuEffect => {
   const beforeReplacement = currentEditor.text.slice(0, frame.binding.replacement.start);
-  const nextText = `${beforeReplacement}${key} `;
-  const nextCursor = nextText.length;
-  const trigger = { range: { start: 0, end: nextText.length }, text: nextText };
-  const back = { type: 'restore' as const, point: { editor: currentEditor } };
+  const valuePrefix = `${beforeReplacement}${key} `;
 
   const modelConfig = getModelSettingConfig(key);
   const isMentorPool = key === SETTING_KEYS.AGENT_MENTOR_POOL;
+  const isFreeFormStringSetting =
+    !modelConfig &&
+    !isMentorPool &&
+    isStringSetting(key) &&
+    !isSecretSetting(key) &&
+    buildSettingValueSuggestions(key).length === 0;
+  const seed =
+    isFreeFormStringSetting && currentValue !== undefined && currentValue !== null ? String(currentValue) : undefined;
+
+  const nextText = seed === undefined ? valuePrefix : `${valuePrefix}${seed}`;
+  const nextCursor = nextText.length;
+  // The value region starts after `<key> `; the trigger range and the binding
+  // positions must exclude the seed so the seeded text parses as value text
+  // (this is what reconciliation would derive from the editor anyway).
+  const valueStart = valuePrefix.length;
+  const trigger = { range: { start: 0, end: valueStart }, text: valuePrefix };
+  const back = { type: 'restore' as const, point: { editor: currentEditor } };
+
   const childFrame = isMentorPool
     ? {
         kind: 'mentor_pool' as const,
         origin: { type: 'settings-list' as const, operation: 'set' as const, back },
         binding: {
           trigger,
-          queryStart: nextText.length,
+          queryStart: valueStart,
           queryEnd: 'cursor' as const,
-          replacement: { start: nextText.length, end: 'buffer-end' as const },
+          replacement: { start: valueStart, end: 'buffer-end' as const },
         },
       }
     : modelConfig
@@ -59,9 +87,9 @@ const pushChildEffect = (
         back,
         binding: {
           trigger,
-          queryStart: nextText.length,
+          queryStart: valueStart,
           queryEnd: 'cursor' as const,
-          replacement: { start: nextText.length, end: 'buffer-end' as const },
+          replacement: { start: valueStart, end: 'buffer-end' as const },
         },
       }
     : {
@@ -70,9 +98,9 @@ const pushChildEffect = (
         origin: { type: 'settings-list' as const, operation: 'set' as const, back },
         binding: {
           trigger,
-          queryStart: nextText.length,
+          queryStart: valueStart,
           queryEnd: 'cursor' as const,
-          replacement: { start: nextText.length, end: 'cursor' as const },
+          replacement: { start: valueStart, end: 'cursor' as const },
         },
       };
 
@@ -155,7 +183,7 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
             }
 
             if (!selected) return 'fallthrough';
-            return pushChildEffect(frame, selected.key, currentEditor);
+            return pushChildEffect(frame, selected.key, currentEditor, selected.currentValue);
           }
           case 'escape':
             return { buffer: { type: 'clear' }, stack: { type: 'close-top' } };

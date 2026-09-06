@@ -694,6 +694,13 @@ export const formatToolArgs = (
         return `[${name}]`;
       }
 
+      case 'run_code': {
+        // The `code` arg is a whole program; the default branch would dump it into
+        // the header. The model-written description is the only one-line summary.
+        const description = normalizedArgs.description;
+        return typeof description === 'string' ? description.replace(/\r?\n/g, ' ').trim() : '';
+      }
+
       case 'run_agent_workflow':
         // The only arg is a whole JavaScript program; no slice of it reads usefully in a
         // one-line header, so the verb alone carries the entry.
@@ -844,4 +851,98 @@ export const countDiffStats = (diff: string): DiffStats => {
   }
 
   return { added, removed };
+};
+
+/** One grouped row of a run_code nested-call trace. */
+export type RunCodeTraceRow = {
+  tool: string;
+  count: number;
+  status: 'completed' | 'failed';
+  note?: string;
+};
+
+export type RunCodeTrace = {
+  rows: RunCodeTraceRow[];
+  /** The result text with the trace lines removed, so the card does not say it twice. */
+  body: string;
+  /** How many rows did not complete; drives the concise-mode suffix. */
+  troubledCount: number;
+};
+
+/**
+ * Reconstructs the nested-call trace from the text `run_code` already returns.
+ *
+ * The renderer only receives the persisted result string, so this is the whole
+ * channel: a script's `RunCodeCallRecord[]` is gone by render time. The summary
+ * line counts calls per tool but records no per-call outcome, so a tool that was
+ * called three times and refused once renders as one failed row of count three.
+ * Per-call fidelity would cost a result line per nested call, which defeats the
+ * batching `run_code` exists for.
+ */
+export const parseRunCodeTrace = (output: string | undefined): RunCodeTrace | null => {
+  if (!output) return null;
+
+  const summaryMatch = output.match(/^\[(?:no tool calls|\d+ tool calls?: (.+))\]$/m);
+  if (!summaryMatch) return null;
+
+  const noteByLine: Array<[RegExp, string]> = [
+    [/^Refused \(needs user approval and could not be completed from inside this script\): (.+)$/m, 'needs approval'],
+    [
+      /^Unavailable \(approval policy refused or failed; no user approval was requested\): (.+)$/m,
+      'approval policy refused',
+    ],
+    [/^Unavailable \(no registered approval policy\): (.+)$/m, 'no approval policy'],
+  ];
+
+  const notes = new Map<string, string>();
+  const consumed: string[] = [summaryMatch[0]];
+  for (const [pattern, note] of noteByLine) {
+    const match = output.match(pattern);
+    if (!match) continue;
+    consumed.push(match[0]);
+    for (const name of match[1].split(',')) {
+      const tool = name.trim();
+      // First note wins: a tool listed twice was refused for the earlier reason too.
+      if (tool && !notes.has(tool)) notes.set(tool, note);
+    }
+  }
+
+  const rows: RunCodeTraceRow[] = [];
+  const seen = new Set<string>();
+  for (const entry of (summaryMatch[1] ?? '').split(',')) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const [tool, countText] = trimmed.split('×');
+    const name = tool.trim();
+    if (!name) continue;
+    seen.add(name);
+    const note = notes.get(name);
+    rows.push({
+      tool: name,
+      count: Number.parseInt(countText ?? '1', 10) || 1,
+      status: note ? 'failed' : 'completed',
+      ...(note ? { note } : {}),
+    });
+  }
+  // A refusal can settle before the call is recorded, so the summary may omit it.
+  for (const [tool, note] of notes) {
+    if (!seen.has(tool)) rows.push({ tool, count: 1, status: 'failed', note });
+  }
+
+  let body = output;
+  for (const line of consumed) body = body.replace(line, '');
+  body = body.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { rows, body, troubledCount: rows.filter((row) => row.status === 'failed').length };
+};
+
+/**
+ * Clips tool output to a few lines the way a settled card shows it, keeping the
+ * last line because it usually carries the summary or the error.
+ */
+export const truncateOutputLines = (text: string, maxLines = 3): string => {
+  const lines = text.trimEnd().split('\n');
+  if (lines.length <= maxLines + 1) return text;
+  const head = lines.slice(0, maxLines).join('\n');
+  return `${head}\n... (${lines.length - maxLines - 1} more lines)\n${lines[lines.length - 1]}`;
 };

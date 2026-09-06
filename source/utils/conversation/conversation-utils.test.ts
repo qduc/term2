@@ -113,6 +113,13 @@ it('formatToolCommand: apply_patch with type and path', () => {
   expect(result).toBe('apply_patch create newfile.ts');
 });
 
+it('formatToolCommand: apply_patch canonical patch envelope shows its first operation', () => {
+  const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {
+    patch: ['*** Begin Patch', '*** Add File: src/newfile.ts', '+hello', '*** End Patch'].join('\n'),
+  });
+  expect(result).toBe('apply_patch create_file src/newfile.ts');
+});
+
 it('formatToolCommand: apply_patch with missing args', () => {
   const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {});
   expect(result).toBe('apply_patch unknown ');

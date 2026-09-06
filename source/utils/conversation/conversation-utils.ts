@@ -1,4 +1,5 @@
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { parseUpstreamApplyPatch } from '../../tools/file/upstream-apply-patch.js';
 
 /**
  * Pure utility functions extracted from use-conversation.ts for testability.
@@ -78,6 +79,18 @@ export function formatToolCommand(toolName: string, args: Record<string, unknown
   }
 
   if (toolName === TOOL_NAME_APPLY_PATCH) {
+    if (typeof args.patch === 'string') {
+      try {
+        const operations = parseUpstreamApplyPatch(args.patch).operations;
+        const firstOperation = operations[0];
+        if (firstOperation) {
+          const remaining = operations.length > 1 ? ` (+${operations.length - 1} more)` : '';
+          return `${TOOL_NAME_APPLY_PATCH} ${firstOperation.type} ${firstOperation.path}${remaining}`;
+        }
+      } catch {
+        // Keep the generic legacy fallback for malformed/incomplete patches.
+      }
+    }
     return `${TOOL_NAME_APPLY_PATCH} ${args.type ?? 'unknown'} ${args.path ?? ''}`;
   }
 

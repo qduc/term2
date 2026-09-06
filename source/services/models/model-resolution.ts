@@ -336,13 +336,23 @@ export async function resolveModelFlag(deps: {
   // providers without touching credential lookups).
   const fullOrder = deps.providerIds ?? orderedProviderIds(deps.settingsService, knownProviders);
 
-  // A provider named explicitly (--provider) or parsed out of the flag itself
-  // (e.g. the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator)
-  // is tried FIRST, but must never permanently narrow the search: the full id
-  // may be a literal model id on a different provider, so a miss widens to
-  // the rest of the candidate space rather than giving up.
+  // Explicit --provider is the user deliberately scoping the search (it also
+  // sets agent.provider for the session), so it narrows PERMANENTLY: a miss
+  // there errors out rather than silently resolving to a provider the user
+  // didn't name. A provider-style prefix parsed out of the flag itself (e.g.
+  // the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) is a
+  // different thing — it's just the best first guess, and the full id may
+  // turn out to be a literal model id on some other provider, so a miss
+  // there widens to the rest of the candidate space instead of giving up.
+  const explicitProvider = Boolean(deps.providerFlag && parsed.provider);
+
   let order: string[];
-  if (parsed.provider) {
+  if (explicitProvider) {
+    // Deliberately ignores `fullOrder`/`deps.providerIds` beyond this one id:
+    // even a test-supplied candidate space listing other providers must not
+    // leak into the load when the user explicitly scoped to one provider.
+    order = [parsed.provider!];
+  } else if (parsed.provider) {
     const rest = fullOrder.filter((id) => id.toLowerCase() !== parsed.provider!.toLowerCase());
     order = [parsed.provider, ...rest];
   } else {
@@ -354,18 +364,21 @@ export async function resolveModelFlag(deps: {
   // never touch a provider's catalog it didn't need. Only when that first
   // load comes up empty of exact matches do we widen, and we do that widen
   // concurrently since a fuzzy/cross-provider sweep needs every remaining
-  // catalog anyway and gains nothing from doing it one at a time.
+  // catalog anyway and gains nothing from doing it one at a time. Explicit
+  // --provider never reaches this widen branch at all (see above).
   let groups: ProviderModelGroup[] = [];
   if (order.length > 0) {
     const [firstId, ...restIds] = order;
     const firstGroup = await loadProviderModelGroup(loaderDeps, firstId);
     groups = [firstGroup];
 
-    const probe = matchModels(groups, parsed);
-    const needsWiden = !(probe.exact && probe.matches.length > 0) && restIds.length > 0;
-    if (needsWiden) {
-      const restGroups = await collectProviderModelsConcurrently(loaderDeps, restIds);
-      groups = [firstGroup, ...restGroups];
+    if (!explicitProvider) {
+      const probe = matchModels(groups, parsed);
+      const needsWiden = !(probe.exact && probe.matches.length > 0) && restIds.length > 0;
+      if (needsWiden) {
+        const restGroups = await collectProviderModelsConcurrently(loaderDeps, restIds);
+        groups = [firstGroup, ...restGroups];
+      }
     }
   }
 

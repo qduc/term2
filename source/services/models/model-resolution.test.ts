@@ -795,6 +795,42 @@ describe('resolveModelFlag', () => {
     });
   });
 
+  it('diverges from the prefix case: explicit --provider narrows permanently and never widens', async () => {
+    // Same conceptual search as the test above ("claude-x" scoped to
+    // "openai") — a parsed prefix widens and finds it on openrouter, but an
+    // EXPLICIT --provider flag must not: it's the user deliberately scoping
+    // the search (and it also sets agent.provider for the session), so a
+    // miss there errors out with the pre-existing stale-cache hint instead of
+    // silently resolving to a provider the user didn't name. Note the ids
+    // here are bare ("claude-x"), not vendor-prefixed like the widen test
+    // above, because parseModelFlag never strips a prefix off the pattern
+    // when --provider is given explicitly (the whole flag is the pattern).
+    const groups: ProviderModelGroup[] = [
+      makeGroup('openai', [{ id: 'gpt-4' }]),
+      makeGroup('openrouter', [{ id: 'claude-x' }]),
+    ];
+    const fetcher = vi.fn(async (provider: string) => {
+      const group = groups.find((g) => g.provider === provider);
+      return group?.models ?? [];
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'claude-x',
+      providerFlag: 'openai',
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'openrouter'],
+      knownProviders: ['openai', 'openrouter'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalledWith('openrouter');
+    expect(result.status).toBe('no_match');
+    if (result.status === 'no_match') {
+      expect(result.error).toContain('Error: No models match "claude-x".');
+      expect(result.error).toContain('The cached catalog for openai may be stale');
+    }
+  });
+
   it('loads a full fuzzy sweep concurrently and still returns matches spanning every provider', async () => {
     // No prefix, no exact match anywhere: every provider must be consulted
     // for a correct fuzzy sweep. Assert on the *set* of attempted providers

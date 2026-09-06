@@ -155,7 +155,7 @@ it('settles a real scripted worker through ConversationService approval and abor
   const approveSignal = new AbortController();
   activeSignal = approveSignal;
   const approved = runCode.execute(
-    { code: "return await tools.protected({ value: 'x' });" },
+    { description: 'run_code test', code: "return await tools.protected({ value: 'x' });" },
     { context: { sessionId: service.sessionId }, signal: approveSignal.signal },
   );
   await vi.waitFor(() => expect(owner?.getSnapshot()).not.toBeNull());
@@ -164,7 +164,7 @@ it('settles a real scripted worker through ConversationService approval and abor
   const abortSignal = new AbortController();
   activeSignal = abortSignal;
   const aborted = runCode.execute(
-    { code: "return await tools.protected({ value: 'x' });" },
+    { description: 'run_code test', code: "return await tools.protected({ value: 'x' });" },
     { context: { sessionId: service.sessionId }, signal: abortSignal.signal },
   );
   await vi.waitFor(() => expect(owner?.getSnapshot()).not.toBeNull());

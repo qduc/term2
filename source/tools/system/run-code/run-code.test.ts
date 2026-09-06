@@ -104,7 +104,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: "return await tools.protected({ path: 'notes.md' });" },
+      { description: 'run_code test', code: "return await tools.protected({ path: 'notes.md' });" },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
@@ -154,7 +154,10 @@ describe('run_code', () => {
       bindRunCodeRegistry(tools);
       bindRunCodeNestedApprovalOwner(tools, owner);
       const result = runCode.execute(
-        { code: "return await tools.create_file({ path: 'link/file.txt', content: 'effect', overwrite: true });" },
+        {
+          description: 'run_code test',
+          code: "return await tools.create_file({ path: 'link/file.txt', content: 'effect', overwrite: true });",
+        },
         { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
       );
       await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
@@ -213,6 +216,7 @@ describe('run_code', () => {
       bindRunCodeNestedApprovalOwner(tools, owner);
       const result = runCode.execute(
         {
+          description: 'run_code test',
           code:
             'await tools.create_file({ path: ' +
             JSON.stringify(matchingPath) +
@@ -276,7 +280,7 @@ describe('run_code', () => {
         JSON.stringify('*** Begin Patch\n*** Add File: ' + targetPath + '\n+created by patch\n*** End Patch') +
         ' });';
       const result = runCode.execute(
-        { code },
+        { description: 'run_code test', code },
         { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
       );
 
@@ -320,7 +324,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });' },
+      { code: 'return await tools.protected({ value: "x" });', description: 'call protected tool' },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -369,6 +373,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
       {
+        description: 'run_code test',
         code: 'await tools.before({ value: "x" }); try { await tools.protected({ value: "x" }); } catch (e) { return "caught"; }',
       },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
@@ -420,6 +425,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
       {
+        description: 'run_code test',
         code: 'const serial = tools.protected({ value: "x" }); const fast = await tools.fast({ value: "y" }); return { fast, serial: await serial };',
       },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
@@ -454,7 +460,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
+      { description: 'run_code test', code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -501,6 +507,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
       {
+        description: 'run_code test',
         code: 'const serial = tools.protected({ value: "x" }); const slow = tools.slow({ value: "y" }); return { slow: await slow, serial: await serial };',
         timeout_ms: 500,
       },
@@ -534,6 +541,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
       {
+        description: 'run_code test',
         code: 'await tools.describe("protected"); return await tools.protected({ value: "x" });',
         timeout_ms: 500,
       },
@@ -574,7 +582,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const controller = new AbortController();
     const pending = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 60_000 },
+      { description: 'run_code test', code: 'return await tools.protected({ value: "x" });', timeout_ms: 60_000 },
       { context: { sessionId: 'session-1' }, signal: controller.signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -629,6 +637,7 @@ describe('run_code', () => {
       const pending = runCode.execute(
         {
           code: 'return await tools.create_file({ path: ' + JSON.stringify(targetPath) + ", content: 'x' });",
+          description: 'create the target file',
           timeout_ms: 60_000,
         },
         { context: { sessionId: 'session-1' }, signal: controller.signal },
@@ -671,7 +680,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });' },
+      { code: 'return await tools.protected({ value: "x" });', description: 'call protected tool' },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());

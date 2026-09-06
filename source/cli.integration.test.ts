@@ -712,14 +712,18 @@ it('CLI --model vendor/id resolves the literal id on the serving provider, warns
   }
 });
 
-it('CLI treats a lone trailing token after --model as the prompt, not the model value', async () => {
-  // --model followed by exactly one token and nothing else is ambiguous: it
-  // could be the model's value or the whole prompt. The deliberate rule is
-  // that it is the prompt — --model took no value here, so the run proceeds
-  // non-interactively against the already-configured default model.
+it('CLI resolves --model <value> as the last argument to the model, not a prompt', async () => {
+  // A value right after -m/--model is ALWAYS the model, exactly as before
+  // this feature — there is no positional-prompt ambiguity to resolve here.
+  // With no prompt on the line, the run proceeds to the interactive app,
+  // which (on this non-TTY spawn) renders its startup banner and then fails
+  // on Ink's raw-mode guard — that failure is expected and is not what this
+  // test is about. The banner renders the resolved agent.model/agent.provider
+  // before that crash, so its content is direct proof of what resolution
+  // picked, independent of the crash.
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
-  const mock = await startModelMock(['mock-alpha']);
-  const settingsFile = writeSettings(tempHome, {
+  const mock = await startModelMock(['mock-alpha', 'mock-beta']);
+  writeSettings(tempHome, {
     agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
@@ -730,19 +734,39 @@ it('CLI treats a lone trailing token after --model as the prompt, not the model 
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
     });
-    const { status, stderr } = await spawnCli([cliPath(), '--model', 'a lone trailing prompt'], childEnv);
+    const { stdout, stderr } = await spawnCli([cliPath(), '--model', 'mock-beta'], childEnv);
 
-    expect(status).toBe(0);
     expect(stderr).not.toContain('No models match');
     expect(stderr).not.toContain('Multiple models match');
-    // The default model was used untouched; the trailing token never reached
-    // model resolution at all.
-    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+    expect(stdout).toContain('mock-beta');
+    expect(stdout).not.toContain('mock-alpha');
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
 
-    // Session-only contract still holds: nothing was persisted from a flag
-    // that, in this shape, was never actually a model value.
-    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-    expect(persisted.agent.model).toBe('mock-alpha');
+it('CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha', 'mock-beta']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { stdout, stderr } = await spawnCli([cliPath(), '--provider', 'mockprov', '--model', 'mock-beta'], childEnv);
+
+    expect(stderr).not.toContain('No models match');
+    expect(stderr).not.toContain('Multiple models match');
+    expect(stderr).not.toContain('Unknown provider');
+    expect(stdout).toContain('mock-beta');
+    expect(stdout).not.toContain('mock-alpha');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });
@@ -767,6 +791,62 @@ it('CLI still treats --model <value> <prompt> (two or more trailing tokens) as u
 
     expect(status).toBe(0);
     expect(mock.capturedModels()).toEqual(['mock-beta']);
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('CLI "term2 <prompt>" with no --model is unchanged', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status } = await spawnCli([cliPath(), 'explain this function'], childEnv);
+
+    expect(status).toBe(0);
+    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('CLI bare --model (no value) is a no-op outside a TTY session, not a picker attempt', async () => {
+  // This spawn has no TTY, so the picker is never eligible
+  // (isModelPickerEligible/model-picker-host.test.tsx cover the eligible
+  // path directly). Here, --model with no value must fall through exactly
+  // like it did before the picker existed: nothing is resolved, the
+  // already-configured default model is used, and the run proceeds to the
+  // ordinary interactive-app boot (which then hits the same expected
+  // non-TTY raw-mode failure every other no-prompt case in this file hits).
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { stdout, stderr } = await spawnCli([cliPath(), '--model'], childEnv);
+
+    expect(stderr).not.toContain('No models match');
+    expect(stderr).not.toContain('Multiple models match');
+    expect(stdout).toContain('mock-alpha');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });

@@ -45,7 +45,6 @@ import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { preprocessArgvForOptionalModelFlag } from './utils/model-flag-argv.js';
 import { isModelPickerEligible } from './services/models/model-picker-host.js';
 import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
 import {
@@ -195,17 +194,16 @@ const cli = meow(
       A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
       use --auto-approve to allow tools to run without interactive confirmation.
 
-      -m/--model with no value opens an interactive picker (also used for an ambiguous or unmatched
-      pattern) in a TTY session with no prompt; elsewhere it is a no-op. A single trailing word right
-      after -m/--model with nothing else on the line is treated as the prompt, not the model — use
-      --model=<value> to set a model in that exact shape.
+      -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
+      interactive picker in a TTY session with no prompt; the same picker also opens for an
+      ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
+      no-op. A value right after -m/--model is always the model, exactly as before.
 
     Examples
       $ term2
       $ term2 "explain this function"
       $ term2 --model gpt-5.4 --provider openai
       $ term2 --model
-      $ term2 --model=gpt-5.4
       $ term2 --lite
       $ term2 --auto-approve "list files in the current directory"
       $ term2 -q "generate json payload"
@@ -224,7 +222,6 @@ const cli = meow(
   `,
   {
     importMeta: import.meta,
-    argv: preprocessArgvForOptionalModelFlag(process.argv.slice(2)),
     flags: {
       model: {
         type: 'string',
@@ -450,13 +447,15 @@ const rawModelFlag = cli.flags.model;
 const rawProviderFlag = cli.flags.provider;
 const rawReasoningFlag = cli.flags.reasoning;
 
-// meow parses a present-but-empty --model/-m to '' (see
-// preprocessArgvForOptionalModelFlag above for why that also covers the
-// "lone trailing token" shape) — distinct from the flag being absent
-// (undefined). Only that empty-but-present shape means "open the picker",
-// and only when the session is actually going to be interactive: never for
-// no TTY, --json, a positional prompt, or the isolated-harness marker. Every
-// one of those also gates the ambiguous/no-match picker paths below.
+// meow already parses a present-but-valueless --model/-m to '' — when it's
+// the last token, or immediately followed by another flag — WITHOUT
+// swallowing anything else on the line: a value right after -m/--model is
+// always consumed as that value, exactly as before this feature. '' is
+// therefore distinct from the flag being absent entirely (undefined). Only
+// that empty-but-present shape means "open the picker", and only when the
+// session is actually going to be interactive: never for no TTY, --json, a
+// positional prompt, or the isolated-harness marker. Every one of those also
+// gates the ambiguous/no-match picker paths below.
 const modelFlagGivenWithoutValue = rawModelFlag === '';
 const canUseInteractiveModelPicker = isModelPickerEligible({
   stdin: nodeStdin,

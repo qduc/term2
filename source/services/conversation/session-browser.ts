@@ -69,7 +69,7 @@ type ReadSnapshot = {
 };
 
 export type SessionListInput = { limit?: number; maxChars?: number };
-export type SessionSearchInput = { query: string; limit?: number; maxChars?: number };
+export type SessionSearchInput = { query: string; kinds?: Kind[]; limit?: number; maxChars?: number };
 export type SessionReadInput = { id: string; cursor?: string; from?: 'end'; limit?: number; maxChars?: number };
 
 export interface SessionBrowserOptions {
@@ -236,6 +236,7 @@ export class SessionBrowser {
       browsed.scope,
       unavailable,
       skippedMessageCount,
+      input.kinds,
       input.limit,
       input.maxChars,
     );
@@ -251,6 +252,7 @@ export class SessionBrowser {
         indexed.scope,
         indexed.unavailable,
         indexed.skippedMessageCount,
+        input.kinds,
         input.limit,
         input.maxChars,
       );
@@ -271,10 +273,13 @@ export class SessionBrowser {
     scope: string,
     unavailable: number,
     skippedMessageCount: number,
+    kinds: Kind[] | undefined,
     limit: number | undefined,
     maxChars: number | undefined,
   ) {
     const budget = maxChars ?? DEFAULT_INDEX_CHARS;
+    const includedKinds = kinds ? new Set(kinds) : null;
+    matches = includedKinds ? matches.filter((match) => includedKinds.has(match.kind)) : matches;
     const currentSessionId = this.getContext().currentSessionId;
     matches.sort((a, b) => {
       // Demote the live session so its self-referential matches (the query text
@@ -560,11 +565,11 @@ export class SessionBrowser {
             input.from === 'end' ? Math.max(0, projection.records.length - clamp(input.limit, DEFAULT_READ_LIMIT)) : 0,
           nextTextOffset: 0,
         };
-    if (!cursor) return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
+    if (!cursor) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
     if (input.cursor && (cursor.updatedAt !== currentUpdatedAt || cursor.revision !== currentRevision))
-      return boundedError('stale_cursor', 'The session cursor is stale.', budget);
+      return boundedError('stale_cursor', staleCursorMessage(), budget);
     if (input.cursor && !validCursorPosition(cursor, projection.records))
-      return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
+      return boundedError('invalid_cursor', invalidCursorMessage(), budget);
     const session = {
       id: conversation.id,
       shortRef,
@@ -580,7 +585,7 @@ export class SessionBrowser {
     const limit = clamp(input.limit, DEFAULT_READ_LIMIT);
     while (index < projection.records.length && items.length < limit) {
       const record = projection.records[index]!;
-      if (offset > record.text.length) return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
+      if (offset > record.text.length) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
       const completeItem = pageItem(record, record.text.slice(offset), offset, true);
       const afterIndex = index + 1;
       const nextCursor =
@@ -802,6 +807,12 @@ function fitted<T extends Record<string, unknown>>(value: T, maxChars: number): 
 }
 function outputBudgetError(maxChars: number): BrowserError | number {
   return boundedError('output_budget_exceeded', 'The requested result cannot fit in the output budget.', maxChars);
+}
+function invalidCursorMessage() {
+  return 'The session cursor is invalid. Use exactly the nextCursor returned by the preceding page with the same id. Restart without a cursor if that handle is unavailable.';
+}
+function staleCursorMessage() {
+  return 'The session cursor is stale because the session changed. Restart without a cursor to read the current transcript.';
 }
 function boundedError(code: BrowserError['error']['code'], message: string, maxChars: number): BrowserError | number {
   const value: BrowserError = { error: { code, message } };

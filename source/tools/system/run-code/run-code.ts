@@ -112,7 +112,7 @@ export const runCodeParametersSchema = z.object({
     .max(MAX_TIMEOUT_MS)
     .optional()
     .describe(`Wall-clock limit for the script. Defaults to ${DEFAULT_TIMEOUT_MS}.`),
-  description: z.string().optional().describe('One short line describing what the script does, shown to the user.'),
+  description: z.string().describe('One short line describing what the script does, shown to the user.'),
 });
 
 export type RunCodeParams = z.infer<typeof runCodeParametersSchema>;

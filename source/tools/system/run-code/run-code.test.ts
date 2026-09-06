@@ -1101,21 +1101,28 @@ describe('run_code', () => {
     expect(output).toContain('Script timed out.');
   }, 20_000);
 
+  it('requires a description in the parameters schema', () => {
+    const schema = build([]).parameters;
+
+    expect(schema.safeParse({ code: 'x' }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', description: 'test' }).success).toBe(true);
+  });
+
   it('rejects a non-positive timeout because setTimeout(fn, 0) fires promptly', () => {
     const schema = build([]).parameters;
 
-    expect(schema.safeParse({ code: 'x', timeout_ms: 0 }).success).toBe(false);
-    expect(schema.safeParse({ code: 'x', timeout_ms: -1 }).success).toBe(false);
-    expect(schema.safeParse({ code: 'x', timeout_ms: 1_000 }).success).toBe(true);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 0 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: -1 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 1_000 }).success).toBe(true);
   });
 
   it('rejects a timeout above 2**31-1, which Node would wrap to ~1ms', () => {
     const schema = build([]).parameters;
 
-    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_646 }).success).toBe(true);
-    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_647 }).success).toBe(true);
-    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_648 }).success).toBe(false);
-    expect(schema.safeParse({ code: 'x', timeout_ms: 3_000_000_000 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 2_147_483_646 }).success).toBe(true);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 2_147_483_647 }).success).toBe(true);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 2_147_483_648 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', description: 'test', timeout_ms: 3_000_000_000 }).success).toBe(false);
   });
 
   it('gives the script no filesystem, network, or ambient host globals', async () => {

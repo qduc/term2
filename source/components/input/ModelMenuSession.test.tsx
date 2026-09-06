@@ -380,3 +380,97 @@ it('Tab inserts the typed model id without the provider suffix and without submi
   expect(controller.getSnapshot().stack).toHaveLength(1);
   expect(controller.getSnapshot().editor.text).toBe('/settings agent.model gpt-test ');
 });
+
+it('ctrl+f (command "favorite") toggles the highlighted model immediately, with no naming prompt or modal state', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+  expect(settingsService.get('agent.favoriteModels')).toEqual([]);
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'favorite' });
+    await Promise.resolve();
+  });
+
+  expect(settingsService.get('agent.favoriteModels')).toEqual([`${providerId}/gpt-test`]);
+  // No naming prompt, no modal: the stack is still exactly the one model frame.
+  expect(controller.getSnapshot().stack).toHaveLength(1);
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'favorite' });
+    await Promise.resolve();
+  });
+
+  expect(settingsService.get('agent.favoriteModels')).toEqual([]);
+});
+
+it('selecting a model from the Favorites tab applies its own real provider, not the Favorites sentinel', async () => {
+  const intentHost = vi.fn(
+    ({ intentRequest }): IntentResult => ({
+      id: intentRequest.id,
+      sourceFrameId: intentRequest.sourceFrameId,
+      ok: true,
+    }),
+  );
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({
+    'agent.provider': providerId,
+    'agent.favoriteModels': [`${providerId}/gpt-test`],
+  });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model ', cursor: 22 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(intentHost).toHaveBeenCalledTimes(1);
+  const call = intentHost.mock.calls[0]?.[0];
+  expect(call.intentRequest.intent).toEqual({
+    type: 'apply-settings',
+    changes: [
+      { key: 'agent.model', value: 'gpt-test', persistence: 'runtime' },
+      { key: 'agent.provider', value: providerId, persistence: 'runtime' },
+    ],
+  });
+});

@@ -7,6 +7,7 @@ import { renderInAct } from '../../test-helpers/ink-testing.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model-favorites.js';
 
 const mockModels: ModelInfo[] = [
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
@@ -221,4 +222,93 @@ it.sequential('ModelSelectionMenu does not show scroll indicators for short list
   expect(output?.match(/\d+-\d+\/\d+/) !== null).toBe(false);
   // For short lists with no scroll, should not have "N more" indicators
   expect(output?.match(/\d+ more/) !== null).toBe(false);
+});
+
+it.sequential('ModelSelectionMenu renders a Favorites tab pinned leftmost, ahead of provider tabs', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[]}
+      selectedIndex={0}
+      query=""
+      provider="openai"
+    />,
+  );
+  const output = lastFrame() ?? '';
+  const favoritesIdx = output.indexOf('Favorites');
+  const openAiIdx = output.indexOf('OpenAI');
+  expect(favoritesIdx).toBeGreaterThanOrEqual(0);
+  expect(openAiIdx).toBeGreaterThanOrEqual(0);
+  expect(favoritesIdx).toBeLessThan(openAiIdx);
+});
+
+it.sequential('ModelSelectionMenu shows a "how to add" empty state on the Favorites tab with no query', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[]}
+      selectedIndex={0}
+      query=""
+      provider={FAVORITES_TAB_ID}
+    />,
+  );
+  expect(lastFrame()).toContain('No favorites yet');
+  expect(lastFrame()).toContain('ctrl+f');
+});
+
+it.sequential('ModelSelectionMenu shows the ordinary no-match message on the Favorites tab with a query', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[]}
+      selectedIndex={0}
+      query="xyz"
+      provider={FAVORITES_TAB_ID}
+    />,
+  );
+  expect(lastFrame()).toContain('No models match "xyz"');
+  expect(lastFrame()).not.toContain('No favorites yet');
+});
+
+it.sequential('ModelSelectionMenu renders favorited models with their home provider dimmed', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-4o', provider: 'openai' }]}
+      selectedIndex={0}
+      query=""
+      provider={FAVORITES_TAB_ID}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('gpt-4o');
+  expect(output).toContain('(openai)');
+});
+
+it.sequential('ModelSelectionMenu footer includes the favorite hint', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
+  );
+  expect(lastFrame()?.includes('ctrl+f favorite')).toBe(true);
+});
+
+it.sequential('ModelSelectionMenu marks a favorited row on a normal provider tab', async () => {
+  const favoriteKeys = new Set([serializeFavorite('openai', 'gpt-4o')]);
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={mockModels}
+      selectedIndex={0}
+      query=""
+      provider="openai"
+      favoriteKeys={favoriteKeys}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  const favoritedLine = output.split('\n').find((line) => line.includes('gpt-4o') && !line.includes('gpt-4-turbo'));
+  const unfavoritedLine = output.split('\n').find((line) => line.includes('gpt-4-turbo'));
+  expect(favoritedLine).toBeTruthy();
+  expect(unfavoritedLine).toBeTruthy();
+  expect(favoritedLine).toContain('★');
+  expect(unfavoritedLine).not.toContain('★');
 });

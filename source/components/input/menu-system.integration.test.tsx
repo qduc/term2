@@ -4,6 +4,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React, { act, useEffect } from 'react';
 import { useStdin } from 'ink';
 import { it, expect, vi } from 'vitest';
+import { registerProvider, unregisterProvider } from '../../providers/index.js';
 import ApplicationInputSurface from './ApplicationInputSurface.js';
 import { InputProvider, useInputContext } from '../../context/InputContext.js';
 import { MenuControllerImpl } from './menu-controller.js';
@@ -117,6 +118,7 @@ const renderSurface = async (
     onCopySelection?: (selection: CopySelection) => void;
     listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
     resumeConversation?: (target?: string) => void | Promise<void>;
+    settingsService?: ReturnType<typeof createMockSettingsService>;
   },
 ) => {
   const result = await renderInAct(
@@ -125,7 +127,7 @@ const renderSurface = async (
         enabled
         onSubmit={async () => {}}
         slashCommands={commands}
-        settingsService={createMockSettingsService()}
+        settingsService={options?.settingsService ?? createMockSettingsService()}
         loggingService={loggingService}
         historyService={historyService}
         skillsService={options?.skillsService}
@@ -359,6 +361,42 @@ it.sequential('accepting a /model prefix opens the model successor menu', async 
 
   expect(controller.getSnapshot().editor.text).toBe('/model ');
 });
+
+it.sequential(
+  'raw ctrl+f keystroke reaches the model menu and toggles the highlighted model into favorites',
+  async () => {
+    const providerId = `menu-surface-favorite-${Date.now()}-${Math.random()}`;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [{ id: 'ctrl-f-model' }],
+    });
+    try {
+      const controller = new MenuControllerImpl();
+      const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+      const { stdin, lastFrame } = await renderSurface(controller, [...slashCommands, modelCommand], undefined, {
+        settingsService,
+      });
+
+      await writeInput(stdin, '/model ');
+      await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'model');
+      await waitFor(() => (lastFrame() ?? '').includes('ctrl-f-model'));
+
+      expect(settingsService.get('agent.favoriteModels')).toEqual([]);
+
+      // Raw ASCII 0x06 (ACK) is the byte a terminal sends for ctrl+f.
+      await writeInput(stdin, '\x06');
+
+      await waitFor(() => (settingsService.get('agent.favoriteModels') ?? []).length === 1);
+      expect(settingsService.get('agent.favoriteModels')).toEqual([`${providerId}/ctrl-f-model`]);
+      // Still just the one model frame: no naming prompt, no modal push.
+      expect(controller.getSnapshot().stack).toHaveLength(1);
+      expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+    } finally {
+      unregisterProvider(providerId);
+    }
+  },
+);
 
 it.sequential('accepting a /skills prefix opens the skills successor menu', async () => {
   const controller = new MenuControllerImpl();

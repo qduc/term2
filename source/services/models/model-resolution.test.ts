@@ -940,3 +940,240 @@ describe('resolveModelFlag', () => {
     });
   });
 });
+
+describe('resolveModelFlag favorites fast path', () => {
+  const favoriteSettings = (favorites: string[]) =>
+    ({
+      get: vi.fn((key: string) => (key === 'agent.favoriteModels' ? favorites : undefined)),
+      getDynamic: vi.fn(() => []),
+    } as any);
+
+  it('resolves a favorited model against an exact id with zero provider loads', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      throw new Error(`must not fetch ${provider}: a single favorite match must never touch a catalog`);
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      settingsService: favoriteSettings(['openai/gpt-5.4']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'anthropic'],
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('resolves a favorited model against a fuzzy pattern with zero provider loads', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      throw new Error(`must not fetch ${provider}`);
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'sonnet',
+      settingsService: favoriteSettings(['anthropic/claude-sonnet-4']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'anthropic'],
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'claude-sonnet-4',
+      provider: 'anthropic',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('preserves the thinking suffix when resolving from a favorite', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4:high',
+      settingsService: favoriteSettings(['openai/gpt-5.4']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('round-trips a favorited model id that itself contains a slash', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'anthropic/claude-3.5-sonnet',
+      providerFlag: 'openrouter',
+      settingsService: favoriteSettings(['openrouter/anthropic/claude-3.5-sonnet']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openrouter'],
+      knownProviders: ['openrouter'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'anthropic/claude-3.5-sonnet',
+      provider: 'openrouter',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('falls through to the full catalog search when multiple favorites match the pattern', async () => {
+    const catalogGroups: ProviderModelGroup[] = [makeGroup('openai', [{ id: 'gpt-shared' }])];
+    const deps = mockDeps(catalogGroups, {
+      getSetting: (key) => (key === 'agent.favoriteModels' ? ['openai/gpt-shared', 'anthropic/gpt-shared'] : undefined),
+    });
+
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-shared',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai'],
+    });
+
+    // Falling through means the normal catalog path ran (and it only knows
+    // about 'openai', so it resolves there rather than offering the
+    // 'anthropic' favorite that has no backing catalog entry).
+    expect(deps.fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-shared',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('only considers favorites for the explicitly-scoped --provider', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      if (provider === 'openai') return [{ id: 'gpt-5.4', provider }];
+      throw new Error(`must not fetch ${provider}`);
+    });
+    // A favorite exists for 'anthropic', but --provider=openai must not
+    // consider it: the explicit-provider scope applies to favorites too.
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      providerFlag: 'openai',
+      settingsService: favoriteSettings(['anthropic/gpt-5.4']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('falls back to the full search and warns when a favorite has vanished from a warm cache', async () => {
+    const provider = 'fake-favorite-vanished';
+    registerProvider({
+      id: provider,
+      label: 'Fake Favorite Vanished',
+      fetchModels: async () => [{ id: 'still-here' }],
+    });
+    try {
+      // Warm the real model-service cache for this provider with a catalog
+      // that no longer includes the favorited id.
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: vi.fn() } as any },
+        provider,
+      );
+
+      const fetcher = vi.fn(async (p: string) => {
+        if (p === provider) return [{ id: 'gone-model-replacement', provider: p }];
+        throw new Error(`must not fetch ${p}`);
+      });
+
+      const result = await resolveModelFlag({
+        modelFlag: 'gone-model',
+        settingsService: favoriteSettings([`${provider}/gone-model`]),
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+        providerIds: [provider],
+        knownProviders: [provider],
+      });
+
+      expect(fetcher).toHaveBeenCalledWith(provider);
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'gone-model-replacement',
+        provider,
+        reasoningEffort: undefined,
+        warnings: [
+          `warning: favorite model "gone-model" is no longer in ${provider}'s cached catalog; falling back to full search.`,
+        ],
+      });
+    } finally {
+      unregisterProvider(provider);
+      clearModelCache(provider);
+    }
+  });
+
+  it('trusts a favorite when the provider cache is cold (accepted limitation, zero network)', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch: a cold cache cannot disprove the favorite, so it is trusted as-is');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'cold-favorite',
+      settingsService: favoriteSettings(['fake-cold-provider/cold-favorite']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['fake-cold-provider'],
+      knownProviders: ['fake-cold-provider'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'cold-favorite',
+      provider: 'fake-cold-provider',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('ignores favorites and behaves exactly as before when none are set', async () => {
+    const groups: ProviderModelGroup[] = [makeGroup('openai', [{ id: 'gpt-5.4' }])];
+    const deps = mockDeps(groups, { getSetting: () => undefined });
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+});

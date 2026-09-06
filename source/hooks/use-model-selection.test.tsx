@@ -10,6 +10,7 @@ import { createMockSettingsService } from '../services/settings/settings-service
 import { Text } from 'ink';
 import { clearModelCache } from '../services/model-service.js';
 import { getProviderIds, registerProvider, unregisterProvider } from '../providers/index.js';
+import { FAVORITES_TAB_ID } from '../services/models/model-favorites.js';
 
 type TestModelFetcher = (provider: string) => Promise<any[]>;
 const EMPTY_MODEL_FETCHER: TestModelFetcher = async () => [];
@@ -859,3 +860,174 @@ it.sequential('allows switching the main provider even when conversation history
     renderer.unmount();
   });
 });
+
+it.sequential('opens directly on the Favorites tab when favorites exist, with zero catalog fetches', async () => {
+  let fetchCount = 0;
+  const settingsService = createMockSettingsService({
+    'agent.favoriteModels': ['openai/gpt-fav'],
+  });
+
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          modelFetcher={async () => {
+            fetchCount++;
+            throw new Error('must not fetch when opening on the Favorites tab');
+          }}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  expect(capturedModels.provider).toBe(FAVORITES_TAB_ID);
+  expect(capturedModels.loading).toBe(false);
+  expect(capturedModels.error).toBeNull();
+  expect(capturedModels.filteredModels).toEqual([{ id: 'gpt-fav', provider: 'openai' }]);
+  expect(fetchCount).toBe(0);
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('opens on the current provider (not Favorites) when no favorites exist', async () => {
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          initialInput="/model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  expect(capturedModels.provider).not.toBe(FAVORITES_TAB_ID);
+  expect(capturedModels.provider).toBeTruthy();
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});
+
+it.sequential(
+  'toggleFavorite adds the selected model, exposes it via favoriteKeys, and it appears on the Favorites tab',
+  async () => {
+    const providerId = `fav-toggle-${Date.now()}-${Math.random()}`;
+    registerTestProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [{ id: 'model-a', name: 'Model A' }],
+    });
+
+    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    let capturedModels: any;
+    let renderer: any;
+    await flush(() => {
+      renderer = render(
+        <InputProvider>
+          <TestComponent
+            settingsService={settingsService}
+            initialInput="/model "
+            modelFetcher={async (provider) => [{ id: 'model-a', name: 'Model A', provider }]}
+            onResults={(m) => {
+              capturedModels = m;
+            }}
+          />
+        </InputProvider>,
+      );
+    });
+    await waitForIdle(() => capturedModels);
+
+    expect(capturedModels.provider).toBe(providerId);
+    expect(capturedModels.filteredModels[0]?.id).toBe('model-a');
+    expect(capturedModels.favoriteKeys.has(`${providerId}/model-a`)).toBe(false);
+
+    await flush(() => {
+      capturedModels.toggleFavorite();
+    });
+
+    expect(capturedModels.favoriteKeys.has(`${providerId}/model-a`)).toBe(true);
+    expect(settingsService.get('agent.favoriteModels')).toEqual([`${providerId}/model-a`]);
+
+    // The Favorites pseudo-tab is reachable by the same provider cycling
+    // used for real provider tabs; walk forward until we land on it rather
+    // than assuming a fixed position (registry order across the test run is
+    // not something this test should depend on).
+    let reached = false;
+    for (let i = 0; i < 10 && !reached; i++) {
+      await flush(() => {
+        capturedModels.toggleProvider('next');
+      });
+      await waitForIdle(() => capturedModels);
+      reached = capturedModels.provider === FAVORITES_TAB_ID;
+    }
+    expect(reached).toBe(true);
+    expect(capturedModels.filteredModels).toEqual([{ id: 'model-a', provider: providerId }]);
+
+    await flush(() => {
+      renderer.unmount();
+    });
+  },
+);
+
+it.sequential(
+  'toggling a favorite off while viewing the Favorites tab clamps selection without corrupting it',
+  async () => {
+    const settingsService = createMockSettingsService({
+      'agent.favoriteModels': ['openai/gpt-fav-1', 'openai/gpt-fav-2'],
+    });
+    let capturedModels: any;
+    let renderer: any;
+    await flush(() => {
+      renderer = render(
+        <InputProvider>
+          <TestComponent
+            settingsService={settingsService}
+            initialInput="/model "
+            modelFetcher={async () => {
+              throw new Error('must not fetch on the Favorites tab');
+            }}
+            onResults={(m) => {
+              capturedModels = m;
+            }}
+          />
+        </InputProvider>,
+      );
+    });
+    await waitForIdle(() => capturedModels);
+
+    expect(capturedModels.provider).toBe(FAVORITES_TAB_ID);
+    expect(capturedModels.filteredModels).toHaveLength(2);
+
+    await flush(() => {
+      capturedModels.moveDown();
+    });
+    expect(capturedModels.selectedIndex).toBe(1);
+
+    await flush(() => {
+      capturedModels.toggleFavorite();
+    });
+
+    expect(capturedModels.filteredModels).toEqual([{ id: 'gpt-fav-1', provider: 'openai' }]);
+    expect(capturedModels.selectedIndex).toBe(0);
+
+    await flush(() => {
+      renderer.unmount();
+    });
+  },
+);

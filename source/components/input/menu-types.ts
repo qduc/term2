@@ -209,7 +209,17 @@ export type MenuEvent =
   | { type: 'move'; direction: 'up' | 'down' | 'home' | 'end' | 'page-up' | 'page-down' }
   | {
       type: 'command';
-      command: 'tab' | 'left' | 'right' | 'refresh' | 'reset' | 'backspace' | 'delete' | 'reorder-up' | 'reorder-down';
+      command:
+        | 'tab'
+        | 'left'
+        | 'right'
+        | 'refresh'
+        | 'reset'
+        | 'favorite'
+        | 'backspace'
+        | 'delete'
+        | 'reorder-up'
+        | 'reorder-down';
     }
   | { type: 'input'; text: string }
   | { type: 'accept'; input: FrameInput; selected: unknown | undefined }

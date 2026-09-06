@@ -9,6 +9,7 @@ import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
 import { COLOR_DANGER } from '../theme.js';
+import { FAVORITES_TAB_ID } from '../../services/models/model-favorites.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -31,6 +32,16 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
       const selected = models.getSelectedItem();
       const typed = models.query.trim();
       return selected?.id ?? (typed || undefined);
+    };
+
+    // The Favorites tab is a pseudo-provider: each row's real home provider
+    // lives on the row itself (item.provider), not on the hook's `provider`
+    // state. Resolve through the current selection there so applying or
+    // inserting a favorited model sets its own real provider, exactly as
+    // selecting it from that provider's own tab would.
+    const effectiveProvider = (): string | null | undefined => {
+      if (models.provider !== FAVORITES_TAB_ID) return models.provider;
+      return models.getSelectedItem()?.provider ?? null;
     };
 
     return {
@@ -66,7 +77,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
                 selection: models.getSelectedItem(),
                 modelId,
                 triggerIndex: frame.binding.replacement.start,
-                provider: models.provider,
+                provider: effectiveProvider(),
                 value: currentEditor.text,
                 appendTrailingSpace: true,
                 includeProvider: false,
@@ -80,6 +91,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             if (event.command === 'left') models.toggleProvider('prev');
             else if (event.command === 'right') models.toggleProvider('next');
             else if (event.command === 'refresh') models.refresh();
+            else if (event.command === 'favorite') models.toggleFavorite();
             return keep();
           }
           case 'accept': {
@@ -87,19 +99,20 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             const modelId = resolvedModelId();
             if (!modelId) return 'fallthrough';
 
-            const unavailable = models.provider
-              ? resolveProviderCredentials(settingsService, models.provider).unavailableReason
+            const resolvedProvider = effectiveProvider();
+            const unavailable = resolvedProvider
+              ? resolveProviderCredentials(settingsService, resolvedProvider).unavailableReason
               : undefined;
             const selectedUnavailable = models.getSelectedItem()?.unavailableReason;
             if (unavailable || selectedUnavailable) {
               const requestSetup = services.onUnavailableModelSelected as ((provider: string) => void) | undefined;
-              requestSetup?.(models.provider ?? settingsService.get('agent.provider'));
+              requestSetup?.(resolvedProvider ?? settingsService.get('agent.provider'));
               return keep();
             }
 
             if (frame.target.type === 'setting') {
               const { config } = frame.target;
-              const provider = models.provider;
+              const provider = resolvedProvider;
               const persistenceFor = (key: string) =>
                 settingsService.isRuntimeModifiable(key) ? 'runtime' : 'restart';
               const changes: { key: string; value: unknown; persistence: 'runtime' | 'restart' }[] = [
@@ -127,7 +140,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
               selection: models.getSelectedItem(),
               modelId,
               triggerIndex: frame.binding.replacement.start,
-              provider: models.provider,
+              provider: resolvedProvider,
               value: currentEditor.text,
               appendTrailingSpace: false,
               includeProvider: true,
@@ -171,6 +184,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         scrollOffset={models.scrollOffset}
         canSwitchProvider={models.canSwitchProvider}
         credentialRevision={models.credentialRevision}
+        favoriteKeys={models.favoriteKeys}
       />
       {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
     </Box>

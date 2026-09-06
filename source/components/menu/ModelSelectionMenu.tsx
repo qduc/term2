@@ -11,7 +11,18 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import { useSetting } from '../../hooks/use-setting.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING, GLYPH_WARNING } from '../theme.js';
+import {
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+  GLYPH_FAVORITE,
+  GLYPH_WARNING,
+} from '../theme.js';
+import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model-favorites.js';
+
+const EMPTY_FAVORITE_KEYS = new Set<string>();
 
 type Props = {
   items: ModelInfo[];
@@ -26,6 +37,8 @@ type Props = {
   providerSwitchDisabledMessage?: string;
   credentialRevision?: number;
   settingsService: SettingsService;
+  /** Set of `provider/modelId` strings for the favorited-state marker, shown on every tab. */
+  favoriteKeys?: Set<string>;
 };
 
 const ModelSelectionMenu: FC<Props> = ({
@@ -41,7 +54,9 @@ const ModelSelectionMenu: FC<Props> = ({
   providerSwitchDisabledMessage = 'Provider can only be changed at the start of a new conversation (/clear to reset)',
   credentialRevision = 0,
   settingsService,
+  favoriteKeys = EMPTY_FAVORITE_KEYS,
 }) => {
+  const isFavoritesTab = provider === FAVORITES_TAB_ID;
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
@@ -62,7 +77,7 @@ const ModelSelectionMenu: FC<Props> = ({
         sorted.map((p) => p.id),
       ),
     );
-    return sorted
+    const providerTabs = sorted
       .filter((p) => availableIds.has(p.id) || p.id === provider)
       .map((p) => ({
         id: p.id,
@@ -70,6 +85,12 @@ const ModelSelectionMenu: FC<Props> = ({
         hasCredentials: hasProviderCredentials(settingsService, p.id),
         unavailableReason: resolveProviderCredentials(settingsService, p.id).unavailableReason,
       }));
+    // Pinned leftmost, ahead of every real provider: pure presentation, no
+    // credential check (it never fails to load — there's nothing to load).
+    return [
+      { id: FAVORITES_TAB_ID, label: 'Favorites', hasCredentials: true, unavailableReason: undefined },
+      ...providerTabs,
+    ];
   }, [credentialRevision, openAIApiKey, openRouterApiKey, provider, settingsService]);
 
   const activeTab = tabItems.find((item) => item.id === provider);
@@ -139,35 +160,50 @@ const ModelSelectionMenu: FC<Props> = ({
         loading={loading}
         loadingText={loading ? `Loading models${provider ? ` from ${provider}` : ''}…` : 'Loading...'}
         error={error ? `Unable to load models: ${error}` : null}
-        fallbackText={<Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>}
+        fallbackText={
+          isFavoritesTab && !query ? (
+            <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press ctrl+f on a model to add one.</Text>
+          ) : (
+            <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>
+          )
+        }
         footer={
           <MenuFooter
             hints={[
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
               ['tab', 'provider'],
+              ['ctrl+f', 'favorite'],
               ['ctrl+r', 'refresh model list'],
               ['esc', 'cancel'],
             ]}
           />
         }
         footerOutsideBorder={true}
-        renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => (
-          <Box key={item.id}>
-            <SelectionMarker selected={isSelected} />
-            <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
-              {item.id}
-            </Text>
-            {item.unavailableReason === 'missing-codex-login' ? (
-              <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --codex-login`.</Text>
-            ) : item.unavailableReason === 'missing-grok-login' ? (
-              <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
-            ) : item.unavailableReason === 'missing-credentials' ? (
-              <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
-            ) : null}
-            {item.name && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}> — {item.name}</Text>}
-          </Box>
-        )}
+        renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
+          const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));
+          return (
+            <Box key={`${item.provider}/${item.id}`}>
+              <SelectionMarker selected={isSelected} />
+              {isFavorited && <Text color={COLOR_ACCENT}>{GLYPH_FAVORITE} </Text>}
+              <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
+                {item.id}
+              </Text>
+              {isFavoritesTab && <Text color={COLOR_TEXT_SUBTLE}> ({item.provider})</Text>}
+              {item.unavailableReason === 'missing-codex-login' ? (
+                <Text color={COLOR_WARNING}>
+                  {' '}
+                  — unavailable: Not logged in on this host. Run `term2 --codex-login`.
+                </Text>
+              ) : item.unavailableReason === 'missing-grok-login' ? (
+                <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
+              ) : item.unavailableReason === 'missing-credentials' ? (
+                <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
+              ) : null}
+              {item.name && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}> — {item.name}</Text>}
+            </Box>
+          );
+        }}
       />
       {(error || (items.length === 0 && !loading)) && (
         <MenuFooter

@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { filterModels, type ModelInfo } from '../services/model-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
-import { ModelCatalogSession, type ModelFetcher } from '../services/models/model-catalog-session.js';
+import {
+  ModelCatalogSession,
+  orderedProviderIds,
+  type ModelFetcher,
+} from '../services/models/model-catalog-session.js';
+import { getProviderIds } from '../providers/index.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 import {
@@ -10,6 +15,13 @@ import {
   getProviderIdForCredentialSettingKey,
   resolveProviderCredentials,
 } from '../utils/ai/provider-credentials.js';
+import {
+  FAVORITES_TAB_ID,
+  getFavoriteModelInfos,
+  serializeFavorite,
+  toggleFavoriteModel,
+} from '../services/models/model-favorites.js';
+import { SETTING_KEYS } from '../services/settings/settings-schema.js';
 
 export const useModelSelection = (deps: {
   loggingService: ILoggingService;
@@ -33,7 +45,20 @@ export const useModelSelection = (deps: {
   const isInitialLoadRef = useRef(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [credentialRevision, setCredentialRevision] = useState(0);
+  const [favoritesRevision, setFavoritesRevision] = useState(0);
   const shouldPreselectRef = useRef(false);
+
+  // Favorites render purely from settings: no catalog fetch, no credential
+  // check. Recomputed whenever a toggle (or an external settings change)
+  // bumps favoritesRevision.
+  const favoriteModelInfos = useMemo(
+    () => getFavoriteModelInfos(settingsService),
+    [settingsService, favoritesRevision],
+  );
+  const favoriteKeys = useMemo(
+    () => new Set(favoriteModelInfos.map((m) => serializeFavorite(m.provider, m.id))),
+    [favoriteModelInfos],
+  );
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
   const isControllerOpen = controllerFrame?.kind === 'model';
@@ -57,6 +82,8 @@ export const useModelSelection = (deps: {
       } else if (changedKey === 'providers') {
         catalogSession.clear();
         setCredentialRevision((revision) => revision + 1);
+      } else if (changedKey === SETTING_KEYS.AGENT_FAVORITE_MODELS) {
+        setFavoritesRevision((revision) => revision + 1);
       }
     });
     return unsubscribe;
@@ -76,6 +103,9 @@ export const useModelSelection = (deps: {
   }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const getInitialProvider = useCallback(() => {
+    // Favorites open first when any exist — the whole point is to be fast to
+    // reach. Otherwise, fall back to whichever provider was already active.
+    if (getFavoriteModelInfos(settingsService).length > 0) return FAVORITES_TAB_ID;
     const raw = modelSettingConfig
       ? settingsService.getDynamic(modelSettingConfig.providerKey) ??
         settingsService.getDynamic(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
@@ -101,6 +131,16 @@ export const useModelSelection = (deps: {
 
   useEffect(() => {
     if (!isOpen || !provider) return;
+
+    // The Favorites pseudo-tab renders purely from settings via
+    // favoriteModelInfos (see filteredModels below): no catalog fetch, no
+    // credential check, nothing to load here.
+    if (provider === FAVORITES_TAB_ID) {
+      setLoading(false);
+      setError(null);
+      isInitialLoadRef.current = false;
+      return;
+    }
 
     const credentialResolution = resolveProviderCredentials(settingsService, provider);
     if (credentialResolution.required && !credentialResolution.configured) {
@@ -171,8 +211,9 @@ export const useModelSelection = (deps: {
   }, [isOpen, provider, catalogSession]);
 
   const filteredModels = useMemo(() => {
-    return filterModels(models, query);
-  }, [models, query]);
+    const source = provider === FAVORITES_TAB_ID ? favoriteModelInfos : models;
+    return filterModels(source, query);
+  }, [models, query, provider, favoriteModelInfos]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -285,21 +326,46 @@ export const useModelSelection = (deps: {
   const toggleProvider = useCallback(
     (direction: 'next' | 'prev' = 'next') => {
       const currentProvider = providerRef.current || getInitialProvider() || null;
-      const nextProvider = catalogSession.nextProvider(currentProvider, direction);
+      // Favorites is a pinned-leftmost pseudo-provider ahead of every real
+      // provider in the cycle, always reachable regardless of whether it's
+      // currently empty (the empty state tells the user how to add one).
+      const order = [FAVORITES_TAB_ID, ...orderedProviderIds(settingsService, getProviderIds())];
+      if (order.length === 0) return;
+      const currentIndex = order.indexOf(currentProvider ?? '');
+      const nextProvider =
+        currentIndex < 0
+          ? direction === 'prev'
+            ? order[order.length - 1]
+            : order[0]
+          : order[(currentIndex + (direction === 'prev' ? -1 : 1) + order.length) % order.length];
       if (!nextProvider) return;
-      const cachedModels = catalogSession.getCached(nextProvider);
 
-      // If the user manually selects it, we should allow retrying it
       shouldPreselectRef.current = true;
-      setModels(cachedModels ?? []);
       setSelectedIndex(0);
       setScrollOffset(0);
-      setLoading(!cachedModels);
       setError(null);
+
+      if (nextProvider === FAVORITES_TAB_ID) {
+        setLoading(false);
+        setCurrentProvider(nextProvider);
+        return;
+      }
+
+      // If the user manually selects it, we should allow retrying it
+      const cachedModels = catalogSession.getCached(nextProvider);
+      setModels(cachedModels ?? []);
+      setLoading(!cachedModels);
       setCurrentProvider(nextProvider);
     },
-    [getInitialProvider, setCurrentProvider, catalogSession],
+    [getInitialProvider, setCurrentProvider, catalogSession, settingsService],
   );
+
+  const toggleFavorite = useCallback(() => {
+    const selected = getSelectedItem();
+    if (!selected) return;
+    toggleFavoriteModel(settingsService, selected.provider, selected.id);
+    setFavoritesRevision((revision) => revision + 1);
+  }, [getSelectedItem, settingsService]);
 
   return {
     isOpen,
@@ -321,6 +387,8 @@ export const useModelSelection = (deps: {
     pageDown,
     getSelectedItem,
     toggleProvider,
+    toggleFavorite,
+    favoriteKeys,
     refresh,
     canSwitchProvider,
     modelSettingConfig,

@@ -50,6 +50,7 @@ const SETTINGS_SOURCE_KEYS = {
       autoBrief: 'agent.sessionRollover.autoBrief',
     },
     provider: 'agent.provider',
+    favoriteModels: 'agent.favoriteModels',
     openrouter: 'agent.openrouter',
     codex: {
       websocketFirstFrameTimeoutMs: 'agent.codex.websocketFirstFrameTimeoutMs',

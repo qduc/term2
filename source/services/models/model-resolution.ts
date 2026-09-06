@@ -12,6 +12,7 @@ import { scoreSubsequence } from '../../utils/subsequence-filter.js';
 import { collectProviderModelsConcurrently, loadProviderModelGroup, type ProviderModelGroup } from './model-listing.js';
 import { orderedProviderIds, type ModelFetcher } from './model-catalog-session.js';
 import { HARNESS_IDLE_ENV } from '../../lib/harness-input-idle.js';
+import { getFavoriteModelInfos } from './model-favorites.js';
 
 export const VALID_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 
@@ -300,6 +301,20 @@ export async function promptForDisambiguation(
   }
 }
 
+/** Groups flat ModelInfo rows by provider, preserving first-seen provider order. */
+function groupModelInfosByProvider(models: ModelInfo[]): ProviderModelGroup[] {
+  const order: string[] = [];
+  const byProvider = new Map<string, ModelInfo[]>();
+  for (const model of models) {
+    if (!byProvider.has(model.provider)) {
+      byProvider.set(model.provider, []);
+      order.push(model.provider);
+    }
+    byProvider.get(model.provider)!.push(model);
+  }
+  return order.map((provider) => ({ provider, models: byProvider.get(provider)! }));
+}
+
 /**
  * Resolves `--model <pattern>` against the model catalog with exact match
  * precedence, partial/fuzzy matching, and interactive disambiguation when needed.
@@ -331,6 +346,59 @@ export async function resolveModelFlag(deps: {
     };
   }
 
+  // Explicit --provider is the user deliberately scoping the search (it also
+  // sets agent.provider for the session), so it narrows PERMANENTLY: a miss
+  // there errors out rather than silently resolving to a provider the user
+  // didn't name. A provider-style prefix parsed out of the flag itself (e.g.
+  // the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) is a
+  // different thing — it's just the best first guess, and the full id may
+  // turn out to be a literal model id on some other provider, so a miss
+  // there widens to the rest of the candidate space instead of giving up.
+  const explicitProvider = Boolean(deps.providerFlag && parsed.provider);
+
+  // Favorites resolve BEFORE any provider catalog loads: reading
+  // `agent.favoriteModels` is a settings read, not a fetch, so a hit here
+  // costs zero network work. Only favorites for the explicitly-scoped
+  // provider are eligible when --provider narrows permanently, mirroring the
+  // catalog path below; a slash-prefix guess (not --provider) doesn't narrow
+  // the same way, since the full raw pattern might still be a literal id
+  // favorited under a different provider.
+  const allFavorites = getFavoriteModelInfos(deps.settingsService);
+  const eligibleFavorites = explicitProvider
+    ? allFavorites.filter((m) => m.provider.toLowerCase() === parsed.provider!.toLowerCase())
+    : allFavorites;
+
+  let favoriteVanishedWarning: string | undefined;
+
+  if (eligibleFavorites.length > 0) {
+    const favoriteGroups = groupModelInfosByProvider(eligibleFavorites);
+    const favoriteMatch = matchModels(favoriteGroups, parsed);
+    // Only an UNAMBIGUOUS favorite hit short-circuits; zero or multiple
+    // matches fall through to the full catalog-backed search below (multiple
+    // favorite matches get the normal, complete disambiguation prompt rather
+    // than a guess restricted to favorites).
+    if (favoriteMatch.matches.length === 1) {
+      const hit = favoriteMatch.matches[0];
+      // Read-only peek at whatever's already warm for that provider (memory
+      // or non-expired disk cache) — never a fetch. If the cache is warm and
+      // no longer lists this id, the favorite has gone stale (removed
+      // upstream); fall back to the full search instead of resolving to a
+      // model the provider will reject. A cold/absent cache can't disprove
+      // the favorite, so it's trusted as-is — that's the latency win.
+      const warmCache = peekCachedModels(hit.provider);
+      const vanished = warmCache !== undefined && !warmCache.some((m) => m.id === hit.model.id);
+      if (!vanished) {
+        return {
+          status: 'resolved',
+          modelId: hit.model.id,
+          provider: hit.provider,
+          reasoningEffort: parsed.reasoningEffort,
+        };
+      }
+      favoriteVanishedWarning = `warning: favorite model "${hit.model.id}" is no longer in ${hit.provider}'s cached catalog; falling back to full search.`;
+    }
+  }
+
   const loaderDeps = {
     settingsService: deps.settingsService,
     loggingService: deps.loggingService,
@@ -341,16 +409,6 @@ export async function resolveModelFlag(deps: {
   // supplied, replaces this entirely (tests use it to pin the universe of
   // providers without touching credential lookups).
   const fullOrder = deps.providerIds ?? orderedProviderIds(deps.settingsService, knownProviders);
-
-  // Explicit --provider is the user deliberately scoping the search (it also
-  // sets agent.provider for the session), so it narrows PERMANENTLY: a miss
-  // there errors out rather than silently resolving to a provider the user
-  // didn't name. A provider-style prefix parsed out of the flag itself (e.g.
-  // the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) is a
-  // different thing — it's just the best first guess, and the full id may
-  // turn out to be a literal model id on some other provider, so a miss
-  // there widens to the rest of the candidate space instead of giving up.
-  const explicitProvider = Boolean(deps.providerFlag && parsed.provider);
 
   let order: string[];
   if (explicitProvider) {
@@ -417,9 +475,10 @@ export async function resolveModelFlag(deps: {
   // skipped entirely by the early-exit/narrow-first strategy above must not
   // appear here; do not let the laziness optimization hide a real outage on a
   // provider that was loaded.
-  const warnings = groups
-    .filter((group) => group.error !== undefined)
-    .map((group) => `warning: ${group.provider}: ${group.error}`);
+  const warnings = [
+    ...(favoriteVanishedWarning ? [favoriteVanishedWarning] : []),
+    ...groups.filter((group) => group.error !== undefined).map((group) => `warning: ${group.provider}: ${group.error}`),
+  ];
 
   const totalLoadedModels = groups.reduce((acc, g) => acc + g.models.length, 0);
 

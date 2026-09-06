@@ -158,6 +158,13 @@ export const AgentSettingsSchema = z.object({
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
   provider: z.string().min(1).default('openai').describe('Provider to use for the agent'),
+  favoriteModels: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe(
+      'Ordered list of favorited models as "provider/modelId" strings; matched before any provider catalog loads',
+    ),
   openrouter: z
     .object({
       apiKey: z.string().optional(),
@@ -745,6 +752,7 @@ export interface SettingsWithSources {
       autoBrief: SettingWithSource<boolean>;
     };
     provider: SettingWithSource<string>;
+    favoriteModels: SettingWithSource<string[]>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
     codex: SettingWithSource<{ websocketFirstFrameTimeoutMs: number; websocketInterFrameTimeoutMs: number }>;
@@ -895,6 +903,7 @@ export const SETTING_KEYS = {
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
   AGENT_TEMPERATURE: 'agent.temperature',
   AGENT_PROVIDER: 'agent.provider',
+  AGENT_FAVORITE_MODELS: 'agent.favoriteModels',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
   AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
@@ -1047,6 +1056,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
+  SETTING_KEYS.AGENT_FAVORITE_MODELS,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
   SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
   SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
@@ -1209,6 +1219,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
       autoBrief: true,
     },
     provider: 'openai',
+    favoriteModels: [],
     openrouter: {
       // defaults empty; can be provided via env or config
       // defaults empty; can be provided via env or config

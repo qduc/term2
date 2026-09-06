@@ -62,6 +62,7 @@ export const COLOR_MUTED = COLOR_TEXT_SUBTLE;
 export const GLYPH_SELECTED = '❯';
 export const GLYPH_WARNING = '▲';
 export const GLYPH_SEPARATOR = '│';
+export const GLYPH_FAVORITE = '★';
 
 // --- Tool status -------------------------------------------------------------
 // One glyph vocabulary for every tool line — shell commands, file edits, and

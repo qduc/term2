@@ -455,7 +455,7 @@ export function browseConversationsForProject(
   };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_PREFIX = /^[0-9a-f-]{4,36}$/i;
 
 export function resolveConversationReference(
@@ -485,16 +485,40 @@ export function resolveConversationReference(
 
 export function uniqueConversationShortRefs(conversations: readonly Pick<RestoredState, 'id'>[]): Map<string, string> {
   const ids = conversations.map((conversation) => conversation.id);
+
+  // Group candidates with length >= 8 by their lowercased 8-character prefix.
+  // Complexity: O(N) for distributed prefixes; quadratic only within a single colliding prefix bucket.
+  // Any candidate with length < 8 can never satisfy candidate.startsWith(id.slice(0, length))
+  // for any length >= 8.
+  const prefixBuckets = new Map<string, string[]>();
+  for (const id of ids) {
+    if (id.length >= 8) {
+      const prefix8 = id.slice(0, 8).toLowerCase();
+      const bucket = prefixBuckets.get(prefix8);
+      if (bucket) {
+        bucket.push(id);
+      } else {
+        prefixBuckets.set(prefix8, [id]);
+      }
+    }
+  }
+
   return new Map(
     ids.map((id) => {
       if (!UUID.test(id)) return [id, id];
-      let length = Math.min(8, id.length);
-      while (
-        length < id.length &&
-        ids.some(
-          (candidate) => candidate !== id && candidate.toLowerCase().startsWith(id.slice(0, length).toLowerCase()),
-        )
-      ) {
+      const prefix8 = id.slice(0, 8).toLowerCase();
+      const bucket = prefixBuckets.get(prefix8);
+      // If no other candidate shares this 8-char prefix, the 8-char prefix is unique.
+      if (!bucket || bucket.length === 1) {
+        return [id, id.slice(0, 8)];
+      }
+      let length = 8;
+      while (length < id.length) {
+        const targetPrefix = id.slice(0, length).toLowerCase();
+        const hasCollision = bucket.some(
+          (candidate) => candidate !== id && candidate.toLowerCase().startsWith(targetPrefix),
+        );
+        if (!hasCollision) break;
         length += 1;
       }
       return [id, id.slice(0, length)];

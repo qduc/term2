@@ -1,7 +1,8 @@
-import { it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { it, describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 
 import * as persistenceModule from './conversation-persistence.js';
@@ -2005,4 +2006,107 @@ it.sequential('isConversationLocked: cross-host lock is reported held even with 
   // Liveness cannot be proven for a foreign host; the lock is treated as held.
   const lockInfo = persistenceModule.isConversationLocked(id);
   expect(lockInfo).toMatchObject({ status: 'held', pid: 424242, host: 'some-other-host' });
+});
+
+describe('uniqueConversationShortRefs', () => {
+  function referenceUniqueConversationShortRefs(conversations: readonly { id: string }[]): Map<string, string> {
+    const UUID_REGEX = persistenceModule.UUID;
+    const ids = conversations.map((conversation) => conversation.id);
+    return new Map(
+      ids.map((id) => {
+        if (!UUID_REGEX.test(id)) return [id, id];
+        let length = Math.min(8, id.length);
+        while (
+          length < id.length &&
+          ids.some(
+            (candidate) => candidate !== id && candidate.toLowerCase().startsWith(id.slice(0, length).toLowerCase()),
+          )
+        ) {
+          length += 1;
+        }
+        return [id, id.slice(0, length)];
+      }),
+    );
+  }
+
+  it('maintains behavioral equivalence across diverse fixture classes', () => {
+    const fixtures: Array<Array<{ id: string }>> = [
+      // Empty input
+      [],
+      // Single UUID (v4)
+      [{ id: '12345678-1234-4abc-8def-1234567890ab' }],
+      // Single UUID (v7)
+      [{ id: '018f3a55-8d91-7abc-8123-0123456789ab' }],
+      // Non-UUID IDs (short, long, invalid format, punctuation)
+      [
+        { id: 'short' },
+        { id: 'not-a-uuid-at-all' },
+        { id: '12345678' },
+        { id: '12345678-custom-name' },
+        { id: 'invalid_chars_$$$' },
+      ],
+      // Mixed UUID and non-UUID with colliding prefixes
+      [
+        { id: '12345678-1234-4abc-8def-1234567890ab' },
+        { id: '12345678-custom-suffix' },
+        { id: '12345678' },
+        { id: 'other-session' },
+      ],
+      // Shared-prefix UUID batches (same first 8, 12, 16 chars)
+      [
+        { id: '12345678-1111-4abc-8def-1234567890ab' },
+        { id: '12345678-2222-4abc-8def-1234567890ab' },
+        { id: '12345678-1111-4abc-8def-999999999999' },
+        { id: '12345678-1111-4abc-8def-aaaaaaaaaaaa' },
+        { id: '87654321-0000-4000-8000-000000000000' },
+      ],
+      // Shared prefix up to full length except last character
+      [{ id: '00000000-0000-4000-8000-000000000001' }, { id: '00000000-0000-4000-8000-000000000002' }],
+      // Mixed-case duplicates and casing variants
+      [
+        { id: 'abcdef01-abcd-4abc-8def-1234567890ab' },
+        { id: 'ABCDEF01-ABCD-4ABC-8DEF-1234567890AB' },
+        { id: 'AbCdEf01-1111-4abc-8def-1234567890ab' },
+      ],
+      // Duplicate identical IDs
+      [
+        { id: '12345678-1234-4abc-8def-1234567890ab' },
+        { id: '12345678-1234-4abc-8def-1234567890ab' },
+        { id: 'non-uuid-dup' },
+        { id: 'non-uuid-dup' },
+      ],
+    ];
+
+    for (const fixture of fixtures) {
+      const expected = referenceUniqueConversationShortRefs(fixture);
+      const actual = persistenceModule.uniqueConversationShortRefs(fixture);
+      expect(Array.from(actual.entries())).toEqual(Array.from(expected.entries()));
+    }
+  });
+
+  it('maintains behavioral equivalence against reference implementation on 1,000 random UUIDs', () => {
+    const random1k = Array.from({ length: 1000 }, () => ({ id: crypto.randomUUID() }));
+    // Add intentional prefix collision to ensure multi-id bucket path is hit dynamically
+    random1k.push({ id: '12345678-aaaa-4000-8000-000000000001' });
+    random1k.push({ id: '12345678-bbbb-4000-8000-000000000002' });
+
+    const expected = referenceUniqueConversationShortRefs(random1k);
+    const actual = persistenceModule.uniqueConversationShortRefs(random1k);
+
+    expect(actual.size).toBe(expected.size);
+    for (const [key, value] of expected.entries()) {
+      expect(actual.get(key)).toBe(value);
+    }
+  });
+
+  it('completes 10,000 random UUIDs well under scaling bound (generous 500ms bound vs observed ~12ms)', () => {
+    const random10k = Array.from({ length: 10000 }, () => ({ id: crypto.randomUUID() }));
+    const startTime = Date.now();
+    const result = persistenceModule.uniqueConversationShortRefs(random10k);
+    const durationMs = Date.now() - startTime;
+
+    expect(result.size).toBe(10000);
+    // Observed production duration is ~12-15ms for distributed prefixes (O(N) overall; quadratic within one prefix bucket). 500ms provides >30x headroom for slow CI runners.
+    expect(durationMs).toBeLessThan(500);
+  });
 });

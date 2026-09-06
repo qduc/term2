@@ -40,7 +40,7 @@ export type InteractivePickerRequest = {
   /**
    * Provider tab the picker should open on: the provider of the top-ranked
    * match, so the seeded query actually matches in the catalog the picker
-   * loads first (it fetches only the active tab's catalog).
+   * is prioritized in the unified catalog.
    */
   initialProvider?: string;
   /** Set when --provider (or a parsed provider prefix) narrows permanently; locks the tab. */

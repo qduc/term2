@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import { computeModelInsertion } from './insertions.js';
@@ -9,7 +9,6 @@ import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
 import { COLOR_DANGER } from '../theme.js';
-import { FAVORITES_TAB_ID } from '../../services/models/model-favorites.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -22,6 +21,8 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'model' }>> & {
 
 export function ModelMenuSession({ frame, active, controller, interactions, services }: Props) {
   const models = services.models;
+  const modelsRef = useRef(models);
+  modelsRef.current = models;
   const settingsService = services.settingsService;
   const [applyError, setApplyError] = useState<string | null>(null);
 
@@ -29,23 +30,24 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
     const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
 
     const resolvedModelId = (): string | undefined => {
-      const selected = models.getSelectedItem();
-      const typed = models.query.trim();
+      const current = modelsRef.current;
+      const selected = current.getSelectedItem();
+      const typed = current.query.trim();
       return selected?.id ?? (typed || undefined);
     };
 
-    // The Favorites tab is a pseudo-provider: each row's real home provider
-    // lives on the row itself (item.provider), not on the hook's `provider`
-    // state. Resolve through the current selection there so applying or
-    // inserting a favorited model sets its own real provider, exactly as
-    // selecting it from that provider's own tab would.
     const effectiveProvider = (): string | null | undefined => {
-      if (models.provider !== FAVORITES_TAB_ID) return models.provider;
-      return models.getSelectedItem()?.provider ?? null;
+      const current = modelsRef.current;
+      const selectedProvider = current.getSelectedItem()?.provider;
+      if (selectedProvider) return selectedProvider;
+      const providerKey = current.modelSettingConfig?.providerKey ?? 'agent.provider';
+      const configured = settingsService.getDynamic(providerKey);
+      return typeof configured === 'string' ? configured : null;
     };
 
     return {
       handle: (event) => {
+        const models = modelsRef.current;
         if (!('type' in event)) {
           // Correlated IntentResult for the apply-settings/submit-prompt
           // intent this frame issued.
@@ -56,16 +58,15 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           return keep();
         }
 
-        // While the inline nickname editor owns the input row (Favorites tab
-        // only), it is the single consumer for text keys, Enter, and Escape:
+        // While the inline nickname editor owns the input row, it is the
+        // single consumer for text keys, Enter, and Escape:
         // printable input and backspace edit the draft instead of the filter
         // query, Enter commits — or keeps the editor open with the rejection
         // reason — and Escape cancels back to the untouched filter row rather
         // than closing the menu, so a second Escape closes the menu as usual.
-        // ctrl+f stays live: it toggles the highlighted row's favorite, and
-        // if that removes the row from the Favorites list the hook closes the
-        // editor bound to it. Tab-insert, provider cycling, refresh, reset,
-        // and list navigation are deliberately suspended: the editor is bound
+        // ctrl+f stays live: it toggles the highlighted row's favorite.
+        // Tab-insert, refresh, reset, and list navigation are deliberately
+        // suspended: the editor is bound
         // to one highlighted row, so navigating away would orphan it.
         if (models.nicknameDraft) {
           switch (event.type) {
@@ -121,9 +122,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
                 stack: { type: 'keep' },
               };
             }
-            if (event.command === 'left') models.toggleProvider('prev');
-            else if (event.command === 'right') models.toggleProvider('next');
-            else if (event.command === 'refresh') models.refresh();
+            if (event.command === 'refresh') models.refresh();
             else if (event.command === 'favorite') models.toggleFavorite();
             else if (event.command === 'nickname') models.startNicknameEdit();
             return keep();
@@ -197,7 +196,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         }
       },
     };
-  }, [controller, frame, models, settingsService]);
+  }, [controller, frame, services.onUnavailableModelSelected, settingsService]);
 
   useEffect(() => {
     if (!active) return;
@@ -212,11 +211,10 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}
-        provider={models.provider}
         loading={models.loading}
         error={models.error}
+        warning={models.warning}
         scrollOffset={models.scrollOffset}
-        canSwitchProvider={models.canSwitchProvider}
         credentialRevision={models.credentialRevision}
         favoriteKeys={models.favoriteKeys}
         nicknameLabels={models.nicknameLabels}

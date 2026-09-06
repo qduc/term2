@@ -777,11 +777,9 @@ const ModelSelectionSubmitHarness = ({
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}
-        provider={models.provider}
         loading={models.loading}
         error={models.error}
         scrollOffset={models.scrollOffset}
-        canSwitchProvider={models.canSwitchProvider}
       />
     </>
   );

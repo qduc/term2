@@ -8,7 +8,7 @@ import { Text } from 'ink';
 import { useStandaloneModelPicker } from './use-standalone-model-picker.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
-import { FAVORITES_TAB_ID, toggleFavoriteModel } from '../services/models/model-favorites.js';
+import { toggleFavoriteModel } from '../services/models/model-favorites.js';
 
 type TestModelFetcher = (provider: string) => Promise<any[]>;
 
@@ -73,7 +73,7 @@ const TestComponent = ({
   return <Text>picker</Text>;
 };
 
-it('opens on the Favorites tab when favorites exist', async () => {
+it('pins favorites at the top of the unified list', async () => {
   const testProvider = `test-fav-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => []) as any });
   const settingsService = createMockSettingsService({ 'agent.provider': testProvider });
@@ -84,24 +84,53 @@ it('opens on the Favorites tab when favorites exist', async () => {
     render(<TestComponent settingsService={settingsService} onResults={(r) => (captured = r)} />);
   });
 
-  expect(captured.provider).toBe(FAVORITES_TAB_ID);
+  expect(captured.provider).toBeNull();
   expect(captured.filteredModels).toEqual([{ id: 'fav-model', provider: testProvider }]);
 });
 
-it('falls back to agent.provider when there are no favorites', async () => {
+it('loads and searches configured provider catalogs as one unified list', async () => {
   const testProvider = `test-plain-${Math.random().toString(36).slice(2)}`;
-  registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => []) as any });
+  const otherProvider = `test-other-${Math.random().toString(36).slice(2)}`;
+  registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => [{ id: 'alpha' }]) as any });
+  registerTestProvider({ id: otherProvider, label: otherProvider, fetchModels: (async () => [{ id: 'beta' }]) as any });
   const settingsService = createMockSettingsService({ 'agent.provider': testProvider });
 
   let captured: any;
   await flush(() => {
     render(<TestComponent settingsService={settingsService} onResults={(r) => (captured = r)} />);
   });
+  await waitForIdle(() => captured);
 
-  expect(captured.provider).toBe(testProvider);
+  expect(captured.provider).toBeNull();
+  expect(captured.filteredModels).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: 'alpha', provider: testProvider }),
+      expect.objectContaining({ id: 'beta', provider: otherProvider }),
+    ]),
+  );
 });
 
-it('opens on initialProvider even when favorites exist', async () => {
+it('preselects the configured provider when multiple providers expose the same model id', async () => {
+  const providerA = `test-collision-a-${Math.random().toString(36).slice(2)}`;
+  const providerB = `test-collision-b-${Math.random().toString(36).slice(2)}`;
+  registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => [{ id: 'shared' }]) as any });
+  registerTestProvider({ id: providerB, label: providerB, fetchModels: (async () => [{ id: 'shared' }]) as any });
+  const settingsService = createMockSettingsService({
+    providerOrder: [providerA, providerB],
+    'agent.provider': providerB,
+    'agent.model': 'shared',
+  });
+
+  let captured: any;
+  await flush(() => {
+    render(<TestComponent settingsService={settingsService} onResults={(r) => (captured = r)} />);
+  });
+  await waitForIdle(() => captured);
+
+  expect(captured.getSelectedItem()).toEqual(expect.objectContaining({ id: 'shared', provider: providerB }));
+});
+
+it('prioritizes initialProvider while retaining the unified list', async () => {
   // Regression: the --model starter flow seeds the picker with the typed
   // pattern and the provider whose catalog matched, but the hook used to
   // prefer the Favorites tab, hiding the match behind a tab switch.
@@ -124,10 +153,12 @@ it('opens on initialProvider even when favorites exist', async () => {
   });
   await waitForIdle(() => captured);
 
-  expect(captured.provider).toBe(providerB);
+  expect(captured.provider).toBeNull();
   // Fetched catalogs carry pipeline-enriched fields (e.g. contextWindow);
   // assert the identity contract, not the enrichment defaults.
-  expect(captured.filteredModels).toEqual([expect.objectContaining({ id: 'glm-5.3-flash', provider: providerB })]);
+  expect(captured.filteredModels).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 'glm-5.3-flash', provider: providerB })]),
+  );
 });
 
 it('lockProvider still wins over initialProvider', async () => {
@@ -152,7 +183,7 @@ it('lockProvider still wins over initialProvider', async () => {
   expect(captured.provider).toBe(providerA);
 });
 
-it('locks the provider tab and disables switching when lockProvider is given', async () => {
+it('scopes the catalog when lockProvider is given', async () => {
   const providerA = `test-a-${Math.random().toString(36).slice(2)}`;
   const providerB = `test-b-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => []) as any });
@@ -167,10 +198,7 @@ it('locks the provider tab and disables switching when lockProvider is given', a
   });
 
   expect(captured.provider).toBe(providerB);
-  expect(captured.canSwitchProvider).toBe(false);
-
-  await flush(() => captured.toggleProvider('next'));
-  expect(captured.provider).toBe(providerB);
+  expect(captured.providerScope).toBe(providerB);
 });
 
 it('seeds the query from initialQuery and filters loaded models against it', async () => {

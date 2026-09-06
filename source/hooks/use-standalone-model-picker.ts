@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { filterModels, type ModelInfo } from '../services/model-service.js';
+import type { ModelInfo } from '../services/model-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import {
   ModelCatalogSession,
@@ -9,20 +9,21 @@ import {
 import { getProviderIds } from '../providers/index.js';
 import { resolveProviderCredentials } from '../utils/ai/provider-credentials.js';
 import {
-  FAVORITES_TAB_ID,
   getFavoriteModelInfos,
+  isFavoriteModel,
   serializeFavorite,
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
 import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../services/models/model-nicknames.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import type { NicknameDraftState } from './use-model-selection.js';
 
 /**
  * Drives `ModelSelectionMenu` outside the composer's autocomplete machinery
  * (`useInputContext`/`MenuController`), for the pre-app picker host. It
  * mirrors `useModelSelection`'s catalog/favorites/nicknames/navigation
- * behavior — the same services, the same fuzzy filter, the same Favorites
- * tab — but owns its own query and provider state directly instead of
+ * behavior — the same services and the same cross-provider fuzzy filter —
+ * but owns its own query state directly instead of
  * projecting them from a composer buffer, since there is no composer at
  * this point in the boot sequence.
  */
@@ -32,13 +33,10 @@ export const useStandaloneModelPicker = (deps: {
   modelFetcher?: ModelFetcher;
   initialQuery?: string;
   /**
-   * Provider tab to open on, ahead of the Favorites/agent.provider fallbacks:
-   * the --model starter flow passes the provider of its top-ranked match, so
-   * the seeded query matches in the catalog this picker loads first (it
-   * fetches only the active tab's catalog). lockProvider still wins.
+   * Provider whose results should be loaded first. lockProvider still wins.
    */
   initialProvider?: string;
-  /** When set, the tab is locked to this provider and cannot be switched. */
+  /** When set, searches only this provider rather than the unified catalog. */
   lockProvider?: string;
 }) => {
   const { loggingService, settingsService, modelFetcher, initialProvider, lockProvider } = deps;
@@ -48,20 +46,19 @@ export const useStandaloneModelPicker = (deps: {
   );
 
   const [query, setQuery] = useState(deps.initialQuery ?? '');
-  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [catalogs, setCatalogs] = useState<Map<string, ModelInfo[]>>(() => new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const getInitialProvider = useCallback(() => {
-    if (lockProvider) return lockProvider;
-    if (initialProvider) return initialProvider;
-    if (getFavoriteModelInfos(settingsService).length > 0) return FAVORITES_TAB_ID;
-    const raw = settingsService.get('agent.provider');
-    return typeof raw === 'string' ? raw : null;
-  }, [lockProvider, initialProvider, settingsService]);
-  const [provider, setProvider] = useState<string | null>(() => getInitialProvider());
+  const provider = lockProvider ?? null;
+  const providerIds = useMemo(() => {
+    if (lockProvider) return [lockProvider];
+    const ordered = orderedProviderIds(settingsService, getProviderIds());
+    if (!initialProvider || !ordered.includes(initialProvider)) return ordered;
+    return [initialProvider, ...ordered.filter((id) => id !== initialProvider)];
+  }, [initialProvider, lockProvider, settingsService]);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const isInitialLoadRef = useRef(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [favoritesRevision, setFavoritesRevision] = useState(0);
   const [nicknamesRevision, setNicknamesRevision] = useState(0);
@@ -70,6 +67,7 @@ export const useStandaloneModelPicker = (deps: {
 
   const favoriteModelInfos = useMemo(
     () => getFavoriteModelInfos(settingsService),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [settingsService, favoritesRevision],
   );
   const favoriteKeys = useMemo(
@@ -88,82 +86,96 @@ export const useStandaloneModelPicker = (deps: {
   }, []);
 
   useEffect(() => {
-    if (!provider) return;
+    let disposed = false;
+    let remaining = providerIds.length;
+    const failures: string[] = [];
+    setCatalogs(new Map()); // eslint-disable-line react-hooks/set-state-in-effect
+    setSelectedIndex(0);
+    setScrollOffset(0);
+    setError(null);
+    setWarning(null);
+    setLoading(remaining > 0);
 
-    if (provider === FAVORITES_TAB_ID) {
-      setLoading(false);
-      setError(null);
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    const credentialResolution = resolveProviderCredentials(settingsService, provider);
-    if (credentialResolution.required && !credentialResolution.configured) {
-      const configuredModel = settingsService.getDynamic('agent.model');
-      const unavailableModels =
-        typeof configuredModel === 'string' && configuredModel
-          ? [
-              {
-                id: configuredModel,
-                provider,
-                unavailableReason: credentialResolution.unavailableReason ?? ('missing-credentials' as const),
-              },
-            ]
-          : [];
-      setModels(unavailableModels);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setLoading(false);
-      setError(null);
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    const cachedModels = catalogSession.getCached(provider);
-
-    const load = async () => {
-      if (!catalogSession.shouldRetry(provider, isInitialLoadRef.current)) return;
-
-      setModels(cachedModels ?? []);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setLoading(!cachedModels);
-      setError(null);
-      let stale = false;
-
-      try {
-        const result = await catalogSession.load(provider);
-        if (result.kind === 'stale') {
-          stale = true;
-          return;
-        }
-        setModels(result.models);
-        isInitialLoadRef.current = false;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-      } finally {
-        if (!stale) setLoading(false);
+    const settle = () => {
+      remaining -= 1;
+      if (!disposed && remaining === 0) {
+        setLoading(false);
+        setWarning(failures.length > 0 ? `Some providers failed: ${failures.join(', ')}` : null);
       }
     };
 
-    load().catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      setLoading(false);
-    });
-  }, [provider, catalogSession, refreshKey, settingsService]);
+    for (const providerId of providerIds) {
+      const credentials = resolveProviderCredentials(settingsService, providerId);
+      if (credentials.required && !credentials.configured) {
+        const configuredModel = settingsService.getDynamic('agent.model');
+        const unavailable =
+          lockProvider && typeof configuredModel === 'string' && configuredModel
+            ? [
+                {
+                  id: configuredModel,
+                  provider: providerId,
+                  unavailableReason: credentials.unavailableReason ?? ('missing-credentials' as const),
+                },
+              ]
+            : [];
+        setCatalogs((current) => new Map(current).set(providerId, unavailable));
+        settle();
+        continue;
+      }
+
+      catalogSession
+        .load(providerId)
+        .then((result) => {
+          if (disposed || result.kind === 'stale') return;
+          const models = result.models.map((model) => ({ ...model, provider: model.provider || providerId }));
+          setCatalogs((current) => new Map(current).set(providerId, models));
+        })
+        .catch(() => {
+          failures.push(providerId);
+        })
+        .finally(settle);
+    }
+
+    return () => {
+      disposed = true;
+    };
+  }, [providerIds, catalogSession, refreshKey, settingsService, lockProvider]);
 
   const refresh = useCallback(() => {
-    if (!provider) return;
-    catalogSession.refresh(provider);
+    for (const providerId of providerIds) catalogSession.refresh(providerId);
     setRefreshKey((k) => k + 1);
-  }, [provider, catalogSession]);
+  }, [providerIds, catalogSession]);
 
   const filteredModels = useMemo(() => {
-    const source = provider === FAVORITES_TAB_ID ? favoriteModelInfos : models;
-    return filterModels(source, query);
-  }, [models, query, provider, favoriteModelInfos]);
+    const configuredProvider = settingsService.getDynamic('agent.provider');
+    const configuredModel = settingsService.getDynamic('agent.model');
+    const unavailableConfigured =
+      !lockProvider &&
+      typeof configuredProvider === 'string' &&
+      typeof configuredModel === 'string' &&
+      configuredModel &&
+      !providerIds.includes(configuredProvider)
+        ? [
+            {
+              id: configuredModel,
+              provider: configuredProvider,
+              unavailableReason:
+                resolveProviderCredentials(settingsService, configuredProvider).unavailableReason ??
+                ('missing-credentials' as const),
+            },
+          ]
+        : [];
+    const source = mergeUnifiedModels(
+      providerIds,
+      catalogs,
+      lockProvider ? [] : [...favoriteModelInfos, ...unavailableConfigured],
+    );
+    return filterUnifiedModels(source, query);
+  }, [providerIds, catalogs, lockProvider, favoriteModelInfos, query, settingsService]);
+  const filteredModelsRef = useRef(filteredModels);
+  const selectedIndexRef = useRef(selectedIndex);
+  filteredModelsRef.current = filteredModels;
+  selectedIndexRef.current = selectedIndex;
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -174,8 +186,13 @@ export const useStandaloneModelPicker = (deps: {
 
     if (shouldPreselectRef.current) {
       const currentModelValue = settingsService.getDynamic('agent.model');
+      const currentProviderValue = settingsService.getDynamic('agent.provider');
       if (typeof currentModelValue === 'string' && currentModelValue) {
-        const index = filteredModels.findIndex((m) => m.id === currentModelValue);
+        const index = filteredModels.findIndex(
+          (m) =>
+            m.id === currentModelValue &&
+            (typeof currentProviderValue !== 'string' || m.provider === currentProviderValue),
+        );
         if (index >= 0) {
           setSelectedIndex(index);
           shouldPreselectRef.current = false;
@@ -206,11 +223,13 @@ export const useStandaloneModelPicker = (deps: {
 
   useEffect(() => {
     if (!nicknameDraft) return;
-    const stillListed = filteredModels.some(
-      (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
-    );
+    const stillListed =
+      favoriteKeys.has(serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId)) &&
+      filteredModels.some(
+        (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
+      );
     if (!stillListed) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [filteredModels, nicknameDraft]);
+  }, [favoriteKeys, filteredModels, nicknameDraft]);
 
   const typeQuery = useCallback((text: string) => {
     if (!text) return;
@@ -258,46 +277,11 @@ export const useStandaloneModelPicker = (deps: {
   }, [filteredModels.length]);
 
   const getSelectedItem = useCallback(() => {
-    if (filteredModels.length === 0) return undefined;
-    const safeIndex = Math.min(selectedIndex, filteredModels.length - 1);
-    return filteredModels[safeIndex];
-  }, [filteredModels, selectedIndex]);
-
-  const canSwitchProvider = !lockProvider;
-
-  const toggleProvider = useCallback(
-    (direction: 'next' | 'prev' = 'next') => {
-      if (!canSwitchProvider) return;
-      const currentProvider = provider ?? getInitialProvider() ?? null;
-      const order = [FAVORITES_TAB_ID, ...orderedProviderIds(settingsService, getProviderIds())];
-      if (order.length === 0) return;
-      const currentIndex = order.indexOf(currentProvider ?? '');
-      const nextProvider =
-        currentIndex < 0
-          ? direction === 'prev'
-            ? order[order.length - 1]
-            : order[0]
-          : order[(currentIndex + (direction === 'prev' ? -1 : 1) + order.length) % order.length];
-      if (!nextProvider) return;
-
-      shouldPreselectRef.current = true;
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setError(null);
-
-      if (nextProvider === FAVORITES_TAB_ID) {
-        setLoading(false);
-        setProvider(nextProvider);
-        return;
-      }
-
-      const cachedModels = catalogSession.getCached(nextProvider);
-      setModels(cachedModels ?? []);
-      setLoading(!cachedModels);
-      setProvider(nextProvider);
-    },
-    [canSwitchProvider, provider, getInitialProvider, catalogSession, settingsService],
-  );
+    const currentModels = filteredModelsRef.current;
+    if (currentModels.length === 0) return undefined;
+    const safeIndex = Math.min(selectedIndexRef.current, currentModels.length - 1);
+    return currentModels[safeIndex];
+  }, []);
 
   const toggleFavorite = useCallback(() => {
     const selected = getSelectedItem();
@@ -307,9 +291,9 @@ export const useStandaloneModelPicker = (deps: {
   }, [getSelectedItem, settingsService]);
 
   const startNicknameEdit = useCallback(() => {
-    if (provider !== FAVORITES_TAB_ID) return;
     const selected = getSelectedItem();
     if (!selected) return;
+    if (!isFavoriteModel(settingsService, selected.provider, selected.id)) return;
     const existing = getNicknameEntries(settingsService).find(
       (entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id,
     );
@@ -319,7 +303,7 @@ export const useStandaloneModelPicker = (deps: {
       text: existing?.nickname ?? '',
       error: null,
     });
-  }, [provider, getSelectedItem, settingsService]);
+  }, [getSelectedItem, settingsService]);
 
   const typeNicknameDraft = useCallback((text: string) => {
     if (!text) return;
@@ -354,6 +338,7 @@ export const useStandaloneModelPicker = (deps: {
     backspaceQuery,
     loading,
     error,
+    warning,
     provider,
     filteredModels,
     selectedIndex,
@@ -365,7 +350,6 @@ export const useStandaloneModelPicker = (deps: {
     pageUp,
     pageDown,
     getSelectedItem,
-    toggleProvider,
     toggleFavorite,
     favoriteKeys,
     nicknameDraft,
@@ -376,7 +360,7 @@ export const useStandaloneModelPicker = (deps: {
     commitNicknameDraft,
     cancelNicknameDraft,
     refresh,
-    canSwitchProvider,
+    providerScope: lockProvider,
   };
 };
 

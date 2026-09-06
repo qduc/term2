@@ -411,34 +411,36 @@ it.sequential(
       const controller = new MenuControllerImpl();
       const settingsService = createMockSettingsService({
         'agent.provider': providerId,
+        'agent.model': 'ctrl-n-model',
         'agent.favoriteModels': [`${providerId}/ctrl-n-model`],
       });
       const { stdin, lastFrame } = await renderSurface(controller, [...slashCommands, modelCommand], undefined, {
         settingsService,
       });
 
-      await writeInput(stdin, '/model ');
+      await writeInput(stdin, '/model ctrl-n-model');
       await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'model');
-      // A favorite exists, so the menu opens straight onto the Favorites tab.
+      // The favorite is pinned to the top of the unified model list.
       await waitFor(() => (lastFrame() ?? '').includes('ctrl-n-model'));
 
       // Raw ASCII 0x0E is the byte a terminal sends for ctrl+n.
       await writeInput(stdin, '\x0e');
-      await waitFor(() => (lastFrame() ?? '').includes('Nickname for ctrl-n-model:'));
+      await waitFor(() => (lastFrame() ?? '').includes('Nickname for'));
+      expect(lastFrame() ?? '').toContain('Nickname for ctrl-n-model:');
 
       await writeInput(stdin, 'op');
       await waitFor(() => (lastFrame() ?? '').includes('Nickname for ctrl-n-model: op'));
 
       // The composer text underneath the menu must not have been fed the
       // nickname keystrokes.
-      expect(controller.getSnapshot().editor.text).toBe('/model ');
+      expect(controller.getSnapshot().editor.text).toBe('/model ctrl-n-model');
 
       await writeInput(stdin, '\r');
       await waitFor(() => Object.keys(settingsService.get('agent.modelNicknames') ?? {}).length === 1);
       expect(settingsService.get('agent.modelNicknames')).toEqual({ op: `${providerId}/ctrl-n-model` });
       // Editor closed, menu still open, composer untouched.
       expect(lastFrame() ?? '').not.toContain('Nickname for');
-      expect(controller.getSnapshot().editor.text).toBe('/model ');
+      expect(controller.getSnapshot().editor.text).toBe('/model ctrl-n-model');
     } finally {
       unregisterProvider(providerId);
     }

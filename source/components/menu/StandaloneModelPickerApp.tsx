@@ -5,7 +5,6 @@ import { useStandaloneModelPicker } from '../../hooks/use-standalone-model-picke
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 import type { ModelFetcher } from '../../services/models/model-catalog-session.js';
-import { FAVORITES_TAB_ID } from '../../services/models/model-favorites.js';
 import { COLOR_WARNING } from '../theme.js';
 
 export type StandaloneModelPickerSelection = { modelId: string; provider: string };
@@ -22,7 +21,7 @@ export type StandaloneModelPickerAppProps = {
   initialQuery?: string;
   /** Provider tab the menu opens on (e.g. where the top-ranked match lives). */
   initialProvider?: string;
-  /** When set (an explicit --provider), the tab is locked to this provider. */
+  /** When set (an explicit --provider), search is scoped to this provider. */
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. "No models match ..."). */
   bannerLines?: string[];
@@ -67,7 +66,7 @@ export function StandaloneModelPickerApp({
   );
 
   useInput((input, key) => {
-    // The inline nickname editor (Favorites tab only) owns text input, Enter,
+    // The inline nickname editor for a favorited row owns text input, Enter,
     // and Escape while it is open, exactly as it does inside the composer's
     // ModelMenuSession: Escape cancels the draft, not the whole picker.
     if (models.nicknameDraft) {
@@ -101,10 +100,8 @@ export function StandaloneModelPickerApp({
       models.moveHome();
     } else if ((key as { end?: boolean }).end) {
       models.moveEnd();
-    } else if (key.leftArrow) {
-      models.toggleProvider('prev');
-    } else if (key.rightArrow) {
-      models.toggleProvider('next');
+    } else if (key.leftArrow || key.rightArrow) {
+      // The search field has no mid-string cursor; horizontal arrows are inert.
     } else if (key.ctrl && input === 'r') {
       models.refresh();
     } else if (key.ctrl && input.toLowerCase() === 'f') {
@@ -114,9 +111,7 @@ export function StandaloneModelPickerApp({
     } else if (key.return) {
       const selected = models.getSelectedItem();
       if (!selected || selected.unavailableReason) return;
-      const provider = models.provider === FAVORITES_TAB_ID ? selected.provider : models.provider;
-      if (!provider) return;
-      finish({ status: 'selected', selection: { modelId: selected.id, provider } });
+      finish({ status: 'selected', selection: { modelId: selected.id, provider: selected.provider } });
     } else if (key.backspace) {
       models.backspaceQuery();
     } else if (key.tab || key.delete) {
@@ -139,11 +134,12 @@ export function StandaloneModelPickerApp({
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}
-        provider={models.provider}
+        provider={models.providerScope}
         loading={models.loading}
         error={models.error}
+        warning={models.warning}
         scrollOffset={models.scrollOffset}
-        canSwitchProvider={models.canSwitchProvider}
+        canSwitchProvider={!models.providerScope}
         providerSwitchDisabledMessage={lockProvider ? `Provider fixed by --provider ${lockProvider}` : undefined}
         favoriteKeys={models.favoriteKeys}
         nicknameLabels={models.nicknameLabels}

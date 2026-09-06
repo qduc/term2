@@ -62,9 +62,9 @@ export type ModelPickerHostOptions = ModelPickerHostStreams & {
   modelFetcher?: ModelFetcher;
   /** Filter query the menu opens with (e.g. the pattern typed after --model). */
   initialQuery?: string;
-  /** Provider tab the menu opens on (e.g. where the top-ranked match lives). */
+  /** Provider whose catalog should be prioritized (e.g. where the top-ranked match lives). */
   initialProvider?: string;
-  /** When set (an explicit --provider), the tab is locked to this provider. */
+  /** When set (an explicit --provider), search is scoped to this provider. */
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. "No models match ..."). */
   bannerLines?: string[];

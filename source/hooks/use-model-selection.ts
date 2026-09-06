@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
-import { filterModels, type ModelInfo } from '../services/model-service.js';
+import type { ModelInfo } from '../services/model-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import {
   ModelCatalogSession,
@@ -16,16 +16,17 @@ import {
   resolveProviderCredentials,
 } from '../utils/ai/provider-credentials.js';
 import {
-  FAVORITES_TAB_ID,
   getFavoriteModelInfos,
+  isFavoriteModel,
   serializeFavorite,
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
 import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../services/models/model-nicknames.js';
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 
 /**
- * Authoritative state of the Favorites tab's inline nickname editor. The
+ * Authoritative state of a favorited row's inline nickname editor. The
  * draft is bound to one row identity (provider + model id) and owns its own
  * text buffer — the filter query is never borrowed for naming, so cancelling
  * restores the previous filter text and cursor by construction.
@@ -49,14 +50,13 @@ export const useModelSelection = (deps: {
     [settingsService, loggingService, modelFetcher],
   );
 
-  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [catalogs, setCatalogs] = useState<Map<string, ModelInfo[]>>(() => new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [provider, setProvider] = useState<string | null>(null);
+  const provider = null;
   const [scrollOffset, setScrollOffset] = useState(0);
-  const providerRef = useRef<string | null>(null);
-  const isInitialLoadRef = useRef(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [credentialRevision, setCredentialRevision] = useState(0);
   const [favoritesRevision, setFavoritesRevision] = useState(0);
@@ -69,6 +69,7 @@ export const useModelSelection = (deps: {
   // bumps favoritesRevision.
   const favoriteModelInfos = useMemo(
     () => getFavoriteModelInfos(settingsService),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [settingsService, favoritesRevision],
   );
   const favoriteKeys = useMemo(
@@ -90,7 +91,34 @@ export const useModelSelection = (deps: {
   // getModelSettingConfigForInput reads the raw composer text directly, which
   // is authoritative whether or not the model graph is controller-owned.
   const modelSettingConfig = getModelSettingConfigForInput(input);
-  const canSwitchProvider = true;
+  const providerIds = useMemo(
+    () => orderedProviderIds(settingsService, getProviderIds()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, credentialRevision],
+  );
+  const unavailableConfiguredModels = useMemo(() => {
+    const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
+    const providerKey = modelSettingConfig ? modelSettingConfig.providerKey : 'agent.provider';
+    const configuredModel = settingsService.getDynamic(modelKey);
+    const configuredProvider = settingsService.getDynamic(providerKey);
+    if (
+      typeof configuredModel !== 'string' ||
+      !configuredModel ||
+      typeof configuredProvider !== 'string' ||
+      providerIds.includes(configuredProvider)
+    ) {
+      return [];
+    }
+    const credentials = resolveProviderCredentials(settingsService, configuredProvider);
+    return [
+      {
+        id: configuredModel,
+        provider: configuredProvider,
+        unavailableReason: credentials.unavailableReason ?? ('missing-credentials' as const),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelSettingConfig, providerIds, settingsService, credentialRevision]);
 
   useEffect(() => {
     const unsubscribe = settingsService.onChange?.((changedKey) => {
@@ -120,126 +148,73 @@ export const useModelSelection = (deps: {
   // triggerIndex projection for callers that still use this hook directly.
   const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
-  const query = useMemo(() => {
-    if (!isOpen) return '';
-    if (isControllerOpen) return parseModelProviderArg(controllerFrame.binding.query).modelId;
-    if (triggerIndex === null) return '';
+  const parsedQuery = useMemo(() => {
+    if (!isOpen) return { modelId: '', provider: undefined };
+    if (isControllerOpen) return parseModelProviderArg(controllerFrame.binding.query);
+    if (triggerIndex === null) return { modelId: '', provider: undefined };
     const end = Math.min(cursorOffset, input.length);
-    return parseModelProviderArg(input.slice(triggerIndex, end)).modelId;
+    return parseModelProviderArg(input.slice(triggerIndex, end));
   }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
-
-  const getInitialProvider = useCallback(() => {
-    // Favorites open first when any exist — the whole point is to be fast to
-    // reach. Otherwise, fall back to whichever provider was already active.
-    if (getFavoriteModelInfos(settingsService).length > 0) return FAVORITES_TAB_ID;
-    const raw = modelSettingConfig
-      ? settingsService.getDynamic(modelSettingConfig.providerKey) ??
-        settingsService.getDynamic(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
-      : settingsService.get('agent.provider');
-    return typeof raw === 'string' ? raw : null;
-  }, [modelSettingConfig, settingsService]);
-
-  const setCurrentProvider = useCallback((nextProvider: string | null) => {
-    providerRef.current = nextProvider;
-    setProvider(nextProvider);
-  }, []);
+  const query = parsedQuery.modelId;
 
   useEffect(() => {
     if (isOpen) {
-      if (providerRef.current === null) {
-        setCurrentProvider(getInitialProvider());
-      }
       catalogSession.begin();
-      isInitialLoadRef.current = true;
       shouldPreselectRef.current = true;
     }
-  }, [isOpen, getInitialProvider, setCurrentProvider, catalogSession]);
+  }, [isOpen, catalogSession]);
 
   useEffect(() => {
-    if (!isOpen || !provider) return;
+    if (!isOpen) return;
+    let disposed = false;
+    let remaining = providerIds.length;
+    const failures: string[] = [];
+    setCatalogs(new Map()); // eslint-disable-line react-hooks/set-state-in-effect
+    setSelectedIndex(0);
+    setScrollOffset(0);
+    setError(null);
+    setWarning(null);
+    setLoading(remaining > 0);
 
-    // The Favorites pseudo-tab renders purely from settings via
-    // favoriteModelInfos (see filteredModels below): no catalog fetch, no
-    // credential check, nothing to load here.
-    if (provider === FAVORITES_TAB_ID) {
-      setLoading(false);
-      setError(null);
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    const credentialResolution = resolveProviderCredentials(settingsService, provider);
-    if (credentialResolution.required && !credentialResolution.configured) {
-      const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
-      const configuredModel = settingsService.getDynamic(modelKey);
-      const unavailableModels =
-        typeof configuredModel === 'string' && configuredModel
-          ? [
-              {
-                id: configuredModel,
-                provider,
-                unavailableReason: credentialResolution.unavailableReason ?? ('missing-credentials' as const),
-              },
-            ]
-          : [];
-      setModels(unavailableModels);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setLoading(false);
-      setError(null);
-      isInitialLoadRef.current = false;
-      return;
-    }
-
-    const cachedModels = catalogSession.getCached(provider);
-
-    const load = async () => {
-      // If already marked as failed, don't try again in this session
-      // unless it's the only one left (covered by logic below)
-      if (!catalogSession.shouldRetry(provider, isInitialLoadRef.current)) {
-        return;
-      }
-
-      setModels(cachedModels ?? []);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setLoading(!cachedModels);
-      setError(null);
-      let stale = false;
-
-      try {
-        const result = await catalogSession.load(provider);
-        if (result.kind === 'stale') {
-          stale = true;
-          return;
-        }
-        setModels(result.models);
-        isInitialLoadRef.current = false;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-      } finally {
-        if (!stale) setLoading(false);
+    const settle = () => {
+      remaining -= 1;
+      if (!disposed && remaining === 0) {
+        setLoading(false);
+        setWarning(failures.length > 0 ? `Some providers failed: ${failures.join(', ')}` : null);
       }
     };
-
-    load().catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      setLoading(false);
-    });
-  }, [isOpen, provider, catalogSession, refreshKey, credentialRevision, modelSettingConfig, settingsService]);
+    for (const providerId of providerIds) {
+      catalogSession
+        .load(providerId)
+        .then((result) => {
+          if (disposed || result.kind === 'stale') return;
+          const models = result.models.map((model) => ({ ...model, provider: model.provider || providerId }));
+          setCatalogs((current) => new Map(current).set(providerId, models));
+        })
+        .catch(() => {
+          failures.push(providerId);
+        })
+        .finally(settle);
+    }
+    return () => {
+      disposed = true;
+    };
+  }, [isOpen, providerIds, catalogSession, refreshKey]);
 
   const refresh = useCallback(() => {
-    if (!isOpen || !provider) return;
-    catalogSession.refresh(provider);
+    if (!isOpen) return;
+    for (const providerId of providerIds) catalogSession.refresh(providerId);
     setRefreshKey((k) => k + 1);
-  }, [isOpen, provider, catalogSession]);
+  }, [isOpen, providerIds, catalogSession]);
 
   const filteredModels = useMemo(() => {
-    const source = provider === FAVORITES_TAB_ID ? favoriteModelInfos : models;
-    return filterModels(source, query);
-  }, [models, query, provider, favoriteModelInfos]);
+    const source = mergeUnifiedModels(providerIds, catalogs, [...favoriteModelInfos, ...unavailableConfiguredModels]);
+    return filterUnifiedModels(source, query, parsedQuery.provider);
+  }, [providerIds, catalogs, favoriteModelInfos, unavailableConfiguredModels, query, parsedQuery.provider]);
+  const filteredModelsRef = useRef(filteredModels);
+  const selectedIndexRef = useRef(selectedIndex);
+  filteredModelsRef.current = filteredModels;
+  selectedIndexRef.current = selectedIndex;
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -253,8 +228,14 @@ export const useModelSelection = (deps: {
     if (shouldPreselectRef.current) {
       const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
       const currentModelValue = settingsService.getDynamic(modelKey);
+      const providerKey = modelSettingConfig ? modelSettingConfig.providerKey : 'agent.provider';
+      const currentProviderValue = settingsService.getDynamic(providerKey);
       if (typeof currentModelValue === 'string' && currentModelValue) {
-        const index = filteredModels.findIndex((m) => m.id === currentModelValue);
+        const index = filteredModels.findIndex(
+          (m) =>
+            m.id === currentModelValue &&
+            (typeof currentProviderValue !== 'string' || m.provider === currentProviderValue),
+        );
         if (index >= 0) {
           setSelectedIndex(index);
           shouldPreselectRef.current = false;
@@ -285,16 +266,16 @@ export const useModelSelection = (deps: {
     }
   }, [selectedIndex, scrollOffset]);
 
-  // The editor is bound to one visible Favorites row; if that row leaves the
-  // list — most commonly because ctrl+f un-favorited it while the editor was
-  // open — the editor has nothing left to edit and closes with it.
+  // The editor is bound to one visible favorite row.
   useEffect(() => {
     if (!nicknameDraft) return;
-    const stillListed = filteredModels.some(
-      (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
-    );
+    const stillListed =
+      favoriteKeys.has(serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId)) &&
+      filteredModels.some(
+        (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
+      );
     if (!stillListed) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [filteredModels, nicknameDraft]);
+  }, [favoriteKeys, filteredModels, nicknameDraft]);
 
   // Never leak an open editor into the next menu session.
   useEffect(() => {
@@ -304,24 +285,22 @@ export const useModelSelection = (deps: {
   const open = useCallback(
     (startIndex: number) => {
       if (mode === 'model_selection') return;
-      setCurrentProvider(getInitialProvider());
       const editor = controller.getSnapshot().editor;
       controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       shouldPreselectRef.current = true;
       setSelectedIndex(0);
       setScrollOffset(0);
     },
-    [mode, controller, getInitialProvider, setCurrentProvider],
+    [mode, controller],
   );
 
   const close = useCallback(() => {
     if (mode === 'model_selection') {
       controller.close();
-      setCurrentProvider(null);
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, controller, setCurrentProvider]);
+  }, [mode, controller]);
 
   const moveUp = useCallback(() => {
     shouldPreselectRef.current = false;
@@ -360,47 +339,11 @@ export const useModelSelection = (deps: {
   }, [filteredModels.length]);
 
   const getSelectedItem = useCallback(() => {
-    if (filteredModels.length === 0) return undefined;
-    const safeIndex = Math.min(selectedIndex, filteredModels.length - 1);
-    return filteredModels[safeIndex];
-  }, [filteredModels, selectedIndex]);
-
-  const toggleProvider = useCallback(
-    (direction: 'next' | 'prev' = 'next') => {
-      const currentProvider = providerRef.current || getInitialProvider() || null;
-      // Favorites is a pinned-leftmost pseudo-provider ahead of every real
-      // provider in the cycle, always reachable regardless of whether it's
-      // currently empty (the empty state tells the user how to add one).
-      const order = [FAVORITES_TAB_ID, ...orderedProviderIds(settingsService, getProviderIds())];
-      if (order.length === 0) return;
-      const currentIndex = order.indexOf(currentProvider ?? '');
-      const nextProvider =
-        currentIndex < 0
-          ? direction === 'prev'
-            ? order[order.length - 1]
-            : order[0]
-          : order[(currentIndex + (direction === 'prev' ? -1 : 1) + order.length) % order.length];
-      if (!nextProvider) return;
-
-      shouldPreselectRef.current = true;
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      setError(null);
-
-      if (nextProvider === FAVORITES_TAB_ID) {
-        setLoading(false);
-        setCurrentProvider(nextProvider);
-        return;
-      }
-
-      // If the user manually selects it, we should allow retrying it
-      const cachedModels = catalogSession.getCached(nextProvider);
-      setModels(cachedModels ?? []);
-      setLoading(!cachedModels);
-      setCurrentProvider(nextProvider);
-    },
-    [getInitialProvider, setCurrentProvider, catalogSession, settingsService],
-  );
+    const currentModels = filteredModelsRef.current;
+    if (currentModels.length === 0) return undefined;
+    const safeIndex = Math.min(selectedIndexRef.current, currentModels.length - 1);
+    return currentModels[safeIndex];
+  }, []);
 
   const toggleFavorite = useCallback(() => {
     const selected = getSelectedItem();
@@ -410,13 +353,9 @@ export const useModelSelection = (deps: {
   }, [getSelectedItem, settingsService]);
 
   const startNicknameEdit = useCallback(() => {
-    // Naming is a Favorites-tab affordance only: the filter is near-useless
-    // on a 5-10 row list, so this tab can own its input row for naming
-    // without contending with a filter that matters. Off this tab (or with
-    // no row highlighted) the command is a deliberate no-op.
-    if (providerRef.current !== FAVORITES_TAB_ID) return;
     const selected = getSelectedItem();
     if (!selected) return;
+    if (!isFavoriteModel(settingsService, selected.provider, selected.id)) return;
     const existing = getNicknameEntries(settingsService).find(
       (entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id,
     );
@@ -465,6 +404,7 @@ export const useModelSelection = (deps: {
     query,
     loading,
     error,
+    warning,
     provider,
     filteredModels,
     selectedIndex,
@@ -478,7 +418,6 @@ export const useModelSelection = (deps: {
     pageUp,
     pageDown,
     getSelectedItem,
-    toggleProvider,
     toggleFavorite,
     favoriteKeys,
     nicknameDraft,
@@ -489,7 +428,6 @@ export const useModelSelection = (deps: {
     commitNicknameDraft,
     cancelNicknameDraft,
     refresh,
-    canSwitchProvider,
     modelSettingConfig,
     credentialRevision,
   };

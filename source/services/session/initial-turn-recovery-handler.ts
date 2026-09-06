@@ -195,12 +195,35 @@ export class InitialTurnRecoveryHandler {
     // transport_downgrade) draws against the automatic-replay budget.
     // replay_turn is produced exclusively by model_retry, which is excluded
     // for the same reason noted above.
-    if (
-      plan.kind === 'retry_fresh' &&
-      ((!skipsAutomaticReplayClaim(classified, committedToolContinuation) &&
-        !attempt.recoveryBudget.claimAutomaticReplay()) ||
-        !attempt.recoveryBudget.claimPhysicalAttempt())
-    ) {
+    const recoveryAdmission =
+      plan.kind === 'retry_fresh'
+        ? attempt.recoveryBudget.describeAdmission({
+            automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
+          })
+        : undefined;
+    if (recoveryAdmission) {
+      this.deps.logger.warn('Retry recovery admission evaluated', {
+        eventType: 'retry.recovery_admission',
+        category: 'retry',
+        phase: 'retry',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        source: 'initial',
+        retryKind: classified.kind,
+        retryCause: classified.kind === 'chain_recovery' ? classified.cause : undefined,
+        retryAttempt:
+          classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.attempt : undefined,
+        transientRetryCount: attempt.retryCounts.transientRetryCount,
+        maxTransientRetries: attempt.maxTransientRetries,
+        streamPresent: stream !== null,
+        hasCommittedOutput: attempt.modelEventSeen,
+        completedToolCount: committedToolContinuation?.completedToolCount ?? 0,
+        allToolsCompleted: committedToolContinuation?.allToolsCompleted ?? false,
+        completedPairsPresentInHistory: committedToolContinuation?.completedPairsPresentInHistory ?? false,
+        ...recoveryAdmission,
+      });
+    }
+    if (recoveryAdmission && !recoveryAdmission.admitted) {
       // Refusing the plan must still go through the same settlement path a
       // normal termination does -- open tool calls settle truthfully (not as
       // blind failures), and the chain is cleared so the next turn cannot
@@ -231,6 +254,10 @@ export class InitialTurnRecoveryHandler {
       };
       this.#logFailure(error);
       return { kind: 'terminated' };
+    }
+    if (plan.kind === 'retry_fresh') {
+      if (recoveryAdmission?.automaticReplayRequired) attempt.recoveryBudget.claimAutomaticReplay();
+      attempt.recoveryBudget.claimPhysicalAttempt();
     }
     const result = this.deps.recoveryExecutor.apply({
       plan,

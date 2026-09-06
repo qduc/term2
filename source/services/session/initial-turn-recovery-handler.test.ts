@@ -537,3 +537,56 @@ it('returns stale before classifying when the generation is outdated', async () 
   expect(result.done).toBe(true);
   expect(result.value).toEqual({ kind: 'stale' });
 });
+
+it('logs the evidence and counters when recovery admission is refused', async () => {
+  const warnings: Array<{ message: string; meta: Record<string, unknown> }> = [];
+  const attempt = createAttempt();
+  attempt.recoveryBudget.claimAutomaticReplay();
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: {
+      warn: (message: string, meta: Record<string, unknown>) => warnings.push({ message, meta }),
+      error: () => {},
+      getCorrelationId: () => 'trace-for-test',
+    } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => (plan.kind === 'terminate' ? { kind: 'terminated', events: [] } : undefined),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history' }),
+    } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 0, cause: 'provider_state_rejected' }),
+    } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: 'retry', logFields: {} }) } as any,
+    sessionId: 'admission-test',
+  });
+
+  expect(
+    await drain(handler.handle({ error: new Error('Invalid `previous_response_id`.'), attempt, stream: null })),
+  ).toEqual({ kind: 'terminated' });
+
+  const admission = warnings.find(({ meta }) => meta.eventType === 'retry.recovery_admission');
+  expect(admission?.meta).toMatchObject({
+    source: 'initial',
+    retryKind: 'chain_recovery',
+    retryCause: 'provider_state_rejected',
+    retryAttempt: 1,
+    transientRetryCount: 0,
+    maxTransientRetries: 3,
+    streamPresent: false,
+    completedToolCount: 0,
+    allToolsCompleted: false,
+    completedPairsPresentInHistory: false,
+    physicalAttempts: 0,
+    automaticReplays: 1,
+    automaticReplayRequired: true,
+    automaticReplayAllowed: false,
+    physicalAttemptAllowed: true,
+    admitted: false,
+  });
+});

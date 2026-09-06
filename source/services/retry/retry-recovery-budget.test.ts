@@ -51,6 +51,31 @@ it('refuses further claims once the deadline elapses, even with attempts remaini
   expect(budget.claimAutomaticReplay()).toBe(false);
 });
 
+it('describes the admission state without spending either claim', () => {
+  let now = 0;
+  const budget = new RetryRecoveryBudget({ now: () => now, maxPhysicalAttempts: 2, maxAutomaticReplays: 1 });
+
+  budget.noteRetryableFailure();
+  expect(budget.claimAutomaticReplay()).toBe(true);
+  now = 125;
+
+  expect(budget.describeAdmission({ automaticReplayRequired: true })).toEqual({
+    physicalAttempts: 0,
+    maxPhysicalAttempts: 2,
+    automaticReplays: 1,
+    maxAutomaticReplays: 1,
+    elapsedMs: 125,
+    maxRecoveryTimeMs: 90_000,
+    deadlineExceeded: false,
+    automaticReplayRequired: true,
+    automaticReplayAllowed: false,
+    physicalAttemptAllowed: true,
+    admitted: false,
+  });
+  expect(budget.physicalAttempts).toBe(0);
+  expect(budget.automaticReplays).toBe(1);
+});
+
 it('a second noteRetryableFailure does not reset an already-running clock', () => {
   let now = 0;
   const budget = new RetryRecoveryBudget({ now: () => now });

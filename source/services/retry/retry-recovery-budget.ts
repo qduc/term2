@@ -16,6 +16,23 @@ export type RetryRecoveryBudgetOptions = {
   maxAutomaticReplays?: number;
 };
 
+export type RetryRecoveryBudgetSnapshot = {
+  physicalAttempts: number;
+  maxPhysicalAttempts: number;
+  automaticReplays: number;
+  maxAutomaticReplays: number;
+  elapsedMs: number;
+  maxRecoveryTimeMs: number;
+  deadlineExceeded: boolean;
+};
+
+export type RetryRecoveryAdmission = RetryRecoveryBudgetSnapshot & {
+  automaticReplayRequired: boolean;
+  automaticReplayAllowed: boolean;
+  physicalAttemptAllowed: boolean;
+  admitted: boolean;
+};
+
 export class RetryRecoveryBudget {
   readonly maxRecoveryTimeMs: number;
   readonly maxPhysicalAttempts: number;
@@ -55,6 +72,35 @@ export class RetryRecoveryBudget {
 
   get deadlineExceeded(): boolean {
     return this.#startedAt !== undefined && this.elapsedMs >= this.maxRecoveryTimeMs;
+  }
+
+  /**
+   * Return the complete non-secret state used by a recovery admission gate.
+   * Recovery decisions are otherwise difficult to explain from logs because
+   * claims mutate the counters before the next dispatch is made.
+   */
+  describeAdmission(options: { automaticReplayRequired: boolean }): RetryRecoveryAdmission {
+    const elapsedMs = this.elapsedMs;
+    const snapshot: RetryRecoveryBudgetSnapshot = {
+      physicalAttempts: this.physicalAttempts,
+      maxPhysicalAttempts: this.maxPhysicalAttempts,
+      automaticReplays: this.automaticReplays,
+      maxAutomaticReplays: this.maxAutomaticReplays,
+      elapsedMs,
+      maxRecoveryTimeMs: this.maxRecoveryTimeMs,
+      deadlineExceeded: this.#startedAt !== undefined && elapsedMs >= this.maxRecoveryTimeMs,
+    };
+    const physicalAttemptAllowed =
+      snapshot.physicalAttempts < snapshot.maxPhysicalAttempts && !snapshot.deadlineExceeded;
+    const automaticReplayAllowed =
+      snapshot.automaticReplays < snapshot.maxAutomaticReplays && !snapshot.deadlineExceeded;
+    return {
+      ...snapshot,
+      automaticReplayRequired: options.automaticReplayRequired,
+      automaticReplayAllowed,
+      physicalAttemptAllowed,
+      admitted: physicalAttemptAllowed && (!options.automaticReplayRequired || automaticReplayAllowed),
+    };
   }
 
   /**

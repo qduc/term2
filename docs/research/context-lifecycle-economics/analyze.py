@@ -11,7 +11,6 @@ import argparse
 import datetime as dt
 import json
 import math
-import os
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
@@ -26,26 +25,42 @@ def scalar(value: Any) -> int | float | None:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-def nested(obj: Any, *path: str) -> Any:
-    for key in path:
-        if not isinstance(obj, dict):
-            return None
-        obj = obj.get(key)
-    return obj
+def wire_input_items(sent: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return only the provider request's top-level Responses `input` items.
+
+    The traffic logger records the sanitized request body verbatim.  Compaction
+    markers are not inferred from arbitrary nested values: the Codex Responses
+    wire contract puts them directly in `body.input`.
+    """
+    body = sent.get("body")
+    items = body.get("input") if isinstance(body, dict) else None
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
 
-def walk(obj: Any) -> Iterable[dict[str, Any]]:
-    if isinstance(obj, dict):
-        yield obj
-        for value in obj.values():
-            yield from walk(value)
-    elif isinstance(obj, list):
-        for value in obj:
-            yield from walk(value)
+def request_kind(sent: dict[str, Any]) -> str | None:
+    headers = sent.get("headers")
+    raw = headers.get("x-codex-turn-metadata") if isinstance(headers, dict) else None
+    if not isinstance(raw, str):
+        return None
+    try:
+        metadata = json.loads(raw)
+    except ValueError:
+        return None
+    value = metadata.get("request_kind") if isinstance(metadata, dict) else None
+    return value if isinstance(value, str) else None
 
 
-def has_type(obj: Any, value: str) -> bool:
-    return any(item.get("type") == value for item in walk(obj))
+def request_lane(request: dict[str, Any]) -> str:
+    """A conservative lane key from metadata actually retained by the logger."""
+    provider = str(request.get("provider") or "unknown")
+    model = str(request.get("model") or "unknown")
+    mode = str(request.get("mode") or "unknown")
+    model_class = request.get("model_class") or request.get("modelClass")
+    wrapper = request.get("model_wrapper_class") or request.get("modelWrapperClass")
+    kind = request.get("request_kind") or request.get("requestKind")
+    if not isinstance(model_class, str) or not isinstance(wrapper, str):
+        return f"{provider}/{model}/{mode}/unattributed"
+    return f"{provider}/{model}/{mode}/{model_class}/{wrapper}/{kind if isinstance(kind, str) else 'unknown'}"
 
 
 def date_range(start: dt.date, end: dt.date) -> list[dt.date]:
@@ -82,24 +97,31 @@ def usage_from_received(received: dict[str, Any] | None) -> dict[str, Any]:
             "cost_field": cost_field}
 
 
-def classify_exchange(sent: dict[str, Any], received: dict[str, Any] | None) -> str:
-    """Classify from structure, not prompt text."""
-    body = sent.get("body") if isinstance(sent, dict) else None
-    if has_type(body, "compaction"):
-        return "native_compaction_reset"
-    # A provider-specific summarizer is represented structurally in some old
-    # recordings.  Do not call an ordinary prompt containing "summarize" one.
-    if isinstance(body, dict) and (body.get("compaction") is not None or
-                                   body.get("summarizer") is True or
-                                   body.get("operation") == "compact"):
-        return "summarizer_request"
-    summary = received.get("summary") if isinstance(received, dict) else None
-    if not isinstance(summary, dict) or not isinstance(summary.get("payload"), dict):
-        return "incomplete_or_error"
-    status = summary.get("status")
-    if not isinstance(status, int) or not 200 <= status < 300:
-        return "incomplete_or_error"
+def classify_exchange(sent: dict[str, Any], received: dict[str, Any] | None = None) -> str:
+    """Classify the mechanism from the exact sanitized Responses input path."""
+    item_types = {item.get("type") for item in wire_input_items(sent)}
+    if "compaction_trigger" in item_types:
+        return "native_compaction_trigger"
+    if "compaction" in item_types:
+        return "native_compaction_replay"
     return "ordinary"
+
+
+def exchange_outcome(sent: dict[str, Any], received: dict[str, Any] | None) -> str:
+    """Classify HTTP/error state independently of the request mechanism."""
+    if not isinstance(received, dict):
+        return "missing_response"
+    if isinstance(received.get("error"), dict):
+        return "error"
+    summary = received.get("summary")
+    if not isinstance(summary, dict):
+        return "incomplete"
+    status = summary.get("status")
+    if isinstance(status, int) and not 200 <= status < 300:
+        return "http_error"
+    if isinstance(status, int) and 200 <= status < 300 and isinstance(summary.get("payload"), dict):
+        return "success"
+    return "incomplete"
 
 
 def bucket(input_tokens: int | float | None) -> str | None:
@@ -175,10 +197,12 @@ def analyze_traffic(root: Path, dates: list[dt.date]) -> dict[str, Any]:
     by_bucket: dict[str, dict[str, Any]] = defaultdict(new_stat)
     by_session: dict[str, dict[str, Any]] = defaultdict(lambda: {"requests": 0,
         "first": None, "last": None, "models": [], "usage_input_tokens": 0,
-        "top_request_ids": []})
+        "top_request_ids": [], "lanes": {}})
     requests: list[dict[str, Any]] = []
     seen: set[str] = set()
     classes = Counter()
+    outcomes = Counter()
+    mechanism_outcomes = Counter()
     shapes = Counter()
     for day, path in iter_traffic(root, dates):
         coverage = by_date[day]
@@ -216,10 +240,13 @@ def analyze_traffic(root: Path, dates: list[dt.date]) -> dict[str, Any]:
         model = str(sent.get("model") or "unknown")
         label = f"{provider}/{model}"
         kind = classify_exchange(sent, received)
+        outcome = exchange_outcome(sent, received)
+        outcomes[outcome] += 1
+        mechanism_outcomes[f"{kind}/{outcome}"] += 1
         dimension = coverage_by_date_provider_model[f"{day}/{label}"]
         dimension["files"] += 1
-        dimension["complete"] += int(kind != "incomplete_or_error")
-        dimension["incomplete_or_error"] += int(kind == "incomplete_or_error")
+        dimension["complete"] += int(outcome == "success")
+        dimension["incomplete_or_error"] += int(outcome != "success")
         dimension["usage_missing"] += int(not usage["present"])
         dimension["cache_field_missing"] += int(usage["cached"] is None)
         dimension["cost_present"] += int(usage["cost"] is not None)
@@ -243,12 +270,21 @@ def analyze_traffic(root: Path, dates: list[dt.date]) -> dict[str, Any]:
             s["models"].append(model)
         if len(s["top_request_ids"]) < 3 and request_id:
             s["top_request_ids"].append(request_id)
-        requests.append({"request_id": request_id, "session_id": session, "timestamp": stamp,
+        metadata_request_kind = request_kind(sent)
+        request_item = {"request_id": request_id, "session_id": session, "timestamp": stamp,
                          "provider": provider, "model": model, "kind": kind,
+                          "mechanism": kind, "outcome": outcome, "mode": sent.get("mode"),
+                          "model_class": sent.get("modelClass"),
+                          "model_wrapper_class": sent.get("modelWrapperClass"),
+                          "request_kind": metadata_request_kind,
                          "status": status, "input": usage["input"], "cached": usage["cached"],
                          "output": usage["output"], "cost": usage["cost"], "path": str(path),
-                         "compaction_ids": [item["id"] for item in walk(sent.get("body"))
-                                            if item.get("type") == "compaction" and item.get("id")][:4]})
+                          "compaction_ids": [item["id"] for item in wire_input_items(sent)
+                                             if item.get("type") == "compaction" and item.get("id")][:4]}
+        request_item["lane"] = request_lane(request_item)
+        lane = request_item["lane"]
+        s["lanes"][lane] = s["lanes"].get(lane, 0) + 1
+        requests.append(request_item)
     # Gap and model-switch flags are observational sequencing warnings, not causes.
     gaps = 0
     switches = 0
@@ -274,7 +310,8 @@ def analyze_traffic(root: Path, dates: list[dt.date]) -> dict[str, Any]:
             "coverage_by_date_provider_model": dict(sorted(coverage_by_date_provider_model.items())),
             "input_buckets": {k: finalize_stat(v) for k, v in by_bucket.items()},
             "sessions": dict(sorted(by_session.items(), key=lambda x: (-x[1]["requests"], x[0]))),
-            "request_count": len(requests), "classification": dict(classes), "wire_shapes": dict(shapes),
+            "request_count": len(requests), "classification": dict(classes), "outcomes": dict(outcomes),
+            "mechanism_outcomes": dict(mechanism_outcomes), "wire_shapes": dict(shapes),
             "gap_edges_over_6h": gaps, "model_switch_edges": switches,
             "requests": requests, "session_requests": {k: v for k, v in session_reqs.items()}}
 
@@ -303,6 +340,11 @@ def app_events(log_root: Path, dates: list[dt.date]) -> dict[str, Any]:
                             counts["native_compaction_failed"] += 1
                             records.append({"kind": "native_compaction_failed", "timestamp": item.get("timestamp"),
                                             "correlation_id": item.get("correlationId"), "model": item.get("model")})
+                        elif message == "Local context compaction blocked; continuing with uncompacted history":
+                            counts["local_compaction_blocked"] += 1
+                            records.append({"kind": "local_compaction_blocked", "timestamp": item.get("timestamp"),
+                                            "correlation_id": item.get("correlationId"), "provider": item.get("provider"),
+                                            "model": item.get("model"), "reason": item.get("reason")})
             except OSError:
                 continue
     return {"counts": dict(counts), "records": records}
@@ -357,16 +399,30 @@ def conversations(root: Path, dates: list[dt.date], traffic: dict[str, Any]) -> 
         rollover["successor_verified"] = verified
         successor_requests = sorted(wire_by_session.get(rollover["successorSessionId"], []), key=lambda x: x["timestamp"] or "")
         rollover["successor_wire_requests"] = len(successor_requests)
-        rollover["first_successor_request"] = ({"request_id": successor_requests[0]["request_id"], "input": successor_requests[0]["input"], "cached": successor_requests[0]["cached"], "model": successor_requests[0]["model"]} if successor_requests else None)
-        rollover["subsequent_successor_requests"] = max(0, len(successor_requests) - 1)
+        view = lambda r: ({"request_id": r["request_id"], "timestamp": r["timestamp"],
+                           "input": r["input"], "cached": r["cached"], "output": r["output"],
+                           "model": r["model"], "provider": r["provider"], "mode": r["mode"],
+                           "outcome": r["outcome"], "lane": r["lane"]} if r else None)
+        # Session IDs pool root, child, and auxiliary calls.  Use the first
+        # successor's complete recorded lane as the comparison lane; never
+        # call adjacent requests in a pooled session one model's continuation.
+        lane = successor_requests[0].get("lane") if successor_requests else None
+        same_lane_successors = [r for r in successor_requests if lane and r.get("lane") == lane]
+        rollover["first_successor_request"] = view(same_lane_successors[0]) if same_lane_successors else None
+        rollover["subsequent_successor_requests"] = max(0, len(same_lane_successors) - 1)
         predecessor_requests = sorted(wire_by_session.get(rollover["sourceSessionId"], []), key=lambda x: x["timestamp"] or "")
         rollover["predecessor_wire_requests"] = len(predecessor_requests)
-        before = predecessor_requests[-1] if predecessor_requests else None
-        after = successor_requests[0] if successor_requests else None
+        same_lane_predecessors = [r for r in predecessor_requests if lane and r.get("lane") == lane]
+        before = same_lane_predecessors[-1] if same_lane_predecessors else None
+        after = same_lane_successors[0] if same_lane_successors else None
         rollover["before_after"] = {
-            "before_last": ({"request_id": before["request_id"], "timestamp": before["timestamp"], "input": before["input"], "cached": before["cached"], "model": before["model"]} if before else None),
-            "after_first": ({"request_id": after["request_id"], "timestamp": after["timestamp"], "input": after["input"], "cached": after["cached"], "model": after["model"]} if after else None),
+            "before_last": view(before),
+            "after_first": view(after),
             "model_switch": bool(before and after and before["model"] != after["model"]),
+            "lane": lane,
+            "predecessor_same_lane_requests": len(same_lane_predecessors),
+            "successor_same_lane_requests": len(same_lane_successors),
+            "successor_first_five": [view(r) for r in same_lane_successors[:5]],
         }
         if before and after:
             try:
@@ -379,6 +435,46 @@ def conversations(root: Path, dates: list[dt.date], traffic: dict[str, Any]) -> 
             links.append(rollover)
     return {"event_counts": dict(native_local), "rollovers": rollovers,
             "completed_verified_links": len(links), "verified_links": links}
+
+
+def linked_economics(links: list[dict[str, Any]]) -> dict[str, Any]:
+    """Sensitivity of observed linked sizes; deliberately not a savings model."""
+    rows = []
+    for link in links:
+        before = link.get("before_after", {}).get("before_last")
+        after = link.get("before_after", {}).get("after_first")
+        if not before or not after or before.get("input") is None or after.get("input") is None:
+            continue
+        removed = max(0, before["input"] - after["input"])
+        cold = after["input"] - after["cached"] if after.get("cached") is not None else None
+        rows.append({"rollover_id": link.get("rolloverId"), "predecessor_input": before["input"],
+                     "successor_first_input": after["input"], "successor_first_cached": after.get("cached"),
+                     "removed_context_proxy": removed, "cold_start_delta": cold,
+                     "reset_cost_proxy": after["input"], "lane": link.get("before_after", {}).get("lane")})
+    aggregate = {"usable_sample_count": len(rows),
+                 "cache_warm_sample_count": sum(r["cold_start_delta"] is not None for r in rows),
+                 "predecessor_input_tokens": sum(r["predecessor_input"] for r in rows),
+                 "successor_first_input_tokens": sum(r["successor_first_input"] for r in rows),
+                 "reset_cost_proxy_tokens": sum(r["reset_cost_proxy"] for r in rows),
+                 "removed_context_proxy_tokens": sum(r["removed_context_proxy"] for r in rows),
+                 "cold_start_delta_tokens": sum(r["cold_start_delta"] or 0 for r in rows),
+                 "unknown_handoff_or_rework_cost": True}
+    sensitivity = {}
+    for ratio in (0.01, 0.1, 0.25):
+        horizons = [r["reset_cost_proxy"] / (ratio * r["removed_context_proxy"])
+                    for r in rows if r["removed_context_proxy"] > 0]
+        sensitivity[str(ratio)] = {"usable_horizons": len(horizons),
+                                   "mean_n_strictly_greater_than": (sum(horizons) / len(horizons) if horizons else None),
+                                   "aggregate_n_strictly_greater_than": (
+                                       aggregate["reset_cost_proxy_tokens"] /
+                                       (ratio * aggregate["removed_context_proxy_tokens"])
+                                       if aggregate["removed_context_proxy_tokens"] else None)}
+    return {"assumptions": [
+        "reset_cost_proxy is the first same-lane successor input, priced at one uncached-input unit; handoff and rework costs are not logged",
+        "removed_context_proxy is max(predecessor input minus first successor input, 0); this is a size delta, not causal context removal",
+        "cached_price is a ratio to uncached input price; output prices, quality, latency, and provider billing are excluded",
+    ], "formula": "n > reset_cost / (cached_price * removed_context)",
+        "rows": rows, "aggregate": aggregate, "cached_price_ratio_sensitivity": sensitivity}
 
 
 def enrich(traffic: dict[str, Any]) -> None:
@@ -419,7 +515,8 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
     enrich(traffic)
     app = app_events(Path(args.app_root).expanduser(), dates)
     conv = conversations(Path(args.conversation_root).expanduser(), dates, traffic)
-    native_resets = [r for r in traffic["requests"] if r["kind"] == "native_compaction_reset"]
+    native_resets = [r for r in traffic["requests"] if r["kind"] == "native_compaction_replay"]
+    native_triggers = [r for r in traffic["requests"] if r["kind"] == "native_compaction_trigger"]
     for reset in native_resets:
         same_session = sorted(traffic["session_requests"].get(reset["session_id"], []), key=lambda x: x["timestamp"] or "")
         later = [r for r in same_session
@@ -451,21 +548,27 @@ def analyze(args: argparse.Namespace) -> dict[str, Any]:
             return "~" + str(expanded.relative_to(home))
         except ValueError:
             return str(expanded)
-    return {"schema": 1, "window": {"start": args.start, "end": args.end, "timezone": "UTC for wire/conversations; app wall time retained as date-labelled"},
+    local_summary = {"successful_summary_count": None,
+                     "status": "unavailable",
+                     "reason": "The retained app logger has local drop/blocked records but no persisted local summary-success marker; provider traffic has no local summary request envelope. This is unavailable, not zero."}
+    economics = linked_economics(conv["verified_links"])
+    return {"schema": 2, "window": {"start": args.start, "end": args.end, "timezone": "UTC for wire/conversations; app wall time retained as date-labelled"},
             "sources": {"traffic_root": portable(args.traffic_root), "app_log_root": portable(args.app_root), "conversation_root": portable(args.conversation_root)},
             "traffic": {k: v for k, v in traffic.items() if k not in ("requests", "session_requests")},
-            "relative_cost": relative_cost(traffic), "app_events": app, "conversations": conv,
+             "relative_cost": relative_cost(traffic), "app_events": app, "local_summary": local_summary,
+             "linked_economics": economics, "app_events": app, "conversations": conv,
+             "native_trigger_requests": [{k: r.get(k) for k in ("request_id", "timestamp", "session_id", "provider", "model", "mode", "request_kind", "input", "cached", "outcome", "lane")} for r in native_triggers],
             "native_reset_links": native_resets[:100],
-            "limitations": ["Provider traffic is sanitized and records scalar usage, not prompt bodies.", "A missing cache field is not treated as zero; all coverage fields are explicit.", "App log timestamps are local wall time; no session is inferred from correlationId alone."]}
+             "limitations": ["Provider traffic is sanitized and records scalar usage, not prompt bodies.", "A missing cache field is not treated as zero; all coverage fields are explicit.", "Session IDs pool root, child, and auxiliary calls; role lanes are restricted to retained mode/model-class/request-kind metadata, and unattributed lanes remain pooled.", "Local summary success is unavailable from retained logging; no zero count is inferred.", "Historical accepted-link counts are not comparable unless their corpus window and metadata criteria are retained."]}
 
 
 def render_report(data: dict[str, Any]) -> str:
     t = data["traffic"]
     cov = t["coverage_by_date"]
-    lines = ["# Context-lifecycle economics (retained local evidence)", "", f"Window: **{data['window']['start']} through {data['window']['end']}** (inclusive).", "", "## Method and boundaries", "", "The standalone `analyze.py` reads provider-traffic JSON one file at a time, app JSONL rotations, and persisted conversation JSONL. Requests are deduplicated by the `(sent.requestId, sent.sessionId)` identity; index files are not counted. No prompts, previews, tool arguments, headers, response text, or ciphertext are emitted. Wire timestamps are UTC; app timestamps are local wall-clock labels. These are observations, not causal savings or policy thresholds.", "", "## Coverage", "", "| date | files | complete | usage | cache field | recorded cost | parse errors | duplicate request IDs |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = ["# Context-lifecycle economics (retained local evidence)", "", f"Window: **{data['window']['start']} through {data['window']['end']}** (inclusive).", "", "## Method and boundaries", "", "The standalone `analyze.py` reads provider-traffic JSON one file at a time, app JSONL rotations, and persisted conversation JSONL. Requests are deduplicated by the `(sent.requestId, sent.sessionId)` identity; index files are not counted. No prompts, previews, tool arguments, headers, response text, or ciphertext are emitted. Wire timestamps are UTC; app timestamps are local wall-clock labels. These are observations, not causal savings or policy thresholds.", "", "Wire/source contract checked: `source/services/logging/provider-traffic.ts` writes `sent.mode`, model class metadata, and the sanitized `sent.body`; `source/providers/codex-responses-model.ts` appends `input[*].type=compaction_trigger` for native compaction; `source/providers/codex.provider.ts` detects that exact final input item and records `request_kind=compaction`. This analyzer follows those paths and does not infer mechanism from prompt text or arbitrary nested `type` values.", "", "## Coverage", "", "| date | files | complete | usage | cache field | recorded cost | parse errors | duplicate request IDs |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for day, c in cov.items():
         lines.append(f"| {day} | {c['files']} | {c['complete']} | {c['usage_present']} / {c['usage_missing']} missing | {c['cache_field_present']} / {c['cache_field_missing']} missing | {c['cost_present']} | {c['parse_errors']} | {c['duplicate_request_ids']} |")
-    lines += ["", f"Deduplicated traffic requests: **{t['request_count']}**. Wire shapes: `{json.dumps(t['wire_shapes'], sort_keys=True)}`. Structural traffic classification: `{json.dumps(t['classification'], sort_keys=True)}` (the `summarizer_request` count is therefore explicit, including zero). App compaction-trigger records are reported separately below; their text is not used as a traffic request classification.", "", "Coverage by provider/model/date (all deduplicated files; `usage_missing` and `cache_field_missing` are fields, not zeroes):", "", "| date/provider/model | files | complete | incomplete/error | usage missing | cache missing | cost present |", "|---|---:|---:|---:|---:|---:|---:|"]
+    lines += ["", f"Deduplicated traffic requests: **{t['request_count']}**. Wire shapes: `{json.dumps(t['wire_shapes'], sort_keys=True)}`. Mechanism classification: `{json.dumps(t['classification'], sort_keys=True)}`. Independent HTTP/error outcomes: `{json.dumps(t['outcomes'], sort_keys=True)}`; mechanism/outcome cross-tab: `{json.dumps(t['mechanism_outcomes'], sort_keys=True)}`. The Codex markers are recognized only at `sent.body.input[*].type`: `compaction_trigger` means trigger and `compaction` means replay marker. Guessed `body.compaction`, `body.summarizer`, and `body.operation` fields are not classified.", "", "Coverage by provider/model/date (all deduplicated files; `usage_missing` and `cache_field_missing` are fields, not zeroes):", "", "| date/provider/model | files | complete | incomplete/error | usage missing | cache missing | cost present |", "|---|---:|---:|---:|---:|---:|---:|"]
     for label, c in t["coverage_by_date_provider_model"].items():
         lines.append(f"| `{label}` | {c['files']} | {c['complete']} | {c['incomplete_or_error']} | {c['usage_missing']} | {c['cache_field_missing']} | {c['cost_present']} |")
     lines += ["", "## Token and cache economics", "", "Only scalar provider-recorded usage is used. `cached_tokens: 0` is observed zero; absent cache fields remain missing. Cost sums stay separated by the provider's recorded field (`cost` versus `cost_in_usd_ticks`); neither is converted or priced here. Weighted ratios use the input-token denominator from requests where a cache field was present.", "", "| provider/model | ordinary requests | input | cache-observed input | cached | output | weighted cache ratio | mean per-request ratio | recorded cost fields (count/sum by field) |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
@@ -477,20 +580,21 @@ def render_report(data: dict[str, Any]) -> str:
         s = t["input_buckets"].get(label)
         if s: lines.append(f"| {label} | {s['requests']} | {s['input_tokens']} | {s['cache_observed_input_tokens']} | {s['cached_tokens']} | {fmt(s['cache_ratio_weighted'])} | {fmt(s['cache_ratio_per_request_mean'])} |")
     rc = data["relative_cost"]
-    lines += ["", "### Relative input-price sensitivity", "", f"Ordinary input totals: **{rc['ordinary_input_tokens_all']}** tokens; cache-observed denominator: **{rc['ordinary_input_tokens_cache_observed']}** across {rc['cache_observed_requests']} requests; cache-field-missing input: **{rc['cache_missing_input_tokens']}**. Ratios below use only the cache-observed denominator, never treating missing cache as zero. The counterfactual relative cost at cached/uncached price ratios is `{json.dumps(rc['counterfactual_relative_input_cost_by_cached_price_ratio'])}`. Formula: `{rc['formula']}`. This is not a provider bill, does not establish that compaction caused savings, and does not assume cached tokens are free: at ratio 0.1 they still contribute 10% of uncached unit price; at ratio 1 there is no input-cost difference. Any positive reduction requires cached unit price < uncached unit price; there is no break-even monetary price in this corpus without a complete provider price schedule.", "", "## Session growth and boundary flags", "", f"Sessions with traffic: **{len(t['sessions'])}**. Edges with >6-hour gap: **{t['gap_edges_over_6h']}**; model-switch edges: **{t['model_switch_edges']}**. These flags mark confounding boundaries rather than imputing continuity. Top sessions by request count:", ""]
+    lines += ["", "### Relative input-price sensitivity", "", f"Ordinary input totals: **{rc['ordinary_input_tokens_all']}** tokens; cache-observed denominator: **{rc['ordinary_input_tokens_cache_observed']}** across {rc['cache_observed_requests']} requests; cache-field-missing input: **{rc['cache_missing_input_tokens']}**. Ratios below use only the cache-observed denominator, never treating missing cache as zero. The counterfactual relative cost at cached/uncached price ratios is `{json.dumps(rc['counterfactual_relative_input_cost_by_cached_price_ratio'])}`. Formula: `{rc['formula']}`. This is a history-size sensitivity, not a provider bill or evidence that compaction caused savings. Reducing uncached history can reduce input cost even when cached and uncached unit prices are equal; no provider price schedule is available here.", "", "## Session growth and boundary flags", "", f"Sessions with traffic: **{len(t['sessions'])}**. Edges with >6-hour gap: **{t['gap_edges_over_6h']}**; model-switch edges: **{t['model_switch_edges']}**. Session IDs are pooled identifiers, not root-model context identities. The 8b49 session's **3,023 requests over {fmt_duration(t['sessions'].get('8b49b1ea-9cbe-4615-8b7f-71a0422e1f26', {}).get('first'), t['sessions'].get('8b49b1ea-9cbe-4615-8b7f-71a0422e1f26', {}).get('last'))}** include multiple providers/models and lanes; adjacent requests are not interpreted as one model context. These flags mark confounding boundaries rather than imputing continuity. Top sessions by request count:", ""]
     for sid, s in list(t["sessions"].items())[:15]:
         daily = ", ".join(f"{day}:{count}" for day, count in s.get("daily_requests", {}).items())
-        lines.append(f"- `{sid}`: {s['requests']} requests ({daily}), input {s['usage_input_tokens']} tokens, models `{', '.join(s['models'])}`, first `{s['first']}`, last `{s['last']}`, request IDs `{', '.join(s['top_request_ids'])}`")
+        lanes = ", ".join(f"{lane}={count}" for lane, count in list(s.get("lanes", {}).items())[:5])
+        lines.append(f"- `{sid}`: {s['requests']} pooled requests ({daily}), input {s['usage_input_tokens']} tokens, models `{', '.join(s['models'])}`, lanes `{lanes}`, first `{s['first']}`, last `{s['last']}`, request IDs `{', '.join(s['top_request_ids'])}`")
     app = data["app_events"]
     conv = data["conversations"]
-    lines += ["", "## Compaction and rollover evidence", "", f"App structured messages: `{json.dumps(app['counts'], sort_keys=True)}`. Persisted structured compaction event types: `{json.dumps(conv['event_counts'], sort_keys=True)}`. A failed native compact endpoint is not a reset. Native wire reset items: **{len(data['native_reset_links'])}**; each is linked to later same-session wire requests only when the request envelope contained a structural `type: compaction` item. Verified completed rollover predecessor→successor links: **{conv['completed_verified_links']}**.", "", "Native reset artifact/request IDs and downstream reuse:"]
+    lines += ["", "## Compaction and rollover evidence", "", f"App structured messages: `{json.dumps(app['counts'], sort_keys=True)}`. Persisted structured compaction event types: `{json.dumps(conv['event_counts'], sort_keys=True)}`. Local summary success: **{data['local_summary']['status']}** (successful count is not inferred). Native wire triggers: **{len(data['native_trigger_requests'])} retained examples** of **{t['classification'].get('native_compaction_trigger', 0)}**; native replay markers: **{len(data['native_reset_links'])}**. Trigger and replay are distinct mechanisms; HTTP/error outcome is tabulated independently. In particular, request `90343fc6-604d-4e99-864d-88aa40ef6e6b` is a `compaction_trigger` with input 206582, not ordinary traffic. Verified completed rollover predecessor→successor links: **{conv['completed_verified_links']}**.", "", "Native replay-marker artifact/request IDs and downstream reuse:"]
     for reset in data["native_reset_links"]:
         previous = reset.get("previous_same_session_request")
         peak = reset.get("peak_previous_request")
         prior = (f"previous request `{previous['request_id']}` input={previous['input']} cached={previous['cached']}" if previous else "no previous request")
         peak_text = (f"peak prior `{peak['request_id']}` input={peak['input']} cached={peak['cached']}" if peak else "no peak prior")
         high = ", ".join(f"`{item['request_id']}`={item['input']}" for item in reset.get("prior_high_input_requests", [])) or "—"
-        lines.append(f"- session `{reset['session_id']}`, request `{reset['request_id']}`, compaction item `{', '.join(reset.get('compaction_ids', [])) or '—'}`, model `{reset['model']}`, timestamp `{reset['timestamp']}`, {prior}; {peak_text}; prior high-input requests {high}; reset input={reset['input']} cached={reset['cached']} (reduction from peak={reset.get('input_reduction_from_peak')}), later same-session wire requests: {reset.get('later_same_session_wire_requests', 0)}")
+        lines.append(f"- session `{reset['session_id']}`, request `{reset['request_id']}`, replay marker `{', '.join(reset.get('compaction_ids', [])) or '—'}`, model `{reset['model']}`, timestamp `{reset['timestamp']}`, {prior}; {peak_text}; prior high-input requests {high}; replay input={reset['input']} cached={reset['cached']} (reduction from peak={reset.get('input_reduction_from_peak')}), later same-session wire requests: {reset.get('later_same_session_wire_requests', 0)}")
     lines += ["", "| rollover phase | event time | predecessor | successor | successor session_init verified | predecessor/ successor wire requests | first/subsequent usage | before→after flags |", "|---|---|---|---|---|---:|---|---|"]
     for r in conv["rollovers"]:
         first = r.get("first_successor_request")
@@ -500,12 +604,35 @@ def render_report(data: dict[str, Any]) -> str:
         after = before_after.get("after_first")
         flags = f"gap={before_after.get('gap_seconds', '—')}s, model_switch={before_after.get('model_switch', False)}"
         lines.append(f"| {r.get('phase')} | {r.get('event_ts')} | `{r.get('sourceSessionId')}` | `{r.get('successorSessionId')}` | {r.get('successor_verified')} | {r.get('predecessor_wire_requests', 0)} / {r.get('successor_wire_requests', 0)} | {usage} | {flags}; before `{before.get('request_id') if before else '—'}` → after `{after.get('request_id') if after else '—'}` |")
-    lines += ["", "## Limitations", "", "The date-labelled app-log selection uses local wall-clock dates, while persisted and provider records use UTC. Rotations and retained corpus availability are reported by the table, not assumed. Sanitized traffic cannot recover prompt semantics, server billing rules, or omitted usage; recorded `cost` values are summed only when scalar fields exist and are never extrapolated. Same-session reuse after a reset is transport evidence, not proof of semantic summary fidelity. Rollover requests without IDs or successor `session_init.rolloverFrom` remain unresolved. Gap/model-switch flags, workload mix, provider routing, and concurrent sessions confound any before/after interpretation.", "", "Reproduce with:", "", "```sh", "python3 docs/research/context-lifecycle-economics/analyze.py --start 2026-08-31 --end 2026-09-05 --output docs/research/context-lifecycle-economics/evidence.json --report docs/research/context-lifecycle-economics.md", "```"]
+    econ = data["linked_economics"]
+    agg = econ["aggregate"]
+    lines += ["", "## Linked rollover size sensitivity", "", f"The current rerun verifies **{conv['completed_verified_links']}** completed links using conversation `session_init.rolloverFrom` plus traffic IDs. Historical material reported 23 accepted links; that count is not a comparable denominator here because its corpus window and metadata coverage are not retained. The current method uses same-lane predecessor/ successor records; where model class, wrapper, or request-kind metadata is absent, the lane is explicitly unattributed rather than guessed.", "", f"Usable linked size pairs: **{agg['usable_sample_count']}**; cache-observed first successors: **{agg['cache_warm_sample_count']}**. Sum predecessor input={agg['predecessor_input_tokens']}; sum first-successor input={agg['successor_first_input_tokens']}; reset-cost proxy={agg['reset_cost_proxy_tokens']}; observed size-delta proxy={agg['removed_context_proxy_tokens']}; cold-start delta (first successor input minus cached input)={agg['cold_start_delta_tokens']}. Handoff and rework cost are unknown, so these are not savings.", "", "Relative horizon sensitivity (not a compaction break-even or policy recommendation):", "", f"Formula: `{econ['formula']}`. {econ['assumptions'][0]}. {econ['assumptions'][1]}.", "", "| cached/uncached price ratio | usable pairs | aggregate strict horizon n | mean per-link strict horizon n |", "|---:|---:|---:|---:|"]
+    for ratio, values in econ["cached_price_ratio_sensitivity"].items():
+        lines.append(f"| {ratio} | {values['usable_horizons']} | {fmt(values['aggregate_n_strictly_greater_than'])} | {fmt(values['mean_n_strictly_greater_than'])} |")
+    lines += ["", "Per-link evidence (root predecessor input and first five same-lane successor requests; `cached=—` means usage missing):"]
+    for r in conv["verified_links"]:
+        ba = r.get("before_after", {})
+        before = ba.get("before_last") or {}
+        successors = ba.get("successor_first_five", [])
+        successor_text = "; ".join(f"{item['request_id']} input={item['input']} cached={item['cached']}" for item in successors) or "no same-lane successor usage"
+        lines.append(f"- rollover `{r.get('rolloverId')}` lane `{ba.get('lane')}`: predecessor `{before.get('request_id', '—')}` input={before.get('input', '—')} → {successor_text}")
+    lines += ["", "## Limitations", "", "The date-labelled app-log selection uses local wall-clock dates, while persisted and provider records use UTC. Rotations and retained corpus availability are reported by the table, not assumed. Sanitized traffic cannot recover prompt semantics, server billing rules, or omitted usage; recorded `cost` values are summed only when scalar fields exist and are never extrapolated. Same-session reuse after a replay marker is transport evidence, not proof of semantic summary fidelity. Local summary success is unavailable from retained logs, not zero. Session IDs pool root, child, and auxiliary calls; only exact retained lane metadata is used for before/after links. Rollover requests without IDs or successor `session_init.rolloverFrom` remain unresolved. Handoff/rework cost, quality, latency, workload mix, provider routing, and concurrent sessions are unknown or confounded.", "", "Reproduce with:", "", "```sh", "python3 docs/research/context-lifecycle-economics/analyze.py --start 2026-08-31 --end 2026-09-05 --output docs/research/context-lifecycle-economics/evidence.json --report docs/research/context-lifecycle-economics.md", "```"]
     return "\n".join(lines) + "\n"
 
 
 def fmt(value: Any) -> str:
     return "—" if value is None else f"{value:.4f}"
+
+
+def fmt_duration(start: str | None, end: str | None) -> str:
+    if not start or not end:
+        return "unknown duration"
+    try:
+        a = dt.datetime.fromisoformat(start.replace("Z", "+00:00"))
+        b = dt.datetime.fromisoformat(end.replace("Z", "+00:00"))
+        return f"{(b - a).total_seconds() / 3600:.2f}h"
+    except ValueError:
+        return "unknown duration"
 
 
 def main() -> None:

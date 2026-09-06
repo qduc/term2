@@ -542,3 +542,61 @@ describe('SandboxedCodeHostImpl Fork C clocks', () => {
     });
   });
 });
+
+describe('SandboxedCodeHostImpl script diagnostics', () => {
+  const run = (code: string, capability: CapabilityHandler = echoCapability) =>
+    new SandboxedCodeHostImpl().run({
+      code,
+      capabilities: { tools: capability },
+      limits,
+      subject: 'Script',
+    });
+
+  it('locates an uncaught runtime error at its script line with an excerpt', async () => {
+    const result = await run('const value = missingThing.value;');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('runtime_error');
+    expect(result.error.message).toContain('missingThing is not defined');
+    expect(result.error.message).toMatch(/At script Line 1:\d+: const value = missingThing\.value;/);
+  });
+
+  it('names the failing tool when a nested call reports an error envelope', async () => {
+    const failingCapability: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['search'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async () => ({ kind: 'result', result: { ok: false, error: 'rg: boom' } }),
+    };
+
+    const result = await run('await tools.search({});', failingCapability);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('runtime_error');
+    expect(result.error.message).toMatch(/^tools\.search failed: rg: boom/);
+  });
+
+  it('explains unknown members instead of failing with a bare TypeError', async () => {
+    const result = await run(`
+      try { tools.shell({}); return 'no-throw'; }
+      catch (error) { return String(error.message); }
+    `);
+
+    expect(result).toEqual({ ok: true, output: 'Unknown tool "shell". Available: echo' });
+  });
+
+  it('leaves known members callable through the guarded namespace', async () => {
+    const echoEnvelope: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['echo'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async () => ({ kind: 'result', result: { ok: true, result: { answer: 'ok' } } }),
+    };
+
+    const result = await run('return (await tools.echo({})).answer;', echoEnvelope);
+
+    expect(result).toEqual({ ok: true, output: 'ok' });
+  });
+});

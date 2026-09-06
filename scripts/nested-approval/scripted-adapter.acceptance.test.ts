@@ -114,7 +114,7 @@ describe('scripted nested approval acceptance entry point', () => {
                   type: 'tool_call' as const,
                   id: 'm2b-outer-call',
                   name: 'run_code',
-                  arguments: JSON.stringify({ code: scriptCode }),
+                  arguments: JSON.stringify({ code: scriptCode, description: 'scripted nested edit' }),
                 },
               ],
             };

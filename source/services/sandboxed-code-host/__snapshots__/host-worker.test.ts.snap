@@ -216,10 +216,23 @@ function installContextBindings() {
       // Namespace members speak an { ok, result | error } envelope so a refused or
       // failed call is catchable inside the script instead of a silent value.
       if (!response || typeof response !== 'object') return response;
-      if (response.ok === false) throw new Error(String(response.error));
+      // Naming the tool here is what lets a model tell which call of a fan-out
+      // failed: the underlying message often does not (e.g. 'rg: regex parse error').
+      if (response.ok === false) throw new Error('tools.' + member + ' failed: ' + String(response.error));
       return response.result;
     });
-    return Object.freeze(namespace);
+    // Unknown members explain themselves instead of surfacing as
+    // 'tools.x is not a function', which names neither the problem nor the fix.
+    const guarded = new Proxy(namespace, {
+      get(target, prop) {
+        if (prop in target) return target[prop];
+        if (typeof prop === 'string') {
+          throw new Error('Unknown tool "' + prop + '". Available: ' + members.join(', '));
+        }
+        return undefined;
+      },
+    });
+    return Object.freeze(guarded);
   }
   for (const capability of capabilityDefinitions) {
     globalThis[capability.name] = capability.kind === 'namespace'
@@ -241,29 +254,33 @@ function installContextBindings() {
   };
 }
 const resolveResponse = vm.runInContext('(' + installContextBindings.toString() + ')()', context);
-function syntaxErrorDetail(code, err) {
-  var marker = null;
-  var stackLines = err && err.stack ? String(err.stack).split('\\n') : [];
+function firstScriptFrame(stack) {
+  var stackLines = stack ? String(stack).split('\\n') : [];
   for (var i = 0; i < stackLines.length; i++) {
-    var match = /^workflow\\.js:(\\d+)(?::(\\d+))?$/.exec(stackLines[i].trim());
-    if (match) { marker = match; break; }
+    var match = /^(?:at )?workflow\\.js:(\\d+)(?::(\\d+))?$/.exec(stackLines[i].trim());
+    if (match) return match;
   }
-  var detail = '';
-  var located = false;
-  if (marker) {
-    var userLine = Number(marker[1]) - 1;
-    var sourceLines = String(code).split('\\n');
-    if (userLine >= 1 && userLine <= sourceLines.length) {
-      located = true;
-      var excerpt = sourceLines[userLine - 1].trim();
-      if (excerpt.length > 140) excerpt = excerpt.slice(0, 140) + '...';
-      detail = '\\n\\nLine ' + userLine + (marker[2] ? ':' + marker[2] : '') + ': ' + excerpt;
-    }
-  }
-  if (!located) {
-    detail = '\\n\\nThe error was reported at the end of the script: a block, string, or template literal is likely unterminated.';
-  }
+  return null;
+}
+function scriptLineDetail(code, frame) {
+  if (!frame) return null;
+  var userLine = Number(frame[1]) - 1;
+  var sourceLines = String(code).split('\\n');
+  if (!(userLine >= 1 && userLine <= sourceLines.length)) return null;
+  var excerpt = sourceLines[userLine - 1].trim();
+  if (excerpt.length > 140) excerpt = excerpt.slice(0, 140) + '...';
+  return 'Line ' + userLine + (frame[2] ? ':' + frame[2] : '') + ': ' + excerpt;
+}
+function syntaxErrorDetail(code, err) {
+  var located = scriptLineDetail(code, firstScriptFrame(err && err.stack));
+  var detail = located
+    ? '\\n\\n' + located
+    : '\\n\\nThe error was reported at the end of the script: a block, string, or template literal is likely unterminated.';
   return detail + '\\n\\nScripts run as plain JavaScript in this sandbox: no TypeScript annotations, no Node imports, and no dynamic import(); patch or file text you embed must be an escaped string inside the script, and an unescaped backtick or template substitution breaks the whole script.';
+}
+function runtimeErrorDetail(code, err) {
+  var located = scriptLineDetail(code, firstScriptFrame(err && err.stack));
+  return located ? '\\n\\nAt script ' + located : '';
 }
 
 if (typeof resolveResponse !== 'function') throw new Error('Failed to install sandbox bindings');
@@ -308,6 +325,9 @@ parentPort.on('message', (message) => {
     } else if (reported.message.indexOf('A dynamic import callback was not specified') === 0) {
       reported.message =
         reported.message + '\\n\\ndynamic import() is unavailable inside the sandbox: scripts run as plain JavaScript.';
+    } else {
+      var at = runtimeErrorDetail(workerData.code, err);
+      if (at) reported.message = reported.message + at;
     }
     finishSend('workflow.error', { error: reported, syntax: err instanceof SyntaxError });
   }

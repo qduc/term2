@@ -128,7 +128,7 @@ describe('P1 nested hide result chain', () => {
                   type: 'tool_call' as const,
                   id: outerCallId,
                   name: 'run_code',
-                  arguments: JSON.stringify({ code: scriptCode }),
+                  arguments: JSON.stringify({ code: scriptCode, description: 'scripted nested edit' }),
                 },
               ],
             };

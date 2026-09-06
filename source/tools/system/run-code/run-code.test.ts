@@ -104,7 +104,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: "return await tools.protected({ path: 'notes.md' });" },
+      { description: 'run_code test', code: "return await tools.protected({ path: 'notes.md' });" },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
@@ -154,7 +154,10 @@ describe('run_code', () => {
       bindRunCodeRegistry(tools);
       bindRunCodeNestedApprovalOwner(tools, owner);
       const result = runCode.execute(
-        { code: "return await tools.create_file({ path: 'link/file.txt', content: 'effect', overwrite: true });" },
+        {
+          description: 'run_code test',
+          code: "return await tools.create_file({ path: 'link/file.txt', content: 'effect', overwrite: true });",
+        },
         { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
       );
       await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
@@ -213,6 +216,7 @@ describe('run_code', () => {
       bindRunCodeNestedApprovalOwner(tools, owner);
       const result = runCode.execute(
         {
+          description: 'run_code test',
           code:
             'await tools.create_file({ path: ' +
             JSON.stringify(matchingPath) +
@@ -276,7 +280,7 @@ describe('run_code', () => {
         JSON.stringify('*** Begin Patch\n*** Add File: ' + targetPath + '\n+created by patch\n*** End Patch') +
         ' });';
       const result = runCode.execute(
-        { code },
+        { description: 'run_code test', code },
         { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
       );
 
@@ -320,7 +324,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });' },
+      { code: 'return await tools.protected({ value: "x" });', description: 'call protected tool' },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -369,6 +373,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
       {
+        description: 'run_code test',
         code: 'await tools.before({ value: "x" }); try { await tools.protected({ value: "x" }); } catch (e) { return "caught"; }',
       },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
@@ -420,6 +425,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
       {
+        description: 'run_code test',
         code: 'const serial = tools.protected({ value: "x" }); const fast = await tools.fast({ value: "y" }); return { fast, serial: await serial };',
       },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
@@ -454,7 +460,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
+      { description: 'run_code test', code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -501,6 +507,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
       {
+        description: 'run_code test',
         code: 'const serial = tools.protected({ value: "x" }); const slow = tools.slow({ value: "y" }); return { slow: await slow, serial: await serial };',
         timeout_ms: 500,
       },
@@ -534,6 +541,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const pending = runCode.execute(
       {
+        description: 'run_code test',
         code: 'await tools.describe("protected"); return await tools.protected({ value: "x" });',
         timeout_ms: 500,
       },
@@ -574,7 +582,7 @@ describe('run_code', () => {
     bindRunCodeNestedApprovalOwner(tools, owner);
     const controller = new AbortController();
     const pending = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 60_000 },
+      { description: 'run_code test', code: 'return await tools.protected({ value: "x" });', timeout_ms: 60_000 },
       { context: { sessionId: 'session-1' }, signal: controller.signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
@@ -629,6 +637,7 @@ describe('run_code', () => {
       const pending = runCode.execute(
         {
           code: 'return await tools.create_file({ path: ' + JSON.stringify(targetPath) + ", content: 'x' });",
+          description: 'create the target file',
           timeout_ms: 60_000,
         },
         { context: { sessionId: 'session-1' }, signal: controller.signal },
@@ -671,7 +680,7 @@ describe('run_code', () => {
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
     const result = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });' },
+      { code: 'return await tools.protected({ value: "x" });', description: 'call protected tool' },
       { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
@@ -910,14 +919,16 @@ describe('run_code', () => {
     expect(output).not.toContain('Signature:');
   });
 
-  it('exposes exactly the registry, so an unknown tool name is simply absent', async () => {
+  it('exposes exactly the registry, and unknown names explain themselves when called', async () => {
     const output = await run(
       [tool({ name: 'echo' })],
-      `console.log("names:", Object.keys(tools).join(","), "missing:", typeof tools.missing);`,
+      `console.log("names:", Object.keys(tools).join(","), "missing listed:", Object.keys(tools).includes("missing"));
+       try { tools.missing({}); } catch (error) { console.log("call:", error.message); }`,
       { include_console: true },
     );
 
-    expect(output).toContain('names: echo,describe missing: undefined');
+    expect(output).toContain('names: echo,describe missing listed: false');
+    expect(output).toContain('call: Unknown tool "missing". Available: echo, describe');
   });
 
   it('truncates an oversized tool result with an explicit marker', async () => {
@@ -984,26 +995,26 @@ describe('run_code', () => {
 
     const output = String(
       await definition.execute({
-        code: `console.log(typeof tools.${TOOL_NAME_RUN_CODE});`,
+        code: `try { tools.${TOOL_NAME_RUN_CODE}({}); } catch (error) { console.log(error.message); }`,
         timeout_ms: 60_000,
         include_console: true,
       } as never),
     );
 
-    expect(output).toContain('undefined');
+    expect(output).toContain(`Unknown tool "${TOOL_NAME_RUN_CODE}"`);
   });
 
   it.each([...RUN_CODE_PROHIBITED_TOOLS])('never exposes the prohibited tool %s', async (name) => {
     const execute = vi.fn(() => 'must not run');
     const output = await run(
       [tool({ name, execute }), tool({ name: 'echo' })],
-      `console.log("exposed:", typeof tools[${JSON.stringify(name)}]);
-       console.log("names:", Object.keys(tools).join(","));`,
+      `console.log("listed:", Object.keys(tools).includes(${JSON.stringify(name)}));
+       try { await tools[${JSON.stringify(name)}]({}); } catch (error) { console.log("blocked:", error.message); }`,
       { include_console: true },
     );
 
-    expect(output).toContain('exposed: undefined');
-    expect(output).toContain('names: echo');
+    expect(output).toContain('listed: false');
+    expect(output).toContain(`blocked: Unknown tool "${name}". Available: echo`);
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -1666,8 +1677,11 @@ describe('run_code M5: syntax-error location and guidance', () => {
 
     expect(output).toContain('Script failed');
     expect(output).toContain('user-facing boom');
+    // Compile guidance must stay off for a runtime-thrown SyntaxError from the
+    // vm realm; the accurate script location may still be attached.
     expect(output).not.toMatch(/plain JavaScript/);
-    expect(output).not.toContain('Line ');
+    expect(output).not.toContain('unterminated');
+    expect(output).toMatch(/throw new SyntaxError/);
   });
 });
 

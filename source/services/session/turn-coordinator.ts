@@ -12,6 +12,7 @@ import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
 import { randomUUID } from 'node:crypto';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type { SessionIdSource } from './session-identity.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 
 export type TurnStartOptions = Pick<
@@ -32,7 +33,7 @@ export interface TurnCoordinatorDeps {
   approvalFlow: ApprovalFlowCoordinator;
   providerContinuity: ProviderContinuity;
   shellAutoApproval: ShellAutoApprovalResolver;
-  sessionId?: string;
+  sessionId?: SessionIdSource;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
 }

@@ -13,6 +13,7 @@ import { getProfileLabel } from '../profiles/labels.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
+import type { SessionIdentity } from '../session/session-identity.js';
 import {
   QueueController,
   type ActionId,
@@ -168,7 +169,7 @@ export type QueuedTurnStartObserver = (execution: {
 }) => void;
 
 export class ConversationAdapter {
-  #sessionId: string;
+  #sessionId: string | SessionIdentity;
   #startedAt: string;
   #eventSink: ConversationEventSink | null = null;
   #askUserAnswerSink: AskUserAnswerSink | null;
@@ -215,8 +216,12 @@ export class ConversationAdapter {
   readonly #cancelledLeases = new Set<string>();
   #admissionClosed = false;
 
+  #currentSessionId(): string {
+    return typeof this.#sessionId === 'string' ? this.#sessionId : this.#sessionId.current;
+  }
+
   constructor(deps: {
-    sessionId: string;
+    sessionId: string | SessionIdentity;
     startedAt: string;
     askUserAnswerSink?: AskUserAnswerSink | null;
     subagentEventSinkHost?: SubagentEventSinkHost | null;
@@ -384,7 +389,7 @@ export class ConversationAdapter {
 
     return this.#sessionContextService.runWithContext(
       {
-        sessionId: this.#sessionId,
+        sessionId: this.#currentSessionId(),
         sessionStartedAt: this.#startedAt,
         mode,
         traceId: this.#logger.getCorrelationId(),
@@ -948,7 +953,7 @@ export class ConversationAdapter {
             getRawInterruption: () => this.#approval.getPendingInterruption(),
             onFinalEvent: (event) => {
               this.#logger.debug('sendMessage received final event', {
-                sessionId: this.#sessionId,
+                sessionId: this.#currentSessionId(),
                 hasUsage: Boolean(event.usage),
                 usage: event.usage,
               });
@@ -964,7 +969,7 @@ export class ConversationAdapter {
 
       if (result.type === 'response') {
         this.#logger.debug('sendMessage returning response', {
-          sessionId: this.#sessionId,
+          sessionId: this.#currentSessionId(),
           hasUsage: Boolean(result.usage),
           usage: result.usage,
         });
@@ -1102,7 +1107,7 @@ export class ConversationAdapter {
               getRawInterruption: () => this.#approval.getPendingInterruption(),
               onFinalEvent: (event) => {
                 this.#logger.debug('handleApprovalDecision received final event', {
-                  sessionId: this.#sessionId,
+                  sessionId: this.#currentSessionId(),
                   hasUsage: Boolean(event.usage),
                   usage: event.usage,
                 });
@@ -1118,7 +1123,7 @@ export class ConversationAdapter {
 
         if (result && result.type === 'response') {
           this.#logger.debug('handleApprovalDecision returning response', {
-            sessionId: this.#sessionId,
+            sessionId: this.#currentSessionId(),
             hasUsage: Boolean(result.usage),
             usage: result.usage,
           });

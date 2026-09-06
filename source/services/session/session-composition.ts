@@ -443,7 +443,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // It intentionally does not touch ApprovalState, which owns the root turn.
   const backgroundSubagentApprovals = new BackgroundSubagentApprovalController({
     logger,
-    sessionId: id,
+    sessionId: identity,
     toolOwnership,
     nestedCompatibility: getMethod<
       [],
@@ -589,7 +589,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
     approvalState,
     logger,
-    sessionId: id,
+    sessionId: identity,
     toolTracker,
     generationGuard,
     toolOwnership,
@@ -623,6 +623,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     continuityReset,
     sessionAccess,
     journal,
+    pendingInteraction,
     terminateActiveTurn: () => terminateActiveTurn?.(),
   });
 
@@ -692,7 +693,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const streamProcessor = new SessionStreamProcessor({
     logger,
-    sessionId: id,
+    sessionId: identity,
     toolTracker,
     conversationStore,
     conversationLogger,
@@ -743,7 +744,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     inputPlanner,
     logger,
-    sessionId: id,
+    sessionId: identity,
     state,
   });
   const recoveryHandler = new InitialTurnRecoveryHandler({
@@ -757,7 +758,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     recoveryPolicy,
     retryClassifier,
     retryEventPresenter,
-    sessionId: id,
+    sessionId: identity,
     provider: agentClient?.getProvider?.(),
     toolTracker,
   });
@@ -766,14 +767,14 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     approvalFlow,
     toolTracker,
     logger,
-    sessionId: id,
+    sessionId: identity,
     journal,
   });
 
   const continuationRecoveryHandler = new ContinuationRecoveryHandler({
     breakChaining,
     logger,
-    sessionId: id,
+    sessionId: identity,
     generationGuard,
     retryClassifier,
     recoveryPolicy,
@@ -819,7 +820,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     approvalFlow,
     providerContinuity,
     shellAutoApproval,
-    sessionId: id,
+    sessionId: identity,
     hookLifecycle,
     hookEvents,
   });
@@ -845,11 +846,20 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const rollover = (newSessionId: string): void => {
     if (disposed) throw new Error('Session runtime is already disposed.');
     if (!newSessionId) throw new Error('Session rollover requires a session ID.');
+    if (!appState.statusMachine.is('idle')) {
+      throw new Error('Session rollover is blocked while the foreground turn is active.');
+    }
+    if (approvalFlow.getPending() || postExecutePending.snapshot().entries.length > 0) {
+      throw new Error('Session rollover is blocked while a foreground approval is pending.');
+    }
+    if (nestedApprovalOwner.getSnapshot()) {
+      throw new Error('Session rollover is blocked while a nested approval is pending.');
+    }
     // This is intentionally the same root-state reset used by clear, but it
     // does not dispose the graph.  The retained client owns live background
     // work, permissions, and approval registries; only transcript and
     // provider/turn continuity are freshened.
-    state.resetSession({ clearConversations: true });
+    state.resetSession({ clearConversations: false, rollover: true });
     identity.replace(newSessionId);
   };
   const dispose = (): void => {

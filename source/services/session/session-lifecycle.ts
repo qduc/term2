@@ -12,6 +12,7 @@ import { projectImportedState, ProjectionWarningCode } from '../conversation/con
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 import type { SessionAccessState } from './session-access-state.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import type { PendingInteractionState } from './pending-interaction-state.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
 
@@ -42,6 +43,7 @@ export class SessionLifecycle {
   #sessionAccess: SessionAccessState | undefined;
   #terminateActiveTurn: (() => void) | undefined;
   #journal: AssistantTurnJournal;
+  #pendingInteraction: PendingInteractionState | undefined;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
@@ -64,6 +66,7 @@ export class SessionLifecycle {
     sessionAccess?: SessionAccessState;
     /** Notify the coordinator before a generation reset invalidates a turn. */
     terminateActiveTurn?: () => void;
+    pendingInteraction?: PendingInteractionState;
   }) {
     this.#inputPlanner = deps.inputPlanner;
     this.#toolTracker = deps.toolTracker;
@@ -77,6 +80,7 @@ export class SessionLifecycle {
     this.#sessionAccess = deps.sessionAccess;
     this.#terminateActiveTurn = deps.terminateActiveTurn;
     this.#journal = deps.journal;
+    this.#pendingInteraction = deps.pendingInteraction;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -85,7 +89,7 @@ export class SessionLifecycle {
    * Full session reset: clears conversation store, tool tracker, input planner,
    * and all continuity state.
    */
-  resetSession(options?: { clearConversations?: boolean }): void {
+  resetSession(options?: { clearConversations?: boolean; rollover?: boolean }): void {
     this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#clearAccessState();
@@ -94,6 +98,7 @@ export class SessionLifecycle {
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
     this.#journal.clear();
+    this.#pendingInteraction?.clear();
     this.#appState.statusMachine.abort();
   }
 

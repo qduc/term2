@@ -489,6 +489,11 @@ export class ConversationOrchestrator {
       this.config.conversationService.resetWithNewId(crypto.randomUUID());
     }
 
+    this.resetPresentation();
+  }
+
+  /** Reset only the UI projection after an in-place session rollover. */
+  resetPresentation(): void {
     this.config.messages.setMessages(() => []);
     this.config.approvedContext.current = null;
     this.config.conversationService.clearPendingInteraction?.();

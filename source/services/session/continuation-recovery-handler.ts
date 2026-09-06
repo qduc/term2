@@ -10,11 +10,13 @@ import type { ContinuationState } from './continuation-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 export type ContinuationRecoveryHandlerDeps = {
   breakChaining?: () => void;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   generationGuard: GenerationGuard;
   retryClassifier: DefaultRetryClassifier;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
@@ -99,7 +101,7 @@ export class ContinuationRecoveryHandler {
 
     this.deps.logger.warn(presentation.logMessage, {
       ...presentation.logFields,
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       traceId: this.deps.logger.getCorrelationId(),
     });
 

@@ -227,6 +227,7 @@ const App: FC<AppProps> = ({
     handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
+    resetConversationPresentation,
     restoreConversation,
     stopProcessing,
     cancelAskUser,
@@ -385,26 +386,38 @@ const App: FC<AppProps> = ({
       ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
     });
     const plannedSuccessorId = generateId();
+    const successorCreatedAt = new Date().toISOString();
     pendingRolloverSuccessorIdRef.current = plannedSuccessorId;
     latestRotatedSessionIdRef.current = plannedSuccessorId;
     rolloverSourceSessionIdRef.current = sessionId;
     onPrintUsage?.();
     const canRolloverInPlace = typeof conversationService.rolloverWithNewId === 'function';
-    if (canRolloverInPlace) {
-      conversationService.rolloverWithNewId(plannedSuccessorId);
-    } else {
-      // Compatibility harnesses predating the in-place seam retain the old
-      // clear path; production ConversationService always has the method.
-      await clearConversationAndRefreshBanner();
-    }
+    // Rotate persistence before mutating the in-memory root. If log setup is
+    // rejected, the rollover leaves the live graph and its current transcript
+    // untouched; there is no attempt to promise rollback of arbitrary sinks.
     if (canRolloverInPlace && onRotateWriter) {
-      onRotateWriter(plannedSuccessorId, new Date().toISOString(), sourceSessionId);
+      onRotateWriter(plannedSuccessorId, successorCreatedAt, sourceSessionId);
+    }
+    try {
+      if (canRolloverInPlace) {
+        conversationService.rolloverWithNewId(plannedSuccessorId);
+      } else {
+        // Compatibility harnesses predating the in-place seam retain the old
+        // clear path; production ConversationService always has the method.
+        await clearConversationAndRefreshBanner();
+      }
+    } catch (error) {
+      pendingRolloverSuccessorIdRef.current = undefined;
+      latestRotatedSessionIdRef.current = undefined;
+      rolloverSourceSessionIdRef.current = undefined;
+      throw error;
     }
     pendingRolloverSuccessorIdRef.current = undefined;
     rolloverSourceSessionIdRef.current = undefined;
     if (canRolloverInPlace) {
       setSessionId(plannedSuccessorId);
-      onSessionIdChange?.(plannedSuccessorId, new Date().toISOString());
+      resetConversationPresentation();
+      onSessionIdChange?.(plannedSuccessorId, successorCreatedAt);
       setStartupBannerIds(['startup-banner-0']);
       setActiveRestoredStaticMessageIds([]);
       setMessageListEpoch((epoch) => epoch + 1);

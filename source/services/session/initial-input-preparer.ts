@@ -6,6 +6,8 @@ import type { SessionInputPlanner } from './session-input-planner.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
 import type { TurnAttempt } from './turn-attempt.js';
 import { consumeInputSurgeApproval, type InputSurgeApproval } from '../input-surge-approval.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 type InputSurgeErrorEvent = Extract<ConversationEvent, { type: 'error' }>;
 
@@ -16,7 +18,7 @@ export type InitialInputPreparerDeps = {
   generationGuard: GenerationGuard;
   inputPlanner: SessionInputPlanner;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   state: SessionLifecycle;
 };
 
@@ -55,7 +57,7 @@ export class InitialInputPreparer {
         eventType: 'input_surge.blocked',
         category: 'provider',
         phase: 'request_start',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         reason: surgeDecision.reason,
         stats: surgeDecision.stats,

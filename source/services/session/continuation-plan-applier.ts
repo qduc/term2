@@ -8,12 +8,13 @@ import type { ContinuationInit, ContinuationState, PreparedContinuation } from '
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import type { SessionIdSource } from './session-identity.js';
 
 export type ContinuationPlanApplierDeps = {
   approvalFlow: ApprovalFlowCoordinator;
   toolTracker: SessionToolTracker;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   journal: AssistantTurnJournal;
 };
 

@@ -18,4 +18,8 @@ export class AskUserAnswerStore {
   peek(callId: string): string | undefined {
     return this.#answers.get(callId);
   }
+
+  clear(): void {
+    this.#answers.clear();
+  }
 }

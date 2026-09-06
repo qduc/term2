@@ -28,10 +28,13 @@ import {
   type BackgroundShellWatchScheduler,
 } from '../shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
+import { SessionIdentity } from './session-identity.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
   readonly agentClient: ConversationAgentClient;
+  /** Mutable identity shared by every retained root collaborator. */
+  readonly sessionIdentity?: SessionIdentity;
   /** The sole continuity instance shared by this handle's root client and runtime. */
   readonly providerContinuity?: ProviderContinuity;
   /** Present only for an owned root session handle. */
@@ -101,11 +104,15 @@ export function createOwnedSessionClientFactory(
 ): SessionClientFactory {
   return {
     create(sessionId, options) {
+      const sessionIdentity = new SessionIdentity(sessionId);
       const continuationProjectionMode: ContinuationProjectionMode =
         settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
       const access = new SessionAccessState(settings);
-      const postExecutePending = new PostExecutePendingRegistry({ sessionId, epoch: crypto.randomUUID() });
+      const postExecutePending = new PostExecutePendingRegistry({
+        sessionId: sessionIdentity,
+        epoch: crypto.randomUUID(),
+      });
       const postExecutePauseCapability = new PostExecutePauseCapability(postExecutePending);
       const providerContinuity = new ProviderContinuity();
       const openAIRootCheckpointLifecycleObserver =
@@ -120,7 +127,7 @@ export function createOwnedSessionClientFactory(
       );
       const hookEvents = hookLifecycle
         ? new HookEventFactory({
-            sessionId,
+            sessionId: sessionIdentity,
             includeUserText: settings.getDynamic('hooks.includeUserText') === true,
             includeToolArguments: settings.getDynamic('hooks.includeToolArguments') === true,
             includeToolResults: settings.getDynamic('hooks.includeToolResults') === true,
@@ -172,6 +179,7 @@ export function createOwnedSessionClientFactory(
       let disposed = false;
       return {
         agentClient,
+        sessionIdentity,
         providerContinuity,
         openAIRootFreshTurnSelectorParityObserver,
         openAIRootCheckpointLifecycleObserver,
@@ -209,14 +217,16 @@ export function createCallerOwnedSessionClientFactory(
   toolOwnership: ToolOwnershipRegistry,
 ): SessionClientFactory {
   return {
-    create() {
+    create(sessionId = 'caller-owned') {
+      const sessionIdentity = new SessionIdentity(sessionId);
       const providerContinuity = new ProviderContinuity();
       const postExecutePending = new PostExecutePendingRegistry({
-        sessionId: 'caller-owned',
+        sessionId: sessionIdentity,
         epoch: crypto.randomUUID(),
       });
       return {
         agentClient,
+        sessionIdentity,
         providerContinuity,
         continuationProjectionMode: 'legacy',
         toolOwnership,

@@ -15,6 +15,8 @@ import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 export type InitialTurnRecoveryResult =
   | { kind: 'run'; instruction: NextRunInstruction; delayMs?: number; useStandardServiceTier?: boolean }
@@ -32,7 +34,7 @@ export type InitialTurnRecoveryHandlerDeps = {
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
-  sessionId: string;
+  sessionId: SessionIdSource;
   provider?: string;
   toolTracker?: Pick<SessionToolTracker, 'inspectCommittedToolContinuation'>;
 };
@@ -74,7 +76,7 @@ export class InitialTurnRecoveryHandler {
         eventType: 'retry.fresh_start_blocked',
         category: 'retry',
         phase: 'retry',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         retryKind: classified.kind,
         errorMessage: error instanceof Error ? error.message : String(error),
@@ -156,7 +158,7 @@ export class InitialTurnRecoveryHandler {
 
     this.deps.logger.warn(presentation.logMessage, {
       ...presentation.logFields,
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       traceId: this.deps.logger.getCorrelationId(),
     });
 
@@ -294,7 +296,7 @@ export class InitialTurnRecoveryHandler {
       eventType: 'stream.failed',
       category: 'stream',
       phase: 'abort',
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       traceId: this.deps.logger.getCorrelationId(),
       errorMessage: describeError(error),
       stack: error instanceof Error ? error.stack : undefined,

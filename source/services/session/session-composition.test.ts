@@ -223,6 +223,32 @@ it('rollover changes identity without disposing the retained runtime graph', () 
   runtime.dispose();
 });
 
+it('rollover resets root history and continuity through the owned client seam while retaining background controls', () => {
+  const rolloverRootContext = vi.fn();
+  const backgroundStatuses = [{ runId: 'worker-1', role: 'worker', status: 'running', task: 'hold' }];
+  const runtime = createSessionRuntime({
+    sessionId: 'before-rollover',
+    agentClient: makeMockClient({
+      rolloverRootContext,
+      listBackgroundSubagentStatuses: () => backgroundStatuses,
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  runtime.state.importState({
+    history: [{ type: 'message', role: 'user', content: 'old root' }],
+    previousResponseId: 'response-old',
+  });
+
+  runtime.rollover('after-rollover');
+
+  expect(runtime.sessionId).toBe('after-rollover');
+  expect(runtime.state.getCurrentSnapshot().history).toEqual([]);
+  expect(rolloverRootContext).toHaveBeenCalledTimes(1);
+  expect(runtime.backgroundTaskControl).toBeDefined();
+  expect(backgroundStatuses).toHaveLength(1);
+  runtime.dispose();
+});
+
 it('exposes the agent client background subagent event sink through runtime.sinks', () => {
   const attached: Array<unknown> = [];
   const runtime = createSessionRuntime({

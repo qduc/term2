@@ -150,6 +150,7 @@ export class ConversationService {
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       toolCallMarkers: this.#toolCallMarkers,
+      sessionIdentity: this.#clientHandle.sessionIdentity,
       deps,
       queueForeground: true,
       queueCapacity,
@@ -286,7 +287,39 @@ export class ConversationService {
   /** Rollover-only identity/context reset; ordinary clear keeps its disposal semantics. */
   rolloverWithNewId(newId: string): void {
     if (!newId) throw new Error('Session rollover requires a session ID.');
+    this.#assertRolloverAdmission();
     this.#runtime.rollover(newId);
+  }
+
+  #assertRolloverAdmission(): void {
+    if (this.#adapter.isQueueOwningSubmissions() || this.#adapter.queuedSubmissionCount() > 0) {
+      throw new Error('Session rollover is blocked while a queued submission is pending.');
+    }
+    if (this.#hasPendingRolloverInteraction()) {
+      throw new Error('Session rollover is blocked while a user interaction or approval is pending.');
+    }
+  }
+
+  #hasPendingRolloverInteraction(): boolean {
+    const interaction = this.#runtime.pendingInteraction.getSnapshot();
+    const backgroundWaitingForAnswer = this.#runtime.backgroundTaskControl
+      .listDetails()
+      .some(
+        (detail) =>
+          detail.kind === 'subagent' &&
+          (detail.status === 'awaiting_approval' || detail.status === 'waiting_for_answer'),
+      );
+    // A stale ordinary interaction projection does not veto a settled turn;
+    // check-ins have no backing approval owner and therefore remain authoritative.
+    return (
+      interaction?.approval.checkIn !== undefined ||
+      this.#runtime.approval.getPending() !== null ||
+      this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
+      this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+      this.#runtime.nestedApproval.getSnapshot() !== null ||
+      backgroundWaitingForAnswer ||
+      this.#adapter.queuedSubmissionCount() > 0
+    );
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;
@@ -391,19 +424,7 @@ export class ConversationService {
     }
     if (consumption.status !== 'ready') return consumption;
 
-    const interaction = this.#runtime.pendingInteraction.getSnapshot();
-    // Ordinary tool interactions mirror one of the approval owners below. A
-    // projection can briefly outlive that owner at settlement and must not
-    // veto rollover by itself. Check-ins are the exception: they are presented
-    // directly on the interaction surface and have no backing approval state.
-    const interactionPending =
-      interaction?.approval.checkIn !== undefined ||
-      this.#runtime.approval.getPending() !== null ||
-      this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
-      this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
-      this.#runtime.nestedApproval.getSnapshot() !== null ||
-      this.#adapter.queuedSubmissionCount() > 0;
-    if (!interactionPending) return consumption;
+    if (!this.#hasPendingRolloverInteraction()) return consumption;
 
     const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
     this.#runtime.state.queueModeNotice(error);

@@ -3,6 +3,7 @@ import type { SessionRuntime } from '../../core/index.js';
 import { ConversationAdapter } from './conversation-adapter.js';
 import { createSessionQueuePersistence } from './queue-persistence.js';
 import { isTestEnvironment } from '../settings/settings-env.js';
+import type { SessionIdentity } from '../session/session-identity.js';
 
 export type CreateConversationAdapterOptions = {
   queueForeground?: boolean;
@@ -10,6 +11,7 @@ export type CreateConversationAdapterOptions = {
   preparedLeaseTtlMs?: number;
   activeCancelTimeoutMs?: number;
   discardOnFailure?: boolean;
+  sessionIdentity?: SessionIdentity;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -26,11 +28,12 @@ export function createConversationAdapterForRuntime(
     preparedLeaseTtlMs,
     activeCancelTimeoutMs,
     discardOnFailure,
+    sessionIdentity,
   }: CreateConversationAdapterOptions,
 ): ConversationAdapter {
   const { logger, settingsService, sessionContextService } = deps;
   return new ConversationAdapter({
-    sessionId: runtime.sessionId,
+    sessionId: sessionIdentity ?? runtime.sessionId,
     startedAt: runtime.sessionStartedAt,
     askUserAnswerSink: runtime.sinks.askUserAnswer,
     subagentEventSinkHost: runtime.sinks.subagentEvents,

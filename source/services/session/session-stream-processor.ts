@@ -18,6 +18,8 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ProviderOpaqueItem } from '../../contracts/conversation-items.js';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -149,7 +151,7 @@ const warnIfStreamHistoryReplayedTools = ({
   snapshot,
 }: {
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   source: StreamHistorySource;
   snapshot: StreamReplaySnapshot;
 }): void => {
@@ -166,7 +168,7 @@ const warnIfStreamHistoryReplayedTools = ({
     eventType: 'conversation.stream_history.replayed_tools',
     category: 'provider',
     phase: 'post_stream',
-    sessionId,
+    sessionId: resolveSessionId(sessionId),
     traceId: logger.getCorrelationId(),
     source,
     historyLength: history.length,
@@ -180,7 +182,7 @@ const warnIfStreamHistoryReplayedTools = ({
 
 export interface SessionStreamProcessorDeps {
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   toolTracker: SessionToolTracker;
   conversationStore: ConversationStore;
   conversationLogger: ConversationLogger;
@@ -290,7 +292,7 @@ export class SessionStreamProcessor {
           });
         },
       },
-      { logger: this.deps.logger, sessionId: this.deps.sessionId },
+      { logger: this.deps.logger, sessionId: resolveSessionId(this.deps.sessionId) },
     );
 
     const iterator = generator[Symbol.asyncIterator]();
@@ -357,7 +359,7 @@ export class SessionStreamProcessor {
       );
       warnIfStreamHistoryReplayedTools({
         logger: this.deps.logger,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         source,
         snapshot: extractReplaySnapshot(stream),
       });
@@ -372,7 +374,7 @@ export class SessionStreamProcessor {
             eventType: 'conversation.stream_history.replay_dropped',
             category: 'provider',
             phase: 'post_stream',
-            sessionId: this.deps.sessionId,
+            sessionId: resolveSessionId(this.deps.sessionId),
             traceId: this.deps.logger.getCorrelationId(),
             source,
             inputMode,

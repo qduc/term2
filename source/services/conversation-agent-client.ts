@@ -121,6 +121,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   setOnToolDispatch?(handler: ((callId: string) => void) | undefined): void;
   requestSessionRollover?(request: SessionRolloverRequest): SessionRolloverRequestOutcome;
   consumeSessionRolloverRequest?(): SessionRolloverConsumption;
+  /** Reset only the root request/agent context; retained background clients live on. */
+  rolloverRootContext?(): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 

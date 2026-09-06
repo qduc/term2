@@ -34,7 +34,10 @@ export class SessionContinuityReset {
     this.#agentClient = deps.agentClient;
   }
 
-  reset({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
+  reset({
+    clearConversations = true,
+    rollover = false,
+  }: { clearConversations?: boolean; rollover?: boolean } = {}): void {
     this.#providerContinuity.clear();
     this.#approvalFlow.clearPending();
     this.#approvalFlow.consumeAborted();
@@ -44,7 +47,9 @@ export class SessionContinuityReset {
     this.#inputPlanner.reset();
     this.#turnAccumulator.resetPersistedTurnState();
 
-    if (clearConversations) {
+    if (rollover) {
+      this.#agentClient.rolloverRootContext?.();
+    } else if (clearConversations) {
       const clearConversationsFn = getMethod<[], void>(this.#agentClient, 'clearConversations');
       clearConversationsFn?.call(this.#agentClient);
     }

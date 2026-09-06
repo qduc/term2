@@ -461,26 +461,6 @@ export class AgentClient {
 
   requestSessionRollover(request: SessionRolloverRequest): SessionRolloverRequestOutcome {
     const rolloverId = randomUUID();
-    const active = this.#liveBackgroundWork();
-    if (active.subagent > 0 || active.shell > 0) {
-      this.#logger.info('Session rollover blocked', {
-        eventType: 'session.rollover.blocked',
-        rolloverId,
-        sourceSessionId: this.#sessionContextService.getContext()?.sessionId,
-        blocker: 'background_work',
-        reason: request.reason,
-        briefSize: request.brief.length,
-        providerInputTokens: this.#lastCompletedProviderInputTokens,
-        active,
-      });
-      return {
-        ok: false,
-        status: 'rollover_blocked',
-        error: 'Session rollover is blocked while background work is live.',
-        active,
-        rolloverId,
-      };
-    }
     const pending: PendingSessionRolloverRequest = {
       ...request,
       rolloverId,
@@ -498,31 +478,7 @@ export class AgentClient {
     this.#sessionRolloverRequest = null;
     if (!request) return { status: 'none' };
 
-    const active = this.#liveBackgroundWork();
-    if (active.subagent > 0 || active.shell > 0) {
-      return {
-        status: 'blocked',
-        blocker: 'background_work',
-        error: 'Session rollover was not performed because background work became live before turn settlement.',
-        active,
-        request,
-      };
-    }
     return { status: 'ready', request };
-  }
-
-  #liveBackgroundWork(): { shell: number; subagent: number } {
-    const subagent = this.listBackgroundSubagentStatuses().filter(
-      ({ status }) =>
-        status === 'running' ||
-        status === 'awaiting_approval' ||
-        status === 'waiting_for_answer' ||
-        status === 'cancelling',
-    ).length;
-    const shell = this.listBackgroundShellJobs().filter(
-      ({ status }) => status === 'running' || status === 'cancelling',
-    ).length;
-    return { shell, subagent };
   }
 
   /** Exact nested-tool state shared with the subagent runtime's tool factory. */
@@ -1076,6 +1032,24 @@ export class AgentClient {
     getProvider(this.#agentConfig.getProvider())?.clearConversations?.();
     this.#agentConfig.refreshAgent();
     this.#logger.debug('Conversation and agent refreshed');
+  }
+
+  /**
+   * Rollover deliberately does not use clearConversations(): that public
+   * operation refreshes the whole client and is allowed to tear down normal
+   * conversation resources. Only the root request lane is reset here; nested
+   * clients and their live background work remain owned by the bridge.
+   */
+  rolloverRootContext(): void {
+    this.#applicationRunLoop.abort();
+    this.#clearCorrelationId();
+    this.#contextCompactionSessionState = { disabled: false };
+    this.#contextMilestoneReminder = new ContextMilestoneReminder();
+    this.#sessionRolloverRequest = null;
+    this.#lastCompletedProviderInputTokens = undefined;
+    this.#askUserAnswerStore.clear();
+    this.#clearStreamedModelCache();
+    this.#chatService.clearModelCache();
   }
 
   #clearCorrelationId(): void {

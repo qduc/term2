@@ -157,6 +157,16 @@ it('never disposes a caller-owned compatibility client', () => {
   expect(callerOwned.dispose).not.toHaveBeenCalled();
 });
 
+it('shares the mutable identity with factory-supplied authorization state', () => {
+  const factory = createOwnedSessionClientFactory(createMockSettingsService(), () => client());
+  const handle = factory.create('before-rollover');
+
+  handle.sessionIdentity!.replace('after-rollover');
+
+  expect(handle.postExecutePending!.snapshot().sessionId).toBe('after-rollover');
+  handle.dispose();
+});
+
 it('binds each owned root observer to its handle continuity and leaves caller-owned handles inert', () => {
   const captures: any[] = [];
   const factory = createOwnedSessionClientFactory(

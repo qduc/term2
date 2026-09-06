@@ -301,15 +301,15 @@ export function filterSettingValueSuggestionsByQuery(
     }
   }
 
-  // For string settings without predefined suggestions, allow free-form input.
+  // For string settings, typed text that matches no suggestion is a custom
+  // value. This holds whether or not the key has curated suggestions: Enter
+  // applies the typed text for any string setting, so the row must exist (and
+  // the list must never look like a dead end) even when curated values exist.
   if (key && isStringSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
-    const hasPredefined = isProviderSettingKey(key) || (VALUE_SUGGESTIONS_BY_KEY[key]?.length ?? 0) > 0;
-    if (!hasPredefined) {
-      results.unshift({
-        value: trimmed,
-        description: 'Custom value',
-      });
-    }
+    results.unshift({
+      value: trimmed,
+      description: 'Custom value',
+    });
   }
 
   return results.slice(0, maxResults);

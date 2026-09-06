@@ -335,6 +335,20 @@ it.sequential(
     expect(controller.getSnapshot().editor).toMatchObject({ text: '/settings shell.time', cursor: 20 });
   },
 );
+it.sequential('a settings_value frame labels its line with the setting key instead of "Filter:"', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings shell.time');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings_value');
+
+  const output = lastFrame() ?? '';
+  expect(output).toContain('shell.timeout =');
+  expect(output).not.toContain('Filter: ');
+});
 
 it.sequential('opens the mentor pool editor without repeatedly updating the controller store', async () => {
   const controller = new MenuControllerImpl();

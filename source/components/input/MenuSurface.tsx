@@ -24,6 +24,11 @@ type FilterableMenuFrame = Extract<MenuFrame, { binding: { query: string } }>;
 const isFilterableMenu = (frame: MenuFrame | undefined): frame is FilterableMenuFrame =>
   frame !== undefined && filterableMenuKinds.has(frame.kind);
 
+type SettingsValueMenuFrame = Extract<MenuFrame, { kind: 'settings_value' }>;
+
+const isSettingsValueMenu = (frame: MenuFrame | undefined): frame is SettingsValueMenuFrame =>
+  frame?.kind === 'settings_value';
+
 export type MenuSurfaceProps = {
   stack: readonly MenuFrame[];
   controller: MenuController;
@@ -37,8 +42,12 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   const { input, cursorOffset, menuPromptLabel, setCursorOverride } = useInputContext();
   const activeFrame = stack.at(-1);
   const filterFrame = isFilterableMenu(activeFrame) ? activeFrame : undefined;
-  const promptLabel = menuPromptLabel ?? (filterFrame ? 'Filter: ' : undefined);
-  const promptText = menuPromptLabel ? input : filterFrame?.binding.query;
+  const valueFrame = isSettingsValueMenu(activeFrame) ? activeFrame : undefined;
+  // A settings_value frame edits a value, not a filter: label the line with
+  // the setting key (which the binding text itself omits) instead of "Filter:".
+  const promptLabel =
+    menuPromptLabel ?? (valueFrame ? `${valueFrame.settingKey} = ` : filterFrame ? 'Filter: ' : undefined);
+  const promptText = menuPromptLabel ? input : valueFrame ? valueFrame.binding.query : filterFrame?.binding.query;
 
   useEffect(() => {
     if (enabled) setCursorOverride(cursorOffset);

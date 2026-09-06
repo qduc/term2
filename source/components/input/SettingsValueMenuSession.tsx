@@ -29,6 +29,18 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
 
     const resolveTypedOrSelectedValue = (): unknown => {
       const suggestion = settingsValue.getSelectedItem();
+
+      // A free-form string frame is a field, not a picker: Enter applies the
+      // whole value text from the value-region start. binding.query is
+      // truncated at the cursor, so Home/End (or left/right) cursor moves
+      // would otherwise silently drop the tail of what was typed.
+      if (settingsValue.isFreeFormString) {
+        const editor = controller.getSnapshot().editor;
+        const draft = editor.text.slice(frame.binding.replacement.start).trim();
+        if (draft) return parseSettingValueForKey(frame.settingKey, draft);
+        return suggestion ? parseSettingValueForKey(frame.settingKey, suggestion.value) : undefined;
+      }
+
       const typedValueText = frame.binding.query;
       const parsedTypedValue = typedValueText ? parseSettingValueForKey(frame.settingKey, typedValueText) : undefined;
       const parsedSuggestionValue = suggestion
@@ -61,6 +73,15 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
         switch (event.type) {
           case 'move':
             setApplyError(null);
+            // Text grammar for field frames: Home/End move the editor cursor
+            // inside the value, not list selection (there is no list to move
+            // in). Accept reads the full value text, so nothing is lost.
+            if (settingsValue.isFreeFormString && (event.direction === 'home' || event.direction === 'end')) {
+              const editor = controller.getSnapshot().editor;
+              const target = event.direction === 'home' ? frame.binding.replacement.start : editor.text.length;
+              controller.applyEditorEdit({ type: 'move-cursor', cursor: target });
+              return keep();
+            }
             if (event.direction === 'up') settingsValue.moveUp();
             else if (event.direction === 'down') settingsValue.moveDown();
             else if (event.direction === 'home') settingsValue.moveHome();
@@ -123,6 +144,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
 
   useEffect(() => {
     if (!active) return;
+    console.error('SESSREG', frame.id, 'freeform-prop?', settingsValue.isFreeFormString);
     return interactions.register(frame.id, interaction);
   }, [active, frame.id, interaction, interactions]);
 

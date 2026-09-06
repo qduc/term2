@@ -404,6 +404,17 @@ it('parseSettingValueForKey leaves non-array settings with commas untouched', ()
   expect(parseSettingValueForKey('agent.model', 'gpt-4o,extra')).toBe('gpt-4o,extra');
 });
 
+it('parseSettingValueForKey round-trips string settings verbatim instead of coercing', () => {
+  // "true"/numeric-looking text is a valid string value for a z.string() key;
+  // coercion before the schema made such values impossible to set (E3).
+  expect(parseSettingValueForKey('agent.provider', 'true')).toBe('true');
+  expect(parseSettingValueForKey('webSearch.exa.apiKey', '3.0')).toBe('3.0');
+  expect(parseSettingValueForKey('webSearch.exa.apiKey', '  padded  ')).toBe('padded');
+  // Non-string keys keep the coercion behavior.
+  expect(parseSettingValueForKey('shell.timeout', '60000')).toBe(60000);
+  expect(parseSettingValueForKey('app.mentorMode', 'true')).toBe(true);
+});
+
 it('setting agent.model strips --provider flag from value', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);

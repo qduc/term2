@@ -340,5 +340,73 @@ M2a is read-only and may run before D1-D4 are answered.
   - All OAuth provider IDs appear in suggestions.
   - Dynamically registered providers (`upsertProvider`) immediately appear in suggestions without code modifications.
 
+## Review record (2026-09-06, after agy completion)
+
+Reviewed by coordinator against the plan and the D1/D4 decision record after agy
+reported completion (watcher-settled at `452fe71b`, all milestones merged:
+M0 `c1e4e745`, M1 `0fe06310`, M2 `f55e1bf6`, M3 `a4f39f45`, M4 `40085863`).
+
+**Gate compliance**: M2 appended the D1/D4 decision record to this document in the
+same commit as the code changes (ahead-of-code record not separately visible, but
+the record exists and matches option (a)/D4 recommendations). Worktree isolation,
+per-milestone merges, and worktree/branch cleanup were all followed.
+
+**Validation actually run** (2026-09-06): `pnpm exec cross-env NODE_ENV=test
+vitest run` over 16 settings/input/approval test files: 285 passed, 1 skipped,
+0 failed (registry-consistency, settings-ui-metadata, settings-schema,
+settings-completion-logic, use-settings-completion, settings-command,
+value-suggestions, model-settings, non-interactive-approval-policy,
+shell-auto-approval-evaluator, openai-agent-client.public-methods,
+SettingsValueMenuSession, SettingsMenuSession, ModelMenuSession, SlashMenuSession).
+`pnpm exec tsc --noEmit`: zero errors in settings-touched files; the only 15
+errors are pre-existing dirty-file noise from other lanes
+(`source/tools/system/run-code/run-code.test.ts`,
+`source/services/conversation/conversation-service.test.ts`). Full suite not run.
+
+**Findings** (no blockers; follow-ups recommended):
+
+1. **M2 removed chore-tier and mentor-gate fallbacks but left the smart/cheap
+   legacy chains live** — `model-resolver.ts` `resolveAncillaryModelTier` /
+   `resolveRelativePolicy` still read `agent.capableModel` → `agent.mentorModel`
+   (smart) and `agent.efficientModel` → `agent.subagentExplorerModel` (cheap)
+   via `resolveLegacyTierModel` after the tier key. This contradicts the M2a D1
+   record ("promoting tier keys as sole readers"); combined with the still-live
+   legacy write paths (`runtime-setting-router.ts` mentor branches,
+   `agent-configuration.ts` legacy whitelist, schema/SETTING_KEYS acceptance),
+   a runtime write to a legacy key still steers smart/cheap ancillary resolution
+   while the mentor tool gate ignores it — the divergence class M2 targeted.
+   Follow-up: delete `resolveLegacyTierModel`/`legacyTierModelSettingKeys` for
+   smart/cheap or repoint to tier-only reads once the deprecation window closes.
+2. **`tools.editHealingProvider` override reads remain** in `edit-healing.ts`,
+   `patch-healing.ts`, and `search-replace.ts` (deps.providerId ??
+   editHealingProvider ?? agent.provider ?? 'openai') even though the apply-patch /
+   search-replace call sites were cleaned in M2. Resolve consistently with D1.
+3. **M3 single-sourced descriptions only partially** — `.describe()`-first is
+   real, but `FALLBACK_SETTING_DESCRIPTIONS` in `settings-ui-metadata.ts` is the
+   old SETTING_DESCRIPTIONS dictionary relocated, not eliminated; two description
+   sources still disagree on drift. The "6→5 touchpoints" claim overstates: adding
+   a setting still requires describe-or-fallback text. Also a visible copy
+   regression: for keys with schema `.describe` (e.g. `agent.favoriteModels`,
+   `agent.modelNicknames`) the richer old UI copy is shadowed and the "(edit via
+   ctrl+f / ctrl+n in the model picker…)" affordance hints no longer display.
+4. **M0 was not test-only**: `84996f98` also completed and exported
+   `SETTINGS_SOURCE_KEYS` in `settings-sources.ts` (+47) to satisfy the new
+   reverse guard. Legitimate drift repair, but a silent production change under a
+   `test()` commit — worth a code comment noting intent.
+5. **Plan premise corrected**: this document's M1 premise that the
+   `command-model` / `direct-setting-value` trigger rules are disabled was
+   wrong — `ApplicationInputSurface.tsx` enables both in its allowlist. agy
+   correctly kept them (comment-only correction); the plan's "remove disabled
+   rules" gate did not fire. AGENTS.md completed-bullet wording ("removal of ...
+   disabled trigger rules") should be corrected to match.
+6. Minor: `formatSettingsSummary` now omits `agent.mentorSamples` /
+   `agent.mentorPool` (mentorSamples remains a visible menu setting); and
+   unrelated commits `efda45f5`/`3303a149` (background-move wording) rode main
+   inside the review window — not part of this plan, no action.
+
+Verdict: plan goals substantially met and green on the focused gates; findings 1–2
+are the D1 follow-up (remove the remaining smart/cheap and healing-provider legacy
+reads) and should be tracked as the deprecation-window closure work.
+
 
 

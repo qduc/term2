@@ -1,4 +1,5 @@
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { SubagentBridge } from '../../lib/subagent-bridge.js';
 import type { ContinuationProjectionMode } from '../../lib/continuation-projection-mode.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
@@ -28,6 +29,16 @@ import {
   type BackgroundShellWatchScheduler,
 } from '../shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
+import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
+import type { SessionBackgroundWorkTransfer } from './session-composition.js';
+
+export type SessionRolloverResources = {
+  subagentBridge?: SubagentBridge;
+  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  backgroundShellOutput?: BackgroundShellOutputBundle;
+  shellChildRegistry?: ShellChildRegistry;
+  backgroundWorkTransfer?: SessionBackgroundWorkTransfer;
+};
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -51,13 +62,22 @@ export type SessionClientHandle = {
   readonly backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Present only for an owned root session handle. */
   readonly backgroundShellOutput?: BackgroundShellOutputBundle;
+  /** Snapshot of execution owners to pass to a rollover successor. */
+  rolloverResources?(): SessionRolloverResources;
   /** Idempotently release resources captured by this session's client. */
   dispose(): void;
 };
 
 /** Creates the closure-bound client for one conversation session. */
 export type SessionClientFactory = {
-  create(sessionId: string, options?: { allowBackgroundShell?: boolean; allowAskUser?: boolean }): SessionClientHandle;
+  create(
+    sessionId: string,
+    options?: {
+      allowBackgroundShell?: boolean;
+      allowAskUser?: boolean;
+      rolloverResources?: SessionRolloverResources;
+    },
+  ): SessionClientHandle;
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
@@ -95,6 +115,8 @@ export function createOwnedSessionClientFactory(
     allowBackgroundShell?: boolean,
     backgroundShellOutput?: BackgroundShellOutputBundle,
     allowAskUser?: boolean,
+    subagentBridge?: SubagentBridge,
+    shellChildRegistry?: ShellChildRegistry,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
   defaults?: { allowBackgroundShell?: boolean; allowAskUser?: boolean },
@@ -131,13 +153,15 @@ export function createOwnedSessionClientFactory(
       const allowBackgroundShell = options?.allowBackgroundShell ?? defaults?.allowBackgroundShell ?? true;
       const allowAskUser = options?.allowAskUser ?? defaults?.allowAskUser ?? true;
       const backgroundShellRegistry = allowBackgroundShell
-        ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
+        ? options?.rolloverResources?.backgroundShellRegistry ??
+          new BackgroundShellRegistry<BackgroundShellExecutionResult>()
         : undefined;
       // The output store + watch layer are session-owned beside the registry:
       // the shell tool opens a job's stream at launch and the monitor tools
       // register watches against the same watch set.
       const backgroundShellOutput: BackgroundShellOutputBundle | undefined = allowBackgroundShell
-        ? (() => {
+        ? options?.rolloverResources?.backgroundShellOutput ??
+          (() => {
             const store = new BackgroundShellOutputStore();
             return {
               store,
@@ -167,9 +191,12 @@ export function createOwnedSessionClientFactory(
         allowBackgroundShell,
         backgroundShellOutput,
         allowAskUser,
+        options?.rolloverResources?.subagentBridge,
+        options?.rolloverResources?.shellChildRegistry,
       );
 
       let disposed = false;
+      let rolloverTransferred = false;
       return {
         agentClient,
         providerContinuity,
@@ -185,11 +212,26 @@ export function createOwnedSessionClientFactory(
         toolLifecycle,
         backgroundShellRegistry,
         backgroundShellOutput,
+        rolloverResources() {
+          if (rolloverTransferred) throw new Error('Session client rollover resources were already transferred.');
+          agentClient.detachForSessionRollover?.();
+          rolloverTransferred = true;
+          return {
+            ...(backgroundShellRegistry ? { backgroundShellRegistry } : {}),
+            ...(backgroundShellOutput ? { backgroundShellOutput } : {}),
+            ...(agentClient.getSessionRolloverSubagentBridge
+              ? { subagentBridge: agentClient.getSessionRolloverSubagentBridge() }
+              : {}),
+            ...(agentClient.getSessionRolloverShellChildRegistry
+              ? { shellChildRegistry: agentClient.getSessionRolloverShellChildRegistry() }
+              : {}),
+          };
+        },
         dispose() {
           if (disposed) return;
           disposed = true;
           agentClient.dispose?.();
-          void backgroundShellRegistry?.dispose();
+          if (!rolloverTransferred) void backgroundShellRegistry?.dispose();
           postExecutePauseCapability.setActiveRunId(null);
           postExecutePending.close();
           toolOwnership.clear();
@@ -222,6 +264,7 @@ export function createCallerOwnedSessionClientFactory(
         toolOwnership,
         postExecutePending,
         postExecutePauseCapability: new PostExecutePauseCapability(postExecutePending),
+        rolloverResources: () => ({}),
         dispose: () => {},
       };
     },

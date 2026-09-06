@@ -10,6 +10,10 @@ describe('composeSessionRolloverBrief', () => {
         brief: 'Completed the parser. Open: run the black-box gate. State: docs/plans/parser.md.',
         reason: 'task_boundary',
       },
+      inheritedTasks: [
+        { kind: 'shell', id: 'job-1', status: 'running', startedAt: 10, command: 'npm test' },
+        { kind: 'subagent', id: 'run-1', status: 'running', startedAt: 11, role: 'worker', task: 'finish tests' },
+      ],
     });
 
     expect(brief).toContain('Previous session: `session-old`');
@@ -22,6 +26,9 @@ describe('composeSessionRolloverBrief', () => {
     expect(brief).toContain('Continue from the next open step');
     expect(brief).toContain('session-owned');
     expect(brief).toContain('durable artifacts');
+    expect(brief).toContain('Inherited live-task inventory');
+    expect(brief).toContain('"id": "job-1"');
+    expect(brief).toContain('instead of relaunching');
   });
 
   it('labels an unspecified reason without inventing one', () => {

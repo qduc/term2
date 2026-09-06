@@ -11,6 +11,8 @@ import type { BackgroundShellJob } from './shell/background-shell-registry.js';
 import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from './shell/background-shell-registry.js';
 import type { BackgroundSubagentApprovalPauseSink } from './subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from './subagents/nested-runner.js';
+import type { SubagentBridge } from '../lib/subagent-bridge.js';
+import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
 import type { ToolApprovalPolicyRegistry } from './approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from './approval/nested-approval-owner.js';
@@ -121,6 +123,11 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   setOnToolDispatch?(handler: ((callId: string) => void) | undefined): void;
   requestSessionRollover?(request: SessionRolloverRequest): SessionRolloverRequestOutcome;
   consumeSessionRolloverRequest?(): SessionRolloverConsumption;
+  /** Exposes the live subagent owner so a rollover can retain admitted runs. */
+  getSessionRolloverSubagentBridge?(): SubagentBridge | undefined;
+  getSessionRolloverShellChildRegistry?(): ShellChildRegistry;
+  /** Prevent disposal from cancelling resources transferred to the successor. */
+  detachForSessionRollover?(): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 

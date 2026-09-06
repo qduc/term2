@@ -2,6 +2,11 @@ import path from 'node:path';
 import { realpathSync, statSync } from 'node:fs';
 import { ConversationService } from '../services/conversation/conversation-service.js';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
+import type { SubagentBridge } from '../lib/subagent-bridge.js';
+import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
+import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import { createOwnedSessionClientFactory } from '../services/session/session-client-factory.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
@@ -89,6 +94,10 @@ export type GatewayAgentClientFactory = (input: {
   allowBackgroundShell: boolean;
   maxToolOutputBytes: number;
   sessionSettingsSnapshot: SessionSettingsSnapshot;
+  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  backgroundShellOutput?: BackgroundShellOutputBundle;
+  subagentBridge?: SubagentBridge;
+  shellChildRegistry?: ShellChildRegistry;
 }) => ConversationAgentClient;
 
 export type RuntimeFactoryOptions = {
@@ -294,6 +303,12 @@ export class RuntimeFactory {
         providerContinuity,
         requestCapture,
         toolLifecycle,
+        backgroundShellRegistry,
+        _allowBackgroundShell,
+        backgroundShellOutput,
+        _allowAskUser,
+        subagentBridge,
+        shellChildRegistry,
       ) =>
         this.#options.createAgentClient({
           sessionId,
@@ -312,6 +327,10 @@ export class RuntimeFactory {
           providerContinuity,
           requestCapture,
           toolLifecycle,
+          backgroundShellRegistry,
+          backgroundShellOutput,
+          subagentBridge,
+          shellChildRegistry,
           env: composition.env,
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,

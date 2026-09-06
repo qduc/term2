@@ -8,6 +8,8 @@ import {
 } from './value-suggestions.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
 import { SettingsSchema } from '../services/settings/settings-schema.js';
+import { getProviderIds, upsertProvider, unregisterProvider } from '../providers/index.js';
+import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
 
 /**
  * Walk the SettingsSchema and collect all setting keys whose leaf schema is
@@ -275,5 +277,40 @@ it('buildSettingValueSuggestions offers tuned run-budget policy values', () => {
     'agent.runBudget.identicalToolCallThreshold',
   ]) {
     expect(buildSettingValueSuggestions(key)).not.toEqual([]);
+  }
+});
+
+it('provider suggestions contain all registered registry providers and OAuth providers', () => {
+  const providerSuggestions = buildSettingValueSuggestions('agent.provider');
+  const suggestionValues = new Set(providerSuggestions.map((s) => s.value));
+
+  // Every provider in the registry must be present
+  for (const providerId of getProviderIds()) {
+    expect(suggestionValues.has(providerId), `Provider registry id "${providerId}" missing from suggestions`).toBe(
+      true,
+    );
+  }
+
+  // Every OAuth provider must be present
+  for (const oauthId of OAUTH_ACCOUNT_PROVIDERS) {
+    expect(suggestionValues.has(oauthId), `OAuth provider id "${oauthId}" missing from suggestions`).toBe(true);
+  }
+});
+
+it('dynamic provider registration immediately appears in provider suggestions', () => {
+  const dynamicId = 'test-dynamic-provider-' + Date.now();
+  upsertProvider({
+    id: dynamicId,
+    label: 'Dynamic Test Provider',
+    fetchModels: async () => [],
+  });
+
+  try {
+    const suggestions = buildSettingValueSuggestions('agent.provider');
+    const match = suggestions.find((s) => s.value === dynamicId);
+    expect(match).toBeDefined();
+    expect(match?.description).toBe('Dynamic Test Provider');
+  } finally {
+    unregisterProvider(dynamicId);
   }
 });

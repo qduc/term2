@@ -169,3 +169,31 @@ run_code and sandboxed-code-host suites; the isolated full suite is the handoff
 gate. Beyond tests, the honest measure of M1–M3 is a repeat log scan over a
 comparable window after they ship: the same four failure categories should
 shrink. Do not claim improvement from the diff alone.
+
+### Post-merge re-scan (2026-09-07, bounded — does not discharge the M4 gate)
+
+Scanned the 2026-09-06/07 application logs and persisted conversations: 849
+finished executions, 66 `ok:false` (7.8%). Confirmed live that the
+Invalid-parameters class (the largest raw bucket) now carries the
+`Signature:` teaching from M3. Three classes remained unaddressed by M1–M5
+and were fixed in the `run-code-dx` branch:
+
+1. **Runtime errors carried no location.** M5 scoped locations to compile-time
+   SyntaxErrors; uncaught runtime errors (`m3b2 is not defined`) reached the
+   model with no line. The worker now appends `At script Line N:COL: excerpt`
+   using the same `workflow.js` frame extraction, tolerating the `at `
+   prefix that runtime (but not compile) stacks carry.
+2. **Nested tool errors did not name the tool.** The script envelope threw
+   `Error(String(response.error))`, so a fan-out failure read as
+   `Search failed: rg: …` with no call site. The envelope now throws
+   `tools.<member> failed: …`.
+3. **Prohibited tool access surfaced as a bare TypeError.** An unexposed name
+   read as `undefined`, so a call failed with `tools.shell is not a
+   function` (ten occurrences in the window). The namespace is now a
+   realm-local Proxy whose unknown members throw
+   `Unknown tool "x". Available: …`, the same wording as the prepared-call
+   path. This deliberately replaces the "unknown names are simply absent"
+   contract; registry enumeration (`Object.keys(tools)`) is unchanged.
+
+The M4 re-measure gate still needs ~≥100 strictly post-M1 scripts across ≥5
+sessions; this scan does not satisfy it.

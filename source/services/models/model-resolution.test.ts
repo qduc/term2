@@ -965,7 +965,11 @@ describe('resolveModelFlag interactivePicker', () => {
     });
 
     expect(interactivePicker).toHaveBeenCalledOnce();
-    expect(interactivePicker).toHaveBeenCalledWith({ initialQuery: 'gpt-5', lockProvider: undefined });
+    expect(interactivePicker).toHaveBeenCalledWith({
+      initialQuery: 'gpt-5',
+      lockProvider: undefined,
+      initialProvider: 'openai',
+    });
     expect(result).toEqual<ModelResolutionResult>({
       status: 'resolved',
       modelId: 'gpt-4o',
@@ -988,7 +992,46 @@ describe('resolveModelFlag interactivePicker', () => {
       knownProviders: ['openai', 'anthropic'],
     });
 
-    expect(interactivePicker).toHaveBeenCalledWith({ initialQuery: 'gpt-5', lockProvider: 'openai' });
+    expect(interactivePicker).toHaveBeenCalledWith({
+      initialQuery: 'gpt-5',
+      lockProvider: 'openai',
+      initialProvider: 'openai',
+    });
+  });
+
+  it('seeds the ambiguous-match picker with the top-ranked match provider as the initial tab', async () => {
+    // Regression: the picker used to open on the default provider tab and load
+    // only that catalog, so a pattern that resolution had just matched on
+    // another provider showed "No models match" (e.g. -m glm-5.3-flash with a
+    // codex default tab and the real match living on zai/opencode).
+    const crossGroups: ProviderModelGroup[] = [
+      makeGroup('openai', [{ id: 'gpt-5.4', name: 'GPT 5.4' }], { label: 'OpenAI' }),
+      makeGroup('zai', [{ id: 'glm-5.3-flash', name: 'GLM 5.3 Flash' }], { label: 'Z.ai' }),
+      makeGroup('opencode', [{ id: 'glm-5.3-flash', name: 'GLM 5.3 Flash' }]),
+    ];
+    const interactivePicker = vi.fn(async () => ({ modelId: 'glm-5.3-flash', provider: 'zai' }));
+    const deps = mockDeps(crossGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'glm-5.3-flash',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'zai', 'opencode'],
+    });
+
+    expect(interactivePicker).toHaveBeenCalledWith({
+      initialQuery: 'glm-5.3-flash',
+      lockProvider: undefined,
+      initialProvider: 'zai',
+    });
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'glm-5.3-flash',
+      provider: 'zai',
+      reasoningEffort: undefined,
+    });
   });
 
   it('returns cancelled when the picker is dismissed on an ambiguous match, without touching promptForDisambiguation', async () => {

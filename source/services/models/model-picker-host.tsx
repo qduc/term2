@@ -62,6 +62,8 @@ export type ModelPickerHostOptions = ModelPickerHostStreams & {
   modelFetcher?: ModelFetcher;
   /** Filter query the menu opens with (e.g. the pattern typed after --model). */
   initialQuery?: string;
+  /** Provider tab the menu opens on (e.g. where the top-ranked match lives). */
+  initialProvider?: string;
   /** When set (an explicit --provider), the tab is locked to this provider. */
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. "No models match ..."). */
@@ -99,6 +101,7 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
       loggingService={options.loggingService}
       modelFetcher={options.modelFetcher}
       initialQuery={options.initialQuery}
+      initialProvider={options.initialProvider}
       lockProvider={options.lockProvider}
       bannerLines={options.bannerLines}
       onDone={(result) => {

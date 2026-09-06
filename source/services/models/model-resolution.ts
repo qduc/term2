@@ -37,6 +37,12 @@ export type InteractivePickerSelection = { modelId: string; provider: string };
 export type InteractivePickerRequest = {
   /** Filter query the picker opens with (the stripped, provider/suffix-free pattern). */
   initialQuery: string;
+  /**
+   * Provider tab the picker should open on: the provider of the top-ranked
+   * match, so the seeded query actually matches in the catalog the picker
+   * loads first (it fetches only the active tab's catalog).
+   */
+  initialProvider?: string;
   /** Set when --provider (or a parsed provider prefix) narrows permanently; locks the tab. */
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. why nothing matched). */
@@ -629,6 +635,7 @@ export async function resolveModelFlag(deps: {
   if (deps.interactivePicker) {
     const picked = await deps.interactivePicker({
       initialQuery: parsed.pattern,
+      initialProvider: matches[0].provider,
       lockProvider: explicitProvider ? parsed.provider : undefined,
     });
     if (!picked) return { status: 'cancelled', error: 'Cancelled.' };

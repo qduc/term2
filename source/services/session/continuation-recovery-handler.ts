@@ -146,7 +146,7 @@ export class ContinuationRecoveryHandler {
         eventType: 'retry.recovery_admission',
         category: 'retry',
         phase: 'retry',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         source: 'continuation',
         retryKind: classified.kind,

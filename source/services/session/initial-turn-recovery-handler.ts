@@ -213,7 +213,7 @@ export class InitialTurnRecoveryHandler {
         eventType: 'retry.recovery_admission',
         category: 'retry',
         phase: 'retry',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         source: 'initial',
         retryKind: classified.kind,

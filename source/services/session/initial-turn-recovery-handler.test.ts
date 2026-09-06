@@ -539,6 +539,8 @@ it('returns stale before classifying when the generation is outdated', async () 
 });
 
 it('logs the evidence and counters when recovery admission is refused', async () => {
+  const { SessionIdentity } = await import('./session-identity.js');
+  const identity = new SessionIdentity('admission-before');
   const warnings: Array<{ message: string; meta: Record<string, unknown> }> = [];
   const attempt = createAttempt();
   attempt.recoveryBudget.claimAutomaticReplay();
@@ -563,7 +565,7 @@ it('logs the evidence and counters when recovery admission is refused', async ()
       classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 0, cause: 'provider_state_rejected' }),
     } as any,
     retryEventPresenter: { present: () => ({ event: {}, logMessage: 'retry', logFields: {} }) } as any,
-    sessionId: 'admission-test',
+    sessionId: identity,
   });
 
   expect(
@@ -571,6 +573,7 @@ it('logs the evidence and counters when recovery admission is refused', async ()
   ).toEqual({ kind: 'terminated' });
 
   const admission = warnings.find(({ meta }) => meta.eventType === 'retry.recovery_admission');
+  expect(admission?.meta.sessionId).toBe('admission-before');
   expect(admission?.meta).toMatchObject({
     source: 'initial',
     retryKind: 'chain_recovery',

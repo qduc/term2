@@ -208,6 +208,21 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
   runtime.dispose();
 });
 
+it('rollover changes identity without disposing the retained runtime graph', () => {
+  const dispose = vi.fn();
+  const runtime = createSessionRuntime({
+    sessionId: 'before-rollover',
+    agentClient: makeMockClient({ dispose }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  runtime.rollover('after-rollover');
+
+  expect(runtime.sessionId).toBe('after-rollover');
+  expect(dispose).not.toHaveBeenCalled();
+  runtime.dispose();
+});
+
 it('exposes the agent client background subagent event sink through runtime.sinks', () => {
   const attached: Array<unknown> = [];
   const runtime = createSessionRuntime({

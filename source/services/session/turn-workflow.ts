@@ -86,11 +86,13 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   turnAccumulator: TurnItemAccumulator;
   toolTracker: SessionToolTracker;
   shellAutoApproval: ShellAutoApprovalResolver;
@@ -206,7 +208,7 @@ export class TurnWorkflow {
     return {
       type: 'context_compaction_failed',
       provider: 'openai',
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       errorCategory: category,
       durationMs: 0,
     };
@@ -498,7 +500,7 @@ export class TurnWorkflow {
               eventType: 'approval.auto_approved',
               category: 'approval',
               phase: 'approval',
-              sessionId: this.deps.sessionId,
+              sessionId: resolveSessionId(this.deps.sessionId),
               traceId: this.deps.logger.getCorrelationId(),
               callId: outcome.callId,
               command: outcome.argumentsText,
@@ -527,7 +529,7 @@ export class TurnWorkflow {
             eventType: 'approval.required',
             category: 'approval',
             phase: 'approval',
-            sessionId: this.deps.sessionId,
+            sessionId: resolveSessionId(this.deps.sessionId),
             traceId: this.deps.logger.getCorrelationId(),
             toolName: outcome.result.approval.toolName,
           });
@@ -693,7 +695,7 @@ export class TurnWorkflow {
         approvalFlow: this.deps.approvalFlow,
         shellAutoApproval: this.deps.shellAutoApproval,
         logger: this.deps.logger,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         sessionAccess: this.deps.sessionAccess,
         approvalPolicyRegistry: this.#activePolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,
@@ -734,7 +736,7 @@ export class TurnWorkflow {
       {
         type: 'context_compaction_completed',
         provider: compaction.provider,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         ...(args.inputTokensBefore !== undefined ? { inputTokensBefore: args.inputTokensBefore } : {}),
         // The provider reports no post-compaction size: usage.input_tokens is the
         // compaction pass's own input, i.e. the pre-compaction total.
@@ -773,7 +775,7 @@ export class TurnWorkflow {
           eventType: 'approval.auto_approved',
           category: 'approval',
           phase: 'approval',
-          sessionId: this.deps.sessionId,
+          sessionId: resolveSessionId(this.deps.sessionId),
           traceId: this.deps.logger.getCorrelationId(),
           callId: outcome.callId,
           command: outcome.argumentsText,
@@ -830,7 +832,7 @@ export class TurnWorkflow {
       const resumeOptions: AgentClientRunOptions = {
         recoveryBudget: attempt.recoveryBudget,
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
         hookTurnId: this.#hookTurnId,
       };
@@ -874,7 +876,7 @@ export class TurnWorkflow {
     const startOptions: AgentClientRunOptions = {
       recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       hookTurnId: this.#hookTurnId,
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
@@ -1024,7 +1026,7 @@ export class TurnWorkflow {
         eventType: 'stream.failed',
         category: 'stream',
         phase: 'abort',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         errorMessage: describeError(error),
         stack: error instanceof Error ? error.stack : undefined,
@@ -1117,7 +1119,7 @@ export class TurnWorkflow {
         eventType: 'approval.auto_approved',
         category: 'approval',
         phase: 'approval',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         callId: outcome.callId,
         command: outcome.argumentsText,
@@ -1150,7 +1152,7 @@ export class TurnWorkflow {
           eventType: 'approval.required',
           category: 'approval',
           phase: 'approval',
-          sessionId: this.deps.sessionId,
+          sessionId: resolveSessionId(this.deps.sessionId),
           traceId: this.deps.logger.getCorrelationId(),
           toolName: outcome.result.approval.toolName,
         });
@@ -1168,7 +1170,7 @@ export class TurnWorkflow {
         eventType: 'approval.auto_approved',
         category: 'approval',
         phase: 'approval',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         callId: approvalContext.callId,
         command: approvalContext.argumentsText,
@@ -1207,7 +1209,7 @@ export class TurnWorkflow {
     const continuationOptions: AgentClientRunOptions = {
       recoveryBudget: state.recoveryBudget,
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-      sessionId: this.deps.sessionId,
+      sessionId: resolveSessionId(this.deps.sessionId),
       toolResultCallIds: state.currentCallIds,
       knownToolCallIds: collectKnownToolCallIds(
         this.deps.conversationStore.getHistory(),
@@ -1276,7 +1278,7 @@ export class TurnWorkflow {
         approvalFlow: this.deps.approvalFlow,
         shellAutoApproval: this.deps.shellAutoApproval,
         logger: this.deps.logger,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         sessionAccess: this.deps.sessionAccess,
         approvalPolicyRegistry: this.#activePolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,

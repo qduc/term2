@@ -283,6 +283,12 @@ export class ConversationService {
     }
   }
 
+  /** Rollover-only identity/context reset; ordinary clear keeps its disposal semantics. */
+  rolloverWithNewId(newId: string): void {
+    if (!newId) throw new Error('Session rollover requires a session ID.');
+    this.#runtime.rollover(newId);
+  }
+
   #logSink: ((event: LogEvent) => void) | null = null;
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {

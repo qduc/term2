@@ -32,6 +32,8 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type { SessionIdSource } from '../session/session-identity.js';
+import { resolveSessionId } from '../session/session-identity.js';
 
 export type BatchStageResult =
   | { kind: 'ready' }
@@ -43,7 +45,7 @@ export interface ToolApprovalBatchCoordinatorDeps {
   planApplier: ContinuationPlanApplier;
   shellAutoApproval: ShellAutoApprovalResolver;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
   nestedCompatibility?: NestedToolCompatibilityState;
@@ -125,7 +127,7 @@ export class ToolApprovalBatchCoordinator {
       const parseResult = parseToolCallArguments(rawArguments, {
         callId,
         toolName,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
       });
       const yolo = shouldBypassToolApproval(toolName, this.deps.shellAutoApproval.getAutoApproveMode?.());
@@ -134,7 +136,7 @@ export class ToolApprovalBatchCoordinator {
         : requiresHumanShellApproval(
             toolName,
             parseResult.arguments,
-            this.deps.sessionId,
+            resolveSessionId(this.deps.sessionId),
             this.deps.sessionAccess,
             this.deps.nestedCompatibility,
             {
@@ -146,7 +148,7 @@ export class ToolApprovalBatchCoordinator {
       const dockerHostControl = isDockerHostControlShellApproval(
         toolName,
         parseResult.arguments,
-        this.deps.sessionId,
+        resolveSessionId(this.deps.sessionId),
         this.deps.sessionAccess,
         this.deps.nestedCompatibility,
       );

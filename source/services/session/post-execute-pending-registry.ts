@@ -1,4 +1,6 @@
 import type { PostExecuteDecision } from '../../contracts/conversation.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 export type { PostExecuteDecision } from '../../contracts/conversation.js';
 
@@ -45,14 +47,14 @@ type Pending = {
  * before settling any gate, so a stale or partial request cannot half-apply.
  */
 export class PostExecutePendingRegistry {
-  readonly #sessionId: string;
+  readonly #sessionId: SessionIdSource;
   readonly #epoch: string | number;
   readonly #pending = new Map<string, Pending>();
   readonly #waiters = new Set<(version: number) => void>();
   #revision = 0;
   #closed = false;
 
-  constructor(options: { sessionId: string; epoch: string | number }) {
+  constructor(options: { sessionId: SessionIdSource; epoch: string | number }) {
     this.#sessionId = options.sessionId;
     this.#epoch = options.epoch;
   }
@@ -63,7 +65,7 @@ export class PostExecutePendingRegistry {
 
   snapshot(): PostExecutePendingSnapshot {
     return {
-      sessionId: this.#sessionId,
+      sessionId: resolveSessionId(this.#sessionId),
       epoch: this.#epoch,
       revision: this.#revision,
       entries: [...this.#pending.values()].map(({ entry }) => ({ ...entry })),
@@ -104,7 +106,7 @@ export class PostExecutePendingRegistry {
 
   register(input: Omit<PostExecutePendingEntry, 'id'>): Promise<PostExecuteDecision> {
     if (this.#closed) throw new Error('Post-execute pending registry is closed');
-    const id = `${this.#sessionId}:${this.#epoch}:${input.runId}:${input.toolCallId}`;
+    const id = `${resolveSessionId(this.#sessionId)}:${this.#epoch}:${input.runId}:${input.toolCallId}`;
     if (this.#pending.has(id)) throw new Error(`Duplicate active post-execute gate: ${id}`);
 
     return new Promise<PostExecuteDecision>((settle) => {

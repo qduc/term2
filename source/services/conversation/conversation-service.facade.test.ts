@@ -140,6 +140,23 @@ it('logs a session rollover marker at the public conversation boundary', () => {
   ]);
 });
 
+it('rollover keeps the caller-owned client alive while replacing root identity', () => {
+  const client = partialClient();
+  const abort = vi.spyOn(client, 'abort');
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    sessionId: 'before-rollover',
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.rolloverWithNewId('after-rollover');
+
+  expect(service.sessionId).toBe('after-rollover');
+  expect(abort).not.toHaveBeenCalled();
+  service.dispose();
+});
+
 it('does not let a stale interaction projection block a settled session rollover', () => {
   const request = {
     reason: 'task_boundary' as const,

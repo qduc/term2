@@ -388,7 +388,27 @@ const App: FC<AppProps> = ({
     pendingRolloverSuccessorIdRef.current = plannedSuccessorId;
     latestRotatedSessionIdRef.current = plannedSuccessorId;
     rolloverSourceSessionIdRef.current = sessionId;
-    await clearConversationAndRefreshBanner();
+    onPrintUsage?.();
+    const canRolloverInPlace = typeof conversationService.rolloverWithNewId === 'function';
+    if (canRolloverInPlace) {
+      conversationService.rolloverWithNewId(plannedSuccessorId);
+    } else {
+      // Compatibility harnesses predating the in-place seam retain the old
+      // clear path; production ConversationService always has the method.
+      await clearConversationAndRefreshBanner();
+    }
+    if (canRolloverInPlace && onRotateWriter) {
+      onRotateWriter(plannedSuccessorId, new Date().toISOString(), sourceSessionId);
+    }
+    pendingRolloverSuccessorIdRef.current = undefined;
+    rolloverSourceSessionIdRef.current = undefined;
+    if (canRolloverInPlace) {
+      setSessionId(plannedSuccessorId);
+      onSessionIdChange?.(plannedSuccessorId, new Date().toISOString());
+      setStartupBannerIds(['startup-banner-0']);
+      setActiveRestoredStaticMessageIds([]);
+      setMessageListEpoch((epoch) => epoch + 1);
+    }
     const successorSessionId = latestRotatedSessionIdRef.current;
     if (!successorSessionId) throw new Error('Session rollover completed without a successor session ID.');
     const settlementLatencyMs = Math.max(0, Date.now() - request.requestedAt);

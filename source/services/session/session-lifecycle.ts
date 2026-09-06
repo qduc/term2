@@ -12,6 +12,8 @@ import { projectImportedState, ProjectionWarningCode } from '../conversation/con
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 import type { SessionAccessState } from './session-access-state.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
+import type { SessionIdSource } from './session-identity.js';
+import { resolveSessionId } from './session-identity.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -32,7 +34,7 @@ export class SessionLifecycle {
   #toolTracker: SessionToolTracker;
   #conversationStore: ConversationStore;
   #logger: ILoggingService;
-  #sessionId: string;
+  #sessionId: SessionIdSource;
   #appState: { statusMachine: TurnStatusMachine };
   #providerContinuity: ProviderContinuity;
   #generationGuard: GenerationGuard;
@@ -46,7 +48,7 @@ export class SessionLifecycle {
     toolTracker: SessionToolTracker;
     conversationStore: ConversationStore;
     logger: ILoggingService;
-    sessionId: string;
+    sessionId: SessionIdSource;
     appState: { statusMachine: TurnStatusMachine };
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
@@ -185,7 +187,7 @@ export class SessionLifecycle {
         eventType: 'conversation.tool_ledger.reconciled',
         category: 'conversation',
         phase: 'resume',
-        sessionId: this.#sessionId,
+        sessionId: resolveSessionId(this.#sessionId),
         addedCompletedPairs,
         droppedIncompleteCalls,
       });

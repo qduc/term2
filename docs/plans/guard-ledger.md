@@ -1980,6 +1980,33 @@ load-bearing retrieval triggers, and past roughly 100 entries per scope the
 counted tail is the contract — enforced store pruning remains a separate
 store-policy decision.
 
+### Session rollover live-work retention
+
+The previously attempted live-work transfer was reverted: it disposed the
+predecessor before successor construction and transplanted closure-bound
+clients/controllers, leaving no rollback boundary. The safe implementation
+retains one runtime/client/ownership graph and performs an explicit root reset
+in place. History, provider continuity, compaction/turn state, and transient
+authorization caches are cleared; live background shells, watches, child runs,
+notifications, and check-in policy remain owned by the same graph. The mutable
+session identity changes only after the reset succeeds. Pending approvals,
+questions, post-execute gates, and queued user input remain blocked by the
+mutation owner.
+
+```text
+Guard class: admission/in-place-context-reset guard with context-loss consequence.
+Enforcement owner: ConversationService.rolloverWithNewId and SessionRuntime.rollover.
+Recovery owner: retained runtime/client graph and existing background owners.
+Signal: settled turn plus authoritative pending-interaction and queue checks.
+Action: reset root context in place; never dispose, transfer, cancel, or relaunch
+  admitted background work.
+Partial-work settlement: background completion/watch/check-in notifications remain
+  in the retained channel and are delivered once.
+Rollback boundary: identity swaps after reset; writer cutover follows reset.
+Ordinary resetWithNewId/clear/shutdown disposal semantics are unchanged.
+Status: implementation in progress; focused/typecheck gates currently pass.
+```
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

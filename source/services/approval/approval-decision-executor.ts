@@ -11,6 +11,8 @@ import type { NestedToolCompatibilityState } from '../session/nested-tool-compat
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { ToolOwnershipRegistry } from './tool-ownership-registry.js';
+import type { SessionIdSource } from '../session/session-identity.js';
+import { resolveSessionId } from '../session/session-identity.js';
 
 export type ApprovalDecisionSource = 'user' | 'policy' | 'system';
 
@@ -22,7 +24,7 @@ export type ApprovalDecisionResolution = {
 
 export type ApprovalDecisionExecutorDeps = {
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   /** Session-owned ownership claims for approval calls. */
   toolOwnership: ToolOwnershipRegistry;
   /** Handle-owned root capability. Do not replace this with a fresh access state. */
@@ -77,7 +79,7 @@ export class ApprovalDecisionExecutor {
       getToolInfoFromInterruption(interruption);
     const grant = applyApprovalGrant(
       {
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         sessionAccess: this.deps.sessionAccess,
         nestedCompatibility: this.deps.nestedCompatibility,
         logger: this.deps.logger,
@@ -98,7 +100,7 @@ export class ApprovalDecisionExecutor {
         eventType: 'approval.granted',
         category: 'approval',
         phase: 'approval',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
         ...(grant.deniedReadDecision ? { deniedReadDecision: answer } : {}),
       });
@@ -107,14 +109,14 @@ export class ApprovalDecisionExecutor {
       const parseResult = parseToolCallArguments(rawArguments, {
         callId: decisionCallId ?? String(Date.now()),
         toolName,
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
       });
       if (parseResult.invalidJsonDiagnostic) {
         const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
         this.deps.logger.error('Invalid tool call argument payload', {
           ...diagnostic,
-          sessionId: this.deps.sessionId,
+          sessionId: resolveSessionId(this.deps.sessionId),
           messageId: decisionCallId ?? String(Date.now()),
         });
       }
@@ -148,7 +150,11 @@ export class ApprovalDecisionExecutor {
       // command would require the abandoned prompt again forever.
       if (grant.isDockerRequest && typeof grant.parsedArguments?.command === 'string') {
         if (this.deps.sessionAccess) this.deps.sessionAccess.consumeDockerDenial(grant.parsedArguments.command);
-        else this.deps.nestedCompatibility?.docker.consumeDenial(this.deps.sessionId, grant.parsedArguments.command);
+        else
+          this.deps.nestedCompatibility?.docker.consumeDenial(
+            resolveSessionId(this.deps.sessionId),
+            grant.parsedArguments.command,
+          );
       }
 
       this.#toolCallMarkers.markToolCallAsApprovalRejection(decisionCallId);
@@ -159,7 +165,7 @@ export class ApprovalDecisionExecutor {
         eventType: 'approval.rejected',
         category: 'approval',
         phase: 'approval',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
       });
     }

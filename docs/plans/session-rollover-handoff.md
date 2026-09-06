@@ -5,9 +5,10 @@
 The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
 `38ec5576`, settings-surface repair `6a7cfac7`). The shipped behavior is
 agent-triggered only: context milestones advise the agent, and
-`session_rollover` requests rotation after the current turn settles. Rotation
-is blocked rather than discarding live background work, pending interactions,
-or queued user submissions. The new session starts with a protocol-composed,
+`session_rollover` requests rotation after the current turn settles. Live
+background work remains on the retained runtime/client graph; pending
+interactions or queued user submissions still block at their mutation owner.
+The new session starts with a protocol-composed,
 visually marked rollover briefing. Its `session_init.rolloverFrom` metadata
 durably identifies the predecessor, so `session_read({ id: "previous" })`
 survives restart. The briefing directs that bounded read before search when the
@@ -263,7 +264,7 @@ distinguishes a safe natural boundary from an indivisible step and never makes
 rollover mandatory. Settings remain `agent.sessionRollover.enabled`,
 `agent.sessionRollover.milestones`, and `agent.sessionRollover.autoBrief`.
 
-### Guard conditions (implemented in `fa4b371b`)
+### Guard conditions (implemented in `fa4b371b`, live-work retention follow-up)
 
 The tool refuses with a structured tool error, not a crash, when:
 
@@ -271,9 +272,8 @@ The tool refuses with a structured tool error, not a crash, when:
   (The tool call itself arrives during a turn; the rotation must be deferred
   to that turn's settlement, like background-event injection defers to
   turn boundaries — defer-to-idle, not abort-the-turn.)
-- Background shell jobs or asynchronous subagent runs are live. The agent
-  client checks both when the tool requests rollover and again when the turn
-  settles, closing the race where work starts later in the same model response.
+- Pending live background work is retained by the existing runtime/client graph;
+  rollover never disposes, transfers, cancels, or relaunches those owners.
 - A pending approval, other pending interaction, post-execute gate, background
   approval, or queued user submission exists. `ConversationService` rechecks
   these immediately before handing rotation to the app.

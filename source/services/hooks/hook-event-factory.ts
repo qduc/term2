@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import type { SessionIdSource } from '../session/session-identity.js';
+import { resolveSessionId } from '../session/session-identity.js';
 import type { Term2HookEvent, Term2HookEventName, Term2HookEventMap, Term2HookScope } from './hook-contracts.js';
 
 export type HookEventFactoryOptions = {
-  readonly sessionId: string;
+  readonly sessionId: SessionIdSource;
   readonly scope?: Term2HookScope;
   readonly includeUserText?: boolean;
   readonly includeToolArguments?: boolean;
@@ -27,7 +29,7 @@ export class HookEventFactory {
       type,
       schemaVersion: 1,
       eventId: randomUUID(),
-      sessionId: this.#options.sessionId,
+      sessionId: resolveSessionId(this.#options.sessionId),
       timestamp: Date.now(),
       scope,
       ...correlation,

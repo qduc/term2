@@ -14,12 +14,14 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { ApprovalDecisionExecutor, type ApprovalDecisionSource } from './approval-decision-executor.js';
 import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
+import type { SessionIdSource } from '../session/session-identity.js';
+import { resolveSessionId } from '../session/session-identity.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
   approvalState: ApprovalState;
   logger: ILoggingService;
-  sessionId: string;
+  sessionId: SessionIdSource;
   toolTracker: SessionToolTracker;
   generationGuard: GenerationGuard;
   /** Session-owned registry shared with nested subagent runners. */
@@ -103,7 +105,7 @@ export class ApprovalFlowCoordinator {
         eventType: 'approval.aborted',
         category: 'approval',
         phase: 'abort',
-        sessionId: this.deps.sessionId,
+        sessionId: resolveSessionId(this.deps.sessionId),
         traceId: this.deps.logger.getCorrelationId(),
       });
       return { aborted: true, callId };

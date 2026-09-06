@@ -1,4 +1,6 @@
 import type { PendingApproval } from '../../contracts/conversation.js';
+import type { SessionIdSource } from '../session/session-identity.js';
+import { resolveSessionId } from '../session/session-identity.js';
 
 export type NestedApprovalPolicyResult = 'auto_approve' | 'prompt' | 'unknown' | 'error' | 'interceptor_denied';
 export type NestedApprovalDecision = { readonly answer: string; readonly rejectionReason?: string };
@@ -50,7 +52,7 @@ export class NestedApprovalOwner {
   #closed = false;
   #observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
 
-  constructor(private readonly sessionId?: string) {}
+  constructor(private readonly sessionId?: SessionIdSource) {}
 
   bindGraph(graphIdentity: object): void {
     this.#graphIdentity = graphIdentity;
@@ -90,7 +92,7 @@ export class NestedApprovalOwner {
   request(request: NestedApprovalRequest): Promise<NestedApprovalResolution> {
     if (
       this.#closed ||
-      (this.sessionId !== undefined && request.sessionId !== this.sessionId) ||
+      (this.sessionId !== undefined && request.sessionId !== resolveSessionId(this.sessionId)) ||
       request.signal.aborted ||
       this.#pending.has(request.requestId) ||
       (this.#graphIdentity && request.graphIdentity !== this.#graphIdentity)

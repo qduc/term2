@@ -11,6 +11,7 @@ import {
 import type { PendingApprovalContext } from './approval-state.js';
 import type { BackgroundSubagentApprovalPause } from '../subagents/foreground-subagent-lease.js';
 import type { ToolOwnershipRegistry } from './tool-ownership-registry.js';
+import type { SessionIdSource } from '../session/session-identity.js';
 
 /**
  * Session-owned policy/control boundary for approvals paused by adopted child
@@ -30,7 +31,7 @@ export class BackgroundSubagentApprovalController {
     nestedCompatibility,
   }: {
     logger: ILoggingService;
-    sessionId: string;
+    sessionId: SessionIdSource;
     toolOwnership: ToolOwnershipRegistry;
     nestedCompatibility?: NestedToolCompatibilityState;
   }) {

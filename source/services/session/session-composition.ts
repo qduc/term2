@@ -52,6 +52,7 @@ import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
+import { SessionIdentity } from './session-identity.js';
 import {
   SubagentNotificationStore,
   type BackgroundSubagentNotificationPort,
@@ -104,6 +105,7 @@ export type ConversationSessionRetryOptions = {
 /** @internal Full collaborator graph; used only by tests + the test helper. */
 export type SessionRuntimeInternals = {
   sessionId: string;
+  identity: SessionIdentity;
   sessionStartedAt: string;
   logger: ILoggingService;
   conversationStore: ConversationStore;
@@ -129,6 +131,7 @@ export type SessionRuntimeInternals = {
    */
   dispose: () => void;
   shutdown: () => Promise<void>;
+  rollover: (newSessionId: string) => void;
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
@@ -168,6 +171,7 @@ export type SessionRuntimeInternals = {
 /** @internal Options for the internal composition factory. */
 export type CreateSessionRuntimeInternalsOptions = {
   sessionId: string;
+  sessionIdentity?: SessionIdentity;
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
@@ -273,7 +277,7 @@ export type BackgroundSubagentApprovalChannel = Pick<
  * details.
  */
 export type SessionRuntime = {
-  sessionId: string;
+  readonly sessionId: string;
   sessionStartedAt: string;
   turns: {
     start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
@@ -316,13 +320,16 @@ export type SessionRuntime = {
    */
   dispose: () => void;
   shutdown: () => Promise<void>;
+  /** Clear root transcript/continuity while retaining the runtime graph. */
+  rollover: (newSessionId: string) => void;
 };
 
 // ── Composition factory ───────────────────────────────────────────
 
 export function createSessionRuntimeInternals(options: CreateSessionRuntimeInternalsOptions): SessionRuntimeInternals {
   const {
-    sessionId: id,
+    sessionId: initialSessionId,
+    sessionIdentity: suppliedIdentity,
     sessionStartedAt,
     agentClient,
     providerContinuity: suppliedProviderContinuity,
@@ -343,6 +350,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolCallMarkers: suppliedToolCallMarkers,
     enableNestedApproval = false,
   } = options;
+  const identity = suppliedIdentity ?? new SessionIdentity(initialSessionId);
+  const id = identity.current;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
   const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
@@ -446,12 +455,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // Factory-owned handles supply this same registry to the root tool policy.
   // Compatibility callers receive a fresh explicit token, never a wall-clock epoch.
   const postExecutePending =
-    suppliedPostExecutePending ?? new PostExecutePendingRegistry({ sessionId: id, epoch: crypto.randomUUID() });
+    suppliedPostExecutePending ?? new PostExecutePendingRegistry({ sessionId: identity, epoch: crypto.randomUUID() });
 
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
   const pendingInteraction = new PendingInteractionState();
-  const nestedApprovalOwner = new NestedApprovalOwner(id);
+  const nestedApprovalOwner = new NestedApprovalOwner(identity);
   if (enableNestedApproval) agentClient?.setNestedApprovalOwner?.(nestedApprovalOwner);
   const toolTracker = new SessionToolTracker(conversationStore);
 
@@ -472,7 +481,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const appState = { statusMachine: new TurnStatusMachine() };
-  const hookEvents = suppliedHookEvents ?? (hookLifecycle ? new HookEventFactory({ sessionId: id }) : undefined);
+  const hookEvents = suppliedHookEvents ?? (hookLifecycle ? new HookEventFactory({ sessionId: identity }) : undefined);
   const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
@@ -607,7 +616,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
     conversationStore,
     logger,
-    sessionId: id,
+    sessionId: identity,
     appState,
     providerContinuity,
     generationGuard,
@@ -778,7 +787,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const turnWorkflow = new TurnWorkflow({
     agentClient,
     logger,
-    sessionId: id,
+    sessionId: identity,
     turnAccumulator: resolvedTurnAccumulator,
     toolTracker,
     shellAutoApproval,
@@ -833,6 +842,16 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   let backgroundShellSettlement: Promise<void> | undefined;
   let backgroundSubagentSettlement: Promise<void> | undefined;
+  const rollover = (newSessionId: string): void => {
+    if (disposed) throw new Error('Session runtime is already disposed.');
+    if (!newSessionId) throw new Error('Session rollover requires a session ID.');
+    // This is intentionally the same root-state reset used by clear, but it
+    // does not dispose the graph.  The retained client owns live background
+    // work, permissions, and approval registries; only transcript and
+    // provider/turn continuity are freshened.
+    state.resetSession({ clearConversations: true });
+    identity.replace(newSessionId);
+  };
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
@@ -1040,6 +1059,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   return {
     sessionId: id,
+    identity,
     sessionStartedAt: startedAt,
     logger,
     conversationStore,
@@ -1058,6 +1078,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     runtimeController,
     dispose,
     shutdown,
+    rollover,
     generationGuard,
     providerContinuity,
     breakChaining,
@@ -1111,7 +1132,9 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
   } = internals;
 
   return {
-    sessionId: internals.sessionId,
+    get sessionId() {
+      return internals.identity.current;
+    },
     sessionStartedAt: internals.sessionStartedAt,
     turns: {
       start: turnCoordinator.start.bind(turnCoordinator),
@@ -1170,6 +1193,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     backgroundTaskControl,
     dispose,
     shutdown: internals.shutdown,
+    rollover: internals.rollover,
   };
 }
 

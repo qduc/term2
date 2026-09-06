@@ -83,63 +83,6 @@ it('disposes the owned background shell registry with its session handle', async
   release();
 });
 
-it('transfers live shell owners and child-process ownership to a rollover successor', async () => {
-  const clients: any[] = [];
-  const registries: any[] = [];
-  const childRegistries: any[] = [];
-  const bridge = {} as any;
-  let inheritedBridge: unknown;
-  const factory = createOwnedSessionClientFactory(
-    createMockSettingsService(),
-    (
-      _sessionId,
-      _ownership,
-      _capability,
-      _access,
-      _mode,
-      _continuity,
-      _capture,
-      _lifecycle,
-      registry,
-      _allowBackgroundShell,
-      _output,
-      _allowAskUser,
-      receivedBridge,
-      childRegistry,
-    ) => {
-      registries.push(registry);
-      childRegistries.push(childRegistry);
-      const created = client();
-      if (clients.length === 0) {
-        (created as any).getSessionRolloverSubagentBridge = () => bridge;
-      } else {
-        inheritedBridge = receivedBridge;
-      }
-      clients.push(created);
-      return created;
-    },
-  );
-
-  const first = factory.create('session-old');
-  const launch = registries[0].launch({
-    command: 'hold',
-    run: (signal: AbortSignal) => new Promise((resolve) => signal.addEventListener('abort', () => resolve('done'))),
-  });
-  const resources = first.rolloverResources!();
-  const successor = factory.create('session-new', { rolloverResources: resources });
-  first.dispose();
-
-  expect(registries[1]).toBe(registries[0]);
-  expect(childRegistries[1]).toBe(childRegistries[0]);
-  expect(inheritedBridge).toBe(bridge);
-  expect(registries[1].get(launch.id)?.status).toBe('running');
-  expect(clients[0].dispose).toHaveBeenCalledTimes(1);
-
-  registries[1].cancel(launch.id);
-  await launch.settled;
-  successor.dispose();
-});
-
 it('withholds the background shell capability when the session disables it', () => {
   let receivedRegistry: unknown = 'not-called';
   let receivedAllow: boolean | undefined;

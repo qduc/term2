@@ -1876,40 +1876,6 @@ attempts each progressed through provider contracts and most lifecycle cases,
 then hit a different pre-request PTY startup timeout; no rollover/provider
 assertion failed.
 
-### Session rollover live-work transfer
-
-The original rollover guard treated live background status as proof that a
-session could not rotate. That was an unsafe admission guard: background shell
-and subagent execution already has detachable, session-owned lifecycle owners.
-The rollover boundary now transfers those owners, output/watch state, queued
-notifications, and check-in policy/progress to the successor. Pending approvals,
-questions, post-execute gates, and queued user input remain blockers because
-their continuation owner cannot safely be transferred through this boundary.
-
-```text
-Guard class: admission/ownership-transfer guard with context-loss consequence.
-Enforcement owner: ConversationService.resetWithNewId({ preserveBackgroundWork: true })
-  and the session client factory; AgentClient only records the rollover request.
-Recovery owner: successor session's existing background registries, notification
-  store, and check-in scheduler.
-Signal: settled-turn boundary plus authoritative pending-interaction checks.
-Action: transfer admitted live work without cancellation or relaunch; generate an
-  exact inherited-task inventory in the successor briefing.
-Partial-work settlement: completion remains in the shared notification lane and
-  is delivered once; ordinary clear/shutdown still cancel and await work.
-Observability: inherited task IDs/statuses are brief inventory data; rollover
-  lifecycle events retain their existing correlation and timing fields.
-Rollback boundary: revert the transfer option, resource handoff, and focused
-  rollover tests; ordinary disposal path remains unchanged.
-Ledger row: verified safe pending focused/full-suite and provider-black-box gates.
-```
-
-Red proof: changing the AgentClient rollover tests to accept live shell/subagent
-status failed before the guard removal. Focused verification covers the client
-request boundary, the app's real clear callback, the ConversationService reset
-boundary, resource-factory transfer, inherited inventory, and pending
-interaction blocking.
-
 ### Injected memory-index silent truncation
 
 Incident 2026-09-03: the main-agent session-start index injected by

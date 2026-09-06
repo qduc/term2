@@ -64,7 +64,7 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
-  it('accepts session rollover while background work is live', () => {
+  it('refuses session rollover while background work is live', () => {
     const instance = client('rollover-background-guard', {
       agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
       subagentBridge: {
@@ -90,20 +90,18 @@ describe('AgentClient application-run-loop execution', () => {
       },
     });
 
-    const accepted = instance.requestSessionRollover({ brief: 'continue' });
-    expect(accepted).toMatchObject({
-      ok: true,
-      status: 'rollover_requested',
+    expect(instance.requestSessionRollover({ brief: 'continue' })).toMatchObject({
+      ok: false,
+      status: 'rollover_blocked',
+      error: 'Session rollover is blocked while background work is live.',
+      active: { shell: 1, subagent: 1 },
       rolloverId: expect.any(String),
     });
-    expect(instance.consumeSessionRolloverRequest()).toMatchObject({
-      status: 'ready',
-      request: { brief: 'continue', rolloverId: accepted.rolloverId },
-    });
+    expect(instance.consumeSessionRolloverRequest()).toEqual({ status: 'none' });
     instance.dispose();
   });
 
-  it('keeps an accepted rollover ready when background work starts before settlement', () => {
+  it('rechecks background work when consuming an accepted rollover request', () => {
     let status: 'completed' | 'running' = 'completed';
     const instance = client('rollover-settlement-guard', {
       agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
@@ -133,8 +131,15 @@ describe('AgentClient application-run-loop execution', () => {
     });
     status = 'running';
     expect(instance.consumeSessionRolloverRequest()).toMatchObject({
-      status: 'ready',
-      request: { brief: 'continue', rolloverId: accepted.rolloverId, requestedAt: expect.any(Number) },
+      status: 'blocked',
+      blocker: 'background_work',
+      error: 'Session rollover was not performed because background work became live before turn settlement.',
+      active: { shell: 0, subagent: 1 },
+      request: {
+        brief: 'continue',
+        rolloverId: accepted.rolloverId,
+        requestedAt: expect.any(Number),
+      },
     });
     instance.dispose();
   });

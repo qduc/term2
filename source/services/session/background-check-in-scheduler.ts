@@ -155,9 +155,9 @@ function taskDetails(
  * so a reused id after a task's lifecycle epoch bumps starts a fresh count.
  */
 export class BackgroundCheckInScheduler {
-  #getRunningTasks!: () => readonly BackgroundTask[];
-  #emit!: (event: BackgroundCheckInDueEvent) => void;
-  #getSettings!: () => BackgroundCheckInSettings;
+  #getRunningTasks: () => readonly BackgroundTask[];
+  #emit: (event: BackgroundCheckInDueEvent) => void;
+  #getSettings: () => BackgroundCheckInSettings;
   #getSubagentStatus?: (runId: string) => SubagentRunStatus | undefined;
   #getShellJob?: (jobId: string) => BackgroundShellJob<unknown> | undefined;
   #getShellOutputTail?: (jobId: string, maxBytes?: number) => string | undefined;
@@ -168,29 +168,17 @@ export class BackgroundCheckInScheduler {
   #policies = new Map<string, TaskCheckInPolicy>();
 
   constructor(deps: BackgroundCheckInSchedulerDeps) {
-    this.rebind(deps);
-    this.#now = deps.now ?? (() => Date.now());
-    const setIntervalFn = deps.setInterval ?? setInterval;
-    this.#clearInterval = deps.clearInterval ?? clearInterval;
-    this.#timer = setIntervalFn(() => this.tick(), deps.tickMs ?? DEFAULT_TICK_MS);
-    this.#timer.unref?.();
-  }
-
-  /**
-   * Keep the scheduler's per-task policy and progress when the conversation
-   * projection is replaced by a session rollover. Execution remains owned by
-   * the registries; only these observation callbacks move to the successor.
-   */
-  rebind(
-    deps: Pick<BackgroundCheckInSchedulerDeps, 'getRunningTasks' | 'emit' | 'getSettings'> &
-      Partial<Pick<BackgroundCheckInSchedulerDeps, 'getSubagentStatus' | 'getShellJob' | 'getShellOutputTail'>>,
-  ): void {
     this.#getRunningTasks = deps.getRunningTasks;
     this.#emit = deps.emit;
     this.#getSettings = deps.getSettings;
     this.#getSubagentStatus = deps.getSubagentStatus;
     this.#getShellJob = deps.getShellJob;
     this.#getShellOutputTail = deps.getShellOutputTail;
+    this.#now = deps.now ?? (() => Date.now());
+    const setIntervalFn = deps.setInterval ?? setInterval;
+    this.#clearInterval = deps.clearInterval ?? clearInterval;
+    this.#timer = setIntervalFn(() => this.tick(), deps.tickMs ?? DEFAULT_TICK_MS);
+    this.#timer.unref?.();
   }
 
   setTaskPolicy(target: BackgroundCheckInDueEvent['target'], policy: TaskCheckInPolicy): void {

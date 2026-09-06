@@ -110,7 +110,7 @@ function createScopedToolLifecycle(
  */
 export class AgentClient {
   #agentConfig: AgentConfiguration;
-  #shellChildRegistry: ShellChildRegistry;
+  #shellChildRegistry = new ShellChildRegistry();
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #applicationRunLoop: ApplicationRunLoop;
   #contextCompactionSessionState: ContextCompactionSessionState = { disabled: false };
@@ -128,8 +128,6 @@ export class AgentClient {
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
-  /** The session factory will hand these owners to the rollover successor. */
-  #detachedForSessionRollover = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
   #onToolDispatch?: (callId: string) => void;
   #hookScope: Term2HookScope = 'root';
@@ -463,6 +461,26 @@ export class AgentClient {
 
   requestSessionRollover(request: SessionRolloverRequest): SessionRolloverRequestOutcome {
     const rolloverId = randomUUID();
+    const active = this.#liveBackgroundWork();
+    if (active.subagent > 0 || active.shell > 0) {
+      this.#logger.info('Session rollover blocked', {
+        eventType: 'session.rollover.blocked',
+        rolloverId,
+        sourceSessionId: this.#sessionContextService.getContext()?.sessionId,
+        blocker: 'background_work',
+        reason: request.reason,
+        briefSize: request.brief.length,
+        providerInputTokens: this.#lastCompletedProviderInputTokens,
+        active,
+      });
+      return {
+        ok: false,
+        status: 'rollover_blocked',
+        error: 'Session rollover is blocked while background work is live.',
+        active,
+        rolloverId,
+      };
+    }
     const pending: PendingSessionRolloverRequest = {
       ...request,
       rolloverId,
@@ -480,20 +498,31 @@ export class AgentClient {
     this.#sessionRolloverRequest = null;
     if (!request) return { status: 'none' };
 
+    const active = this.#liveBackgroundWork();
+    if (active.subagent > 0 || active.shell > 0) {
+      return {
+        status: 'blocked',
+        blocker: 'background_work',
+        error: 'Session rollover was not performed because background work became live before turn settlement.',
+        active,
+        request,
+      };
+    }
     return { status: 'ready', request };
   }
 
-  getSessionRolloverSubagentBridge(): SubagentBridge | undefined {
-    return this.#subagentBridge ?? undefined;
-  }
-
-  getSessionRolloverShellChildRegistry(): ShellChildRegistry {
-    return this.#shellChildRegistry;
-  }
-
-  /** Mark session-owned execution owners as transferred before this client is disposed. */
-  detachForSessionRollover(): void {
-    this.#detachedForSessionRollover = true;
+  #liveBackgroundWork(): { shell: number; subagent: number } {
+    const subagent = this.listBackgroundSubagentStatuses().filter(
+      ({ status }) =>
+        status === 'running' ||
+        status === 'awaiting_approval' ||
+        status === 'waiting_for_answer' ||
+        status === 'cancelling',
+    ).length;
+    const shell = this.listBackgroundShellJobs().filter(
+      ({ status }) => status === 'running' || status === 'cancelling',
+    ).length;
+    return { shell, subagent };
   }
 
   /** Exact nested-tool state shared with the subagent runtime's tool factory. */
@@ -556,7 +585,6 @@ export class AgentClient {
     hookScope,
     backgroundShellRegistry,
     backgroundShellOutput,
-    shellChildRegistry,
     allowBackgroundShell = true, // Retained for session-factory compatibility; direct execution no longer
     allowAskUser = true,
     wrapUpOnCriticalRunBudget = false,
@@ -600,8 +628,6 @@ export class AgentClient {
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
     /** Root-session-owned output store + watch layer. Nested clients deliberately omit it. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
-    /** Session-owned child processes inherited by a rollover successor. */
-    shellChildRegistry?: ShellChildRegistry;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
     /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -618,7 +644,6 @@ export class AgentClient {
     this.#hookScope = hookScope ?? 'root';
     this.#backgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
     this.#backgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
-    this.#shellChildRegistry = shellChildRegistry ?? new ShellChildRegistry();
     this.#wrapUpOnCriticalRunBudget = wrapUpOnCriticalRunBudget;
     this.#askUserAnswerStore = new AskUserAnswerStore();
 
@@ -1038,11 +1063,11 @@ export class AgentClient {
     this.#isDisposed = true;
 
     this.abort();
-    if (!this.#detachedForSessionRollover) this.disposeShellChildren();
-    if (!this.#detachedForSessionRollover) void this.disposeBackgroundShellJobs();
+    this.disposeShellChildren();
+    void this.disposeBackgroundShellJobs();
     this.#clearStreamedModelCache();
     this.#chatService.clearModelCache();
-    if (!this.#detachedForSessionRollover) this.#subagentBridge?.dispose();
+    this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
   }
 

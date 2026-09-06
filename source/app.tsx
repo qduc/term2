@@ -280,7 +280,6 @@ const App: FC<AppProps> = ({
     backgroundSubagentApproval ?? ({ revision: 0, current: null, pendingCount: 0, closed: false } as const);
   const backgroundApprovalEntry = backgroundApprovalState.current;
   const rolloverSourceSessionIdRef = useRef<string | undefined>(undefined);
-  const preserveBackgroundWorkOnClearRef = useRef(false);
 
   // Notify cli.tsx when the conversation has content so it can decide whether
   // to show the "To resume this conversation" message.
@@ -298,9 +297,7 @@ const App: FC<AppProps> = ({
     if (onRotateWriter) {
       onRotateWriter(newId, newCreatedAt, rolloverFrom);
     }
-    conversationService.resetWithNewId(newId, {
-      preserveBackgroundWork: preserveBackgroundWorkOnClearRef.current,
-    });
+    conversationService.resetWithNewId(newId);
     setSessionId(newId);
     if (onSessionIdChange) {
       onSessionIdChange(newId, newCreatedAt);
@@ -378,19 +375,6 @@ const App: FC<AppProps> = ({
 
   sessionRolloverHandlerRef.current = async (request) => {
     const sourceSessionId = sessionId;
-    const inheritedTasks =
-      conversationService.backgroundTaskControl
-        ?.listDetails()
-        ?.map((task) => ({
-          kind: task.kind,
-          id: task.id,
-          status: task.status,
-          startedAt: task.startedAt,
-          ...(task.kind === 'shell'
-            ? { command: task.command }
-            : { role: task.role, task: task.task, ...(task.name !== undefined ? { name: task.name } : {}) }),
-        }))
-        .filter((task) => task.status === 'running' || task.status === 'cancelling') ?? [];
     conversationService.logSessionRollover({
       type: 'session_rollover',
       phase: 'requested',
@@ -404,12 +388,7 @@ const App: FC<AppProps> = ({
     pendingRolloverSuccessorIdRef.current = plannedSuccessorId;
     latestRotatedSessionIdRef.current = plannedSuccessorId;
     rolloverSourceSessionIdRef.current = sessionId;
-    preserveBackgroundWorkOnClearRef.current = true;
-    try {
-      await clearConversationAndRefreshBanner();
-    } finally {
-      preserveBackgroundWorkOnClearRef.current = false;
-    }
+    await clearConversationAndRefreshBanner();
     const successorSessionId = latestRotatedSessionIdRef.current;
     if (!successorSessionId) throw new Error('Session rollover completed without a successor session ID.');
     const settlementLatencyMs = Math.max(0, Date.now() - request.requestedAt);
@@ -424,12 +403,7 @@ const App: FC<AppProps> = ({
       ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
       settlementLatencyMs,
     });
-    const briefing = composeSessionRolloverBrief({
-      previousSessionId: sourceSessionId,
-      successorSessionId,
-      request,
-      inheritedTasks,
-    });
+    const briefing = composeSessionRolloverBrief({ previousSessionId: sourceSessionId, successorSessionId, request });
     await sendSessionRolloverBrief(briefing);
   };
 

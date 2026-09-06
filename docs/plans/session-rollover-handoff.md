@@ -5,10 +5,9 @@
 The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
 `38ec5576`, settings-surface repair `6a7cfac7`). The shipped behavior is
 agent-triggered only: context milestones advise the agent, and
-`session_rollover` requests rotation after the current turn settles. Admitted
-live background shells and subagents transfer with their owners and results;
-pending interactions or queued user submissions still block when safe transfer
-cannot be established. The new session starts with a protocol-composed,
+`session_rollover` requests rotation after the current turn settles. Rotation
+is blocked rather than discarding live background work, pending interactions,
+or queued user submissions. The new session starts with a protocol-composed,
 visually marked rollover briefing. Its `session_init.rolloverFrom` metadata
 durably identifies the predecessor, so `session_read({ id: "previous" })`
 survives restart. The briefing directs that bounded read before search when the
@@ -264,19 +263,17 @@ distinguishes a safe natural boundary from an indivisible step and never makes
 rollover mandatory. Settings remain `agent.sessionRollover.enabled`,
 `agent.sessionRollover.milestones`, and `agent.sessionRollover.autoBrief`.
 
-### Guard conditions (implemented in `fa4b371b`, with live-work transfer follow-up)
+### Guard conditions (implemented in `fa4b371b`)
 
-The tool defers to settlement and the conversation facade refuses with a
-structured tool error, not a crash, when:
+The tool refuses with a structured tool error, not a crash, when:
 
 - A turn is actively executing — rollover is an idle-boundary operation.
   (The tool call itself arrives during a turn; the rotation must be deferred
   to that turn's settlement, like background-event injection defers to
   turn boundaries — defer-to-idle, not abort-the-turn.)
-- Live background shell jobs or asynchronous subagent runs are transferred with
-  their registries, output/watch state, notification queue, and check-in
-  policies. The successor receives an exact inherited-task inventory and must
-  not relaunch those handles.
+- Background shell jobs or asynchronous subagent runs are live. The agent
+  client checks both when the tool requests rollover and again when the turn
+  settles, closing the race where work starts later in the same model response.
 - A pending approval, other pending interaction, post-execute gate, background
   approval, or queued user submission exists. `ConversationService` rechecks
   these immediately before handing rotation to the app.
@@ -311,11 +308,9 @@ briefing turn is a tiny request. The old session's server-side state/cache is
 simply abandoned (writes were already paid; nothing is re-billed). Compare
 compaction: it pays a full-history summarization request *and* rebuilds the
 prefix. Rollover's only mandatory cost is writing the brief.
-For ordinary clear/shutdown, `ConversationService.resetWithNewId()` and
-composition disposal still dispose the old client and cancel session-bound
-work. The rollover path instead transfers execution owners and observation
-state before disposing the old parent projection; retained provider transports
-for the abandoned parent are still closed.
+`ConversationService.resetWithNewId()` disposes the old client handle before
+creating the new session client, so retained provider transports are closed
+rather than left keyed to the abandoned session.
 
 ## Decisions and follow-ups
 

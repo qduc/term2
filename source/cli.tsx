@@ -812,8 +812,6 @@ const sessionClientFactory = createOwnedSessionClientFactory(
     allowBackgroundShell,
     backgroundShellOutput,
     allowAskUser,
-    subagentBridge,
-    shellChildRegistry,
   ) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
@@ -836,8 +834,6 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       toolLifecycle,
       backgroundShellRegistry,
       backgroundShellOutput,
-      subagentBridge,
-      shellChildRegistry,
       allowBackgroundShell,
       allowAskUser,
     });

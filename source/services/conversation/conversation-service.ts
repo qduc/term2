@@ -11,7 +11,6 @@ import {
   createCallerOwnedSessionClientFactory,
   type SessionClientFactory,
   type SessionClientHandle,
-  type SessionRolloverResources,
 } from '../session/session-client-factory.js';
 import type {
   SendMessageOptions,
@@ -223,22 +222,14 @@ export class ConversationService {
     this.#clientHandle.dispose();
   }
 
-  resetWithNewId(newId: string, options?: { preserveBackgroundWork?: boolean }): void {
+  resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
     const previousEventSink = this.#eventSink;
-    const preserveBackgroundWork = options?.preserveBackgroundWork === true;
-    const backgroundWorkTransfer = preserveBackgroundWork ? this.#runtime.transferBackgroundWork() : undefined;
-    const rolloverResources: SessionRolloverResources | undefined = preserveBackgroundWork
-      ? {
-          ...(this.#clientHandle.rolloverResources?.() ?? {}),
-          ...(backgroundWorkTransfer ? { backgroundWorkTransfer } : {}),
-        }
-      : undefined;
     this.#runtime.state.reset();
     this.#runtime.dispose();
     this.#clientHandle.dispose();
     this.#deps.skillsService?.discoverSkills();
-    this.#clientHandle = this.#clientFactory.create(newId, rolloverResources ? { rolloverResources } : undefined);
+    this.#clientHandle = this.#clientFactory.create(newId);
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       providerContinuity: this.#clientHandle.providerContinuity,
@@ -259,7 +250,6 @@ export class ConversationService {
       discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
       enableNestedApproval: this.#enableNestedApproval,
-      ...(backgroundWorkTransfer ? { backgroundWorkTransfer } : {}),
     });
     this.#runtime = runtime;
     this.#adapter = adapter;

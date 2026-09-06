@@ -161,19 +161,6 @@ export type SessionRuntimeInternals = {
   /** Authoritative pending approval and ask_user protocol state. */
   pendingInteraction: PendingInteractionState;
   nestedApprovalOwner: NestedApprovalOwner;
-  /** Detach the conversation projection while retaining admitted background work. */
-  transferBackgroundWork: () => SessionBackgroundWorkTransfer;
-};
-
-/**
- * Session-scoped observation owners that must outlive a rollover. The process
- * registries themselves are transferred by the session client factory; these
- * objects retain queued results, monitor policy, and check-in progress.
- */
-export type SessionBackgroundWorkTransfer = {
-  notificationStore: SubagentNotificationStore;
-  backgroundSubagentApprovals: BackgroundSubagentApprovalController;
-  backgroundCheckInScheduler: BackgroundCheckInScheduler;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -211,8 +198,6 @@ export type CreateSessionRuntimeInternalsOptions = {
   toolCallMarkers?: ToolCallMarkerStore;
   /** Install the interactive nested owner; headless callers retain fail-closed fallback behavior. */
   enableNestedApproval?: boolean;
-  /** Existing background observation owners inherited by a rollover successor. */
-  backgroundWorkTransfer?: SessionBackgroundWorkTransfer;
 };
 
 export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
@@ -314,8 +299,6 @@ export type SessionRuntime = {
   approval: SessionApprovalQuery;
   /** Session-owned live nested approval protocol. */
   nestedApproval: SessionNestedApproval;
-  /** Transfer admitted background work to a successor session without cancelling it. */
-  transferBackgroundWork: () => SessionBackgroundWorkTransfer;
   /** Pending approval protocol projected by presentation layers. */
   pendingInteraction: PendingInteractionState;
   sinks: SessionSinks;
@@ -359,7 +342,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     hookEvents: suppliedHookEvents,
     toolCallMarkers: suppliedToolCallMarkers,
     enableNestedApproval = false,
-    backgroundWorkTransfer,
   } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
@@ -397,7 +379,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // while the conversation is idle and no per-turn sink is attached.
   let disposed = false;
   let syncPublicStatus: () => void = () => {};
-  const notificationStore = backgroundWorkTransfer?.notificationStore ?? new SubagentNotificationStore();
+  const notificationStore = new SubagentNotificationStore();
   let notificationObserver: (() => void) | null = null;
   let taskObserver: (() => void) | null = null;
   const backgroundSubagentNotifications: BackgroundSubagentNotificationChannel = {
@@ -450,17 +432,15 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   // This controller owns background-child approval policy and FIFO ordering.
   // It intentionally does not touch ApprovalState, which owns the root turn.
-  const backgroundSubagentApprovals =
-    backgroundWorkTransfer?.backgroundSubagentApprovals ??
-    new BackgroundSubagentApprovalController({
-      logger,
-      sessionId: id,
-      toolOwnership,
-      nestedCompatibility: getMethod<
-        [],
-        import('./nested-tool-compatibility-state.js').NestedToolCompatibilityState | undefined
-      >(agentClient, 'getNestedToolCompatibilityState')?.call(agentClient),
-    });
+  const backgroundSubagentApprovals = new BackgroundSubagentApprovalController({
+    logger,
+    sessionId: id,
+    toolOwnership,
+    nestedCompatibility: getMethod<
+      [],
+      import('./nested-tool-compatibility-state.js').NestedToolCompatibilityState | undefined
+    >(agentClient, 'getNestedToolCompatibilityState')?.call(agentClient),
+  });
 
   const generationGuard = new GenerationGuard();
   // Factory-owned handles supply this same registry to the root tool policy.
@@ -580,32 +560,17 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // docs/plans/background-work-control/agent-checkin.md. Settings are read
   // fresh on every tick so a runtime change takes effect without restarting
   // the timer.
-  const backgroundCheckInScheduler =
-    backgroundWorkTransfer?.backgroundCheckInScheduler ??
-    new BackgroundCheckInScheduler({
-      getRunningTasks: () => notificationStore.getTaskSnapshot(),
-      emit: recordBackgroundEvent,
-      getSubagentStatus: (runId) => agentClient.getBackgroundSubagentStatus?.(runId),
-      getShellJob: (jobId) => agentClient.getBackgroundShellJob?.(jobId),
-      getShellOutputTail: (jobId, maxBytes) => agentClient.getBackgroundShellOutputTail?.(jobId, maxBytes),
-      getSettings: () => ({
-        enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
-        intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
-      }),
-    });
-  if (backgroundWorkTransfer) {
-    backgroundCheckInScheduler.rebind({
-      getRunningTasks: () => notificationStore.getTaskSnapshot(),
-      emit: recordBackgroundEvent,
-      getSubagentStatus: (runId) => agentClient.getBackgroundSubagentStatus?.(runId),
-      getShellJob: (jobId) => agentClient.getBackgroundShellJob?.(jobId),
-      getShellOutputTail: (jobId, maxBytes) => agentClient.getBackgroundShellOutputTail?.(jobId, maxBytes),
-      getSettings: () => ({
-        enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
-        intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
-      }),
-    });
-  }
+  const backgroundCheckInScheduler = new BackgroundCheckInScheduler({
+    getRunningTasks: () => notificationStore.getTaskSnapshot(),
+    emit: recordBackgroundEvent,
+    getSubagentStatus: (runId) => agentClient.getBackgroundSubagentStatus?.(runId),
+    getShellJob: (jobId) => agentClient.getBackgroundShellJob?.(jobId),
+    getShellOutputTail: (jobId, maxBytes) => agentClient.getBackgroundShellOutputTail?.(jobId, maxBytes),
+    getSettings: () => ({
+      enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
+      intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
+    }),
+  });
   getMethod<[scheduler: BackgroundCheckInScheduler | undefined], void>(
     agentClient,
     'setBackgroundCheckInScheduler',
@@ -712,7 +677,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   appState.statusMachine.setObserver(() => {
     syncPublicStatus();
   });
-  const unsubscribeBackgroundApprovalObserver = backgroundSubagentApprovals.subscribe(() => {
+  backgroundSubagentApprovals.subscribe(() => {
     syncPublicStatus();
   });
 
@@ -868,25 +833,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   let backgroundShellSettlement: Promise<void> | undefined;
   let backgroundSubagentSettlement: Promise<void> | undefined;
-  let retainedBackgroundWorkTransfer: SessionBackgroundWorkTransfer | undefined;
-  const transferBackgroundWork = (): SessionBackgroundWorkTransfer => {
-    if (retainedBackgroundWorkTransfer) return retainedBackgroundWorkTransfer;
-    if (disposed) throw new Error('Session runtime is already disposed.');
-    // Rollover is only admitted at a settled turn boundary. Tear down the
-    // parent projection, but deliberately do not cancel the execution owners.
-    disposed = true;
-    turnWorkflow.abortLiveRun();
-    postExecutePending.close();
-    generationGuard.invalidate();
-    unsubscribeBackgroundApprovalObserver();
-    pendingInteraction.clear();
-    retainedBackgroundWorkTransfer = {
-      notificationStore,
-      backgroundSubagentApprovals,
-      backgroundCheckInScheduler,
-    };
-    return retainedBackgroundWorkTransfer;
-  };
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
@@ -907,7 +853,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getMethod<[], void>(agentClient, 'disposeShellChildren')?.call(agentClient);
     notificationObserver = null;
     taskObserver = null;
-    unsubscribeBackgroundApprovalObserver();
     const subagentDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundSubagents')?.call(agentClient);
     backgroundSubagentSettlement = subagentDisposal
       ? Promise.resolve(subagentDisposal).finally(() => {
@@ -1135,7 +1080,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     postExecutePending,
     pendingInteraction,
     nestedApprovalOwner,
-    transferBackgroundWork,
   };
 }
 
@@ -1164,7 +1108,6 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     postExecutePending,
     pendingInteraction,
     nestedApprovalOwner,
-    transferBackgroundWork,
   } = internals;
 
   return {
@@ -1217,7 +1160,6 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       decide: nestedApprovalOwner.decide.bind(nestedApprovalOwner),
       close: nestedApprovalOwner.close.bind(nestedApprovalOwner),
     },
-    transferBackgroundWork,
     sinks: {
       askUserAnswer: resolvedAskUserAnswerSink,
       subagentEvents: resolvedSubagentEventSinkHost,

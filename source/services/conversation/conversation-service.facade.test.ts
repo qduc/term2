@@ -7,7 +7,6 @@ import { createAgentStream } from '../agent-stream.js';
 import { MockStream, createMockStream } from '../test-helpers/mock-stream.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
-import { BackgroundShellRegistry } from '../shell/background-shell-registry.js';
 
 const mockLogger = {
   info: () => {},
@@ -224,61 +223,6 @@ it('constructs with a caller-owned agentClient and toolOwnership', () => {
 
   expect(service.sessionId).toBe('caller-owned');
   expect(() => service.dispose()).not.toThrow();
-});
-
-it('preserves live background work through the conversation reset used by rollover', async () => {
-  const registry = new BackgroundShellRegistry<string>();
-  const cancelBackgroundRuns = vi.fn();
-  const cancelBackgroundShellJobs = vi.fn();
-  const oldClient = partialClient({
-    listBackgroundShellJobs: () => registry.list(),
-    cancelBackgroundRuns,
-    cancelBackgroundShellJobs,
-  });
-  const successorClient = partialClient({ listBackgroundShellJobs: () => registry.list() });
-  const handles: SessionClientHandle[] = [];
-  const factory: SessionClientFactory = {
-    create(_sessionId, options) {
-      const agentClient = handles.length === 0 ? oldClient : successorClient;
-      const resources = options?.rolloverResources;
-      const handle = {
-        agentClient,
-        continuationProjectionMode: 'legacy' as const,
-        toolOwnership: new ToolOwnershipRegistry(),
-        ...(handles.length === 0
-          ? {
-              rolloverResources: () => ({
-                backgroundShellRegistry: registry,
-              }),
-            }
-          : {}),
-        dispose: vi.fn(),
-      } as SessionClientHandle;
-      // The real factory passes the inherited registry into the successor.
-      if (handles.length === 1) expect(resources?.backgroundShellRegistry).toBe(registry);
-      handles.push(handle);
-      return handle;
-    },
-  };
-  const service = new ConversationService({
-    sessionClientFactory: factory,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const launch = registry.launch({
-    command: 'hold',
-    run: (signal) => new Promise<string>((resolve) => signal.addEventListener('abort', () => resolve('done'))),
-  });
-
-  service.resetWithNewId('successor', { preserveBackgroundWork: true });
-
-  expect(registry.get(launch.id)?.status).toBe('running');
-  expect(cancelBackgroundRuns).not.toHaveBeenCalled();
-  expect(cancelBackgroundShellJobs).not.toHaveBeenCalled();
-  expect(service.backgroundTaskControl.listDetails().find((task) => task.kind === 'shell')?.status).toBe('running');
-
-  registry.cancel(launch.id);
-  await launch.settled;
-  service.dispose();
 });
 
 it('grantRunBudgetExtension returns a denied grant when the client cannot grant', () => {

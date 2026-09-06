@@ -12,6 +12,8 @@ import {
   getMatchCount,
   isSearchLikeTool,
   parseCodeOutlineOutput,
+  parseRunCodeTrace,
+  truncateOutputLines,
   parseFindFilesOutput,
   parseSubagentOutput,
   stripRgErrorLines,
@@ -37,6 +39,7 @@ import WebSearchRenderer from './WebSearchRenderer.js';
 import WebFetchRenderer from './WebFetchRenderer.js';
 import CodeContextSearchRenderer from './CodeContextSearchRenderer.js';
 import MemoryRenderer from './MemoryRenderer.js';
+import RunCodeRenderer from './RunCodeRenderer.js';
 
 const useRunningElapsedSeconds = (isRunning: boolean): number => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -178,6 +181,10 @@ const CommandMessage: FC<Props> = ({
   }, [toolName, toolArgs]);
   const isBackgroundSubagentLaunch = toolName === 'run_subagent' && toolArgs?.execution === 'background';
 
+  // A script's nested calls only survive as text in its result, so the trace is
+  // reconstructed at render time. It is absent while the call is still running.
+  const runCodeTrace = useMemo(() => (toolName === 'run_code' ? parseRunCodeTrace(output) : null), [toolName, output]);
+
   const displayAction = useMemo(() => {
     const isShell = !toolName || toolName === 'shell';
     if (isShell) {
@@ -249,6 +256,8 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Activated skill');
       case 'run_agent_workflow':
         return renderAction('Ran agent workflow');
+      case 'run_code':
+        return renderAction('Ran code');
       case 'enter_worktree':
         return renderAction('Entered worktree');
       case 'exit_worktree':
@@ -463,6 +472,13 @@ const CommandMessage: FC<Props> = ({
       </Box>
     ) : null;
 
+  // Concise mode draws the header alone, so a refused nested call would otherwise
+  // vanish. Counts on a clean run would be noise, so only trouble is announced.
+  const runCodeTroubleElement =
+    displayMode === 'concise' && runCodeTrace && runCodeTrace.troubledCount > 0 ? (
+      <Text color={COLOR_DANGER}> ({runCodeTrace.troubledCount} refused)</Text>
+    ) : null;
+
   const autoApprovalLabel = autoApprovedByLlm ? <Text color={COLOR_TEXT_SUBTLE}>(Auto approved by LLM)</Text> : null;
 
   if (!isVisible && !isSubagent) {
@@ -594,6 +610,7 @@ const CommandMessage: FC<Props> = ({
             {TOOL_STATUS_GLYPH.completed}
           </Text>{' '}
           {displayAction}
+          {runCodeTroubleElement}
           {changeStatsElement}
         </Text>
         {matchCountElement}
@@ -602,20 +619,7 @@ const CommandMessage: FC<Props> = ({
     );
   }
   const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
-  const displayed =
-    outputText && outputText !== '(no output)'
-      ? (() => {
-          const trimmedOutput = (output || '').trimEnd();
-          const lines = trimmedOutput.split('\n');
-          const maxLines = 3;
-          if (lines.length > maxLines + 1) {
-            const firstPart = lines.slice(0, maxLines).join('\n');
-            const lastLine = lines[lines.length - 1];
-            return `${firstPart}\n... (${lines.length - maxLines - 1} more lines)\n${lastLine}`;
-          }
-          return output;
-        })()
-      : outputText;
+  const displayed = outputText && outputText !== '(no output)' ? truncateOutputLines(output || '') : outputText;
 
   // Special handling for apply_patch
   if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {
@@ -687,6 +691,10 @@ const CommandMessage: FC<Props> = ({
         </Box>
       </Box>
     );
+  }
+
+  if (displayMode === 'standard' && toolName === 'run_code' && runCodeTrace && !isApprovalRejection) {
+    return <RunCodeRenderer trace={runCodeTrace} success={success} renderStandardHeader={renderStandardHeader} />;
   }
 
   // Standard mode custom tool renderers

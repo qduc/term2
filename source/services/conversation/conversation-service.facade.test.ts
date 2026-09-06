@@ -158,6 +158,33 @@ it('rollover keeps the caller-owned client alive while replacing root identity',
   service.dispose();
 });
 
+it('keeps the owned client identity aligned when rollover follows ordinary clear', () => {
+  const ownedFactory = createOwnedSessionClientFactory(
+    { get: () => undefined, getDynamic: () => undefined } as any,
+    () => partialClient(),
+  );
+  const handles: SessionClientHandle[] = [];
+  const service = new ConversationService({
+    sessionClientFactory: {
+      create(id, options) {
+        const handle = ownedFactory.create(id, options);
+        handles.push(handle);
+        return handle;
+      },
+    },
+    sessionId: 'original',
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  try {
+    service.resetWithNewId('cleared');
+    service.rolloverWithNewId('successor');
+    expect(service.sessionId).toBe('successor');
+    expect(handles.at(-1)?.sessionIdentity?.current).toBe('successor');
+  } finally {
+    service.dispose();
+  }
+});
+
 it('prepares rollover admission before returning a commit callback', () => {
   const service = new ConversationService({
     agentClient: partialClient(),

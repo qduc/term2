@@ -247,6 +247,7 @@ export class ConversationService {
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       toolCallMarkers: this.#toolCallMarkers,
+      sessionIdentity: this.#clientHandle.sessionIdentity,
       deps: this.#deps,
       queueForeground: true,
       queueCapacity: this.#queueCapacity,

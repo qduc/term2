@@ -376,6 +376,11 @@ const App: FC<AppProps> = ({
 
   sessionRolloverHandlerRef.current = async (request) => {
     const sourceSessionId = sessionId;
+    const taskInventory = (conversationService.backgroundTaskControl?.listDetails?.() ?? []).map((task) => ({
+      kind: task.kind,
+      id: task.id,
+      status: task.status,
+    }));
     conversationService.logSessionRollover({
       type: 'session_rollover',
       phase: 'requested',
@@ -436,7 +441,12 @@ const App: FC<AppProps> = ({
       ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
       settlementLatencyMs,
     });
-    const briefing = composeSessionRolloverBrief({ previousSessionId: sourceSessionId, successorSessionId, request });
+    const briefing = composeSessionRolloverBrief({
+      previousSessionId: sourceSessionId,
+      successorSessionId,
+      request,
+      taskInventory,
+    });
     await sendSessionRolloverBrief(briefing);
   };
 

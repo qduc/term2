@@ -33,4 +33,20 @@ describe('composeSessionRolloverBrief', () => {
       }),
     ).toContain('Reason: not specified');
   });
+
+  it('includes the harness-owned live-work inventory rather than relying on the handoff text', () => {
+    const brief = composeSessionRolloverBrief({
+      previousSessionId: 'session-old',
+      successorSessionId: 'session-new',
+      request: { brief: 'Continue.' },
+      taskInventory: [
+        { kind: 'shell', id: 'job-1', status: 'running' },
+        { kind: 'subagent', id: 'run-1', status: 'waiting_for_answer' },
+      ],
+    });
+
+    expect(brief).toContain('## Harness-observed live work at cutover');
+    expect(brief).toContain('- shell `job-1` status: running');
+    expect(brief).toContain('- subagent `run-1` status: waiting_for_answer');
+  });
 });

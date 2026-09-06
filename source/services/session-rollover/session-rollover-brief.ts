@@ -6,21 +6,37 @@ const reasonLabel = (reason: SessionRolloverRequest['reason']): string => {
   return 'not specified';
 };
 
+export type SessionRolloverTaskInventoryEntry = {
+  kind: 'shell' | 'subagent';
+  id: string;
+  status: string;
+};
+
 export function composeSessionRolloverBrief({
   previousSessionId,
   successorSessionId,
   request,
+  taskInventory = [],
 }: {
   previousSessionId: string;
   successorSessionId: string;
   request: SessionRolloverRequest;
+  taskInventory?: readonly SessionRolloverTaskInventoryEntry[];
 }): string {
+  const inventory =
+    taskInventory.length === 0
+      ? ['- none observed at cutover']
+      : taskInventory.map((task) => `- ${task.kind} \`${task.id}\` status: ${task.status}`);
   return [
     '# Continuation briefing',
     '',
     `Previous session: \`${previousSessionId}\``,
     `Outcome: completed into successor session \`${successorSessionId}\``,
     `Reason: ${reasonLabel(request.reason)}`,
+    '',
+    '## Harness-observed live work at cutover',
+    '',
+    ...inventory,
     '',
     '## Handoff from the previous session',
     '',

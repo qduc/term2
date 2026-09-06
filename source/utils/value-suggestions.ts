@@ -214,17 +214,12 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
  */
 function suggestFromEnum(schema: any): SettingValueSuggestion[] {
   if (!schema) return [];
-  const def = (schema?._def ?? schema?.def) as any;
+  const def = schema?.def ?? schema?._def;
   if (def?.type !== 'enum') return [];
 
   // Zod v4: def.entries is Record<string, string>
-  if (def.entries && typeof def.entries === 'object' && !Array.isArray(def.entries)) {
+  if (def.entries && typeof def.entries === 'object') {
     return (Object.values(def.entries) as string[]).map((v: string) => ({ value: v }));
-  }
-
-  // Zod v3: def.values is string[]
-  if (Array.isArray(def.values)) {
-    return def.values.map((v: string) => ({ value: v }));
   }
 
   return [];
@@ -251,7 +246,7 @@ function autoSuggestFromSchema(key: string): SettingValueSuggestion[] {
   const unwrapped = unwrapSchema(schema);
   if (!unwrapped) return [];
 
-  const def = (unwrapped as any)._def ?? (unwrapped as any).def;
+  const def = unwrapped.def ?? unwrapped._def;
   if (!def) return [];
 
   const typeName = def.type ?? def.typeName;
@@ -296,7 +291,7 @@ function isSettingType(key: string, expectedType: 'number' | 'string'): boolean 
   if (!unwrapped) return false;
   // In Zod v4, number/string checks are on the base schema, not wrappers.
   // .int(), .positive() etc. add checks but keep the schema as ZodNumber.
-  const def = (unwrapped as any)._def;
+  const def = unwrapped.def ?? unwrapped._def;
   return def?.type === expectedType;
 }
 

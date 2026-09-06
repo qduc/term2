@@ -103,7 +103,7 @@ export function createDefaultTriggerRegistry(
   });
 
   // Priority 50: direct command-backed model selection (graph 4 — `/model `).
-  // Disabled until Step 2 enables `command-model`.
+  // Enabled when included in enabledRuleIds (e.g. ApplicationInputSurface).
   registerRule({
     id: 'command-model',
     priority: 50,
@@ -201,7 +201,7 @@ export function createDefaultTriggerRegistry(
   });
 
   // Priority 40: direct setting-value triggers (graph 4 — `/effort `,
-  // `/auto-approve `). Disabled until Step 2 enables `direct-setting-value`.
+  // `/auto-approve `). Enabled when included in enabledRuleIds (e.g. ApplicationInputSurface).
   registerRule({
     id: 'direct-setting-value',
     priority: 40,

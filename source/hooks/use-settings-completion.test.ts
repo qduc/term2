@@ -346,7 +346,7 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
 
   // Verify specific expected mappings for key settings
   expect(getSettingCategory('agent.model').id).toBe('models');
-  expect(getSettingCategory('agent.mentorModel').id).toBe('models');
+  expect(getSettingCategory('agent.smartModel').id).toBe('models');
   expect(getSettingCategory('shell.autoApproveMode').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory('sandbox.enabled').id).toBe('safety');
@@ -355,7 +355,7 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   expect(SETTING_DESCRIPTIONS[SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS]).toContain('revoke');
   expect(getSettingCategory('app.searchViaShell').id).toBe('tools');
   expect(getSettingCategory('agent.maxParallelToolCalls').id).toBe('misc');
-  expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');
+  expect(getSettingCategory('agent.balancedModel').id).toBe('models');
   expect(getSettingCategory('ui.pasteThreshold').id).toBe('ui');
 });
 

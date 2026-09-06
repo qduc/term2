@@ -937,6 +937,7 @@ it.sequential('setModel resets mentor conversation chain used by ask_mentor', as
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
+    'agent.smartModel': 'mock-mentor-model',
     'agent.mentorModel': 'mock-mentor-model',
     'agent.mentorProvider': 'mock-mentor-refresh',
     'app.liteMode': false,
@@ -961,6 +962,7 @@ it.sequential('ask_mentor resets conversation chain when mentor provider changes
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
+    'agent.smartModel': 'mock-mentor-model',
     'agent.mentorModel': 'mock-mentor-model',
     'agent.mentorProvider': 'mock-mentor-refresh',
     'app.liteMode': false,
@@ -1003,6 +1005,7 @@ it.sequential('setSubagentEventSink defers cleanup to null when subagents are ac
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
+    'agent.smartModel': 'mock-mentor-model',
     'agent.mentorModel': 'mock-mentor-model',
     'agent.mentorProvider': 'mock-deferred-sink-provider',
     'app.liteMode': false,

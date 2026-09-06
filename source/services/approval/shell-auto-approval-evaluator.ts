@@ -445,12 +445,8 @@ export async function evaluateShellAutoApprovalAdvisories({
   if (mode === 'off') return out;
 
   const choreModel = resolveAncillaryModelTier('chore', settingsService);
-  const autoApproveModel =
-    settingsService.get('agent.choreModel') ?? settingsService.get('agent.autoApproveModel') ?? choreModel.model;
-  const autoApproveProvider =
-    settingsService.get('agent.choreProvider') ??
-    settingsService.get('agent.autoApproveProvider') ??
-    choreModel.provider;
+  const autoApproveModel = settingsService.get('agent.choreModel') ?? choreModel.model;
+  const autoApproveProvider = settingsService.get('agent.choreProvider') ?? choreModel.provider;
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();

@@ -26,6 +26,8 @@ const createMockSettings = (
 ) => {
   const map: Record<string, unknown> = {
     'shell.autoApproveMode': mode,
+    'agent.choreModel': model,
+    'agent.choreProvider': provider,
     'agent.autoApproveModel': model,
     'agent.autoApproveProvider': provider,
   };

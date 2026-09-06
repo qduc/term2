@@ -15,6 +15,10 @@ import { SettingsService } from '../services/settings/settings-service.js';
 const baseSettings = {
   agent: {
     model: { value: 'gpt-5.1', source: 'default' },
+    smartModel: { value: 'gpt-5.1', source: 'default' },
+    balancedModel: { value: 'gpt-5-mini', source: 'config' },
+    cheapModel: { value: undefined, source: 'default' },
+    choreModel: { value: undefined, source: 'default' },
     efficientModel: { value: 'gpt-5-mini', source: 'config' },
     capableModel: { value: undefined, source: 'default' },
     reasoningEffort: { value: 'default', source: 'default' },
@@ -138,8 +142,10 @@ it('formatSettingsSummary renders values with sources', () => {
   const summary = formatSettingsSummary(baseSettings);
 
   expect(summary.includes('agent.model: gpt-5.1 (default)')).toBe(true);
-  expect(summary.includes('agent.efficientModel: gpt-5-mini (config)')).toBe(true);
-  expect(summary.includes('agent.capableModel: undefined (default)')).toBe(true);
+  expect(summary.includes('agent.smartModel: gpt-5.1 (default)')).toBe(true);
+  expect(summary.includes('agent.balancedModel: gpt-5-mini (config)')).toBe(true);
+  expect(summary.includes('agent.cheapModel: undefined (default)')).toBe(true);
+  expect(summary.includes('agent.choreModel: undefined (default)')).toBe(true);
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
   expect(summary.includes('shell.backgroundTimeout: 1800000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
@@ -443,33 +449,33 @@ it('setting agent.model without provider flag works normally', () => {
   expect(deps.messages[0].includes('Set agent.model to gpt-5.1')).toBe(true);
 });
 
-it('setting agent.mentorModel strips --provider flag and saves mentor provider', () => {
+it('setting agent.smartModel strips --provider flag and saves smart provider', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('agent.mentorModel some/mentor-model --provider=openrouter');
+  command.action('agent.smartModel some/smart-model --provider=openrouter');
 
   expect(deps.setCalls).toEqual([
-    { key: 'agent.mentorProvider', value: 'openrouter' },
-    { key: 'agent.mentorModel', value: 'some/mentor-model' },
+    { key: 'agent.smartProvider', value: 'openrouter' },
+    { key: 'agent.smartModel', value: 'some/smart-model' },
   ]);
   expect(deps.applied).toEqual([
-    { key: 'agent.mentorProvider', value: 'openrouter' },
-    { key: 'agent.mentorModel', value: 'some/mentor-model' },
+    { key: 'agent.smartProvider', value: 'openrouter' },
+    { key: 'agent.smartModel', value: 'some/smart-model' },
   ]);
 });
 
-it('setting tools.editHealingModel strips --provider flag and saves edit healing provider', () => {
+it('setting agent.choreModel strips --provider flag and saves chore provider', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('tools.editHealingModel fast-healer --provider=openrouter');
+  command.action('agent.choreModel fast-chore --provider=openrouter');
 
   expect(deps.setCalls).toEqual([
-    { key: 'tools.editHealingProvider', value: 'openrouter' },
-    { key: 'tools.editHealingModel', value: 'fast-healer' },
+    { key: 'agent.choreProvider', value: 'openrouter' },
+    { key: 'agent.choreModel', value: 'fast-chore' },
   ]);
   expect(deps.applied).toEqual([
-    { key: 'tools.editHealingProvider', value: 'openrouter' },
-    { key: 'tools.editHealingModel', value: 'fast-healer' },
+    { key: 'agent.choreProvider', value: 'openrouter' },
+    { key: 'agent.choreModel', value: 'fast-chore' },
   ]);
 });
 

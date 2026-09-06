@@ -39,53 +39,6 @@ export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
     providerKey: SETTING_KEYS.AGENT_CHORE_PROVIDER,
     fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
   },
-  // Legacy triggers remain recognized for settings files and commands created before tier consolidation.
-  {
-    modelKey: SETTING_KEYS.AGENT_MENTOR_MODEL,
-    trigger: '/settings agent.mentorModel ',
-    providerKey: SETTING_KEYS.AGENT_MENTOR_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
-    trigger: '/settings agent.autoApproveModel ',
-    providerKey: SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
-    trigger: '/settings tools.editHealingModel ',
-    providerKey: SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
-    trigger: '/settings agent.subagentExplorerModel ',
-    providerKey: SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
-    trigger: '/settings agent.subagentWorkerModel ',
-    providerKey: SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
-    trigger: '/settings agent.subagentLibrarianModel ',
-    providerKey: SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_EFFICIENT_MODEL,
-    trigger: '/settings agent.efficientModel ',
-    providerKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
-  {
-    modelKey: SETTING_KEYS.AGENT_CAPABLE_MODEL,
-    trigger: '/settings agent.capableModel ',
-    providerKey: SETTING_KEYS.AGENT_PROVIDER,
-  },
 ];
 
 export const MODEL_SETTING_TRIGGERS = MODEL_SETTING_CONFIGS.map((config) => config.trigger);

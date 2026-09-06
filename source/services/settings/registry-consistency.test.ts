@@ -65,19 +65,7 @@ function getSettingsWithSourcesPaths(): string[] {
  * registry litter (category entries filtered out before category display).
  * This tolerance list must shrink, not grow, as legacy settings are cleaned up.
  */
-export const TOLERATED_CATEGORY_HIDDEN_OVERLAP: readonly string[] = [
-  SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
-  SETTING_KEYS.AGENT_MENTOR_MODEL,
-  SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
-  SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
-  SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
-].sort();
+export const TOLERATED_CATEGORY_HIDDEN_OVERLAP: readonly string[] = [];
 
 describe('registry-consistency guards (M0)', () => {
   const exportedKeySet = new Set<string>(Object.values(SETTING_KEYS));
@@ -152,8 +140,8 @@ describe('registry-consistency guards (M0)', () => {
 
     const overlap = [...categoryKeys].filter((k) => HIDDEN_SETTINGS.has(k)).sort();
     expect(overlap).toEqual([...TOLERATED_CATEGORY_HIDDEN_OVERLAP].sort());
-    // The tolerance list must shrink, not grow
-    expect(overlap.length).toBeLessThanOrEqual(11);
+    // The tolerance list has shrunk to zero
+    expect(overlap.length).toBe(0);
   });
 
   it('every MODEL_SETTING_CONFIGS model/provider key is a SETTING_KEYS member', () => {

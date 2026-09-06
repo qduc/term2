@@ -73,7 +73,7 @@ export class NonInteractiveApprovalPolicy {
 
     const autoApproveModel =
       this.deps.settingsService && this.deps.agentClient
-        ? this.deps.settingsService.get('agent.choreModel') ?? this.deps.settingsService.get('agent.autoApproveModel')
+        ? this.deps.settingsService.get('agent.choreModel')
         : undefined;
     if (!autoApproveModel) {
       return {

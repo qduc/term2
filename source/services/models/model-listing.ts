@@ -1,4 +1,4 @@
-import { filterModels, type ModelInfo } from '../model-service.js';
+import { fetchModels, filterModels, type ModelInfo } from '../model-service.js';
 import { getProvider, getProviderIds } from '../../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { ModelCatalogSession, orderedProviderIds, type ModelFetcher } from './model-catalog-session.js';
@@ -55,6 +55,55 @@ export async function collectProviderModels(
     }
   }
   return groups;
+}
+
+export type LoadProviderModelGroupDeps = {
+  settingsService: ISettingsService;
+  loggingService: ILoggingService;
+  fetcher?: ModelFetcher;
+  signal?: AbortSignal;
+  cacheDir?: string;
+  now?: () => number;
+  ttlMs?: number;
+};
+
+/**
+ * Load a single provider's model listing without ModelCatalogSession's
+ * overlapping-request staleness tracking. Each call is fully independent (no
+ * shared mutable request counter), so unlike `collectProviderModels` this is
+ * safe to call concurrently across providers. `ModelCatalogSession` must stay
+ * sequential-only because it deliberately marks overlapping loads stale for
+ * the interactive picker's superseded-selection semantics; a one-shot CLI
+ * resolution has no such concern.
+ */
+export async function loadProviderModelGroup(
+  deps: LoadProviderModelGroupDeps,
+  provider: string,
+): Promise<ProviderModelGroup> {
+  const label = getProvider(provider)?.label;
+  const fetcher = deps.fetcher ?? ((p: string) => fetchModels(deps, p));
+  try {
+    const models = await fetcher(provider);
+    return { provider, ...(label ? { label } : {}), models };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    deps.loggingService.warn(`Model selection fetch failed for ${provider}`, { error: message });
+    return { provider, ...(label ? { label } : {}), models: [], error: message };
+  }
+}
+
+/**
+ * Load several providers' model listings concurrently. Used by the CLI
+ * `--model` resolution path once an early exact match hasn't been found and
+ * the search must widen to the rest of the credentialed providers; loading
+ * them one at a time there would pay each provider's latency serially for no
+ * benefit, since a fuzzy/cross-provider match needs every catalog anyway.
+ */
+export async function collectProviderModelsConcurrently(
+  deps: LoadProviderModelGroupDeps,
+  providerIds: string[],
+): Promise<ProviderModelGroup[]> {
+  return Promise.all(providerIds.map((provider) => loadProviderModelGroup(deps, provider)));
 }
 
 /**

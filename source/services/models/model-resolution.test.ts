@@ -217,25 +217,61 @@ describe('matchModels', () => {
     expect(result.matches.map((m) => m.model.id)).toEqual(['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano']);
   });
 
-  it('fuzzy matches across multiple providers when unconstrained', () => {
+  it('fuzzy matches across multiple providers when unconstrained, ranked deterministically', () => {
+    // All three candidates match "sonnet" right after a `-` boundary (same
+    // tier), so the ranking falls back to scoreSubsequence: the shorter id
+    // `claude-sonnet-4` pays a smaller length penalty than the longer
+    // `claude-3-5-sonnet-20241022` and the openrouter aggregator id, so it
+    // ranks first. This replaces the old raw provider-iteration order.
     const parsed = parseModelFlag('sonnet');
     const result = matchModels(groups, parsed);
     expect(result.exact).toBe(false);
     expect(result.matches.map((m) => `${m.provider}/${m.model.id}`)).toEqual([
-      'anthropic/claude-3-5-sonnet-20241022',
       'anthropic/claude-sonnet-4',
+      'anthropic/claude-3-5-sonnet-20241022',
       'openrouter/anthropic/claude-3.5-sonnet',
     ]);
   });
 
-  it('fuzzy matches constrained to provider when provider is specified', () => {
+  it('fuzzy matches constrained to provider when provider is specified, ranked deterministically', () => {
+    // Same tier/score ranking as the unconstrained case above, just narrowed
+    // to the anthropic group.
     const parsed = parseModelFlag('anthropic/sonnet', { knownProviders: ['anthropic'] });
     const result = matchModels(groups, parsed);
     expect(result.exact).toBe(false);
     expect(result.matches.map((m) => `${m.provider}/${m.model.id}`)).toEqual([
-      'anthropic/claude-3-5-sonnet-20241022',
       'anthropic/claude-sonnet-4',
+      'anthropic/claude-3-5-sonnet-20241022',
     ]);
+  });
+
+  it('ranks fuzzy matches by tier (id-prefix > word-boundary > subsequence) then provider order, not catalog order', () => {
+    // Deliberately listed worst-to-best in the fixture, and with the best
+    // match on the LAST provider, so a passing test proves real ranking
+    // rather than incidentally matching iteration order.
+    const tierGroups: ProviderModelGroup[] = [
+      makeGroup('providerA', [{ id: 'xclaudey' }]), // mid-word subsequence, no boundary before "claude"
+      makeGroup('providerB', [{ id: 'foo-claude-y' }]), // word-boundary: "claude" right after "-"
+      makeGroup('providerC', [{ id: 'claude-x' }]), // id-prefix: id starts with "claude"
+    ];
+    const parsed = parseModelFlag('claude');
+    const result = matchModels(tierGroups, parsed);
+    expect(result.exact).toBe(false);
+    expect(result.matches.map((m) => m.model.id)).toEqual(['claude-x', 'foo-claude-y', 'xclaudey']);
+  });
+
+  it('tie-breaks equal tier and score by provider order (catalog array order)', () => {
+    const tieGroups: ProviderModelGroup[] = [
+      makeGroup('zprovider', [{ id: 'claude-x' }]),
+      makeGroup('aprovider', [{ id: 'claude-y' }]),
+    ];
+    const parsed = parseModelFlag('claude');
+    const result = matchModels(tieGroups, parsed);
+    expect(result.exact).toBe(false);
+    // Same tier (id-prefix) and same score (ids differ only in trailing
+    // letter, so scoreSubsequence is identical): the earlier provider in the
+    // catalog array wins, not alphabetical or any other incidental order.
+    expect(result.matches.map((m) => m.provider)).toEqual(['zprovider', 'aprovider']);
   });
 
   it('returns empty matches when query matches nothing', () => {
@@ -492,33 +528,62 @@ describe('resolveModelFlag', () => {
     }
   });
 
-  it('surfaces fetch warnings when resolution proceeds despite a failed provider catalog', async () => {
-    registerProvider({ id: 'fake-healthy', label: 'Fake Healthy', fetchModels: async () => [] });
-    registerProvider({ id: 'fake-broken', label: 'Fake Broken', fetchModels: async () => [] });
-    try {
-      const fetcher = vi.fn(async (provider: string) => {
-        if (provider === 'fake-healthy') return [{ id: 'alpha-1', provider }];
-        if (provider === 'fake-broken') throw new Error('Connection refused');
-        return [];
-      });
-      const result = await resolveModelFlag({
-        modelFlag: 'alpha-1',
-        settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
-        loggingService: { warn: vi.fn() } as any,
-        fetcher,
-      });
+  it('does not warn about a provider the early-exit strategy deliberately never loaded', async () => {
+    // The exact match resolves off the first provider in priority order, so
+    // the second provider is never attempted at all — its failure (if any)
+    // must not leak into `warnings`, since we never actually asked it for
+    // anything. Only a provider we DID try and that failed may warn.
+    const warnGroups: ProviderModelGroup[] = [
+      makeGroup('fake-healthy', [{ id: 'alpha-1' }]),
+      makeGroup('fake-broken', [], { error: 'Connection refused' }),
+    ];
+    const deps = mockDeps(warnGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'alpha-1',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['fake-healthy', 'fake-broken'],
+    });
 
-      expect(result).toEqual<ModelResolutionResult>({
-        status: 'resolved',
-        modelId: 'alpha-1',
-        provider: 'fake-healthy',
-        reasoningEffort: undefined,
-        warnings: ['warning: fake-broken: Connection refused'],
-      });
-    } finally {
-      unregisterProvider('fake-healthy');
-      unregisterProvider('fake-broken');
-    }
+    expect(deps.fetcher).not.toHaveBeenCalledWith('fake-broken');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'alpha-1',
+      provider: 'fake-healthy',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('still surfaces a warning for a provider that was loaded during widening and failed', async () => {
+    // The first provider in order has no exact match, so resolution widens
+    // and loads the rest concurrently. One of those actually-attempted
+    // providers fails; its warning must survive even though a third provider
+    // is what ultimately resolves the query.
+    const warnGroups: ProviderModelGroup[] = [
+      makeGroup('fake-empty', []),
+      makeGroup('fake-broken', [], { error: 'Connection refused' }),
+      makeGroup('fake-target', [{ id: 'alpha-99' }]),
+    ];
+    const deps = mockDeps(warnGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'alpha',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['fake-empty', 'fake-broken', 'fake-target'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('fake-broken');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'alpha-99',
+      provider: 'fake-target',
+      reasoningEffort: undefined,
+      warnings: ['warning: fake-broken: Connection refused'],
+    });
   });
 
   it('returns cancelled when user aborts selection prompt', async () => {
@@ -562,7 +627,14 @@ describe('resolveModelFlag', () => {
     });
   });
 
-  it('disambiguates between multiple exact matches across providers', async () => {
+  it('resolves silently via the first provider on an exact match, even when a later, unattempted provider also has that id', async () => {
+    // Latency trade-off: resolution stops loading catalogs as soon as the
+    // first provider in priority order produces an exact match, so it never
+    // discovers whether a later provider it didn't need to load also has the
+    // same id. This is the same mechanism that keeps `--model gpt-5.4` from
+    // loading an unrelated provider's catalog; cross-provider id collisions
+    // are rare enough that giving up exhaustive disambiguation for them is
+    // an accepted trade-off.
     const multiExactGroups: ProviderModelGroup[] = [
       makeGroup('openai', [{ id: 'gpt-4o' }], { label: 'OpenAI' }),
       makeGroup('openrouter', [{ id: 'gpt-4o' }], { label: 'OpenRouter' }),
@@ -579,11 +651,12 @@ describe('resolveModelFlag', () => {
       knownProviders: ['openai', 'openrouter'],
     });
 
-    expect(prompter).toHaveBeenCalledOnce();
+    expect(prompter).not.toHaveBeenCalled();
+    expect(deps.fetcher).not.toHaveBeenCalledWith('openrouter');
     expect(result).toEqual<ModelResolutionResult>({
       status: 'resolved',
       modelId: 'gpt-4o',
-      provider: 'openrouter',
+      provider: 'openai',
       reasoningEffort: undefined,
     });
   });
@@ -658,5 +731,94 @@ describe('resolveModelFlag', () => {
       expect(result.error).toContain('The cached catalog for codex may be stale');
       expect(result.error).toContain('codex.json');
     }
+  });
+
+  it('does not load an unrelated provider once an earlier one in priority order has an exact match', async () => {
+    // `--model gpt-5.4` (no prefix, no --provider) must resolve off the first
+    // credentialed provider in order without ever touching a later one.
+    const latencyGroups: ProviderModelGroup[] = [
+      makeGroup('openai', [{ id: 'gpt-5.4', name: 'GPT 5.4' }]),
+      makeGroup('anthropic', [{ id: 'claude-sonnet-4', name: 'Sonnet 4' }]),
+    ];
+    const deps = mockDeps(latencyGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('openai');
+    expect(deps.fetcher).not.toHaveBeenCalledWith('anthropic');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('tries a provider-style prefix first, then widens to find a literal id on a different provider', async () => {
+    // The prefix-derived provider ("openai") is attempted first (latency win
+    // when it's right), but coming up empty there must still widen to the
+    // rest of the candidate space rather than dead-ending — this is the
+    // aggregator-id correctness guarantee, made lazy: `matchModels`'s stage 1
+    // already checks other providers for a literal id match, but only if
+    // their catalogs were actually loaded.
+    const widenGroups: ProviderModelGroup[] = [
+      makeGroup('openai', []),
+      makeGroup('openrouter', [{ id: 'openai/claude-x' }]),
+    ];
+    const callOrder: string[] = [];
+    const fetcher = vi.fn(async (provider: string) => {
+      callOrder.push(provider);
+      const group = widenGroups.find((g) => g.provider === provider);
+      return group?.models ?? [];
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'openai/claude-x',
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'openrouter'],
+      knownProviders: ['openai', 'openrouter'],
+    });
+
+    expect(callOrder).toEqual(['openai', 'openrouter']);
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'openai/claude-x',
+      provider: 'openrouter',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('loads a full fuzzy sweep concurrently and still returns matches spanning every provider', async () => {
+    // No prefix, no exact match anywhere: every provider must be consulted
+    // for a correct fuzzy sweep. Assert on the *set* of attempted providers
+    // (order-independent) since concurrent loads race, plus that matches
+    // from every provider that has one come back — not just the first tried.
+    const sweepGroups: ProviderModelGroup[] = [
+      makeGroup('providerA', [{ id: 'nova-alpha' }]),
+      makeGroup('providerB', [{ id: 'nova-beta' }]),
+      makeGroup('providerC', [{ id: 'nova-gamma' }]),
+    ];
+    const deps = mockDeps(sweepGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'nova',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      prompter: vi.fn(async () => '1'),
+      knownProviders: ['providerA', 'providerB', 'providerC'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('providerA');
+    expect(deps.fetcher).toHaveBeenCalledWith('providerB');
+    expect(deps.fetcher).toHaveBeenCalledWith('providerC');
+    expect(result.status).toBe('resolved');
   });
 });

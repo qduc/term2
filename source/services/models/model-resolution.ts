@@ -1,10 +1,10 @@
 import { createInterface } from 'node:readline';
 import { getProvider, getProviderIds } from '../../providers/index.js';
-import { filterModels, getModelCacheFilePath, type ModelInfo } from '../model-service.js';
+import { getModelCacheFilePath, matchTier, rankModelMatch, type ModelInfo } from '../model-service.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { scoreSubsequence } from '../../utils/subsequence-filter.js';
-import { collectProviderModels, type ProviderModelGroup } from './model-listing.js';
-import type { ModelFetcher } from './model-catalog-session.js';
+import { collectProviderModelsConcurrently, loadProviderModelGroup, type ProviderModelGroup } from './model-listing.js';
+import { orderedProviderIds, type ModelFetcher } from './model-catalog-session.js';
 import { HARNESS_IDLE_ENV } from '../../lib/harness-input-idle.js';
 
 export const VALID_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
@@ -159,35 +159,54 @@ export function matchModels(
     return { exact: true, matches: exactMatches };
   }
 
-  // Stage 2: Fuzzy / partial matches
-  const fuzzyMatches: ModelMatch[] = [];
+  // Stage 2: Fuzzy / partial matches, ranked deterministically (tier, then
+  // score, then provider order) instead of raw provider-iteration order.
+  // `groups` is expected in provider-priority order (orderedProviderIds), so
+  // its index doubles as the provider-order tiebreak without a third param.
+  type RankedFuzzyMatch = { match: ModelMatch; tier: number; score: number; groupIndex: number };
+  const ranked: RankedFuzzyMatch[] = [];
   const trimmed = parsed.pattern.trim();
 
-  for (const group of groups) {
+  groups.forEach((group, groupIndex) => {
     if (parsed.provider) {
-      if (group.provider.toLowerCase() === parsed.provider.toLowerCase()) {
-        const filtered = filterModels(group.models, trimmed);
-        for (const model of filtered) {
-          fuzzyMatches.push({ provider: group.provider, model });
+      if (group.provider.toLowerCase() !== parsed.provider.toLowerCase()) {
+        return;
+      }
+      for (const model of group.models) {
+        const rank = rankModelMatch(model, trimmed);
+        if (rank) {
+          ranked.push({ match: { provider: group.provider, model }, tier: rank.tier, score: rank.score, groupIndex });
         }
       }
-      continue;
+      return;
     }
 
-    // No provider specified: match provider name or model id/name
-    if (scoreSubsequence(trimmed, group.provider) !== -Infinity) {
+    // No provider specified: a provider-name match pulls in the whole group,
+    // ranked by how well the provider name itself matched.
+    const providerScore = scoreSubsequence(trimmed, group.provider);
+    if (providerScore !== -Infinity) {
+      const tier = matchTier(trimmed, group.provider);
       for (const model of group.models) {
-        fuzzyMatches.push({ provider: group.provider, model });
+        ranked.push({ match: { provider: group.provider, model }, tier, score: providerScore, groupIndex });
       }
-    } else {
-      const filtered = filterModels(group.models, trimmed);
-      for (const model of filtered) {
-        fuzzyMatches.push({ provider: group.provider, model });
+      return;
+    }
+
+    for (const model of group.models) {
+      const rank = rankModelMatch(model, trimmed);
+      if (rank) {
+        ranked.push({ match: { provider: group.provider, model }, tier: rank.tier, score: rank.score, groupIndex });
       }
     }
-  }
+  });
 
-  return { exact: false, matches: fuzzyMatches };
+  ranked.sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    if (a.score !== b.score) return b.score - a.score;
+    return a.groupIndex - b.groupIndex;
+  });
+
+  return { exact: false, matches: ranked.map((r) => r.match) };
 }
 
 /**
@@ -306,19 +325,54 @@ export async function resolveModelFlag(deps: {
     };
   }
 
-  // Narrow the catalog load only when the user explicitly scoped it with
-  // --provider. A provider prefix parsed out of the flag itself (e.g. the
-  // `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) must not
-  // narrow: the full id may be a literal model id on a different provider.
-  const providerIds = deps.providerIds ?? (deps.providerFlag && parsed.provider ? [parsed.provider] : undefined);
-  const groups = await collectProviderModels(
-    {
-      settingsService: deps.settingsService,
-      loggingService: deps.loggingService,
-      fetcher: deps.fetcher,
-    },
-    providerIds,
-  );
+  const loaderDeps = {
+    settingsService: deps.settingsService,
+    loggingService: deps.loggingService,
+    fetcher: deps.fetcher,
+  };
+
+  // Full candidate space, in provider-priority order. `deps.providerIds`, when
+  // supplied, replaces this entirely (tests use it to pin the universe of
+  // providers without touching credential lookups).
+  const fullOrder = deps.providerIds ?? orderedProviderIds(deps.settingsService, knownProviders);
+
+  // A provider named explicitly (--provider) or parsed out of the flag itself
+  // (e.g. the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator)
+  // is tried FIRST, but must never permanently narrow the search: the full id
+  // may be a literal model id on a different provider, so a miss widens to
+  // the rest of the candidate space rather than giving up.
+  let order: string[];
+  if (parsed.provider) {
+    const rest = fullOrder.filter((id) => id.toLowerCase() !== parsed.provider!.toLowerCase());
+    order = [parsed.provider, ...rest];
+  } else {
+    order = fullOrder;
+  }
+
+  // Walk lazily: load just the first (highest-priority) provider and stop
+  // there if it already produced an exact match — `--model gpt-5.4` should
+  // never touch a provider's catalog it didn't need. Only when that first
+  // load comes up empty of exact matches do we widen, and we do that widen
+  // concurrently since a fuzzy/cross-provider sweep needs every remaining
+  // catalog anyway and gains nothing from doing it one at a time.
+  let groups: ProviderModelGroup[] = [];
+  if (order.length > 0) {
+    const [firstId, ...restIds] = order;
+    const firstGroup = await loadProviderModelGroup(loaderDeps, firstId);
+    groups = [firstGroup];
+
+    const probe = matchModels(groups, parsed);
+    const needsWiden = !(probe.exact && probe.matches.length > 0) && restIds.length > 0;
+    if (needsWiden) {
+      const restGroups = await collectProviderModelsConcurrently(loaderDeps, restIds);
+      groups = [firstGroup, ...restGroups];
+    }
+  }
+
+  // Only providers we actually attempted to load can have failed; a provider
+  // skipped entirely by the early-exit/narrow-first strategy above must not
+  // appear here; do not let the laziness optimization hide a real outage on a
+  // provider that was loaded.
   const warnings = groups
     .filter((group) => group.error !== undefined)
     .map((group) => `warning: ${group.provider}: ${group.error}`);

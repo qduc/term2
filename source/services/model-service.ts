@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { scoreSubsequence } from '../utils/subsequence-filter.js';
+import { BOUNDARY_REGEX, scoreSubsequence } from '../utils/subsequence-filter.js';
 import { getProvider } from '../providers/index.js';
 import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
@@ -378,24 +378,66 @@ export function getProviderDefaultReasoningLevel(provider: string): string | und
   return PROVIDER_DEFAULT_REASONING_LEVEL[provider.toLowerCase()];
 }
 
+export type ModelMatchRank = {
+  /** Weighted subsequence score (id matches are weighted 2x over name matches). */
+  score: number;
+  /** 0 = query is a literal prefix of the matched text; 1 = query occurs right after a
+   * word boundary (`/`, `.`, `-`, `_`, or a case change); 2 = plain subsequence match. */
+  tier: number;
+};
+
+/**
+ * Classify how strongly `query` matches `text`, independent of score magnitude.
+ * Used to rank id-prefix and word-boundary hits above a merely-plausible
+ * subsequence match, before falling back to the continuous score as a tiebreaker.
+ */
+export function matchTier(query: string, text: string): number {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  if (!q) return 2;
+  if (t.startsWith(q)) return 0;
+
+  let idx = t.indexOf(q);
+  while (idx !== -1) {
+    const prevChar = idx > 0 ? t[idx - 1] : undefined;
+    if (prevChar !== undefined && BOUNDARY_REGEX.test(prevChar)) {
+      return 1;
+    }
+    idx = t.indexOf(q, idx + 1);
+  }
+  return 2;
+}
+
+/**
+ * Score a model against a search query the way `filterModels` does internally
+ * (id matches weighted 2x over name matches, higher of the two wins), but
+ * surface the result instead of discarding it. Returns null when neither the
+ * id nor the name is a subsequence match.
+ */
+export function rankModelMatch(model: ModelInfo, query: string): ModelMatchRank | null {
+  const idScore = scoreSubsequence(query, model.id);
+  const nameScore = model.name ? scoreSubsequence(query, model.name) : -Infinity;
+
+  // Reward ID match more than Name match
+  const weightedId = idScore === -Infinity ? -Infinity : idScore * 2;
+  const weightedName = nameScore === -Infinity ? -Infinity : nameScore;
+
+  if (weightedId === -Infinity && weightedName === -Infinity) {
+    return null;
+  }
+
+  const useId = weightedId >= weightedName;
+  return {
+    score: useId ? weightedId : weightedName,
+    tier: matchTier(query, useId ? model.id : model.name!),
+  };
+}
+
 export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
   const trimmed = query.trim();
   if (!trimmed) {
     return models;
   }
 
-  return models
-    .map((model) => {
-      const idScore = scoreSubsequence(trimmed, model.id);
-      const nameScore = model.name ? scoreSubsequence(trimmed, model.name) : -Infinity;
-
-      // Reward ID match more than Name match
-      const weightedId = idScore === -Infinity ? -Infinity : idScore * 2;
-      const weightedName = nameScore === -Infinity ? -Infinity : nameScore;
-
-      const score = Math.max(weightedId, weightedName);
-      return { model, score };
-    })
-    .filter(({ score }) => score !== -Infinity)
-    .map(({ model }) => model);
+  return models.filter((model) => rankModelMatch(model, trimmed) !== null);
 }

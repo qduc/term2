@@ -41,7 +41,21 @@ tokens for no batching benefit) and wins on F. If that holds, **B is the only
 configuration worth shipping**: it adds the fan-out capability without
 removing the adaptive path.
 
-## Current state: pilot running
+## Current state: COMPLETE — see `.coord/orch/exp-shell/RESULTS.md`
+
+**Finished 2026-09-05.** 14 valid cells (9-cell pilot + rep 2 of M and F),
+stopped after rep 2 by decision because A-vs-B came out tangled and a tangled
+A-vs-B is an acceptable answer. Verdict: **arm C is closed** (loses M and P,
+wins F only on request count, runs into `maxCalls`, and cannot ship because
+nested dispatch turns "needs approval" into failure); **ship arm B on
+capability grounds, not on measured savings.** Four further harness defects
+were found and fixed — read the RESULTS "Harness defects" section before
+trusting any number in `out/runs.tsv`, in particular that the ledger's
+`shell_direct` column is inflated for pre-fix rows.
+
+Everything below this line is the pre-run plan, kept for its reasoning.
+
+## Superseded: pilot running
 
 `.coord/orch/exp-shell/pilot.sh` — 9 cells (tasks P, M, F x arms A, B, C, one
 rep, `glm` only), serialised. Started ~22:28. Log: `out/pilot.log`; ledger:

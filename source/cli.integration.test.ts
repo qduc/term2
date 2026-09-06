@@ -507,29 +507,33 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
   expect(error).toBeTruthy();
 });
 
-it('CLI --model reports error and exits 1 when no models match pattern', () => {
+it('CLI --model reports error and exits 1 when no models match pattern', async () => {
+  // The no-match error requires at least one catalog to load, so serve one
+  // from a loopback double. A prior version relied on an ambient network
+  // catalog (codex's credential-free models endpoint); when that endpoint
+  // began rejecting anonymous reads the resolution failed open to passthrough
+  // and the CLI attempted a real provider connection instead.
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
-  let error: any;
-  let stderr = '';
+  const mock = await startModelMock(['mock-alpha', 'mock-beta']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
   try {
-    execFileSync('node', [cliPath(), '--model', 'nonexistent-xyz-pattern', 'hello'], {
-      env: createTestChildEnv({
-        HOME: tempHome,
-        TERM2_CONVERSATIONS_DIR: testDir,
-        DISABLE_LOGGING: '1',
-      }),
-      stdio: ['pipe', 'pipe', 'pipe'],
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
     });
-  } catch (err: any) {
-    error = err;
-    stderr = err.stderr?.toString?.() ?? '';
+    const { status, stderr } = await spawnCli([cliPath(), '--model', 'nonexistent-xyz-pattern', 'hello'], childEnv);
+
+    expect(status).toBe(1);
+    expect(stderr).toContain('Error: No models match "nonexistent-xyz-pattern".');
   } finally {
+    await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });
   }
-
-  expect(error).toBeTruthy();
-  expect(error.status).toBe(1);
-  expect(stderr).toContain('Error: No models match "nonexistent-xyz-pattern".');
 });
 
 it('CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog', async () => {

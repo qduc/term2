@@ -1,6 +1,8 @@
 # Bug: Automatic local compaction triggers well below the configured token ceiling (on the scale the user sees) and re-attempts on every request boundary when it cannot proceed
 
-**Status:** open (2026-09-06). No fix or branch yet; this report records the finding from a read-only diagnosis.
+**Status:** resolved (`bfae6d47`, merged to main).
+- Root Cause A addressed: `estimateContext` strips internal bookkeeping properties (`providerItem`, `providerMetadata`, `providerData`, `rawItem`) and duplicate opaque reasoning, aligning byte-derived estimates within 4–5% of real wire prompt tokens. `compactAtBoundary` and `ApplicationRunLoop` also carry forward `lastCompletedInputTokens`.
+- Root Cause B addressed: blocked automatic compaction calculates `rearmAtTokens` and enforces hysteresis in `AgentClient.#boundaryCompaction` so subsequent request boundaries within the same user turn defer rather than re-triggering and re-logging.
 **Severity:** medium — no data loss or corruption, but the configured `compactThresholdTokens` ceiling is enforced against an uncalibrated byte-derived estimate, so compaction fires when the provider-counted context is only ~2/3 of the configured value; and when a triggered compaction is blocked it re-triggers on every subsequent request boundary instead of backing off, producing repeated attempts, repeated warn logs, and a full re-serialization of a ~300k-estimate history per boundary.
 **Component:** local (application-owned) context compaction trigger path —
 `source/services/agent-runtime/context-compaction/index.ts` (`estimateContext`, `resolveCompactionThreshold`, `shouldDeferAutomaticCompaction`, `planLocalCompaction`),

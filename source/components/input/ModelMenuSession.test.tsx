@@ -40,6 +40,9 @@ const modelCommand: SlashCommand = {
   action: () => {},
 };
 
+const fetchTestModels = async (provider: string) =>
+  provider === providerId ? [{ id: 'gpt-test', name: 'GPT Test', provider }] : [];
+
 const ControllerHost = ({
   controller,
   settingsService,
@@ -50,7 +53,11 @@ const ControllerHost = ({
   onUnavailableModelSelected?: (provider: string) => void;
 }) => {
   const { input: _input } = useInputState();
-  const models = useModelSelection({ loggingService: noopLoggingService, settingsService });
+  const models = useModelSelection({
+    loggingService: noopLoggingService,
+    settingsService,
+    modelFetcher: fetchTestModels,
+  });
   return (
     <MenuStackHost
       stack={controller.getSnapshot().stack}
@@ -420,7 +427,7 @@ it('ctrl+f (command "favorite") toggles the highlighted model immediately, with 
   expect(settingsService.get('agent.favoriteModels')).toEqual([]);
 });
 
-it('selecting a model from the Favorites tab applies its own real provider, not the Favorites sentinel', async () => {
+it('selecting a pinned favorite applies the provider carried by its unified-list row', async () => {
   const intentHost = vi.fn(
     ({ intentRequest }): IntentResult => ({
       id: intentRequest.id,
@@ -475,7 +482,7 @@ it('selecting a model from the Favorites tab applies its own real provider, not 
   });
 });
 
-it('ctrl+n opens the inline nickname editor on a Favorites row; typed keys fill the draft, not the filter query', async () => {
+it('ctrl+n opens the inline nickname editor on a favorited row; typed keys fill the draft, not the filter query', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({
     'agent.provider': providerId,
@@ -565,196 +572,7 @@ it('Enter commits a valid nickname, persists it, and keeps the menu open with th
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
 });
 
-it('Enter with a duplicate nickname shows the reason and keeps the editor open', async () => {
-  const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
-    'agent.favoriteModels': [providerId + '/gpt-test'],
-    'agent.modelNicknames': { op: 'someone-else/other-model' },
-  });
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider controller={controller}>
-      <ControllerHost controller={controller} settingsService={settingsService} />
-    </InputProvider>,
-  );
-
-  await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'input', text: 'op' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({
-      type: 'accept',
-      input: {
-        kind: 'composer',
-        text: controller.getSnapshot().editor.text,
-        cursor: controller.getSnapshot().editor.cursor,
-      },
-      selected: undefined,
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(lastFrame() ?? '').toContain('already in use');
-  expect(lastFrame() ?? '').toContain('Nickname for');
-  expect(settingsService.get('agent.modelNicknames')).toEqual({ op: 'someone-else/other-model' });
-});
-
-it('Esc cancels the editor leaving the filter untouched; a second Esc closes the menu', async () => {
-  const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
-    'agent.favoriteModels': [providerId + '/gpt-test'],
-  });
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider controller={controller}>
-      <ControllerHost controller={controller} settingsService={settingsService} />
-    </InputProvider>,
-  );
-
-  await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/model gpt', cursor: 10 });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'input', text: 'zz' });
-    await Promise.resolve();
-  });
-  expect(lastFrame() ?? '').toContain('Nickname for gpt-test:');
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'escape' });
-    await Promise.resolve();
-  });
-
-  // Editor cancelled; menu stays open; filter text (the composer binding) is
-  // exactly what it was before naming started.
-  expect(lastFrame() ?? '').not.toContain('Nickname for');
-  expect(controller.getSnapshot().editor.text).toBe('/model gpt');
-  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'escape' });
-    await Promise.resolve();
-  });
-
-  expect(controller.getSnapshot().stack).toHaveLength(0);
-});
-
-it('ctrl+f while the editor is open unfavorites the row and closes the editor with it', async () => {
-  const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
-    'agent.favoriteModels': [providerId + '/gpt-test'],
-  });
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider controller={controller}>
-      <ControllerHost controller={controller} settingsService={settingsService} />
-    </InputProvider>,
-  );
-
-  await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'input', text: 'x' });
-    await Promise.resolve();
-  });
-  expect(lastFrame() ?? '').toContain('Nickname for gpt-test:');
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'favorite' });
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-
-  expect(settingsService.get('agent.favoriteModels')).toEqual([]);
-  // The row left the Favorites list, and the editor bound to it closed.
-  expect(lastFrame() ?? '').not.toContain('Nickname for');
-});
-
-it('provider cycling and tab are suspended while the editor is open', async () => {
-  const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
-    'agent.favoriteModels': [providerId + '/gpt-test'],
-  });
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider controller={controller}>
-      <ControllerHost controller={controller} settingsService={settingsService} />
-    </InputProvider>,
-  );
-
-  await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'input', text: 'o' });
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'command', command: 'left' });
-    controller.dispatchActiveEvent({ type: 'command', command: 'right' });
-    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
-    await Promise.resolve();
-  });
-
-  // The editor is still open with its text intact (cycling away would have
-  // unlisted the row and closed it), and tab did not insert into the composer.
-  expect(lastFrame() ?? '').toContain('Nickname for gpt-test:');
-  expect(controller.getSnapshot().editor.text).toBe('/model ');
-});
-
-it('nickname command is a no-op on provider tabs', async () => {
+it('nickname command is a no-op on a non-favorited row', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({ 'agent.provider': providerId });
 

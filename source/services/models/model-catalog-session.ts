@@ -19,7 +19,8 @@ export class ModelCatalogSession {
   readonly #fetcher: ModelFetcher;
   readonly #modelsByProvider = new Map<string, ModelInfo[]>();
   readonly #failedProviders = new Set<string>();
-  #requestId = 0;
+  readonly #requestIds = new Map<string, number>();
+  #generation = 0;
 
   constructor(deps: {
     settingsService: ISettingsService;
@@ -42,14 +43,17 @@ export class ModelCatalogSession {
   async load(provider: string): Promise<{ kind: 'loaded' | 'cached' | 'stale'; models: ModelInfo[] }> {
     const cached = this.#modelsByProvider.get(provider);
     if (cached) return { kind: 'cached', models: cached };
-    const requestId = ++this.#requestId;
+    const generation = this.#generation;
+    const requestId = (this.#requestIds.get(provider) ?? 0) + 1;
+    this.#requestIds.set(provider, requestId);
+    const isCurrent = () => generation === this.#generation && this.#requestIds.get(provider) === requestId;
     try {
       const models = await this.#fetcher(provider);
-      if (requestId !== this.#requestId) return { kind: 'stale', models: [] };
+      if (!isCurrent()) return { kind: 'stale', models: [] };
       this.#modelsByProvider.set(provider, models);
       return { kind: 'loaded', models };
     } catch (error) {
-      if (requestId !== this.#requestId) return { kind: 'stale', models: [] };
+      if (!isCurrent()) return { kind: 'stale', models: [] };
       this.#failedProviders.add(provider);
       const message = error instanceof Error ? error.message : String(error);
       this.#loggingService.warn(`Model selection fetch failed for ${provider}`, { error: message });
@@ -62,7 +66,7 @@ export class ModelCatalogSession {
   }
 
   begin(): void {
-    this.#requestId++;
+    this.#generation++;
     this.#failedProviders.clear();
   }
 
@@ -74,7 +78,7 @@ export class ModelCatalogSession {
   invalidate(provider: string): void {
     this.#failedProviders.delete(provider);
     this.#modelsByProvider.delete(provider);
-    ++this.#requestId;
+    this.#requestIds.set(provider, (this.#requestIds.get(provider) ?? 0) + 1);
     clearModelCache(provider);
   }
 
@@ -89,7 +93,7 @@ export class ModelCatalogSession {
   }
 
   clear(): void {
-    this.#requestId++;
+    this.#generation++;
     this.#modelsByProvider.clear();
     this.#failedProviders.clear();
   }

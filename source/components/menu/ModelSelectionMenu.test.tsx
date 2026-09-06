@@ -58,7 +58,7 @@ it.sequential('ModelSelectionMenu renders empty state', async () => {
   expect(lastFrame()?.includes('No models match "xyz"')).toBe(true);
 });
 
-it.sequential('ModelSelectionMenu renders list of models', async () => {
+it.sequential('ModelSelectionMenu renders a unified list with the provider on every row', async () => {
   const { lastFrame } = await renderInAct(
     <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
   );
@@ -67,6 +67,9 @@ it.sequential('ModelSelectionMenu renders list of models', async () => {
   expect(output?.includes('GPT-4o')).toBe(true);
   expect(output?.includes('gpt-4-turbo')).toBe(true);
   expect(output?.includes('claude-3-opus')).toBe(true);
+  expect(output?.includes('(openai)')).toBe(true);
+  expect(output?.includes('(openrouter)')).toBe(true);
+  expect(output).not.toContain(' Favorites ');
 });
 
 it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {

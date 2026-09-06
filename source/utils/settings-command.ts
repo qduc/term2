@@ -453,7 +453,7 @@ export function createSettingsCommand({
       // at the start of a new conversation via the model selection menu
       if (key === 'agent.provider') {
         addSystemMessage(
-          `Cannot change provider mid-conversation. Use the model menu (Tab to switch provider) at the start of a new conversation.`,
+          `Cannot change provider mid-conversation. Choose a model from the desired provider in the model menu at the start of a new conversation.`,
         );
         return true;
       }

@@ -21,7 +21,7 @@ it('caches successful loads and suppresses failed providers until refresh', asyn
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
-it('marks an older in-flight result stale when a newer provider load starts', async () => {
+it('allows different provider catalogs to load concurrently', async () => {
   let resolveFirst!: (models: any[]) => void;
   const first = new Promise<any[]>((resolve) => {
     resolveFirst = resolve;
@@ -34,10 +34,12 @@ it('marks an older in-flight result stale when a newer provider load starts', as
   resolveFirst([{ id: 'a' }]);
 
   expect((await secondLoad).kind).toBe('loaded');
-  expect((await firstLoad).kind).toBe('stale');
+  expect((await firstLoad).kind).toBe('loaded');
+  expect(session.getCached('openai')).toEqual([{ id: 'a' }]);
+  expect(session.getCached('openrouter')).toEqual([{ id: 'b' }]);
 });
 
-it('does not surface an older rejected load after a newer provider load starts', async () => {
+it('reports one provider failure without invalidating another provider load', async () => {
   let rejectFirst!: (error: Error) => void;
   const first = new Promise<any[]>((_, reject) => {
     rejectFirst = reject;
@@ -50,7 +52,7 @@ it('does not surface an older rejected load after a newer provider load starts',
   rejectFirst(new Error('old provider failed'));
 
   expect((await secondLoad).kind).toBe('loaded');
-  expect((await firstLoad).kind).toBe('stale');
+  await expect(firstLoad).rejects.toThrow('old provider failed');
 });
 
 it('moves through providers that have credentials, with no-key providers excluded', () => {

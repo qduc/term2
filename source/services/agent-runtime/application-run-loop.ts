@@ -1262,6 +1262,9 @@ export class ApplicationRunLoop {
         continue;
       }
       const finalCompletion = completion as Extract<StreamedModelTurnEvent, { type: 'completion' }>;
+      // A terminal response ends recovery, unlike partial tokens or tool
+      // activity. Later failures must not inherit an old episode's deadline.
+      state.recoveryBudget?.noteModelResponseCompleted();
       // Commit the authoritative terminal state before handling terminal-only
       // tool calls. Approval may pause immediately after this point, and the
       // continuation must still carry the response that produced the calls.

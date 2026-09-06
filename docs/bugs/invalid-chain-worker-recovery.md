@@ -1,10 +1,35 @@
 # Invalid chained worker recovery investigation
 
-Status: incident mechanism narrowed; the settled-tool recovery policy is present
-in the baseline, but the retained production records do not show why admission
-did not produce a replacement worker request. Recovery admission is now
-instrumented in both session recovery handlers; the incident cause remains
-unproven because it predates that instrumentation.
+Status: stale recovery-deadline failure reproduced and repaired. The provider
+rejection itself remains externally unexplained; see the distinction below.
+
+## Recovery episode repair contract (2026-09-06)
+
+The parent reproduced the terminal Invalid previous_response_id failure by adding
+900,000ms of fake elapsed time after an earlier recovery to the real runtime
+characterization. The immediate case passes; the delayed case throws the exact
+provider error and never reaches the expected full-history replacement.
+
+Harm prevented: productive worker runs losing recovery after an old failure.
+Scope: root and subagent requests through ApplicationRunLoop and both session
+recovery handlers. Class: recovery containment, not a total-run budget.
+Enforcement owner: RetryRecoveryBudget; recovery/settlement owner unchanged.
+Signal: consecutive failed dispatches since the last accepted terminal model
+response. Completion is direct evidence that recovery succeeded; partial tokens,
+tool output, and an incomplete/failed stream are not.
+Configuration: unchanged internal defaults, 90,000ms / 3 physical recovery
+attempts / 1 automatic replay; constructor overrides remain test-only.
+Action: reject exhausted episodes as before; accepted terminal completion ends
+the episode. This intentionally supersedes the old per-logical-turn lifetime.
+Separate run-budget containment remains in force across successful responses.
+Partial-work settlement, cancellation, committed-output safety, and full-history
+chain repair are unchanged. No persisted settings or migration.
+Observability: retry.recovery_admission retains counters, deadline and settlement
+evidence without payloads. Rollback: episode method and its single run-loop
+completion call; diagnostics are independent. Ledger: retry/recovery containment.
+
+Red command: pnpm test source/services/session/subagent-connect-close-retry.test.ts
+(2 pass, delayed case fails with Invalid previous_response_id).
 
 ## Incident evidence
 
@@ -33,59 +58,28 @@ request. The later invalid-chain failure therefore occurred after prior retry
 activity and is consistent with an exhausted or mis-accounted recovery gate,
 but the logs do not record the gate's evidence or counters.
 
-## Reproduction status
+## Reproduction and conclusion
 
-`source/services/session/subagent-connect-close-retry.test.ts` contains a
-deterministic session/run-loop characterization. It starts a subagent runtime
-with fresh-start retries disabled, executes a worker tool, rejects the next
-chained request with the same provider-state error before yielding a frame, and
-verifies a third request is full-history with chaining disabled and the
-completed tool result present. It also pre-spends the shared automatic replay
-claim, reproducing the long-turn budget state. The test passes on the baseline;
-removing the settled-tool exemption makes it terminate after the 400 instead of
-issuing request three. This proves the policy in that runtime, not that the
-production `run_subagent` worker uses this recovery owner.
+The regression now drives an actual earlier WebSocket failure through
+createSessionRuntime and ApplicationRunLoop, accepts a successful tool-producing
+response, and then rejects its chained continuation at either 0ms or 900,000ms.
+No budget counters are seeded by the fixture. Both cases must issue a fourth,
+full-history request with chaining disabled and the completed tool result intact.
 
-The focused command is:
+Disabling only the new terminal-completion hook makes the delayed case throw
+Invalid previous_response_id; the immediate case stays green. Restoring the
+hook makes both green. This isolates the stale recovery clock as a sufficient
+cause of the local failure to recover, rather than merely testing classification.
+The old one-tool regression missed elapsed time and prior real retry activity.
 
-```text
-pnpm test source/services/session/subagent-connect-close-retry.test.ts -t "recovers a stale chained worker continuation"
-```
-
-It passes deterministically. The same scenario is red against the pre-settled-
-tool recovery policy: the prior automatic replay claim causes the recovery
-budget gate to terminate unless `isSettledCommittedToolContinuation` permits
-the chain recovery without claiming that slot. This is the real-path evidence,
-not a classifier-only mock.
-
-## Current hypotheses
-
-1. **Highest-confidence mechanism:** the app classified the 400 as
-   `retry.conversation_state` with `retryAttempt: 2`, broke chaining, then
-   emitted no second worker request. The session-level admission point is the
-   recovery handler's `retry_fresh` budget gate: it requires a physical attempt
-   and, unless the continuation is proven settled, an automatic-replay claim.
-   The real-path characterization proves that a previously spent
-   automatic-replay claim is safe to bypass only when all live tools are
-   completed and their pairs remain in reconciled history.
-2. The retained incident logs do not include the three admission booleans
-   (`completedToolCount`, `allToolsCompleted`, `completedPairsPresentInHistory`)
-   or the budget counters, so they cannot distinguish “settled evidence was
-   false” from “automatic replay, physical-attempt, or deadline budget was
-   exhausted.” The trace proves the provider rejected the chained request; it
-   does not by itself identify which recovery-admission boolean was false.
-3. The running process loaded `dist/` (the failure stack is under
-   `/home/qduc/term2/dist/`). Current source and current `dist` contain the
-   settled-tool exemption. The incident behavior therefore requires either a
-   different recovery owner in the production `run_subagent` path, failed
-   settlement evidence, or a budget/admission rejection. A stale build is only
-   one deployment hypothesis, not proof of which artifact was loaded at
-   `03:14:43`.
-4. The provider-side reason for rejecting a response ID remains unknown beyond
-   the recorded 400. The predecessor ID was valid in the immediately preceding
-   success, so “missing predecessor” is ruled out.
-
-No secrets or prompt bodies are recorded here.
+The retained incident had successful model responses between recoveries and
+over 12 minutes between the later earlier recovery and this failure. The old
+budget has no reset: once started in that logical turn, its 90-second deadline
+necessarily expires before the final request. This explains the missing local
+replacement under the recorded same-turn lifetime. Historic admission counters
+were not logged, so additional simultaneous refusal reasons cannot be excluded.
+The provider-side reason for rejecting its own recently returned ID remains
+unknown; the local fix makes that rejection recoverable after productive work.
 
 ## Diagnostic artifact shipped
 
@@ -108,18 +102,31 @@ verifies the snapshot is non-mutating.
 
 ## Retro
 
-- **Preventable:** yes. The failure crossed a provider/session boundary, but
-  admission state was not recorded at the point that decided whether to issue
-  the replacement request.
-- **Bug and root cause:** a worker continuation received a provider-state 400,
-  then no replacement worker request was observed. The local cause is known only
-  to the boundary: the retained records show chain break and termination, not
-  whether settlement evidence or a recovery budget gate refused admission.
-- **Detection gap:** the existing characterization exercised the session
-  runtime with a fake client and proved policy behavior, but the production
-  worker trace had no admission evidence. It therefore could not distinguish a
-  policy defect from a different owner or an exhausted/mis-accounted gate.
-- **Hardened:** the shared budget exposes one typed, non-mutating admission
-  snapshot and both recovery owners log the same decision inputs. The exact
-  production owner and the provider's reason for rejecting the predecessor
-  remain open questions; no causal claim is made here.
+Preventable: yes. A recovery timer was scoped to a long logical turn rather than
+a consecutive failure episode (latent in the documented original contract).
+Representability/ownership: the budget had failure and claim operations but no
+success transition. One explicit completion operation now owns that transition.
+Single source of truth: the same shared object still serves both recovery
+handlers and RetryingModel; no caller-local clock was added. Boundary/implicit
+coupling: the run loop owns accepted terminal completion, not the wrapper
+(which can finish without a terminal event). Partial output cannot end recovery.
+Wrong assumption: successful work between failures was treated as recovery time.
+Detection/automation: prior tests checked budget arithmetic and immediate errors
+separately. The real runtime elapsed-time matrix now links them, with red proof.
+Siblings checked: both session handlers, RetryingModel, TurnAttempt/factory,
+ContinuationState, TurnWorkflow forwarding, AgentClient forwarding, and the
+shared run loop. Root/subagent callers share the completion boundary; raw
+RetryingModel intentionally cannot reset it.
+Knowledge gap: the old per-turn scope was explicit but lacked a legitimate
+long-worker counterexample. Observability now records actual admission claims
+and non-secret pre-claim counters; snapshot predictions do not override claims.
+
+## Verification
+
+- Focused retry/runtime/provider tests: 43 passed before the stronger real-prior-
+  failure fixture; final fixture separately passed all 3 tests.
+- pnpm typecheck passed after final code and formatting.
+- pnpm test:provider-black-box: 177 passed, 1 skipped.
+- pnpm test: 8,053 passed, 5 failed, 3 expected failures, 2 skipped. Failures
+  match the previously reported nested-approval acceptance and four file-tool
+  workspace/symlink failures; the full suite is not green.

@@ -23,6 +23,17 @@ Provider or run-loop changes require the provider black-box suite.
 
 ## Resume here
 
+The September 6 invalid-chain incident supersedes the historical per-logical-
+turn retry envelope below: the shared budget now bounds consecutive recovery
+episodes. ApplicationRunLoop ends an episode only after accepting a terminal
+model completion; partial output, failed streams, and tool activity do not reset
+it. Limits remain 90,000ms / 3 recovery dispatches / 1 automatic replay. Separate
+total-run containment is unchanged. See
+[the incident contract and red proof](../bugs/invalid-chain-worker-recovery.md).
+The old lifetime allowed 15 minutes of successful work after a recovered failure
+to expire the next unrelated recovery before its first replacement request.
+
+
 The retry/recovery budget contract is that ordinary successful tool-loop
 continuations do not consume the physical recovery-attempt allowance. Recovery
 handlers claim the physical dispatch when they schedule a `retry_fresh` plan,
@@ -1360,6 +1371,17 @@ existing TimeoutNaNWarning; no test failed.
 ```
 
 ### Retry/recovery containment budget and never-replay-after-committed-output precondition
+
+**Historical contract below:** the per-logical-turn lifetime was replaced by
+recovery episodes in the September 6 repair described in Resume here. The
+shared object still spans the turn; accepted terminal model completion resets
+its counters and lazy clock. Recovery handlers log pre-claim admission evidence
+and the actual claim result. Rollback is the budget completion operation plus
+its single ApplicationRunLoop call, independent of diagnostic logging.
+Verification: deterministic delayed-worker red/green, typecheck, provider
+black-box 177 passed / 1 skipped; isolated full suite 8,053 passed / 5 known
+failures (nested approval and file-tool workspace boundaries), not green.
+
 
 Disposition: **repaired on branch `retry-recovery-contract`; seven commits,
 pending merge to main.**

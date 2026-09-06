@@ -201,6 +201,11 @@ export class InitialTurnRecoveryHandler {
             automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
           })
         : undefined;
+    const admitted =
+      plan.kind !== 'retry_fresh' ||
+      ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+        attempt.recoveryBudget.claimAutomaticReplay()) &&
+        attempt.recoveryBudget.claimPhysicalAttempt());
     if (recoveryAdmission) {
       this.deps.logger.warn('Retry recovery admission evaluated', {
         eventType: 'retry.recovery_admission',
@@ -221,9 +226,10 @@ export class InitialTurnRecoveryHandler {
         allToolsCompleted: committedToolContinuation?.allToolsCompleted ?? false,
         completedPairsPresentInHistory: committedToolContinuation?.completedPairsPresentInHistory ?? false,
         ...recoveryAdmission,
+        admitted,
       });
     }
-    if (recoveryAdmission && !recoveryAdmission.admitted) {
+    if (!admitted) {
       // Refusing the plan must still go through the same settlement path a
       // normal termination does -- open tool calls settle truthfully (not as
       // blind failures), and the chain is cleared so the next turn cannot
@@ -254,10 +260,6 @@ export class InitialTurnRecoveryHandler {
       };
       this.#logFailure(error);
       return { kind: 'terminated' };
-    }
-    if (plan.kind === 'retry_fresh') {
-      if (recoveryAdmission?.automaticReplayRequired) attempt.recoveryBudget.claimAutomaticReplay();
-      attempt.recoveryBudget.claimPhysicalAttempt();
     }
     const result = this.deps.recoveryExecutor.apply({
       plan,

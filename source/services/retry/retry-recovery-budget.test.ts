@@ -88,6 +88,33 @@ it('a second noteRetryableFailure does not reset an already-running clock', () =
   expect(budget.elapsedMs).toBe(1000);
 });
 
+it('ends an exhausted recovery episode only on accepted model completion', () => {
+  let now = 0;
+  const budget = new RetryRecoveryBudget({ now: () => now });
+  budget.noteRetryableFailure();
+  expect(budget.claimAutomaticReplay()).toBe(true);
+  for (let i = 0; i < 3; i++) expect(budget.claimPhysicalAttempt()).toBe(true);
+  now = 900_000;
+  budget.noteRetryableFailure();
+  expect(budget.claimPhysicalAttempt()).toBe(false);
+  budget.noteModelResponseCompleted();
+  expect(budget.startedAt).toBeUndefined();
+  expect(budget.physicalAttempts).toBe(0);
+  expect(budget.automaticReplays).toBe(0);
+  budget.noteRetryableFailure();
+  expect(budget.startedAt).toBe(now);
+  expect(budget.claimAutomaticReplay()).toBe(true);
+  expect(budget.claimPhysicalAttempt()).toBe(true);
+});
+
+it.each([89_999, 90_000, 90_001])('enforces the episode deadline at %i ms', (elapsed) => {
+  let now = 0;
+  const budget = new RetryRecoveryBudget({ now: () => now });
+  budget.noteRetryableFailure();
+  now = elapsed;
+  expect(budget.claimPhysicalAttempt()).toBe(elapsed < 90_000);
+});
+
 it('RetryRecoveryBudgetExhaustedError carries the triggering error as cause', () => {
   const trigger = new Error('upstream 503');
   const error = new RetryRecoveryBudgetExhaustedError(trigger);

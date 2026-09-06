@@ -134,6 +134,11 @@ export class ContinuationRecoveryHandler {
             automaticReplayRequired: !skipsAutomaticReplayClaim(classified, committedToolContinuation),
           })
         : undefined;
+    const admitted =
+      plan.kind !== 'retry_fresh' ||
+      ((skipsAutomaticReplayClaim(classified, committedToolContinuation) ||
+        state.recoveryBudget.claimAutomaticReplay()) &&
+        state.recoveryBudget.claimPhysicalAttempt());
     if (recoveryAdmission) {
       this.deps.logger.warn('Retry recovery admission evaluated', {
         eventType: 'retry.recovery_admission',
@@ -153,9 +158,10 @@ export class ContinuationRecoveryHandler {
         allToolsCompleted: committedToolContinuation?.allToolsCompleted ?? false,
         completedPairsPresentInHistory: committedToolContinuation?.completedPairsPresentInHistory ?? false,
         ...recoveryAdmission,
+        admitted,
       });
     }
-    if (recoveryAdmission && !recoveryAdmission.admitted) {
+    if (!admitted) {
       // Refusing the plan must still settle open tool calls truthfully and
       // clear the provider chain, exactly like an ordinary termination does --
       // see the matching comment in initial-turn-recovery-handler.ts.
@@ -180,10 +186,6 @@ export class ContinuationRecoveryHandler {
         canRetry: true,
       };
       return { kind: 'terminated' };
-    }
-    if (plan.kind === 'retry_fresh') {
-      if (recoveryAdmission?.automaticReplayRequired) state.recoveryBudget.claimAutomaticReplay();
-      state.recoveryBudget.claimPhysicalAttempt();
     }
 
     const recoveryResult = this.deps.recoveryExecutor.apply({

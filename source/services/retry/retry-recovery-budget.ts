@@ -1,7 +1,7 @@
 /**
  * One bounded capability shared by provider transport retries and session
  * recovery. The owner is deliberately the retry/session layer: providers can
- * consume claims, but cannot extend or reset the envelope.
+ * consume claims; only accepted terminal model completion ends an episode.
  */
 export const RETRY_RECOVERY_LIMITS = {
   maxRecoveryTimeMs: 90_000,
@@ -68,6 +68,13 @@ export class RetryRecoveryBudget {
   /** Starts the recovery clock only after a retryable failure is observed. */
   noteRetryableFailure(): void {
     if (this.#startedAt === undefined) this.#startedAt = this.#now();
+  }
+
+  /** Only the run-loop terminal-response owner may end a recovery episode. */
+  noteModelResponseCompleted(): void {
+    this.#startedAt = undefined;
+    this.#physicalAttempts = 0;
+    this.#automaticReplays = 0;
   }
 
   get deadlineExceeded(): boolean {

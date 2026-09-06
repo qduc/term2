@@ -3,8 +3,8 @@
 ## Resume here
 
 **Closed (2026-09-06): M1 guidance + M2 executor/log observability merged to
-main; pilot decision sample complete; M3 decision taken — close, no
-escalation.** Milestone 1 is guidance-only (shell tool description,
+main (`c9162de4`; branch commit `19e77307`; plan doc `cd6c1c23`); pilot
+decision sample complete; M3 decision taken — close, no escalation.** Milestone 1 is guidance-only (shell tool description,
 background-shell addendum, AGENTS.md test policy; defaults and persisted
 settings unchanged — no command-name classifier, no renewal API, no
 detachment). Milestone 2 added a typed executor termination reason

@@ -2010,7 +2010,7 @@ it.sequential('isConversationLocked: cross-host lock is reported held even with 
 
 describe('uniqueConversationShortRefs', () => {
   function referenceUniqueConversationShortRefs(conversations: readonly { id: string }[]): Map<string, string> {
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const UUID_REGEX = persistenceModule.UUID;
     const ids = conversations.map((conversation) => conversation.id);
     return new Map(
       ids.map((id) => {
@@ -2033,8 +2033,10 @@ describe('uniqueConversationShortRefs', () => {
     const fixtures: Array<Array<{ id: string }>> = [
       // Empty input
       [],
-      // Single UUID
+      // Single UUID (v4)
       [{ id: '12345678-1234-4abc-8def-1234567890ab' }],
+      // Single UUID (v7)
+      [{ id: '018f3a55-8d91-7abc-8123-0123456789ab' }],
       // Non-UUID IDs (short, long, invalid format, punctuation)
       [
         { id: 'short' },
@@ -2104,7 +2106,7 @@ describe('uniqueConversationShortRefs', () => {
     const durationMs = Date.now() - startTime;
 
     expect(result.size).toBe(10000);
-    // Observed production duration is ~12-15ms. 500ms provides >30x headroom for slow CI runners.
+    // Observed production duration is ~12-15ms for distributed prefixes (O(N) overall; quadratic within one prefix bucket). 500ms provides >30x headroom for slow CI runners.
     expect(durationMs).toBeLessThan(500);
   });
 });

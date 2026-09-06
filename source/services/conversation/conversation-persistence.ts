@@ -455,7 +455,7 @@ export function browseConversationsForProject(
   };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const UUID_PREFIX = /^[0-9a-f-]{4,36}$/i;
 
 export function resolveConversationReference(
@@ -487,6 +487,7 @@ export function uniqueConversationShortRefs(conversations: readonly Pick<Restore
   const ids = conversations.map((conversation) => conversation.id);
 
   // Group candidates with length >= 8 by their lowercased 8-character prefix.
+  // Complexity: O(N) for distributed prefixes; quadratic only within a single colliding prefix bucket.
   // Any candidate with length < 8 can never satisfy candidate.startsWith(id.slice(0, length))
   // for any length >= 8.
   const prefixBuckets = new Map<string, string[]>();

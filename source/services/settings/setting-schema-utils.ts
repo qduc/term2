@@ -62,32 +62,12 @@ export function resolveSettingAtPath(key: string): any {
   for (const part of parts) {
     if (!current) return undefined;
 
-    // Unwrap wrappers at every level so we can reach .optional() children.
-    while (current && current._def) {
-      const def = current._def;
-      const typeName = def.type || def.typeName;
-      if (typeName === 'optional' || typeName === 'ZodOptional') {
-        current = def.innerType;
-      } else if (typeName === 'nullable' || typeName === 'ZodNullable') {
-        current = def.innerType;
-      } else if (typeName === 'default' || typeName === 'ZodDefault') {
-        current = def.innerType;
-      } else if (typeName === 'effects' || typeName === 'ZodEffects') {
-        current = def.schema;
-      } else {
-        break;
-      }
-    }
-
+    current = unwrapSchema(current);
     if (!current) return undefined;
 
-    // Navigate into object shape.
-    const shape = current?._def?.shape;
-    if (typeof shape === 'function') {
-      // Some Zod versions lazy-evaluate shape via a function.
-      current = shape();
-    }
-    current = current?._def?.shape?.[part];
+    const shape = current.def?.shape || current._def?.shape;
+    const resolvedShape = typeof shape === 'function' ? shape() : shape;
+    current = resolvedShape?.[part];
   }
 
   return current;

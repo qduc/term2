@@ -11,6 +11,7 @@ import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
 import { profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
 import { isLegacyModeSettingKey } from '../services/profiles/legacy-adapter.js';
+import { isSettingArrayKey } from '../services/settings/setting-schema-utils.js';
 
 /**
  * Render the durable settlement of a mutation truthfully. Only a `saved`
@@ -69,6 +70,25 @@ export function parseSettingValue(raw: string): any {
   }
 
   return value;
+}
+
+/**
+ * Key-aware variant of parseSettingValue: for array-typed settings, plain
+ * comma-separated input is split and each element parsed individually, so
+ * `200000,300000,400000` is accepted for `z.array(z.number())` settings
+ * without requiring JSON brackets. Non-array settings parse unchanged, so
+ * string values containing commas are never mangled.
+ */
+export function parseSettingValueForKey(key: string, raw: string): any {
+  const value = parseSettingValue(raw);
+  if (typeof value !== 'string' || !isSettingArrayKey(key)) return value;
+
+  const parts = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+  if (parts.length === 0) return value;
+  return parts.map((part) => parseSettingValue(part));
 }
 
 export function formatSettingsSummary(settings: SettingsWithSources): string {
@@ -425,7 +445,7 @@ export function createSettingsCommand({
 
       const key = parts[0];
       const rawValue = parts.slice(1).join(' ');
-      let parsedValue = parseSettingValue(rawValue);
+      let parsedValue = parseSettingValueForKey(key, rawValue);
 
       // Special handling for model settings: handle --provider flag and save
       // the associated provider setting.

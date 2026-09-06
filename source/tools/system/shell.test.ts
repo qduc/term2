@@ -1275,8 +1275,80 @@ it.sequential('shell execute stops a running command when the tool invocation is
   queueMicrotask(() => abortController.abort());
   const output = await outputPromise;
 
-  expect(output.startsWith('timeout')).toBe(true);
+  // A caller cancellation is presented as cancelled, not as a deadline
+  // timeout: the typed executor reason distinguishes the two.
+  expect(output.startsWith('cancelled')).toBe(true);
+  expect(output).not.toMatch(/^timeout(?:\n|$)/);
+  expect(output).toContain('cancelled before completing');
   expect(output.includes('finished')).toBe(false);
+});
+
+it.sequential('shell execute explains a deadline timeout with its budget and partial-effects note', async () => {
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    executeShellCommandImpl: async () => ({
+      stdout: 'PARTIAL-VALIDATION-EVIDENCE',
+      stderr: '',
+      exitCode: null,
+      timedOut: true,
+      terminationKind: 'deadline' as const,
+    }),
+  });
+
+  const output = await shell.execute({ command: 'pnpm test', timeout_ms: 900_000 });
+
+  expect(output.startsWith('timeout')).toBe(true);
+  expect(output).toContain('explicit 900000ms timeout');
+  expect(output.toLowerCase()).toContain('output may be partial');
+  expect(output.toLowerCase()).toContain('does not authorize replaying');
+  expect(output).toContain('PARTIAL-VALIDATION-EVIDENCE');
+});
+
+it.sequential('shell execute logs the timeout source, mode, identity, and typed termination', async () => {
+  const logged: Array<{ level: string; message: string; fields: Record<string, unknown> }> = [];
+  const loggingService = createNoopLogger({
+    debug: (_message?: string, fields?: Record<string, unknown>) =>
+      logged.push({ level: 'debug', message: String(_message), fields: fields ?? {} }),
+    warn: (_message?: string, fields?: Record<string, unknown>) =>
+      logged.push({ level: 'warn', message: String(_message), fields: fields ?? {} }),
+  });
+  const shell = createShellToolDefinition({
+    loggingService,
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      timedOut: true,
+      terminationKind: 'deadline' as const,
+    }),
+  });
+
+  await shell.execute(
+    { command: 'slow-command', timeout_ms: 60_000 },
+    { context: undefined, approvals: new ApprovalLedger() },
+    { toolCall: { callId: 'call-timeout-evidence' } },
+  );
+
+  const started = logged.find((entry) => entry.message === 'Shell command execution started');
+  const timedOut = logged.find((entry) => entry.message === 'Shell command timeout');
+  const completed = logged.find((entry) => entry.message === 'Shell command execution completed');
+
+  expect(started?.fields).toMatchObject({ timeoutSource: 'invocation', mode: 'foreground', timeout: 60_000 });
+  expect(timedOut?.fields).toMatchObject({
+    timeoutSource: 'invocation',
+    mode: 'foreground',
+    timeout: 60_000,
+    terminationKind: 'deadline',
+    callId: 'call-timeout-evidence',
+  });
+  expect(typeof timedOut?.fields.elapsedMs).toBe('number');
+  expect(completed?.fields).toMatchObject({
+    timeoutCount: 1,
+    terminationKind: 'deadline',
+    callId: 'call-timeout-evidence',
+  });
 });
 
 it.sequential('shell execute characterizes the post-approval RTK command boundary', async () => {
@@ -2301,4 +2373,46 @@ it('clamps over-cap requests on the public wrapped shell path (outer trim + spoo
   expect(result).toContain('characters trimmed');
   expect(result).toMatch(/-[0-9a-f-]+\.txt`/);
   expect(result).not.toContain('x'.repeat(50));
+});
+
+it('shell description teaches an explicit finite timeout for known long-running work', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+  });
+
+  expect(tool.description).toContain('Known long-running work needs an explicit finite timeout_ms');
+  expect(tool.description).toContain('30min background defaults are not ceilings');
+  expect(tool.description.toLowerCase()).toContain('diagnose');
+  expect(tool.description).not.toContain('pnpm test');
+});
+
+it('orchestrator shell description teaches the same explicit-timeout rule', () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    orchestratorMode: true,
+  });
+
+  expect(tool.description).toContain(
+    'Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms',
+  );
+});
+
+it('shell transcript classifies a cancelled status line as a cancelled failure, not an unknown result', async () => {
+  const { formatShellCommandMessage } = await import('./shell.js');
+  const messages = formatShellCommandMessage(
+    {
+      toolName: 'shell',
+      rawItem: { name: 'shell', arguments: '{"command":"watch-receipts.sh r s","background":false}' },
+      toolCallId: 'call-cancel-transcript',
+      output:
+        'cancelled\nRuntime: 61000ms\nInterrupted: the command was cancelled before completing.\nOutput may be partial and effects may already have occurred.',
+    } as never,
+    0,
+    new Map(),
+  );
+
+  expect(messages[0].success).toBe(false);
+  expect(messages[0].failureReason).toBe('cancelled');
 });

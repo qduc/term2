@@ -36,6 +36,7 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 - **A regression test is the floor, not the finish line.** After any non-trivial bug fix, ask what allowed the defect class and why nothing caught it earlier. See `## After a bug fix` in the `testing` skill.
 - **`pnpm test:lane` runs a fixed no-isolate manifest, not the whole suite.** It executes only the files in `.github/vitest.lane.safe.txt` with worker isolation disabled (~28 s), so a new test file is invisible to it until admitted: a file joins the manifest only after passing shuffled seeded runs (`pnpm test:lane:seed <seed>`), and any file that has ever failed non-isolated stays excluded. The isolated full suite remains the handoff/CI authority. Leak classes and rules: `docs/plans/slow-test-suite.md`.
 - **The `pnpm` test scripts pin `NODE_ENV=test` via `cross-env`; keep it that way.** Under `NODE_ENV=production` vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. The scripts make the ambient value irrelevant, so a bare `pnpm test` is safe — but set it yourself if you invoke `vitest` directly.
+- **Full-suite and other known-long validation runs need an explicit finite shell timeout.** The 120 s foreground default interrupts them. Pass a `timeout_ms` sized to the expected duration, run long validation through the background lifecycle (completion notification, not polling), and record actual elapsed time and the terminal test result separately from pass/fail. A narrowed rerun does not close a full-suite gate; a timeout or hang is evidence to diagnose, not a reason to blindly re-run the same command — and an interrupted run's effects may be partial, so verify before replaying anything mutating.
 
 # Work In Progress
 
@@ -44,6 +45,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 **Note:** Keep this list current.
 
 ## Active or deferred
+
 
 - **[SQLite index for session tools](docs/plans/session-query-index.md)** — **In progress (2026-09-05): M0 and M2a merged; M1 in flight; M2b–M4 open.** Rebuildable SQLite query index under `session_list`/`session_search`/`session_read`; canonical logs stay authoritative. M0 picked `better-sqlite3` behind a long-lived worker (FTS5-trigram probe is the M1 hard gate); M2a repaired the `from: "end"` tail anchor and made `omitted` page-local. Read before touching the session browser, session tools, or conversation persistence.
 
@@ -60,6 +62,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Completed — still read before touching these areas
 
+- **[Evidence-backed shell timeouts](docs/plans/evidence-backed-shell-timeouts.md)** — **Closed 2026-09-06; merged to main.** M1 guidance (shell tool description, background-shell addendum, this file's test policy teach explicit finite `timeout_ms` for known long work) + M2 executor/log observability (typed termination reason `deadline`/`cancelled`/`output-overflow`, paused-time accounting, joinable launch/settlement log fields, `cancelled` presented distinctly from `timeout`). Pilot decision sample closed the plan with no escalation: a two-hour watcher delivered a post-minute-30 marker unreplaced and three full-suite runs finished within a 900,000 ms allowance — no renewal API, no default or persisted-setting change. Evidence receipt in the plan doc. Read before touching shell timeout resolution, `execute-shell.ts` termination, the timeout/cancelled result text, or the shell description/addendum wording.
 - **[Session-tool retrieval tuning](docs/research/session-retrieval-observed-usage.md)** — Naturalistic study plus paired cells closed 2026-08-31 with no API change. Pattern 1 (worktree scoping) was repaired after a controlled cell (`1176fe82`). Cursor-invention and no-tail-pagination crossed the repeat bar; the seek/tail control cell is designed and not yet run (`docs/research/session-retrieval-seek-cell.md`). See also [docs/research/session-retrieval-paired-protocol.md](docs/research/session-retrieval-paired-protocol.md) and [docs/plans/memory-progressive-disclosure.md](docs/plans/memory-progressive-disclosure.md) for cursor format.
 - **[Session rollover & handoff](docs/plans/session-rollover-handoff.md)** (`fa4b371b`) — M1–M3 merged. Turn settlement deferral and background task safety; auto-rollover remains experimental.
 - **[Grok on Responses API & credit usage](docs/plans/grok-responses-and-credits.md)** (`b065bbc9`, `40c4546a`) — Encrypted reasoning round-trip, dedicated `grok` lane, ZDR/no chaining constraints; REST credit usage in `source/services/grok/grok-credit-usage-service.ts`.

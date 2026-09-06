@@ -13,6 +13,12 @@ export interface FormatShellExecutionOutputParams {
   timedOut: boolean;
   maxOutputLength?: number;
   durationMs?: number;
+  /** Effective deadline budget, for the bounded timeout explanation. */
+  timeoutMs?: number;
+  /** Where the effective budget came from (invocation vs a settings default). */
+  timeoutSource?: 'invocation' | 'foreground_setting' | 'background_setting';
+  /** Present when the executor stopped the command for a caller cancellation. */
+  cancelled?: boolean;
 }
 
 export interface FormatShellExecutionOutputResult {
@@ -35,15 +41,17 @@ function buildArtifactContents(params: {
   exitCode: number | null;
   timedOut: boolean;
   durationMs?: number;
+  cancelled?: boolean;
 }): string {
-  const statusLine = params.timedOut ? 'timeout' : `exit ${params.exitCode ?? 'null'}`;
+  const statusLine = params.cancelled ? 'cancelled' : params.timedOut ? 'timeout' : `exit ${params.exitCode ?? 'null'}`;
+  const timedOutColumn = params.timedOut && !params.cancelled ? 'yes' : 'no';
 
   return [
     `Command: ${params.command}`,
     `Working directory: ${params.cwd}`,
     `Status: ${statusLine}`,
     typeof params.durationMs === 'number' ? `Runtime: ${params.durationMs}ms` : undefined,
-    `Timed out: ${params.timedOut ? 'yes' : 'no'}`,
+    `Timed out: ${timedOutColumn}`,
     '',
     'STDOUT:',
     params.stdout || '(empty)',
@@ -76,6 +84,38 @@ export function formatFullOutputSavedNote(artifactPath: string): string {
   return `${FULL_OUTPUT_SAVED_NOTE_PREFIX} \`${artifactPath}\``;
 }
 
+/**
+ * Bounded, model-facing explanation of why the command stopped. Load-bearing
+ * wording (partial effects, no automatic replay) is part of the tool contract:
+ * a deadline is evidence the agent must diagnose, not a license to retry a
+ * command whose earlier effects may already have landed.
+ */
+function buildTerminationNote(params: {
+  timedOut: boolean;
+  cancelled?: boolean;
+  timeoutMs?: number;
+  timeoutSource?: 'invocation' | 'foreground_setting' | 'background_setting';
+}): string {
+  if (params.cancelled) {
+    return 'Interrupted: the command was cancelled before completing.\nOutput may be partial and effects may already have occurred.';
+  }
+  if (!params.timedOut) return '';
+  const budgetLabel =
+    params.timeoutSource === 'invocation'
+      ? `its explicit ${params.timeoutMs}ms timeout`
+      : params.timeoutSource === 'background_setting'
+      ? `the ${params.timeoutMs}ms background-setting timeout`
+      : params.timeoutSource === 'foreground_setting'
+      ? `the ${params.timeoutMs}ms foreground-setting timeout`
+      : params.timeoutMs !== undefined
+      ? `its ${params.timeoutMs}ms timeout budget`
+      : 'its timeout budget';
+  return [
+    `Terminated: the command reached the end of ${budgetLabel} and was stopped.`,
+    'Output may be partial and effects may already have occurred; increasing the timeout does not authorize replaying the command.',
+  ].join('\n');
+}
+
 export async function formatShellExecutionOutput({
   command,
   cwd,
@@ -85,6 +125,9 @@ export async function formatShellExecutionOutput({
   timedOut,
   maxOutputLength,
   durationMs,
+  timeoutMs,
+  timeoutSource,
+  cancelled,
 }: FormatShellExecutionOutputParams): Promise<FormatShellExecutionOutputResult> {
   const stdoutTrimmedOutput = trimOutput(stdout, undefined, maxOutputLength);
   const stderrTrimmedOutput = trimOutput(stderr, undefined, maxOutputLength);
@@ -93,21 +136,24 @@ export async function formatShellExecutionOutput({
   const stdoutTruncated = stdoutTrimmedOutput !== stdout;
   const stderrTruncated = stderrTrimmedOutput !== stderr;
   const combinedOutput = [stdoutTrimmed, stderrTrimmed].filter(Boolean).join('\n').trimEnd();
-  const statusLine = timedOut ? 'timeout' : `exit ${exitCode ?? 'null'}`;
+  const statusLine = cancelled ? 'cancelled' : timedOut ? 'timeout' : `exit ${exitCode ?? 'null'}`;
   const runtimeLine = typeof durationMs === 'number' ? `Runtime: ${durationMs}ms` : '';
-  const emptyOutputNote = combinedOutput === '' && !timedOut && exitCode === 0 ? '(No output)' : '';
+  const terminationNote = buildTerminationNote({ timedOut, cancelled, timeoutMs, timeoutSource });
+  const emptyOutputNote = combinedOutput === '' && !timedOut && !cancelled && exitCode === 0 ? '(No output)' : '';
 
   let artifactPath: string | undefined;
   if (stdoutTruncated || stderrTruncated) {
     artifactPath = await saveOutputArtifact(
-      buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs }),
+      buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs, cancelled }),
     );
   }
 
   const truncationNote = artifactPath ? formatFullOutputSavedNote(artifactPath) : '';
 
   return {
-    text: [statusLine, runtimeLine, combinedOutput, emptyOutputNote, truncationNote].filter(Boolean).join('\n'),
+    text: [statusLine, runtimeLine, terminationNote, combinedOutput, emptyOutputNote, truncationNote]
+      .filter(Boolean)
+      .join('\n'),
     truncated: Boolean(artifactPath),
     artifactPath,
   };

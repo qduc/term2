@@ -150,3 +150,46 @@ it('formatShellExecutionOutput reuses one temp directory and randomizes artifact
     if (fs.existsSync(secondPath)) fs.unlinkSync(secondPath);
   }
 });
+
+it('explains a deadline timeout with its effective budget, partial effects, and no-replay note', async () => {
+  const result = await formatShellExecutionOutput({
+    command: 'pnpm test',
+    cwd: '/workspace',
+    stdout: 'Test Files 1 passed (1)',
+    stderr: '',
+    exitCode: null,
+    timedOut: true,
+    timeoutMs: 900_000,
+    timeoutSource: 'invocation',
+    durationMs: 900_123,
+  });
+
+  expect(result.text.startsWith('timeout')).toBe(true);
+  expect(result.text).toContain('Runtime: 900123ms');
+  expect(result.text).toContain('Terminated');
+  expect(result.text).toContain('explicit 900000ms timeout');
+  expect(result.text.toLowerCase()).toContain('output may be partial');
+  expect(result.text.toLowerCase()).toContain('does not authorize replaying');
+  // Partial output and the artifact reference survive the explanation.
+  expect(result.text).toContain('Test Files 1 passed (1)');
+});
+
+it('presents a caller cancellation as cancelled, not as a timeout', async () => {
+  const result = await formatShellExecutionOutput({
+    command: 'watch-receipts.sh receipts state',
+    cwd: '/workspace',
+    stdout: '',
+    stderr: '',
+    exitCode: null,
+    timedOut: true,
+    cancelled: true,
+    durationMs: 61_000,
+  });
+
+  expect(result.text.startsWith('cancelled')).toBe(true);
+  expect(result.text).not.toMatch(/^timeout(?:\n|$)/);
+  expect(result.text).toContain('cancelled before completing');
+  expect(result.text.toLowerCase()).toContain('output may be partial');
+  expect(result.text).not.toContain('(No output)');
+  expect(result.text).not.toContain('does not authorize replaying');
+});

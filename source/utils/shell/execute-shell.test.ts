@@ -299,3 +299,56 @@ function createFakeChildProcess(): ChildProcess {
     stdin: new PassThrough(),
   } as unknown as ChildProcess;
 }
+
+describe('typed termination classification', () => {
+  it('classifies a deadline settlement as deadline with latched timedOut', async () => {
+    const result = await executeShellCommand(`node -e "setInterval(() => {}, 1_000)"`, {
+      timeout: 150,
+      terminationGraceMs: 200,
+      drainGraceMs: 100,
+    });
+
+    expect(result.timedOut).toBe(true);
+    expect(result.terminationKind).toBe('deadline');
+  });
+
+  it('classifies an abort settlement as cancelled instead of a SIGTERM-inferred timeout', async () => {
+    const abortController = new AbortController();
+    let killCalls = 0;
+
+    const resultPromise = executeShellCommand('long-running', {
+      signal: abortController.signal,
+      execImpl: (_command, _options, callback) => {
+        const child = createFakeChildProcess();
+        child.kill = () => {
+          killCalls += 1;
+          const error = new Error('aborted') as Error & { signal: string };
+          error.signal = 'SIGTERM';
+          queueMicrotask(() => callback(error, 'partial-out', ''));
+          return true;
+        };
+        return child;
+      },
+    });
+
+    abortController.abort();
+    const result = await resultPromise;
+
+    expect(killCalls).toBe(1);
+    // Legacy timedOut stays latched by the SIGTERM fallback, but the typed
+    // reason distinguishes the caller's cancellation from a deadline.
+    expect(result.timedOut).toBe(true);
+    expect(result.terminationKind).toBe('cancelled');
+    expect(result.stdout).toBe('partial-out');
+  });
+
+  it('classifies a retained-output overflow kill as output-overflow, not a timeout', async () => {
+    const result = await executeShellCommand(
+      `node -e "process.stdout.write('x'.repeat(3000)); setTimeout(() => process.stdout.write('END'), 30)"`,
+      { timeout: 10_000, maxBuffer: 1024 },
+    );
+
+    expect(result.timedOut).toBe(false);
+    expect(result.terminationKind).toBe('output-overflow');
+  });
+});

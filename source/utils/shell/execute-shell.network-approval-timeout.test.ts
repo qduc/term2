@@ -195,3 +195,40 @@ function createPausedChild() {
 
   return child;
 }
+
+it('reports paused time separately from active time when network approval pauses the command', async () => {
+  vi.useFakeTimers();
+  const child = createPausedChild();
+  spawnMock.mockReturnValue(child as any);
+
+  let resolveApproval: ((allow: boolean) => void) | undefined;
+  registerSandboxNetworkApprovalHandler(
+    async () =>
+      new Promise<boolean>((resolve) => {
+        resolveApproval = resolve;
+      }),
+  );
+
+  const command = executeShellCommand('networking', {
+    timeout: 100,
+    pauseOnSandboxNetworkApproval: true,
+  });
+  vi.advanceTimersByTime(3);
+  const approval = requestSandboxNetworkApproval({ host: 'example.com', port: 443 });
+  await Promise.resolve();
+  await Promise.resolve();
+  vi.advanceTimersByTime(50);
+
+  resolveApproval?.(true);
+  await expect(approval).resolves.toBe(true);
+
+  vi.advanceTimersByTime(6);
+  child.complete();
+
+  const result = await command;
+  // 50ms of the 59ms wall time were spent paused and must not count against
+  // the command budget; the remaining ~9ms were active.
+  expect(result.pausedMs).toBe(50);
+  expect(result.timedOut).toBe(false);
+  expect(result.exitCode).toBe(0);
+});

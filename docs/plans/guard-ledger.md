@@ -1128,7 +1128,19 @@ If shell containment is ever repaired, these hold regardless of the fix chosen:
 
 Current behavior: foreground default 120s, background 30m, per-call `timeout_ms`
 wins, SIGTERM then SIGKILL; foreground retained-buffer overflow (1MiB) kills
-while background truncates and keeps running.
+while background truncates and keeps running. Defaults are unchanged; known long
+work is handled by per-invocation explicit `timeout_ms` (shell tool
+description, background-shell addendum, and AGENTS.md test policy teach this —
+no command-name classifier, no renewal API, no detachment). The executor now
+reports a typed termination reason (`deadline` / `cancelled` /
+`output-overflow`) plus paused time, so launch/settlement logs join a deadline
+to its source (invocation vs foreground/background setting) and distinguish a
+caller cancellation from a genuine timeout without inferring it from SIGTERM;
+a cancelled command is presented as `cancelled`, not `timeout`. Timeout
+results carry a bounded explanation (effective budget, partial effects, no
+automatic replay). See
+[docs/plans/evidence-backed-shell-timeouts.md](evidence-backed-shell-timeouts.md)
+for the September 6, 2026 receipts.
 
 ### Foreground nested shell approval false positive
 

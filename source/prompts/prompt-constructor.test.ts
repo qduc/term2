@@ -424,3 +424,18 @@ it('buildPromptSpec excludes async subagent guidance when disabled', () => {
   });
   expect(spec.inlineSections.some((s) => s.includes('Asynchronous subagents'))).toBe(false);
 });
+
+it('background shell addendum teaches explicit finite timeouts for long-lived work', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    profile: profile('builtin:standard'),
+    backgroundShellEnabled: true,
+  });
+  const guidance = spec.inlineSections.join('\n');
+
+  expect(guidance).toContain('must pass an explicit finite `timeout_ms`');
+  expect(guidance).toContain('two hours for a watcher');
+  expect(guidance).toContain('15 minutes for a full-suite gate');
+  expect(guidance).toContain('never detach a job with nohup to escape the registry');
+  expect(guidance).toContain('Attach `monitor` in the same launch call');
+});

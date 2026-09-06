@@ -216,6 +216,15 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
   return child;
 };
 
+/**
+ * Why the executor stopped a command, when the executor itself stopped it.
+ * Distinct from `timedOut`, which is latched for any settlement that did not
+ * finish on its own (including the legacy SIGTERM fallback): an investigator
+ * must be able to tell a deliberate deadline from a caller cancellation and
+ * from a retained-output overflow kill without inferring it from the signal.
+ */
+export type ShellTerminationKind = 'deadline' | 'cancelled' | 'output-overflow';
+
 export interface ShellExecutionResult {
   stdout: string;
   stderr: string;
@@ -225,6 +234,14 @@ export interface ShellExecutionResult {
   signal?: NodeJS.Signals | null;
   /** False when output was cut short at the drain deadline rather than at EOF. */
   outputComplete?: boolean;
+  /**
+   * Typed reason the executor ended the command, when it was the executor that
+   * ended it. Absent for ordinary exits, spawn/command failures, and injected
+   * implementations that settle without going through the executor termination path.
+   */
+  terminationKind?: ShellTerminationKind;
+  /** Total wall-clock time the command spent paused (e.g. network approval). */
+  pausedMs?: number;
 }
 
 import { ISSHService } from '../../services/service-interfaces.js';
@@ -350,6 +367,20 @@ async function executeShellCommandUnleased(
   let timedOutLatched = false;
   let outputCompleteResult: boolean | undefined;
 
+  // Typed reason the executor itself ended the command (deadline, caller
+  // cancellation, retained-output overflow), plus paused-time accounting for
+  // the network-approval pause. The reason is recorded when termination
+  // begins; overflow is classified from the retained-buffer error in the catch
+  // below because that kill happens inside the exec implementation.
+  let terminationKind: ShellTerminationKind | undefined;
+  let pausedTotalMs = 0;
+  let pausedSinceMs: number | undefined;
+  const endPauseAccounting = () => {
+    if (pausedSinceMs === undefined) return;
+    pausedTotalMs += Date.now() - pausedSinceMs;
+    pausedSinceMs = undefined;
+  };
+
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
       let unregisterPauseController: (() => void) | undefined;
@@ -389,10 +420,14 @@ async function executeShellCommandUnleased(
        * only real guarantee is that this settles on a deadline regardless of
        * whether anything actually died.
        */
-      const beginTermination = () => {
+      const beginTermination = (kind: ShellTerminationKind) => {
         if (settled || hardFinishTimer) return;
+        // The first cause wins: once the deadline has fired, a later caller
+        // cancellation must not relabel the termination.
+        terminationKind ??= kind;
         if (paused) {
           paused = false;
+          endPauseAccounting();
           signalChildProcess(child, 'SIGCONT');
         }
         stopChildProcess(child);
@@ -413,7 +448,7 @@ async function executeShellCommandUnleased(
           }
         }, terminationGraceMs + drainGraceMs);
       };
-      const stopChild = () => beginTermination();
+      const stopChild = () => beginTermination('cancelled');
       const cleanupListeners = () => {
         // The termination grace is owed to the direct child. Once it has exited,
         // anything still in its group ignored SIGTERM or never saw it, and there
@@ -439,7 +474,7 @@ async function executeShellCommandUnleased(
           timeoutId = undefined;
           remainingTimeoutMs = 0;
           timedOutLatched = true;
-          beginTermination();
+          beginTermination('deadline');
         }, remainingTimeoutMs);
       };
       const pauseCommandTimeout = () => {
@@ -488,11 +523,13 @@ async function executeShellCommandUnleased(
               if (settled || paused) return;
               pauseCommandTimeout();
               paused = true;
+              pausedSinceMs = Date.now();
               signalChildProcess(child, 'SIGSTOP');
             },
             resume: () => {
               if (settled || !paused) return;
               paused = false;
+              endPauseAccounting();
               startCommandTimeout();
               signalChildProcess(child, 'SIGCONT');
             },
@@ -515,6 +552,8 @@ async function executeShellCommandUnleased(
       timedOut: timedOutLatched,
       signal: null,
       outputComplete: outputCompleteResult ?? true,
+      ...(terminationKind === undefined ? {} : { terminationKind }),
+      ...(pausedTotalMs > 0 ? { pausedMs: pausedTotalMs } : {}),
     };
   } catch (error: any) {
     const exitCode = typeof error?.code === 'number' ? error.code : null;
@@ -522,6 +561,17 @@ async function executeShellCommandUnleased(
     // The latch is authoritative; the signal check stays as a fallback for
     // impls that terminate the child without going through the deadline.
     const timedOut = timedOutLatched || Boolean(error?.killed || error?.signal === 'SIGTERM');
+    // The retained-buffer overflow kill happens inside defaultExecImpl, so the
+    // executor never began termination for it; classify it from the error the
+    // implementation reports instead of leaving it as an unexplained signal.
+    let classifiedKind = terminationKind;
+    if (
+      classifiedKind === undefined &&
+      typeof error?.message === 'string' &&
+      error.message.includes('maxBuffer length exceeded')
+    ) {
+      classifiedKind = 'output-overflow';
+    }
 
     return {
       stdout: error?.stdout?.toString() ?? '',
@@ -530,6 +580,8 @@ async function executeShellCommandUnleased(
       timedOut,
       signal,
       outputComplete: outputCompleteResult ?? true,
+      ...(classifiedKind === undefined ? {} : { terminationKind: classifiedKind }),
+      ...(pausedTotalMs > 0 ? { pausedMs: pausedTotalMs } : {}),
     };
   }
 }

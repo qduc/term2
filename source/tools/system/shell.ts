@@ -103,7 +103,7 @@ const shellParametersSchema = z.object({
     .positive()
     .optional()
     .describe(
-      'Optional timeout in milliseconds for each command. Defaults to shell.timeout (foreground) or shell.backgroundTimeout (background) if not specified.',
+      'Optional timeout in milliseconds for each command. Defaults to shell.timeout (foreground) or shell.backgroundTimeout (background) if not specified. Choose an explicit finite timeout for known long-running work: the 120s foreground and 30min background defaults are not ceilings and do not guarantee completion — a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms sized to the job.',
     ),
   max_output_length: relaxedNumber
     .int()
@@ -647,6 +647,9 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
     if (statusLine === 'timeout') {
       success = false;
       failureReason = 'timeout';
+    } else if (statusLine === 'cancelled') {
+      success = false;
+      failureReason = 'cancelled';
     } else if (statusLine.startsWith('exit ')) {
       const parsedExitCode = Number(statusLine.slice(5).trim());
       success = Number.isFinite(parsedExitCode) ? parsedExitCode === 0 : undefined;
@@ -672,10 +675,11 @@ const getShellDescription = (searchViaShell: boolean) =>
     : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
   'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead. ' +
-  'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling.';
+  'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
+  'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
-  'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling.';
+  'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';
 
 export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -916,6 +920,12 @@ export function createShellToolDefinition(deps: {
         const timeoutValue =
           timeout_ms ?? settingsService.get(background ? 'shell.backgroundTimeout' : 'shell.timeout');
         const timeout = timeoutValue != null ? timeoutValue : undefined;
+        // Budget provenance for launch/settlement evidence: an investigator must
+        // be able to tell an explicit per-invocation choice from a settings
+        // default without re-deriving precedence.
+        const timeoutSource =
+          timeout_ms !== undefined ? 'invocation' : background ? 'background_setting' : 'foreground_setting';
+        const executionMode = background || transferred ? 'background' : 'foreground';
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
         // Clamp foreground requests to the configured maximum, mirroring the
@@ -936,6 +946,8 @@ export function createShellToolDefinition(deps: {
             commandCount: 1,
             commands: [command],
             timeout,
+            timeoutSource,
+            mode: executionMode,
             workingDirectory: cwd,
             maxOutputLength: initialMaxOutputLength,
           }),
@@ -1176,15 +1188,31 @@ export function createShellToolDefinition(deps: {
 
           const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
           const exitCode = result.exitCode ?? null;
-          const outcome: ShellCommandResult['outcome'] = result.timedOut
+          // Deadline classification belongs to the executor's typed reason:
+          // a caller cancellation settles with the legacy SIGTERM fallback
+          // (timedOut true) but must not be presented or logged as a timeout.
+          const cancelled = result.terminationKind === 'cancelled';
+          const deadlineTimeout = result.timedOut && !cancelled;
+          const outcome: ShellCommandResult['outcome'] = deadlineTimeout
             ? { type: 'timeout' }
             : { type: 'exit', exitCode };
 
-          if (result.timedOut) {
-            loggingService.warn(
-              'Shell command timeout',
-              withExecutionCorrelation({ command: optimizedCommand.substring(0, 100), timeout }),
-            );
+          const settlementFields = {
+            command: optimizedCommand.substring(0, 100),
+            timeout,
+            timeoutSource,
+            mode: transferred || background ? 'background' : 'foreground',
+            elapsedMs: Date.now() - startedAt,
+            ...(result.terminationKind === undefined ? {} : { terminationKind: result.terminationKind }),
+            ...(result.pausedMs === undefined ? {} : { pausedMs: result.pausedMs }),
+            ...(toolCallId === undefined ? {} : { callId: toolCallId }),
+            ...(observedJobId === undefined ? {} : { jobId: observedJobId }),
+          };
+
+          if (cancelled) {
+            loggingService.debug('Shell command cancelled', withExecutionCorrelation(settlementFields));
+          } else if (deadlineTimeout) {
+            loggingService.warn('Shell command timeout', withExecutionCorrelation(settlementFields));
           } else if (exitCode === 0) {
             loggingService.debug(
               'Shell command executed successfully',
@@ -1213,6 +1241,12 @@ export function createShellToolDefinition(deps: {
               successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
               failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
               timeoutCount: outcome.type === 'timeout' ? 1 : 0,
+              mode: transferred || background ? 'background' : 'foreground',
+              elapsedMs: Date.now() - startedAt,
+              ...(result.terminationKind === undefined ? {} : { terminationKind: result.terminationKind }),
+              ...(result.pausedMs === undefined ? {} : { pausedMs: result.pausedMs }),
+              ...(toolCallId === undefined ? {} : { callId: toolCallId }),
+              ...(observedJobId === undefined ? {} : { jobId: observedJobId }),
             }),
           );
 
@@ -1222,7 +1256,10 @@ export function createShellToolDefinition(deps: {
             stdout,
             stderr,
             exitCode,
-            timedOut: outcome.type === 'timeout',
+            timedOut: deadlineTimeout,
+            cancelled: cancelled || undefined,
+            timeoutMs: timeout ?? undefined,
+            timeoutSource,
             maxOutputLength: background || transferred ? backgroundMaxOutputLength : foregroundMaxOutputLength,
             durationMs: Date.now() - startedAt,
           });

@@ -2,7 +2,7 @@ import type { SettingSource, SettingsData, SettingsWithSources } from './setting
 
 type SourceGetter = (key: string) => SettingSource;
 
-const SETTINGS_SOURCE_KEYS = {
+export const SETTINGS_SOURCE_KEYS = {
   agent: {
     model: 'agent.model',
     efficientModel: 'agent.efficientModel',
@@ -21,6 +21,10 @@ const SETTINGS_SOURCE_KEYS = {
     reasoningEffort: 'agent.reasoningEffort',
     temperature: 'agent.temperature',
     maxTurns: 'agent.maxTurns',
+    maxOutputTokens: 'agent.maxOutputTokens',
+    maxStreamOutputChars: 'agent.maxStreamOutputChars',
+    maxModelRequestDurationMs: 'agent.maxModelRequestDurationMs',
+    maxModelStreamIdleMs: 'agent.maxModelStreamIdleMs',
     retryAttempts: 'agent.retryAttempts',
     transport: 'agent.transport',
     maxParallelToolCalls: 'agent.maxParallelToolCalls',
@@ -53,6 +57,7 @@ const SETTINGS_SOURCE_KEYS = {
     favoriteModels: 'agent.favoriteModels',
     modelNicknames: 'agent.modelNicknames',
     openrouter: 'agent.openrouter',
+    openai: 'agent.openai',
     codex: {
       websocketFirstFrameTimeoutMs: 'agent.codex.websocketFirstFrameTimeoutMs',
       websocketInterFrameTimeoutMs: 'agent.codex.websocketInterFrameTimeoutMs',
@@ -60,6 +65,8 @@ const SETTINGS_SOURCE_KEYS = {
     mentorModel: 'agent.mentorModel',
     mentorProvider: 'agent.mentorProvider',
     mentorReasoningEffort: 'agent.mentorReasoningEffort',
+    mentorSamples: 'agent.mentorSamples',
+    mentorPool: 'agent.mentorPool',
     useFlexServiceTier: 'agent.useFlexServiceTier',
     contextCompaction: {
       enabled: 'agent.contextCompaction.enabled',
@@ -70,6 +77,18 @@ const SETTINGS_SOURCE_KEYS = {
     autoApproveModel: 'agent.autoApproveModel',
     autoApproveProvider: 'agent.autoApproveProvider',
     autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
+    subagentExplorerModel: 'agent.subagentExplorerModel',
+    subagentExplorerProvider: 'agent.subagentExplorerProvider',
+    subagentExplorerReasoningEffort: 'agent.subagentExplorerReasoningEffort',
+    subagentWorkerModel: 'agent.subagentWorkerModel',
+    subagentWorkerProvider: 'agent.subagentWorkerProvider',
+    subagentWorkerReasoningEffort: 'agent.subagentWorkerReasoningEffort',
+    subagentResearcherModel: 'agent.subagentResearcherModel',
+    subagentResearcherProvider: 'agent.subagentResearcherProvider',
+    subagentResearcherReasoningEffort: 'agent.subagentResearcherReasoningEffort',
+    subagentLibrarianModel: 'agent.subagentLibrarianModel',
+    subagentLibrarianProvider: 'agent.subagentLibrarianProvider',
+    subagentLibrarianReasoningEffort: 'agent.subagentLibrarianReasoningEffort',
   },
   shell: {
     timeout: 'shell.timeout',
@@ -86,8 +105,14 @@ const SETTINGS_SOURCE_KEYS = {
     dockerHostControlProjects: 'sandbox.dockerHostControlProjects',
     allowNetworking: 'sandbox.allowNetworking',
   },
+  subagent: {
+    asyncSessionTtlMs: 'subagent.asyncSessionTtlMs',
+    asyncMessageCap: 'subagent.asyncMessageCap',
+  },
   ui: {
     historySize: 'ui.historySize',
+    pasteThreshold: 'ui.pasteThreshold',
+    displayMode: 'ui.displayMode',
   },
   logging: {
     logLevel: 'logging.logLevel',
@@ -105,6 +130,9 @@ const SETTINGS_SOURCE_KEYS = {
     liteMode: 'app.liteMode',
     planMode: 'app.planMode',
     orchestratorMode: 'app.orchestratorMode',
+    notifications: 'app.notifications',
+    notificationsOnApproval: 'app.notificationsOnApproval',
+    notificationsOnComplete: 'app.notificationsOnComplete',
     searchViaShell: 'app.searchViaShell',
   },
   tools: {
@@ -138,6 +166,23 @@ const SETTINGS_SOURCE_KEYS = {
   webSearch: {
     provider: 'webSearch.provider',
     tavily: 'webSearch.tavily',
+    exa: 'webSearch.exa',
+  },
+  memory: {
+    enabled: 'memory.enabled',
+    directory: 'memory.directory',
+    contextBudgetChars: 'memory.contextBudgetChars',
+    searchDefaultLimit: 'memory.searchDefaultLimit',
+    searchMaxLimit: 'memory.searchMaxLimit',
+  },
+  hooks: {
+    user: 'hooks.user',
+    project: 'hooks.project',
+    trustedProjectRoots: 'hooks.trustedProjectRoots',
+    includeUserText: 'hooks.includeUserText',
+    includeToolArguments: 'hooks.includeToolArguments',
+    includeToolResults: 'hooks.includeToolResults',
+    timeoutMs: 'hooks.timeoutMs',
   },
 } as const;
 

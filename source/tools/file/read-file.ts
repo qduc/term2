@@ -159,7 +159,7 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     scriptedReturnShape:
-      '{ path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }',
+      '{ path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string } or content parts [{ type: "text" | "image", ... }] for image files',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace

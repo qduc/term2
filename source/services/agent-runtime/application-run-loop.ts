@@ -55,6 +55,23 @@ import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
 
 /**
+ * Tool results may carry provider-neutral content parts (for example the
+ * image returned by read_file). Preserve only the known multimodal shape;
+ * arbitrary structured tool values retain their historical JSON text form.
+ */
+const isToolResultContentParts = (value: unknown): value is readonly StreamedModelToolResultPart[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (part) =>
+      typeof part === 'object' &&
+      part !== null &&
+      (('type' in part && part.type === 'text') ||
+        ('type' in part && part.type === 'image' && 'image' in part) ||
+        ('type' in part && part.type === 'file' && 'file' in part)),
+  );
+
+/**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
  * Codex-only request fields are modeled separately so they cannot escape into
  * another provider's opaque option bag. The index signature remains for legacy
@@ -1620,18 +1637,23 @@ export class ApplicationRunLoop {
     entry: ToolPlanEntry,
     result: unknown,
   ): void {
-    const output = typeof result === 'string' ? result : JSON.stringify(result);
+    const modelOutput: string | readonly StreamedModelToolResultPart[] =
+      typeof result === 'string'
+        ? result
+        : isToolResultContentParts(result)
+        ? result
+        : JSON.stringify(result) ?? String(result ?? '');
     const resultItem: ProviderInputItem = {
       type: entry.event.toolType === 'custom' ? 'custom_tool_call_output' : 'function_call_result',
       callId: entry.event.id,
       name: entry.event.name,
-      output,
+      output: modelOutput,
     };
     state.history.push(resultItem);
     state.input.push({
       type: 'tool_result',
       id: entry.event.id,
-      output,
+      output: modelOutput,
       ...(entry.event.toolType ? { toolType: entry.event.toolType } : {}),
     });
     outputPush(stream, queue, { type: 'item', item: resultItem });

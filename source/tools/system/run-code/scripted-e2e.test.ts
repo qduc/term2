@@ -55,6 +55,144 @@ describe('run_code -> read_file scripted cap, end to end', () => {
     // shape carries raw lines, so there is no banner to account for.
     expect(lines).toBe(raw.split('\n').length);
   }, 30_000);
+
+  it('delivers a real read_file image as model-visible content parts', async () => {
+    const readFile = createReadFileToolDefinition({}) as any;
+    const registry = [readFile] as ToolRegistry;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    approvalPolicyRegistry.register({
+      toolName: readFile.name,
+      parameters: readFile.parameters,
+      needsApproval: readFile.needsApproval,
+    });
+    const runCode = createRunCodeToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      getToolRegistry: () => registry,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry,
+    });
+    const imagePath = path.join(process.cwd(), '.tmp-scripted-image.png');
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02, 0x03]);
+    await fs.writeFile(imagePath, imageBytes);
+    try {
+      const result = await runCode.execute({
+        code: `return await tools.read_file({ path: '.tmp-scripted-image.png' });`,
+        timeout_ms: 60_000,
+      } as never);
+
+      expect(Array.isArray(result)).toBe(true);
+      const parts = result as Array<Record<string, any>>;
+      expect(parts[0]?.type).toBe('text');
+      expect(parts[0]?.text).toContain('Image: ');
+      expect(parts[0]?.text).toContain('(11 bytes, image/png)');
+      expect(parts[0]?.text).toContain('[1 tool call: read_file]');
+      expect(parts[1]).toEqual({
+        type: 'image',
+        image: { data: imageBytes.toString('base64'), mediaType: 'image/png' },
+      });
+    } finally {
+      await fs.rm(imagePath, { force: true });
+    }
+  }, 30_000);
+
+  it('keeps images from parallel and wrapped script results as content parts', async () => {
+    const readFile = createReadFileToolDefinition({}) as any;
+    const registry = [readFile] as ToolRegistry;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    approvalPolicyRegistry.register({
+      toolName: readFile.name,
+      parameters: readFile.parameters,
+      needsApproval: readFile.needsApproval,
+    });
+    const runCode = createRunCodeToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      getToolRegistry: () => registry,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry,
+    });
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x04]);
+    const imagePaths = ['.tmp-scripted-image-a.png', '.tmp-scripted-image-b.png'].map((name) =>
+      path.join(process.cwd(), name),
+    );
+    await Promise.all(imagePaths.map((imagePath) => fs.writeFile(imagePath, imageBytes)));
+    try {
+      const result = await runCode.execute({
+        code: `
+          const values = await Promise.all([
+            tools.read_file({ path: '.tmp-scripted-image-a.png' }),
+            tools.read_file({ path: '.tmp-scripted-image-b.png' }),
+          ]);
+          return { values };
+        `,
+        timeout_ms: 60_000,
+      } as never);
+
+      expect(Array.isArray(result)).toBe(true);
+      const parts = result as Array<Record<string, any>>;
+      expect(parts.filter((part) => part.type === 'image')).toHaveLength(2);
+      expect(
+        parts
+          .filter((part) => part.type === 'image')
+          .every((part) => part.image.data === imageBytes.toString('base64')),
+      ).toBe(true);
+      expect(parts.some((part) => part.type === 'text' && String(part.text).includes('[image content attached]'))).toBe(
+        true,
+      );
+    } finally {
+      await Promise.all(imagePaths.map((imagePath) => fs.rm(imagePath, { force: true })));
+    }
+  }, 30_000);
+
+  it('does not truncate a large image into corrupt model-visible media', async () => {
+    const readFile = createReadFileToolDefinition({}) as any;
+    const registry = [readFile] as ToolRegistry;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    approvalPolicyRegistry.register({
+      toolName: readFile.name,
+      parameters: readFile.parameters,
+      needsApproval: readFile.needsApproval,
+    });
+    const runCode = createRunCodeToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      getToolRegistry: () => registry,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry,
+    });
+    const imagePath = path.join(process.cwd(), '.tmp-scripted-large-image.png');
+    const imageBytes = Buffer.alloc(80_000, 0x01);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(imageBytes);
+    await fs.writeFile(imagePath, imageBytes);
+    try {
+      const result = await runCode.execute({
+        code: `return await tools.read_file({ path: '.tmp-scripted-large-image.png' });`,
+        timeout_ms: 60_000,
+      } as never);
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('media result exceeded 100000 characters; media content omitted');
+      expect(result).not.toContain(imageBytes.toString('base64').slice(0, 100));
+    } finally {
+      await fs.rm(imagePath, { force: true });
+    }
+  }, 30_000);
 });
 
 describe('structured scripted results survive the tool wrapper', () => {

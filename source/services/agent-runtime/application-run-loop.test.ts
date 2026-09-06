@@ -12,7 +12,11 @@ import {
   runWithOpenAIRequestPrefixBindingScope,
 } from '../../providers/openai-request-prefix-binding.js';
 import { isDeepStrictEqual } from 'node:util';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../../contracts/streamed-model-turn.js';
+import type {
+  StreamedModelToolResultPart,
+  StreamedModelTurn,
+  StreamedModelTurnRequest,
+} from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
@@ -159,6 +163,53 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       expect.arrayContaining([
         expect.objectContaining({ type: 'tool_result', id: 'call-rollover', output: expectedOutput }),
       ]),
+    );
+  });
+
+  it('preserves multimodal tool results for the provider instead of JSON-stringifying them', async () => {
+    const requests: StreamedModelTurnRequest[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'image-call',
+            output: [{ type: 'tool_call', id: 'call-image', name: 'read_file', arguments: '{"path":"image.png"}' }],
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'image-follow-up',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'I can see the image.' }] }],
+        };
+      },
+    };
+    const imageResult: readonly StreamedModelToolResultPart[] = [
+      { type: 'text', text: 'Image: image.png (3 bytes, image/png)' },
+      { type: 'image', image: { data: 'iVBORw==', mediaType: 'image/png' } },
+    ];
+    const tool: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file',
+      parameters: z.object({ path: z.string() }),
+      needsApproval: () => false,
+      execute: () => imageResult,
+      formatCommandMessage: () => [],
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream({ ...agent, tools: [tool] }, [
+      { role: 'user', type: 'message', content: 'inspect image.png' },
+    ]);
+    await stream.completed;
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1].input).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'tool_result', id: 'call-image', output: imageResult })]),
+    );
+    expect(stream.history).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'function_call_result', output: imageResult })]),
     );
   });
 

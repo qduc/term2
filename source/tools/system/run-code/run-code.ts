@@ -290,16 +290,64 @@ const isUnsuccessfulRunCodeOutput = (output: string): boolean => {
 const truncate = (text: string, limit: number): string =>
   text.length <= limit ? text : `${text.slice(0, limit)}\n[truncated: result exceeded ${limit} characters]`;
 
+type RunCodeContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; image: unknown; detail?: unknown }
+  | { type: 'file'; file: unknown };
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const isMediaContentPart = (value: unknown): value is RunCodeContentPart =>
+  isRecord(value) && ((value.type === 'image' && 'image' in value) || (value.type === 'file' && 'file' in value));
+
+const isContentPartArray = (value: unknown): value is Array<Record<string, unknown>> =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every((part) => isRecord(part) && (part.type === 'text' || isMediaContentPart(part)));
+
+/** Look through script wrappers without mistaking ordinary arrays for media. */
+function containsMediaContent(value: unknown, ancestors = new Set<object>()): boolean {
+  if (isMediaContentPart(value)) return true;
+  if (!isRecord(value) && !Array.isArray(value)) return false;
+  if (ancestors.has(value)) return false;
+  ancestors.add(value);
+  const found = Array.isArray(value)
+    ? value.some((entry) => containsMediaContent(entry, ancestors))
+    : Object.values(value).some((entry) => containsMediaContent(entry, ancestors));
+  ancestors.delete(value);
+  return found;
+}
+
 const serializeResult = (result: unknown, limit: number): JsonValue => {
   if (typeof result === 'string') return truncate(result, limit);
   try {
     const encoded = JSON.stringify(result);
     if (encoded === undefined) return null;
-    return encoded.length <= limit ? (result as JsonValue) : truncate(encoded, limit);
+    if (encoded.length <= limit) return result as JsonValue;
+    // Never turn a multimodal result into a partial JSON string: that both
+    // corrupts image data and makes the failure look like a successful text
+    // result to the script. A clear value lets the script continue (or catch
+    // the omission) without sending an unusable image to the worker.
+    return containsMediaContent(result)
+      ? `[truncated: media result exceeded ${limit} characters; media content omitted]`
+      : truncate(encoded, limit);
   } catch {
     return truncate(String(result), limit);
   }
 };
+
+/** Replace embedded media with a text marker while retaining the real parts. */
+function stripMediaContent(value: unknown, media: RunCodeContentPart[]): unknown {
+  if (isMediaContentPart(value)) {
+    media.push(value);
+    return value.type === 'image' ? '[image content attached]' : '[file content attached]';
+  }
+  if (Array.isArray(value)) return value.map((entry) => stripMediaContent(entry, media));
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, stripMediaContent(entry, media)]));
+  }
+  return value;
+}
 
 /** Renders one console.log's arguments the way a terminal would. */
 const renderConsoleValues = (values: JsonValue[]): string =>
@@ -805,8 +853,9 @@ function renderResult(
   output: readonly string[],
   calls: readonly RunCodeCallRecord[],
   includeConsole: boolean,
-): Promise<string> {
+): Promise<string | readonly RunCodeContentPart[]> {
   const sections: string[] = [];
+  const media: RunCodeContentPart[] = [];
   if (!result.ok && result.error) {
     sections.push(
       result.error.code === 'timeout'
@@ -820,7 +869,19 @@ function renderResult(
   } else if (result.voidOutput === true) {
     sections.push('Script returned no result. Return a value from the script to send it to the model.');
   } else {
-    const rendered = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
+    const stripped = containsMediaContent(result.output) ? stripMediaContent(result.output, media) : result.output;
+    // A top-level content-part array already has a useful text projection;
+    // wrappers (Promise.all, object fields, etc.) retain their shape in JSON,
+    // with media replaced by markers so base64 never leaks into text.
+    const rendered =
+      media.length > 0 && isContentPartArray(result.output)
+        ? result.output
+            .filter((part) => part.type === 'text' && typeof part.text === 'string')
+            .map((part) => part.text)
+            .join('\n')
+        : typeof stripped === 'string'
+        ? stripped
+        : JSON.stringify(stripped);
     sections.push(`Result:\n${rendered}`);
   }
 
@@ -850,5 +911,8 @@ function renderResult(
   }
   sections.push(`[${summarizeCalls(calls)}]`);
 
+  if (media.length > 0) {
+    return clip(sections.join('\n\n')).then((text) => [{ type: 'text', text }, ...media]);
+  }
   return clip(sections.join('\n\n'));
 }

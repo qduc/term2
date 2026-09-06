@@ -182,6 +182,7 @@ const cli = meow(
           --grok-login                     Log in to Grok in a browser (OAuth) and exit
           --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
           --list-models [search]           Print available models grouped by provider, filtered by an optional search term
+          --refresh                        With --list-models, bypass the model catalog cache and re-fetch before listing
       -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
           --fork                            Fork the resumed conversation into a new session (requires --resume)
       -h, --help                           Show help
@@ -207,6 +208,7 @@ const cli = meow(
       $ term2 --codex-login
       $ term2 --list-models
       $ term2 --list-models gpt-5
+      $ term2 --list-models --refresh
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
   `,
@@ -278,6 +280,10 @@ const cli = meow(
         type: 'boolean',
         default: false,
       },
+      refresh: {
+        type: 'boolean',
+        default: false,
+      },
     },
   },
 );
@@ -329,6 +335,11 @@ if (cli.flags.codexLogin) {
 // because model availability is credential-gated at the same boundary the
 // /model picker uses. The optional positional search term is consumed here,
 // ahead of the resume/prompt positional handling below.
+if (cli.flags.refresh && !cli.flags.listModels) {
+  console.error('Error: --refresh can only be used with --list-models.');
+  process.exit(1);
+}
+
 if (cli.flags.listModels) {
   // --list-models is a standalone errand and does not start or touch a
   // session, so it cannot coexist with flags that select or manipulate a
@@ -354,6 +365,7 @@ if (cli.flags.listModels) {
     settingsService: listingSettings,
     loggingService: listingLogger,
     search: cli.input[0]?.trim(),
+    refresh: cli.flags.refresh,
   });
   for (const warning of outcome.warnings) console.error(warning);
   if (outcome.error) console.error(outcome.error);

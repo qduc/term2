@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
 import { orderedProviderIds } from './model-catalog-session.js';
 import { filterModelGroups, formatModelGroups, runListModels, type ProviderModelGroup } from './model-listing.js';
-import { clearModelCache, clearModelMemoryCacheForTest } from '../model-service.js';
+import { clearModelCache, clearModelMemoryCacheForTest, getModelCacheFilePath } from '../model-service.js';
 import { SettingsService } from '../settings/settings-service.js';
 import { LoggingService } from '../logging/logging-service.js';
 
@@ -175,6 +175,104 @@ it('runListModels reuses disk cache across separate invocations without custom f
     expect(second.exitCode).toBe(0);
     expect(second.output).toContain('cached-cli-model');
     expect(networkFetches, 'Second CLI errand must hit disk cache without hitting provider API').toBe(1);
+  } finally {
+    unregisterProvider(providerId);
+    clearModelCache(providerId, { cacheDir: customDir });
+    try {
+      fs.rmSync(customDir, { recursive: true, force: true });
+    } catch {}
+  }
+});
+
+it('runListModels with refresh:true bypasses a warm disk cache, re-fetches, and repopulates the cache', async () => {
+  const customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-list-models-refresh-'));
+  const providerId = 'list-models-refresh-test';
+  let networkFetches = 0;
+  registerProvider({
+    id: providerId,
+    label: 'List Models Refresh Test',
+    fetchModels: async () => {
+      networkFetches++;
+      return [{ id: `refresh-model-${networkFetches}` }];
+    },
+  });
+
+  try {
+    const deps = {
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      providerIds: [providerId],
+      cacheDir: customDir,
+    };
+
+    // Warm the cache normally.
+    const first = await runListModels(deps);
+    expect(first.output).toContain('refresh-model-1');
+    expect(networkFetches).toBe(1);
+
+    // Without refresh, a second errand within the TTL would hit the warm
+    // cache and never call the provider again (proven by the sibling test
+    // above). With refresh:true it must hit the provider again even though
+    // the cache is still fresh, and the disk cache must reflect the new
+    // result afterward.
+    clearModelMemoryCacheForTest();
+    const second = await runListModels({ ...deps, refresh: true });
+    expect(second.exitCode).toBe(0);
+    expect(second.output).toContain('refresh-model-2');
+    expect(networkFetches, 'refresh:true must bypass the warm cache and hit the provider again').toBe(2);
+
+    const cacheFilePath = getModelCacheFilePath(providerId, customDir);
+    const diskContent = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+    expect(diskContent.models.map((m: any) => m.id)).toEqual(['refresh-model-2']);
+  } finally {
+    unregisterProvider(providerId);
+    clearModelCache(providerId, { cacheDir: customDir });
+    try {
+      fs.rmSync(customDir, { recursive: true, force: true });
+    } catch {}
+  }
+});
+
+it('runListModels with refresh:true leaves a usable disk cache untouched when the forced fetch fails', async () => {
+  const customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-list-models-refresh-fail-'));
+  const providerId = 'list-models-refresh-fail-test';
+  let shouldFail = false;
+  registerProvider({
+    id: providerId,
+    label: 'List Models Refresh Fail Test',
+    fetchModels: async () => {
+      if (shouldFail) throw new Error('provider unreachable');
+      return [{ id: 'good-model' }];
+    },
+  });
+
+  try {
+    const deps = {
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      providerIds: [providerId],
+      cacheDir: customDir,
+    };
+
+    // Warm the cache with a good result first.
+    const first = await runListModels(deps);
+    expect(first.output).toContain('good-model');
+
+    const cacheFilePath = getModelCacheFilePath(providerId, customDir);
+    const before = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+
+    // Force a refresh while the provider is down. The user should end up no
+    // worse off than before asking: the existing usable disk cache must
+    // survive untouched, and the failure must be reported rather than
+    // silently served from the stale cache within this same errand.
+    clearModelMemoryCacheForTest();
+    shouldFail = true;
+    const second = await runListModels({ ...deps, refresh: true });
+
+    expect(second.warnings.some((w) => w.includes(providerId) && w.includes('provider unreachable'))).toBe(true);
+
+    const after = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+    expect(after).toEqual(before);
   } finally {
     unregisterProvider(providerId);
     clearModelCache(providerId, { cacheDir: customDir });

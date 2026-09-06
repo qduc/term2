@@ -29,6 +29,17 @@ export async function collectProviderModels(
     cacheDir?: string;
     now?: () => number;
     ttlMs?: number;
+    /**
+     * Force a fresh fetch for every provider being listed, bypassing both the
+     * in-memory and fresh-disk cache tiers in `fetchModels` (the on-disk
+     * last-known-good entry is left alone, so a failed forced fetch cannot
+     * destroy usable cached data). Implemented as a `ttlMs: 0` override
+     * rather than a new `fetchModels` code path, since `fetchModels` already
+     * treats an entry as expired once its age reaches `ttlMs`. Does not
+     * affect an injected `fetcher`, which owns its own caching decisions (or
+     * none at all).
+     */
+    forceRefresh?: boolean;
   },
   providerIds?: string[],
 ): Promise<ProviderModelGroup[]> {
@@ -39,7 +50,7 @@ export async function collectProviderModels(
     signal: deps.signal,
     cacheDir: deps.cacheDir,
     now: deps.now,
-    ttlMs: deps.ttlMs,
+    ttlMs: deps.forceRefresh ? 0 : deps.ttlMs,
   });
   const ids = providerIds ?? orderedProviderIds(deps.settingsService, getProviderIds());
   session.begin();
@@ -159,6 +170,8 @@ export async function runListModels(deps: {
   cacheDir?: string;
   now?: () => number;
   ttlMs?: number;
+  /** Force a fresh fetch for every listed provider; see `collectProviderModels`'s `forceRefresh`. */
+  refresh?: boolean;
 }): Promise<ListModelsOutcome> {
   const groups = await collectProviderModels(
     {
@@ -169,6 +182,7 @@ export async function runListModels(deps: {
       cacheDir: deps.cacheDir,
       now: deps.now,
       ttlMs: deps.ttlMs,
+      forceRefresh: deps.refresh,
     },
     deps.providerIds,
   );

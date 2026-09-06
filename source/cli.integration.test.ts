@@ -391,6 +391,64 @@ it('CLI --list-models without conflicting flags runs the listing errand, not a f
   expect(status).toBe(1);
 });
 
+it('CLI --refresh without --list-models errors clearly instead of being silently ignored', () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  let error: any;
+  let stderr = '';
+  try {
+    execFileSync('node', [cliPath(), '--refresh', 'hello'], {
+      env: createTestChildEnv({
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr.toString();
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr).toContain('--refresh');
+  expect(stderr).toContain('--list-models');
+});
+
+it('CLI --list-models --refresh runs the listing errand, not the flag-conflict error', () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  let stdout = '';
+  let stderr = '';
+  let status: number | null = 0;
+  try {
+    try {
+      stdout = execFileSync('node', [cliPath(), '--list-models', '--refresh'], {
+        env: createTestChildEnv({
+          HOME: tempHome,
+          TERM2_CONVERSATIONS_DIR: testDir,
+          DISABLE_LOGGING: '1',
+        }),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).toString();
+    } catch (err: any) {
+      status = err.status;
+      stdout = err.stdout?.toString() ?? '';
+      stderr = err.stderr?.toString() ?? '';
+    }
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  // With no credentials configured, this hits the same "no models available"
+  // outcome as plain --list-models, proving --refresh alongside --list-models
+  // does not trip the "--refresh can only be used with --list-models" check.
+  expect(stderr).not.toContain('can only be used with');
+  expect(stdout + stderr).toContain('No models available.');
+  expect(status).toBe(1);
+});
+
 it('CLI prompts before starting in non-lite mode from home directory', () => {
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 

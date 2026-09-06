@@ -230,6 +230,30 @@ it('blocks a settled session rollover while a standalone check-in interaction is
   ]);
 });
 
+it('leaves the root state unchanged when direct rollover admission is blocked', () => {
+  const client = partialClient();
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    sessionId: 'before-rollover',
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.presentPendingInteraction({
+    agentName: 'System',
+    toolName: 'check_in',
+    argumentsText: 'Continue?',
+    rawInterruption: null,
+    checkIn: 'max_turns',
+  });
+
+  expect(() => service.rolloverWithNewId('after-rollover')).toThrow(
+    'Session rollover is blocked while a user interaction or approval is pending.',
+  );
+  expect(service.sessionId).toBe('before-rollover');
+  expect(service.getPendingInteractionSnapshot()?.approval.checkIn).toBe('max_turns');
+  service.dispose();
+});
+
 it('constructs with a caller-owned agentClient and toolOwnership', () => {
   const service = new ConversationService({
     agentClient: partialClient(),

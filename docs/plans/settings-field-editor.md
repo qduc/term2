@@ -172,8 +172,16 @@ local HEAD. A is self-contained; B follows after D1's exit-semantics decision.
 
 ## Implementation record: Phase A (2026-09-06)
 
-(Completed by coordinator in `.worktrees/settings-field-editor-a`; merge SHA and
-before/after test counts recorded when the milestone lands.)
+- Branch `settings-field-editor-a`, commit `47788af3`, merge `107fbba4` (no-ff, main).
+- Gate: 6 focused files / 94 tests passed (SettingsValueMenuSession,
+  SettingsValueSelectionMenu, SettingsMenuSession, settings-command,
+  value-suggestions, menu-system integration) plus `pnpm typecheck` clean.
+- Fixes recorded while implementing: a JSX newline between `</Text>` and the
+  next expression child was collapsed during an edit, which blanked the
+  empty-state render entirely; restored. A3 session tests originally used a
+  stubbed settingsValue host that never subscribed to the input context (no
+  re-render on frame push); rewritten on the real hook with
+  `environment.nodeEnv` (a genuine free-form string key).
 
 ## Related plans
 

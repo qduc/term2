@@ -1,7 +1,7 @@
 # Report & Retrospective: run_code Contract & Boundary Repair
 
-**Worktree**: `/home/qduc/term2/.worktrees/rc-contract-repair`  
-**Branch**: `rc-contract-repair`  
+**Worktree**: `/home/qduc/term2/.worktrees/rc-contract-repair`
+**Branch**: `rc-contract-repair`
 **Commits**:
 - `5d83db4f39f7922700cdebb0fbc572d9ca74d8a9`: Initial contract repair across transport budgeting, canonical schema provider parity, and scripted operational rejections.
 - `20fcd401098195934ea8e4c08850399bd264d472`: Adversarial review follow-up (removal of generic field shrinking, UTF-8 envelope byte budgeting, and code-context return declaration alignment).

@@ -910,14 +910,16 @@ describe('run_code', () => {
     expect(output).not.toContain('Signature:');
   });
 
-  it('exposes exactly the registry, so an unknown tool name is simply absent', async () => {
+  it('exposes exactly the registry, and unknown names explain themselves when called', async () => {
     const output = await run(
       [tool({ name: 'echo' })],
-      `console.log("names:", Object.keys(tools).join(","), "missing:", typeof tools.missing);`,
+      `console.log("names:", Object.keys(tools).join(","), "missing listed:", Object.keys(tools).includes("missing"));
+       try { tools.missing({}); } catch (error) { console.log("call:", error.message); }`,
       { include_console: true },
     );
 
-    expect(output).toContain('names: echo,describe missing: undefined');
+    expect(output).toContain('names: echo,describe missing listed: false');
+    expect(output).toContain('call: Unknown tool "missing". Available: echo, describe');
   });
 
   it('truncates an oversized tool result with an explicit marker', async () => {
@@ -984,26 +986,26 @@ describe('run_code', () => {
 
     const output = String(
       await definition.execute({
-        code: `console.log(typeof tools.${TOOL_NAME_RUN_CODE});`,
+        code: `try { tools.${TOOL_NAME_RUN_CODE}({}); } catch (error) { console.log(error.message); }`,
         timeout_ms: 60_000,
         include_console: true,
       } as never),
     );
 
-    expect(output).toContain('undefined');
+    expect(output).toContain(`Unknown tool "${TOOL_NAME_RUN_CODE}"`);
   });
 
   it.each([...RUN_CODE_PROHIBITED_TOOLS])('never exposes the prohibited tool %s', async (name) => {
     const execute = vi.fn(() => 'must not run');
     const output = await run(
       [tool({ name, execute }), tool({ name: 'echo' })],
-      `console.log("exposed:", typeof tools[${JSON.stringify(name)}]);
-       console.log("names:", Object.keys(tools).join(","));`,
+      `console.log("listed:", Object.keys(tools).includes(${JSON.stringify(name)}));
+       try { await tools[${JSON.stringify(name)}]({}); } catch (error) { console.log("blocked:", error.message); }`,
       { include_console: true },
     );
 
-    expect(output).toContain('exposed: undefined');
-    expect(output).toContain('names: echo');
+    expect(output).toContain('listed: false');
+    expect(output).toContain(`blocked: Unknown tool "${name}". Available: echo`);
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -1659,8 +1661,11 @@ describe('run_code M5: syntax-error location and guidance', () => {
 
     expect(output).toContain('Script failed');
     expect(output).toContain('user-facing boom');
+    // Compile guidance must stay off for a runtime-thrown SyntaxError from the
+    // vm realm; the accurate script location may still be attached.
     expect(output).not.toMatch(/plain JavaScript/);
-    expect(output).not.toContain('Line ');
+    expect(output).not.toContain('unterminated');
+    expect(output).toMatch(/throw new SyntaxError/);
   });
 });
 

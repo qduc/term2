@@ -9,9 +9,8 @@ import { SETTING_KEYS } from '../services/settings/settings-service.js';
 import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
-import { profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
-import { isLegacyModeSettingKey } from '../services/profiles/legacy-adapter.js';
-import { isSettingArrayKey } from '../services/settings/setting-schema-utils.js';
+import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
+import { isArraySetting } from '../services/settings/settings-ui-metadata.js';
 
 /**
  * Render the durable settlement of a mutation truthfully. Only a `saved`
@@ -81,7 +80,7 @@ export function parseSettingValue(raw: string): any {
  */
 export function parseSettingValueForKey(key: string, raw: string): any {
   const value = parseSettingValue(raw);
-  if (typeof value !== 'string' || !isSettingArrayKey(key)) return value;
+  if (typeof value !== 'string' || !isArraySetting(key)) return value;
 
   const parts = value
     .split(',')

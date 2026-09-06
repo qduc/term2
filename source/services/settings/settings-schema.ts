@@ -174,7 +174,7 @@ export const AgentSettingsSchema = z.object({
     ),
   openrouter: z
     .object({
-      apiKey: z.string().optional(),
+      apiKey: z.string().optional().meta({ secret: true }),
       baseUrl: z.string().url().optional(),
       referrer: z.string().optional(),
       title: z.string().optional(),
@@ -182,7 +182,7 @@ export const AgentSettingsSchema = z.object({
     .optional(),
   openai: z
     .object({
-      apiKey: z.string().optional(),
+      apiKey: z.string().optional().meta({ secret: true }),
     })
     .optional(),
   codex: z
@@ -537,12 +537,12 @@ export const WebSearchSettingsSchema = z.object({
   provider: z.string().optional(),
   tavily: z
     .object({
-      apiKey: z.string().optional(),
+      apiKey: z.string().optional().meta({ secret: true }),
     })
     .optional(),
   exa: z
     .object({
-      apiKey: z.string().optional(),
+      apiKey: z.string().optional().meta({ secret: true }),
     })
     .optional(),
 });
@@ -604,7 +604,7 @@ export const CustomProviderSchema = z
     name: z.string().min(1).optional(),
     type: CustomProviderTypeSchema,
     baseUrl: z.string().url().optional(),
-    apiKey: z.string().optional(),
+    apiKey: z.string().optional().meta({ secret: true }),
   })
   .passthrough()
   .superRefine((data, ctx) => {

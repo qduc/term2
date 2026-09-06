@@ -1,5 +1,12 @@
 import { scoreSubsequence } from './subsequence-filter.js';
-import { resolveSettingAtPath, unwrapSchema } from '../services/settings/setting-schema-utils.js';
+import {
+  getSettingMetadata,
+  isSecretSetting,
+  isStringSetting,
+  isNumberSetting,
+} from '../services/settings/settings-ui-metadata.js';
+
+export { isSecretSetting, isStringSetting, isNumberSetting };
 
 export type SettingValueSuggestion = {
   value: string;
@@ -206,93 +213,25 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
 };
 
 /**
- * Extract enum values from a Zod schema as value-suggestion entries.
- * Returns empty array if the schema is not an enum type.
- *
- * Zod v3: def.type === 'enum', def.values is string[]
- * Zod v4: def.type === 'enum', def.entries is Record<string, string>
- */
-function suggestFromEnum(schema: any): SettingValueSuggestion[] {
-  if (!schema) return [];
-  const def = schema?.def ?? schema?._def;
-  if (def?.type !== 'enum') return [];
-
-  // Zod v4: def.entries is Record<string, string>
-  if (def.entries && typeof def.entries === 'object') {
-    return (Object.values(def.entries) as string[]).map((v: string) => ({ value: v }));
-  }
-
-  return [];
-}
-
-/**
- * Extract boolean suggestions from a Zod schema.
- * Returns empty array if the schema is not a boolean type.
- */
-function suggestFromBoolean(_schema: any): SettingValueSuggestion[] {
-  return [{ value: 'true' }, { value: 'false' }];
-}
-
-/**
- * Auto-generate value suggestions by introspecting the Zod schema for a setting.
+ * Auto-generate value suggestions by introspecting the Zod schema metadata for a setting.
  *
  * - `z.enum([...])` → one suggestion per enum value
- * - `z.boolean()` (including `.optional()`, `.default()`, `.transform()`) → true/false
+ * - `z.boolean()` → true/false
  * - Other types → empty array (no auto-suggestion)
  */
 function autoSuggestFromSchema(key: string): SettingValueSuggestion[] {
-  const schema = resolveSettingAtPath(key);
-  if (!schema) return [];
-  const unwrapped = unwrapSchema(schema);
-  if (!unwrapped) return [];
+  const meta = getSettingMetadata(key);
+  if (!meta) return [];
 
-  const def = unwrapped.def ?? unwrapped._def;
-  if (!def) return [];
-
-  const typeName = def.type ?? def.typeName;
-
-  // Handle enum: Zod v3/v4 both use type === 'enum'
-  if (typeName === 'enum') {
-    return suggestFromEnum(unwrapped);
+  if (meta.type === 'enum' && meta.enumOptions) {
+    return meta.enumOptions.map((value) => ({ value }));
   }
 
-  // Handle boolean: Zod v3/v4 both use type === 'boolean'
-  if (typeName === 'boolean') {
-    return suggestFromBoolean(unwrapped);
+  if (meta.type === 'boolean') {
+    return [{ value: 'true' }, { value: 'false' }];
   }
 
   return [];
-}
-
-/**
- * Secret settings hold credentials. Their current value must never be echoed
- * into the input buffer or the suggestion list: doing so lets a following paste
- * append to the existing secret instead of replacing it, producing a silently
- * malformed credential (two concatenated API keys) that only surfaces later as
- * an opaque provider 401.
- */
-export function isSecretSetting(key: string): boolean {
-  return /(^|\.)apiKey$/.test(key);
-}
-
-// Type guard for isNumberSetting / isStringSetting (kept for backward compat).
-export function isStringSetting(key: string): boolean {
-  return isSettingType(key, 'string');
-}
-
-export function isNumberSetting(key: string): boolean {
-  return isSettingType(key, 'number');
-}
-
-function isSettingType(key: string, expectedType: 'number' | 'string'): boolean {
-  const schema = resolveSettingAtPath(key);
-  if (!schema) return false;
-  const unwrapped = unwrapSchema(schema);
-  if (!unwrapped) return false;
-  // In Zod v4, number/string checks are on the base schema, not wrappers.
-  // .int(), .positive() etc. add checks but keep the schema as ZodNumber.
-  const def = unwrapped.def ?? unwrapped._def;
-  return def?.type === expectedType;
 }
 
 /**
@@ -341,7 +280,7 @@ export function filterSettingValueSuggestionsByQuery(
 
   // For number settings, if the query itself is a valid number and not already
   // in the results as an exact match, add it as a "Custom value" option.
-  if (key && isSettingType(key, 'number') && trimmed && !results.some((r) => r.value === trimmed)) {
+  if (key && isNumberSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
     const numValue = Number(trimmed);
     if (!isNaN(numValue)) {
       // Add to the START of results so it's the default choice
@@ -354,7 +293,7 @@ export function filterSettingValueSuggestionsByQuery(
   }
 
   // For string settings without predefined suggestions, allow free-form input.
-  if (key && isSettingType(key, 'string') && trimmed && !results.some((r) => r.value === trimmed)) {
+  if (key && isStringSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
     const hasPredefined = (VALUE_SUGGESTIONS_BY_KEY[key]?.length ?? 0) > 0;
     if (!hasPredefined) {
       results.unshift({

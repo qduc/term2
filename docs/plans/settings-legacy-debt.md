@@ -312,3 +312,17 @@ M2a is read-only and may run before D1-D4 are answered.
 - **Rationale**: The interactive menu migrated to display tier models (`agent.smartModel`, `agent.balancedModel`, `agent.cheapModel`, `agent.choreModel`). The `/settings` text slash-command summary previously still printed legacy keys (`AGENT_EFFICIENT_MODEL`, `AGENT_CAPABLE_MODEL`, `AGENT_MENTOR_MODEL`) while omitting every tier key.
 - Aligning `formatSettingsSummary` with tier-primary keys establishes consistent vocabulary across all user-facing surfaces.
 
+## Implementation Record: Milestone 3 (2026-09-06)
+
+### Schema-derived UI metadata & Touchpoint Count
+- Added `source/services/settings/settings-ui-metadata.ts` companion module deriving value type, enum options, `.describe()` text, secret status (`.meta({ secret: true })`), and runtime-modifiability.
+- Migrated consumers:
+  - `source/hooks/settings-completion-config.ts`: replaced manual 170-line `SETTING_DESCRIPTIONS` dictionary with `getAllSettingDescriptions()`.
+  - `source/utils/value-suggestions.ts`: replaced hand Zod reflection in `autoSuggestFromSchema`, `isSettingType` with `settings-ui-metadata.ts`.
+  - `source/hooks/use-settings-value-completion.ts`: uses `isNumberSetting`, `isSecretSetting`, `isStringSetting` from `settings-ui-metadata.ts`.
+  - `source/utils/settings-command.ts`: uses `isArraySetting` from `settings-ui-metadata.ts` for array parse decisions.
+- **Touchpoint count for adding a setting**:
+  - **Before M3**: 6 mandatory touchpoints (`SETTING_KEYS`, `DEFAULT_SETTINGS`, `SettingsWithSources`, `SETTING_DESCRIPTIONS`, `CATEGORY_KEYS`, `RUNTIME_MODIFIABLE_SETTINGS`).
+  - **After M3**: 5 mandatory touchpoints (`SETTING_DESCRIPTIONS` eliminated as a manual touchpoint — descriptions are now defined directly on the Zod schema field via `.describe(...)` in `settings-schema.ts`).
+
+

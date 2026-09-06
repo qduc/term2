@@ -2,13 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { useSelection } from './use-selection.js';
-import {
-  buildSettingValueSuggestions,
-  filterSettingValueSuggestionsByQuery,
-  isNumberSetting,
-  isSecretSetting,
-  isStringSetting,
-} from '../utils/value-suggestions.js';
+import { buildSettingValueSuggestions, filterSettingValueSuggestionsByQuery } from '../utils/value-suggestions.js';
+import { isNumberSetting, isSecretSetting, isStringSetting } from '../services/settings/settings-ui-metadata.js';
 
 const MAX_RESULTS = 10;
 

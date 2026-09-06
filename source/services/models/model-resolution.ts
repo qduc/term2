@@ -32,6 +32,30 @@ export type ModelMatch = {
   model: ModelInfo;
 };
 
+export type InteractivePickerSelection = { modelId: string; provider: string };
+
+export type InteractivePickerRequest = {
+  /** Filter query the picker opens with (the stripped, provider/suffix-free pattern). */
+  initialQuery: string;
+  /** Set when --provider (or a parsed provider prefix) narrows permanently; locks the tab. */
+  lockProvider?: string;
+  /** One-line explanations shown above the menu (e.g. why nothing matched). */
+  bannerLines?: string[];
+};
+
+/**
+ * Opens the interactive model picker and resolves to the chosen model, or
+ * `null` on cancellation. Callers wire this to `runModelPickerHost`
+ * (source/services/models/model-picker-host.tsx); tests can supply a stub.
+ * When supplied, it REPLACES the readline-based `promptForDisambiguation`
+ * fallback for ambiguous matches, and replaces the hard `no_match` error with
+ * an interactive re-search seeded with the same query. It must only ever be
+ * supplied by a caller that has already confirmed an interactive session
+ * (real TTY, no positional prompt, no --json, no isolated-harness marker) —
+ * this module does not re-derive that eligibility itself.
+ */
+export type InteractivePicker = (request: InteractivePickerRequest) => Promise<InteractivePickerSelection | null>;
+
 export type ModelResolutionResult =
   | {
       status: 'resolved';
@@ -320,6 +344,8 @@ export async function resolveModelFlag(deps: {
   streams?: { input?: NodeJS.ReadableStream; output?: NodeJS.WritableStream };
   knownProviders?: string[];
   providerIds?: string[];
+  /** See `InteractivePicker`. Only ever set by a confirmed-interactive caller. */
+  interactivePicker?: InteractivePicker;
 }): Promise<ModelResolutionResult> {
   const knownProviders = deps.knownProviders ?? getProviderIds();
   const parsed = parseModelFlag(deps.modelFlag, {
@@ -328,7 +354,7 @@ export async function resolveModelFlag(deps: {
   });
 
   // Isolated black-box provider harnesses replay wire turns and do not mock catalog endpoints
-  if (process.env[HARNESS_IDLE_ENV] && deps.prompter === undefined) {
+  if (process.env[HARNESS_IDLE_ENV] && deps.prompter === undefined && deps.interactivePicker === undefined) {
     return {
       status: 'passthrough',
       modelId: parsed.rawPattern,
@@ -539,11 +565,45 @@ export async function resolveModelFlag(deps: {
 
       if (targetGroup) {
         const cacheFilePath = getModelCacheFilePath(targetGroup.provider);
+        if (deps.interactivePicker) {
+          const picked = await deps.interactivePicker({
+            initialQuery: parsed.pattern,
+            lockProvider: explicitProvider ? parsed.provider : undefined,
+            bannerLines: [
+              `No models match "${deps.modelFlag}".`,
+              `The cached catalog for ${targetGroup.provider} may be stale — delete ${cacheFilePath} to refetch.`,
+            ],
+          });
+          if (!picked) return { status: 'cancelled', error: 'Cancelled.' };
+          return {
+            status: 'resolved',
+            modelId: picked.modelId,
+            provider: picked.provider,
+            reasoningEffort: parsed.reasoningEffort,
+            ...(warnings.length > 0 ? { warnings } : {}),
+          };
+        }
         return {
           status: 'no_match',
           error: `Error: No models match "${deps.modelFlag}". The cached catalog for ${targetGroup.provider} may be stale — delete ${cacheFilePath} to refetch.`,
         };
       }
+    }
+
+    if (deps.interactivePicker) {
+      const picked = await deps.interactivePicker({
+        initialQuery: parsed.pattern,
+        lockProvider: explicitProvider ? parsed.provider : undefined,
+        bannerLines: [`No models match "${deps.modelFlag}".`],
+      });
+      if (!picked) return { status: 'cancelled', error: 'Cancelled.' };
+      return {
+        status: 'resolved',
+        modelId: picked.modelId,
+        provider: picked.provider,
+        reasoningEffort: parsed.reasoningEffort,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      };
     }
 
     return {
@@ -562,7 +622,25 @@ export async function resolveModelFlag(deps: {
     };
   }
 
-  // Ambiguous match: disambiguate
+  // Ambiguous match: disambiguate. The interactive picker, when available,
+  // replaces the readline prompt entirely and browses the FULL catalog
+  // (seeded with the typed pattern) rather than only the ambiguous subset,
+  // since it lets the user keep narrowing past what --model alone matched.
+  if (deps.interactivePicker) {
+    const picked = await deps.interactivePicker({
+      initialQuery: parsed.pattern,
+      lockProvider: explicitProvider ? parsed.provider : undefined,
+    });
+    if (!picked) return { status: 'cancelled', error: 'Cancelled.' };
+    return {
+      status: 'resolved',
+      modelId: picked.modelId,
+      provider: picked.provider,
+      reasoningEffort: parsed.reasoningEffort,
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+  }
+
   const selected = await promptForDisambiguation(matches, groups, deps.modelFlag, deps.prompter, deps.streams);
 
   if (!selected) {

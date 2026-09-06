@@ -711,3 +711,64 @@ it('CLI --model vendor/id resolves the literal id on the serving provider, warns
     fs.rmSync(tempHome, { recursive: true, force: true });
   }
 });
+
+it('CLI treats a lone trailing token after --model as the prompt, not the model value', async () => {
+  // --model followed by exactly one token and nothing else is ambiguous: it
+  // could be the model's value or the whole prompt. The deliberate rule is
+  // that it is the prompt — --model took no value here, so the run proceeds
+  // non-interactively against the already-configured default model.
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha']);
+  const settingsFile = writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status, stderr } = await spawnCli([cliPath(), '--model', 'a lone trailing prompt'], childEnv);
+
+    expect(status).toBe(0);
+    expect(stderr).not.toContain('No models match');
+    expect(stderr).not.toContain('Multiple models match');
+    // The default model was used untouched; the trailing token never reached
+    // model resolution at all.
+    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+
+    // Session-only contract still holds: nothing was persisted from a flag
+    // that, in this shape, was never actually a model value.
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    expect(persisted.agent.model).toBe('mock-alpha');
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha', 'mock-beta']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status } = await spawnCli([cliPath(), '--model', 'mock-beta', 'hello'], childEnv);
+
+    expect(status).toBe(0);
+    expect(mock.capturedModels()).toEqual(['mock-beta']);
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});

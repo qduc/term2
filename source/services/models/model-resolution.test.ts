@@ -941,6 +941,155 @@ describe('resolveModelFlag', () => {
   });
 });
 
+describe('resolveModelFlag interactivePicker', () => {
+  const groups: ProviderModelGroup[] = [
+    makeGroup(
+      'openai',
+      [{ id: 'gpt-5.4', name: 'GPT 5.4' }, { id: 'gpt-5.4-mini', name: 'GPT 5.4 Mini' }, { id: 'gpt-4o' }],
+      { label: 'OpenAI' },
+    ),
+    makeGroup('anthropic', [{ id: 'claude-sonnet-4', name: 'Sonnet 4' }], { label: 'Anthropic' }),
+  ];
+
+  it('replaces the readline prompt for an ambiguous match, seeded with the stripped pattern', async () => {
+    const interactivePicker = vi.fn(async () => ({ modelId: 'gpt-4o', provider: 'openai' }));
+    const deps = mockDeps(groups);
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5:high',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(interactivePicker).toHaveBeenCalledOnce();
+    expect(interactivePicker).toHaveBeenCalledWith({ initialQuery: 'gpt-5', lockProvider: undefined });
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-4o',
+      provider: 'openai',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('locks the picker to the explicitly-scoped provider on an ambiguous match', async () => {
+    const interactivePicker = vi.fn(async () => ({ modelId: 'gpt-4o', provider: 'openai' }));
+    const deps = mockDeps(groups);
+    await resolveModelFlag({
+      modelFlag: 'gpt-5',
+      providerFlag: 'openai',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(interactivePicker).toHaveBeenCalledWith({ initialQuery: 'gpt-5', lockProvider: 'openai' });
+  });
+
+  it('returns cancelled when the picker is dismissed on an ambiguous match, without touching promptForDisambiguation', async () => {
+    const interactivePicker = vi.fn(async () => null);
+    const deps = mockDeps(groups);
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({ status: 'cancelled', error: 'Cancelled.' });
+  });
+
+  it('replaces the no_match error with the picker, seeded with the pattern and a banner', async () => {
+    const interactivePicker = vi.fn(async () => ({ modelId: 'claude-sonnet-4', provider: 'anthropic' }));
+    const deps = mockDeps(groups);
+    const result = await resolveModelFlag({
+      modelFlag: 'zzz-nonexistent',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(interactivePicker).toHaveBeenCalledWith({
+      initialQuery: 'zzz-nonexistent',
+      lockProvider: undefined,
+      bannerLines: ['No models match "zzz-nonexistent".'],
+    });
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'claude-sonnet-4',
+      provider: 'anthropic',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('carries the stale-cache hint into the no_match banner for an explicitly-scoped provider', async () => {
+    const interactivePicker = vi.fn(async () => ({ modelId: 'gpt-4o', provider: 'openai' }));
+    const deps = mockDeps(groups);
+    await resolveModelFlag({
+      modelFlag: 'zzz-nonexistent',
+      providerFlag: 'openai',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(interactivePicker).toHaveBeenCalledWith({
+      initialQuery: 'zzz-nonexistent',
+      lockProvider: 'openai',
+      bannerLines: [
+        'No models match "zzz-nonexistent".',
+        expect.stringContaining('The cached catalog for openai may be stale'),
+      ],
+    });
+  });
+
+  it('returns cancelled when the picker is dismissed on a no_match', async () => {
+    const interactivePicker = vi.fn(async () => null);
+    const deps = mockDeps(groups);
+    const result = await resolveModelFlag({
+      modelFlag: 'zzz-nonexistent',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({ status: 'cancelled', error: 'Cancelled.' });
+  });
+
+  it('does not call the picker on a single unambiguous match', async () => {
+    const interactivePicker = vi.fn();
+    const deps = mockDeps(groups);
+    await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      interactivePicker,
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(interactivePicker).not.toHaveBeenCalled();
+  });
+});
+
 describe('resolveModelFlag favorites fast path', () => {
   const favoriteSettings = (favorites: string[]) =>
     ({

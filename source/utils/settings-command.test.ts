@@ -2,7 +2,12 @@ import { it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
+import {
+  createSettingsCommand,
+  formatSettingsSummary,
+  parseSettingValue,
+  parseSettingValueForKey,
+} from './settings-command.js';
 import { unregisterProvider, upsertProvider } from '../providers/index.js';
 import type { SettingsWithSources } from '../services/settings/settings-schema.js';
 import { SettingsService } from '../services/settings/settings-service.js';
@@ -375,6 +380,22 @@ it('parseSettingValue converts common primitives', () => {
   expect(parseSettingValue('true')).toBe(true);
   expect(parseSettingValue('false')).toBe(false);
   expect(parseSettingValue('gpt-4o')).toBe('gpt-4o');
+});
+
+it('parseSettingValueForKey splits comma-separated input for array settings', () => {
+  expect(parseSettingValueForKey('agent.sessionRollover.milestones', '200000,300000,400000')).toEqual([
+    200000, 300000, 400000,
+  ]);
+  expect(parseSettingValueForKey('agent.sessionRollover.milestones', '200000, 300000')).toEqual([200000, 300000]);
+  expect(parseSettingValueForKey('hooks.trustedProjectRoots', '/a,/b')).toEqual(['/a', '/b']);
+});
+
+it('parseSettingValueForKey still accepts JSON array input for array settings', () => {
+  expect(parseSettingValueForKey('agent.sessionRollover.milestones', '[200000, 300000]')).toEqual([200000, 300000]);
+});
+
+it('parseSettingValueForKey leaves non-array settings with commas untouched', () => {
+  expect(parseSettingValueForKey('agent.model', 'gpt-4o,extra')).toBe('gpt-4o,extra');
 });
 
 it('setting agent.model strips --provider flag from value', () => {

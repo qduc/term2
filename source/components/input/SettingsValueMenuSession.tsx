@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import SettingsValueSelectionMenu from '../menu/SettingsValueSelectionMenu.js';
-import { parseSettingValue } from '../../utils/settings-command.js';
+import { parseSettingValueForKey } from '../../utils/settings-command.js';
 import { isSecretSetting } from '../../utils/value-suggestions.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -30,8 +30,10 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
     const resolveTypedOrSelectedValue = (): unknown => {
       const suggestion = settingsValue.getSelectedItem();
       const typedValueText = frame.binding.query;
-      const parsedTypedValue = typedValueText ? parseSettingValue(typedValueText) : undefined;
-      const parsedSuggestionValue = suggestion ? parseSettingValue(suggestion.value) : undefined;
+      const parsedTypedValue = typedValueText ? parseSettingValueForKey(frame.settingKey, typedValueText) : undefined;
+      const parsedSuggestionValue = suggestion
+        ? parseSettingValueForKey(frame.settingKey, suggestion.value)
+        : undefined;
       const shouldPreferTypedNumericValue =
         settingsValue.isNumericSettings &&
         parsedTypedValue !== undefined &&

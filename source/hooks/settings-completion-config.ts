@@ -54,7 +54,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]:
     'Remind the agent when context reaches milestones so it can plan a session rollover (true|false)',
   [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]:
-    'Context token milestones that trigger session rollover reminders (e.g. [200000, 300000, 400000])',
+    'Context token milestones that trigger session rollover reminders (e.g. 200000, 300000, 400000)',
   [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]:
     'Automatically pass the handoff brief into the new session upon rollover (true|false)',
   [SETTING_KEYS.AGENT_MENTOR_MODEL]: 'Mentor model to use (optional, enables ask_mentor tool)',

@@ -105,6 +105,53 @@ it('accepting a typed numeric value issues an apply-settings intent and closes t
   expect(controller.getSnapshot().editor).toMatchObject({ text: SETTINGS_TRIGGER, cursor: SETTINGS_TRIGGER.length });
 });
 
+it('accepting comma-separated input for an array setting issues an apply-settings intent with an array value', async () => {
+  const intentHost = vi.fn(
+    ({ intentRequest }): IntentResult => ({
+      id: intentRequest.id,
+      sourceFrameId: intentRequest.sourceFrameId,
+      ok: true,
+    }),
+  );
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({ 'agent.sessionRollover.milestones': [200000, 300000, 400000] });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({
+      type: 'set-text',
+      text: '/settings agent.sessionRollover.milestones 500000,600000',
+      cursor: '/settings agent.sessionRollover.milestones 500000,600000'.length,
+    });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const call = intentHost.mock.calls[0]?.[0];
+  expect(call.intentRequest.intent).toEqual({
+    type: 'apply-settings',
+    changes: [{ key: 'agent.sessionRollover.milestones', value: [500000, 600000], persistence: 'runtime' }],
+  });
+});
+
 it('preselects the current thinking effort in the value menu', async () => {
   const controller = buildController(vi.fn(), ['direct-setting-value']);
   const settingsService = createMockSettingsService({ 'agent.reasoningEffort': 'high' });

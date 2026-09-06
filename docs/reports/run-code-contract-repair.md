@@ -12,7 +12,7 @@
 
 This report records the root cause analysis, systemic architectural gaps, implementation resolutions, adversarial review closure, and verification results for three contract and boundary defects in `run_code` nested execution:
 
-1. **Oversized structured results**: Truncation corrupted JSON strings in `#serializeResult()`, and `read_file` budgeted content before metadata/escaping. Generic field shrinking was attempted and rejected; the final repair enforces full UTF-8 byte budgeting for `read_file` envelopes and artifact-spool rejection with completed-effects disclosure for oversized generic objects.
+1. **Oversized structured results**: Truncation corrupted JSON strings in `serializeResult`, and `read_file` budgeted content before metadata/escaping. Generic field shrinking was attempted and rejected; the final repair enforces full UTF-8 byte budgeting for `read_file` envelopes and artifact-spool rejection with completed-effects disclosure for oversized generic objects.
 2. **Provider parity under strict JSON schema substitution**: Tool parameter schemas converted to strict JSON schemas for OpenAI caused `run_code` to bypass pre-dispatch validation and fulfill with late diagnostic strings, whereas OpenRouter rejected early. Preserving `canonicalParameters` across provider transformations restored strict parity.
 3. **Scripted operational failures**: Direct tool implementations returned user-facing `"Error: ..."` strings instead of throwing, causing scripted promises to resolve successfully. Scripted calls now reject with explicit errors for operational failures, preserving `try/catch` and `Promise.allSettled` semantics.
 
@@ -23,15 +23,15 @@ This report records the root cause analysis, systemic architectural gaps, implem
 ### Defect 1: Oversized Structured Results & Transport Budgeting
 
 #### Root Cause
-- In `source/tools/system/run-code/run-code.ts`, `#serializeResult()` sliced any result whose JSON representation exceeded `RUN_CODE_LIMITS.maxResultChars` (100,000 characters) via `truncate(encoded, limit)`. This sliced mid-JSON, producing corrupted strings like `"[truncated: result exceeded 100000 characters]"` that broke `JSON.parse` across the worker VM boundary.
+- In `source/tools/system/run-code/run-code.ts`, `serializeResult` sliced any result whose JSON representation exceeded `RUN_CODE_LIMITS.maxResultChars` (100,000 characters) via `truncate(encoded, limit)`. This sliced mid-JSON, producing corrupted strings like `"[truncated: result exceeded 100000 characters]"` that broke `JSON.parse` across the worker VM boundary.
 - In `source/tools/file/read-file.ts`, content was bounded at 100,000 bytes *before* adding envelope metadata (`path`, `totalLines`, `fromLine`, `toLine`, `truncated`) and JSON character escaping, causing the resulting envelope to reliably exceed the limit (~100,050 chars) and trigger string truncation.
 
 #### Review Finding & Follow-Up (SEV-3)
-- **Attempted & Rejected**: The initial fix attempted generic structured-field shrinking in `#serializeResult()` by inspecting property names (e.g. `content`) and binary-searching a truncated prefix. Adversarial review (`/tmp/rc-independent-review.md`) demonstrated that this corrupted internal consistency (e.g. `{ content, contentLength: 100000, truncated: false }` returned truncated content while claiming `truncated: false`) without a truncation marker or retrieval path.
+- **Attempted & Rejected**: The initial fix attempted generic structured-field shrinking in `serializeResult` by inspecting property names (e.g. `content`) and binary-searching a truncated prefix. Adversarial review (`/tmp/rc-independent-review.md`) demonstrated that this corrupted internal consistency (e.g. `{ content, contentLength: 100000, truncated: false }` returned truncated content while claiming `truncated: false`) without a truncation marker or retrieval path.
 - **UTF-16 vs UTF-8 Byte Budget (SEV-3)**: The initial fix checked `.length <= maxResultBytes` on the JSON string. For Unicode/CJK text, character count diverged sharply from UTF-8 byte count, allowing payloads to bypass `resolveResultMaxBytesForCall` and fail at the sandbox host boundary (`262,144` bytes).
 
 #### Final Resolution
-- **Removed generic field shrinking**: In `source/tools/system/run-code/run-code.ts`, generic structured objects within limits pass intact. Oversized generic objects are spooled to temporary disk artifacts via `saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' })` and returned as worker failure `{ ok: false, error }`, rejecting the script promise with the artifact path, byte count, and an explicit warning that tool side effects already completed and must not be blindly replayed.
+- **Removed generic field shrinking**: In `source/tools/system/run-code/run-code.ts`, generic structured objects within limits pass intact. Oversized generic objects are spooled to temporary disk artifacts via `saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' })` and returned as worker failure `{ ok: false, error }`, rejecting the script promise with the artifact path, exceeded character limit, and an explicit warning that tool side effects already completed and must not be blindly replayed.
 - **Envelope byte budgeting**: In `source/tools/file/read-file.ts`, scripted calls compute the envelope budget strictly in UTF-8 bytes using `Buffer.byteLength(JSON.stringify(envelope), 'utf8')`. When content exceeds the budget, raw content is saved to an artifact, `truncated: true` and `fullOutputPath` are attached, and binary search determines the exact content slice without splitting UTF-16 surrogate pairs (`/[\uD800-\uDBFF]$/`).
 - **Too-small budget guards**: If the budget cannot accommodate `fullOutputPath`, it is omitted; if the budget is smaller than the empty minimal envelope, an explicit `Error` is thrown.
 - **Reviewer Closure**: Re-review (`/tmp/rc-independent-rereview.md`) verified that generic shrinking was removed, all envelope checks measure UTF-8 bytes, surrogate pairs are preserved, and artifact paths are safely exposed.
@@ -42,14 +42,14 @@ This report records the root cause analysis, systemic architectural gaps, implem
 
 #### Root Cause
 - Providers with strict schema requirements (e.g. OpenAI) had their tool `parameters` substituted with strict JSON schema objects in `buildAgentTools` (`source/lib/agent-factory.ts`) and `SubagentToolFactory.buildAgentTools` (`source/services/subagents/tool-policy.ts`).
-- When `run_code` inspected nested tool calls in `#prepare()`, it checked `isZodToolParameterSchema(tool.parameters)`. Because `tool.parameters` was now a raw JSON schema object, `run_code` skipped early schema validation.
+- When `run_code` inspected nested tool calls in `prepare`, it checked `isZodToolParameterSchema(tool.parameters)`. Because `tool.parameters` was now a raw JSON schema object, `run_code` skipped early schema validation.
 - The unvalidated invocation fell through to `invoke()`, where the outer `wrapToolInvoke` caught the schema mismatch and returned a diagnostic string (`"Tool input did not match schema: ..."`).
-- Consequently, an identical invalid call fulfilled with an error string under OpenAI, but rejected early in `#prepare()` with a compact signature under OpenRouter (where `tool.parameters` remained a Zod schema).
+- Consequently, an identical invalid call fulfilled with an error string under OpenAI, but rejected early in `prepare` with a compact signature under OpenRouter (where `tool.parameters` remained a Zod schema).
 
 #### Final Resolution
 - Extended `SchemaToolDefinition` and `AnyToolDefinition` in `source/tools/types.ts` with optional `canonicalParameters?: ZodTypeAny`.
 - In `buildAgentTools` (`agent-factory.ts`) and `SubagentToolFactory.buildAgentTools` (`tool-policy.ts`), preserved the original Zod schema in `canonicalParameters` across strict JSON schema conversions.
-- In `source/tools/system/run-code/run-code.ts` (`#prepare()` and `#describeTool()`) and `source/tools/system/run-code/tools-header.ts` (`renderCompactSignature`), updated schema inspection to prioritize `tool.canonicalParameters ?? tool.parameters`.
+- In `source/tools/system/run-code/run-code.ts` (`prepare` and `describeTool`) and `source/tools/system/run-code/tools-header.ts` (`renderCompactSignature`), updated schema inspection to prioritize `tool.canonicalParameters ?? tool.parameters`.
 - **Reviewer Closure**: Re-review confirmed that provider substitution preserves canonical schemas, and both OpenAI and OpenRouter reject invalid nested invocations before approval/dispatch with identical compact signatures.
 
 ---
@@ -173,15 +173,15 @@ Later:            None.
   - Combined gate run: **exit 0 in 254.23s**.
   - Static analysis: `pnpm typecheck` passed (0 errors); `git diff --check` passed.
 - **Environmental Diagnosis**:
-  - Default nested worktree `TMPDIR` paths triggered 5 pre-existing outside-workspace and nested-approval acceptance test failures sensitive to directory prefixes; all 94 focused tests and the full suite passed cleanly with `TMPDIR=/tmp`.
-  - An initial provider gate run encountered a 15s socket timeout; isolated re-run completed in 12.67s, and the full subsequent provider black-box gate passed completely.
+  - Default nested worktree `TMPDIR` paths triggered 5 observed TMPDIR-sensitive outside-workspace and nested-approval acceptance test failures; all 94 focused tests and the full suite passed cleanly with `TMPDIR=/tmp`.
+  - An initial provider gate run encountered a 15s CLI subprocess deadline; isolated re-run completed in 12.67s, and the full subsequent provider black-box gate passed completely.
 
 ---
 
 ## 6. Retro Residuals & Guidance
 
-1. **UTF-8 Byte Length vs Character Length in Tool Envelopes**:
-   - Any tool budgeting serialized output for transport or context inclusion must measure UTF-8 bytes via `Buffer.byteLength(JSON.stringify(envelope), 'utf8')`, never string `.length`. String character counts fail silently on Unicode and CJK content.
+1. **UTF-8 Byte Length vs Character Length in Byte-Declared Tool Envelopes**:
+   - Any tool budgeting serialized output for transport or context inclusion against an explicit byte cap (such as `read_file`'s `maxResultBytes` via `resolveResultMaxBytesForCall`) must measure UTF-8 bytes via `Buffer.byteLength(JSON.stringify(envelope), 'utf8')`, never string `.length`. String character counts fail silently on Unicode and CJK content. In contrast, `run_code`'s `maxResultChars` intentionally retains a character cap for string and structured transport limits.
 2. **Preserving Runtime Capabilities on Transformed Tool Definitions**:
    - When tools are wrapped or transformed for external wire representations (such as strict JSON schema formatting for OpenAI), operational metadata required by local execution engines must be retained on designated canonical fields (`canonicalParameters`).
 3. **Programmatic Contract Integrity**:

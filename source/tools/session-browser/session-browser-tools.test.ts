@@ -39,18 +39,24 @@ it('exposes read-only browser tools with strict bounded parameter schemas', asyn
   for (const tool of tools) expect(tool.needsApproval({} as never)).toBe(false);
   expect(tools[0]!.parameters.safeParse({ maxChars: 511 }).success).toBe(false);
   expect(tools[1]!.parameters.safeParse({ query: '   ' }).success).toBe(false);
+  expect(tools[1]!.parameters.safeParse({ query: 'needle', kinds: ['user', 'assistant'] }).success).toBe(true);
+  expect(tools[1]!.parameters.safeParse({ query: 'needle', kinds: ['unknown'] }).success).toBe(false);
   expect(tools[2]!.parameters.safeParse({ id: '../escape' }).success).toBe(false);
   expect(JSON.parse((await tools[0]!.execute({})) as string)).toMatchObject({ sessions: [] });
 
   // Descriptions are product behavior: pin the `total`/`omitted` semantics and
   // the live-session demotion rule so a cleanup cannot silently drop them.
   expect(tools[0]!.description).toContain('`total` is the number of browsable sessions in scope');
-  expect(tools[1]!.description).toContain('`total` is the number of ranked matches before `limit` is applied');
+  expect(tools[1]!.description).toContain(
+    '`total` is the number of ranked matches after the kind filter and before `limit` is applied',
+  );
   expect(tools[1]!.description).toContain('Matches from the currently active session sort last');
+  expect(tools[1]!.description).toContain('kinds: ["user", "assistant"]');
   expect(tools[2]!.description).toContain('`from: "end"` starts at the last `limit` projected records');
   expect(tools[2]!.description).toContain('without `from: "end"` the read starts at the first record');
   expect(tools[2]!.description).toContain('`nextCursor` is returned only while forward content remains');
   expect(tools[2]!.description).toContain('`total - omitted` records are represented here');
+  expect(tools[2]!.description).toContain('Never invent, edit, or reuse a cursor');
   // Search hits carry the session's last-write time, not per-message times.
   expect(tools[1]!.description).toContain("`updatedAt` is the session's last-write timestamp");
   expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end' }).success).toBe(true);

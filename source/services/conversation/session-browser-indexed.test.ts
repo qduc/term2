@@ -260,12 +260,17 @@ describe('SessionBrowser Indexed Backend', () => {
         const indLimit = await indexedBrowser.search({ query: 'apple banana', limit: 1 });
         expect(indLimit).toEqual(canLimit);
 
-        // 7. No match
+        // 7. Projected-kind filter applies before totals and limits.
+        const canKinds = canonicalBrowser.search({ query: 'apple banana', kinds: ['user'], limit: 1 });
+        const indKinds = await indexedBrowser.search({ query: 'apple banana', kinds: ['user'], limit: 1 });
+        expect(indKinds).toEqual(canKinds);
+
+        // 8. No match
         const canNone = canonicalBrowser.search({ query: 'nonexistentqueryterm' });
         const indNone = await indexedBrowser.search({ query: 'nonexistentqueryterm' });
         expect(indNone).toEqual(canNone);
 
-        // 8. Scope isolation: search for 'different' should return 0 in project-a
+        // 9. Scope isolation: search for 'different' should return 0 in project-a
         const canDiff = canonicalBrowser.search({ query: 'different' });
         const indDiff = await indexedBrowser.search({ query: 'different' });
         expect(indDiff).toEqual(canDiff);

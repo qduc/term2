@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../types.js';
-import type { SessionBrowser } from '../../services/conversation/session-browser.js';
+import type { Kind, SessionBrowser } from '../../services/conversation/session-browser.js';
 import { boundedJsonFailure, fitsSerializedText } from '../../utils/output/bounded-json.js';
 import { isScriptedToolCall, resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
 import {
@@ -14,6 +14,7 @@ import {
 const maxChars = z.number().int().min(512).max(12_000).optional();
 const limit = z.number().int().min(1).max(50).optional();
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
+const sessionKind = z.enum(['user', 'assistant', 'reasoning', 'system', 'tool', 'subagent'] satisfies Kind[]);
 
 export function createSessionBrowserToolDefinitions(browser: SessionBrowser): ToolDefinition[] {
   return [
@@ -26,14 +27,21 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
     ),
     definition(
       'session_search',
-      "Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript. Each match's `updatedAt` is the session's last-write timestamp, not per-message time.",
-      z.object({ query: z.string().refine((value) => /\S/.test(value)), limit, maxChars }).strict(),
+      'Search prior locally persisted session transcripts for the current project. Whitespace-separated query terms use OR matching, so prefer distinctive terms over broad words. Use `kinds: ["user", "assistant"]` to exclude noisy tool, reasoning, system, and subagent records when looking for conversation content. Without `kinds`, every projected record kind is searched. `total` is the number of ranked matches after the kind filter and before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript. Each match\'s `updatedAt` is the session\'s last-write timestamp, not per-message time.',
+      z
+        .object({
+          query: z.string().refine((value) => /\S/.test(value)),
+          kinds: z.array(sessionKind).min(1).max(6).optional(),
+          limit,
+          maxChars,
+        })
+        .strict(),
       (params) => browser.search(params),
       '{ results: { sessionId: string, shortRef: string, kind: string, messageIndex: number, snippet: { text: string, truncated: boolean }, updatedAt: string }[], scope: string, total: number, omitted: number, unavailable: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. On an initial read, `from: "end"` starts at the last `limit` projected records in chronological order (`limit` selects the tail region; without `from: "end"` the read starts at the first record); omit `cursor` with this option, then continue with the returned cursor and no `from`. `maxChars` may require continuation pages; `nextCursor` is returned only while forward content remains, so its absence after a tail read says nothing about earlier records. `total` is the projected record count for the whole session; `omitted` counts whole-session records not represented on this page for any reason — before the tail anchor, beyond `limit`, or awaiting continuation — unlike `session_list`/`session_search`, whose `omitted` counts only budget-dropped entries; a partial or resumed chunk still represents its record, so `total - omitted` records are represented here.',
+      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous ID or shortRef returned by `session_list`/`session_search`; never reconstruct an ID. Ambiguous prefixes return candidates and are never guessed. On an initial read, `from: "end"` starts at the last `limit` projected records in chronological order (`limit` selects the tail region; without `from: "end"` the read starts at the first record); omit `cursor` with this option, then continue with the returned cursor and no `from`. Cursors are process-local opaque handles: use exactly the `nextCursor` returned by the preceding page with the same `id`. Never invent, edit, or reuse a cursor from another read; after an invalid or stale cursor, restart without one. `maxChars` may require continuation pages; `nextCursor` is returned only while forward content remains, so its absence after a tail read says nothing about earlier records. `total` is the projected record count for the whole session; `omitted` counts whole-session records not represented on this page for any reason — before the tail anchor, beyond `limit`, or awaiting continuation — unlike `session_list`/`session_search`, whose `omitted` counts only budget-dropped entries; a partial or resumed chunk still represents its record, so `total - omitted` records are represented here.',
       z
         .object({ id, from: z.literal('end').optional(), cursor: z.string().optional(), limit, maxChars })
         .strict()

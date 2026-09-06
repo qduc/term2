@@ -175,6 +175,38 @@ it('projects replay messages, searches every kind, and pages oversized text with
   expect(first.charsUsed).toBe(JSON.stringify(first).length);
 });
 
+it('filters search matches by projected message kind before totals and limits', () => {
+  const id = 'filtered-search-session';
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+  writer.append({ type: 'user_message', message: { id: 'u', sender: 'user', text: 'shared needle from user' } });
+  writer.append({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'shared needle from assistant' }] },
+    state: { previousResponseId: null },
+  });
+  writer.append({
+    type: 'command_message',
+    message: {
+      id: 'c',
+      sender: 'command',
+      status: 'completed',
+      command: 'search command',
+      output: 'shared needle from tool output',
+    },
+  });
+  void writer.close();
+  appendEnvelope(id, 99, { type: 'future_provider_state' });
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const unfiltered: any = browser.search({ query: 'shared' });
+  expect(unfiltered.results.map((result: any) => result.kind)).toEqual(['user', 'assistant', 'tool']);
+
+  const conversationOnly: any = browser.search({ query: 'shared', kinds: ['user', 'assistant'], limit: 1 });
+  expect(conversationOnly.results.map((result: any) => result.kind)).toEqual(['user']);
+  expect(conversationOnly.total).toBe(2);
+});
+
 it('returns short opaque cursors and rejects malformed and stale handles', () => {
   writeSession('session-a', '/project', undefined, 'x'.repeat(900));
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
@@ -182,6 +214,7 @@ it('returns short opaque cursors and rejects malformed and stale handles', () =>
   expect(page.nextCursor).toMatch(/^c[0-9a-z]+$/);
   expect(page.nextCursor.length).toBeLessThanOrEqual(8);
   expect(browser.read({ id: 'session-a', cursor: 'bad' })).toMatchObject({ error: { code: 'invalid_cursor' } });
+  expect((browser.read({ id: 'session-a', cursor: 'bad' }) as any).error.message).toContain('Restart without a cursor');
   fs.appendFileSync(
     path.join(dir, 'session-a.jsonl'),
     `${JSON.stringify({
@@ -192,7 +225,7 @@ it('returns short opaque cursors and rejects malformed and stale handles', () =>
     })}\n`,
   );
   expect(browser.read({ id: 'session-a', cursor: page.nextCursor! })).toMatchObject({
-    error: { code: 'stale_cursor' },
+    error: { code: 'stale_cursor', message: expect.stringContaining('Restart without a cursor') },
   });
 });
 

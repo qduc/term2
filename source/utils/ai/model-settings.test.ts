@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
 import { MODEL_SETTING_CONFIGS, getModelSettingConfigForInput } from './model-settings.js';
 
-it('prioritizes the main and flat ancillary tiers while recognizing legacy commands', () => {
-  expect(MODEL_SETTING_CONFIGS.slice(0, 5).map(({ modelKey }) => modelKey)).toEqual([
+it('contains only the main and flat ancillary tiers', () => {
+  expect(MODEL_SETTING_CONFIGS.map(({ modelKey }) => modelKey)).toEqual([
     'agent.model',
     'agent.smartModel',
     'agent.balancedModel',
@@ -14,7 +14,5 @@ it('prioritizes the main and flat ancillary tiers while recognizing legacy comma
     providerKey: 'agent.cheapProvider',
     fallbackProviderKey: 'agent.provider',
   });
-  expect(getModelSettingConfigForInput('/settings agent.efficientModel ')).toMatchObject({
-    providerKey: 'agent.provider',
-  });
+  expect(getModelSettingConfigForInput('/settings agent.efficientModel ')).toBeUndefined();
 });

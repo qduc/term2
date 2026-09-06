@@ -189,3 +189,60 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
   'Favorite models — presentation aid and next --model resolution fast path': ['agent.favoriteModels'],
   'Model nicknames — presentation aid and next --model resolution fast path': ['agent.modelNicknames'],
 } as const;
+
+export interface SettingReadSite {
+  consumer: string;
+  sourceFile: string;
+  readExpression: string;
+  primaryKey: string;
+  fallbackKeys: string[];
+}
+
+export const LEGACY_FALLBACK_CHAINS: readonly SettingReadSite[] = [
+  {
+    consumer: 'Mentor tool capability check',
+    sourceFile: 'source/agent.ts',
+    readExpression: "settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel')",
+    primaryKey: 'agent.smartModel',
+    fallbackKeys: ['agent.mentorModel'],
+  },
+  {
+    consumer: 'Shell auto-approval evaluation model',
+    sourceFile: 'source/services/approval/shell-auto-approval-evaluator.ts',
+    readExpression:
+      "settingsService.get('agent.choreModel') ?? settingsService.get('agent.autoApproveModel') ?? choreModel.model",
+    primaryKey: 'agent.choreModel',
+    fallbackKeys: ['agent.autoApproveModel'],
+  },
+  {
+    consumer: 'Non-interactive auto-approval review model',
+    sourceFile: 'source/services/approval/non-interactive-approval-policy.ts',
+    readExpression:
+      "this.deps.settingsService.get('agent.choreModel') ?? this.deps.settingsService.get('agent.autoApproveModel')",
+    primaryKey: 'agent.choreModel',
+    fallbackKeys: ['agent.autoApproveModel'],
+  },
+  {
+    consumer: 'Search-replace file edit healing model',
+    sourceFile: 'source/tools/file/search-replace.ts',
+    readExpression:
+      "settingsService.get('agent.choreModel') ?? settingsService.get('tools.editHealingModel') ?? choreModel.model",
+    primaryKey: 'agent.choreModel',
+    fallbackKeys: ['tools.editHealingModel'],
+  },
+  {
+    consumer: 'Apply-patch file edit healing model',
+    sourceFile: 'source/tools/file/apply-patch.ts',
+    readExpression:
+      "settingsService.get('agent.choreModel') ?? settingsService.get('tools.editHealingModel') ?? choreModel.model",
+    primaryKey: 'agent.choreModel',
+    fallbackKeys: ['tools.editHealingModel'],
+  },
+  {
+    consumer: 'Ancillary model tier resolver (agent runtime)',
+    sourceFile: 'source/services/agent-runtime/model-resolver.ts',
+    readExpression: 'settings.getDynamic(`agent.${tier}Model`) ?? resolveLegacyTierModel(tier, settings)',
+    primaryKey: 'agent.${tier}Model',
+    fallbackKeys: ['agent.capableModel', 'agent.mentorModel', 'agent.efficientModel', 'agent.subagentExplorerModel'],
+  },
+] as const;

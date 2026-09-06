@@ -465,10 +465,7 @@ export function createSearchReplaceToolDefinition(deps: {
           if (enableEditHealing) {
             healingAttempted = true;
             const choreModel = resolveAncillaryModelTier('chore', settingsService);
-            const healingModel =
-              settingsService.get('agent.choreModel') ??
-              settingsService.get('tools.editHealingModel') ??
-              choreModel.model;
+            const healingModel = settingsService.get('agent.choreModel') ?? choreModel.model;
             const healingResult = await editHealing(
               operation,
               content,

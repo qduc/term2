@@ -83,7 +83,7 @@ it('approves non-shell tools when non-interactive auto-approval is enabled', asy
 it('fails closed for RED shell commands without consulting the evaluator', async () => {
   let chats = 0;
   const decision = await createPolicy({
-    settings: { 'agent.autoApproveModel': 'reviewer' },
+    settings: { 'agent.choreModel': 'reviewer' },
     chat: async () => {
       chats += 1;
       return '{"results":[{"approved":true,"reasoning":"safe"}]}';
@@ -118,7 +118,7 @@ it('rejects YELLOW shell commands without a configured auto-approve model', asyn
 
 it('uses the evaluator decision for YELLOW shell commands', async () => {
   const decision = await createPolicy({
-    settings: { 'agent.autoApproveModel': 'reviewer' },
+    settings: { 'agent.choreModel': 'reviewer' },
     chat: async () => '{"results":[{"approved":false,"reasoning":"requires confirmation"}]}',
   }).decide({
     autoApprove: true,
@@ -135,7 +135,7 @@ it('uses the evaluator decision for YELLOW shell commands', async () => {
 
 it('fails closed with the evaluator error reason for YELLOW shell commands', async () => {
   const decision = await createPolicy({
-    settings: { 'agent.autoApproveModel': 'reviewer' },
+    settings: { 'agent.choreModel': 'reviewer' },
     chat: async () => {
       throw new Error('reviewer unavailable');
     },

@@ -298,3 +298,17 @@ M2a is read-only and may run before D1-D4 are answered.
 - `docs/profiles/README.md` - owns `app.*Mode` retirement (D2).
 - `docs/plans/settings-field-editor.md` - not yet written; owns value-entry UX.
 
+## Decision Record (M2a - 2026-09-06)
+
+### D1 - Legacy role-key end state
+**Decision: Option (a) — Remove runtime fallback chains, migrate non-menu surfaces, and schedule schema field retirement.**
+- **Rationale**: `migrateLegacyAncillarySettings` already runs at startup to copy legacy role settings (`agent.capableModel`, `agent.mentorModel`, `agent.subagentWorkerModel`, `agent.subagentExplorerModel`, `agent.subagentLibrarianModel`, `agent.autoApproveModel`, `tools.editHealingModel`, etc.) into tier keys without overwriting tier values already present.
+- Consumers at runtime do not need secondary `?? settings.get('legacyKey')` fallback expressions once startup migration has completed.
+- Removing secondary read expressions allows promoting tier keys as sole readers, reducing divergence between the interactive menu and underlying runtime.
+- Deprecation window: Schema definitions and parser acceptance remain active for one deprecation window so pre-tier persisted settings files continue to parse and migrate seamlessly.
+
+### D4 - Text summary vocabulary
+**Decision: Switch `formatSettingsSummary` entries to tier-primary keys.**
+- **Rationale**: The interactive menu migrated to display tier models (`agent.smartModel`, `agent.balancedModel`, `agent.cheapModel`, `agent.choreModel`). The `/settings` text slash-command summary previously still printed legacy keys (`AGENT_EFFICIENT_MODEL`, `AGENT_CAPABLE_MODEL`, `AGENT_MENTOR_MODEL`) while omitting every tier key.
+- Aligning `formatSettingsSummary` with tier-primary keys establishes consistent vocabulary across all user-facing surfaces.
+

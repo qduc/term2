@@ -526,14 +526,8 @@ export function createApplyPatchToolDefinition(deps: {
 
                   try {
                     const choreModel = resolveAncillaryModelTier('chore', settingsService);
-                    const healingModel =
-                      settingsService.get('agent.choreModel') ??
-                      settingsService.get('tools.editHealingModel') ??
-                      choreModel.model;
-                    const providerId =
-                      settingsService.get('agent.choreProvider') ??
-                      settingsService.get('tools.editHealingProvider') ??
-                      choreModel.provider;
+                    const healingModel = settingsService.get('agent.choreModel') ?? choreModel.model;
+                    const providerId = settingsService.get('agent.choreProvider') ?? choreModel.provider;
 
                     const healingResult = await patchHealing(
                       filePath,

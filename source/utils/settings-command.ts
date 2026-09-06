@@ -100,14 +100,24 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.model.source,
     },
     {
-      key: SETTING_KEYS.AGENT_EFFICIENT_MODEL,
-      value: settings.agent.efficientModel.value,
-      source: settings.agent.efficientModel.source,
+      key: SETTING_KEYS.AGENT_SMART_MODEL,
+      value: settings.agent.smartModel.value,
+      source: settings.agent.smartModel.source,
     },
     {
-      key: SETTING_KEYS.AGENT_CAPABLE_MODEL,
-      value: settings.agent.capableModel.value,
-      source: settings.agent.capableModel.source,
+      key: SETTING_KEYS.AGENT_BALANCED_MODEL,
+      value: settings.agent.balancedModel.value,
+      source: settings.agent.balancedModel.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_CHEAP_MODEL,
+      value: settings.agent.cheapModel.value,
+      source: settings.agent.cheapModel.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_CHORE_MODEL,
+      value: settings.agent.choreModel.value,
+      source: settings.agent.choreModel.source,
     },
     {
       key: SETTING_KEYS.AGENT_REASONING_EFFORT,
@@ -118,26 +128,6 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       key: SETTING_KEYS.AGENT_TEMPERATURE,
       value: settings.agent.temperature.value,
       source: settings.agent.temperature.source,
-    },
-    {
-      key: SETTING_KEYS.AGENT_MENTOR_MODEL,
-      value: settings.agent.mentorModel.value,
-      source: settings.agent.mentorModel.source,
-    },
-    {
-      key: SETTING_KEYS.AGENT_MENTOR_PROVIDER,
-      value: settings.agent.mentorProvider.value,
-      source: settings.agent.mentorProvider.source,
-    },
-    {
-      key: SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
-      value: settings.agent.mentorReasoningEffort.value,
-      source: settings.agent.mentorReasoningEffort.source,
-    },
-    {
-      key: SETTING_KEYS.AGENT_MENTOR_SAMPLES,
-      value: settings.agent.mentorSamples.value,
-      source: settings.agent.mentorSamples.source,
     },
     {
       key: SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,

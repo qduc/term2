@@ -115,6 +115,7 @@ export interface ApplicationBoundaryCompaction {
   readonly compact: (input: {
     history: readonly ProviderInputItem[];
     automaticCompactionsThisRun: number;
+    lastCompletedInputTokens?: number;
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
   }) => Promise<
@@ -935,6 +936,7 @@ export class ApplicationRunLoop {
           const compaction = await options.boundaryCompaction.compact({
             history: state.history,
             automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
+            lastCompletedInputTokens: state.lastCompletedInputTokens,
             signal: options.signal,
             onStarted: (provider) =>
               outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),

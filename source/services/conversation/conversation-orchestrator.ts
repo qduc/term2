@@ -314,7 +314,7 @@ export function formatBackgroundSubagentNotifications(notifications: readonly Ba
           '',
           ...entriesFor(backgroundMoves, 'moved to'),
           '',
-          'The same execution continues running in the background. Plan the next step without waiting for it, and do not stop or relaunch it unless the task now requires that.',
+          "The same execution continues running in the background. The user moved it here so you can do something else instead of waiting for this. Keep working on the user's goal rather than blocking on this task; do not stop or relaunch the moved work, and do not treat it as finished — a completion notification will arrive when it settles.",
         ].join('\n'),
       );
     }

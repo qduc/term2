@@ -887,4 +887,38 @@ describe('code_context_search result cap for scripted calls', () => {
       expect(scripted.truncated).toBe(true);
     });
   });
+
+  it('rejects operational failures for scripted calls while returning string errors for direct calls', async () => {
+    await withFixture(async (searchTool) => {
+      const outlineTool = createReadCodeOutlineToolDefinition();
+
+      // Direct calls return formatted error strings
+      const directOutline = await outlineTool.execute({ path: 'nonexistent_file_12345.ts' }, {});
+      expect(typeof directOutline).toBe('string');
+      expect(directOutline).toContain('Error: File not found');
+
+      const directSearch = await searchTool.execute({ query_type: 'related', path: 'nonexistent_file_12345.ts' }, {});
+      expect(typeof directSearch).toBe('string');
+      expect(directSearch).toContain('Error: File not found');
+
+      // Scripted calls reject with Error
+      await expect(outlineTool.execute({ path: 'nonexistent_file_12345.ts' }, { scripted: true })).rejects.toThrow(
+        'File not found: nonexistent_file_12345.ts',
+      );
+
+      await expect(
+        searchTool.execute({ query_type: 'related', path: 'nonexistent_file_12345.ts' }, { scripted: true }),
+      ).rejects.toThrow();
+    });
+  });
+
+  it('declares in scriptedReturnShape that operational failures reject', () => {
+    const outlineTool = createReadCodeOutlineToolDefinition();
+    const searchTool = createCodeContextSearchToolDefinition();
+
+    expect(outlineTool.scriptedReturnShape).toContain('operational failures');
+    expect(outlineTool.scriptedReturnShape).toContain('reject');
+    expect(searchTool.scriptedReturnShape).toContain('operational failures');
+    expect(searchTool.scriptedReturnShape).toContain('reject');
+  });
 });

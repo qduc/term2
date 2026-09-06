@@ -432,7 +432,7 @@ describe('read_file scripted return shape', () => {
     }
   });
 
-  it('budgets the full envelope so JSON.stringify(scripted).length <= maxResultBytes with retrieval and Unicode', async () => {
+  it('budgets the full envelope so JSON.stringify(scripted) UTF-8 byteLength <= maxResultBytes with retrieval and Unicode', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-envelope-'));
     try {
       const target = path.join(dir, 'unicode.txt');
@@ -452,9 +452,9 @@ describe('read_file scripted return shape', () => {
       expect(typeof scripted.content).toBe('string');
       expect(typeof scripted.fullOutputPath).toBe('string');
 
-      // The full envelope serialized as JSON MUST fit within the configured budget
+      // The full envelope serialized as JSON MUST fit within the configured UTF-8 byte budget
       const encoded = JSON.stringify(scripted);
-      expect(encoded.length).toBeLessThanOrEqual(budget);
+      expect(Buffer.byteLength(encoded, 'utf8')).toBeLessThanOrEqual(budget);
 
       // The saved artifact must contain the full untruncated content for retrieval
       const artifactContent = await fs.readFile(scripted.fullOutputPath, 'utf8');
@@ -462,6 +462,73 @@ describe('read_file scripted return shape', () => {
 
       // Verify no broken unicode / unpaired surrogate at the end of truncated content
       expect(/[\uD800-\uDBFF]$/.test(scripted.content)).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('enforces UTF-8 byte budget on Unicode-heavy CJK content (not UTF-16 characters)', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-cjk-'));
+    try {
+      const target = path.join(dir, 'cjk.txt');
+      // Thousands of 3-byte CJK characters:
+      const fullText = '界'.repeat(3000);
+      await fs.writeFile(target, fullText);
+
+      const budget = 1_000;
+      const tool = createReadFileToolDefinition({ maxResultBytes: budget }) as any;
+      const scripted = await tool.execute({ path: target }, { scripted: true });
+
+      expect(scripted.truncated).toBe(true);
+      const encoded = JSON.stringify(scripted);
+      // Byte length in UTF-8 must be <= budget
+      expect(Buffer.byteLength(encoded, 'utf8')).toBeLessThanOrEqual(budget);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws an error when maxResultBytes is too small to fit the minimum envelope', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-too-small-'));
+    try {
+      const target = path.join(dir, 'file.txt');
+      await fs.writeFile(target, 'some content');
+
+      // 10 bytes is smaller than {"path":"...","totalLines":1,"fromLine":1,"toLine":1,"content":"","truncated":true}
+      const budget = 10;
+      const tool = createReadFileToolDefinition({ maxResultBytes: budget }) as any;
+      await expect(tool.execute({ path: target }, { scripted: true })).rejects.toThrow(
+        /Result envelope exceeds budget of 10 bytes/,
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits fullOutputPath when envelope with artifact path would exceed budget but minimal envelope fits', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-no-artifact-budget-'));
+    try {
+      const target = path.join(dir, 'short.txt');
+      await fs.writeFile(target, 'a'.repeat(200));
+
+      const minimalEnvelope = {
+        path: target,
+        totalLines: 1,
+        fromLine: 1,
+        toLine: 1,
+        content: '',
+        truncated: true,
+      };
+      const minBytes = Buffer.byteLength(JSON.stringify(minimalEnvelope), 'utf8');
+      // Set budget just enough for minimal envelope + 5 bytes, but not enough for ~70 bytes of fullOutputPath
+      const budget = minBytes + 5;
+      const tool = createReadFileToolDefinition({ maxResultBytes: budget }) as any;
+      const scripted = await tool.execute({ path: target }, { scripted: true });
+
+      expect(scripted.truncated).toBe(true);
+      expect(scripted.fullOutputPath).toBeUndefined();
+      const encoded = JSON.stringify(scripted);
+      expect(Buffer.byteLength(encoded, 'utf8')).toBeLessThanOrEqual(budget);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

@@ -130,7 +130,7 @@ export const createReadCodeOutlineToolDefinition = (
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     scriptedReturnShape:
-      'string: formatted code outline of the target file; "WARNING target_too_large", an empty-outline note, or "Error: \u2026" on failure',
+      'string: formatted code outline of the target file, "WARNING target_too_large", or an empty-outline note; operational failures (e.g. missing file) reject so handle with try/catch or Promise.allSettled',
     parameters: readCodeOutlineParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,
@@ -199,7 +199,7 @@ export const createCodeContextSearchToolDefinition = (
   return {
     name: 'code_context_search',
     scriptedReturnShape:
-      "{ queryType: 'symbol'|'related', matches|results: object[], truncated: boolean, partial: boolean }",
+      "{ queryType: 'symbol'|'related', matches|results: object[], truncated: boolean, partial: boolean }; operational failures reject so handle with try/catch or Promise.allSettled",
     description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
     canRequireApproval: true,

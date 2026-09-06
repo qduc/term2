@@ -289,7 +289,7 @@ export const createReadFileToolDefinition = (
             truncated: false,
           };
 
-          if (JSON.stringify(fullEnvelope).length <= maxBudget) {
+          if (Buffer.byteLength(JSON.stringify(fullEnvelope), 'utf8') <= maxBudget) {
             return fullEnvelope;
           }
 
@@ -300,7 +300,15 @@ export const createReadFileToolDefinition = (
             // Artifact saving failure leaves fullOutputPath undefined
           }
 
-          const template = {
+          let template: {
+            path: string;
+            totalLines: number;
+            fromLine: number;
+            toLine: number;
+            content: string;
+            truncated: boolean;
+            fullOutputPath?: string;
+          } = {
             path: filePath,
             totalLines,
             fromLine,
@@ -309,6 +317,25 @@ export const createReadFileToolDefinition = (
             truncated: true,
             ...(artifactPath ? { fullOutputPath: artifactPath } : {}),
           };
+
+          // If template with fullOutputPath exceeds budget, drop fullOutputPath
+          if (Buffer.byteLength(JSON.stringify(template), 'utf8') > maxBudget && artifactPath) {
+            template = {
+              path: filePath,
+              totalLines,
+              fromLine,
+              toLine,
+              content: '',
+              truncated: true,
+            };
+          }
+
+          const minBytes = Buffer.byteLength(JSON.stringify(template), 'utf8');
+          if (minBytes > maxBudget) {
+            throw new Error(
+              `Result envelope exceeds budget of ${maxBudget} bytes (minimum required: ${minBytes} bytes).`,
+            );
+          }
 
           let low = 0;
           let high = rawContent.length;
@@ -320,7 +347,7 @@ export const createReadFileToolDefinition = (
             if (/[\uD800-\uDBFF]$/.test(candidate)) {
               candidate = candidate.slice(0, -1);
             }
-            if (JSON.stringify({ ...template, content: candidate }).length <= maxBudget) {
+            if (Buffer.byteLength(JSON.stringify({ ...template, content: candidate }), 'utf8') <= maxBudget) {
               bestSlice = candidate;
               low = mid + 1;
             } else {
@@ -328,7 +355,10 @@ export const createReadFileToolDefinition = (
             }
           }
 
-          while (bestSlice.length > 0 && JSON.stringify({ ...template, content: bestSlice }).length > maxBudget) {
+          while (
+            bestSlice.length > 0 &&
+            Buffer.byteLength(JSON.stringify({ ...template, content: bestSlice }), 'utf8') > maxBudget
+          ) {
             bestSlice = bestSlice.slice(0, -1);
             if (/[\uD800-\uDBFF]$/.test(bestSlice)) {
               bestSlice = bestSlice.slice(0, -1);

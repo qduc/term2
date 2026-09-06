@@ -422,49 +422,6 @@ const serializeResult = async (
       };
     }
 
-    // If result is a plain object with a string property (e.g. 'content'),
-    // truncate that string property so the structured object stays an object within the limit.
-    if (result && typeof result === 'object' && !Array.isArray(result)) {
-      const record = { ...(result as Record<string, unknown>) };
-      const stringKeys = Object.keys(record).filter((k) => typeof record[k] === 'string');
-      stringKeys.sort((a, b) => {
-        if (a === 'content') return -1;
-        if (b === 'content') return 1;
-        return ((record[b] as string)?.length ?? 0) - ((record[a] as string)?.length ?? 0);
-      });
-
-      if (stringKeys.length > 0) {
-        const targetKey = stringKeys[0];
-        const originalStr = record[targetKey] as string;
-        let low = 0;
-        let high = originalStr.length;
-        let bestSlice = '';
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2);
-          let candidate = originalStr.slice(0, mid);
-          if (/[\uD800-\uDBFF]$/.test(candidate)) candidate = candidate.slice(0, -1);
-          record[targetKey] = candidate;
-          if (JSON.stringify(record).length <= limit) {
-            bestSlice = candidate;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
-        }
-        if (bestSlice.length > 0 || JSON.stringify({ ...record, [targetKey]: '' }).length <= limit) {
-          record[targetKey] = bestSlice;
-          while (bestSlice.length > 0 && JSON.stringify(record).length > limit) {
-            bestSlice = bestSlice.slice(0, -1);
-            if (/[\uD800-\uDBFF]$/.test(bestSlice)) bestSlice = bestSlice.slice(0, -1);
-            record[targetKey] = bestSlice;
-          }
-          if (JSON.stringify(record).length <= limit) {
-            return { ok: true, result: record as unknown as JsonValue };
-          }
-        }
-      }
-    }
-
     let retrieval = '';
     try {
       const artifactPath = await saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' });

@@ -1710,7 +1710,7 @@ describe('run_code M5: persisted command-message telemetry', () => {
     }
   });
 
-  it('structured tool results maintain object type across the transport budget boundary (-1, 0, 1 deltas)', async () => {
+  it('structured tool results maintain object type within transport budget, and reject oversized delivery without field shrinking', async () => {
     const limit = RUN_CODE_LIMITS.maxResultChars;
     const schema = z.object({ delta: z.number() });
     const specimen = {
@@ -1733,13 +1733,77 @@ describe('run_code M5: persisted command-message telemetry', () => {
     });
 
     const output = await tool.execute({
-      code: 'const rows = []; for (const delta of [-1, 0, 1]) { const r = await tools.specimen({ delta }); let parseable = true; if (typeof r === "string") { try { JSON.parse(r); } catch { parseable = false; } } rows.push({ delta, type: typeof r, hasContent: typeof r.content === "string", parseable }); } return rows;',
+      code: `
+        const rows = [];
+        for (const delta of [-1, 0, 1]) {
+          try {
+            const r = await tools.specimen({ delta });
+            rows.push({ delta, status: 'fulfilled', type: typeof r, hasContent: typeof r?.content === 'string' });
+          } catch (err) {
+            rows.push({ delta, status: 'rejected', error: err.message });
+          }
+        }
+        return rows;
+      `,
     } as any);
 
     const text = String(output);
     const rows = JSON.parse(text.slice(text.indexOf('Result:\n') + 8).split('\n\n')[0]);
     expect(rows).toHaveLength(3);
-    expect(rows.every((row: any) => row.type === 'object' && row.hasContent)).toBe(true);
+    // delta = -1 and 0 fit within the budget and maintain their object structure
+    expect(rows[0]).toEqual({ delta: -1, status: 'fulfilled', type: 'object', hasContent: true });
+    expect(rows[1]).toEqual({ delta: 0, status: 'fulfilled', type: 'object', hasContent: true });
+    // delta = 1 exceeds the budget: it must reject with retrieval artifact, not slice into a string or shrink fields
+    expect(rows[2].status).toBe('rejected');
+    expect(rows[2].error).toContain('result exceeded');
+    expect(rows[2].error).toContain('Full output saved to:');
+    expect(rows[2].error).toContain('tool effects have already completed');
+  });
+
+  it('does not silently shrink structured fields on oversized objects, preserving metadata consistency and rejecting with retrieval', async () => {
+    const limit = RUN_CODE_LIMITS.maxResultChars;
+    const metadataSpecimen = {
+      name: 'metadata_specimen',
+      description: 'Object with metadata and content',
+      parameters: z.object({}),
+      parallelSafe: true,
+      canRequireApproval: false,
+      needsApproval: () => false,
+      execute: () => ({
+        content: 'x'.repeat(limit),
+        contentLength: limit,
+        truncated: false,
+      }),
+    };
+    const policy = new ToolApprovalPolicyRegistry();
+    policy.register({
+      toolName: metadataSpecimen.name,
+      parameters: metadataSpecimen.parameters,
+      needsApproval: metadataSpecimen.needsApproval,
+    });
+    const tool = createRunCodeToolDefinition({
+      loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+      getToolRegistry: () => [metadataSpecimen] as any,
+      approvalPolicyRegistry: policy,
+    });
+
+    const output = await tool.execute({
+      code: `
+        try {
+          const r = await tools.metadata_specimen({});
+          return { caught: false, r };
+        } catch (err) {
+          return { caught: true, message: err.message };
+        }
+      `,
+    } as any);
+
+    const text = String(output);
+    const parsed = JSON.parse(text.slice(text.indexOf('Result:\n') + 8).split('\n\n')[0]);
+    expect(parsed.caught).toBe(true);
+    expect(parsed.message).toContain('result exceeded');
+    expect(parsed.message).toContain('Full output saved to:');
+    expect(parsed.message).toContain('tool effects have already completed');
   });
 
   it('generic overflow rejects with catchable error, retrieval artifact, and notes effects completed without partial JSON', async () => {

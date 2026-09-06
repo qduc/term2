@@ -487,6 +487,10 @@ export const useConversation = ({
   );
 
   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);
+  const resetConversationPresentation = useCallback(
+    () => orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true }),
+    [orchestrator],
+  );
 
   const restoreConversation = useCallback(
     (
@@ -669,6 +673,7 @@ export const useConversation = ({
     handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
+    resetConversationPresentation,
     restoreConversation,
     stopProcessing: stopProcessingWithNotice,
     cancelAskUser,

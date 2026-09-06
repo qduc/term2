@@ -191,4 +191,105 @@ describe('conversationUIReducer - multi-select bug fix', () => {
     expect(flags.askUserAnswers.length).toBe(1);
     expect(flags.currentAskUserQuestionIndex).toBe(1);
   });
+
+  it('resets composerEntryMode and waitingForAskUserAnswer when snapshot advances to next question', () => {
+    const approval: ApprovalDescriptor = {
+      agentName: 'Agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({
+        questions: [
+          { question: 'Q1', options: [{ label: 'A' }, { label: 'B' }] },
+          { question: 'Q2', options: [{ label: 'X' }, { label: 'Y' }] },
+        ],
+      }),
+      rawInterruption: { type: 'ask_user' },
+    };
+
+    let state = createInitialUIState(null);
+
+    // Initial snapshot for Q1
+    state = conversationUIReducer(state, {
+      type: 'interaction/snapshot',
+      snapshot: {
+        interactionId: 42,
+        approval,
+        askUserAnswers: [],
+        currentAskUserQuestionIndex: 0,
+      },
+    });
+
+    // User chooses to type a custom answer for Q1
+    state = conversationUIReducer(state, {
+      type: 'interaction/composer_entry',
+      mode: 'ask_user_answer',
+    });
+
+    let flags = getConversationUIFlags(state);
+    expect(flags.waitingForAskUserAnswer).toBe(true);
+
+    // Q1 custom answer submitted -> snapshot updates to Q2 with same interactionId
+    state = conversationUIReducer(state, {
+      type: 'interaction/snapshot',
+      snapshot: {
+        interactionId: 42,
+        approval,
+        askUserAnswers: ['custom answer for Q1'],
+        currentAskUserQuestionIndex: 1,
+      },
+    });
+
+    // BUG FIX VERIFICATION:
+    // When advancing to Q2, composerEntryMode should be reset to 'none' and waitingForAskUserAnswer must be false
+    // so the custom answer input box disappears and arrow keys work for Q2 options
+    flags = getConversationUIFlags(state);
+    expect(flags.currentAskUserQuestionIndex).toBe(1);
+    expect(flags.waitingForAskUserAnswer).toBe(false);
+    expect(flags.waitingForApproval).toBe(true);
+  });
+
+  it('resets composerEntryMode when navigating back to previous question', () => {
+    const approval: ApprovalDescriptor = {
+      agentName: 'Agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({
+        questions: [
+          { question: 'Q1', options: [{ label: 'A' }, { label: 'B' }] },
+          { question: 'Q2', options: [{ label: 'X' }, { label: 'Y' }] },
+        ],
+      }),
+      rawInterruption: { type: 'ask_user' },
+    };
+
+    let state = createInitialUIState(null);
+
+    state = conversationUIReducer(state, {
+      type: 'interaction/snapshot',
+      snapshot: {
+        interactionId: 42,
+        approval,
+        askUserAnswers: ['answer 1'],
+        currentAskUserQuestionIndex: 1,
+      },
+    });
+
+    // User starts typing custom answer for Q2
+    state = conversationUIReducer(state, {
+      type: 'interaction/composer_entry',
+      mode: 'ask_user_answer',
+    });
+    expect(getConversationUIFlags(state).waitingForAskUserAnswer).toBe(true);
+
+    // User navigates back to Q1
+    state = conversationUIReducer(state, {
+      type: 'interaction/snapshot',
+      snapshot: {
+        interactionId: 42,
+        approval,
+        askUserAnswers: [],
+        currentAskUserQuestionIndex: 0,
+      },
+    });
+
+    expect(getConversationUIFlags(state).waitingForAskUserAnswer).toBe(false);
+  });
 });

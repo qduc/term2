@@ -550,54 +550,6 @@ export const useConversation = ({
   const getSubagentUsage = useCallback(() => orchestrator.getSubagentUsage(), [orchestrator]);
   const getCostSummary = useCallback(() => orchestrator.getCostSummary(), [orchestrator]);
 
-  const goToPreviousQuestion = useCallback(() => orchestrator.goToPreviousQuestion(), [orchestrator]);
-
-  const goToNextQuestion = useCallback(() => orchestrator.goToNextQuestion(), [orchestrator]);
-
-  const submitApprovalDecision = useCallback(
-    async (answer?: string) => {
-      const normalized = normalizeApprovalDecision(answer);
-      if (normalized.approvalAnswer !== undefined) {
-        replaceInput?.('');
-        await handleApprovalDecision(normalized.answer, undefined, normalized.approvalAnswer);
-        return;
-      }
-
-      await handleApprovalDecision(normalized.answer);
-    },
-    [handleApprovalDecision, replaceInput],
-  );
-
-  const submitConversationTurn = useCallback(
-    async (turn: UserTurn) => {
-      const route = routeConversationTurnSubmission({
-        text: turn.text,
-        waitingForAskUserAnswer,
-        waitingForRejectionReason,
-        waitingForApproval,
-      });
-
-      if (route.kind === 'blocked') {
-        return true;
-      }
-
-      if (route.kind === 'approval_answer') {
-        replaceInput?.('');
-        await handleApprovalDecision(route.answer, undefined, route.approvalAnswer);
-        return true;
-      }
-
-      if (route.kind === 'rejection_reason') {
-        replaceInput?.('');
-        await handleApprovalDecision('n', route.reason);
-        return true;
-      }
-
-      return false;
-    },
-    [handleApprovalDecision, replaceInput, waitingForApproval, waitingForAskUserAnswer, waitingForRejectionReason],
-  );
-
   // ── Compatibility wrappers (pure UI state, no orchestration) ────────────
   const onTypeAnswer = useCallback(() => {
     dispatch({ type: 'interaction/composer_entry', mode: 'ask_user_answer' });
@@ -629,6 +581,71 @@ export const useConversation = ({
   const setWaitingForAskUserAnswer = useCallback((value: boolean) => {
     dispatch({ type: 'interaction/composer_entry', mode: value ? 'ask_user_answer' : 'none' });
   }, []);
+
+  const goToPreviousQuestion = useCallback(() => {
+    setWaitingForAskUserAnswer(false);
+    return orchestrator.goToPreviousQuestion();
+  }, [orchestrator, setWaitingForAskUserAnswer]);
+
+  const goToNextQuestion = useCallback(() => {
+    setWaitingForAskUserAnswer(false);
+    return orchestrator.goToNextQuestion();
+  }, [orchestrator, setWaitingForAskUserAnswer]);
+
+  const submitApprovalDecision = useCallback(
+    async (answer?: string) => {
+      const normalized = normalizeApprovalDecision(answer);
+      if (normalized.approvalAnswer !== undefined) {
+        replaceInput?.('');
+        setWaitingForAskUserAnswer(false);
+        await handleApprovalDecision(normalized.answer, undefined, normalized.approvalAnswer);
+        return;
+      }
+
+      await handleApprovalDecision(normalized.answer);
+    },
+    [handleApprovalDecision, replaceInput, setWaitingForAskUserAnswer],
+  );
+
+  const submitConversationTurn = useCallback(
+    async (turn: UserTurn) => {
+      const route = routeConversationTurnSubmission({
+        text: turn.text,
+        waitingForAskUserAnswer,
+        waitingForRejectionReason,
+        waitingForApproval,
+      });
+
+      if (route.kind === 'blocked') {
+        return true;
+      }
+
+      if (route.kind === 'approval_answer') {
+        replaceInput?.('');
+        setWaitingForAskUserAnswer(false);
+        await handleApprovalDecision(route.answer, undefined, route.approvalAnswer);
+        return true;
+      }
+
+      if (route.kind === 'rejection_reason') {
+        replaceInput?.('');
+        setWaitingForRejectionReason(false);
+        await handleApprovalDecision('n', route.reason);
+        return true;
+      }
+
+      return false;
+    },
+    [
+      handleApprovalDecision,
+      replaceInput,
+      setWaitingForAskUserAnswer,
+      setWaitingForRejectionReason,
+      waitingForApproval,
+      waitingForAskUserAnswer,
+      waitingForRejectionReason,
+    ],
+  );
 
   // ── Return object (identical shape to the old monolith) ─────────────────
   return {

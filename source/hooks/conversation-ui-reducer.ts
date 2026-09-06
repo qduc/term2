@@ -388,15 +388,18 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       return {
         ...state,
         turnPhase: isProcessingPhase(state.turnPhase) ? { kind: 'processing' } : { kind: 'idle' },
+        composerEntryMode: 'none',
       };
 
     case 'interaction/snapshot': {
-      const sameInteraction =
-        action.snapshot !== null && state.pendingInteraction?.interactionId === action.snapshot.interactionId;
+      const sameInteractionQuestion =
+        action.snapshot !== null &&
+        state.pendingInteraction?.interactionId === action.snapshot.interactionId &&
+        state.pendingInteraction?.currentAskUserQuestionIndex === action.snapshot.currentAskUserQuestionIndex;
       return {
         ...state,
         pendingInteraction: action.snapshot,
-        composerEntryMode: sameInteraction ? state.composerEntryMode : 'none',
+        composerEntryMode: sameInteractionQuestion ? state.composerEntryMode : 'none',
       };
     }
 

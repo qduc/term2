@@ -141,6 +141,8 @@ export class AgentClient {
   #contextMilestoneReminder = new ContextMilestoneReminder();
   #sessionRolloverRequest: PendingSessionRolloverRequest | null = null;
   #lastCompletedProviderInputTokens?: number;
+  #blockedCompactionRearmAtEstimatedTokens?: number;
+  #blockedCompactionUserTurnCount?: number;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -264,11 +266,13 @@ export class AgentClient {
       compact: async ({
         history,
         automaticCompactionsThisRun,
+        lastCompletedInputTokens,
         signal,
         onStarted,
       }: {
         history: readonly ProviderInputItem[];
         automaticCompactionsThisRun: number;
+        lastCompletedInputTokens?: number;
         signal?: AbortSignal;
         onStarted: (provider: string) => void;
       }) => {
@@ -321,6 +325,20 @@ export class AgentClient {
           },
         });
         const checkpoint = history.find(isLocalContextSummary)?.contextSummary;
+        const genuineUserTurns = history.filter((item) => {
+          const message = projectConversationMessage(item);
+          return message?.role === 'user' && !message.isSynthetic;
+        }).length;
+        const checkpointIndex = history.findIndex(isLocalContextSummary);
+        const hasCompleteNewUserTurn =
+          this.#blockedCompactionUserTurnCount !== undefined
+            ? genuineUserTurns > this.#blockedCompactionUserTurnCount
+            : checkpointIndex >= 0
+            ? history.slice(checkpointIndex + 1).some((item) => {
+                const message = projectConversationMessage(item);
+                return message?.role === 'user' && !message.isSynthetic;
+              })
+            : true;
         let outcome;
         try {
           outcome = await compactor.compactAtBoundary({
@@ -337,8 +355,10 @@ export class AgentClient {
             compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
             manual: false,
             automaticCompactionsThisRun,
-            hasCompleteNewUserTurn: true,
+            hasCompleteNewUserTurn,
             checkpoint: checkpoint ? { rearmAtEstimatedTokens: checkpoint.rearmAtEstimatedTokens } : undefined,
+            rearmAtEstimatedTokens: this.#blockedCompactionRearmAtEstimatedTokens,
+            lastCompletedInputTokens,
             signal,
           });
         } catch (error) {
@@ -359,11 +379,16 @@ export class AgentClient {
           // A blocked outcome leaves context growing, so it must be visible in
           // the log even though it is not a failure the user can act on.
           if (outcome.kind === 'blocked') {
+            if (outcome.rearmAtTokens !== undefined) {
+              this.#blockedCompactionRearmAtEstimatedTokens = outcome.rearmAtTokens;
+              this.#blockedCompactionUserTurnCount = genuineUserTurns;
+            }
             this.#logger.warn('Local context compaction blocked; continuing with uncompacted history', {
               provider,
               model,
               reason: outcome.reason,
               renderedInputTokens: outcome.estimate.renderedInputTokens,
+              ...(outcome.rearmAtTokens !== undefined ? { rearmAtEstimatedTokens: outcome.rearmAtTokens } : {}),
             });
             if (outcome.reason === 'no_complete_cold_turn') {
               return {
@@ -376,6 +401,8 @@ export class AgentClient {
           }
           return { kind: 'unchanged' as const };
         }
+        this.#blockedCompactionRearmAtEstimatedTokens = undefined;
+        this.#blockedCompactionUserTurnCount = undefined;
         if (outcome.droppedOpaqueItems > 0) {
           this.#logger.debug('Local context compaction dropped provider-opaque items with their cold turns', {
             provider,
@@ -1025,10 +1052,14 @@ export class AgentClient {
     this.#chatService.clearModelCache();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
+    this.#blockedCompactionRearmAtEstimatedTokens = undefined;
+    this.#blockedCompactionUserTurnCount = undefined;
   }
 
   clearConversations(): void {
     this.#applicationRunLoop.abort();
+    this.#blockedCompactionRearmAtEstimatedTokens = undefined;
+    this.#blockedCompactionUserTurnCount = undefined;
     getProvider(this.#agentConfig.getProvider())?.clearConversations?.();
     this.#agentConfig.refreshAgent();
     this.#logger.debug('Conversation and agent refreshed');

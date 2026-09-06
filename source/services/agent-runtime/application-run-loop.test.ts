@@ -360,6 +360,53 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
     expect(compact).not.toHaveBeenCalled();
   });
 
+  it('passes lastCompletedInputTokens to boundaryCompaction.compact on subsequent boundaries', async () => {
+    const compact = vi.fn(async () => ({ kind: 'unchanged' as const }));
+    let requests = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        requests += 1;
+        if (requests === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'step-1',
+            output: [{ type: 'tool_call', id: 'call-1', name: 'noop', arguments: '{}' }],
+            usage: { inputTokens: 42_000, outputTokens: 100 },
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'step-2',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'all done' }] }],
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'noop',
+      description: 'noop',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'ok',
+      formatCommandMessage: () => [],
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      { ...agent, tools: [tool] },
+      [{ role: 'user', type: 'message', content: 'run' }],
+      {
+        boundaryCompaction: { compact },
+      },
+    );
+
+    await stream.completed;
+
+    expect(requests).toBe(2);
+    expect(compact).toHaveBeenCalledTimes(2);
+    const calls = compact.mock.calls as unknown as Array<[{ lastCompletedInputTokens?: number }]>;
+    expect(calls[0]?.[0]?.lastCompletedInputTokens).toBeUndefined();
+    expect(calls[1]?.[0]?.lastCompletedInputTokens).toBe(42_000);
+  });
+
   it('dispatches the replacement input, clears chaining, and exposes replacement history', async () => {
     let request: any;
     const model: StreamedModelTurn = {

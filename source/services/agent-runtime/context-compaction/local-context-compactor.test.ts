@@ -273,3 +273,69 @@ it('uses the existing local checkpoint as the running-summary seed on a later co
   const firstCall = generate.mock.calls[0] as unknown as [{ transcriptChunk: string }];
   expect(firstCall[0].transcriptChunk).not.toContain('contextSummary');
 });
+
+it('returns rearmAtTokens when automatic compaction is blocked so caller can back off', async () => {
+  const generate = vi.fn();
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(2, 25_000),
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: 10_000,
+    manual: false,
+    automaticCompactionsThisRun: 0,
+    hasCompleteNewUserTurn: true,
+  });
+
+  expect(outcome.kind).toBe('blocked');
+  if (outcome.kind !== 'blocked') return;
+  expect(outcome.reason).toBe('no_complete_cold_turn');
+  expect(outcome.rearmAtTokens).toBeGreaterThan(outcome.estimate.renderedInputTokens);
+  expect(outcome.rearmAtTokens).toBeGreaterThanOrEqual(outcome.estimate.renderedInputTokens + 8_000);
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it('defers with hysteresis when rearmAtEstimatedTokens is passed and no new user turn arrived', async () => {
+  const generate = vi.fn();
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(2, 25_000),
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: 10_000,
+    manual: false,
+    automaticCompactionsThisRun: 0,
+    hasCompleteNewUserTurn: false,
+    rearmAtEstimatedTokens: 50_000,
+  });
+
+  expect(outcome).toMatchObject({ kind: 'deferred', reason: 'hysteresis' });
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it('does not trigger automatic compaction when lastCompletedInputTokens is below threshold', async () => {
+  const generate = vi.fn();
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(3, 100),
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: 50_000,
+    manual: false,
+    automaticCompactionsThisRun: 0,
+    hasCompleteNewUserTurn: true,
+    lastCompletedInputTokens: 20_000,
+  });
+
+  expect(outcome.kind).toBe('not_needed');
+  expect(generate).not.toHaveBeenCalled();
+});

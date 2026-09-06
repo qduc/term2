@@ -456,6 +456,80 @@ describe('AgentClient application-run-loop execution', () => {
     nativeInstance.dispose();
   });
 
+  it('re-arms on blocked automatic attempts and does not repeat compaction warning on subsequent boundaries in the same turn', async () => {
+    const provider = `blocked-compaction-rearm-${Date.now()}`;
+    providers.add(provider);
+    const warned: Array<{ message: string; meta?: any }> = [];
+    const testLogger: ILoggingService = {
+      ...logger,
+      warn: (message, meta) => void warned.push({ message, meta }),
+    };
+    let requests = 0;
+    registerProvider({
+      id: provider,
+      label: 'Blocked compaction rearm test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          requests += 1;
+          if (requests === 1) {
+            yield {
+              type: 'completion',
+              responseId: 'turn-1',
+              output: [{ type: 'tool_call', id: 'call_1', name: 'echo', arguments: '{"text":"hi"}' }],
+            };
+            return;
+          }
+          yield {
+            type: 'completion',
+            responseId: 'turn-2',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const echoTool: AnyToolDefinition = {
+      name: 'echo',
+      description: 'echo',
+      parameters: z.object({ text: z.string() }),
+      needsApproval: () => false,
+      execute: async () => 'echoed',
+      formatCommandMessage: () => [],
+    };
+    const instance = new AgentClient({
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [echoTool] },
+      deps: {
+        logger: testLogger,
+        settings: makeSettings(provider, {
+          'agent.contextCompaction.enabled': true,
+          'agent.contextCompaction.mode': 'auto',
+          'agent.contextCompaction.compactThreshold': 0.8,
+          'agent.contextCompaction.compactThresholdTokens': 1_000,
+        }),
+        sessionContextService,
+      },
+      toolOwnership: new ToolOwnershipRegistry(),
+    } as any);
+
+    const input = [
+      { role: 'user' as const, type: 'message' as const, content: `one-${'x'.repeat(10_000)}` },
+      { role: 'assistant' as const, type: 'message' as const, content: 'one answer' },
+      { role: 'user' as const, type: 'message' as const, content: 'two' },
+    ];
+
+    const stream = await instance.startStream(input);
+    await stream.completed;
+
+    expect(requests).toBe(2);
+    const compactionBlockedWarns = warned.filter((w) => w.message.includes('Local context compaction blocked'));
+    expect(compactionBlockedWarns).toHaveLength(1);
+    expect(compactionBlockedWarns[0].meta).toMatchObject({
+      reason: 'no_complete_cold_turn',
+      rearmAtEstimatedTokens: expect.any(Number),
+    });
+    instance.dispose();
+  });
+
   it('fails with a typed error instead of dispatching when the protected hot tail cannot fit', async () => {
     const provider = `local-compaction-hard-fit-${Date.now()}`;
     providers.add(provider);

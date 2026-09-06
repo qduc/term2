@@ -6,6 +6,7 @@ import {
   rearmAtTokens,
   resolveCompactionThreshold,
   serializeColdPrefix,
+  shouldDeferAutomaticCompaction,
 } from './index.js';
 
 describe('resolveCompactionThreshold', () => {
@@ -107,4 +108,96 @@ it('truncates old tool payloads for summarizer input without mutating source his
 it('rearms with the larger of 8000 tokens or ten percent of threshold', () => {
   expect(rearmAtTokens(2_000, 60_000)).toBe(10_000);
   expect(rearmAtTokens(2_000, 100_000)).toBe(12_000);
+});
+
+it('estimates context without inflating from internal bookkeeping fields or duplicate reasoning', () => {
+  const baseHistory: ProviderInputItem[] = [
+    { role: 'user', type: 'message', content: 'hello' },
+    {
+      type: 'reasoning',
+      text: 'thinking-'.repeat(200),
+    },
+    {
+      type: 'function_call',
+      callId: 'call-1',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'cat ' + 'x'.repeat(4_000) }),
+    },
+    {
+      type: 'function_call_result',
+      callId: 'call-1',
+      name: 'shell',
+      output: 'result-output-'.repeat(500),
+    },
+  ];
+  const historyWithDuplicates: ProviderInputItem[] = [
+    { role: 'user', type: 'message', content: 'hello' },
+    {
+      type: 'reasoning',
+      text: 'thinking-'.repeat(200),
+      providerMetadata: { reasoning_content: 'thinking-'.repeat(200) },
+    },
+    {
+      type: 'provider_opaque',
+      provider: 'deepseek',
+      item: { reasoning_content: 'thinking-'.repeat(200) },
+    },
+    {
+      type: 'function_call',
+      callId: 'call-1',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'cat ' + 'x'.repeat(4_000) }),
+      providerItem: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'cat ' + 'x'.repeat(4_000) }),
+      },
+      rawItem: { foo: 'x'.repeat(4_000) },
+    },
+    {
+      type: 'function_call_result',
+      callId: 'call-1',
+      name: 'shell',
+      output: 'result-output-'.repeat(500),
+      providerItem: {
+        type: 'function_call_result',
+        callId: 'call-1',
+        name: 'shell',
+        output: 'result-output-'.repeat(500),
+      },
+    },
+  ];
+
+  const baseEstimate = estimateContext({ history: baseHistory });
+  const duplicateEstimate = estimateContext({ history: historyWithDuplicates });
+
+  expect(duplicateEstimate.renderedInputTokens).toBe(baseEstimate.renderedInputTokens);
+});
+
+it('defers automatic compaction when blocked rearm is provided without a new user turn', () => {
+  expect(
+    shouldDeferAutomaticCompaction({
+      automaticCompactionsThisRun: 0,
+      rearmAtEstimatedTokens: 50_000,
+      renderedInputTokens: 40_000,
+      hasCompleteNewUserTurn: false,
+    }),
+  ).toBe('hysteresis');
+  expect(
+    shouldDeferAutomaticCompaction({
+      automaticCompactionsThisRun: 0,
+      rearmAtEstimatedTokens: 50_000,
+      renderedInputTokens: 60_000,
+      hasCompleteNewUserTurn: false,
+    }),
+  ).toBe('hysteresis');
+  expect(
+    shouldDeferAutomaticCompaction({
+      automaticCompactionsThisRun: 0,
+      rearmAtEstimatedTokens: 50_000,
+      renderedInputTokens: 60_000,
+      hasCompleteNewUserTurn: true,
+    }),
+  ).toBe(null);
 });

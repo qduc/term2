@@ -66,9 +66,36 @@ export interface ContextEstimate {
   hardFitTokens: number;
 }
 
+const INTERNAL_BOOKKEEPING_KEYS = new Set(['providerItem', 'providerMetadata', 'providerData', 'rawItem']);
+
+const compactionReplacer = (key: string, value: unknown) => {
+  if (INTERNAL_BOOKKEEPING_KEYS.has(key)) {
+    return undefined;
+  }
+  return value;
+};
+
+const isOpaqueReasoning = (item: unknown): boolean => {
+  if (!item || typeof item !== 'object') return false;
+  const record = item as Record<string, unknown>;
+  if (record.type === 'provider_opaque') {
+    const payload = record.item as Record<string, unknown> | undefined;
+    if (payload && (typeof payload.reasoning_content === 'string' || typeof payload.reasoning === 'string')) {
+      return true;
+    }
+  }
+  return false;
+};
+
+export const filterHistoryForEstimate = (history: readonly ProviderInputItem[]): ProviderInputItem[] => {
+  const hasReasoningItem = history.some((item) => (item as Record<string, unknown>)?.type === 'reasoning');
+  if (!hasReasoningItem) return history as ProviderInputItem[];
+  return history.filter((item) => !isOpaqueReasoning(item));
+};
+
 const serializedBytes = (value: unknown): number => {
   try {
-    return Buffer.byteLength(JSON.stringify(value));
+    return Buffer.byteLength(JSON.stringify(value, compactionReplacer));
   } catch {
     return Buffer.byteLength(String(value));
   }
@@ -81,10 +108,11 @@ export function estimateContext(input: {
   contextWindow?: number;
   maxOutputTokens?: number;
 }): ContextEstimate {
+  const filteredHistory = filterHistoryForEstimate(input.history);
   const renderedBytes = serializedBytes({
     instructions: input.instructions ?? '',
     tools: input.tools ?? [],
-    history: projectModelRequestHistory(input.history),
+    history: projectModelRequestHistory(filteredHistory),
   });
   const renderedInputTokens = Math.ceil(renderedBytes / 4);
   const outputReserveTokens = Math.max(0, Math.ceil(input.maxOutputTokens ?? 0));
@@ -127,7 +155,7 @@ export function planLocalCompaction(input: {
 
   const hotTailBudgetTokens = Math.min(32_000, Math.max(8_000, Math.floor(input.usableInputTokens * 0.25)));
   const hotStartTurn = turns.length - 2;
-  const hotTokens = Math.ceil(serializedBytes(history.slice(turns[hotStartTurn]!.start)) / 4);
+  const hotTokens = Math.ceil(serializedBytes(filterHistoryForEstimate(history.slice(turns[hotStartTurn]!.start))) / 4);
   if (hotTokens > input.usableInputTokens) return { kind: 'blocked', reason: 'single_turn_too_large' };
   const cut = turns[hotStartTurn]!.start;
   if (cut <= 0) return { kind: 'blocked', reason: 'no_complete_cold_turn' };
@@ -177,11 +205,12 @@ export const rearmAtTokens = (postCompactionEstimatedTokens: number, effectiveTh
 export function shouldDeferAutomaticCompaction(input: {
   automaticCompactionsThisRun: number;
   checkpoint?: { rearmAtEstimatedTokens?: number };
+  rearmAtEstimatedTokens?: number;
   renderedInputTokens: number;
   hasCompleteNewUserTurn: boolean;
 }): 'per_run_cap' | 'hysteresis' | null {
   if (input.automaticCompactionsThisRun >= 1) return 'per_run_cap';
-  const rearmAt = input.checkpoint?.rearmAtEstimatedTokens;
+  const rearmAt = input.rearmAtEstimatedTokens ?? input.checkpoint?.rearmAtEstimatedTokens;
   if (rearmAt !== undefined && (!input.hasCompleteNewUserTurn || input.renderedInputTokens < rearmAt))
     return 'hysteresis';
   return null;

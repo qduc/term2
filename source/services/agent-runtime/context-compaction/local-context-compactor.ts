@@ -71,6 +71,7 @@ export type LocalCompactionOutcome =
         | 'no_complete_cold_turn'
         | 'hot_tail_would_orphan_tool_result';
       estimate: ContextEstimate;
+      rearmAtTokens?: number;
     };
 
 export interface LocalCompactionInput {
@@ -88,6 +89,8 @@ export interface LocalCompactionInput {
   automaticCompactionsThisRun?: number;
   hasCompleteNewUserTurn?: boolean;
   checkpoint?: { rearmAtEstimatedTokens?: number };
+  rearmAtEstimatedTokens?: number;
+  lastCompletedInputTokens?: number;
   signal?: AbortSignal;
 }
 
@@ -213,14 +216,19 @@ export class LocalContextCompactor {
       return { kind: 'not_needed', estimate: estimateContext(input) };
     }
     const estimate = estimateContext(input);
-    if (!input.manual && estimate.renderedInputTokens < threshold.effectiveThreshold) {
+    const measuredTokens =
+      input.lastCompletedInputTokens !== undefined
+        ? Math.max(input.lastCompletedInputTokens, estimate.renderedInputTokens)
+        : estimate.renderedInputTokens;
+    if (!input.manual && measuredTokens < threshold.effectiveThreshold) {
       return { kind: 'not_needed', estimate };
     }
     if (!input.manual) {
       const deferred = shouldDeferAutomaticCompaction({
         automaticCompactionsThisRun: input.automaticCompactionsThisRun ?? 0,
         checkpoint: input.checkpoint,
-        renderedInputTokens: estimate.renderedInputTokens,
+        rearmAtEstimatedTokens: input.rearmAtEstimatedTokens,
+        renderedInputTokens: measuredTokens,
         hasCompleteNewUserTurn: input.hasCompleteNewUserTurn ?? false,
       });
       if (deferred) return { kind: 'deferred', reason: deferred, estimate };
@@ -233,10 +241,13 @@ export class LocalContextCompactor {
       usableWindow - (input.maxOutputTokens ?? 0) - Math.ceil(usableWindow * 0.1),
     );
     const plan = planLocalCompaction({ history: input.history, usableInputTokens });
-    if (plan.kind === 'blocked') return { kind: 'blocked', reason: plan.reason, estimate };
+    const rearmAt = rearmAtTokens(measuredTokens, threshold.effectiveThreshold);
+    if (plan.kind === 'blocked') {
+      return { kind: 'blocked', reason: plan.reason, estimate, rearmAtTokens: rearmAt };
+    }
 
     if (!assertHotTailPairsIntact(plan.hotTail)) {
-      return { kind: 'blocked', reason: 'hot_tail_would_orphan_tool_result', estimate };
+      return { kind: 'blocked', reason: 'hot_tail_would_orphan_tool_result', estimate, rearmAtTokens: rearmAt };
     }
 
     // Leave the remaining 10% of the half-window budget for the bounded
@@ -272,9 +283,9 @@ export class LocalContextCompactor {
       history: [{ role: 'system', type: 'message', content }, ...plan.hotTail],
     });
     if (postEstimate.hardFitTokens > usableWindow) {
-      return { kind: 'blocked', reason: 'result_still_too_large', estimate: postEstimate };
+      return { kind: 'blocked', reason: 'result_still_too_large', estimate: postEstimate, rearmAtTokens: rearmAt };
     }
-    const rearmAt = rearmAtTokens(postEstimate.renderedInputTokens, threshold.effectiveThreshold);
+    const postCompactionRearmAt = rearmAtTokens(postEstimate.renderedInputTokens, threshold.effectiveThreshold);
     const checkpoint: ContextSummaryCheckpoint = {
       role: 'system',
       type: 'message',
@@ -287,7 +298,7 @@ export class LocalContextCompactor {
         sourceModel: input.model,
         estimatedTokensBefore: estimate.renderedInputTokens,
         estimatedTokensAfter: postEstimate.renderedInputTokens,
-        rearmAtEstimatedTokens: rearmAt,
+        rearmAtEstimatedTokens: postCompactionRearmAt,
       },
     };
     return {
@@ -295,7 +306,7 @@ export class LocalContextCompactor {
       checkpoint,
       hotTail: plan.hotTail,
       estimate: postEstimate,
-      rearmAtTokens: rearmAt,
+      rearmAtTokens: postCompactionRearmAt,
       usage,
       costRecords,
       droppedOpaqueItems,

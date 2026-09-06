@@ -71,33 +71,38 @@ it('executes session_read at the tool boundary with the pinned serialized envelo
     });
   }
   void writer.close();
-  const read = createSessionBrowserToolDefinitions(new SessionBrowser(() => ({ projectPath: '/project' })))[2]!;
+  const browserInstance = new SessionBrowser(() => ({ projectPath: '/project' }));
+  try {
+    const read = createSessionBrowserToolDefinitions(browserInstance)[2]!;
 
-  // Consumed tail page: nextCursor is absent from the envelope, not null, and
-  // charsUsed equals the serialized length the model actually receives.
-  const rawTail = (await read.execute({ id, from: 'end', limit: 2 })) as string;
-  const tail = JSON.parse(rawTail);
-  expect(Object.keys(tail).sort()).toEqual([
-    'charsUsed',
-    'items',
-    'omitted',
-    'scope',
-    'session',
-    'skippedMessageCount',
-    'total',
-  ]);
-  expect(tail.total).toBe(6);
-  expect(tail.omitted).toBe(4);
-  expect(tail.charsUsed).toBe(rawTail.length);
+    // Consumed tail page: nextCursor is absent from the envelope, not null, and
+    // charsUsed equals the serialized length the model actually receives.
+    const rawTail = (await read.execute({ id, from: 'end', limit: 2 })) as string;
+    const tail = JSON.parse(rawTail);
+    expect(Object.keys(tail).sort()).toEqual([
+      'charsUsed',
+      'items',
+      'omitted',
+      'scope',
+      'session',
+      'skippedMessageCount',
+      'total',
+    ]);
+    expect(tail.total).toBe(6);
+    expect(tail.omitted).toBe(4);
+    expect(tail.charsUsed).toBe(rawTail.length);
 
-  // Forward page within budget: nextCursor is a short opaque handle.
-  const rawForward = (await read.execute({ id, limit: 1, maxChars: 512 })) as string;
-  const forward = JSON.parse(rawForward);
-  expect(Object.keys(forward)).toContain('nextCursor');
-  expect(forward.nextCursor).toMatch(/^c[0-9a-z]+$/);
-  expect(forward.total).toBe(6);
-  expect(forward.omitted).toBe(5);
-  expect(rawForward.length).toBeLessThanOrEqual(512);
+    // Forward page within budget: nextCursor is a short opaque handle.
+    const rawForward = (await read.execute({ id, limit: 1, maxChars: 512 })) as string;
+    const forward = JSON.parse(rawForward);
+    expect(Object.keys(forward)).toContain('nextCursor');
+    expect(forward.nextCursor).toMatch(/^c[0-9a-z]+$/);
+    expect(forward.total).toBe(6);
+    expect(forward.omitted).toBe(5);
+    expect(rawForward.length).toBeLessThanOrEqual(512);
+  } finally {
+    await browserInstance.close();
+  }
 });
 
 it('returns structured values to a scripted call and keeps the direct path serialized', async () => {

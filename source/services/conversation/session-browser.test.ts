@@ -10,11 +10,20 @@ import { setTrimConfig, getTrimConfig } from '../../utils/output/output-trim.js'
 let dir = '';
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {}, getCorrelationId: () => undefined } as any;
 
+let prevBackendEnv: string | undefined;
+
 beforeEach(() => {
+  prevBackendEnv = process.env['TERM2_SESSION_BROWSER_BACKEND'];
+  process.env['TERM2_SESSION_BROWSER_BACKEND'] = 'canonical';
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-session-browser-'));
   setConversationsDirForTest(dir);
 });
 afterEach(() => {
+  if (prevBackendEnv !== undefined) {
+    process.env['TERM2_SESSION_BROWSER_BACKEND'] = prevBackendEnv;
+  } else {
+    delete process.env['TERM2_SESSION_BROWSER_BACKEND'];
+  }
   fs.rmSync(dir, { recursive: true, force: true });
   setConversationsDirForTest(null);
 });

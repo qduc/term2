@@ -901,4 +901,74 @@ describe('SessionBrowser Indexed Backend', () => {
       await service.close();
     }
   });
+
+  describe('backend resolution seam and default selection', () => {
+    it('defaults to indexed backend when options and env are unset', async () => {
+      const origEnv = process.env['TERM2_SESSION_BROWSER_BACKEND'];
+      delete process.env['TERM2_SESSION_BROWSER_BACKEND'];
+      const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+      const browser = new SessionBrowser(() => ({ projectPath: '/project' }), { indexService });
+      try {
+        const listResult = browser.list({});
+        // Indexed backend returns a Promise asynchronously
+        expect(listResult).toBeInstanceOf(Promise);
+        const resolved = (await listResult) as any;
+        expect(resolved.scope).toBe('/project');
+      } finally {
+        if (origEnv !== undefined) process.env['TERM2_SESSION_BROWSER_BACKEND'] = origEnv;
+        await browser.close();
+        await indexService.close();
+      }
+    });
+
+    it('opts out to canonical backend when TERM2_SESSION_BROWSER_BACKEND=canonical', async () => {
+      const origEnv = process.env['TERM2_SESSION_BROWSER_BACKEND'];
+      process.env['TERM2_SESSION_BROWSER_BACKEND'] = 'canonical';
+      const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+      try {
+        const listResult = browser.list({});
+        // Canonical backend returns synchronous result directly, not a Promise
+        expect(listResult).not.toBeInstanceOf(Promise);
+        expect((listResult as any).scope).toBe('/project');
+      } finally {
+        if (origEnv !== undefined) process.env['TERM2_SESSION_BROWSER_BACKEND'] = origEnv;
+        else delete process.env['TERM2_SESSION_BROWSER_BACKEND'];
+        await browser.close();
+      }
+    });
+
+    it('keeps indexed backend for unknown TERM2_SESSION_BROWSER_BACKEND values', async () => {
+      const origEnv = process.env['TERM2_SESSION_BROWSER_BACKEND'];
+      process.env['TERM2_SESSION_BROWSER_BACKEND'] = 'unknown_backend';
+      const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+      const browser = new SessionBrowser(() => ({ projectPath: '/project' }), { indexService });
+      try {
+        const listResult = browser.list({});
+        expect(listResult).toBeInstanceOf(Promise);
+        const resolved = (await listResult) as any;
+        expect(resolved.scope).toBe('/project');
+      } finally {
+        if (origEnv !== undefined) process.env['TERM2_SESSION_BROWSER_BACKEND'] = origEnv;
+        else delete process.env['TERM2_SESSION_BROWSER_BACKEND'];
+        await browser.close();
+        await indexService.close();
+      }
+    });
+
+    it('honors options.backend over TERM2_SESSION_BROWSER_BACKEND', async () => {
+      const origEnv = process.env['TERM2_SESSION_BROWSER_BACKEND'];
+      process.env['TERM2_SESSION_BROWSER_BACKEND'] = 'canonical';
+      const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+      const browser = new SessionBrowser(() => ({ projectPath: '/project' }), { backend: 'indexed', indexService });
+      try {
+        const listResult = browser.list({});
+        expect(listResult).toBeInstanceOf(Promise);
+      } finally {
+        if (origEnv !== undefined) process.env['TERM2_SESSION_BROWSER_BACKEND'] = origEnv;
+        else delete process.env['TERM2_SESSION_BROWSER_BACKEND'];
+        await browser.close();
+        await indexService.close();
+      }
+    });
+  });
 });

@@ -88,7 +88,7 @@ export class SessionBrowser {
 
   constructor(private readonly getContext: () => SessionBrowserContext, options?: SessionBrowserOptions) {
     this.#backend =
-      options?.backend ?? (process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'indexed' ? 'indexed' : 'canonical');
+      options?.backend ?? (process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'canonical' ? 'canonical' : 'indexed');
     this.#indexService = options?.indexService;
   }
 

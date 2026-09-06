@@ -8,7 +8,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/*.e2e.*'],
     environment: 'node',
     globals: false,
-    setupFiles: ['./source/test-helpers/vitest-network-guard.ts'],
+    setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,
     testTimeout: 10_000,
     hookTimeout: 10_000,

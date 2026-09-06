@@ -150,7 +150,11 @@ it.sequential('keeps every registered tool reachable across direct and script pa
   expect(runCode).toBeDefined();
 
   const rendered = String(
-    await runCode!.execute({ code: 'return Object.keys(tools).sort().join("|");', timeout_ms: 60_000 } as never),
+    await runCode!.execute({
+      code: 'return Object.keys(tools).sort().join("|");',
+      description: 'list exposed tools',
+      timeout_ms: 60_000,
+    } as never),
   );
   const exposed =
     rendered
@@ -576,7 +580,11 @@ it.sequential('binds JSON apply_patch into run_code instead of native freeform w
   expect(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK')).toBe(false);
 
   const described = String(
-    await runCode.execute({ code: 'return await tools.describe("apply_patch");', timeout_ms: 60_000 } as never),
+    await runCode.execute({
+      code: 'return await tools.describe("apply_patch");',
+      description: 'describe apply_patch',
+      timeout_ms: 60_000,
+    } as never),
   );
   expect(described).toContain('"name":"apply_patch"');
   expect(described).not.toContain('FREEFORM');
@@ -1135,6 +1143,7 @@ it.sequential(
       const runCodeTool = built.find((t) => t.name === 'run_code')!;
       const output = String(
         await runCodeTool.execute({
+          description: 'probe invalid signature',
           code: 'try { const value = await tools.specimen({ from: "end", cursor: "c1" }); return { settled: "fulfilled", value }; } catch(e) { return { settled: "rejected", error: e.message }; }',
         } as any),
       );

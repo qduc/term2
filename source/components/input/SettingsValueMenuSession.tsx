@@ -144,7 +144,6 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
 
   useEffect(() => {
     if (!active) return;
-    console.error('SESSREG', frame.id, 'freeform-prop?', settingsValue.isFreeFormString);
     return interactions.register(frame.id, interaction);
   }, [active, frame.id, interaction, interactions]);
 

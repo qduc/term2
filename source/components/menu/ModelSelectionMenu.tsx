@@ -9,6 +9,7 @@ import {
 } from '../../utils/ai/provider-credentials.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import { useSetting } from '../../hooks/use-setting.js';
+import type { NicknameDraftState } from '../../hooks/use-model-selection.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
 import {
@@ -39,6 +40,10 @@ type Props = {
   settingsService: SettingsService;
   /** Set of `provider/modelId` strings for the favorited-state marker, shown on every tab. */
   favoriteKeys?: Set<string>;
+  /** Map of `provider/modelId` -> nickname, rendered on rows on every tab. */
+  nicknameLabels?: Map<string, string>;
+  /** When set (Favorites tab only), the inline nickname editor owns an input row below the list. */
+  nicknameDraft?: NicknameDraftState | null;
 };
 
 const ModelSelectionMenu: FC<Props> = ({
@@ -55,6 +60,8 @@ const ModelSelectionMenu: FC<Props> = ({
   credentialRevision = 0,
   settingsService,
   favoriteKeys = EMPTY_FAVORITE_KEYS,
+  nicknameLabels,
+  nicknameDraft = null,
 }) => {
   const isFavoritesTab = provider === FAVORITES_TAB_ID;
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
@@ -173,6 +180,8 @@ const ModelSelectionMenu: FC<Props> = ({
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
               ['tab', 'provider'],
+              // Naming exists only in the Favorites tab, so its hint does too.
+              ...(isFavoritesTab ? ([['ctrl+n', 'nickname']] as [string, string][]) : []),
               ['ctrl+f', 'favorite'],
               ['ctrl+r', 'refresh model list'],
               ['esc', 'cancel'],
@@ -182,6 +191,7 @@ const ModelSelectionMenu: FC<Props> = ({
         footerOutsideBorder={true}
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
           const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));
+          const nickname = nicknameLabels?.get(serializeFavorite(item.provider, item.id));
           return (
             <Box key={`${item.provider}/${item.id}`}>
               <SelectionMarker selected={isSelected} />
@@ -189,6 +199,7 @@ const ModelSelectionMenu: FC<Props> = ({
               <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
                 {item.id}
               </Text>
+              {nickname && <Text color={COLOR_ACCENT}> — aka "{nickname}"</Text>}
               {isFavoritesTab && <Text color={COLOR_TEXT_SUBTLE}> ({item.provider})</Text>}
               {item.unavailableReason === 'missing-codex-login' ? (
                 <Text color={COLOR_WARNING}>
@@ -205,6 +216,18 @@ const ModelSelectionMenu: FC<Props> = ({
           );
         }}
       />
+      {isFavoritesTab && nicknameDraft && (
+        <Box flexDirection="column">
+          <Box>
+            <Text color={COLOR_ACCENT} bold>
+              Nickname for {nicknameDraft.modelId}:
+            </Text>
+            <Text color={COLOR_TEXT}> {nicknameDraft.text}</Text>
+            <Text color={COLOR_ACCENT}>▏</Text>
+          </Box>
+          {nicknameDraft.error && <Text color={COLOR_DANGER}>{nicknameDraft.error}</Text>}
+        </Box>
+      )}
       {(error || (items.length === 0 && !loading)) && (
         <MenuFooter
           hints={[

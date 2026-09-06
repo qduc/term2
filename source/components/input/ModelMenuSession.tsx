@@ -56,6 +56,39 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           return keep();
         }
 
+        // While the inline nickname editor owns the input row (Favorites tab
+        // only), it is the single consumer for text keys, Enter, and Escape:
+        // printable input and backspace edit the draft instead of the filter
+        // query, Enter commits — or keeps the editor open with the rejection
+        // reason — and Escape cancels back to the untouched filter row rather
+        // than closing the menu, so a second Escape closes the menu as usual.
+        // ctrl+f stays live: it toggles the highlighted row's favorite, and
+        // if that removes the row from the Favorites list the hook closes the
+        // editor bound to it. Tab-insert, provider cycling, refresh, reset,
+        // and list navigation are deliberately suspended: the editor is bound
+        // to one highlighted row, so navigating away would orphan it.
+        if (models.nicknameDraft) {
+          switch (event.type) {
+            case 'input':
+              models.typeNicknameDraft(event.text);
+              return keep();
+            case 'command':
+              if (event.command === 'backspace') models.backspaceNicknameDraft();
+              else if (event.command === 'favorite') models.toggleFavorite();
+              return keep();
+            case 'move':
+              return keep();
+            case 'accept':
+              models.commitNicknameDraft();
+              return keep();
+            case 'escape':
+              models.cancelNicknameDraft();
+              return keep();
+            default:
+              return keep();
+          }
+        }
+
         if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
 
         switch (event.type) {
@@ -92,6 +125,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             else if (event.command === 'right') models.toggleProvider('next');
             else if (event.command === 'refresh') models.refresh();
             else if (event.command === 'favorite') models.toggleFavorite();
+            else if (event.command === 'nickname') models.startNicknameEdit();
             return keep();
           }
           case 'accept': {
@@ -185,6 +219,8 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         canSwitchProvider={models.canSwitchProvider}
         credentialRevision={models.credentialRevision}
         favoriteKeys={models.favoriteKeys}
+        nicknameLabels={models.nicknameLabels}
+        nicknameDraft={models.nicknameDraft}
       />
       {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
     </Box>

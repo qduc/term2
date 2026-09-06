@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(147);
-  expect(new Set(exportedKeys).size).toBe(147);
+  expect(exportedKeys).toHaveLength(148);
+  expect(new Set(exportedKeys).size).toBe(148);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());

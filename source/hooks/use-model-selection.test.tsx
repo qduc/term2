@@ -617,7 +617,6 @@ it.sequential('ignores stale model results after switching providers', async () 
     renderer.unmount();
   });
 });
-
 it.sequential('keeps completed provider results ready when switching back', async () => {
   clearModelCache();
 
@@ -1031,3 +1030,276 @@ it.sequential(
     });
   },
 );
+
+it.sequential(
+  'startNicknameEdit opens the editor on the Favorites tab, prefilled with any existing nickname',
+  async () => {
+    const settingsService = createMockSettingsService({
+      'agent.favoriteModels': ['openai/gpt-fav'],
+      'agent.modelNicknames': { fav: 'openai/gpt-fav' },
+    });
+    let capturedModels: any;
+    let renderer: any;
+    await flush(() => {
+      renderer = render(
+        <InputProvider>
+          <TestComponent
+            settingsService={settingsService}
+            initialInput="/model "
+            modelFetcher={async () => {
+              throw new Error('must not fetch on the Favorites tab');
+            }}
+            onResults={(m) => {
+              capturedModels = m;
+            }}
+          />
+        </InputProvider>,
+      );
+    });
+    await waitForIdle(() => capturedModels);
+
+    expect(capturedModels.provider).toBe(FAVORITES_TAB_ID);
+    expect(capturedModels.nicknameDraft).toBeNull();
+
+    await flush(() => {
+      capturedModels.startNicknameEdit();
+    });
+
+    expect(capturedModels.nicknameDraft).toEqual({
+      provider: 'openai',
+      modelId: 'gpt-fav',
+      text: 'fav',
+      error: null,
+    });
+
+    await flush(() => {
+      renderer.unmount();
+    });
+  },
+);
+
+it.sequential('typing appends to the draft, commit persists the nickname and closes the editor', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.favoriteModels': ['openai/gpt-fav'],
+  });
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          modelFetcher={async () => {
+            throw new Error('must not fetch on the Favorites tab');
+          }}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  await flush(() => {
+    capturedModels.startNicknameEdit();
+    capturedModels.typeNicknameDraft('o');
+    capturedModels.typeNicknameDraft('p');
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'op', error: null });
+  expect(capturedModels.query).toBe('');
+
+  await flush(() => {
+    capturedModels.backspaceNicknameDraft();
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'o' });
+
+  await flush(() => {
+    capturedModels.typeNicknameDraft('pp');
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'opp' });
+
+  await flush(() => {
+    capturedModels.commitNicknameDraft();
+  });
+
+  expect(settingsService.get('agent.modelNicknames')).toEqual({ opp: 'openai/gpt-fav' });
+  expect(capturedModels.nicknameDraft).toBeNull();
+  expect(capturedModels.nicknameLabels.get('openai/gpt-fav')).toBe('opp');
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('commit with a duplicate nickname shows the reason and keeps the editor open', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.favoriteModels': ['openai/gpt-fav'],
+    'agent.modelNicknames': { op: 'openai/other-model' },
+  });
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          modelFetcher={async () => {
+            throw new Error('must not fetch on the Favorites tab');
+          }}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  await flush(() => {
+    capturedModels.startNicknameEdit();
+    capturedModels.typeNicknameDraft('op');
+  });
+
+  await flush(() => {
+    capturedModels.commitNicknameDraft();
+  });
+
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'op' });
+  expect(String(capturedModels.nicknameDraft.error)).toContain('already in use');
+  expect(settingsService.get('agent.modelNicknames')).toEqual({ op: 'openai/other-model' });
+
+  // Editing again clears the rejection reason but stays in the editor.
+  await flush(() => {
+    capturedModels.typeNicknameDraft('2');
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'op2', error: null });
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('cancel discards the draft and leaves the filter query untouched', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.favoriteModels': ['openai/gpt-fav'],
+  });
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          modelFetcher={async () => {
+            throw new Error('must not fetch on the Favorites tab');
+          }}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  await flush(() => {
+    capturedModels.startNicknameEdit();
+    capturedModels.typeNicknameDraft('zz');
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'zz' });
+
+  await flush(() => {
+    capturedModels.cancelNicknameDraft();
+  });
+
+  expect(capturedModels.nicknameDraft).toBeNull();
+  expect(capturedModels.query).toBe('');
+  expect(settingsService.get('agent.modelNicknames')).toEqual({});
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('startNicknameEdit is a no-op off the Favorites tab', async () => {
+  const providerId = 'nickname-off-favorites';
+  registerTestProvider({
+    id: providerId,
+    label: providerId,
+    fetchModels: async () => [{ id: 'model-a', name: 'Model A' }],
+  });
+  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  let capturedModels: any;
+  let renderer: any;
+  try {
+    await flush(() => {
+      renderer = render(
+        <InputProvider>
+          <TestComponent
+            settingsService={settingsService}
+            initialInput="/model "
+            modelFetcher={async (provider: string) => [{ id: 'model-a', name: 'Model A', provider }]}
+            onResults={(m) => {
+              capturedModels = m;
+            }}
+          />
+        </InputProvider>,
+      );
+    });
+    await waitForIdle(() => capturedModels);
+
+    expect(capturedModels.provider).toBe(providerId);
+    await flush(() => {
+      capturedModels.startNicknameEdit();
+    });
+    expect(capturedModels.nicknameDraft).toBeNull();
+  } finally {
+    await flush(() => renderer?.unmount());
+  }
+});
+
+it.sequential('un-favoriting the highlighted row closes the editor bound to it', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.favoriteModels': ['openai/gpt-fav'],
+  });
+  let capturedModels: any;
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          modelFetcher={async () => {
+            throw new Error('must not fetch on the Favorites tab');
+          }}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  await flush(() => {
+    capturedModels.startNicknameEdit();
+    capturedModels.typeNicknameDraft('x');
+  });
+  expect(capturedModels.nicknameDraft).toMatchObject({ text: 'x' });
+
+  await flush(() => {
+    capturedModels.toggleFavorite();
+  });
+
+  expect(settingsService.get('agent.favoriteModels')).toEqual([]);
+  expect(capturedModels.nicknameDraft).toBeNull();
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});

@@ -1177,3 +1177,334 @@ describe('resolveModelFlag favorites fast path', () => {
     });
   });
 });
+
+describe('resolveModelFlag nicknames fast path', () => {
+  const nicknameSettings = (nicknames: Record<string, string>, favorites: string[] = []) =>
+    ({
+      get: vi.fn((key: string) => {
+        if (key === 'agent.modelNicknames') return nicknames;
+        if (key === 'agent.favoriteModels') return favorites;
+        return key === 'agent.provider' ? 'openai' : undefined;
+      }),
+      getDynamic: vi.fn(() => []),
+    } as any);
+
+  it('resolves an exact nickname with zero provider loads', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      throw new Error('must not fetch ' + provider + ': an exact nickname match must never touch a catalog');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op',
+      settingsService: nicknameSettings({ op: 'anthropic/claude-opus-4' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'anthropic'],
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'claude-opus-4',
+      provider: 'anthropic',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('exact nickname wins over an exact real model id (the real id stays reachable as provider/id)', async () => {
+    const groups: ProviderModelGroup[] = [makeGroup('openai', [{ id: 'gpt54' }, { id: 'gpt-5.4-mini' }])];
+    const deps = mockDeps(groups, {
+      // The nickname shadows a REAL catalog id: -m gpt54 must resolve to the
+      // nickname's target without ever loading the catalog.
+      getSetting: (key) => (key === 'agent.modelNicknames' ? { gpt54: 'openai/gpt-5.4-mini' } : undefined),
+    });
+
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt54',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai'],
+    });
+
+    expect(deps.fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4-mini',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('exact nickname wins over a favorite matching the same pattern', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch: the nickname path precedes the favorites path');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'shared-id',
+      settingsService: nicknameSettings({ 'shared-id': 'anthropic/nicknamed-target' }, ['openai/shared-id']),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai', 'anthropic'],
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'nicknamed-target',
+      provider: 'anthropic',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('applies the effort stored on the nickname target when the CLI suffix is absent', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op',
+      settingsService: nicknameSettings({ op: 'openai/gpt-5.4:high' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('an inline CLI suffix overrides the effort stored on the nickname target', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op:low',
+      settingsService: nicknameSettings({ op: 'openai/gpt-5.4:high' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: 'low',
+    });
+  });
+
+  it('carries an inline CLI suffix when the nickname target stores none', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op:medium',
+      settingsService: nicknameSettings({ op: 'openai/gpt-5.4' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: 'medium',
+    });
+  });
+
+  it('ignores a nickname whose target provider differs from an explicit --provider', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      if (provider === 'openai') return [{ id: 'op-real', provider }];
+      throw new Error('must not fetch ' + provider);
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op',
+      providerFlag: 'openai',
+      settingsService: nicknameSettings({ op: 'anthropic/claude-opus-4' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai'],
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'op-real',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('ignores a nickname whose target provider differs from a provider prefix in the flag', async () => {
+    const fetcher = vi.fn(async (provider: string) => {
+      if (provider === 'openai') return [{ id: 'op-real', provider }];
+      throw new Error('must not fetch ' + provider);
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'openai/op',
+      settingsService: nicknameSettings({ op: 'anthropic/claude-opus-4' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['openai'],
+      knownProviders: ['openai', 'anthropic'],
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'op-real',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('resolves a nickname under a matching explicit --provider with zero loads', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'op',
+      providerFlag: 'anthropic',
+      settingsService: nicknameSettings({ op: 'anthropic/claude-opus-4' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['anthropic'],
+      knownProviders: ['anthropic'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'claude-opus-4',
+      provider: 'anthropic',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('falls back to the full search and warns when the nicknamed target has vanished from a warm cache', async () => {
+    const provider = 'fake-nickname-vanished';
+    registerProvider({
+      id: provider,
+      label: 'Fake Nickname Vanished',
+      fetchModels: async () => [{ id: 'still-here' }],
+    });
+    try {
+      // Warm the real model-service cache for this provider with a catalog
+      // that no longer includes the nicknamed id.
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: vi.fn() } as any },
+        provider,
+      );
+
+      const fetcher = vi.fn(async (p: string) => {
+        if (p === provider) return [{ id: 'gone-model-replacement', provider: p }];
+        throw new Error('must not fetch ' + p);
+      });
+
+      const result = await resolveModelFlag({
+        modelFlag: 'gone-model',
+        settingsService: nicknameSettings({ 'gone-model': provider + '/gone-model' }),
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+        providerIds: [provider],
+        knownProviders: [provider],
+      });
+
+      expect(fetcher).toHaveBeenCalledWith(provider);
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'gone-model-replacement',
+        provider,
+        reasoningEffort: undefined,
+        warnings: [
+          'warning: nicknamed model "gone-model" is no longer in ' +
+            provider +
+            "'s cached catalog; falling back to full search.",
+        ],
+      });
+    } finally {
+      unregisterProvider(provider);
+      clearModelCache(provider);
+    }
+  });
+
+  it('trusts a nickname when the target provider cache is cold (accepted limitation, zero network)', async () => {
+    const fetcher = vi.fn(async () => {
+      throw new Error('must not fetch: a cold cache cannot disprove the nickname, so it is trusted as-is');
+    });
+    const result = await resolveModelFlag({
+      modelFlag: 'cold-nicknamed',
+      settingsService: nicknameSettings({ 'cold-nicknamed': 'fake-cold-provider/cold-model' }),
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      providerIds: ['fake-cold-provider'],
+      knownProviders: ['fake-cold-provider'],
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'cold-model',
+      provider: 'fake-cold-provider',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('drops malformed stored targets and resolves through the normal catalog path', async () => {
+    const groups: ProviderModelGroup[] = [makeGroup('openai', [{ id: 'op-real' }])];
+    const deps = mockDeps(groups, {
+      getSetting: (key) => (key === 'agent.modelNicknames' ? { op: 'no-separator' } : undefined),
+    });
+
+    const result = await resolveModelFlag({
+      modelFlag: 'op',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'op-real',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('behaves exactly as before when no nicknames are set', async () => {
+    const groups: ProviderModelGroup[] = [makeGroup('openai', [{ id: 'gpt-5.4' }])];
+    const deps = mockDeps(groups, { getSetting: () => undefined });
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-5.4',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['openai'],
+    });
+
+    expect(deps.fetcher).toHaveBeenCalledWith('openai');
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'gpt-5.4',
+      provider: 'openai',
+      reasoningEffort: undefined,
+    });
+  });
+});

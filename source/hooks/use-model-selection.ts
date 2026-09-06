@@ -21,7 +21,21 @@ import {
   serializeFavorite,
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
+import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../services/models/model-nicknames.js';
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
+
+/**
+ * Authoritative state of the Favorites tab's inline nickname editor. The
+ * draft is bound to one row identity (provider + model id) and owns its own
+ * text buffer — the filter query is never borrowed for naming, so cancelling
+ * restores the previous filter text and cursor by construction.
+ */
+export type NicknameDraftState = Readonly<{
+  provider: string;
+  modelId: string;
+  text: string;
+  error: string | null;
+}>;
 
 export const useModelSelection = (deps: {
   loggingService: ILoggingService;
@@ -46,6 +60,8 @@ export const useModelSelection = (deps: {
   const [refreshKey, setRefreshKey] = useState(0);
   const [credentialRevision, setCredentialRevision] = useState(0);
   const [favoritesRevision, setFavoritesRevision] = useState(0);
+  const [nicknamesRevision, setNicknamesRevision] = useState(0);
+  const [nicknameDraft, setNicknameDraft] = useState<NicknameDraftState | null>(null);
   const shouldPreselectRef = useRef(false);
 
   // Favorites render purely from settings: no catalog fetch, no credential
@@ -58,6 +74,14 @@ export const useModelSelection = (deps: {
   const favoriteKeys = useMemo(
     () => new Set(favoriteModelInfos.map((m) => serializeFavorite(m.provider, m.id))),
     [favoriteModelInfos],
+  );
+
+  // Nicknames render purely from settings, like favorites; recomputed when a
+  // commit (or an external settings change) bumps nicknamesRevision.
+  const nicknameLabels = useMemo(
+    () => getNicknameLabels(settingsService),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision],
   );
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
@@ -84,6 +108,8 @@ export const useModelSelection = (deps: {
         setCredentialRevision((revision) => revision + 1);
       } else if (changedKey === SETTING_KEYS.AGENT_FAVORITE_MODELS) {
         setFavoritesRevision((revision) => revision + 1);
+      } else if (changedKey === SETTING_KEYS.AGENT_MODEL_NICKNAMES) {
+        setNicknamesRevision((revision) => revision + 1);
       }
     });
     return unsubscribe;
@@ -259,6 +285,22 @@ export const useModelSelection = (deps: {
     }
   }, [selectedIndex, scrollOffset]);
 
+  // The editor is bound to one visible Favorites row; if that row leaves the
+  // list — most commonly because ctrl+f un-favorited it while the editor was
+  // open — the editor has nothing left to edit and closes with it.
+  useEffect(() => {
+    if (!nicknameDraft) return;
+    const stillListed = filteredModels.some(
+      (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
+    );
+    if (!stillListed) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [filteredModels, nicknameDraft]);
+
+  // Never leak an open editor into the next menu session.
+  useEffect(() => {
+    if (!isOpen && nicknameDraft) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [isOpen, nicknameDraft]);
+
   const open = useCallback(
     (startIndex: number) => {
       if (mode === 'model_selection') return;
@@ -367,6 +409,56 @@ export const useModelSelection = (deps: {
     setFavoritesRevision((revision) => revision + 1);
   }, [getSelectedItem, settingsService]);
 
+  const startNicknameEdit = useCallback(() => {
+    // Naming is a Favorites-tab affordance only: the filter is near-useless
+    // on a 5-10 row list, so this tab can own its input row for naming
+    // without contending with a filter that matters. Off this tab (or with
+    // no row highlighted) the command is a deliberate no-op.
+    if (providerRef.current !== FAVORITES_TAB_ID) return;
+    const selected = getSelectedItem();
+    if (!selected) return;
+    const existing = getNicknameEntries(settingsService).find(
+      (entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id,
+    );
+    setNicknameDraft({
+      provider: selected.provider,
+      modelId: selected.id,
+      text: existing?.nickname ?? '',
+      error: null,
+    });
+  }, [getSelectedItem, settingsService]);
+
+  // The draft keeps its cursor at the end of the text: it names one row, so
+  // mid-string cursor movement (and the arrows that would provide it) is not
+  // part of this editor.
+  const typeNicknameDraft = useCallback((text: string) => {
+    if (!text) return;
+    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text + text, error: null } : draft));
+  }, []);
+
+  const backspaceNicknameDraft = useCallback(() => {
+    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text.slice(0, -1), error: null } : draft));
+  }, []);
+
+  const commitNicknameDraft = useCallback(() => {
+    if (!nicknameDraft) return;
+    const result = setNicknameTarget(
+      settingsService,
+      nicknameDraft.text,
+      { provider: nicknameDraft.provider, modelId: nicknameDraft.modelId },
+      { providerIds: getProviderIds() },
+    );
+    if (!result.ok) {
+      // Rejected input keeps the user in the editor with the reason shown.
+      setNicknameDraft({ ...nicknameDraft, error: result.error });
+      return;
+    }
+    setNicknameDraft(null);
+    setNicknamesRevision((revision) => revision + 1);
+  }, [nicknameDraft, settingsService]);
+
+  const cancelNicknameDraft = useCallback(() => setNicknameDraft(null), []);
+
   return {
     isOpen,
     triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
@@ -389,6 +481,13 @@ export const useModelSelection = (deps: {
     toggleProvider,
     toggleFavorite,
     favoriteKeys,
+    nicknameDraft,
+    nicknameLabels,
+    startNicknameEdit,
+    typeNicknameDraft,
+    backspaceNicknameDraft,
+    commitNicknameDraft,
+    cancelNicknameDraft,
     refresh,
     canSwitchProvider,
     modelSettingConfig,

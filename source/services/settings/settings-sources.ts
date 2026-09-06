@@ -51,6 +51,7 @@ const SETTINGS_SOURCE_KEYS = {
     },
     provider: 'agent.provider',
     favoriteModels: 'agent.favoriteModels',
+    modelNicknames: 'agent.modelNicknames',
     openrouter: 'agent.openrouter',
     codex: {
       websocketFirstFrameTimeoutMs: 'agent.codex.websocketFirstFrameTimeoutMs',

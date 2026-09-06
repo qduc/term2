@@ -13,10 +13,12 @@ import { collectProviderModelsConcurrently, loadProviderModelGroup, type Provide
 import { orderedProviderIds, type ModelFetcher } from './model-catalog-session.js';
 import { HARNESS_IDLE_ENV } from '../../lib/harness-input-idle.js';
 import { getFavoriteModelInfos } from './model-favorites.js';
+import { findNicknameMatch } from './model-nicknames.js';
+import { stripReasoningEffortSuffix, type ModelSettingsReasoningEffort } from './reasoning-effort.js';
 
-export const VALID_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
-
-export type ModelSettingsReasoningEffort = (typeof VALID_REASONING_EFFORTS)[number];
+// Re-exported for the existing importers of this module; the definitions live
+// in reasoning-effort.ts so model-nicknames can share them without a cycle.
+export { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from './reasoning-effort.js';
 
 export type ParsedModelFlag = {
   provider?: string;
@@ -67,18 +69,7 @@ export function parseModelFlag(
   const trimmed = rawModelFlag.trim();
 
   // 1. Extract thinking suffix (e.g. :high, :low, :medium)
-  let withoutThinking = trimmed;
-  let reasoningEffort: ModelSettingsReasoningEffort | undefined;
-
-  const colonIdx = trimmed.lastIndexOf(':');
-  if (colonIdx !== -1) {
-    const potentialEffort = trimmed.slice(colonIdx + 1).toLowerCase();
-    if ((VALID_REASONING_EFFORTS as readonly string[]).includes(potentialEffort)) {
-      reasoningEffort = potentialEffort as ModelSettingsReasoningEffort;
-      withoutThinking = trimmed.slice(0, colonIdx).trim();
-    }
-  }
-
+  const { value: withoutThinking, reasoningEffort } = stripReasoningEffortSuffix(trimmed);
   const rawPattern = withoutThinking;
 
   // 2. Extract provider prefix
@@ -356,6 +347,41 @@ export async function resolveModelFlag(deps: {
   // there widens to the rest of the candidate space instead of giving up.
   const explicitProvider = Boolean(deps.providerFlag && parsed.provider);
 
+  // Nicknames resolve first — before favorites and before any provider
+  // catalog loads: reading `agent.modelNicknames` is a settings read, not a
+  // fetch, so an exact hit costs zero network work. Precedence is exact
+  // nickname > favorite > exact real model id: favorites already shadowed
+  // exact real ids before nicknames existed (the favorites fast path below is
+  // unchanged), so the nickname check slots in directly in front of it. A
+  // real id shadowed by a nickname stays reachable as `provider/id`; a
+  // nickname equal to a registered provider id is rejected at creation and
+  // excluded at lookup, so `-m openai` can never be hijacked by a nickname.
+  // A nickname whose target has vanished from a warm cache does not hard-fail:
+  // like a vanished favorite, it falls through to the full search with a
+  // warning instead of resolving to a model the provider will reject.
+  const nicknameHit = findNicknameMatch(deps.settingsService, parsed.pattern, {
+    providerScope: parsed.provider,
+    knownProviders,
+  });
+
+  let nicknameVanishedWarning: string | undefined;
+
+  if (nicknameHit) {
+    const warmCache = peekCachedModels(nicknameHit.provider);
+    const vanished = warmCache !== undefined && !warmCache.some((m) => m.id === nicknameHit.modelId);
+    if (!vanished) {
+      return {
+        status: 'resolved',
+        modelId: nicknameHit.modelId,
+        provider: nicknameHit.provider,
+        // An inline `-m op:low` suffix overrides the effort stored on the
+        // nickname target (`op -> ...:high`).
+        reasoningEffort: parsed.reasoningEffort ?? nicknameHit.reasoningEffort,
+      };
+    }
+    nicknameVanishedWarning = `warning: nicknamed model "${nicknameHit.modelId}" is no longer in ${nicknameHit.provider}'s cached catalog; falling back to full search.`;
+  }
+
   // Favorites resolve BEFORE any provider catalog loads: reading
   // `agent.favoriteModels` is a settings read, not a fetch, so a hit here
   // costs zero network work. Only favorites for the explicitly-scoped
@@ -476,6 +502,7 @@ export async function resolveModelFlag(deps: {
   // appear here; do not let the laziness optimization hide a real outage on a
   // provider that was loaded.
   const warnings = [
+    ...(nicknameVanishedWarning ? [nicknameVanishedWarning] : []),
     ...(favoriteVanishedWarning ? [favoriteVanishedWarning] : []),
     ...groups.filter((group) => group.error !== undefined).map((group) => `warning: ${group.provider}: ${group.error}`),
   ];

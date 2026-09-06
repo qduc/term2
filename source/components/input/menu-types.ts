@@ -216,6 +216,7 @@ export type MenuEvent =
         | 'refresh'
         | 'reset'
         | 'favorite'
+        | 'nickname'
         | 'backspace'
         | 'delete'
         | 'reorder-up'

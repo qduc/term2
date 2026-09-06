@@ -27,6 +27,8 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
   [SETTING_KEYS.AGENT_FAVORITE_MODELS]:
     'Favorited models as "provider/modelId" strings, matched fast by --model before any catalog loads (edit via ctrl+f in the model picker)',
+  [SETTING_KEYS.AGENT_MODEL_NICKNAMES]:
+    'Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (edit via ctrl+n in the model picker Favorites tab)',
   [SETTING_KEYS.AGENT_SMART_MODEL]: 'Model for smart ancillary tasks (falls back to agent.model)',
   [SETTING_KEYS.AGENT_SMART_REASONING_EFFORT]:
     'Reasoning effort for smart ancillary tasks (none|minimal|low|medium|high|xhigh|default)',
@@ -247,6 +249,7 @@ export const CATEGORY_KEYS = {
   models: new Set<string>([
     SETTING_KEYS.AGENT_MODEL,
     SETTING_KEYS.AGENT_FAVORITE_MODELS,
+    SETTING_KEYS.AGENT_MODEL_NICKNAMES,
     SETTING_KEYS.AGENT_SMART_MODEL,
     SETTING_KEYS.AGENT_SMART_REASONING_EFFORT,
     SETTING_KEYS.AGENT_BALANCED_MODEL,

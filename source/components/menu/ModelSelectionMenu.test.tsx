@@ -312,3 +312,63 @@ it.sequential('ModelSelectionMenu marks a favorited row on a normal provider tab
   expect(favoritedLine).toContain('★');
   expect(unfavoritedLine).not.toContain('★');
 });
+
+it.sequential('renders existing nicknames on rows', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-fav', name: 'GPT Fav', provider: 'openai' }]}
+      selectedIndex={0}
+      query=""
+      provider={FAVORITES_TAB_ID}
+      nicknameLabels={new Map([['openai/gpt-fav', 'op']])}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('aka');
+  expect(output).toContain('"op"');
+});
+
+it.sequential(
+  'renders the inline nickname editor and its rejection error while a draft is open on the Favorites tab',
+  async () => {
+    const { lastFrame } = await renderInAct(
+      <ModelSelectionMenu
+        settingsService={createMockSettingsService()}
+        items={[{ id: 'gpt-fav', name: 'GPT Fav', provider: 'openai' }]}
+        selectedIndex={0}
+        query=""
+        provider={FAVORITES_TAB_ID}
+        nicknameDraft={{
+          provider: 'openai',
+          modelId: 'gpt-fav',
+          text: 'op',
+          error: 'Nickname "op" is already in use.',
+        }}
+      />,
+    );
+    const output = lastFrame() ?? '';
+    expect(output).toContain('Nickname for gpt-fav:');
+    expect(output).toContain('op');
+    expect(output).toContain('Nickname "op" is already in use.');
+  },
+);
+
+it.sequential('does not render the nickname editor row on provider tabs', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' }]}
+      selectedIndex={0}
+      query=""
+      provider="openai"
+      nicknameLabels={new Map([['openai/gpt-4o', 'four-oh']])}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  // Nickname labels render on rows everywhere, but the editor row and its
+  // hint belong to the Favorites tab only.
+  expect(output).toContain('aka "four-oh"');
+  expect(output).not.toContain('Nickname for');
+  expect(output).not.toContain('ctrl+n');
+});

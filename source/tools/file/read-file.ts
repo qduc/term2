@@ -19,6 +19,7 @@ import {
   looksLikeBinary,
   resolveResultMaxBytesForCall,
 } from '../../utils/output/bound-tool-result.js';
+import { saveOutputArtifact } from '../../utils/shell/shell-output.js';
 
 const READ_FILE_DESCRIPTION =
   'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
@@ -234,10 +235,13 @@ export const createReadFileToolDefinition = (
         }
 
         if (looksLikeBinary(buffer)) {
-          return (
-            `Error: File appears to be binary and was not loaded into context: ${filePath} ` +
-            `(${buffer.length} bytes). Use shell tools or a specialized binary viewer if you need its contents.`
-          );
+          const message =
+            `File appears to be binary and was not loaded into context: ${filePath} ` +
+            `(${buffer.length} bytes). Use shell tools or a specialized binary viewer if you need its contents.`;
+          if (isScriptedToolCall(context)) {
+            throw new Error(message);
+          }
+          return `Error: ${message}`;
         }
 
         const content = buffer.toString('utf8');
@@ -274,18 +278,66 @@ export const createReadFileToolDefinition = (
         // which every observed script had to strip by hand, and it reports
         // truncation as a trailing sentence a script will not branch on.
         if (isScriptedToolCall(context)) {
-          const scriptedBound = await boundToolResultText({
-            fullText: filteredLines.join('\n'),
-            maxBytes: resolveResultMaxBytesForCall(context, maxResultBytes),
-          });
-          return {
+          const maxBudget = resolveResultMaxBytesForCall(context, maxResultBytes);
+          const rawContent = filteredLines.join('\n');
+          const fullEnvelope = {
             path: filePath,
             totalLines,
             fromLine,
             toLine,
-            content: scriptedBound.text,
-            truncated: scriptedBound.truncated,
-            ...(scriptedBound.artifactPath ? { fullOutputPath: scriptedBound.artifactPath } : {}),
+            content: rawContent,
+            truncated: false,
+          };
+
+          if (JSON.stringify(fullEnvelope).length <= maxBudget) {
+            return fullEnvelope;
+          }
+
+          let artifactPath: string | undefined;
+          try {
+            artifactPath = await saveOutputArtifact(rawContent, { filenamePrefix: 'read-file' });
+          } catch {
+            // Artifact saving failure leaves fullOutputPath undefined
+          }
+
+          const template = {
+            path: filePath,
+            totalLines,
+            fromLine,
+            toLine,
+            content: '',
+            truncated: true,
+            ...(artifactPath ? { fullOutputPath: artifactPath } : {}),
+          };
+
+          let low = 0;
+          let high = rawContent.length;
+          let bestSlice = '';
+
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            let candidate = rawContent.slice(0, mid);
+            if (/[\uD800-\uDBFF]$/.test(candidate)) {
+              candidate = candidate.slice(0, -1);
+            }
+            if (JSON.stringify({ ...template, content: candidate }).length <= maxBudget) {
+              bestSlice = candidate;
+              low = mid + 1;
+            } else {
+              high = mid - 1;
+            }
+          }
+
+          while (bestSlice.length > 0 && JSON.stringify({ ...template, content: bestSlice }).length > maxBudget) {
+            bestSlice = bestSlice.slice(0, -1);
+            if (/[\uD800-\uDBFF]$/.test(bestSlice)) {
+              bestSlice = bestSlice.slice(0, -1);
+            }
+          }
+
+          return {
+            ...template,
+            content: bestSlice,
           };
         }
 
@@ -307,6 +359,21 @@ export const createReadFileToolDefinition = (
         });
         return bounded.text;
       } catch (error: any) {
+        if (isScriptedToolCall(context)) {
+          if (error.code === 'ENOENT') {
+            throw new Error(`File not found: ${filePath}`);
+          }
+          if (error.code === 'EISDIR') {
+            throw new Error(`Path is a directory: ${filePath}`);
+          }
+          if (error.code === 'EACCES') {
+            throw new Error(`Permission denied: ${filePath}`);
+          }
+          if (error.message?.includes('outside workspace')) {
+            throw new Error(error.message);
+          }
+          throw error;
+        }
         // Handle errors gracefully
         if (error.message?.includes('outside workspace')) {
           return `Error: ${error.message}`;

@@ -150,8 +150,12 @@ export function buildAgentTools({
     .filter(() => true)
     .map((definition) => {
       const providerParameters = definition.strictParameters ?? definition.parameters;
+      const canonicalParameters =
+        definition.canonicalParameters ??
+        (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
+        canonicalParameters,
         parameters:
           useStrictToolSchema && isZodToolParameterSchema(providerParameters)
             ? // Strict-schema path: `parameters` is replaced at runtime by its JSON

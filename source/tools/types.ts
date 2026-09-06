@@ -99,6 +99,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   name: string;
   description: string;
   parameters: TSchema;
+  /** Canonical runtime schema preserved when provider substitution replaces `parameters`. */
+  canonicalParameters?: ZodTypeAny;
   /** Opt-in capability for independent, auto-approved calls in one model response. */
   parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
   /** True when some valid parameter values can require interactive approval. */
@@ -172,6 +174,8 @@ export interface AnyToolDefinition {
   name: string;
   description: string;
   parameters: ToolParameterSchema;
+  /** Canonical runtime schema preserved when provider substitution replaces `parameters`. */
+  canonicalParameters?: ZodTypeAny;
   /** Opt-in capability for independent, auto-approved calls in one model response. */
   /** `never` keeps heterogeneous schema-derived predicates assignable at the erased boundary. */
   parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);

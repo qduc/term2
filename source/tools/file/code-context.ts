@@ -149,7 +149,7 @@ export const createReadCodeOutlineToolDefinition = (
         return true;
       }
     },
-    execute: async ({ path: filePath }) => {
+    execute: async ({ path: filePath }, context) => {
       const cwd = executionContext?.getCwd() || process.cwd();
 
       try {
@@ -167,6 +167,18 @@ export const createReadCodeOutlineToolDefinition = (
 
         return formatOutline(filePath, provider.language, provider.extractOutline(source));
       } catch (error: any) {
+        if (isScriptedToolCall(context)) {
+          if (error.code === 'ENOENT') {
+            throw new Error(`File not found: ${filePath}`);
+          }
+          if (error.code === 'EACCES') {
+            throw new Error(`Permission denied: ${filePath}`);
+          }
+          if (error.code === 'EISDIR') {
+            throw new Error(`Path is a directory: ${filePath}`);
+          }
+          throw error;
+        }
         return formatFileError(error, filePath);
       }
     },
@@ -270,6 +282,9 @@ export const createCodeContextSearchToolDefinition = (
           truncated ? ['result_limit_reached'] : [],
         );
       } catch (error: any) {
+        if (isScriptedToolCall(context)) {
+          throw error;
+        }
         return formatSearchError(error);
       }
     },

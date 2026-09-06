@@ -213,14 +213,15 @@ function unknownToolMessage(name: string, registry: ToolRegistry): string {
 
 function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
-  if (isZodToolParameterSchema(tool.parameters)) {
+  const targetSchema = tool.canonicalParameters ?? tool.parameters;
+  if (isZodToolParameterSchema(targetSchema)) {
     try {
-      parameters = z.toJSONSchema(tool.parameters, { io: 'input' }) as JsonValue;
+      parameters = z.toJSONSchema(targetSchema, { io: 'input' }) as JsonValue;
     } catch {
       parameters = {};
     }
   } else {
-    parameters = tool.parameters as JsonValue;
+    parameters = targetSchema as JsonValue;
   }
   return {
     name: tool.name,
@@ -399,21 +400,83 @@ function containsMediaContent(value: unknown, ancestors = new Set<object>()): bo
   return found;
 }
 
-const serializeResult = (result: unknown, limit: number): JsonValue => {
-  if (typeof result === 'string') return truncate(result, limit);
+const serializeResult = async (
+  result: unknown,
+  limit: number,
+  toolName: string,
+  callsCompleted: number,
+): Promise<{ ok: true; result: JsonValue } | { ok: false; error: string }> => {
+  if (typeof result === 'string') return { ok: true, result: truncate(result, limit) };
   try {
     const encoded = JSON.stringify(result);
-    if (encoded === undefined) return null;
-    if (encoded.length <= limit) return result as JsonValue;
+    if (encoded === undefined) return { ok: true, result: null };
+    if (encoded.length <= limit) return { ok: true, result: result as JsonValue };
     // Never turn a multimodal result into a partial JSON string: that both
     // corrupts image data and makes the failure look like a successful text
     // result to the script. A clear value lets the script continue (or catch
     // the omission) without sending an unusable image to the worker.
-    return containsMediaContent(result)
-      ? `[truncated: media result exceeded ${limit} characters; media content omitted]`
-      : truncate(encoded, limit);
+    if (containsMediaContent(result)) {
+      return {
+        ok: true,
+        result: `[truncated: media result exceeded ${limit} characters; media content omitted]`,
+      };
+    }
+
+    // If result is a plain object with a string property (e.g. 'content'),
+    // truncate that string property so the structured object stays an object within the limit.
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+      const record = { ...(result as Record<string, unknown>) };
+      const stringKeys = Object.keys(record).filter((k) => typeof record[k] === 'string');
+      stringKeys.sort((a, b) => {
+        if (a === 'content') return -1;
+        if (b === 'content') return 1;
+        return ((record[b] as string)?.length ?? 0) - ((record[a] as string)?.length ?? 0);
+      });
+
+      if (stringKeys.length > 0) {
+        const targetKey = stringKeys[0];
+        const originalStr = record[targetKey] as string;
+        let low = 0;
+        let high = originalStr.length;
+        let bestSlice = '';
+        while (low <= high) {
+          const mid = Math.floor((low + high) / 2);
+          let candidate = originalStr.slice(0, mid);
+          if (/[\uD800-\uDBFF]$/.test(candidate)) candidate = candidate.slice(0, -1);
+          record[targetKey] = candidate;
+          if (JSON.stringify(record).length <= limit) {
+            bestSlice = candidate;
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+        if (bestSlice.length > 0 || JSON.stringify({ ...record, [targetKey]: '' }).length <= limit) {
+          record[targetKey] = bestSlice;
+          while (bestSlice.length > 0 && JSON.stringify(record).length > limit) {
+            bestSlice = bestSlice.slice(0, -1);
+            if (/[\uD800-\uDBFF]$/.test(bestSlice)) bestSlice = bestSlice.slice(0, -1);
+            record[targetKey] = bestSlice;
+          }
+          if (JSON.stringify(record).length <= limit) {
+            return { ok: true, result: record as unknown as JsonValue };
+          }
+        }
+      }
+    }
+
+    let retrieval = '';
+    try {
+      const artifactPath = await saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' });
+      retrieval = `Full output saved to: ${artifactPath}. `;
+    } catch {
+      retrieval = 'Full output could not be saved; the omitted result is unavailable. ';
+    }
+    const callUnit = callsCompleted === 1 ? 'call' : 'calls';
+    const message = `Tool "${toolName}" result exceeded ${limit} characters and could not be delivered to script. ${retrieval}${callsCompleted} nested tool ${callUnit} completed — inspect state before retrying; tool effects have already completed.`;
+    return { ok: false, error: message };
   } catch {
-    return truncate(String(result), limit);
+    return { ok: true, result: truncate(String(result), limit) };
   }
 };
 
@@ -571,14 +634,15 @@ export function createRunCodeToolDefinition(
             return failed(unknownToolMessage(name, registry));
           }
 
+          const targetSchema = tool.canonicalParameters ?? tool.parameters;
           let normalized: unknown;
           try {
-            normalized = normalizeToolParameters(payload.params ?? {}, tool.parameters);
+            normalized = normalizeToolParameters(payload.params ?? {}, targetSchema);
           } catch {
             normalized = payload.params ?? {};
           }
-          if (isZodToolParameterSchema(tool.parameters)) {
-            const parsed = tool.parameters.safeParse(normalized);
+          if (isZodToolParameterSchema(targetSchema)) {
+            const parsed = targetSchema.safeParse(normalized);
             if (!parsed.success) {
               record(name, 'invalid_params', started);
               const issues = parsed.error.issues
@@ -690,15 +754,15 @@ export function createRunCodeToolDefinition(
                 });
                 if (resolution.kind === 'approved') {
                   record(prepared.tool.name, 'ok', prepared.started);
+                  const serialized = await serializeResult(
+                    mediaReferences.capture(resolution.result),
+                    RUN_CODE_LIMITS.maxResultChars,
+                    prepared.tool.name,
+                    calls.length,
+                  );
                   return {
                     kind: 'result',
-                    result: {
-                      ok: true,
-                      result: serializeResult(
-                        mediaReferences.capture(resolution.result),
-                        RUN_CODE_LIMITS.maxResultChars,
-                      ),
-                    } as JsonValue,
+                    result: serialized as JsonValue,
                   };
                 }
                 if (resolution.kind === 'failed') {
@@ -744,12 +808,15 @@ export function createRunCodeToolDefinition(
             });
             const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
             record(prepared.tool.name, 'ok', started);
+            const serialized = await serializeResult(
+              mediaReferences.capture(result),
+              RUN_CODE_LIMITS.maxResultChars,
+              prepared.tool.name,
+              calls.length,
+            );
             return {
               kind: 'result',
-              result: {
-                ok: true,
-                result: serializeResult(mediaReferences.capture(result), RUN_CODE_LIMITS.maxResultChars),
-              } as JsonValue,
+              result: serialized as JsonValue,
             };
           } catch (error) {
             record(prepared.tool.name, 'error', started);

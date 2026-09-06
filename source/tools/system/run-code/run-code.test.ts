@@ -1709,4 +1709,132 @@ describe('run_code M5: persisted command-message telemetry', () => {
       expect(msg.success).toBe(false);
     }
   });
+
+  it('structured tool results maintain object type across the transport budget boundary (-1, 0, 1 deltas)', async () => {
+    const limit = RUN_CODE_LIMITS.maxResultChars;
+    const schema = z.object({ delta: z.number() });
+    const specimen = {
+      name: 'specimen',
+      description: 'Structured boundary probe',
+      parameters: schema,
+      parallelSafe: true,
+      canRequireApproval: false,
+      needsApproval: () => false,
+      execute: ({ delta }: { delta: number }) => ({
+        content: 'x'.repeat(limit - JSON.stringify({ content: '' }).length + delta),
+      }),
+    };
+    const policy = new ToolApprovalPolicyRegistry();
+    policy.register({ toolName: specimen.name, parameters: schema, needsApproval: specimen.needsApproval });
+    const tool = createRunCodeToolDefinition({
+      loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+      getToolRegistry: () => [specimen] as any,
+      approvalPolicyRegistry: policy,
+    });
+
+    const output = await tool.execute({
+      code: 'const rows = []; for (const delta of [-1, 0, 1]) { const r = await tools.specimen({ delta }); let parseable = true; if (typeof r === "string") { try { JSON.parse(r); } catch { parseable = false; } } rows.push({ delta, type: typeof r, hasContent: typeof r.content === "string", parseable }); } return rows;',
+    } as any);
+
+    const text = String(output);
+    const rows = JSON.parse(text.slice(text.indexOf('Result:\n') + 8).split('\n\n')[0]);
+    expect(rows).toHaveLength(3);
+    expect(rows.every((row: any) => row.type === 'object' && row.hasContent)).toBe(true);
+  });
+
+  it('generic overflow rejects with catchable error, retrieval artifact, and notes effects completed without partial JSON', async () => {
+    // A structured tool result without a truncatable string property that exceeds the limit
+    const limit = RUN_CODE_LIMITS.maxResultChars;
+    const overflowSpecimen = {
+      name: 'overflow_specimen',
+      description: 'Generic overflow probe',
+      parameters: z.object({}),
+      parallelSafe: true,
+      canRequireApproval: false,
+      needsApproval: () => false,
+      execute: () => {
+        // Large array of numeric objects that cannot be truncated via a string property
+        return Array.from({ length: 10_000 }, (_, i) => ({ id: i, count: i * 2 }));
+      },
+    };
+    const policy = new ToolApprovalPolicyRegistry();
+    policy.register({
+      toolName: overflowSpecimen.name,
+      parameters: overflowSpecimen.parameters,
+      needsApproval: overflowSpecimen.needsApproval,
+    });
+    const tool = createRunCodeToolDefinition({
+      loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+      getToolRegistry: () => [overflowSpecimen] as any,
+      approvalPolicyRegistry: policy,
+    });
+
+    const output = String(
+      await tool.execute({
+        code: `try {
+          const res = await tools.overflow_specimen({});
+          return { caught: false, res };
+        } catch (e) {
+          return { caught: true, message: e.message };
+        }`,
+      } as any),
+    );
+
+    const text = output.slice(output.indexOf('Result:\n') + 8).split('\n\n')[0];
+    const parsed = JSON.parse(text);
+    expect(parsed.caught).toBe(true);
+    expect(parsed.message).toContain('result exceeded');
+    expect(parsed.message).toContain('Full output saved to:');
+    expect(parsed.message).toContain('tool effects have already completed');
+    expect(parsed.message).not.toContain('undefined');
+  });
+
+  it('mixed outcomes: Promise.allSettled with valid reads and missing-file reads correctly settles each', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'run-code-mixed-'));
+    try {
+      const fileA = join(dir, 'a.txt');
+      const fileB = join(dir, 'b.txt');
+      writeFileSync(fileA, 'Content A');
+      writeFileSync(fileB, 'Content B');
+
+      const readFile = createReadFileToolDefinition({ allowOutsideWorkspace: true });
+      const policy = new ToolApprovalPolicyRegistry();
+      policy.register({
+        toolName: readFile.name,
+        parameters: readFile.parameters,
+        needsApproval: readFile.needsApproval as any,
+      });
+      const tool = createRunCodeToolDefinition({
+        loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+        getToolRegistry: () => [readFile] as any,
+        approvalPolicyRegistry: policy,
+      });
+
+      const output = String(
+        await tool.execute({
+          code: `const results = await Promise.allSettled([
+            tools.read_file({ path: "${fileA}" }),
+            tools.read_file({ path: "${join(dir, 'missing.txt')}" }),
+            tools.read_file({ path: "${fileB}" }),
+          ]);
+          return results.map(r => ({
+            status: r.status,
+            ...(r.status === 'fulfilled' ? { content: r.value.content } : { error: r.reason.message })
+          }));`,
+        } as any),
+      );
+
+      const text = output.slice(output.indexOf('Result:\n') + 8).split('\n\n')[0];
+      const parsed = JSON.parse(text);
+      expect(parsed).toHaveLength(3);
+      expect(parsed[0].status).toBe('fulfilled');
+      expect(parsed[0].content).toBe('Content A');
+      expect(parsed[1].status).toBe('rejected');
+      expect(parsed[1].error).toContain('File not found');
+      expect(parsed[2].status).toBe('fulfilled');
+      expect(parsed[2].content).toBe('Content B');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

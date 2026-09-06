@@ -9,12 +9,13 @@ import { z } from 'zod';
 import path from 'path';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { buildAgent, buildAgentTools } from './agent-factory.js';
+import { createRunCodeToolDefinition } from '../tools/system/run-code/run-code.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
 import { registerProvider, type ProviderDefinition } from '../providers/registry.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { createEditorImpl } from './editor-impl.js';
-import type { ToolDefinition } from '../tools/types.js';
+import type { AnyToolDefinition, ToolDefinition } from '../tools/types.js';
 import { PostExecutePendingRegistry } from '../services/session/post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
@@ -1062,3 +1063,92 @@ it.sequential('root tools still execute when arguments match the schema', async 
 
   expect(result).toBe('original:ok');
 });
+
+it.sequential('buildAgentTools preserves canonicalParameters across strict JSON-schema conversion', () => {
+  const schema = z.object({ value: z.string() });
+  const rawTool: AnyToolDefinition = {
+    name: 'custom_tool',
+    description: 'Custom tool for schema test',
+    parameters: schema,
+    needsApproval: () => false,
+    execute: () => 'ok',
+    formatCommandMessage: () => [],
+  };
+  const { deps } = createDeps({ providerId: 'openai' });
+  const built = buildAgentTools({
+    toolDefinitions: [rawTool],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+
+  const tool = built.find((t) => t.name === 'custom_tool')!;
+  expect(tool.canonicalParameters).toBe(schema);
+  // Wire parameters converted to JSON schema
+  expect(typeof tool.parameters).toBe('object');
+  expect('safeParse' in tool.parameters).toBe(false);
+});
+
+it.sequential(
+  'provider parity: nested invalid calls reject with signature before execution/approval under both openrouter and openai',
+  async () => {
+    const rows: Array<{ providerId: string; executions: number; settled: string; error?: string; value?: unknown }> =
+      [];
+
+    for (const providerId of ['openrouter', 'openai']) {
+      let executions = 0;
+      const schema = z
+        .object({ from: z.literal('end').optional(), cursor: z.string().optional() })
+        .superRefine((v, c) => {
+          if (v.from === 'end' && v.cursor !== undefined) {
+            c.addIssue({ code: 'custom', path: ['from'], message: 'from end requires an initial read without cursor' });
+          }
+        });
+      const specimen: AnyToolDefinition = {
+        name: 'specimen',
+        description: 'Cross-field contract probe',
+        parameters: schema,
+        canRequireApproval: false,
+        needsApproval: () => false,
+        execute: () => {
+          executions++;
+          return { done: true };
+        },
+        formatCommandMessage: () => [],
+      };
+      const policy = new ToolApprovalPolicyRegistry();
+      policy.register({ toolName: specimen.name, parameters: schema, needsApproval: specimen.needsApproval });
+      const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} };
+      const runCode = createRunCodeToolDefinition({ loggingService: logger as any, approvalPolicyRegistry: policy });
+      const built = buildAgentTools({
+        toolDefinitions: [specimen, runCode] as any,
+        resolvedModel: 'gpt-4o',
+        shouldUseNativePatchTool: false,
+        deps: {
+          providerId,
+          settings: { get: () => undefined },
+          logger,
+          checkToolInterceptors: async () => null,
+          approvalPolicyRegistry: policy,
+        } as any,
+      });
+      const runCodeTool = built.find((t) => t.name === 'run_code')!;
+      const output = String(
+        await runCodeTool.execute({
+          code: 'try { const value = await tools.specimen({ from: "end", cursor: "c1" }); return { settled: "fulfilled", value }; } catch(e) { return { settled: "rejected", error: e.message }; }',
+        } as any),
+      );
+      const parsed = JSON.parse(output.slice(output.indexOf('Result:\n') + 8).split('\n\n')[0]);
+      rows.push({ providerId, executions, ...parsed });
+    }
+
+    // Under both providers, the invalid call MUST reject before execution (executions === 0)
+    // and must include the compact signature guidance
+    expect(rows.every((r) => r.executions === 0)).toBe(true);
+    expect(rows.every((r) => r.settled === 'rejected')).toBe(true);
+    expect(rows[0]?.error).toContain('Invalid parameters for "specimen"');
+    expect(rows[0]?.error).toContain('Signature: tools.specimen(');
+    expect(rows[1]?.error).toContain('Invalid parameters for "specimen"');
+    expect(rows[1]?.error).toContain('Signature: tools.specimen(');
+  },
+);

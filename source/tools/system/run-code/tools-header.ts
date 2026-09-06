@@ -95,8 +95,13 @@ const oneLine = (text: string): string => {
  * Shared by the header and the invalid-parameters failure message, so the two
  * never drift apart.
  */
-export function renderCompactSignature(tool: { name: string; parameters: unknown }): string {
-  const fields = renderFields(schemaFor(tool.parameters), 0);
+export function renderCompactSignature(tool: {
+  name: string;
+  parameters: unknown;
+  canonicalParameters?: unknown;
+}): string {
+  const targetSchema = tool.canonicalParameters ?? tool.parameters;
+  const fields = renderFields(schemaFor(targetSchema), 0);
   return `tools.${tool.name}({ ${fields.join(', ')} })`.replace('({  })', '()');
 }
 

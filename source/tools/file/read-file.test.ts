@@ -408,4 +408,62 @@ describe('read_file scripted return shape', () => {
     expect(scripted.truncated).toBe(true);
     expect(typeof scripted.fullOutputPath).toBe('string');
   });
+
+  it('rejects operational errors for scripted calls while direct calls return error string', async () => {
+    const tool = createReadFileToolDefinition({}) as any;
+
+    // Missing file
+    await expect(tool.execute({ path: 'nonexistent-scripted-file.txt' }, { scripted: true })).rejects.toThrow(
+      'File not found: nonexistent-scripted-file.txt',
+    );
+    const directMissing = await tool.execute({ path: 'nonexistent-scripted-file.txt' }, {});
+    expect(typeof directMissing).toBe('string');
+    expect(directMissing).toContain('Error: File not found');
+
+    // Directory path
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-dir-'));
+    try {
+      await expect(tool.execute({ path: dir }, { scripted: true })).rejects.toThrow(`Path is a directory: ${dir}`);
+      const directDir = await tool.execute({ path: dir }, {});
+      expect(typeof directDir).toBe('string');
+      expect(directDir).toContain('Error: Path is a directory');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('budgets the full envelope so JSON.stringify(scripted).length <= maxResultBytes with retrieval and Unicode', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-envelope-'));
+    try {
+      const target = path.join(dir, 'unicode.txt');
+      // Create text with newlines, quotes, unicode characters (CJK + emojis) that expand under JSON serialization
+      const lines = Array.from(
+        { length: 200 },
+        (_, i) => `Line ${i}: "quoted" \\backslash\\ 日本語 🚀 ${'a'.repeat(40)}`,
+      );
+      const fullText = lines.join('\n');
+      await fs.writeFile(target, fullText);
+
+      const budget = 2_000;
+      const tool = createReadFileToolDefinition({ maxResultBytes: budget }) as any;
+      const scripted = await tool.execute({ path: target }, { scripted: true });
+
+      expect(scripted.truncated).toBe(true);
+      expect(typeof scripted.content).toBe('string');
+      expect(typeof scripted.fullOutputPath).toBe('string');
+
+      // The full envelope serialized as JSON MUST fit within the configured budget
+      const encoded = JSON.stringify(scripted);
+      expect(encoded.length).toBeLessThanOrEqual(budget);
+
+      // The saved artifact must contain the full untruncated content for retrieval
+      const artifactContent = await fs.readFile(scripted.fullOutputPath, 'utf8');
+      expect(artifactContent).toBe(fullText);
+
+      // Verify no broken unicode / unpaired surrogate at the end of truncated content
+      expect(/[\uD800-\uDBFF]$/.test(scripted.content)).toBe(false);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
 });

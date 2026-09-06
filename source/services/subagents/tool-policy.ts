@@ -1028,8 +1028,12 @@ export class SubagentToolFactory {
     });
 
     return toolDefinitions.map((definition) => {
+      const canonicalParameters =
+        definition.canonicalParameters ??
+        (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
       const wrapped: AnyToolDefinition = {
         ...definition,
+        canonicalParameters,
         parameters:
           useStrictSchema && isZodToolParameterSchema(definition.parameters)
             ? toOpenAIStrictToolSchema(definition.parameters)

@@ -101,7 +101,7 @@ describe('run_code -> read_file scripted cap, end to end', () => {
     }
   }, 30_000);
 
-  it('keeps images from parallel and wrapped script results as content parts', async () => {
+  it('keeps images from parallel and wrapped script results as content parts above the host output budget', async () => {
     const readFile = createReadFileToolDefinition({}) as any;
     const registry = [readFile] as ToolRegistry;
     const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
@@ -122,7 +122,11 @@ describe('run_code -> read_file scripted cap, end to end', () => {
       getCwd: () => process.cwd(),
       approvalPolicyRegistry,
     });
-    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x04]);
+    // Two base64 payloads are larger than RUN_CODE_LIMITS.maxOutputBytes. The
+    // worker must see only host-owned references, while the model still gets
+    // both complete attachments after the script settles.
+    const imageBytes = Buffer.alloc(140_000, 0x04);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(imageBytes);
     const imagePaths = ['.tmp-scripted-image-a.png', '.tmp-scripted-image-b.png'].map((name) =>
       path.join(process.cwd(), name),
     );
@@ -155,7 +159,7 @@ describe('run_code -> read_file scripted cap, end to end', () => {
     }
   }, 30_000);
 
-  it('does not truncate a large image into corrupt model-visible media', async () => {
+  it('delivers a real PNG whose base64 encoding exceeds the per-result character budget', async () => {
     const readFile = createReadFileToolDefinition({}) as any;
     const registry = [readFile] as ToolRegistry;
     const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
@@ -186,9 +190,52 @@ describe('run_code -> read_file scripted cap, end to end', () => {
         timeout_ms: 60_000,
       } as never);
 
-      expect(typeof result).toBe('string');
-      expect(result).toContain('media result exceeded 100000 characters; media content omitted');
-      expect(result).not.toContain(imageBytes.toString('base64').slice(0, 100));
+      expect(Array.isArray(result)).toBe(true);
+      const parts = result as Array<Record<string, any>>;
+      expect(parts.find((part) => part.type === 'image')).toEqual({
+        type: 'image',
+        image: { data: imageBytes.toString('base64'), mediaType: 'image/png' },
+      });
+    } finally {
+      await fs.rm(imagePath, { force: true });
+    }
+  }, 30_000);
+
+  it('does not attach an image that the script did not return', async () => {
+    const readFile = createReadFileToolDefinition({}) as any;
+    const registry = [readFile] as ToolRegistry;
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+    approvalPolicyRegistry.register({
+      toolName: readFile.name,
+      parameters: readFile.parameters,
+      needsApproval: readFile.needsApproval,
+    });
+    const runCode = createRunCodeToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      getToolRegistry: () => registry,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry,
+    });
+    const imagePath = path.join(process.cwd(), '.tmp-scripted-unreturned-image.png');
+    const imageBytes = Buffer.alloc(80_000);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(imageBytes);
+    await fs.writeFile(imagePath, imageBytes);
+    try {
+      const result = await runCode.execute({
+        code: `const image = await tools.read_file({ path: '.tmp-scripted-unreturned-image.png' });
+               return { read: image[0].text };`,
+        timeout_ms: 60_000,
+      } as never);
+
+      expect(Array.isArray(result)).toBe(false);
+      expect(String(result)).toContain('Image: ');
+      expect(String(result)).not.toContain(imageBytes.toString('base64').slice(0, 100));
     } finally {
       await fs.rm(imagePath, { force: true });
     }

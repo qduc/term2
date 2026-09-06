@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import type { ExecutionContext } from '../../../services/execution-context.js';
 import { z } from 'zod';
 import { relaxedNumber } from '../../utils.js';
@@ -59,6 +60,11 @@ export const RUN_CODE_LIMITS = {
   maxConcurrency: 8,
   /** Per-result cap. A larger result is truncated with an explicit marker. */
   maxResultChars: 100_000,
+  /** Maximum raw bytes in one media attachment retained outside the script. */
+  maxMediaBytes: 8 * 1024 * 1024,
+  /** Maximum raw bytes and attachment count retained for one script run. */
+  maxMediaTotalBytes: 32 * 1024 * 1024,
+  maxMediaAttachments: 32,
   maxCodeBytes: 65_536,
   maxOutputBytes: 262_144,
   maxConsoleBytes: 262_144,
@@ -305,6 +311,81 @@ const isContentPartArray = (value: unknown): value is Array<Record<string, unkno
   value.length > 0 &&
   value.every((part) => isRecord(part) && (part.type === 'text' || isMediaContentPart(part)));
 
+const MEDIA_REFERENCE_KEY = '__term2_run_code_media_reference__';
+type MediaReference = { [MEDIA_REFERENCE_KEY]: string };
+
+const isMediaReference = (value: unknown): value is MediaReference =>
+  isRecord(value) && typeof value[MEDIA_REFERENCE_KEY] === 'string' && Object.keys(value).length === 1;
+
+/** Count the bytes that will eventually be sent to the model, not its JSON wrapper. */
+function mediaBytes(value: RunCodeContentPart): number {
+  const payload = value.type === 'image' ? value.image : value.type === 'file' ? value.file : undefined;
+  if (isRecord(payload) && typeof payload.data === 'string') {
+    try {
+      return Buffer.from(payload.data, 'base64').byteLength;
+    } catch {
+      return Buffer.byteLength(payload.data, 'utf8');
+    }
+  }
+  try {
+    return Buffer.byteLength(JSON.stringify(payload) ?? '', 'utf8');
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
+ * Keep large media out of both the worker transport and its generic result
+ * budget. The reference is deliberately scoped to one execute call: a token
+ * from another run is just an ordinary object and cannot recover its bytes.
+ */
+function createMediaReferenceStore() {
+  const attachments = new Map<string, RunCodeContentPart>();
+  const byValue = new WeakMap<object, string | null>();
+  let totalBytes = 0;
+
+  const capture = (value: unknown): unknown => {
+    if (isMediaContentPart(value)) {
+      const existing = byValue.get(value);
+      if (existing !== undefined) return existing ? { [MEDIA_REFERENCE_KEY]: existing } : '[media content omitted]';
+
+      const size = mediaBytes(value);
+      if (
+        !Number.isFinite(size) ||
+        size > RUN_CODE_LIMITS.maxMediaBytes ||
+        attachments.size >= RUN_CODE_LIMITS.maxMediaAttachments ||
+        totalBytes + size > RUN_CODE_LIMITS.maxMediaTotalBytes
+      ) {
+        byValue.set(value, null);
+        return (
+          `[media content omitted: attachment exceeds the ${RUN_CODE_LIMITS.maxMediaBytes}-byte per-image or ` +
+          `${RUN_CODE_LIMITS.maxMediaTotalBytes}-byte per-run limit]`
+        );
+      }
+
+      const token = `run_code_media_${randomUUID()}`;
+      byValue.set(value, token);
+      attachments.set(token, value);
+      totalBytes += size;
+      return { [MEDIA_REFERENCE_KEY]: token } satisfies MediaReference;
+    }
+    if (Array.isArray(value)) return value.map(capture);
+    if (isRecord(value)) {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, capture(entry)]));
+    }
+    return value;
+  };
+
+  const resolve = (value: unknown): unknown => {
+    if (isMediaReference(value)) return attachments.get(value[MEDIA_REFERENCE_KEY]) ?? value;
+    if (Array.isArray(value)) return value.map(resolve);
+    if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolve(entry)]));
+    return value;
+  };
+
+  return { capture, resolve };
+}
+
 /** Look through script wrappers without mistaking ordinary arrays for media. */
 function containsMediaContent(value: unknown, ancestors = new Set<object>()): boolean {
   if (isMediaContentPart(value)) return true;
@@ -439,6 +520,7 @@ export function createRunCodeToolDefinition(
       const calls: RunCodeCallRecord[] = [];
       const output: string[] = [];
       const sessionId = getConversationSessionId(context);
+      const mediaReferences = createMediaReferenceStore();
 
       const record = (
         tool: string,
@@ -612,7 +694,10 @@ export function createRunCodeToolDefinition(
                     kind: 'result',
                     result: {
                       ok: true,
-                      result: serializeResult(resolution.result, RUN_CODE_LIMITS.maxResultChars),
+                      result: serializeResult(
+                        mediaReferences.capture(resolution.result),
+                        RUN_CODE_LIMITS.maxResultChars,
+                      ),
                     } as JsonValue,
                   };
                 }
@@ -661,7 +746,10 @@ export function createRunCodeToolDefinition(
             record(prepared.tool.name, 'ok', started);
             return {
               kind: 'result',
-              result: { ok: true, result: serializeResult(result, RUN_CODE_LIMITS.maxResultChars) } as JsonValue,
+              result: {
+                ok: true,
+                result: serializeResult(mediaReferences.capture(result), RUN_CODE_LIMITS.maxResultChars),
+              } as JsonValue,
             };
           } catch (error) {
             record(prepared.tool.name, 'error', started);
@@ -697,7 +785,11 @@ export function createRunCodeToolDefinition(
         toolCalls: calls.length,
       });
 
-      return renderResult(result, output, calls, include_console);
+      const resolvedResult =
+        result.ok && !result.voidOutput
+          ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
+          : result;
+      return renderResult(resolvedResult, output, calls, include_console);
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };

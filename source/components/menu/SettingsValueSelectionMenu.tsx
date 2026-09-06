@@ -25,12 +25,15 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   isNumericSettings,
   isFreeFormString,
 }) => {
+  const acceptsAnyString = isStringSetting(settingKey);
   const isFreeFormStringSetting =
-    isFreeFormString ?? (isStringSetting(settingKey) && buildSettingValueSuggestions(settingKey).length === 0);
+    isFreeFormString ?? (acceptsAnyString && buildSettingValueSuggestions(settingKey).length === 0);
 
-  // For free-form string settings (no predefined suggestions), show a neutral
-  // message instead of a red error box — the empty state is expected.
-  const showNeutralEmpty = items.length === 0 && isFreeFormStringSetting;
+  // A string value is always settable by typing, so an empty list is an
+  // expected, neutral state — never a red picker error. Choices (enums,
+  // booleans) keep the red "No matching values" because Enter cannot apply
+  // text their schema does not accept.
+  const showNeutralEmpty = items.length === 0 && acceptsAnyString;
   const selectedItem = items[selectedIndex];
 
   return (
@@ -49,7 +52,11 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           )}
           <Text color={COLOR_TEXT_SUBTLE}>
             {settingKey} ·{' '}
-            {showNeutralEmpty ? 'No predefined values — type freely' : `No values match "${query || '*'}"`}
+            {showNeutralEmpty
+              ? isFreeFormStringSetting
+                ? 'No predefined values — type freely'
+                : `No value matches "${query || '*'}" — Enter applies the typed value`
+              : `No values match "${query || '*'}"`}
           </Text>
           {isNumericSettings && <Text color={COLOR_WARNING}>Note: This setting accepts numeric values.</Text>}
           {showNeutralEmpty && <Text color={COLOR_WARNING}>Note: This setting accepts any string value.</Text>}

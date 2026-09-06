@@ -10,7 +10,7 @@ import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
 import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
-import { isArraySetting } from '../services/settings/settings-ui-metadata.js';
+import { isArraySetting, isStringSetting } from '../services/settings/settings-ui-metadata.js';
 
 /**
  * Render the durable settlement of a mutation truthfully. Only a `saved`
@@ -79,6 +79,12 @@ export function parseSettingValue(raw: string): any {
  * string values containing commas are never mangled.
  */
 export function parseSettingValueForKey(key: string, raw: string): any {
+  // A string setting round-trips its text verbatim (trimmed). The generic
+  // parse below would coerce "true" and numeric-looking text before the schema
+  // saw it, making perfectly valid string values (a model id "3.0", a flag
+  // named "true") impossible to set.
+  if (isStringSetting(key)) return raw.trim();
+
   const value = parseSettingValue(raw);
   if (typeof value !== 'string' || !isArraySetting(key)) return value;
 

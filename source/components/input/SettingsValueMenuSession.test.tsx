@@ -280,3 +280,106 @@ it('Tab inserts the selected suggestion without submitting or closing the frame'
   expect(controller.getSnapshot().editor.text.startsWith('/settings shell.timeout ')).toBe(true);
   expect(controller.getSnapshot().editor.text.length).toBeGreaterThan(25);
 });
+// A free-form string frame is a field: Home/End move the editor cursor inside
+// the value, and Enter applies the FULL value text (not binding.query, which
+// truncates at the cursor). environment.nodeEnv is a real free-form string
+// setting (z.string, no curated suggestions), so the real hook reports
+// isFreeFormString for it.
+it('Home and End move the editor cursor within a free-form value frame', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService();
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({
+      type: 'set-text',
+      text: '/settings environment.nodeEnv 3.0',
+      cursor: '/settings environment.nodeEnv 3.0'.length,
+    });
+    await Promise.resolve();
+  });
+
+  const child = controller.getSnapshot().stack.at(-1);
+  expect(child?.kind).toBe('settings_value');
+  const binding = (child as { binding: { queryStart: number; replacement: { start: number } } }).binding;
+  const valueStart = binding.queryStart;
+  const textLength = controller.getSnapshot().editor.text.length;
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(controller.getSnapshot().editor.cursor).toBe(valueStart);
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(controller.getSnapshot().editor.cursor).toBe(textLength);
+});
+
+it('a free-form string value round-trips verbatim and survives a Home cursor move on accept', async () => {
+  const intentHost = vi.fn(
+    ({ intentRequest }): IntentResult => ({
+      id: intentRequest.id,
+      sourceFrameId: intentRequest.sourceFrameId,
+      ok: true,
+    }),
+  );
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService();
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({
+      type: 'set-text',
+      text: '/settings environment.nodeEnv 3.0',
+      cursor: '/settings environment.nodeEnv 3.0'.length,
+    });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  // Cursor is at the value start; binding.query is truncated to the empty
+  // prefix. A query-based accept would drop the whole value - the accept
+  // below must apply the full editor draft instead, parsed verbatim: "3.0"
+  // must stay a string for this z.string() setting (E3 coercion trap).
+  const childAfter = controller.getSnapshot().stack.at(-1) as { binding: { query: string } };
+  expect(childAfter.binding.query).toBe('');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(intentHost).toHaveBeenCalledTimes(1);
+  const call = intentHost.mock.calls[0]?.[0];
+  expect(call.intentRequest.intent.changes).toEqual([
+    expect.objectContaining({ key: 'environment.nodeEnv', value: '3.0' }),
+  ]);
+});

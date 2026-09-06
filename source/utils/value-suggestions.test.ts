@@ -198,7 +198,7 @@ it('filterSettingValueSuggestionsByQuery does not include custom string if alrea
   expect(result.some((r) => r.description === 'Custom value')).toBe(false);
 });
 
-it('filterSettingValueSuggestionsByQuery does not include custom string for string settings with predefined suggestions', () => {
+it('filterSettingValueSuggestionsByQuery includes custom string for string settings even with predefined suggestions', () => {
   const suggestions: SettingValueSuggestion[] = [
     { value: 'openai', description: 'OpenAI official API' },
     { value: 'openrouter', description: 'OpenRouter.ai' },
@@ -210,7 +210,11 @@ it('filterSettingValueSuggestionsByQuery does not include custom string for stri
 
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'custom-provider', 10, 'agent.provider');
 
-  expect(result.some((r) => r.description === 'Custom value')).toBe(false);
+  // A curated list is an accessory, not a constraint: Enter applies typed text
+  // for any string setting, so an unmatched typed value must surface as an
+  // actionable row rather than a dead-end "No matching values" state.
+  expect(result[0]?.value).toBe('custom-provider');
+  expect(result[0]?.description).toBe('Custom value');
 });
 
 it('filterSettingValueSuggestionsByQuery does not include custom string for empty query', () => {

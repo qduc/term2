@@ -170,7 +170,7 @@ it('runListModels reuses disk cache across separate invocations without custom f
     // Simulate process exit and new process startup: in-memory cache is wiped
     clearModelMemoryCacheForTest();
 
-    // Second CLI errand within 1 hour: should read from disk cache, networkFetches stays 1
+    // Second CLI errand within the TTL: should read from disk cache, networkFetches stays 1
     const second = await runListModels(deps);
     expect(second.exitCode).toBe(0);
     expect(second.output).toContain('cached-cli-model');

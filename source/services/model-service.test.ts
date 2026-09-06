@@ -7,6 +7,7 @@ import {
   clearModelCache,
   filterModels,
   MODEL_CACHE_TTL_MS,
+  MODEL_CACHE_STALE_GRACE_MS,
   getModelCacheDir,
   getModelCacheFilePath,
   clearModelMemoryCacheForTest,
@@ -587,7 +588,7 @@ describe.sequential('model disk cache', () => {
     }
   });
 
-  it('serves models from disk within TTL (e.g. 59 minutes elapsed)', async () => {
+  it('serves models from disk within TTL (elapsed time just under the TTL)', async () => {
     const providerId = 'ttl-hit-provider';
     let fetchCount = 0;
     registerProvider({
@@ -613,9 +614,9 @@ describe.sequential('model disk cache', () => {
       );
       expect(fetchCount).toBe(1);
 
-      // Clear memory cache, advance time by 59 minutes (3540 seconds)
+      // Clear memory cache, advance time to just under the TTL boundary
       clearModelMemoryCacheForTest();
-      now += 59 * 60 * 1000;
+      now += MODEL_CACHE_TTL_MS - 60_000;
 
       const cached = await fetchModels(
         {
@@ -632,7 +633,7 @@ describe.sequential('model disk cache', () => {
     }
   });
 
-  it('treats disk cache older than 1 hour as expired (miss), re-fetches and overwrites', async () => {
+  it('treats disk cache older than the TTL as expired (miss), re-fetches and overwrites', async () => {
     const providerId = 'ttl-expire-provider';
     let fetchCount = 0;
     registerProvider({
@@ -659,7 +660,7 @@ describe.sequential('model disk cache', () => {
       expect(first[0].id).toBe('ttl-model-1');
       expect(fetchCount).toBe(1);
 
-      // Clear memory cache, advance time by 60 minutes + 1 second (> 1 hour)
+      // Clear memory cache, advance time just past the TTL boundary
       clearModelMemoryCacheForTest();
       now += MODEL_CACHE_TTL_MS + 1000;
 
@@ -1139,6 +1140,86 @@ describe.sequential('model disk cache', () => {
       const cacheFilePath = getModelCacheFilePath(providerId);
       const diskContent = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
       expect(diskContent.models.map((m: any) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('keeps the stale-grace window strictly wider than the fresh TTL', () => {
+    // If GRACE <= TTL, any cache entry still inside the grace window would
+    // already have been served by the fresh-TTL disk read a few lines above
+    // in fetchModels, so the "previous" read at the wider GRACE window could
+    // never observe an entry the fresh read hadn't already returned. That
+    // makes the degraded/last-known-good fallback structurally unreachable:
+    // a provider outage on an expired-but-recent cache would serve nothing
+    // instead of falling back to stale models. The two tiers must stay
+    // distinct so there is a window where "too old to serve fresh" and
+    // "not yet too old to use as last-known-good" both hold.
+    expect(MODEL_CACHE_STALE_GRACE_MS).toBeGreaterThan(MODEL_CACHE_TTL_MS);
+  });
+
+  it('serves stale last-known-good models when a cache entry is older than TTL but within the grace window and the provider degrades', async () => {
+    const providerId = 'stale-grace-degraded-provider';
+    let fetchCount = 0;
+    const healthyList = [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }];
+    const degradedList = [{ id: 'm1' }];
+
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        // Every fetch after the first (the initial warm-up) returns a
+        // degraded strict subset, including the immediate retry inside
+        // fetchModels, so the degraded/last-known-good path is exercised
+        // deterministically.
+        return fetchCount === 1 ? healthyList : degradedList;
+      },
+    });
+
+    try {
+      let now = 70_000_000;
+      const clock = () => now;
+
+      // 1. Initial healthy fetch populates memory + disk cache.
+      const first = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(first.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(fetchCount).toBe(1);
+
+      // 2. Advance past the fresh TTL but stay inside the wider grace
+      // window, so the entry is "too old to serve fresh" while still
+      // "not too old to use as last-known-good".
+      clearModelMemoryCacheForTest();
+      now += MODEL_CACHE_TTL_MS + 1000;
+      expect(now - 70_000_000).toBeLessThan(MODEL_CACHE_STALE_GRACE_MS);
+
+      // 3. The provider degrades on both the primary fetch and the
+      // immediate retry, so fetchModels must fall back to the grace-window
+      // disk entry instead of returning the degraded list.
+      const second = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+
+      expect(second.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+
+      // Disk cache must NOT be overwritten with the degraded list — the
+      // existing last-known-good behavior is preserved exactly.
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      const diskContent = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(diskContent.models.map((m: any) => m.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(diskContent.timestamp).toBe(70_000_000);
     } finally {
       unregisterProvider(providerId);
     }

@@ -493,7 +493,7 @@ export class ConversationOrchestrator {
   }
 
   /** Reset only the UI projection after an in-place session rollover. */
-  resetPresentation(): void {
+  resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean } = {}): void {
     this.config.messages.setMessages(() => []);
     this.config.approvedContext.current = null;
     this.config.conversationService.clearPendingInteraction?.();
@@ -502,7 +502,9 @@ export class ConversationOrchestrator {
     this.config.subagentUsageAccumulator?.reset();
     this.config.costAccumulator?.reset();
     this.#directlyAppendedMessageIds.clear();
-    this.#displayedBackgroundNotificationMessageIds.clear();
+    if (!options.preserveBackgroundNotificationDedup) {
+      this.#displayedBackgroundNotificationMessageIds.clear();
+    }
     this.#retractedSteerIds.clear();
     this.#editedSteerTurns.clear();
     this.#reportedStrandedCallIds.clear();

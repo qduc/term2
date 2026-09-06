@@ -7,6 +7,7 @@ import { createAgentStream } from '../agent-stream.js';
 import { MockStream, createMockStream } from '../test-helpers/mock-stream.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { createOwnedSessionClientFactory } from '../session/session-client-factory.js';
 
 const mockLogger = {
   info: () => {},
@@ -154,6 +155,93 @@ it('rollover keeps the caller-owned client alive while replacing root identity',
 
   expect(service.sessionId).toBe('after-rollover');
   expect(abort).not.toHaveBeenCalled();
+  service.dispose();
+});
+
+it('prepares rollover admission before returning a commit callback', () => {
+  const service = new ConversationService({
+    agentClient: partialClient(),
+    toolOwnership: new ToolOwnershipRegistry(),
+    sessionId: 'before-rollover',
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const commit = service.prepareRolloverWithNewId('after-rollover', '2026-09-06T11:00:00.000Z');
+  expect(service.sessionId).toBe('before-rollover');
+  commit();
+  expect(service.sessionId).toBe('after-rollover');
+  service.dispose();
+});
+
+it('retains owned background shell output and notification wiring across rollover', async () => {
+  let registry: any;
+  let output: any;
+  const providerCalls: Array<{ text: string; options: any }> = [];
+  let backgroundSink: ((event: ConversationEvent) => void) | null = null;
+  const settings = {
+    get: (key: string) => (key === 'agent.provider' ? 'openai' : undefined),
+    getDynamic: () => undefined,
+  } as any;
+  const factory = createOwnedSessionClientFactory(settings, (...args: any[]) => {
+    registry = args[8];
+    output = args[10];
+    return partialClient({
+      startStream: async (text: string, options: any) => {
+        providerCalls.push({ text, options });
+        return completedStream('successor response');
+      },
+      setBackgroundShellEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
+        backgroundSink = sink;
+      },
+    });
+  });
+  const service = new ConversationService({
+    sessionClientFactory: factory,
+    sessionId: 'owned-before',
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const job = registry.launch({
+    command: 'hold',
+    run: (signal: AbortSignal) =>
+      new Promise((resolve) =>
+        signal.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true }),
+      ),
+  });
+  output.store.open(job.id);
+  output.store.push(job.id, 'stdout', 'retained output\n');
+
+  service.importState({
+    history: [{ type: 'message', role: 'user', content: 'predecessor context' }],
+    previousResponseId: 'predecessor-response',
+    toolLedger: [],
+  });
+  service.rolloverWithNewId('owned-after', '2026-09-06T11:00:00.000Z');
+  await service.sendMessage('successor request');
+
+  expect(registry.get(job.id)).toEqual(expect.objectContaining({ id: job.id, status: 'running' }));
+  expect(output.store.readTail(job.id, 100)?.text).toBe('retained output\n');
+  expect(providerCalls[0]).toMatchObject({
+    text: 'successor request',
+    options: {
+      sessionId: 'owned-after',
+      previousResponseId: null,
+      providerHistorySnapshot: expect.objectContaining({
+        history: [{ type: 'message', role: 'user', content: 'successor request' }],
+      }),
+    },
+  });
+  expect(backgroundSink).toEqual(expect.any(Function));
+  const retainedBackgroundSink = backgroundSink as unknown as (event: ConversationEvent) => void;
+  retainedBackgroundSink({
+    type: 'background_check_in_due',
+    target: { kind: 'shell', id: job.id },
+    checkInIndex: 1,
+    elapsedMs: 1_000,
+    details: { kind: 'shell', id: job.id, command: 'hold' },
+  });
+  expect(service.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({ kind: 'check_in', target: { kind: 'shell', id: job.id } }),
+  ]);
   service.dispose();
 });
 

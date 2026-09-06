@@ -932,6 +932,7 @@ if (!forkRequested) {
 const conversationService = new ConversationService({
   sessionClientFactory,
   sessionId: effectiveSessionId,
+  sessionStartedAt: effectiveCreatedAt,
   deps: {
     logger: logger,
     settingsService: settings,

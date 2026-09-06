@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   handleShellSubmit: vi.fn(),
   cycleAppModes: vi.fn(),
   clearConversation: vi.fn(),
+  resetConversationPresentation: vi.fn(),
   handoff: {
     handoffState: null as any,
     startHandoff: vi.fn(),
@@ -183,6 +184,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
       handleApprovalDecision: mocks.handleApprovalDecision,
       onTypeAnswer: vi.fn(),
       clearConversation: mocks.clearConversation,
+      resetConversationPresentation: mocks.resetConversationPresentation,
       stopProcessing: mocks.stopProcessing,
       undoLastUserMessage: vi.fn(),
       retryLastToolOutput: vi.fn(async () => false),
@@ -358,6 +360,7 @@ beforeEach(() => {
   mocks.handleShellSubmit.mockReset();
   mocks.cycleAppModes.mockReset();
   mocks.clearConversation.mockReset();
+  mocks.resetConversationPresentation.mockReset();
   mocks.clearConversationCallback = null;
   mocks.sessionRolloverCallback = null;
   mocks.messageListMounts = 0;
@@ -444,6 +447,81 @@ describe('App orchestration', () => {
       expect.stringContaining('Outcome: completed into successor session `session-2`'),
     );
     expect(mocks.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it.sequential('preflights the in-place rollover before rotating the writer and commits afterwards', async () => {
+    const services = createServices();
+    const order: string[] = [];
+    const commit = vi.fn(() => order.push('commit'));
+    services.conversationService.rolloverWithNewId = vi.fn();
+    services.conversationService.prepareRolloverWithNewId = vi.fn(() => {
+      order.push('preflight');
+      return commit;
+    });
+    const onRotateWriter = vi.fn(() => order.push('writer'));
+
+    await renderInAct(
+      <App
+        {...services}
+        sessionId="session-1"
+        terminalTitleBase="term2"
+        generateId={() => 'session-2'}
+        onRotateWriter={onRotateWriter}
+      />,
+    );
+
+    await act(async () => {
+      await mocks.sessionRolloverCallback?.({
+        brief: 'Continue.',
+        rolloverId: 'rollover-in-place',
+        requestedAt: Date.now(),
+      });
+    });
+
+    expect(order).toEqual(['preflight', 'writer', 'commit']);
+    expect(onRotateWriter).toHaveBeenCalledWith('session-2', expect.any(String), 'session-1');
+    expect(services.conversationService.resetWithNewId).not.toHaveBeenCalled();
+  });
+
+  it.sequential('cleans pending rollover refs when the writer rejects so a retry can proceed', async () => {
+    const services = createServices();
+    const commit = vi.fn();
+    services.conversationService.rolloverWithNewId = vi.fn();
+    services.conversationService.prepareRolloverWithNewId = vi.fn(() => commit);
+    const onRotateWriter = vi.fn().mockImplementationOnce(() => {
+      throw new Error('writer unavailable');
+    });
+
+    await renderInAct(
+      <App
+        {...services}
+        sessionId="session-1"
+        terminalTitleBase="term2"
+        generateId={() => 'session-2'}
+        onRotateWriter={onRotateWriter}
+      />,
+    );
+
+    await expect(
+      act(async () => {
+        await mocks.sessionRolloverCallback?.({
+          brief: 'Retry me.',
+          rolloverId: 'rollover-failed',
+          requestedAt: Date.now(),
+        });
+      }),
+    ).rejects.toThrow('writer unavailable');
+    expect(commit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await mocks.sessionRolloverCallback?.({
+        brief: 'Retry me.',
+        rolloverId: 'rollover-retry',
+        requestedAt: Date.now(),
+      });
+    });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledTimes(1);
   });
 
   it.sequential('remounts MessageList when clearing conversation without clearing the terminal', async () => {

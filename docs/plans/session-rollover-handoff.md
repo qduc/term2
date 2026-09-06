@@ -18,6 +18,15 @@ The result-aware termination, provider-usage reminders, durable predecessor,
 semantic/short references, correlated telemetry, and outcome UX follow-up is
 merged in `37d156ac` (implementation `09ba6067`).
 
+The final acceptance hardening keeps the external writer behind service/runtime
+admission preflight, commits the retained graph synchronously, and cleans the
+App's pending rollover references when writer setup fails. The retained session
+identity now carries the successor start time into adapter traffic context, and
+rollover presentation reset preserves notification deduplication while ordinary
+clear still resets it. Focused App, service, runtime/adapter-context, brief,
+tool-description, and notification tests cover these boundaries; they do not
+claim rollback for a writer that has partially mutated external state.
+
 At the request boundary after a completed provider request, the reminder uses
 that request's provider-reported input-token usage. It has no local-estimator
 fallback. Configured milestones fire once and a deferred decision is

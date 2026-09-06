@@ -962,6 +962,37 @@ it('sendMessage runs inside sessionContextService.runWithContext with session co
   expect(ctx.traceId).toBe('trace-abc-123');
 });
 
+it('rollover forwards successor identity and start time through the adapter traffic context', async () => {
+  const contextLog: any[] = [];
+  const sessionContextService = {
+    runWithContext(context: any, fn: () => any) {
+      contextLog.push(context);
+      return fn();
+    },
+    getContext: () => null,
+  };
+  const bundle = createConversationSession({
+    sessionId: 'traffic-before',
+    sessionStartedAt: '2026-09-06T10:00:00.000Z',
+    agentClient: createMockAgentClient({
+      startStream: async () => {
+        const stream = new MockStream([]);
+        stream.finalOutput = 'Successor turn.';
+        return stream;
+      },
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  await bundle.terminalAdapter.sendMessage('before rollover');
+  bundle.rollover('traffic-after', '2026-09-06T11:00:00.000Z');
+  await bundle.terminalAdapter.sendMessage('after rollover');
+
+  expect(contextLog[0]).toMatchObject({ sessionId: 'traffic-before', sessionStartedAt: '2026-09-06T10:00:00.000Z' });
+  expect(contextLog[1]).toMatchObject({ sessionId: 'traffic-after', sessionStartedAt: '2026-09-06T11:00:00.000Z' });
+  bundle.dispose();
+});
+
 it('sendMessage sets mode correctly for different settings', async () => {
   const contextLog: any[] = [];
 

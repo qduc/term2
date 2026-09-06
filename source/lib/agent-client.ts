@@ -370,7 +370,7 @@ export class AgentClient {
                 kind: 'unchanged' as const,
                 notice:
                   'Local compaction cannot shorten this history yet: it preserves the newest two user turns and needs an older completed turn. ' +
-                  'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe boundary after background work settles. Do not repeat completed work or manufacture user turns to force compaction.',
+                  'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe idle boundary; live background work survives rollover, so do not wait for it solely to rotate. Do not repeat completed work or manufacture user turns to force compaction.',
               };
             }
           }

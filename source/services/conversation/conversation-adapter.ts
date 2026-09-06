@@ -170,7 +170,7 @@ export type QueuedTurnStartObserver = (execution: {
 
 export class ConversationAdapter {
   #sessionId: string | SessionIdentity;
-  #startedAt: string;
+  #startedAt: string | SessionIdentity;
   #eventSink: ConversationEventSink | null = null;
   #askUserAnswerSink: AskUserAnswerSink | null;
   #subagentEventSinkHost: SubagentEventSinkHost | null;
@@ -220,9 +220,13 @@ export class ConversationAdapter {
     return typeof this.#sessionId === 'string' ? this.#sessionId : this.#sessionId.current;
   }
 
+  #currentStartedAt(): string {
+    return typeof this.#startedAt === 'string' ? this.#startedAt : this.#startedAt.startedAt;
+  }
+
   constructor(deps: {
     sessionId: string | SessionIdentity;
-    startedAt: string;
+    startedAt: string | SessionIdentity;
     askUserAnswerSink?: AskUserAnswerSink | null;
     subagentEventSinkHost?: SubagentEventSinkHost | null;
     logger: ILoggingService;
@@ -390,7 +394,7 @@ export class ConversationAdapter {
     return this.#sessionContextService.runWithContext(
       {
         sessionId: this.#currentSessionId(),
-        sessionStartedAt: this.#startedAt,
+        sessionStartedAt: this.#currentStartedAt(),
         mode,
         traceId: this.#logger.getCorrelationId(),
         firstUserMessagePreview,

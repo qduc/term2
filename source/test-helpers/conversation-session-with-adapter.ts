@@ -24,6 +24,9 @@ export function createConversationSession(
   const runtime = buildSessionRuntime(internals);
   return {
     ...internals,
-    terminalAdapter: createConversationAdapterForRuntime(runtime, { deps: options.deps }),
+    terminalAdapter: createConversationAdapterForRuntime(runtime, {
+      deps: options.deps,
+      sessionIdentity: internals.identity,
+    }),
   };
 }

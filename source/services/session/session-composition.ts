@@ -131,7 +131,8 @@ export type SessionRuntimeInternals = {
    */
   dispose: () => void;
   shutdown: () => Promise<void>;
-  rollover: (newSessionId: string) => void;
+  rollover: (newSessionId: string, sessionStartedAt?: string) => void;
+  prepareRollover: (newSessionId: string, sessionStartedAt?: string) => () => void;
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
@@ -278,7 +279,7 @@ export type BackgroundSubagentApprovalChannel = Pick<
  */
 export type SessionRuntime = {
   readonly sessionId: string;
-  sessionStartedAt: string;
+  readonly sessionStartedAt: string;
   turns: {
     start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
     continueAfterApproval: (options: {
@@ -321,7 +322,9 @@ export type SessionRuntime = {
   dispose: () => void;
   shutdown: () => Promise<void>;
   /** Clear root transcript/continuity while retaining the runtime graph. */
-  rollover: (newSessionId: string) => void;
+  rollover: (newSessionId: string, sessionStartedAt?: string) => void;
+  /** Validate rollover admission and return its synchronous commit. */
+  prepareRollover: (newSessionId: string, sessionStartedAt?: string) => () => void;
 };
 
 // ── Composition factory ───────────────────────────────────────────
@@ -350,10 +353,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolCallMarkers: suppliedToolCallMarkers,
     enableNestedApproval = false,
   } = options;
-  const identity = suppliedIdentity ?? new SessionIdentity(initialSessionId);
+  const startedAt = sessionStartedAt ?? new Date().toISOString();
+  const identity = suppliedIdentity ?? new SessionIdentity(initialSessionId, startedAt);
   const id = identity.current;
   const { logger, settingsService, sessionContextService } = deps;
-  const startedAt = sessionStartedAt ?? new Date().toISOString();
   const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
   const toolCallMarkers = suppliedToolCallMarkers ?? new ToolCallMarkerStore();
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
@@ -843,7 +846,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   let backgroundShellSettlement: Promise<void> | undefined;
   let backgroundSubagentSettlement: Promise<void> | undefined;
-  const rollover = (newSessionId: string): void => {
+  const prepareRollover = (newSessionId: string, newStartedAt = new Date().toISOString()): (() => void) => {
     if (disposed) throw new Error('Session runtime is already disposed.');
     if (!newSessionId) throw new Error('Session rollover requires a session ID.');
     if (!appState.statusMachine.is('idle')) {
@@ -855,12 +858,17 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     if (nestedApprovalOwner.getSnapshot()) {
       throw new Error('Session rollover is blocked while a nested approval is pending.');
     }
-    // This is intentionally the same root-state reset used by clear, but it
-    // does not dispose the graph.  The retained client owns live background
-    // work, permissions, and approval registries; only transcript and
-    // provider/turn continuity are freshened.
-    state.resetSession({ clearConversations: false, rollover: true });
-    identity.replace(newSessionId);
+    return () => {
+      // This is intentionally the same root-state reset used by clear, but it
+      // does not dispose the graph. The retained client owns live background
+      // work, permissions, and approval registries; only transcript and
+      // provider/turn continuity are freshened.
+      state.resetSession({ clearConversations: false, rollover: true });
+      identity.replace(newSessionId, newStartedAt);
+    };
+  };
+  const rollover = (newSessionId: string, newStartedAt = new Date().toISOString()): void => {
+    prepareRollover(newSessionId, newStartedAt)();
   };
   const dispose = (): void => {
     if (disposed) return;
@@ -1070,7 +1078,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   return {
     sessionId: id,
     identity,
-    sessionStartedAt: startedAt,
+    get sessionStartedAt() {
+      return identity.startedAt;
+    },
     logger,
     conversationStore,
     approvalState,
@@ -1089,6 +1099,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     dispose,
     shutdown,
     rollover,
+    prepareRollover,
     generationGuard,
     providerContinuity,
     breakChaining,
@@ -1145,7 +1156,9 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     get sessionId() {
       return internals.identity.current;
     },
-    sessionStartedAt: internals.sessionStartedAt,
+    get sessionStartedAt() {
+      return internals.identity.startedAt;
+    },
     turns: {
       start: turnCoordinator.start.bind(turnCoordinator),
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),
@@ -1204,6 +1217,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     dispose,
     shutdown: internals.shutdown,
     rollover: internals.rollover,
+    prepareRollover: internals.prepareRollover,
   };
 }
 

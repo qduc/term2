@@ -60,7 +60,10 @@ export type SessionClientHandle = {
 
 /** Creates the closure-bound client for one conversation session. */
 export type SessionClientFactory = {
-  create(sessionId: string, options?: { allowBackgroundShell?: boolean; allowAskUser?: boolean }): SessionClientHandle;
+  create(
+    sessionId: string,
+    options?: { allowBackgroundShell?: boolean; allowAskUser?: boolean; sessionStartedAt?: string },
+  ): SessionClientHandle;
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
@@ -104,7 +107,7 @@ export function createOwnedSessionClientFactory(
 ): SessionClientFactory {
   return {
     create(sessionId, options) {
-      const sessionIdentity = new SessionIdentity(sessionId);
+      const sessionIdentity = new SessionIdentity(sessionId, options?.sessionStartedAt);
       const continuationProjectionMode: ContinuationProjectionMode =
         settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
@@ -217,8 +220,8 @@ export function createCallerOwnedSessionClientFactory(
   toolOwnership: ToolOwnershipRegistry,
 ): SessionClientFactory {
   return {
-    create(sessionId = 'caller-owned') {
-      const sessionIdentity = new SessionIdentity(sessionId);
+    create(sessionId = 'caller-owned', options) {
+      const sessionIdentity = new SessionIdentity(sessionId, options?.sessionStartedAt);
       const providerContinuity = new ProviderContinuity();
       const postExecutePending = new PostExecutePendingRegistry({
         sessionId: sessionIdentity,

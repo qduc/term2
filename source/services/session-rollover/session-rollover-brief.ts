@@ -48,7 +48,7 @@ export function composeSessionRolloverBrief({
     '- If predecessor detail is missing, read `session_read({ id: "previous", ... })` directly with bounded limits.',
     '- Use `session_search` only when the relevant session or location is unknown.',
     '- Do not replay the entire previous transcript.',
-    '- Old job and subagent handles are session-owned and may not be queryable here. Use durable artifacts, paths, and commits to verify their results; a missing handle is not evidence that completed work failed.',
+    '- Live job and subagent handles remain session-owned and are retained across this rollover; inspect or control them through the background-task tools when needed. Use durable artifacts, paths, and commits for completed results rather than copying transient output into the handoff.',
     '- Continue from the next open step rather than redoing completed work.',
   ].join('\n');
 }

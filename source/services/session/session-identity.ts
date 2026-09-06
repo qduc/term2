@@ -5,13 +5,19 @@
  */
 export class SessionIdentity {
   #value: string;
+  #startedAt: string;
 
-  constructor(value: string) {
+  constructor(value: string, startedAt = new Date().toISOString()) {
     this.#value = value;
+    this.#startedAt = startedAt;
   }
 
   get current(): string {
     return this.#value;
+  }
+
+  get startedAt(): string {
+    return this.#startedAt;
   }
 
   toString(): string {
@@ -22,8 +28,9 @@ export class SessionIdentity {
     return this.#value;
   }
 
-  replace(value: string): void {
+  replace(value: string, startedAt = new Date().toISOString()): void {
     this.#value = value;
+    this.#startedAt = startedAt;
   }
 }
 

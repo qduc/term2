@@ -28,9 +28,9 @@ export function createSessionRolloverToolDefinition(
   return {
     name: 'session_rollover',
     description:
-      'Request an idle-boundary rotation into a fresh session. Live background work blocks rotation: let it settle before drafting a brief. ' +
+      'Request an idle-boundary rotation into a fresh session. Live background work survives the rotation; include its current status and next action in the brief, but do not wait for it merely to rotate. ' +
       'Keep the brief well below the 8,000-character limit using durable-state pointers and the next open step. ' +
-      'Old job and subagent handles are session-owned; save their useful results to durable artifacts rather than promising the successor can query those handles.',
+      'The successor retains the session-owned live background registry and can inspect or control those handles; save durable results when they are ready rather than copying transient output into the brief.',
     parameters: sessionRolloverParameters,
     terminateAfterExecution: (result) =>
       typeof result === 'string' &&

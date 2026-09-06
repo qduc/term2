@@ -223,6 +223,21 @@ it('rollover changes identity without disposing the retained runtime graph', () 
   runtime.dispose();
 });
 
+it('rollover updates the session start timestamp used by the retained runtime identity', () => {
+  const runtime = createSessionRuntime({
+    sessionId: 'before-rollover',
+    sessionStartedAt: '2026-09-06T10:00:00.000Z',
+    agentClient: makeMockClient(),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  runtime.rollover('after-rollover', '2026-09-06T11:00:00.000Z');
+
+  expect(runtime.sessionId).toBe('after-rollover');
+  expect(runtime.sessionStartedAt).toBe('2026-09-06T11:00:00.000Z');
+  runtime.dispose();
+});
+
 it('rollover resets root history and continuity through the owned client seam while retaining background controls', () => {
   const rolloverRootContext = vi.fn();
   const backgroundStatuses = [{ runId: 'worker-1', role: 'worker', status: 'running', task: 'hold' }];

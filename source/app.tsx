@@ -392,20 +392,23 @@ const App: FC<AppProps> = ({
     });
     const plannedSuccessorId = generateId();
     const successorCreatedAt = new Date().toISOString();
+    const canRolloverInPlace = typeof conversationService.prepareRolloverWithNewId === 'function';
+    // Admission must happen before rotating persistence. The returned callback
+    // is the commit seam: after the writer runs, runtime rollover is a checked,
+    // synchronous mutation and has no remaining admission point that can reject.
+    const commitRollover = canRolloverInPlace
+      ? conversationService.prepareRolloverWithNewId(plannedSuccessorId, successorCreatedAt)
+      : undefined;
     pendingRolloverSuccessorIdRef.current = plannedSuccessorId;
     latestRotatedSessionIdRef.current = plannedSuccessorId;
     rolloverSourceSessionIdRef.current = sessionId;
-    onPrintUsage?.();
-    const canRolloverInPlace = typeof conversationService.rolloverWithNewId === 'function';
-    // Rotate persistence before mutating the in-memory root. If log setup is
-    // rejected, the rollover leaves the live graph and its current transcript
-    // untouched; there is no attempt to promise rollback of arbitrary sinks.
-    if (canRolloverInPlace && onRotateWriter) {
-      onRotateWriter(plannedSuccessorId, successorCreatedAt, sourceSessionId);
-    }
     try {
+      onPrintUsage?.();
       if (canRolloverInPlace) {
-        conversationService.rolloverWithNewId(plannedSuccessorId);
+        if (onRotateWriter) {
+          onRotateWriter(plannedSuccessorId, successorCreatedAt, sourceSessionId);
+        }
+        commitRollover?.();
       } else {
         // Compatibility harnesses predating the in-place seam retain the old
         // clear path; production ConversationService always has the method.

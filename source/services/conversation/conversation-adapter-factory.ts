@@ -34,7 +34,7 @@ export function createConversationAdapterForRuntime(
   const { logger, settingsService, sessionContextService } = deps;
   return new ConversationAdapter({
     sessionId: sessionIdentity ?? runtime.sessionId,
-    startedAt: runtime.sessionStartedAt,
+    startedAt: sessionIdentity ?? runtime.sessionStartedAt,
     askUserAnswerSink: runtime.sinks.askUserAnswer,
     subagentEventSinkHost: runtime.sinks.subagentEvents,
     logger,

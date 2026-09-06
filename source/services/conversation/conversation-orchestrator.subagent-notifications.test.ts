@@ -198,6 +198,9 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
     emit(event: ConversationEvent) {
       if (store.enqueue(event)) observer?.();
     },
+    wake() {
+      observer?.();
+    },
     emitStop(target: { kind: 'subagent' | 'shell'; id: string }) {
       if (
         store.enqueueUserControl({
@@ -602,6 +605,22 @@ describe('ConversationOrchestrator background subagent notifications', () => {
       .join('\n');
     expect(display).toContain('question-1');
     expect(display).toContain('question-2');
+  });
+
+  it('does not re-announce a retained notification after a rollover presentation reset', async () => {
+    const h = makeHarness();
+    h.service.sendMessage.mockRejectedValueOnce(new Error('temporary delivery failure'));
+
+    h.emit(completion({ agentId: 'run-once' }));
+    await settle();
+    expect(h.store.pendingCount).toBe(1);
+
+    h.orchestrator.resetPresentation({ preserveBackgroundNotificationDedup: true });
+    h.wake();
+    await settle();
+
+    expect(h.config.messages.getMessages().filter((message) => message.sender === 'command')).toHaveLength(0);
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('starts one system turn when a background run settles while the conversation is idle', async () => {

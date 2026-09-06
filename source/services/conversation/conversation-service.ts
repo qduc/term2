@@ -135,7 +135,10 @@ export class ConversationService {
     this.#activeCancelTimeoutMs = activeCancelTimeoutMs;
     this.#discardOnFailure = discardOnFailure === true;
     this.#enableNestedApproval = enableNestedApproval === true;
-    this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
+    const resolvedSessionStartedAt = sessionStartedAt ?? new Date().toISOString();
+    this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default', {
+      sessionStartedAt: resolvedSessionStartedAt,
+    });
     this.#toolCallMarkers = toolCallMarkers ?? new ToolCallMarkerStore();
     this.#deps = deps;
     const { runtime, adapter } = createConversationRuntime({
@@ -158,7 +161,7 @@ export class ConversationService {
       activeCancelTimeoutMs,
       discardOnFailure: this.#discardOnFailure,
       sessionId: sessionId ?? 'default',
-      sessionStartedAt,
+      sessionStartedAt: resolvedSessionStartedAt,
       enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
@@ -230,7 +233,8 @@ export class ConversationService {
     this.#runtime.dispose();
     this.#clientHandle.dispose();
     this.#deps.skillsService?.discoverSkills();
-    this.#clientHandle = this.#clientFactory.create(newId);
+    const newSessionStartedAt = new Date().toISOString();
+    this.#clientHandle = this.#clientFactory.create(newId, { sessionStartedAt: newSessionStartedAt });
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       providerContinuity: this.#clientHandle.providerContinuity,
@@ -250,6 +254,7 @@ export class ConversationService {
       activeCancelTimeoutMs: this.#activeCancelTimeoutMs,
       discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
+      sessionStartedAt: newSessionStartedAt,
       enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
@@ -284,11 +289,19 @@ export class ConversationService {
     }
   }
 
-  /** Rollover-only identity/context reset; ordinary clear keeps its disposal semantics. */
-  rolloverWithNewId(newId: string): void {
+  /** Validate rollover admission without changing state or external persistence. */
+  prepareRolloverWithNewId(newId: string, sessionStartedAt?: string): () => void {
     if (!newId) throw new Error('Session rollover requires a session ID.');
     this.#assertRolloverAdmission();
-    this.#runtime.rollover(newId);
+    // Runtime admission is part of this preflight too. Its returned callback
+    // performs only the synchronous state transition, with no later rejection
+    // point after an external writer has committed.
+    return this.#runtime.prepareRollover(newId, sessionStartedAt);
+  }
+
+  /** Rollover-only identity/context reset; ordinary clear keeps its disposal semantics. */
+  rolloverWithNewId(newId: string, sessionStartedAt?: string): void {
+    this.prepareRolloverWithNewId(newId, sessionStartedAt)();
   }
 
   #assertRolloverAdmission(): void {

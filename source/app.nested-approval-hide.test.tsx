@@ -225,9 +225,25 @@ it.sequential(
           expect(frame).toContain('Allow permission to edit this file outside the workspace?');
         });
         expect(existsSync(approvedPath)).toBe(false);
+        // waitFor polls the committed frame, but Ink attaches the prompt's
+        // input listener in passive effects that flush after the commit. On a
+        // loaded CI runner the poll can observe the frame inside that window,
+        // the Enter lands before any listener owns it, and the turn never
+        // settles (observed as a CI-only 20s timeout). Re-send Enter while the
+        // prompt is still on screen; a consumed Enter resolves the approval
+        // and clears it from the frame.
+        const approvalShown = () =>
+          (view.lastFrame() ?? '').includes('Allow permission to edit this file outside the workspace?');
         await act(async () => {
           view.stdin.write('\r');
         });
+        for (let attempt = 0; attempt < 5 && approvalShown(); attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          if (!approvalShown()) break;
+          await act(async () => {
+            view.stdin.write('\r');
+          });
+        }
         const terminal = await pending;
         expect(terminal.type).toBe('response');
         if (terminal.type !== 'response') throw new Error(`expected response, got ${terminal.type}`);

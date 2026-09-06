@@ -1,6 +1,7 @@
 # Invalid chained worker recovery investigation
 
-Status: stale recovery-deadline failure reproduced and repaired. The provider
+Status: stale recovery-deadline failure reproduced and repaired (`700df65c`,
+merged in `6d9648b1`). The provider
 rejection itself remains externally unexplained; see the distinction below.
 
 ## Recovery episode repair contract (2026-09-06)

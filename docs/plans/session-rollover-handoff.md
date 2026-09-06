@@ -2,6 +2,13 @@
 
 ## Resume here
 
+Live-background rollover and final acceptance repairs are merged in `9485b1ef`.
+The retained identity is also shared when rollover follows ordinary reset, and
+retry admission telemetry resolves that identity to a concrete session ID.
+Parent integrated verification: typecheck passed; provider black-box 177 passed /
+1 skipped; isolated full suite 8,067 passed / 5 independently reproduced baseline
+failures (not green).
+
 The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
 `38ec5576`, settings-surface repair `6a7cfac7`). The shipped behavior is
 agent-triggered only: context milestones advise the agent, and

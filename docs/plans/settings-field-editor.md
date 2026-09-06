@@ -2,7 +2,7 @@
 
 ## Resume here
 
-**Status: active (2026-09-06). Phase A implemented and merged to main; Phase B open (decision-gated).**
+**Status: active (2026-09-06). Phases A and B implemented and merged to main; C open (extraction only on a second consumer).**
 
 Planning baseline: main HEAD `c023fae1` (settings-legacy-debt M0–M4 merged), inspected 2026-09-06.
 
@@ -95,9 +95,9 @@ no curation-only fix.
 
 ## Decisions
 
-- **D1 (exit semantics, decided for A, revisit in B):** Enter applies and returns
-  to the settings list (batch edits). Auto-close-to-composer is a B candidate;
-  requires a "single change vs batch" affordance decision and a BackPolicy change.
+- **D1 (exit semantics, decided for A and B, 2026-09-06):** Enter applies and
+  returns to the settings list (batch edits). User decision (B gate): keep
+  apply-and-stay; auto-close-to-composer was declined. No BackPolicy change.
 - **D2 (chrome):** the `settings_value` prompt line shows `<settingKey> =` +
   the value text instead of `Filter:` - the key context is currently invisible
   (E1).
@@ -107,7 +107,9 @@ no curation-only fix.
   Enter genuinely cannot apply the typed text.
 - **D4 (grammar rule):** Home/End move the text cursor only in field frames -
   string settings with no curated suggestions (E4). Curated strings keep list
-  navigation because their list is still the primary surface (until B).
+  navigation because their list is still the primary surface. **Decided for B
+  (2026-09-06): field scope = free-form strings only.** Curated strings and
+  numbers keep the settings_value list+typing flow; enums/booleans stay pickers.
 
 ## Milestones
 
@@ -135,16 +137,39 @@ function, and MenuSurface's label line; no frame-model change.
   `binding.query` for `settings_value` frames instead of `Filter: ` (D2).
   Other filterable frames unchanged. Fixes E1.
 
-### B - Field frame (open, decision-gated)
+### B - Field frame (implemented 2026-09-06, D1/D4 decisions applied)
 
-Schema-driven split: introduce a `settings_field` frame kind next to
-`settings_value` (or a field interaction state inside the value session) whose
-draft is frame-owned state seeded from the current value, rendered as
-`settingKey = draft`; completions render below as accessories; Home/End text
-grammar for strings and numbers; inline schema validation before commit; D1's
-exit semantics re-decided. Precedent: the model frame and provider wizard draft.
-Needs its own milestone record here, isolated worktree, and focused suites
-(SettingsValueMenuSession, SettingsValueSelectionMenu, menu-system integration).
+Implemented as a **field interaction state inside the settings_value session**
+(the plan's explicit alternative to a new frame kind), scoped by the D4
+decision to free-form strings only:
+
+- **Draft seeded from the current value** - list-selecting a free-form string
+  setting (z.string, no curated suggestions) pushes its value frame prefilled
+  with the current value (edit-in-place rather than retype). Seeding happens
+  inside `pushChildEffect` as part of the single push transaction: the seeded
+  text is ordinary value text from the controller's point of view (binding
+  queryStart/replacement/trigger exclude the seed; reconciliation re-derives
+  the binding from the editor), so Esc/apply restore the pre-selection filter
+  exactly as before. Never seeds: curated strings (D4), numbers/enums,
+  model-backed keys (they route to the model frame), and stored credentials
+  (secrets are never echoed into the buffer).
+- **Inline validation before commit** - Enter on a blank free-form draft keeps
+  the frame open with an inline `Type a value before applying` error instead
+  of silently closing (the old `undefined -> close-top` path looked like a
+  successful no-op commit).
+- **Rendered as `settingKey = draft`** (A4 chrome), **Home/End text grammar**
+  and **full-draft accept** (A3) already in place from Phase A; completions are
+  moot for free-form keys (no curated list) beyond the current-value accessory
+  row.
+- **Draft stays the composer binding, not frame-owned state** (deviation from
+  the plan's literal wording, chosen deliberately): the binding is the single
+  source of truth for the visible input line; duplicating it into frame state
+  risks desync for no free-form benefit (the provider-wizard precedent restores
+  the composer rather than owning text). Seeding via the push buffer effect is
+  indistinguishable from the user having typed the value.
+
+D1 (apply-and-stay) confirmed: after Enter the frame closes through the
+settings-list Back, exactly as in A.
 
 ### C - Shared field interaction (only on second consumer)
 
@@ -182,6 +207,25 @@ local HEAD. A is self-contained; B follows after D1's exit-semantics decision.
   stubbed settingsValue host that never subscribed to the input context (no
   re-render on frame push); rewritten on the real hook with
   `environment.nodeEnv` (a genuine free-form string key).
+
+## Implementation record: Phase B (2026-09-06)
+
+- Gate decisions (user): D1 = keep apply-and-stay (batch); D4 = field scope is
+  free-form strings only (numbers/curated strings stay on settings_value).
+- Branch `settings-field-editor-b`, commit `161078d0`, merge `730178b8` (no-ff,
+  main).
+- Gate: 5 focused files / 76 tests passed (settings-command, value-suggestions,
+  SettingsValueSelectionMenu, SettingsValueMenuSession, SettingsMenuSession)
+  plus menu-system integration (22) and `pnpm typecheck` clean.
+- New pins: list-select on `memory.directory` (free-form string, current value
+  set) seeds binding.query/buffer with the value and Escape restores the exact
+  pre-selection filter; curated string (`webSearch.provider`) and model-backed
+  keys (`agent.smartModel`) never seed; Enter on a blank free-form draft shows
+  the inline error, fires no intent, and keeps the frame open.
+- Finding during test construction: the settings list only surfaces keys with
+  defaults/descriptions — `environment.nodeEnv` and `agent.openai.apiKey` are
+  reachable only via typed activation, so list-select seeding tests use
+  `memory.directory` (override) instead.
 
 ## Related plans
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
-import type { ModelInfo } from '../model-service.js';
+import { clearModelCache, fetchModels, type ModelInfo } from '../model-service.js';
+import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import type { ProviderModelGroup } from './model-listing.js';
 import {
   formatDisambiguationPrompt,
@@ -856,5 +857,86 @@ describe('resolveModelFlag', () => {
     expect(deps.fetcher).toHaveBeenCalledWith('providerB');
     expect(deps.fetcher).toHaveBeenCalledWith('providerC');
     expect(result.status).toBe('resolved');
+  });
+
+  it('detects a same-id collision on a provider whose catalog is already warm in cache, without fetching it', async () => {
+    // The first provider tried resolves "shared-model" exactly and stops
+    // there (early exit), but a second provider already has the identical id
+    // sitting in a warm cache from an earlier interaction in this process.
+    // Resolution must notice that via a read-only cache peek and offer
+    // disambiguation, instead of silently handing back the first provider's
+    // arbitrary pick — while never issuing a network fetch for the second
+    // provider (asserted by making its fetcher branch throw).
+    const secondProviderId = 'fake-peek-second';
+    registerProvider({
+      id: secondProviderId,
+      label: 'Fake Peek Second',
+      fetchModels: async () => [{ id: 'shared-model' }],
+    });
+    try {
+      // Warm the second provider's real model-service cache ahead of time,
+      // independent of resolveModelFlag's own (mocked) fetcher.
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: vi.fn() } as any },
+        secondProviderId,
+      );
+
+      const fetcher = vi.fn(async (provider: string) => {
+        if (provider === 'fake-peek-first') return [{ id: 'shared-model', provider }];
+        throw new Error(`must not fetch ${provider}: its catalog should come from cache, not the network`);
+      });
+      const prompter = vi.fn(async () => '1');
+      const result = await resolveModelFlag({
+        modelFlag: 'shared-model',
+        settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+        prompter,
+        providerIds: ['fake-peek-first', secondProviderId],
+        knownProviders: ['fake-peek-first', secondProviderId],
+      });
+
+      expect(fetcher).not.toHaveBeenCalledWith(secondProviderId);
+      expect(prompter).toHaveBeenCalledOnce();
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'shared-model',
+        provider: 'fake-peek-first',
+        reasoningEffort: undefined,
+      });
+    } finally {
+      unregisterProvider(secondProviderId);
+      clearModelCache(secondProviderId);
+    }
+  });
+
+  it('does not detect a collision on a provider whose cache is cold (accepted limitation)', async () => {
+    // Same shape as the test above, but the second provider was never warmed
+    // ahead of time. Its cache is cold, so the peek finds nothing and the
+    // first provider's exact match resolves silently — this is the accepted
+    // residual gap: ruling out a cold-cache collision would require a
+    // network fetch, which defeats the point of the early exit.
+    const fetcher = vi.fn(async (provider: string) => {
+      if (provider === 'fake-peek-first-cold') return [{ id: 'shared-model', provider }];
+      throw new Error(`must not fetch ${provider}`);
+    });
+    const prompter = vi.fn();
+    const result = await resolveModelFlag({
+      modelFlag: 'shared-model',
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      fetcher,
+      prompter,
+      providerIds: ['fake-peek-first-cold', 'fake-peek-second-cold'],
+      knownProviders: ['fake-peek-first-cold', 'fake-peek-second-cold'],
+    });
+
+    expect(prompter).not.toHaveBeenCalled();
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'resolved',
+      modelId: 'shared-model',
+      provider: 'fake-peek-first-cold',
+      reasoningEffort: undefined,
+    });
   });
 });

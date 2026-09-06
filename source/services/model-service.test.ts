@@ -13,6 +13,7 @@ import {
   setModelCacheDirForTest,
   setModelCacheClockForTest,
   isStrictSubsetModels,
+  peekCachedModels,
 } from './model-service.js';
 import { createMockSettingsService } from './settings/settings-service.mock.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
@@ -1225,6 +1226,128 @@ describe.sequential('model disk cache', () => {
       );
       expect(second[0].id).toBe('model-2');
       expect(fetchCount).toBe(2);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+});
+
+describe.sequential('peekCachedModels', () => {
+  let testDir: string;
+  let prevEnvCacheDir: string | undefined;
+
+  beforeAll(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-model-peek-cache-suite-'));
+    prevEnvCacheDir = process.env.TERM2_CACHE_DIR;
+    process.env.TERM2_CACHE_DIR = testDir;
+    setModelCacheDirForTest(testDir);
+  });
+
+  afterAll(() => {
+    if (prevEnvCacheDir !== undefined) {
+      process.env.TERM2_CACHE_DIR = prevEnvCacheDir;
+    } else {
+      delete process.env.TERM2_CACHE_DIR;
+    }
+    setModelCacheDirForTest(fileLevelCacheDir);
+    try {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  beforeEach(() => {
+    clearModelCache();
+    setModelCacheClockForTest(null);
+  });
+
+  afterEach(() => {
+    clearModelCache();
+    setModelCacheClockForTest(null);
+  });
+
+  it('returns undefined without fetching when nothing is cached', () => {
+    expect(peekCachedModels('never-fetched-provider')).toBeUndefined();
+  });
+
+  it('returns the in-memory cached models without touching disk or network', async () => {
+    const providerId = 'peek-memory-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'warm-model' }];
+      },
+    });
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(fetchCount).toBe(1);
+
+      const peeked = peekCachedModels(providerId);
+      expect(peeked).toEqual([{ id: 'warm-model', provider: providerId }]);
+      expect(fetchCount, 'peek must not trigger a fetch').toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('returns non-expired disk cache when the in-memory cache is cold', async () => {
+    const providerId = 'peek-disk-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'disk-warm-model' }];
+      },
+    });
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(fetchCount).toBe(1);
+
+      // Simulate a fresh process: memory cache is gone, disk cache remains.
+      clearModelMemoryCacheForTest();
+
+      const peeked = peekCachedModels(providerId);
+      expect(peeked).toEqual([{ id: 'disk-warm-model', provider: providerId }]);
+      expect(fetchCount, 'peek must not trigger a fetch').toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('returns undefined for an expired disk cache without refreshing it', async () => {
+    const providerId = 'peek-expired-provider';
+    let now = 10_000_000;
+    const clock = () => now;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [{ id: 'stale-model' }],
+    });
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any, now: clock },
+        providerId,
+      );
+      clearModelMemoryCacheForTest();
+      now += MODEL_CACHE_TTL_MS + 1;
+
+      expect(peekCachedModels(providerId, { now: clock })).toBeUndefined();
+
+      // The stale entry must still be sitting there untouched, not evicted.
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      expect(fs.existsSync(cacheFilePath)).toBe(true);
     } finally {
       unregisterProvider(providerId);
     }

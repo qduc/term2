@@ -1,6 +1,12 @@
 import { createInterface } from 'node:readline';
 import { getProvider, getProviderIds } from '../../providers/index.js';
-import { getModelCacheFilePath, matchTier, rankModelMatch, type ModelInfo } from '../model-service.js';
+import {
+  getModelCacheFilePath,
+  matchTier,
+  peekCachedModels,
+  rankModelMatch,
+  type ModelInfo,
+} from '../model-service.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { scoreSubsequence } from '../../utils/subsequence-filter.js';
 import { collectProviderModelsConcurrently, loadProviderModelGroup, type ProviderModelGroup } from './model-listing.js';
@@ -372,12 +378,37 @@ export async function resolveModelFlag(deps: {
     const firstGroup = await loadProviderModelGroup(loaderDeps, firstId);
     groups = [firstGroup];
 
-    if (!explicitProvider) {
+    if (!explicitProvider && restIds.length > 0) {
       const probe = matchModels(groups, parsed);
-      const needsWiden = !(probe.exact && probe.matches.length > 0) && restIds.length > 0;
-      if (needsWiden) {
+      const hasEarlyExactMatch = probe.exact && probe.matches.length > 0;
+
+      if (!hasEarlyExactMatch) {
         const restGroups = await collectProviderModelsConcurrently(loaderDeps, restIds);
         groups = [firstGroup, ...restGroups];
+      } else {
+        // The first provider already resolved an exact match, so a full
+        // network load of the rest would only be there to rule out a
+        // same-id collision — not worth giving back the latency win early
+        // exit was built for. Instead, peek whatever's ALREADY warm (memory
+        // cache, or a non-expired disk cache) for the providers we chose not
+        // to load: read-only, no fetch, costs nothing when cold. If one of
+        // them already has this exact id, fold it in so the normal
+        // multiple-matches path asks the user instead of silently picking
+        // the first provider tried. Accepted residual limitation: a
+        // collision sitting on a provider whose cache is cold or expired
+        // goes undetected — that's intentional, not a bug, since ruling it
+        // out would require the network fetch this path exists to avoid.
+        const peekedGroups: ProviderModelGroup[] = [];
+        for (const id of restIds) {
+          const models = peekCachedModels(id);
+          if (models && models.length > 0) {
+            const label = getProvider(id)?.label;
+            peekedGroups.push({ provider: id, ...(label ? { label } : {}), models });
+          }
+        }
+        if (peekedGroups.length > 0) {
+          groups = [firstGroup, ...peekedGroups];
+        }
       }
     }
   }

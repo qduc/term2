@@ -128,6 +128,36 @@ function readDiskCache(
   }
 }
 
+/**
+ * Read-only peek at whatever model listing is already warm for a provider:
+ * the in-memory cache if still fresh, else a non-expired disk cache entry.
+ * Never fetches, and never populates, refreshes, or evicts either cache
+ * layer — a cold or expired cache costs nothing beyond a Map lookup and, on
+ * a miss, one `fs.existsSync` check. Intended for opportunistic
+ * cross-provider exact-match collision detection after a fast, single-
+ * provider resolution (see `resolveModelFlag`); deliberately not a
+ * substitute for `fetchModels`, which is the only thing allowed to touch
+ * the network or write the cache.
+ */
+export function peekCachedModels(
+  provider: string,
+  opts?: { cacheDir?: string; now?: () => number; ttlMs?: number },
+): ModelInfo[] | undefined {
+  const now = opts?.now ?? testClock ?? Date.now;
+  const ttlMs = opts?.ttlMs ?? MODEL_CACHE_TTL_MS;
+
+  const memCached = cache.get(provider);
+  if (memCached) {
+    const age = now() - memCached.timestamp;
+    if (age >= 0 && age < ttlMs && memCached.models.length > 0) {
+      return memCached.models;
+    }
+  }
+
+  const diskCached = readDiskCache(provider, opts?.cacheDir, opts?.now, ttlMs);
+  return diskCached ?? undefined;
+}
+
 function writeDiskCache(
   provider: string,
   models: ModelInfo[],

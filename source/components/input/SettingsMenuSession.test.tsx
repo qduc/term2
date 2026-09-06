@@ -122,6 +122,44 @@ it('selecting a plain key pushes a settings_value child as one transaction, rest
   expect(controller.getSnapshot().editor).toMatchObject({ text: '/settings shell.time', cursor: 20 });
 });
 
+it('pressing Space on a boolean setting toggles it in place without opening a child menu', async () => {
+  const intentHost = vi.fn(({ intentRequest }) => ({
+    id: intentRequest.id,
+    sourceFrameId: intentRequest.sourceFrameId,
+    ok: true as const,
+  }));
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({ 'tools.shell.enabled': false });
+  const filter = '/settings tools.shell.en';
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: filter, cursor: filter.length });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('settings');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'input', text: ' ' });
+    await Promise.resolve();
+  });
+
+  expect(intentHost).toHaveBeenCalledTimes(1);
+  expect(intentHost.mock.calls[0]?.[0].intentRequest.intent).toEqual({
+    type: 'apply-settings',
+    changes: [{ key: 'tools.shell.enabled', value: true, persistence: 'runtime' }],
+  });
+  expect(controller.getSnapshot().stack).toHaveLength(1);
+  expect(controller.getSnapshot().stack[0]?.kind).toBe('settings');
+  expect(controller.getSnapshot().editor).toMatchObject({ text: filter, cursor: filter.length });
+});
+
 it('selecting a model-backed key pushes a settings-backed model child instead of a settings_value child', async () => {
   const controller = buildController();
   const settingsService = createMockSettingsService({ 'agent.provider': 'openai' });

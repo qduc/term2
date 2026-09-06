@@ -90,6 +90,22 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
     () => ({
       handle: (event) => {
         if (!('type' in event)) return;
+        if (event.type === 'input' && event.text === ' ' && frame.operation !== 'reset') {
+          const selected = settings.getSelectedItem();
+          if (selected && typeof selected.currentValue === 'boolean') {
+            return {
+              stack: { type: 'keep' },
+              intent: {
+                id: `apply-settings:${frame.id}:${selected.key}`,
+                sourceFrameId: frame.id,
+                intent: {
+                  type: 'apply-settings',
+                  changes: [{ key: selected.key, value: !selected.currentValue, persistence: 'runtime' }],
+                },
+              },
+            };
+          }
+        }
         if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
         switch (event.type) {
           case 'move':

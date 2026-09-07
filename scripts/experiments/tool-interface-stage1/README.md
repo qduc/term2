@@ -1,12 +1,13 @@
-# Stage1 tool-interface benchmark driver
+# Stage 1 tool-interface bench
 
-Paired real-model protocol for the Stage1 `run_code` header candidate vs baseline `76e51d24`.
-Full protocol: `docs/research/tool-interface-stage1-protocol.md`.
+Serial A/B of the combined Stage 1 `run_code` treatment vs baseline `76e51d24`.
 
-Do not launch paid cells until the candidate hash is final and parent/Claude give `--go`.
+- Protocol: `protocol.md` (gates B1–B9 / L1–L4). **Paid launch is blocked until protocol review.**
+- Candidate pin: `80f7488401c1043445cf3974f163633693c8c20f`. Not `67560fa9`.
+- Header bytes: factory-bound **non-interactive** snapshots (construction) and `provider-traffic-raw` (trials). The candidate test's interactive replica +8,471 B is not acceptance evidence (F3).
+- Tasks: 2 untreated-essential + 2 treated-nonessential. `aggregate-owners` is off the primary schedule.
 
-```bash
-node scripts/experiments/tool-interface-stage1/driver.mjs preflight --output-dir /home/qduc/.agents/runtime/tool-interface-stage1
-node scripts/experiments/tool-interface-stage1/driver.mjs run --go --output-dir /home/qduc/.agents/runtime/tool-interface-stage1
 ```
-
+node scripts/experiments/tool-interface-stage1/driver.mjs preflight
+pnpm exec vitest run scripts/experiments/tool-interface-stage1/stage1-bench.test.ts
+```

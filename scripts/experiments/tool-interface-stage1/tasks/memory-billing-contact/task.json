@@ -1,6 +1,7 @@
 {
   "id": "memory-billing-contact",
   "family": "memory-retrieval",
+  "stratum": "treated-nonessential",
   "title": "Recover a billing contact from project memory",
   "memory": {
     "global": [

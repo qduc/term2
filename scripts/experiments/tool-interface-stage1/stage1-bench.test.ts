@@ -6,6 +6,9 @@ import { HEADER_MARK, headerSnapshotFromDescription, compareNameSets, splitRunCo
 import { buildSchedule } from './lib/schedule.mjs';
 import { extractNestedCallMetrics, extractCellMetrics, modelMatchesPin } from './lib/extract.mjs';
 import { scoreOracle, scorePair, aggregateReport } from './lib/score.mjs';
+import { classifyCellOutcome } from './lib/cell-outcome.mjs';
+import { collectPreflightBlockers } from './lib/gates.mjs';
+import { snapshotRunCodeHeader } from './snapshot-header.mjs';
 import { findPromptLeaks, assertNoPromptLeaks } from './lib/leakage.mjs';
 import { snapshotFromRawSidecars, extractRunCodeDescriptionFromRawBody, isNamesOnlyTools } from './lib/traffic.mjs';
 
@@ -67,11 +70,16 @@ it('counts describe lookups separately from invalid params and recorded calls', 
 });
 
 it('parses model-visible schema lookup telemetry from candidate summaries', () => {
-  const metrics = extractNestedCallMetrics('await tools.describe("grep");', '[0 tool calls: ; 1 schema lookup]');
-  expect(metrics.modelVisibleSchemaLookups).toBe(1);
-  expect(
-    extractNestedCallMetrics('await tools.describe("grep");', '[0 tool calls: ]').modelVisibleSchemaLookups,
-  ).toBeNull();
+  const onlyLookups = extractNestedCallMetrics('await tools.describe("grep");', '[no tool calls; 1 schema lookup]');
+  expect(onlyLookups.modelVisibleSchemaLookups).toBe(1);
+  expect(onlyLookups.recordedNestedCalls).toBe(0);
+  const mixed = extractNestedCallMetrics(
+    'await tools.describe("inspect");',
+    '[1 tool call: inspect; 2 schema lookups]',
+  );
+  expect(mixed.modelVisibleSchemaLookups).toBe(2);
+  expect(mixed.recordedNestedCalls).toBe(1);
+  expect(extractNestedCallMetrics('', '[no tool calls]').modelVisibleSchemaLookups).toBeNull();
 });
 
 it('reads model identity from session_init artifacts not argv', () => {
@@ -87,8 +95,13 @@ it('reads model identity from session_init artifacts not argv', () => {
   ).toBe(false);
 });
 
+const rawHeader = (description) => ({
+  ...headerSnapshotFromDescription(description),
+  source: 'provider-traffic-raw',
+});
+
 it('rejects a pair with empty headers or mismatched name sets', () => {
-  const header = headerSnapshotFromDescription(HEADER_MARK + '\n- tools.read_file()');
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
   const ok = scorePair({
     baseline: { headerSnapshot: header, correctness: { correct: true } },
     candidate: { headerSnapshot: header, correctness: { correct: true } },
@@ -96,7 +109,7 @@ it('rejects a pair with empty headers or mismatched name sets', () => {
   expect(ok.fairness.pairValid).toBe(true);
   const empty = scorePair({
     baseline: {
-      headerSnapshot: { headerFound: false, combinedHeaderBytes: 0, toolNames: [] },
+      headerSnapshot: { ...header, headerFound: false, combinedHeaderBytes: 0, toolNames: [], toolNameCount: 0 },
       correctness: { correct: true },
     },
     candidate: { headerSnapshot: header, correctness: { correct: true } },
@@ -105,8 +118,22 @@ it('rejects a pair with empty headers or mismatched name sets', () => {
   expect(empty.fairness.pairInvalidReason).toBe('empty-or-missing-run-code-header');
 });
 
+it('does not accept a well-formed construction header as a raw substitute', () => {
+  const construction = {
+    ...headerSnapshotFromDescription(HEADER_MARK + '\n- tools.read_file()\n- tools.grep()'),
+    source: 'non-interactive-factory-bind',
+    mode: 'non-interactive-factory-bind',
+  };
+  const scored = scorePair({
+    baseline: { headerSnapshot: construction, correctness: { correct: true } },
+    candidate: { headerSnapshot: construction, correctness: { correct: true } },
+  });
+  expect(scored.fairness.pairValid).toBe(false);
+  expect(scored.fairness.pairInvalidReason).toBe('raw-header-missing');
+});
+
 it('rejects efficiency claims when any model regresses on correctness', () => {
-  const header = headerSnapshotFromDescription(HEADER_MARK + '\n- tools.read_file()');
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
   const pair = (modelId, baselineCorrect, candidateCorrect) => ({
     modelId,
     score: scorePair({
@@ -161,7 +188,7 @@ it('extracts run_code header from raw sidecars and rejects names-only sanitized 
 });
 
 it('marks cache incomparable across arms', () => {
-  const header = headerSnapshotFromDescription(HEADER_MARK + '\n- tools.read_file()');
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
   const scored = scorePair({
     baseline: {
       headerSnapshot: header,
@@ -175,4 +202,126 @@ it('marks cache incomparable across arms', () => {
     },
   });
   expect(scored.cacheReadTokensWithinArm.comparableAcrossArms).toBe(false);
+});
+
+it('classifies timeout and missing conversation as infrastructure, not incorrect', () => {
+  expect(
+    classifyCellOutcome({
+      exit: { code: null, signal: 'SIGKILL' },
+      identityOk: true,
+      conversationPath: '/tmp/x.jsonl',
+      stdout: '',
+      correctness: { correct: false, reason: 'token-miss' },
+    }).kind,
+  ).toBe('infrastructure-failure');
+  expect(
+    classifyCellOutcome({
+      exit: { code: 0, signal: null },
+      identityOk: true,
+      conversationPath: null,
+      stdout: '',
+      correctness: { correct: false },
+    }).kind,
+  ).toBe('infrastructure-failure');
+  expect(
+    classifyCellOutcome({
+      exit: { code: 0, signal: null },
+      identityOk: true,
+      conversationPath: '/tmp/x.jsonl',
+      stdout: '{"type":"completed","finalText":"nope"}',
+      correctness: { correct: false, reason: 'token-miss' },
+    }).kind,
+  ).toBe('incorrect');
+});
+
+it('excludes infrastructure pairs from correctness and fails the infra rate', () => {
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
+  const scored = scorePair({
+    baseline: { headerSnapshot: header, correctness: { correct: true }, outcome: { kind: 'correct' } },
+    candidate: {
+      headerSnapshot: header,
+      correctness: { correct: false },
+      outcome: { kind: 'infrastructure-failure', reason: 'timeout-sigkill' },
+    },
+  });
+  const report = aggregateReport([{ modelId: 'glm', stratum: 'untreated-essential', score: scored }], {
+    maxInfrastructureFailureRate: 0.1,
+  });
+  expect(report.models[0].scoredPairs).toBe(0);
+  expect(report.infrastructureExceeded).toBe(true);
+  expect(report.correctnessRegressions).toEqual([]);
+});
+
+it('blocks paid launch while protocol review is pending even with a pinned candidate hash', () => {
+  const header = {
+    headerFound: true,
+    toolNameCount: 20,
+    toolNames: ['read_file', 'grep'],
+    combinedHeaderBytes: 2000,
+  };
+  const blockers = collectPreflightBlockers({
+    sourceMatch: { matches: true },
+    baselineCliExists: true,
+    candidateCliExists: true,
+    candidateRev: '80f7488401c1043445cf3974f163633693c8c20f',
+    candidateDirty: false,
+    candidateCommitFinal: '80f7488401c1043445cf3974f163633693c8c20f',
+    pendingFinalReview: true,
+    providers: { zai: true, DeepSeek: true },
+    leakage: [],
+    treatment: { unchanged: true },
+    baselineSnap: { ok: true, snapshot: header },
+    candidateSnap: { ok: true, snapshot: header },
+  });
+  expect(blockers.some((line) => /protocol review pending/.test(line))).toBe(true);
+});
+
+it('blocks empty factory-bound headers and mismatched name sets', () => {
+  const empty = collectPreflightBlockers({
+    sourceMatch: { matches: true },
+    baselineCliExists: true,
+    candidateCliExists: true,
+    candidateRev: '80f7488401c1043445cf3974f163633693c8c20f',
+    candidateDirty: false,
+    candidateCommitFinal: '80f7488401c1043445cf3974f163633693c8c20f',
+    pendingFinalReview: false,
+    providers: { zai: true, DeepSeek: true },
+    leakage: [],
+    treatment: {},
+    baselineSnap: { ok: true, snapshot: { headerFound: false, toolNameCount: 0, toolNames: [] } },
+    candidateSnap: { ok: true, snapshot: { headerFound: true, toolNameCount: 20, toolNames: ['read_file'] } },
+  });
+  expect(empty.some((line) => /empty or stub-sized/.test(line))).toBe(true);
+  const mismatch = collectPreflightBlockers({
+    sourceMatch: { matches: true },
+    baselineCliExists: true,
+    candidateCliExists: true,
+    candidateRev: '80f7488401c1043445cf3974f163633693c8c20f',
+    candidateDirty: false,
+    candidateCommitFinal: '80f7488401c1043445cf3974f163633693c8c20f',
+    pendingFinalReview: false,
+    providers: { zai: true, DeepSeek: true },
+    leakage: [],
+    treatment: {},
+    baselineSnap: {
+      ok: true,
+      snapshot: { headerFound: true, toolNameCount: 2, toolNames: ['read_file', 'grep'] },
+    },
+    candidateSnap: {
+      ok: true,
+      snapshot: { headerFound: true, toolNameCount: 2, toolNames: ['read_file', 'glob'] },
+    },
+  });
+  expect(mismatch.some((line) => /name sets differ/.test(line))).toBe(true);
+});
+
+it('snapshots a factory-bound non-interactive header with at least 8 tools', async () => {
+  const dist = path.resolve('dist');
+  if (!fs.existsSync(path.join(dist, 'cli.js'))) return;
+  const snap = await snapshotRunCodeHeader(dist, { model: 'glm-5.3-flash', providerId: 'zai' });
+  expect(snap.headerFound).toBe(true);
+  expect(snap.toolNameCount).toBeGreaterThanOrEqual(8);
+  expect(snap.combinedHeaderBytes).toBeGreaterThan(0);
+  expect(snap.interactiveMinusNonInteractive).toEqual(['session_list', 'session_search', 'session_read']);
+  expect(snap.mode).toBe('non-interactive-factory-bind');
 });

@@ -1,5 +1,6 @@
 {
   "id": "retrieve-config-token",
   "family": "filesystem-read",
+  "stratum": "untreated-essential",
   "title": "Recover a service release channel from workspace files"
 }

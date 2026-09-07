@@ -16,10 +16,16 @@ import {
   writeIsolatedSettings,
   cellEnv,
   copyWorkspace,
+  createEphemeralAuthState,
+  destroyEphemeralAuthState,
+  harvestLogs,
 } from './lib/isolation.mjs';
 import { seedProjectAndGlobalMemory } from './lib/memory.mjs';
 import { snapshotRunCodeHeader } from './snapshot-header.mjs';
 import { snapshotFromRawSidecars } from './lib/traffic.mjs';
+import { gitRev, gitDirty, sourceTreeMatchesPin } from './lib/git-pin.mjs';
+import { classifyCellOutcome } from './lib/cell-outcome.mjs';
+import { collectPreflightBlockers } from './lib/gates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PINS = JSON.parse(fs.readFileSync(path.join(HERE, 'pins.json'), 'utf8'));
@@ -36,7 +42,8 @@ function loadTasks() {
       const prompt = fs.readFileSync(path.join(dir, 'prompt.txt'), 'utf8');
       const oracle = JSON.parse(fs.readFileSync(path.join(dir, 'oracle.json'), 'utf8'));
       return { ...task, id: task.id ?? id, dir, prompt, oracle };
-    });
+    })
+    .filter((task) => task.includeInPrimarySchedule !== false);
 }
 
 function parseArgs(argv) {
@@ -48,14 +55,12 @@ function parseArgs(argv) {
     baselineWorktree: path.resolve(HERE, '../../..'),
     candidateWorktree: PINS.candidateWorktree,
     go: false,
-    allowIdenticalCandidate: false,
     declareDescriptionTreatment: null,
     only: null,
+    resume: false,
   };
   const rest = [...argv];
-  if (rest[0] && !rest[0].startsWith('-')) {
-    args.command = rest.shift();
-  }
+  if (rest[0] && !rest[0].startsWith('-')) args.command = rest.shift();
   while (rest.length) {
     const flag = rest.shift();
     const next = () => {
@@ -64,7 +69,7 @@ function parseArgs(argv) {
       return value;
     };
     if (flag === '--go') args.go = true;
-    else if (flag === '--allow-identical-candidate') args.allowIdenticalCandidate = true;
+    else if (flag === '--resume') args.resume = true;
     else if (flag === '--trials') args.trials = Number(next());
     else if (flag === '--timeout-ms') args.timeoutMs = Number(next());
     else if (flag === '--output-dir') args.outputDir = path.resolve(next());
@@ -81,26 +86,13 @@ function parseArgs(argv) {
   return args;
 }
 
-function gitRev(worktree) {
-  const result = spawnSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
-  if (result.status !== 0) throw new Error('git rev-parse failed in ' + worktree + ': ' + result.stderr);
-  return result.stdout.trim();
-}
-
-function gitDirty(worktree) {
-  const result = spawnSync('git', ['-C', worktree, 'status', '--porcelain'], { encoding: 'utf8' });
-  return result.stdout.trim().length > 0;
-}
-
 function shaFile(filePath) {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
-
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
-
 function writeJson(filePath, value) {
   ensureDir(path.dirname(filePath));
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\n');
@@ -117,9 +109,7 @@ function spawnCommand(command, args, options) {
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
     });
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-    }, options.timeoutMs);
+    const timer = setTimeout(() => child.kill('SIGKILL'), options.timeoutMs);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       resolve({ code, signal, stdout, stderr });
@@ -128,6 +118,7 @@ function spawnCommand(command, args, options) {
 }
 
 function newestConversation(conversationsDir, afterMs) {
+  if (!fs.existsSync(conversationsDir)) return null;
   const files = fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl'));
   const ranked = files
     .map((name) => {
@@ -147,16 +138,20 @@ function extractFinalText(stdout) {
       if (event.type === 'completed' && typeof event.finalText === 'string') return event.finalText;
       if (event.type === 'final' && typeof event.finalText === 'string') return event.finalText;
     } catch {
-      /* ignore non-JSON */
+      /* ignore */
     }
   }
   return stdout.trim();
 }
 
-async function maybeSnapshot(cliPath, settingsDir, label) {
-  const distRoot = path.dirname(cliPath);
+async function maybeSnapshot(cliPath, settingsDir, label, modelPin) {
+  if (!fs.existsSync(cliPath)) return { ok: false, label, error: 'missing cli ' + cliPath };
   try {
-    const snapshot = await snapshotRunCodeHeader(distRoot, { settingsDir });
+    const snapshot = await snapshotRunCodeHeader(path.dirname(cliPath), {
+      settingsDir,
+      model: modelPin?.model,
+      providerId: modelPin?.provider,
+    });
     return { ok: true, label, snapshot };
   } catch (error) {
     return { ok: false, label, error: error instanceof Error ? error.message : String(error) };
@@ -174,76 +169,89 @@ function staticProseTreatment(baseline, candidate, declaredPath) {
       comparable: true,
       unchanged: false,
       declared: false,
-      error: 'RUN_CODE_DESCRIPTION static prose differs between arms. Quote the full diff with --declare-description-treatment <file> or keep the candidate prose identical.',
+      error:
+        'RUN_CODE_DESCRIPTION static prose differs between arms. Quote the full diff with --declare-description-treatment.',
     };
   }
-  return {
-    comparable: true,
-    unchanged: false,
-    declared: true,
-    declarationSha256: shaFile(declaredPath),
-    declarationPath: declaredPath,
-  };
+  return { comparable: true, unchanged: false, declared: true, declarationSha256: shaFile(declaredPath) };
 }
 
 function providerPresence(summary) {
   const ids = new Set(summary.providerIds ?? []);
-  return {
-    zai: ids.has('zai'),
-    DeepSeek: ids.has('DeepSeek'),
-    note: 'codex is a built-in provider; zai and DeepSeek are custom and case-sensitive.',
-  };
+  return { zai: ids.has('zai'), DeepSeek: ids.has('DeepSeek') };
+}
+
+function gitInitWorkspace(workspace) {
+  spawnSync('git', ['init'], { cwd: workspace, encoding: 'utf8' });
 }
 
 async function preflight(args, tasks) {
   const out = ensureDir(path.join(args.outputDir, 'preflight'));
   const baselineRev = gitRev(args.baselineWorktree);
-  const candidateRev = fs.existsSync(path.join(args.candidateWorktree, '.git')) || fs.existsSync(args.candidateWorktree)
-    ? gitRev(args.candidateWorktree)
-    : null;
+  const candidateRev = gitRev(args.candidateWorktree);
+  const sourceMatch = sourceTreeMatchesPin(args.baselineWorktree, PINS.baselineCommit);
   const settingsPath = realSettingsPath();
   if (!fs.existsSync(settingsPath)) throw new Error('settings.json not found at ' + settingsPath);
-  const isolatedSettingsDir = ensureDir(path.join(out, 'settings-shadow'));
-  const isolatedSettings = path.join(isolatedSettingsDir, 'settings.json');
-  const summary = writeIsolatedSettings({
-    sourcePath: settingsPath,
-    destPath: isolatedSettings,
-    memoryDirectory: path.join(out, 'memory-unused'),
-    pin: PINS.settingsPin,
-  });
-  const schedule = buildSchedule({ models: PINS.models, tasks, trials: args.trials });
-  const baselineSnap = fs.existsSync(args.baselineCli)
-    ? await maybeSnapshot(args.baselineCli, isolatedSettingsDir, 'baseline')
-    : { ok: false, label: 'baseline', error: 'missing cli ' + args.baselineCli };
-  const candidateSnap = fs.existsSync(args.candidateCli)
-    ? await maybeSnapshot(args.candidateCli, isolatedSettingsDir, 'candidate')
-    : { ok: false, label: 'candidate', error: 'missing cli ' + args.candidateCli };
+  const ephemeral = createEphemeralAuthState();
+  let summary;
+  let baselineSnap;
+  let candidateSnap;
+  try {
+    const settingsDir = ensureDir(path.join(ephemeral, 'term2-nodejs'));
+    summary = writeIsolatedSettings({
+      sourcePath: settingsPath,
+      destPath: path.join(settingsDir, 'settings.json'),
+      memoryDirectory: path.join(ephemeral, 'memory-unused'),
+      pin: PINS.settingsPin,
+    });
+    const representative = PINS.models.find((model) => model.id === 'glm') ?? PINS.models[0];
+    baselineSnap = await maybeSnapshot(args.baselineCli, settingsDir, 'baseline', representative);
+    candidateSnap = await maybeSnapshot(args.candidateCli, settingsDir, 'candidate', representative);
+  } finally {
+    destroyEphemeralAuthState(ephemeral);
+  }
   const leakage = [];
+  const leakNames = baselineSnap.snapshot ?? { toolNames: [] };
   for (const task of tasks) {
     try {
-      assertNoPromptLeaks(task.prompt, baselineSnap.snapshot ?? { toolNames: [] });
+      assertNoPromptLeaks(task.prompt, leakNames);
     } catch (error) {
       leakage.push({ task: task.id, error: error.message });
     }
   }
   const treatment = staticProseTreatment(baselineSnap, candidateSnap, args.declareDescriptionTreatment);
-  const identicalCandidate = candidateRev && candidateRev === baselineRev;
+  const schedule = buildSchedule({ models: PINS.models, tasks, trials: args.trials });
+  const providers = providerPresence(summary);
+  const candidateDirty = gitDirty(args.candidateWorktree);
+  const blockers = collectPreflightBlockers({
+    sourceMatch,
+    baselineCliExists: fs.existsSync(args.baselineCli),
+    candidateCliExists: fs.existsSync(args.candidateCli),
+    candidateRev,
+    candidateDirty,
+    candidateCommitFinal: PINS.candidateCommitFinal,
+    pendingFinalReview: PINS.pendingFinalReview !== false,
+    providers,
+    leakage,
+    treatment,
+    baselineSnap,
+    candidateSnap,
+  });
   const report = {
     generatedAt: new Date().toISOString(),
     pins: {
       baselineCommit: PINS.baselineCommit,
-      originalBaselineCommit: PINS.originalBaselineCommit,
-      previousAcceptedStage: PINS.previousAcceptedStage,
+      candidateCommitFinal: PINS.candidateCommitFinal,
+      pendingFinalReview: PINS.pendingFinalReview !== false,
       models: PINS.models,
-      settingsPin: PINS.settingsPin,
     },
     git: {
       baselineRev,
       candidateRev,
       baselineDirty: gitDirty(args.baselineWorktree),
-      candidateDirty: candidateRev ? gitDirty(args.candidateWorktree) : null,
-      baselineMatchesPin: baselineRev === PINS.baselineCommit,
-      identicalCandidate,
+      candidateDirty,
+      sourceMatchesPin: sourceMatch,
+      identicalCandidate: candidateRev === baselineRev,
     },
     clis: {
       baselineCli: args.baselineCli,
@@ -251,60 +259,32 @@ async function preflight(args, tasks) {
       baselineCliExists: fs.existsSync(args.baselineCli),
       candidateCliExists: fs.existsSync(args.candidateCli),
     },
-    providers: providerPresence(summary),
+    providers,
     settingsSummary: summary,
     schedule,
     snapshots: { baseline: baselineSnap, candidate: candidateSnap },
     staticProseTreatment: treatment,
     leakage,
+    headerSurface: 'non-interactive-cli-lower-bound',
+    f3Note:
+      'Interactive-max replica measurements (e.g. +8471 B) are not acceptance evidence. Bound production snapshots own the reproducible non-interactive figure; interactive session tools are absent here.',
     estimated: {
       cells: schedule.totals.cells,
       timeoutMsPerCell: args.timeoutMs,
       serial: true,
       paid: Boolean(args.go),
-      note: 'Serial paid cells. Do not launch without --go after protocol review.',
+      strata: Object.fromEntries(
+        tasks.reduce((map, task) => {
+          const key = task.stratum || 'unspecified';
+          map.set(key, (map.get(key) || 0) + 1);
+          return map;
+        }, new Map()),
+      ),
     },
-    blockers: [],
+    blockers,
   };
-  if (baselineRev !== PINS.baselineCommit) {
-    report.blockers.push('baseline worktree HEAD is not ' + PINS.baselineCommit);
-  }
-  if (!fs.existsSync(args.baselineCli)) {
-    report.blockers.push('missing baseline CLI (pnpm build in the baseline worktree): ' + args.baselineCli);
-  }
-  if (!fs.existsSync(args.candidateCli)) {
-    report.blockers.push('missing candidate CLI (pnpm build in the candidate worktree): ' + args.candidateCli);
-  }
-  if (!PINS.candidateCommitFinal) {
-    report.blockers.push('candidateCommitFinal is null; c9a47777 was reviewed and is not final — refuse paid launch until a final hash is recorded');
-  }
-  if (identicalCandidate && args.go && !args.allowIdenticalCandidate) {
-    report.blockers.push('candidate SHA equals baseline; refuse --go until the discovery candidate exists (or pass --allow-identical-candidate)');
-  }
-  if (!report.providers.zai || !report.providers.DeepSeek) {
-    report.blockers.push('settings.json is missing custom providers zai and/or DeepSeek (case-sensitive)');
-  }
-  if (leakage.length) report.blockers.push('task prompt leakage');
-  if (treatment.error) report.blockers.push(treatment.error);
-  if (baselineSnap.ok && candidateSnap.ok) {
-    const namesMatch =
-      JSON.stringify(baselineSnap.snapshot.toolNames) === JSON.stringify(candidateSnap.snapshot.toolNames);
-    report.nameListsMatch = namesMatch;
-    if (!namesMatch) report.blockers.push('baseline/candidate header tool-name lists differ');
-    if (baselineSnap.snapshot.toolNameCount < 8) {
-      report.blockers.push('baseline header tool count looks like a stub registry');
-    }
-  }
   writeJson(path.join(out, 'preflight.json'), report);
   return report;
-}
-
-function gitInitWorkspace(workspace) {
-  spawnSync('git', ['init'], { cwd: workspace, encoding: 'utf8' });
-  spawnSync('git', ['-c', 'user.email=bench@local', '-c', 'user.name=bench', 'commit', '--allow-empty', '-m', 'seed'], {
-    cwd: workspace,
-    encoding: 'utf8',
-  });
 }
 
 function prepareCell(cell, args, task) {
@@ -313,8 +293,9 @@ function prepareCell(cell, args, task) {
   if (fs.existsSync(workspace)) fs.rmSync(workspace, { recursive: true, force: true });
   copyWorkspace(path.join(task.dir, 'workspace'), workspace);
   gitInitWorkspace(workspace);
-  const isolated = cellEnv({ cellRoot, configDir: realConfigDir() });
-  const settingsDir = ensureDir(path.join(isolated.paths.xdgState, 'term2-nodejs'));
+  const ephemeralState = createEphemeralAuthState();
+  const isolated = cellEnv({ cellRoot, configDir: realConfigDir(), ephemeralState });
+  const settingsDir = ensureDir(path.join(ephemeralState, 'term2-nodejs'));
   const settingsSummary = writeIsolatedSettings({
     sourcePath: realSettingsPath(),
     destPath: path.join(settingsDir, 'settings.json'),
@@ -329,35 +310,34 @@ function prepareCell(cell, args, task) {
       globalMemories: task.memory.global,
     });
   }
-  return { cellRoot, workspace, isolated, settingsDir, settingsSummary };
+  return { cellRoot, workspace, isolated, settingsDir, settingsSummary, ephemeralState };
 }
 
 async function runCell(cell, args, task, prepared) {
   const cli = cell.arm === 'baseline' ? args.baselineCli : args.candidateCli;
   const pin = cell.model;
   const started = Date.now();
-  const result = await spawnCommand(
-    process.execPath,
-    [cli, '-p', pin.provider, '-m', pin.model, '-r', pin.reasoningEffort, '--auto-approve', '--json', '--quiet', task.prompt],
-    { cwd: prepared.workspace, env: { ...process.env, ...prepared.isolated.env }, timeoutMs: args.timeoutMs },
-  );
+  let result;
+  try {
+    result = await spawnCommand(
+      process.execPath,
+      [cli, '-p', pin.provider, '-m', pin.model, '-r', pin.reasoningEffort, '--auto-approve', '--json', '--quiet', task.prompt],
+      { cwd: prepared.workspace, env: { ...process.env, ...prepared.isolated.env }, timeoutMs: args.timeoutMs },
+    );
+  } finally {
+    harvestLogs(prepared.ephemeralState, prepared.isolated.paths.logs);
+    destroyEphemeralAuthState(prepared.ephemeralState);
+  }
   const wallTimeMs = Date.now() - started;
   fs.writeFileSync(path.join(prepared.cellRoot, 'stdout.txt'), result.stdout);
   fs.writeFileSync(path.join(prepared.cellRoot, 'stderr.txt'), result.stderr);
   const conversationPath = newestConversation(prepared.isolated.paths.conversations, started);
   const events = conversationPath ? conversationEvents(conversationPath) : [];
-  const distRoot = path.dirname(cli);
-  const trafficRoot = path.join(prepared.isolated.paths.xdgState, 'term2-nodejs', 'logs', 'provider-traffic');
+  const trafficRoot = path.join(prepared.isolated.paths.logs, 'provider-traffic');
   const rawHeader = snapshotFromRawSidecars(trafficRoot);
-  let constructionHeader = null;
-  try {
-    constructionHeader = await snapshotRunCodeHeader(distRoot, { settingsDir: prepared.settingsDir });
-  } catch (error) {
-    constructionHeader = { error: error instanceof Error ? error.message : String(error) };
-  }
   const headerSnapshot = rawHeader.ok
-    ? { ...rawHeader, constructionToolNameCount: constructionHeader?.toolNameCount ?? null }
-    : constructionHeader;
+    ? rawHeader
+    : { ...rawHeader, source: rawHeader.source || 'missing-raw', headerFound: false, combinedHeaderBytes: 0, toolNames: [] };
   const metrics = extractCellMetrics({ events, wallTimeMs, headerSnapshot });
   const identityOk = modelMatchesPin(metrics.identity, pin);
   const files = {};
@@ -367,6 +347,13 @@ async function runCell(cell, args, task, prepared) {
   }
   const finalText = extractFinalText(result.stdout);
   const correctness = scoreOracle(task.oracle, { finalText, files });
+  const outcome = classifyCellOutcome({
+    exit: { code: result.code, signal: result.signal },
+    identityOk,
+    conversationPath,
+    stdout: result.stdout,
+    correctness,
+  });
   const record = {
     cell,
     cli,
@@ -374,35 +361,29 @@ async function runCell(cell, args, task, prepared) {
     conversationPath,
     identityOk,
     wrongModel: !identityOk,
+    outcome,
     metrics,
     correctness,
     finalTextPreview: finalText.slice(0, 500),
   };
   writeJson(path.join(prepared.cellRoot, 'result.json'), record);
-  if (record.wrongModel) {
-    throw new Error('Wrong model for ' + cell.cellId + ': expected ' + pin.provider + '/' + pin.model + ' got ' + JSON.stringify(metrics.identity));
-  }
   return record;
 }
 
-async function runPaid(args, tasks, preflightReport) {
-  if (preflightReport.blockers.length) {
-    throw new Error('Refusing --go; preflight blockers: ' + preflightReport.blockers.join('; '));
-  }
-  const records = [];
-  for (const cell of preflightReport.schedule.cells) {
-    if (args.only && cell.cellId !== args.only && cell.pairId !== args.only) continue;
-    const task = tasks.find((entry) => entry.id === cell.task.id);
-    const prepared = prepareCell(cell, args, task);
-    const record = await runCell(cell, args, task, prepared);
-    records.push(record);
-  }
+function writePartialReport(args, records, extra = {}) {
   const byPair = new Map();
   for (const record of records) {
     const pairId = record.cell.pairId;
-    if (!byPair.has(pairId)) byPair.set(pairId, { pairId, modelId: record.cell.model.id, taskId: record.cell.task.id, trial: record.cell.trial });
-    const pair = byPair.get(pairId);
-    pair[record.cell.arm] = record;
+    if (!byPair.has(pairId)) {
+      byPair.set(pairId, {
+        pairId,
+        modelId: record.cell.model.id,
+        taskId: record.cell.task.id,
+        trial: record.cell.trial,
+        stratum: record.cell.task.stratum || 'unspecified',
+      });
+    }
+    byPair.get(pairId)[record.cell.arm] = record;
   }
   const pairs = [...byPair.values()].map((pair) => ({
     ...pair,
@@ -412,9 +393,43 @@ async function runPaid(args, tasks, preflightReport) {
     generatedAt: new Date().toISOString(),
     pairs,
     aggregate: aggregateReport(pairs.filter((pair) => pair.score)),
+    ...extra,
   };
   writeJson(path.join(args.outputDir, 'report.json'), report);
   return report;
+}
+
+async function runPaid(args, tasks, preflightReport) {
+  if (preflightReport.blockers.length) {
+    throw new Error('Refusing --go; preflight blockers: ' + preflightReport.blockers.join('; '));
+  }
+  const records = [];
+  let aborted = null;
+  for (const cell of preflightReport.schedule.cells) {
+    if (args.only && cell.cellId !== args.only && cell.pairId !== args.only) continue;
+    const resultPath = path.join(args.outputDir, 'cells', cell.cellId, 'result.json');
+    if (args.resume && fs.existsSync(resultPath)) {
+      records.push(JSON.parse(fs.readFileSync(resultPath, 'utf8')));
+      continue;
+    }
+    const task = tasks.find((entry) => entry.id === cell.task.id);
+    const prepared = prepareCell(cell, args, task);
+    const record = await runCell(cell, args, task, prepared);
+    records.push(record);
+    if (record.wrongModel) {
+      aborted = { reason: 'wrong-model', cellId: cell.cellId, identity: record.metrics.identity };
+      break;
+    }
+  }
+  if (args.only && records.length === 1) {
+    writeJson(path.join(args.outputDir, 'report.json'), {
+      generatedAt: new Date().toISOString(),
+      note: '--only with a single cellId does not score a pair; pass pairId to rerun both arms, or --resume after both exist.',
+      records,
+    });
+    return { aggregate: { rejectEfficiencyClaims: false, correctnessRegressions: [] }, aborted: null, incompleteOnly: true };
+  }
+  return writePartialReport(args, records, aborted ? { aborted } : {});
 }
 
 async function main() {
@@ -422,12 +437,37 @@ async function main() {
   const tasks = loadTasks();
   if (args.command === 'preflight' || args.command === 'run') {
     const report = await preflight(args, tasks);
-    process.stdout.write(JSON.stringify({ command: 'preflight', blockers: report.blockers, estimated: report.estimated, git: report.git, output: path.join(args.outputDir, 'preflight', 'preflight.json') }, null, 2) + '\n');
+    process.stdout.write(
+      JSON.stringify(
+        {
+          command: 'preflight',
+          blockers: report.blockers,
+          estimated: report.estimated,
+          git: report.git,
+          headerBytes: report.snapshots?.baseline?.snapshot?.combinedHeaderBytes ?? null,
+          output: path.join(args.outputDir, 'preflight', 'preflight.json'),
+        },
+        null,
+        2,
+      ) + '\n',
+    );
     if (args.command === 'run' && args.go) {
       const paid = await runPaid(args, tasks, report);
-      process.stdout.write(JSON.stringify({ command: 'run', rejectEfficiencyClaims: paid.aggregate.rejectEfficiencyClaims, correctnessRegressions: paid.aggregate.correctnessRegressions, output: path.join(args.outputDir, 'report.json') }, null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify(
+          {
+            command: 'run',
+            rejectEfficiencyClaims: paid.aggregate?.rejectEfficiencyClaims,
+            correctnessRegressions: paid.aggregate?.correctnessRegressions,
+            aborted: paid.aborted ?? null,
+            output: path.join(args.outputDir, 'report.json'),
+          },
+          null,
+          2,
+        ) + '\n',
+      );
     } else if (args.command === 'run' && !args.go) {
-      process.stdout.write(JSON.stringify({ skippedPaid: true, reason: 'pass --go after protocol review to launch paid cells' }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ skippedPaid: true, reason: 'pass --go after final candidate review' }, null, 2) + '\n');
     }
     if (report.blockers.length && args.go) process.exitCode = 2;
     return;

@@ -23,9 +23,11 @@
   "originalBaselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
   "previousAcceptedStage": null,
   "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
-  "candidateCommitReviewed": "c9a47777b5f88c3059f470660294eca5381a4854",
-  "candidateCommitFinal": null,
-  "candidateCommitNote": "c9a47777 is NOT final. Agy is correcting tests/schema-root fallback. Do not launch paid cells until a final hash is recorded and protocol review passes.",
+  "candidateCommitReviewed": "80f7488401c1043445cf3974f163633693c8c20f",
+  "candidateCommitFinal": "80f7488401c1043445cf3974f163633693c8c20f",
+  "pendingFinalReview": true,
+  "candidateCommitNote": "Claude approved 80f74884 (revision2). 67560fa9 is not the pin. Paid launch stays blocked until this revised protocol is reviewed. Header measurements come from factory-bound non-interactive snapshots, not the interactive replica +8471 fixture (F3).",
+
   "models": [
     {
       "id": "luna",
@@ -63,6 +65,7 @@
     "json": true,
     "quiet": true,
     "trials": 3,
+    "costControl": "Default 2 treated + 2 untreated tasks x 3 trials = 72 cells. Pass --trials 2 to cut cost. Report strata separately; untreated tasks measure cost only.",
     "timeoutMs": 900000,
     "serial": true,
     "rawTraffic": true

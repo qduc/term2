@@ -18,6 +18,17 @@ export function projectMemoryId(projectPath) {
   return createHash('sha256').update(path.resolve(projectPath)).digest('hex');
 }
 
+export function createEphemeralAuthState() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-stage1-auth-'));
+  fs.chmodSync(root, 0o700);
+  return root;
+}
+
+export function destroyEphemeralAuthState(root) {
+  if (!root) return;
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 export function writeIsolatedSettings({ sourcePath, destPath, memoryDirectory, pin }) {
   const raw = fs.readFileSync(sourcePath, 'utf8');
   const data = JSON.parse(raw);
@@ -34,8 +45,16 @@ export function writeIsolatedSettings({ sourcePath, destPath, memoryDirectory, p
   data.enable_agent_workflow = false;
   data.sandbox = { ...(data.sandbox ?? {}), enabled: pin?.['sandbox.enabled'] ?? true };
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  fs.writeFileSync(destPath, JSON.stringify(data, null, 2) + '\n');
+  fs.writeFileSync(destPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+  fs.chmodSync(destPath, 0o600);
   return summarizeSettings(data);
+}
+
+export function harvestLogs(ephemeralState, destLogs) {
+  const src = path.join(ephemeralState, 'term2-nodejs', 'logs');
+  if (!fs.existsSync(src)) return null;
+  fs.cpSync(src, destLogs, { recursive: true });
+  return destLogs;
 }
 
 export function summarizeSettings(data) {
@@ -65,18 +84,18 @@ export function summarizeSettings(data) {
   };
 }
 
-export function cellEnv({ cellRoot, configDir }) {
-  const xdgState = path.join(cellRoot, 'xdg-state');
+export function cellEnv({ cellRoot, configDir, ephemeralState }) {
   const xdgData = path.join(cellRoot, 'xdg-data');
   const conversations = path.join(cellRoot, 'conversations');
   const memory = path.join(cellRoot, 'memory');
   const tmp = path.join(cellRoot, 'tmp');
-  for (const dir of [xdgState, xdgData, conversations, memory, tmp]) {
+  const logs = path.join(cellRoot, 'logs');
+  for (const dir of [xdgData, conversations, memory, tmp, logs]) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return {
     env: {
-      XDG_STATE_HOME: xdgState,
+      XDG_STATE_HOME: ephemeralState,
       XDG_DATA_HOME: xdgData,
       TERM2_CONVERSATIONS_DIR: conversations,
       TERM2_CONFIG_DIR: configDir,
@@ -85,7 +104,7 @@ export function cellEnv({ cellRoot, configDir }) {
       DEBUG_LOGGING: '1',
       TMPDIR: tmp,
     },
-    paths: { xdgState, xdgData, conversations, memory, tmp },
+    paths: { ephemeralState, xdgData, conversations, memory, tmp, logs },
   };
 }
 

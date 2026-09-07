@@ -5,8 +5,8 @@ const NESTED_CALL = /tools\.([A-Za-z0-9_]+)\s*\(/g;
 const INVALID_PARAMS = /Invalid parameters for "([^"]+)"/g;
 const UNKNOWN_TOOL = /Unknown tool "([^"]+)"/g;
 const SCHEMA_DIRECT = /Tool input did not match schema for ([A-Za-z0-9_]+)/g;
-const CALL_SUMMARY = /\[(\d+) tool calls?: ([^\]]*)\]/;
-const SCHEMA_LOOKUPS = /;\s*(\d+) schema lookups?/;
+const CALL_SUMMARY =
+  /\[(no tool calls|\d+ tool calls?: [^\];]+?)(?:; (\d+) schema lookups?)?\]/;
 const RESULT_FAILURE_PREFIXES = [
   'Error:',
   'Script failed',
@@ -33,15 +33,17 @@ export function extractNestedCallMetrics(scriptSource, resultText) {
   const invalidParamsAttempted = countMatches(result, INVALID_PARAMS);
   const unknownToolAttempted = countMatches(result, UNKNOWN_TOOL);
   const summary = result.match(CALL_SUMMARY);
-  const recordedNestedCalls = summary ? Number(summary[1]) : null;
-  const schemaLookupMatch = result.match(SCHEMA_LOOKUPS);
-  const modelVisibleSchemaLookups = schemaLookupMatch ? Number(schemaLookupMatch[1]) : null;
+  let recordedNestedCalls = null;
+  let modelVisibleSchemaLookups = null;
+  if (summary) {
+    recordedNestedCalls = summary[1] === 'no tool calls' ? 0 : Number(summary[1].split(' ')[0]);
+    modelVisibleSchemaLookups = summary[2] != null ? Number(summary[2]) : null;
+  }
   // describe is not recorded. invalid_params/unknown_tool are recorded but not admitted.
   // Admitted count is therefore not recoverable from the user-visible summary alone.
   const admittedNestedCallsKnown = false;
   const admittedNestedCalls = null;
   const scriptFailed = RESULT_FAILURE_PREFIXES.some((prefix) => result.startsWith(prefix));
-  const nestedErrorInResult = /\nResult:\n[\s\S]*\b(Error:|failed:)/.test('\n' + result) || result.includes('tools.');
   return {
     describeLookups,
     attemptedNestedCalls,

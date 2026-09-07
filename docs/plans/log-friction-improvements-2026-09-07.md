@@ -38,7 +38,53 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Resume checkpoint (2026-09-07, residual evidence resolved; cwd repair in review)
+## Final disposition (2026-09-07)
+
+The authorized log-friction implementation and bounded evidence review are
+complete, with the limitations below. No live workers or shell jobs remain;
+all owned worktrees are cleaned. User untracked preflight document untouched.
+No push was requested or performed.
+
+Deleted-process-cwd startup repair merged as `ff03a38a` (final branch head
+`841fc361`). Parent rejected caller/session cwd plumbing and an unnecessary
+startup-flag filter. Final four-file change repairs only shared-host worker
+bootstrap on native cwd ENOENT, using a local preload directory without
+changing parent cwd, inherited execArgv, NODE_OPTIONS, script realm isolation,
+or execution-context authority. Parent independently passed 150 focused tests,
+two source/built child-process e2e tests, and typecheck before merge.
+
+Final main gate `f7fa11b7-9c1e-42c8-9909-f63312900b82`: exit 1 after
+216.530 seconds. Build and typecheck passed; startup e2e 2 passed (0.498s);
+provider black-box 177 passed / 1 skipped (59.59s); full suite 8345 passed /
+20 failed / 3 expected fail / 2 skipped, 626 files (138.99s). Exact failure
+identity comparison with the preceding final gate: new [], gone []. The
+suite is NOT green; these are unchanged baseline failures, not waived passes.
+Full output: `/tmp/qduc/term2-nodejs/tool-output/output-4026698-1788755708597-31f8ee.txt`.
+
+Evidence closure is not an all-fixed assertion. Nine disputed script joins
+are now parent-verified by batch identity and canonical results (`e42fd1a1`);
+the heuristic helper counts remain historical, not a new verified aggregate.
+The 16:46:30 canonical absence and 813-versus-849 scan denominator difference
+remain explicitly unavailable/unresolved. The 37 prefix-class mitigations
+have no controlled post-fix outcome sample. Provider I2 recovery-admission
+reason and T2-T4 native-compaction trigger linkage remain unavailable; no
+speculative retry, cap increase, or provider change was made for those gaps.
+Hooks-disabled records remain startup configuration diagnostics.
+
+Deleted-cwd retro: preventable, latent assumption that a session-pinned
+workspace implied a valid process cwd. A Node bootstrap boundary retained
+that hidden dependency; existing tests never removed a real child cwd. A
+TypeScript path cannot make an OS inode undeletable. The repair belongs in
+the one shared host used by scripts/workflows, not duplicated caller cwd
+plumbing. Real child-module tests cover source and fresh built artifacts,
+parent-cwd nonmutation, inherited flags/preloads, and VM isolation. Historical
+logs surfaced it; precise originating commit was not established. Sibling
+SessionIndexWorkerClient eval startup was inspected but is not covered by
+this host-local repair; no historical failure/recovery claim is made for it.
+Global process cwd recovery and deleting-owner attribution remain outside
+what this evidence proves.
+
+## Earlier checkpoint (2026-09-07, residual evidence resolved; cwd repair in review)
 
 Residual evidence supplement merged on main as `e42fd1a1`. Parent independently
 read all nine disputed app dispatch/start/finish/settlement envelopes. Each

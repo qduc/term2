@@ -1,6 +1,8 @@
 # Stage1 compact matrix results — 2026-09-07
 
-Factual evidence only. Compact combined treatment (catalog-wide input signatures; purpose/returns on `tools.describe`; honest schema fallback; N1 KEEP lookup telemetry) vs baseline. The **run is valid**. This document does **not** declare the stage accepted, recommend merge, claim isolated-catalog causality, claim a production break-even, or treat compact-vs-full as a paired comparison. Parent owns the final judgment.
+Factual evidence only. Compact combined treatment (catalog-wide input signatures; purpose/returns on `tools.describe`; honest schema fallback; N1 KEEP lookup telemetry) vs baseline. The **run is valid**.
+
+**Parent decision: ACCEPT compact for Stage1 integration**, conditional on this report's closure. Scope of the accept: memory-task prompt and argument errors improved on all three models; correctness preserved; mixed-task net is luna **+4.5%**; production is unmeasured. This is **not** a general catalog-wide efficiency claim, not a paired dominance over the full candidate (cross-run only), and not a production break-even.
 
 ## Pins
 
@@ -23,9 +25,9 @@ Reconstructed from `preflight/preflight.json` (`generatedAt` 2026-09-07T15:43:21
 | clock | value |
 | --- | --- |
 | Terminal process | **exit 0** |
-| Combined terminal wall | **1,086,431 ms = 18 m 6.431 s** (builds + driver preflight + 72 cells; **not** cell-only) |
+| Combined terminal wall | **1,086,431 ms = 18 m 6.431 s** (authoritative: both CLI builds + driver preflight + 72 cells; **not** cell-only) |
 | Sum of per-cell `wallTimeMs` | **1,077,062 ms** (mean 14,959 ms) |
-| Remainder | 9,369 ms (rebuild/preflight/driver overhead, not model time) |
+| Remainder | **9,369 ms** arithmetic difference (combined wall − cell-sum). Unattributed setup/driver overhead — **not** a measured split of non-model time. |
 
 Do not infer elapsed from `generatedAt`. Elapsed and pass/fail are separate: the process succeeded; every cell also scored `correct`. `runInvalid: false`. No correctness regressions.
 
@@ -53,7 +55,7 @@ Live raw headers (`source: provider-traffic-raw`) match construction snapshots a
 
 ## Paired correctness
 
-72/72 cells `outcome.kind === "correct"` and oracle-correct. 36/36 valid scored pairs. 0 infrastructure. 0 fairness invalid. `rejectEfficiencyClaims: false`. Identity 72/72 via `cost_update` (provider/model as pinned). Raw sidecar `body.reasoning.effort === "medium"` on **72/72** cells.
+72/72 cells `outcome.kind === "correct"` and oracle-correct. 36/36 valid scored pairs. 0 infrastructure. 0 fairness invalid. `rejectEfficiencyClaims: false`. Identity 72/72 via `cost_update` (provider/model as pinned). Raw sidecar effort is **medium** on **72/72** cells: Codex luna uses `body.reasoning.effort`; zai glm and DeepSeek use flat `body.reasoning_effort`. The rescorer reads both; the conclusion is true.
 
 | model | treated pairs B/C | untreated pairs B/C |
 | --- | --- | --- |
@@ -78,7 +80,7 @@ Correctness is saturated. It does not show a treatment win; it also does not sho
 
 All 13 invalid-param counts are on **memory-billing-contact**. Compact 3 remaining: luna trials 0 and 1, deepseek trial 0. Failures recovered in-cell (14/14). The one unknown-tool count is untreated control `deepseek__contained-edit-port__trial2` **baseline** (not a compact-arm event).
 
-`tools.describe` **0/72**. Honest-fallback marker never observed. Those combined-treatment legs are unmeasured in this run.
+`tools.describe` **0/72** here and **0/144** across both Stage1 matrices. Honest-fallback marker never observed. Those combined-treatment legs are unmeasured.
 
 ### Remaining compact memory errors (read-only)
 
@@ -94,7 +96,7 @@ Baseline memory invalids in this run mixed extra keys (`scope`, `title`, `name`)
 
 ## Prompt tokens (per-request sums)
 
-250 provider requests. Per-turn prompt sums equal `promptTokensSum` on all 72 cells.
+**250 pinned-model** provider requests (`cost_update`: luna 81 + glm 77 + deepseek 92). Per-turn prompt sums equal `promptTokensSum` on all 72 cells. Token and catalog-cost totals are **pinned-model only**.
 
 | arm | prompt tokens | cache-read tokens | requests | cell wall ms |
 | --- | ---: | ---: | ---: | ---: |
@@ -114,7 +116,7 @@ Compact **−81,697** prompt tokens vs baseline (−10 requests, −22,634 ms ce
 
 Mixed: luna net worse, glm and deepseek net better on total prompt tokens. Cache-read tokens are **within-arm only**. Do not compare cache across arms. Do not treat the pooled −81,697 as an all-model win.
 
-Indicative (not paired) vs historical full `80f74884` totals: that run was luna **+18.4%**, glm **+10.1%**, deepseek **−3.2%**. Compact is cheaper on this snapshot, but cells are from a different date/run and must not be scored as a pair.
+Indicative (not paired) vs historical full `80f74884` totals: that run was luna **+18.4%**, glm **+10.1%**, deepseek **−3.2%**. Compact looks cheaper on this snapshot, but the cells are from a **different run the same date** (~70 minutes later) and must not be scored as a pair. Do not assert dominance over full.
 
 ## Cost (catalog micros)
 
@@ -166,7 +168,9 @@ Skill (10/18 treated-path, **8 essential bypass** via nested `read_file` only �
 | `deepseek__skill-invoice-contact__trial1` | candidate |
 | `deepseek__skill-invoice-contact__trial2` | baseline |
 
-Luna skill: 6/6 `activate_skill`. Exclude the eight bypass cells from treated-stratum headlines. Skill prompt is mixed (luna +1.9%, glm −23.4%, deepseek +2.3%) and noisy.
+Bypass split: **6 baseline, 2 candidate** (`glm` trial0 both arms; `glm` trials 1–2 baseline; `deepseek` trial0 baseline, trial1 both, trial2 baseline). Luna skill: 6/6 `activate_skill`.
+
+The arms solved skill by **different routes**. That arm-asymmetric solution-path confound **excludes skill from any treatment-causal claim**, not merely from headlines. glm −23.4% in particular compares mostly-bypass baseline cells to mostly-`activate_skill` compact cells. Skill prompt mixed (luna +1.9%, glm −23.4%, deepseek +2.3%) is not a compact effect.
 
 Control nested tools were essential filesystem tools. One control cell (`luna__retrieve-config-token__trial2` candidate) completed correctly with **zero** `run_code` / nested-tool calls.
 
@@ -174,11 +178,13 @@ Control nested tools were essential filesystem tools. One control cell (`luna__r
 
 1. Non-interactive coverage: no session tools. Header bytes are a lower bound on interactive production.
 2. Preflight `baselineDirty: true` (untracked `.bench-runs/`). `sourceMatchesPin.matches: true`. Candidate clean.
-3. `reasoningEffort` is not on `cost_update`; verified from raw sidecar bodies.
-4. Combined-treatment describe telemetry and honest-fallback produced **zero events**.
-5. Compact-vs-full is a cross-run indication only.
-6. Task-set error rate is not production prevalence. No break-even claim.
-7. Combined terminal wall includes both CLI rebuilds; do not substitute cell-sum wall for that figure.
+3. Effort is not on `cost_update`. Pinned-model medium is from raw sidecars: `body.reasoning.effort` (Codex) vs `body.reasoning_effort` (zai, DeepSeek).
+4. Combined-treatment describe telemetry and honest-fallback produced **zero events** in **144 cells / two matrices**. Truthful: unmeasured legs.
+5. Compact-vs-full is a same-date **cross-run** indication only. Not paired; not dominance.
+6. Task-set error rate is not production prevalence. No break-even claim. Prior production nested-`invalid_params` analysis is **closed** (`/tmp/tool-interface-error-prevalence.md`): those events are not persisted systematically (`writeNestedCallRecord` opt-in; caught errors invisible). **Do not reopen** or promise an exact production rate.
+7. Combined terminal wall **1,086,431 ms** is the authoritative builds-inclusive figure (tool-observed: both builds + preflight + 72 cells). The 9,369 ms remainder is arithmetic (combined − cell-sum), unattributed setup/driver overhead, not a measured non-model split. A claim that two builds cannot fit in that remainder is rejected: an earlier 26-test + both-builds + preflight window was 12,826 ms total.
+8. Helper traffic: **58** raw requests to `qwen3.6-35b-fast` (`reasoning_effort: "none"`) in **37/72** cells (27 baseline / 31 candidate; luna 29, glm 12, deepseek 17 requests). These emit **no** `cost_update`. Headline 250 requests / tokens / catalog µUSD are **pinned-model only**. Helper usage is unmetered. No end-to-end cost-saving claim. No assertion that unknown helper cost cannot change direction.
+9. Extra-`scope` leftovers and schema-strictness / memory-guidance hypotheses are **untested**. No fix is authorized in this unit; any next stage needs its own measurement.
 
 ## Arithmetic checks performed
 
@@ -189,6 +195,6 @@ Control nested tools were essential filesystem tools. One control cell (`luna__r
 - Invalid 10+3 = 13, all on memory-billing-contact.
 - Combined terminal wall 1,086,431 ms vs cell-sum 1,077,062 ms (documented remainder).
 
-## Conclusion (evidence, not a merge decision)
+## Conclusion
 
-The compact 72-cell run is **valid**. Correctness is at ceiling on both arms. Memory argument errors dropped 10→3 but did not reach zero; the three compact leftovers are extra `scope` on `memory_get` despite a signature that omits `scope`. Prompt effect is **mixed by model** (luna +4.5%, glm −5.5%, deepseek −15.2%). Skill remains a noisy stratum (8/18 `read_file` bypass). Parent decides whether that is enough to accept, iterate, or stop.
+The compact 72-cell run is **valid**. **Accepted for Stage1 integration** under the scoped evidence above: memory-task prompt and errors improved on all three models; correctness preserved; mixed-task net luna +4.5%; production unmeasured. Not a general catalog-wide efficiency result. Not a paired claim of dominance over full. Parent owns merge/integration execution; this file records the decision and its limits.

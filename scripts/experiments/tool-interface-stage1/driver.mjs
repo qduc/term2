@@ -6,8 +6,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { buildSchedule } from './lib/schedule.mjs';
-import { conversationEvents } from './lib/jsonl.mjs';
-import { extractCellMetrics, modelMatchesPin } from './lib/extract.mjs';
+import { conversationEvents, stdoutEvents } from './lib/jsonl.mjs';
+import { extractCellMetrics, matchIdentity } from './lib/extract.mjs';
 import { scoreOracle, scorePair, aggregateReport } from './lib/score.mjs';
 import { assertNoPromptLeaks } from './lib/leakage.mjs';
 import {
@@ -24,7 +24,7 @@ import { seedProjectAndGlobalMemory } from './lib/memory.mjs';
 import { snapshotRunCodeHeader } from './snapshot-header.mjs';
 import { snapshotFromRawSidecars } from './lib/traffic.mjs';
 import { gitRev, gitDirty, sourceTreeMatchesPin } from './lib/git-pin.mjs';
-import { classifyCellOutcome } from './lib/cell-outcome.mjs';
+import { classifyCellOutcome, paidReportMode } from './lib/cell-outcome.mjs';
 import { collectPreflightBlockers } from './lib/gates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -118,8 +118,8 @@ function spawnCommand(command, args, options) {
 }
 
 function newestConversation(conversationsDir, afterMs) {
-  if (!fs.existsSync(conversationsDir)) return null;
-  const files = fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl'));
+  if (!conversationsDir || !fs.existsSync(conversationsDir)) return null;
+  const files = fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl') && !name.includes('index'));
   const ranked = files
     .map((name) => {
       const filePath = path.join(conversationsDir, name);
@@ -128,6 +128,19 @@ function newestConversation(conversationsDir, afterMs) {
     .filter((entry) => entry.mtimeMs >= afterMs - 1000)
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
   return ranked[0]?.filePath ?? null;
+}
+
+function discoverConversationPath(isolated, afterMs) {
+  const dirs = [
+    isolated.paths.conversations,
+    path.join(isolated.paths.xdgData, 'term2', 'conversations'),
+    path.join(isolated.paths.logs, 'conversations'),
+  ];
+  for (const dir of dirs) {
+    const found = newestConversation(dir, afterMs);
+    if (found) return found;
+  }
+  return null;
 }
 
 function extractFinalText(stdout) {
@@ -370,15 +383,18 @@ async function runCell(cell, args, task, prepared) {
   const wallTimeMs = Date.now() - started;
   fs.writeFileSync(path.join(prepared.cellRoot, 'stdout.txt'), result.stdout);
   fs.writeFileSync(path.join(prepared.cellRoot, 'stderr.txt'), result.stderr);
-  const conversationPath = newestConversation(prepared.isolated.paths.conversations, started);
-  const events = conversationPath ? conversationEvents(conversationPath) : [];
+  const conversationPath = discoverConversationPath(prepared.isolated, started);
+  const fileEvents = conversationPath ? conversationEvents(conversationPath) : [];
+  const liveEvents = stdoutEvents(result.stdout);
+  const events = fileEvents.length ? fileEvents : liveEvents;
   const trafficRoot = path.join(prepared.isolated.paths.logs, 'provider-traffic');
   const rawHeader = snapshotFromRawSidecars(trafficRoot);
   const headerSnapshot = rawHeader.ok
     ? rawHeader
     : { ...rawHeader, source: rawHeader.source || 'missing-raw', headerFound: false, combinedHeaderBytes: 0, toolNames: [] };
   const metrics = extractCellMetrics({ events, wallTimeMs, headerSnapshot });
-  const identityOk = modelMatchesPin(metrics.identity, pin);
+  const identityMatch = matchIdentity(metrics.identity, pin);
+  const identityOk = identityMatch.ok;
   const files = {};
   if (task.oracle.kind === 'file-json-subset') {
     const filePath = path.join(prepared.workspace, task.oracle.path);
@@ -388,9 +404,11 @@ async function runCell(cell, args, task, prepared) {
   const correctness = scoreOracle(task.oracle, { finalText, files });
   const outcome = classifyCellOutcome({
     exit: { code: result.code, signal: result.signal },
+    identityMatch,
     identityOk,
     conversationPath,
     stdout: result.stdout,
+    stdoutEventCount: liveEvents.length,
     correctness,
   });
   const record = {
@@ -398,8 +416,10 @@ async function runCell(cell, args, task, prepared) {
     cli,
     exit: { code: result.code, signal: result.signal },
     conversationPath,
+    eventSource: fileEvents.length ? 'conversation-jsonl' : 'stdout-json',
     identityOk,
-    wrongModel: !identityOk,
+    identityMatch,
+    wrongModel: identityMatch.reason === 'wrong-model',
     outcome,
     metrics,
     correctness,
@@ -459,8 +479,13 @@ async function runPaid(args, tasks, preflightReport) {
       aborted = { reason: 'wrong-model', cellId: cell.cellId, identity: record.metrics.identity };
       break;
     }
+    if (record.outcome?.reason === 'identity-missing') {
+      aborted = { reason: 'identity-missing', cellId: cell.cellId, identity: record.metrics.identity };
+      break;
+    }
   }
-  if (args.only && records.length === 1) {
+  const mode = paidReportMode({ only: args.only, records, aborted });
+  if (mode.kind === 'incomplete-cell-only') {
     writeJson(path.join(args.outputDir, 'report.json'), {
       generatedAt: new Date().toISOString(),
       note: '--only with a single cellId does not score a pair; pass pairId to rerun both arms, or --resume after both exist.',
@@ -468,7 +493,11 @@ async function runPaid(args, tasks, preflightReport) {
     });
     return { aggregate: { rejectEfficiencyClaims: false, correctnessRegressions: [] }, aborted: null, incompleteOnly: true };
   }
-  return writePartialReport(args, records, aborted ? { aborted } : {});
+  const extra =
+    mode.kind === 'invalid-abort'
+      ? { aborted: mode.aborted, runInvalid: true, invalidReason: mode.aborted.reason, headline: mode.headline }
+      : {};
+  return writePartialReport(args, records, extra);
 }
 
 async function main() {
@@ -497,7 +526,9 @@ async function main() {
         JSON.stringify(
           {
             command: 'run',
-            rejectEfficiencyClaims: paid.aggregate?.rejectEfficiencyClaims,
+            runInvalid: paid.runInvalid === true,
+            headline: paid.headline ?? null,
+            rejectEfficiencyClaims: paid.runInvalid ? true : paid.aggregate?.rejectEfficiencyClaims,
             correctnessRegressions: paid.aggregate?.correctnessRegressions,
             aborted: paid.aborted ?? null,
             output: path.join(args.outputDir, 'report.json'),

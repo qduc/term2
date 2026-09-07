@@ -4,9 +4,10 @@ import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { HEADER_MARK, headerSnapshotFromDescription, compareNameSets, splitRunCodeDescription } from './lib/header.mjs';
 import { buildSchedule } from './lib/schedule.mjs';
-import { extractNestedCallMetrics, extractCellMetrics, modelMatchesPin } from './lib/extract.mjs';
+import { extractNestedCallMetrics, extractCellMetrics, modelMatchesPin, matchIdentity } from './lib/extract.mjs';
 import { scoreOracle, scorePair, aggregateReport } from './lib/score.mjs';
-import { classifyCellOutcome } from './lib/cell-outcome.mjs';
+import { classifyCellOutcome, paidReportMode } from './lib/cell-outcome.mjs';
+import { stdoutEvents } from './lib/jsonl.mjs';
 import { collectPreflightBlockers } from './lib/gates.mjs';
 import { snapshotRunCodeHeader } from './snapshot-header.mjs';
 import { findPromptLeaks, assertNoPromptLeaks } from './lib/leakage.mjs';
@@ -355,4 +356,114 @@ it('snapshots a factory-bound non-interactive header with at least 8 tools', asy
   expect(snap.combinedHeaderBytes).toBeGreaterThan(0);
   expect(snap.interactiveMinusNonInteractive).toEqual(['session_list', 'session_search', 'session_read']);
   expect(snap.mode).toBe('non-interactive-factory-bind');
+  expect(snap.toolNames).toContain('configure_task_check_in');
+});
+
+it('does not classify missing identity as a proven wrong model', () => {
+  const missing = matchIdentity(
+    { provider: null, model: null },
+    { provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'medium' },
+  );
+  expect(missing).toEqual({ present: false, ok: false, reason: 'identity-missing' });
+  expect(
+    classifyCellOutcome({
+      exit: { code: 0, signal: null },
+      identityMatch: missing,
+      conversationPath: null,
+      stdout: '{"type":"completed","finalText":"ora-keel-19"}',
+      stdoutEventCount: 1,
+      correctness: { correct: true },
+    }).reason,
+  ).toBe('identity-missing');
+  const wrong = matchIdentity(
+    { provider: 'zai', model: 'glm-5.3-flash' },
+    { provider: 'codex', model: 'gpt-5.6-luna' },
+  );
+  expect(wrong.reason).toBe('wrong-model');
+  expect(
+    classifyCellOutcome({
+      exit: { code: 0, signal: null },
+      identityMatch: wrong,
+      conversationPath: '/tmp/x.jsonl',
+      stdout: '',
+      correctness: { correct: true },
+    }).reason,
+  ).toBe('wrong-model');
+});
+
+it('headlines an aborted pair as INVALID even when --only selected the pairId', () => {
+  const records = [
+    {
+      cell: {
+        cellId: 'luna__memory-billing-contact__trial0__candidate',
+        pairId: 'luna__memory-billing-contact__trial0',
+      },
+    },
+  ];
+  const aborted = paidReportMode({
+    only: 'luna__memory-billing-contact__trial0',
+    records,
+    aborted: { reason: 'wrong-model', cellId: records[0].cell.cellId },
+  });
+  expect(aborted.kind).toBe('invalid-abort');
+  expect(aborted.runInvalid).toBe(true);
+  expect(aborted.headline).toBe('INVALID: aborted after wrong-model');
+  const cellOnly = paidReportMode({ only: records[0].cell.cellId, records, aborted: null });
+  expect(cellOnly.kind).toBe('incomplete-cell-only');
+});
+
+it('reconstructs the luna memory pilot from the actual stdout event stream', () => {
+  const fixture = path.resolve(
+    'scripts/experiments/tool-interface-stage1/fixtures/pilot-luna-memory-candidate-stdout.txt',
+  );
+  const events = stdoutEvents(fs.readFileSync(fixture, 'utf8'));
+  const pin = { provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'medium' };
+  const metrics = extractCellMetrics({ events, wallTimeMs: 14397, headerSnapshot: null });
+  expect(metrics.identity.provider).toBe('codex');
+  expect(metrics.identity.model).toBe('gpt-5.6-luna');
+  expect(metrics.identity.identitySource).toBe('cost_update');
+  expect(matchIdentity(metrics.identity, pin).ok).toBe(true);
+  expect(metrics.usage.turnCount).toBe(3);
+  expect(metrics.usage.promptTokensSum).toBe(32892);
+  expect(metrics.usage.cacheReadTokensSum).toBe(19968);
+  expect(metrics.usage.costUsdMicros).toBe(3167);
+  expect(metrics.usage.costKnown).toBe(true);
+  expect(metrics.runCodeCalls).toBe(2);
+  expect(metrics.invalidParamsAttempted).toBe(1);
+  expect(metrics.resultHandlingFailures).toBe(1);
+  expect(metrics.resultHandlingRecoveries).toBe(1);
+  expect(metrics.toolStarted).toEqual(['run_code', 'run_code']);
+  const finalText = [...events].reverse().find((event) => event.type === 'completed')?.finalText;
+  expect(scoreOracle({ kind: 'exact-token', token: 'ora-keel-19' }, { finalText }).correct).toBe(true);
+  expect(
+    classifyCellOutcome({
+      exit: { code: 0, signal: null },
+      identityMatch: matchIdentity(metrics.identity, pin),
+      conversationPath: null,
+      stdout: fs.readFileSync(fixture, 'utf8'),
+      stdoutEventCount: events.length,
+      correctness: { correct: true, reason: 'token-match' },
+    }),
+  ).toEqual({ kind: 'correct', reason: 'token-match' });
+});
+
+it('uses the preserved pilot artifact location when present', () => {
+  const resultPath = path.resolve(
+    '.bench-runs/stage1-pilot-20260907-2058/cells/luna__memory-billing-contact__trial0__candidate/result.json',
+  );
+  if (!fs.existsSync(resultPath)) return;
+  const saved = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+  expect(saved.conversationPath).toBeNull();
+  expect(saved.metrics.identity.provider).toBeNull();
+  expect(saved.wrongModel).toBe(true);
+  expect(saved.outcome.reason).toBe('wrong-model');
+  expect(saved.correctness.correct).toBe(true);
+  expect(saved.metrics.headerSnapshot.toolNames).toContain('configure_task_check_in');
+  expect(saved.metrics.headerSnapshot.toolNameCount).toBe(18);
+  expect(saved.metrics.headerSnapshot.combinedHeaderBytes).toBe(6821);
+  const stdoutPath = path.join(path.dirname(resultPath), 'stdout.txt');
+  const events = stdoutEvents(fs.readFileSync(stdoutPath, 'utf8'));
+  const repaired = extractCellMetrics({ events, wallTimeMs: saved.metrics.wallTimeMs });
+  expect(matchIdentity(repaired.identity, saved.cell.model).ok).toBe(true);
+  expect(repaired.usage.promptTokensSum).toBe(32892);
 });

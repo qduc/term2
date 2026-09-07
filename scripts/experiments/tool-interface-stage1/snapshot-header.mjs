@@ -65,6 +65,7 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
     approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
     allowBackgroundShell: false,
     allowAskUser: false,
+    configureTaskCheckIn: () => ({ ok: true }),
   };
   const definition = getAgentDefinition(
     {
@@ -81,6 +82,7 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
       skillsService,
       allowBackgroundShell: false,
       allowAskUser: false,
+      configureTaskCheckIn: factoryDeps.configureTaskCheckIn,
     },
     resolvedModel,
   );

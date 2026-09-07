@@ -25,11 +25,11 @@ Measured construction headers (2026-09-07, factory-bound, this worktree's snapsh
 
 | model | baseline B | candidate B | delta B | names | static prose |
 | --- | ---: | ---: | ---: | ---: | --- |
-| luna | 1422 | 6453 | +5031 | 17 match | match |
-| glm | 2619 | 7650 | +5031 | 20 match | match |
-| deepseek | 2619 | 7650 | +5031 | 20 match | match |
+| luna | 1454 | 6821 | +5367 | 18 match | match |
+| glm | 2651 | 8018 | +5367 | 21 match | match |
+| deepseek | 2651 | 8018 | +5367 | 21 match | match |
 
-Same absolute +5031 B on all three. Luna ratio 4.54x, glm/deepseek 2.92x. **Not** the F3 replica +8471 / 3.31x–4.42x interactive fixture. Prior 3.9x signature-only plan-doc figure is reopened under these tri-model construction measurements; trial prompt tokens remain the live primary cost metric.
+Includes `configure_task_check_in`. Luna construction matches the candidate pilot raw header (18 / 6821 B). Same absolute +5367 B on all three. **Not** the F3 replica +8471 / 3.31x–4.42x interactive fixture. Prior 3.9x signature-only plan-doc figure is reopened under these tri-model construction measurements; trial prompt tokens remain the live primary cost metric.
 
 ## Hard gates (B1–B9)
 
@@ -61,3 +61,9 @@ node scripts/experiments/tool-interface-stage1/driver.mjs run --go   # refused u
 ```
 
 Do not launch paid cells from this revision.
+
+## Pilot repair (2026-09-07)
+
+Non-interactive `--json` does **not** write `*.jsonl` under `TERM2_CONVERSATIONS_DIR`. The cell event stream is stdout JSON (and harvested `logs/provider-traffic`). Missing jsonl is not a wrong-model. Identity comes from `session_init` when present, else `cost_update.record` / `final.costRecords`. Proven wrong-model aborts; identity-missing is a distinct infra reason. An aborted pair must headline `INVALID`, including when `--only` was a pairId that only finished one cell.
+
+Live luna raw header includes `configure_task_check_in` (18 names / 6821 B on the candidate pilot). Construction snapshots must pass the same `configureTaskCheckIn` stub production uses; that is the 17-vs-18 seam, not a treatment effect.

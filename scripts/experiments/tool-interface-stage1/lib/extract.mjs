@@ -79,16 +79,68 @@ export function extractRunCodeSources(events) {
 
 export function extractSessionIdentity(events) {
   const init = events.find((event) => event.type === 'session_init') ?? {};
+  const cost = events.find((event) => event.type === 'cost_update' && event.record?.provider);
+  const finalEvent = events.find((event) => event.type === 'final' && Array.isArray(event.costRecords));
+  const record = cost?.record ?? finalEvent?.costRecords?.[0] ?? {};
+  const provider =
+    (typeof init.provider === 'string' && init.provider) ||
+    (typeof record.provider === 'string' && record.provider) ||
+    null;
+  const model =
+    (typeof init.model === 'string' && init.model) || (typeof record.model === 'string' && record.model) || null;
   return {
     sessionId: typeof init.id === 'string' ? init.id : null,
-    provider: typeof init.provider === 'string' ? init.provider : null,
-    model: typeof init.model === 'string' ? init.model : null,
+    provider,
+    model,
     reasoningEffort: typeof init.reasoningEffort === 'string' ? init.reasoningEffort : null,
     projectPath: typeof init.projectPath === 'string' ? init.projectPath : null,
+    identitySource: init.provider || init.model ? 'session_init' : provider ? 'cost_update' : 'missing',
   };
 }
 
+export function matchIdentity(identity, pin) {
+  if (!identity?.provider || !identity?.model) {
+    return { present: false, ok: false, reason: 'identity-missing' };
+  }
+  if (identity.provider !== pin.provider || identity.model !== pin.model) {
+    return { present: true, ok: false, reason: 'wrong-model' };
+  }
+  if (pin.reasoningEffort && identity.reasoningEffort && identity.reasoningEffort !== pin.reasoningEffort) {
+    return { present: true, ok: false, reason: 'wrong-model' };
+  }
+  return { present: true, ok: true, reason: 'identity-match' };
+}
+
 export function extractUsage(events) {
+  const costs = events.filter((event) => event.type === 'cost_update' && event.record?.usage);
+  if (costs.length > 0) {
+    const perTurnPromptTokens = costs.map((event) =>
+      typeof event.record.usage.prompt_tokens === 'number' ? event.record.usage.prompt_tokens : null,
+    );
+    const perTurnCacheReadTokens = costs.map((event) =>
+      typeof event.record.usage.cache_read_tokens === 'number' ? event.record.usage.cache_read_tokens : null,
+    );
+    let costUsdMicros = 0;
+    let costKnown = false;
+    for (const event of costs) {
+      if (typeof event.record.usdMicros === 'number') {
+        costUsdMicros += event.record.usdMicros;
+        costKnown = true;
+      }
+    }
+    const last = costs[costs.length - 1]?.record?.usage ?? null;
+    return {
+      turnCount: costs.length,
+      perTurnPromptTokens,
+      perTurnCacheReadTokens,
+      promptTokensSum: sumKnown(perTurnPromptTokens),
+      cacheReadTokensSum: sumKnown(perTurnCacheReadTokens),
+      lastUsage: last,
+      costUsdMicros: costKnown ? costUsdMicros : null,
+      costKnown,
+      usageSource: 'cost_update',
+    };
+  }
   const turns = events.filter((event) => event.type === 'assistant_turn');
   const perTurnPromptTokens = [];
   const perTurnCacheReadTokens = [];
@@ -117,6 +169,21 @@ export function extractUsage(events) {
       }
     }
   }
+  const finalEvent = events.find((event) => event.type === 'final' && event.usage);
+  if (turns.length === 0 && finalEvent?.usage) {
+    const usage = finalEvent.usage;
+    return {
+      turnCount: 1,
+      perTurnPromptTokens: [typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null],
+      perTurnCacheReadTokens: [typeof usage.cache_read_tokens === 'number' ? usage.cache_read_tokens : null],
+      promptTokensSum: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+      cacheReadTokensSum: typeof usage.cache_read_tokens === 'number' ? usage.cache_read_tokens : null,
+      lastUsage: usage,
+      costUsdMicros: null,
+      costKnown: false,
+      usageSource: 'final',
+    };
+  }
   return {
     turnCount: turns.length,
     perTurnPromptTokens,
@@ -126,6 +193,7 @@ export function extractUsage(events) {
     lastUsage,
     costUsdMicros: costKnown ? costUsdMicros : null,
     costKnown,
+    usageSource: 'assistant_turn',
   };
 }
 
@@ -203,11 +271,5 @@ export function extractCellMetrics({ events, wallTimeMs, headerSnapshot }) {
 }
 
 export function modelMatchesPin(identity, pin) {
-  if (!identity?.provider || !identity?.model) return false;
-  if (identity.provider !== pin.provider) return false;
-  if (identity.model !== pin.model) return false;
-  if (pin.reasoningEffort && identity.reasoningEffort && identity.reasoningEffort !== pin.reasoningEffort) {
-    return false;
-  }
-  return true;
+  return matchIdentity(identity, pin).ok;
 }

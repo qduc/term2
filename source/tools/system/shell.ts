@@ -1188,11 +1188,14 @@ export function createShellToolDefinition(deps: {
 
           const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
           const exitCode = result.exitCode ?? null;
-          // Deadline classification belongs to the executor's typed reason:
-          // a caller cancellation settles with the legacy SIGTERM fallback
-          // (timedOut true) but must not be presented or logged as a timeout.
+          // Deadline classification belongs to the executor's typed reason.
+          // Keep accepting legacy timeout-shaped injected results, but never
+          // infer a deadline from the cancellation bit or a process signal.
           const cancelled = result.terminationKind === 'cancelled';
-          const deadlineTimeout = result.timedOut && !cancelled;
+          const processTerminated = result.terminationKind === 'process-terminated';
+          const deadlineTimeout =
+            result.terminationKind === 'deadline' ||
+            (result.terminationKind === undefined && result.timedOut && !cancelled && !processTerminated);
           const outcome: ShellCommandResult['outcome'] = deadlineTimeout
             ? { type: 'timeout' }
             : { type: 'exit', exitCode };
@@ -1211,6 +1214,8 @@ export function createShellToolDefinition(deps: {
 
           if (cancelled) {
             loggingService.debug('Shell command cancelled', withExecutionCorrelation(settlementFields));
+          } else if (processTerminated) {
+            loggingService.warn('Shell command process terminated', withExecutionCorrelation(settlementFields));
           } else if (deadlineTimeout) {
             loggingService.warn('Shell command timeout', withExecutionCorrelation(settlementFields));
           } else if (exitCode === 0) {
@@ -1266,7 +1271,7 @@ export function createShellToolDefinition(deps: {
 
           return {
             output: formattedOutput.text,
-            status: result.timedOut ? 'timed_out' : exitCode === 0 ? 'completed' : 'failed',
+            status: deadlineTimeout ? 'timed_out' : exitCode === 0 ? 'completed' : 'failed',
           };
         };
 

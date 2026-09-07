@@ -218,12 +218,12 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
 
 /**
  * Why the executor stopped a command, when the executor itself stopped it.
- * Distinct from `timedOut`, which is latched for any settlement that did not
- * finish on its own (including the legacy SIGTERM fallback): an investigator
- * must be able to tell a deliberate deadline from a caller cancellation and
- * from a retained-output overflow kill without inferring it from the signal.
+ * Distinct from `timedOut`, which is the deadline (or legacy cancellation) bit:
+ * an investigator must be able to tell a deliberate deadline from a caller
+ * cancellation, an independently terminated process, or a retained-output
+ * overflow kill without inferring a deadline from the signal.
  */
-export type ShellTerminationKind = 'deadline' | 'cancelled' | 'output-overflow';
+export type ShellTerminationKind = 'deadline' | 'cancelled' | 'process-terminated' | 'output-overflow';
 
 export interface ShellExecutionResult {
   stdout: string;
@@ -235,9 +235,11 @@ export interface ShellExecutionResult {
   /** False when output was cut short at the drain deadline rather than at EOF. */
   outputComplete?: boolean;
   /**
-   * Typed reason the executor ended the command, when it was the executor that
-   * ended it. Absent for ordinary exits, spawn/command failures, and injected
-   * implementations that settle without going through the executor termination path.
+   * Typed reason for a non-ordinary termination. Executor-owned causes are
+   * recorded at the termination boundary; process termination is inferred only
+   * from the child-process error after an external signal/kill. Absent for
+   * ordinary exits, spawn/command failures, and injected implementations that
+   * settle without a termination signal or error.
    */
   terminationKind?: ShellTerminationKind;
   /** Total wall-clock time the command spent paused (e.g. network approval). */
@@ -558,19 +560,25 @@ async function executeShellCommandUnleased(
   } catch (error: any) {
     const exitCode = typeof error?.code === 'number' ? error.code : null;
     const signal = (error?.signal as NodeJS.Signals | null | undefined) ?? null;
-    // The latch is authoritative; the signal check stays as a fallback for
-    // impls that terminate the child without going through the deadline.
-    const timedOut = timedOutLatched || Boolean(error?.killed || error?.signal === 'SIGTERM');
+    // The deadline latch is authoritative. A child can receive SIGTERM from
+    // outside this executor (for example, a process-control command matching
+    // its own supervision shell), and that must not be mistaken for expiry.
+    // Preserve the legacy cancellation bit for callers that still consume it;
+    // the typed reason is what distinguishes cancellation from a deadline.
+    const timedOut = timedOutLatched || terminationKind === 'cancelled';
     // The retained-buffer overflow kill happens inside defaultExecImpl, so the
     // executor never began termination for it; classify it from the error the
     // implementation reports instead of leaving it as an unexplained signal.
     let classifiedKind = terminationKind;
-    if (
-      classifiedKind === undefined &&
-      typeof error?.message === 'string' &&
-      error.message.includes('maxBuffer length exceeded')
-    ) {
-      classifiedKind = 'output-overflow';
+    if (classifiedKind === undefined) {
+      if (typeof error?.message === 'string' && error.message.includes('maxBuffer length exceeded')) {
+        classifiedKind = 'output-overflow';
+      } else if (error?.killed || signal !== null) {
+        // This is a process termination observed by the executor, not an
+        // executor-owned deadline. Keep it explicit so callers do not need to
+        // infer timeout attribution from SIGTERM/SIGKILL.
+        classifiedKind = 'process-terminated';
+      }
     }
 
     return {

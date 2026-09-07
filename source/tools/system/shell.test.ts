@@ -1351,6 +1351,51 @@ it.sequential('shell execute logs the timeout source, mode, identity, and typed 
   });
 });
 
+it.sequential('shell execute does not count an external process termination as a timeout', async () => {
+  const logged: Array<{ level: string; message: string; fields: Record<string, unknown> }> = [];
+  const loggingService = createNoopLogger({
+    debug: (_message?: string, fields?: Record<string, unknown>) =>
+      logged.push({ level: 'debug', message: String(_message), fields: fields ?? {} }),
+    warn: (_message?: string, fields?: Record<string, unknown>) =>
+      logged.push({ level: 'warn', message: String(_message), fields: fields ?? {} }),
+  });
+  const shell = createShellToolDefinition({
+    loggingService,
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      signal: 'SIGTERM' as const,
+      timedOut: false,
+      terminationKind: 'process-terminated' as const,
+    }),
+  });
+
+  const output = await shell.execute(
+    { command: 'safe-self-termination', timeout_ms: 120_000 },
+    { context: undefined, approvals: new ApprovalLedger() },
+    { toolCall: { callId: 'call-process-termination' } },
+  );
+
+  const timeout = logged.find((entry) => entry.message === 'Shell command timeout');
+  const terminated = logged.find((entry) => entry.message === 'Shell command process terminated');
+  const completed = logged.find((entry) => entry.message === 'Shell command execution completed');
+
+  expect(timeout).toBeUndefined();
+  expect(terminated?.fields).toMatchObject({
+    terminationKind: 'process-terminated',
+    callId: 'call-process-termination',
+  });
+  expect(completed?.fields).toMatchObject({
+    failureCount: 1,
+    timeoutCount: 0,
+    terminationKind: 'process-terminated',
+    callId: 'call-process-termination',
+  });
+  expect(output).not.toMatch(/^timeout(?:\n|$)/);
+});
+
 it.sequential('shell execute characterizes the post-approval RTK command boundary', async () => {
   const rtkPath = '/tmp/rtk/rtk';
   const executedCommands: string[] = [];

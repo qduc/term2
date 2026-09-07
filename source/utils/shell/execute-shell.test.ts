@@ -40,15 +40,22 @@ it('executeShellCommand captures stderr and exit code for failed command', async
 it('executeShellCommand reports timeouts', async () => {
   const result = await executeShellCommand('long-running', {
     timeout: 50,
+    terminationGraceMs: 100,
+    drainGraceMs: 50,
     execImpl: (_command, _options, callback) => {
-      const error = new Error('timeout') as Error & { signal: string };
-      error.signal = 'SIGTERM';
-      queueMicrotask(() => callback(error, '', ''));
-      return createFakeChildProcess();
+      const child = createFakeChildProcess();
+      child.kill = () => {
+        const error = new Error('deadline') as Error & { signal: string };
+        error.signal = 'SIGTERM';
+        queueMicrotask(() => callback(error, '', ''));
+        return true;
+      };
+      return child;
     },
   });
 
   expect(result.timedOut).toBe(true);
+  expect(result.terminationKind).toBe('deadline');
 });
 
 it('executeShellCommand merges env for exec implementation and sets TMPDIR', async () => {
@@ -311,6 +318,19 @@ describe('typed termination classification', () => {
     expect(result.timedOut).toBe(true);
     expect(result.terminationKind).toBe('deadline');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'does not classify an independently terminated child as a deadline',
+    async () => {
+      const result = await executeShellCommand(`exec node -e "process.kill(process.pid, 'SIGTERM')"`, {
+        timeout: 120_000,
+      });
+
+      expect(result.signal).toBe('SIGTERM');
+      expect(result.timedOut).toBe(false);
+      expect(result.terminationKind).toBe('process-terminated');
+    },
+  );
 
   it('classifies an abort settlement as cancelled instead of a SIGTERM-inferred timeout', async () => {
     const abortController = new AbortController();

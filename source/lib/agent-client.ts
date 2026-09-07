@@ -1145,10 +1145,7 @@ export class AgentClient {
       },
       (error) => {
         const failure = classifyProviderFailure(error);
-        this.#logger.error('Agent stream failed', {
-          eventType: 'provider.response.failed',
-          category: 'provider',
-          phase: 'provider_response',
+        const metadata = {
           traceId: correlationId ?? undefined,
           provider,
           model,
@@ -1161,7 +1158,22 @@ export class AgentClient {
           inputType: Array.isArray(input) ? 'array' : typeof input,
           inputLength: typeof input === 'string' ? input.length : undefined,
           inputItems: Array.isArray(input) ? input.length : undefined,
-        });
+        };
+        if (failure.errorKind === 'cancelled') {
+          this.#logger.debug('Agent stream cancelled', {
+            ...metadata,
+            eventType: 'stream.aborted',
+            category: 'stream',
+            phase: 'abort',
+          });
+        } else {
+          this.#logger.error('Agent stream failed', {
+            ...metadata,
+            eventType: 'provider.response.failed',
+            category: 'provider',
+            phase: 'provider_response',
+          });
+        }
         cleanup();
       },
     );

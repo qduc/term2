@@ -184,8 +184,8 @@ const createSessionHarness = ({
       logger: createMockLogger(),
       settingsService: createMockSettingsService({
         'shell.autoApproveMode': 'advisory',
-        'agent.autoApproveModel': 'test-auto-model',
-        'agent.autoApproveProvider': 'test-auto-provider',
+        'agent.choreModel': 'test-auto-model',
+        'agent.choreProvider': 'test-auto-provider',
         ...settingsOverrides,
       }),
       sessionContextService: createSessionContextService() as any,

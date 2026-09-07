@@ -19,6 +19,8 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { createAgentStream } from '../agent-stream.js';
+import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
 
 const ROLE_UNKNOWN = 'nonexistent-role-xyz';
 const MODEL_MAIN = 'main-model';
@@ -203,6 +205,55 @@ describe('mentor role', () => {
     await manager.run({ role: ROLE_MENTOR, task: TASK_FRESH_QUESTION });
     // After reset, second call should have only 1 message (fresh start)
     expect(mentorManagerRunnerCalls[1].input.length).toBe(1);
+  });
+
+  it('resetMentorSession() does not cancel an async worker retained for the successor session', async () => {
+    const settings = createMockSettings({
+      'agent.model': MODEL_MAIN,
+      'agent.provider': mentorProviderId,
+      'agent.retryAttempts': 0,
+    });
+    let releaseWorker!: () => void;
+    const workerReleased = new Promise<void>((resolve) => {
+      releaseWorker = resolve;
+    });
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings,
+      sessionContextService: createSessionContextService() as any,
+      createClient: () =>
+        ({
+          abort: () => {},
+          chat: async () => 'worker result',
+          startStream: async () =>
+            createAgentStream({
+              interruptions: [],
+              state: undefined,
+              history: [],
+              newItems: [],
+              finalOutput: 'worker result',
+              lastResponseId: null,
+              completed: Promise.resolve(),
+              output: [],
+              async *[Symbol.asyncIterator](): AsyncGenerator<ApplicationRunEvent> {
+                await workerReleased;
+                yield { type: 'text_delta' as const, text: 'worker result' };
+              },
+            }),
+        } as any),
+    });
+
+    const handle = manager.startRunAsync({ role: ROLE_WORKER, task: 'keep working' });
+    await Promise.resolve();
+    manager.resetMentorSession();
+
+    expect(manager.getRunStatus(handle.runId)).toMatchObject({ status: 'running' });
+    releaseWorker();
+    const result = await manager.getRunResult(handle.runId);
+    expect(result).toMatchObject({
+      status: 'completed',
+      finalText: 'worker result',
+    });
   });
 });
 

@@ -58,8 +58,11 @@ export class SubagentManager {
   }
 
   resetMentorSession(): void {
+    // Agent configuration rebuilds call this while a retained session starts
+    // its successor turn. Async runs are conversation-owned, not mentor-cache
+    // state: explicit interruption/disposal paths call cancelAllAsyncRuns (or
+    // dispose) and must remain the only paths that stop them.
     this.#runtime.mentorRunner.reset();
-    this.#runtime.asyncRegistry.reset();
   }
 
   clearCache(): void {

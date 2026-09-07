@@ -73,6 +73,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The sandboxed-code-host e2e 'built' variants import the compiled
+      # dist/ modules (see sandboxed-code-host.e2e.test.ts), so dist/ must
+      # exist and be fresh before the suite runs. SKIP_BUILD_BACKUP=1 skips
+      # the rollback backup copy; CI dist/ is disposable.
+      - name: Build dist
+        run: SKIP_BUILD_BACKUP=1 pnpm build
+
       - name: Run e2e suite
         run: pnpm test:e2e
 

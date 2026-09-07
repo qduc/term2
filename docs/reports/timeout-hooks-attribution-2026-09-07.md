@@ -13,9 +13,9 @@ prompts or command output.
 
 | Record class | Count | Pre-merge | Post-merge | Provenance split |
 | --- | ---: | ---: | ---: | --- |
-| `log.message` / `Shell command timeout` | 15 | 11 | 4 | 10 test/development probes, 5 controlled timeout pilot processes |
+| `log.message` / `Shell command timeout` | 15 | 11 | 4 | 10 ordinary live test/development workloads, 5 controlled timeout pilot processes |
 | `hooks.hook_disabled` / `hook_disabled` | 25 | 9 | 16 | 5 worktree development startups, 20 primary-checkout startups |
-| **Total** | **40** | **20** | **20** | **15 test/development, 5 controlled pilot, 20 primary-checkout runtime** |
+| **Total** | **40** | **20** | **20** | **15 ordinary live test/development workloads, 5 controlled pilot processes, 20 primary-checkout runtime** |
 
 The phase split uses the evidence-backed shell-timeout merge at
 `2026-09-06 15:24:20 +07:00` (`c9162de43b85d3f74d41a6aa39282775cc3953c5`,
@@ -50,8 +50,9 @@ from a projection nor a stray file was executed.
   timeout records and 25 hook records.  Timeout grouping was: 20000 (1),
   30000 (1), 60000 (1), 120000 (6), 1800000 (2), 3600000 (2), 5600000 (1),
   and 7200000 (1).  All 25 hook message IDs are unique.
-* Workspace checks found no files named `=` or `0)`.  No production source was
-  changed and no full-suite command was run for this report.
+* Workspace checks found no files named `=` or `0)`. The incident-log
+  inspection changed no source and no full-suite command was run for this
+  report; the follow-up source repair is described below.
 
 ## Shell timeout identities and dispositions
 
@@ -63,16 +64,16 @@ the warning label alone is not treated as proof of deadline expiry.
 | # | Timestamp | Identity | Effective budget / mode | Context and bounded evidence | Phase | Disposition |
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | 2026-09-06 08:46:55 | correlation `a4ebc5c2-2701-4037-8e9d-822a59c3d3b0` | 120000 ms; pre-M2 fields absent | `pnpm test:related …`; started 08:44:55 and settled at the 120-second warning with `successCount: 0`, `timeoutCount: 1` | pre | **Confirmed deadline; test validation interrupted.** |
-| 2 | 2026-09-06 09:20:30 | no correlation ID | 120000 ms; pre-M2 fields absent | `find`/`jq` provider-traffic inspection command; a development evidence probe, not a product workload | pre | **Timeout warning accounted; deadline mechanism not independently joinable** because identity and elapsed fields are absent. |
+| 2 | 2026-09-06 09:20:30 | no correlation ID | 120000 ms; pre-M2 fields absent | `find`/`jq` provider-traffic inspection command; an ordinary live development/log-inspection workload, not a controlled timeout pilot | pre | **Timeout warning accounted; deadline mechanism not independently joinable** because identity and elapsed fields are absent. |
 | 3 | 2026-09-06 10:49:03 | correlation `30248c29-fdc7-4131-82de-df3f5bc0cbf5`; session `subagent-shady-oat-638` | 120000 ms; pre-M2 fields absent | Focused `pnpm test -- …`; start 10:47:03, settlement at 120 seconds, `successCount: 0`, `timeoutCount: 1` | pre | **Confirmed deadline; test validation interrupted.** |
 | 4 | 2026-09-06 11:10:05 | no correlation ID | 120000 ms; pre-M2 fields absent | `pnpm test`; full-suite development validation attempt | pre | **Timeout warning accounted; exact join/elapsed evidence unavailable.** It is not counted as a completed full-suite gate. |
-| 5 | 2026-09-06 12:26:33 | correlation `0dd4bccb-358a-43ac-98cc-629aefe1b748`; sessions `b2799d1a-082e-44f6-9fcc-b913ae9ed3ff` and `subagent-punctual-wolf-697` | 20000 ms; pre-M2 fields absent | `jq` audit query for warning events; started 12:26:13 and settled at 20 seconds | pre | **Confirmed deadline; development/log-analysis probe interrupted.** |
+| 5 | 2026-09-06 12:26:33 | correlation `0dd4bccb-358a-43ac-98cc-629aefe1b748`; sessions `b2799d1a-082e-44f6-9fcc-b913ae9ed3ff` and `subagent-punctual-wolf-697` | 20000 ms; pre-M2 fields absent | `jq` audit query for warning events; started 12:26:13 and settled at 20 seconds | pre | **Confirmed deadline; ordinary live development/log-analysis workload interrupted.** |
 | 6 | 2026-09-06 13:19:39 | correlation `134c4e59-e856-4da9-9ebf-1ed1670276f9` | 1800000 ms; pre-M2 fields absent | `watch-receipts.sh` on `/tmp/qduc/term2-nodejs/et-watch-pilot-zXIZRz`; first no-explicit-budget watcher, started 12:49:39 | pre | **Confirmed default deadline (red E1 reproduction).** The 30-minute default killed the watcher before the marker and explains replacement churn. |
 | 7 | 2026-09-06 13:19:39 | correlation `31228aa0-ff90-4eee-8d08-b28fc9911027` | 1800000 ms; pre-M2 fields absent | Marker writer `sleep 1860 …` for the same controlled pilot; started 12:49:39 | pre | **Confirmed default deadline (red E1 reproduction).** The writer was killed about 53 seconds before its intended marker. |
 | 8 | 2026-09-06 13:55:12 | correlation `1b469bd2-ed54-4ab1-bc9a-c83868658f4f` | 3600000 ms; pre-M2 fields absent | Gap-pilot watcher G1; started 13:55:05 and settled about 7 seconds later while being deliberately cancelled through its owner | pre | **Controlled cancellation mislabeled as timeout.** The warning does not establish deadline expiry. |
 | 9 | 2026-09-06 13:55:50 | correlation `014954af-119a-4fc2-bfa8-055eddd93835` | 3600000 ms; pre-M2 fields absent | Gap-pilot watcher G2; started 13:55:35 and settled about 15 seconds later after deliberate cancellation | pre | **Controlled cancellation mislabeled as timeout.** The warning does not establish deadline expiry. |
 | 10 | 2026-09-06 15:22:46 | correlation `8592a0bb-40e1-4f9f-a072-20f00b8ec5ab` | 7200000 ms; pre-M2 fields absent | Controlled watcher started 13:22:46 on `et-watch-pilot-zXIZRz`; settled exactly two hours later. The closed plan receipt records typed `timed_out`, one instance, and marker delivery after minute 30 | pre | **Expected explicit-horizon settlement.** This is evidence that the selected finite pilot value worked; the warning itself lacks typed reason because it predates the merged logging fields. |
-| 11 | 2026-09-06 15:23:09 | correlation `db0194ec-db3e-4d61-b362-a2ee37aa3772` | 5600000 ms; pre-M2 fields absent | `for i in 1 2 3; do sleep 1800 …`; development/cache-warm probe started 14:04:49 and settled after about 4700000 ms, before its configured horizon | pre | **Not a confirmed deadline.** The timeout label and `timeoutCount` are present, but elapsed/source/reason are absent and the process ended before 5600000 ms. |
+| 11 | 2026-09-06 15:23:09 | correlation `db0194ec-db3e-4d61-b362-a2ee37aa3772` | 5600000 ms; pre-M2 fields absent | `for i 1 2 3; do sleep 1800 …`; ordinary live development/cache-warm workload started 14:04:49 and settled after about 4700000 ms, before its configured horizon | pre | **Not a confirmed deadline.** The timeout label and `timeoutCount` are present, but elapsed/source/reason are absent and the process ended before 5600000 ms. |
 | 12 | 2026-09-06 17:26:22 | correlation `552ca3d7-9f41-4fae-9851-55d5ed16517b`; `callId` `call_26861b5ade5b4d3eb2887f2b`; `jobId` `1f3927e8-2bd3-470f-bee7-45a1aeea56c6` | 60000 ms; invocation; foreground; elapsed 60006 ms | Model-flag-picker development command; settlement has `terminationKind: deadline`, `successCount: 0`, `timeoutCount: 1` | post | **Confirmed deadline with M2 attribution.** Explicit 60-second validation budget was enforced. |
 | 13 | 2026-09-06 17:26:30 | correlation `5db0567a-5a6e-4a14-a3d0-fb0001cb1116`; `callId` `call_edcc511824d0422f8283c334`; `jobId` `9de2b506-4b2c-4dba-a56e-dad0cd4bfac4` | 120000 ms; foreground setting; foreground; elapsed 37–38 ms | `pgrep`/`pkill` development process-control command; settlement has `timeoutCount: 1` but no `terminationKind` and elapsed is far below the 120-second budget | post | **Attribution anomaly, not a confirmed timeout.** The command likely disrupted its own supervision path; preserve as an M2 observability gap rather than inflating deadline incidence. |
 | 14 | 2026-09-06 19:47:41 | correlation `be1d4acc-c407-4a86-a752-ff9764a77a6f`; `callId` `call_Ij7meNbtg4oglKWVpvoZUJK4`; `jobId` `7031e440-f564-4e6f-928b-e2219cb1fd27` | 120000 ms; invocation; foreground; elapsed 120067 ms | Prettier development command; settlement has `terminationKind: deadline`, `successCount: 0`, `timeoutCount: 1` | post | **Confirmed deadline with M2 attribution.** Explicit 120-second formatting budget was enforced. |
@@ -80,8 +81,8 @@ the warning label alone is not treated as proof of deadline expiry.
 
 ### Shell evidence summary
 
-The pre-M2 set contains 11 rows: five ordinary validation/log-analysis
-probes, five controlled pilot watcher/writer rows, and one cache-warm probe.
+The pre-M2 set contains 11 rows: six ordinary live validation/log-analysis or
+cache-warm workloads and five controlled pilot watcher/writer rows.
 The two 1,800,000 ms rows are the direct red proof of the old background
 default. The 3,600,000 ms rows ended after seconds by deliberate cancellation,
 not deadline expiry. The 7,200,000 ms row is the intended two-hour pilot
@@ -190,12 +191,47 @@ timeout-fix effect.
   separate expected follow-up. It is not inferable from these 25 hook rows and
   was not run here.
 
+## Follow-up reproduction: self-termination attribution
+
+The row-13 mechanism is reproducible without replaying the logged
+`pgrep`/`pkill` payload. A safe public-boundary fixture runs
+`exec node -e "process.kill(process.pid, 'SIGTERM')"`, so the command's direct
+child terminates itself while the shell executor still has a 120,000 ms
+foreground budget. The pre-fix focused test failed deterministically: the
+result carried `signal: "SIGTERM"` and completed in tens of milliseconds, but
+also carried `timedOut: true` with no `terminationKind`. The timeout bit came
+from the catch-path fallback that treated `error.killed` or any `SIGTERM` as a
+timeout, even though the executor's deadline timer had not fired.
+
+The minimal repair keeps executor-owned deadline and caller-cancellation
+authority unchanged. It makes an observed signal/error without an executor
+termination cause `terminationKind: "process-terminated"` and removes the
+SIGTERM-to-deadline inference. The shell outcome then records
+`timeoutCount: 0`, `failureCount: 1`, and the typed process-termination reason;
+caller cancellation remains typed `cancelled`, and an actual deadline remains
+typed `deadline` with `timeoutCount: 1`. No default, timeout, cancellation
+authority, or process-control command was changed.
+
+The red command was `pnpm test source/utils/shell/execute-shell.test.ts -t
+'independently terminated'` (one deterministic failure: expected
+`timedOut: false`, received `true`, after observing `signal: "SIGTERM"`). The
+same regression plus the shell logging contract pass in
+`pnpm test source/utils/shell/execute-shell.test.ts
+source/tools/system/shell.test.ts`, with 102 tests passing. The related output
+formatter tests also pass (7 tests); no full-suite command was run.
+
+This fixture establishes the classification mechanism, not the exact history
+of row 13's process tree. The row's 37–38 ms settlement and command shape are
+consistent with the mechanism, while the log does not prove which process
+received the signal.
+
 ## Reproduction and scope boundary
 
-This report is an evidence receipt only. It performs no replay, retry, timeout
-extension, cap/default increase, production edit, full-suite run, or execution
-of command payloads found in logs. The report accounts for all 15 timeout and
-all 25 project-hook records found by the bounded structured query; the only
-identity gaps are the two timeout rows whose source logs themselves have no
-correlation ID, plus the pre-M2 rows whose executor metadata was not yet
-logged.
+The incident-log inspection and row accounting performed no replay, retry,
+timeout extension, cap/default increase, or execution of command payloads found
+in logs. The separate safe synthetic fixture above is the only process-control
+reproduction. The source repair did not alter defaults, timeout values, or
+cancellation authority. The report accounts for all 15 timeout and all 25
+project-hook records found by the bounded structured query; the only identity
+gaps are the two timeout rows whose source logs themselves have no correlation
+ID, plus the pre-M2 rows whose executor metadata was not yet logged.

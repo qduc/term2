@@ -1450,7 +1450,7 @@ it('CodexResponsesWSModel retains the partial transcript of an aborted stream', 
   expect(typeof diagnostics.durationMs).toBe('number');
 });
 
-it('CodexResponsesWSModel retains the partial transcript when an abort interrupts a pending frame', async () => {
+it('CodexResponsesWSModel keeps a concrete failure when abort interrupts a pending frame', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficCalls: Array<{ method: string; args: any }> = [];
   const mockProviderTraffic: IProviderTraffic = {
@@ -1485,6 +1485,7 @@ it('CodexResponsesWSModel retains the partial transcript when an abort interrupt
   };
 
   const controller = new AbortController();
+  const providerFailure = Object.assign(new Error('upstream unavailable'), { status: 503 });
   const model = new CodexResponsesWSModel(
     { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
     'gpt-5-codex',
@@ -1501,19 +1502,16 @@ it('CodexResponsesWSModel retains the partial transcript when an abort interrupt
     value: { type: 'tool_call_streaming_delta', argumentCharCount: '{"type":"update_file"}'.length },
   });
   const pending = iterator.next();
-  controller.abort();
+  controller.abort(providerFailure);
   await expect(pending).rejects.toThrow();
 
-  expect(trafficCalls.map(({ method }) => method)).toEqual(['recordResponseClosed']);
+  expect(trafficCalls.map(({ method }) => method)).toEqual(['recordRequestFailed']);
+  expect(trafficCalls[0]!.args.error).toBe(providerFailure);
   const diagnostics = trafficCalls[0]!.args.diagnostics;
-  expect(trafficCalls[0]!.args.outcome).toBe('aborted');
-  expect(diagnostics.eventTypeCounts).toMatchObject({
-    'response.created': 1,
-    'response.output_item.added': 1,
-    'response.function_call_arguments.delta': 1,
-  });
+  expect(diagnostics.eventCount).toBe(3);
+  expect(diagnostics.progressCategoryCounts).toMatchObject({ tool: 1 });
   expect(diagnostics.toolArgumentDeltaFrames).toBe(1);
-  expect(JSON.stringify(diagnostics.events)).toContain('update_file');
+  expect(diagnostics).not.toHaveProperty('events');
 });
 
 it('CodexResponsesWSModel keeps provider stream failures on the existing failure path', async () => {

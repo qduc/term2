@@ -15,7 +15,7 @@ import type {
   ProviderTrafficRequest,
   ProviderTrafficResponse,
 } from '../service-interfaces.js';
-import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
+import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
 export type SentTrafficRecord = {
   requestId: string;
@@ -1331,14 +1331,24 @@ export class ProviderTraffic implements IProviderTraffic {
         });
       });
 
-      // 2. Log failure to winston
-      this.loggingService.error(`${input.provider} request failed`, {
-        eventType: 'provider.response.failed',
-        category: 'provider',
-        phase: 'provider_response',
-        ...baseMeta,
-        error: input.error,
-      });
+      // 2. Log failure to winston. A body read can be interrupted by the same
+      // user cancellation that stopped the provider stream; keep that expected
+      // outcome out of the error channel without dropping the artifact above.
+      const classification = classifyProviderFailure(input.error);
+      const cancelled = isClassifiedCancellation(input.error);
+      const log = cancelled ? this.loggingService.debug : this.loggingService.error;
+      log.call(
+        this.loggingService,
+        cancelled ? `${input.provider} response aborted` : `${input.provider} request failed`,
+        {
+          eventType: cancelled ? 'stream.aborted' : 'provider.response.failed',
+          category: cancelled ? 'stream' : 'provider',
+          phase: cancelled ? 'abort' : 'provider_response',
+          ...baseMeta,
+          error: input.error,
+          errorKind: classification.errorKind,
+        },
+      );
       return;
     }
 
@@ -1572,24 +1582,31 @@ export class ProviderTraffic implements IProviderTraffic {
       });
     });
 
-    // 2. Log failure to winston
-    this.loggingService.error(`${input.provider} request failed`, {
-      eventType: 'provider.response.failed',
-      category: 'provider',
-      phase: 'provider_response',
-      ...baseMeta,
-      error: errorDetails.message,
-      errorKind: errorDetails.errorKind,
-      code: errorDetails.code,
-      status: errorDetails.status,
-      retryAfterMs: errorDetails.retryAfterMs,
-      retryable: errorDetails.retryable,
-      host: errorDetails.host,
-      timeoutMs: errorDetails.timeoutMs,
-      physicalAttempt: errorDetails.physicalAttempt,
-      wsAttempt: input.wsAttempt,
-      wsMaxAttempts: input.wsMaxAttempts,
-      diagnostics: input.diagnostics,
-    });
+    // 2. Log failure to winston. Cancellation remains a retained provider
+    // artifact, but is an expected stream outcome rather than an error.
+    const cancelled = isClassifiedCancellation(input.error);
+    const log = cancelled ? this.loggingService.debug : this.loggingService.error;
+    log.call(
+      this.loggingService,
+      cancelled ? `${input.provider} request aborted` : `${input.provider} request failed`,
+      {
+        eventType: cancelled ? 'stream.aborted' : 'provider.response.failed',
+        category: cancelled ? 'stream' : 'provider',
+        phase: cancelled ? 'abort' : 'provider_response',
+        ...baseMeta,
+        error: errorDetails.message,
+        errorKind: errorDetails.errorKind,
+        code: errorDetails.code,
+        status: errorDetails.status,
+        retryAfterMs: errorDetails.retryAfterMs,
+        retryable: errorDetails.retryable,
+        host: errorDetails.host,
+        timeoutMs: errorDetails.timeoutMs,
+        physicalAttempt: errorDetails.physicalAttempt,
+        wsAttempt: input.wsAttempt,
+        wsMaxAttempts: input.wsMaxAttempts,
+        diagnostics: input.diagnostics,
+      },
+    );
   }
 }

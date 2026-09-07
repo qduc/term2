@@ -77,6 +77,44 @@ export function extractRunCodeSources(events) {
   return { scripts, results };
 }
 
+const TREATED_NONESSENTIAL = new Set([
+  'memory_list',
+  'memory_get',
+  'memory_search',
+  'memory_retrieve',
+  'memory_synthesize',
+  'memory_create',
+  'memory_update',
+  'memory_delete',
+  'activate_skill',
+  'configure_task_check_in',
+  'web_search',
+  'web_fetch',
+  'get_subagent_result',
+  'get_subagent_status',
+  'send_message',
+  'cancel_run',
+]);
+
+export function extractTreatedToolPath(events) {
+  const { scripts, results } = extractRunCodeSources(events);
+  const nested = [];
+  for (const script of scripts) {
+    for (const match of String(script).matchAll(NESTED_CALL)) {
+      if (match[1] !== 'describe') nested.push(match[1]);
+    }
+  }
+  const treated = nested.filter((name) => TREATED_NONESSENTIAL.has(name));
+  return {
+    nestedToolCalls: nested,
+    treatedToolCalls: treated,
+    usedTreatedTool: treated.length > 0,
+    usedEssentialBypassOnly: nested.length > 0 && treated.length === 0,
+    scriptCount: scripts.length,
+    resultCount: results.length,
+  };
+}
+
 export function extractSessionIdentity(events) {
   const init = events.find((event) => event.type === 'session_init') ?? {};
   const cost = events.find((event) => event.type === 'cost_update' && event.record?.provider);

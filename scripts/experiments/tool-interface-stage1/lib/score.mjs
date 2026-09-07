@@ -40,20 +40,32 @@ function headerReady(header) {
   return Boolean(header?.headerFound) && (header.combinedHeaderBytes ?? 0) > 0 && (header.toolNameCount ?? 0) > 0;
 }
 
+export function cellHeaderSnapshot(cell) {
+  if (cell?.metrics?.headerSnapshot && typeof cell.metrics.headerSnapshot === 'object') {
+    return cell.metrics.headerSnapshot;
+  }
+  return cell?.headerSnapshot ?? {};
+}
+
 export function scorePair({ baseline, candidate }) {
-  const baselineHeader = baseline.headerSnapshot ?? {};
-  const candidateHeader = candidate.headerSnapshot ?? {};
+  const baselineHeader = cellHeaderSnapshot(baseline);
+  const candidateHeader = cellHeaderSnapshot(candidate);
   const nameListsMatch = compareNameSets(baselineHeader.toolNames ?? [], candidateHeader.toolNames ?? []);
   const baselineRaw = baselineHeader.source === RAW_SOURCE;
   const candidateRaw = candidateHeader.source === RAW_SOURCE;
+  const staticProseMatch = Boolean(
+    baselineHeader.staticProseSha256 &&
+      candidateHeader.staticProseSha256 &&
+      baselineHeader.staticProseSha256 === candidateHeader.staticProseSha256,
+  );
   let pairInvalidReason = null;
   if (!baselineRaw || !candidateRaw) pairInvalidReason = 'raw-header-missing';
   else if (!headerReady(baselineHeader) || !headerReady(candidateHeader)) pairInvalidReason = 'empty-or-missing-run-code-header';
   else if (!nameListsMatch) pairInvalidReason = 'registry-name-set-mismatch';
+  else if (!staticProseMatch) pairInvalidReason = 'static-prose-mismatch';
   const fairness = {
     nameListsMatch,
-    staticProseMatch:
-      !baselineHeader.staticProseSha256 || baselineHeader.staticProseSha256 === candidateHeader.staticProseSha256,
+    staticProseMatch,
     pairValid: pairInvalidReason === null,
     pairInvalidReason,
     baselineHeaderPresent: headerReady(baselineHeader),
@@ -152,5 +164,24 @@ export function aggregateReport(pairs, { maxInfrastructureFailureRate = 0.1 } = 
       'A candidate that reduces task correctness on any pinned model is rejected without efficiency analysis. Infrastructure failures are excluded from correctness counts and fail the run if they exceed the stated rate. Report correctness before any cost column. Report treated-nonessential and untreated-essential strata separately.',
     primaryMetricOrder: ['taskCorrectness', 'combinedHeaderBytes', 'perTurnPromptTokens'],
     headerSurface: 'non-interactive-cli-lower-bound',
+  };
+}
+
+export function failClosedAggregate(aggregate, { aborted } = {}) {
+  const scoredPairs = (aggregate.models ?? []).reduce((sum, row) => sum + (row.scoredPairs || 0), 0);
+  const invalidFairnessPairs = (aggregate.models ?? []).reduce((sum, row) => sum + (row.invalidFairness || 0), 0);
+  const reasons = [];
+  if (aborted?.reason) reasons.push('aborted:' + aborted.reason);
+  if (aggregate.infrastructureExceeded) reasons.push('infrastructure-exceeded');
+  if (invalidFairnessPairs > 0) reasons.push('invalid-fairness');
+  if (scoredPairs === 0) reasons.push('zero-scored-pairs');
+  const runInvalid = reasons.length > 0;
+  return {
+    ...aggregate,
+    scoredPairs,
+    invalidFairnessPairs,
+    runInvalid,
+    rejectEfficiencyClaims: runInvalid || Boolean(aggregate.rejectEfficiencyClaims),
+    headline: runInvalid ? 'INVALID: ' + reasons.join(', ') : null,
   };
 }

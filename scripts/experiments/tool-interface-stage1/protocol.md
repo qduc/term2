@@ -8,7 +8,7 @@ Read this before launching cells. Paid launch is blocked until this protocol is 
 - Candidate final: `80f7488401c1043445cf3974f163633693c8c20f` (Claude revision2 APPROVED)
 - Not a pin: `67560fa9` (BLOCKED on F1/F2/F3; superseded)
 - Models: luna `gpt-5.6-luna#medium` (codex), glm `glm-5.3-flash#medium` (zai), deepseek `deepseek-v4-flash#medium` (DeepSeek)
-- Seed: 7. Trials: 3 (pass `--trials 2` to cut cost). Serial. 30 min/cell.
+- Seed: 7. Trials: 3. Serial. 30 min/cell. **72 cells** (2 treated + 2 untreated × 3 models × 2 arms × 3 trials). Controls stay. Do not reduce the matrix.
 - Combined treatment only. No isolated-catalog causality.
 
 ## F3 / measurement surface (binding)
@@ -57,7 +57,8 @@ Correctness first. A candidate that reduces task correctness on any pinned model
 
 ```
 node scripts/experiments/tool-interface-stage1/driver.mjs preflight
-node scripts/experiments/tool-interface-stage1/driver.mjs run --go   # refused until protocol review clears pendingFinalReview
+node scripts/experiments/tool-interface-stage1/driver.mjs run --go --output-dir <fresh-dir>
+# Fresh directory only. Do not --resume. Do not reuse .bench-runs/stage1-pilot-* cells.
 ```
 
 Do not launch paid cells from this revision.

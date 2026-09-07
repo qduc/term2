@@ -4,9 +4,15 @@ import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { HEADER_MARK, headerSnapshotFromDescription, compareNameSets, splitRunCodeDescription } from './lib/header.mjs';
 import { buildSchedule } from './lib/schedule.mjs';
-import { extractNestedCallMetrics, extractCellMetrics, modelMatchesPin, matchIdentity } from './lib/extract.mjs';
-import { scoreOracle, scorePair, aggregateReport } from './lib/score.mjs';
-import { classifyCellOutcome, paidReportMode } from './lib/cell-outcome.mjs';
+import {
+  extractNestedCallMetrics,
+  extractCellMetrics,
+  modelMatchesPin,
+  matchIdentity,
+  extractTreatedToolPath,
+} from './lib/extract.mjs';
+import { scoreOracle, scorePair, aggregateReport, cellHeaderSnapshot, failClosedAggregate } from './lib/score.mjs';
+import { classifyCellOutcome, paidReportMode, runProcessExitCode } from './lib/cell-outcome.mjs';
 import { stdoutEvents } from './lib/jsonl.mjs';
 import { collectPreflightBlockers } from './lib/gates.mjs';
 import { snapshotRunCodeHeader } from './snapshot-header.mjs';
@@ -466,4 +472,63 @@ it('uses the preserved pilot artifact location when present', () => {
   const repaired = extractCellMetrics({ events, wallTimeMs: saved.metrics.wallTimeMs });
   expect(matchIdentity(repaired.identity, saved.cell.model).ok).toBe(true);
   expect(repaired.usage.promptTokensSum).toBe(32892);
+});
+
+const REPAIRED_PILOT_REPORT = path.resolve('.bench-runs/stage1-pilot-repaired-20260907-2118/report.json');
+
+it('scores the preserved serialized runCell shape via metrics.headerSnapshot', () => {
+  expect(fs.existsSync(REPAIRED_PILOT_REPORT)).toBe(true);
+  const saved = JSON.parse(fs.readFileSync(REPAIRED_PILOT_REPORT, 'utf8'));
+  const pair = saved.pairs[0];
+  expect(pair.baseline.headerSnapshot).toBeUndefined();
+  expect(pair.candidate.metrics.headerSnapshot.source).toBe('provider-traffic-raw');
+  expect(cellHeaderSnapshot(pair.baseline).combinedHeaderBytes).toBe(1454);
+  expect(cellHeaderSnapshot(pair.candidate).combinedHeaderBytes).toBe(6821);
+  const scored = scorePair({ baseline: pair.baseline, candidate: pair.candidate });
+  expect(scored.fairness.pairInvalidReason).toBeNull();
+  expect(scored.fairness.pairValid).toBe(true);
+  expect(scored.fairness.staticProseMatch).toBe(true);
+  expect(scored.headerBytes).toEqual({ baseline: 1454, candidate: 6821, surface: 'non-interactive-cli' });
+  expect(scored.baselineCorrect).toBe(true);
+  expect(scored.candidateCorrect).toBe(true);
+  const aggregate = failClosedAggregate(aggregateReport([{ ...pair, score: scored }]));
+  expect(aggregate.scoredPairs).toBe(1);
+  expect(aggregate.runInvalid).toBe(false);
+  expect(aggregate.rejectEfficiencyClaims).toBe(false);
+  const candStdout = path.join(path.dirname(REPAIRED_PILOT_REPORT), 'cells', pair.candidate.cell.cellId, 'stdout.txt');
+  const baseStdout = path.join(path.dirname(REPAIRED_PILOT_REPORT), 'cells', pair.baseline.cell.cellId, 'stdout.txt');
+  const candidatePath = extractTreatedToolPath(stdoutEvents(fs.readFileSync(candStdout, 'utf8')));
+  const baselinePath = extractTreatedToolPath(stdoutEvents(fs.readFileSync(baseStdout, 'utf8')));
+  expect(candidatePath.usedTreatedTool).toBe(true);
+  expect(candidatePath.treatedToolCalls).toContain('memory_retrieve');
+  expect(baselinePath.usedTreatedTool).toBe(true);
+  expect(baselinePath.treatedToolCalls).toContain('memory_retrieve');
+});
+
+it('fail-closes zero scored pairs, invalid fairness, infra, and abort', () => {
+  const empty = failClosedAggregate(aggregateReport([]));
+  expect(empty.runInvalid).toBe(true);
+  expect(empty.headline).toMatch(/zero-scored-pairs/);
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
+  const fairFail = scorePair({
+    baseline: { metrics: { headerSnapshot: { ...header, source: 'missing-raw' } }, correctness: { correct: true } },
+    candidate: { metrics: { headerSnapshot: header }, correctness: { correct: true } },
+  });
+  expect(fairFail.fairness.pairValid).toBe(false);
+  const closed = failClosedAggregate(aggregateReport([{ modelId: 'luna', score: fairFail }]));
+  expect(closed.runInvalid).toBe(true);
+  expect(closed.headline).toMatch(/invalid-fairness/);
+  expect(runProcessExitCode({ paid: { runInvalid: true } })).toBe(3);
+  expect(runProcessExitCode({ paid: { incompleteOnly: true, runInvalid: true } })).toBe(4);
+});
+
+it('treats static prose mismatch as invalid fairness', () => {
+  const header = rawHeader(HEADER_MARK + '\n- tools.read_file()');
+  const scored = scorePair({
+    baseline: { metrics: { headerSnapshot: { ...header, staticProseSha256: 'aaa' } }, correctness: { correct: true } },
+    candidate: { metrics: { headerSnapshot: { ...header, staticProseSha256: 'bbb' } }, correctness: { correct: true } },
+  });
+  expect(scored.fairness.staticProseMatch).toBe(false);
+  expect(scored.fairness.pairValid).toBe(false);
+  expect(scored.fairness.pairInvalidReason).toBe('static-prose-mismatch');
 });

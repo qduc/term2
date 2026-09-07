@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { buildSchedule } from './lib/schedule.mjs';
 import { conversationEvents, stdoutEvents } from './lib/jsonl.mjs';
 import { extractCellMetrics, matchIdentity } from './lib/extract.mjs';
-import { scoreOracle, scorePair, aggregateReport } from './lib/score.mjs';
+import { scoreOracle, scorePair, aggregateReport, failClosedAggregate } from './lib/score.mjs';
 import { assertNoPromptLeaks } from './lib/leakage.mjs';
 import {
   realSettingsPath,
@@ -24,7 +24,7 @@ import { seedProjectAndGlobalMemory } from './lib/memory.mjs';
 import { snapshotRunCodeHeader } from './snapshot-header.mjs';
 import { snapshotFromRawSidecars } from './lib/traffic.mjs';
 import { gitRev, gitDirty, sourceTreeMatchesPin } from './lib/git-pin.mjs';
-import { classifyCellOutcome, paidReportMode } from './lib/cell-outcome.mjs';
+import { classifyCellOutcome, paidReportMode, runProcessExitCode } from './lib/cell-outcome.mjs';
 import { collectPreflightBlockers } from './lib/gates.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -448,11 +448,16 @@ function writePartialReport(args, records, extra = {}) {
     ...pair,
     score: pair.baseline && pair.candidate ? scorePair({ baseline: pair.baseline, candidate: pair.candidate }) : null,
   }));
+  const aggregate = failClosedAggregate(aggregateReport(pairs.filter((pair) => pair.score)), {
+    aborted: extra.aborted,
+  });
   const report = {
     generatedAt: new Date().toISOString(),
     pairs,
-    aggregate: aggregateReport(pairs.filter((pair) => pair.score)),
     ...extra,
+    aggregate,
+    runInvalid: extra.runInvalid === true || aggregate.runInvalid,
+    headline: extra.headline ?? aggregate.headline,
   };
   writeJson(path.join(args.outputDir, 'report.json'), report);
   return report;
@@ -486,12 +491,16 @@ async function runPaid(args, tasks, preflightReport) {
   }
   const mode = paidReportMode({ only: args.only, records, aborted });
   if (mode.kind === 'incomplete-cell-only') {
-    writeJson(path.join(args.outputDir, 'report.json'), {
+    const incomplete = {
       generatedAt: new Date().toISOString(),
       note: '--only with a single cellId does not score a pair; pass pairId to rerun both arms, or --resume after both exist.',
       records,
-    });
-    return { aggregate: { rejectEfficiencyClaims: false, correctnessRegressions: [] }, aborted: null, incompleteOnly: true };
+      incompleteOnly: true,
+      runInvalid: true,
+      headline: mode.headline,
+    };
+    writeJson(path.join(args.outputDir, 'report.json'), incomplete);
+    return { ...incomplete, aggregate: { rejectEfficiencyClaims: true, correctnessRegressions: [] }, aborted: null };
   }
   const extra =
     mode.kind === 'invalid-abort'
@@ -531,16 +540,18 @@ async function main() {
             rejectEfficiencyClaims: paid.runInvalid ? true : paid.aggregate?.rejectEfficiencyClaims,
             correctnessRegressions: paid.aggregate?.correctnessRegressions,
             aborted: paid.aborted ?? null,
+            incompleteOnly: paid.incompleteOnly === true,
             output: path.join(args.outputDir, 'report.json'),
           },
           null,
           2,
         ) + '\n',
       );
+      process.exitCode = runProcessExitCode({ preflightBlockers: report.blockers, paid });
     } else if (args.command === 'run' && !args.go) {
       process.stdout.write(JSON.stringify({ skippedPaid: true, reason: 'pass --go after final candidate review' }, null, 2) + '\n');
     }
-    if (report.blockers.length && args.go) process.exitCode = 2;
+    if (args.command === 'preflight' && report.blockers.length) process.exitCode = 2;
     return;
   }
   throw new Error('Unknown command: ' + args.command + ' (use preflight|run)');

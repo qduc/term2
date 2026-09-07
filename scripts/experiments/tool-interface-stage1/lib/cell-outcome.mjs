@@ -56,7 +56,20 @@ export function paidReportMode({ only, records, aborted }) {
     };
   }
   if (onlyIsCellId) {
-    return { kind: 'incomplete-cell-only', runInvalid: false, aborted: null };
+    return {
+      kind: 'incomplete-cell-only',
+      runInvalid: true,
+      incompleteOnly: true,
+      aborted: null,
+      headline: 'INCOMPLETE: single cellId does not score a pair',
+    };
   }
   return { kind: 'aggregate', runInvalid: false, aborted: null };
+}
+
+export function runProcessExitCode({ preflightBlockers, paid } = {}) {
+  if (preflightBlockers?.length) return 2;
+  if (paid?.incompleteOnly) return 4;
+  if (paid?.runInvalid) return 3;
+  return 0;
 }

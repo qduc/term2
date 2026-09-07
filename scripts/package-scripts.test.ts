@@ -22,7 +22,11 @@ it('pins NODE_ENV=test cross-platform for every Vitest-facing package script', a
     .map(([name]) => name)
     .sort();
 
-  expect(directVitestScripts).toEqual(testRunnerScripts.filter((name) => name !== 'test:provider-black-box').sort());
+  expect(directVitestScripts).toEqual(
+    testRunnerScripts.filter((name) => name !== 'test' && name !== 'test:provider-black-box').sort(),
+  );
+
+  expect(scripts.test).toBe('cross-env NODE_ENV=test node scripts/run-test.mjs');
 
   for (const name of testRunnerScripts) {
     expect(scripts[name]).toMatch(/^cross-env NODE_ENV=test(?:\s|$)/);

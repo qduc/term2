@@ -49,10 +49,11 @@ const client = (
   provider: string,
   options: Record<string, unknown> = {},
   settingOverrides: Record<string, unknown> = {},
+  testLogger: ILoggingService = logger,
 ) =>
   new AgentClient({
     ...options,
-    deps: { logger, settings: makeSettings(provider, settingOverrides), sessionContextService },
+    deps: { logger: testLogger, settings: makeSettings(provider, settingOverrides), sessionContextService },
     toolOwnership: new ToolOwnershipRegistry(),
   } as any);
 
@@ -1039,6 +1040,112 @@ describe('AgentClient application-run-loop execution', () => {
     instance.abort();
     resolve?.();
     await expect(stream.completed).rejects.toMatchObject({ name: 'AbortError' });
+    instance.dispose();
+  });
+
+  it('records cancellation as a debug stream event instead of a provider failure', async () => {
+    const provider = `completion-cancel-logging-${Date.now()}`;
+    providers.add(provider);
+    const debugLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    const errorLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    let correlationId: string | undefined;
+    const testLogger: ILoggingService = {
+      debug: (message, meta) => debugLogs.push({ message, meta }),
+      info: () => {},
+      warn: () => {},
+      error: (message, meta) => errorLogs.push({ message, meta }),
+      security: () => {},
+      setCorrelationId: (id) => {
+        correlationId = id;
+      },
+      clearCorrelationId: () => {
+        correlationId = undefined;
+      },
+      getCorrelationId: () => correlationId,
+      log: () => {},
+    } as ILoggingService;
+    registerProvider({
+      id: provider,
+      label: 'Completion cancellation logging test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      {},
+      testLogger,
+    );
+
+    const stream = await instance.startStream('run');
+    await expect(stream.completed).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+
+    expect(errorLogs).toHaveLength(0);
+    expect(debugLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: 'Agent stream cancelled',
+          meta: expect.objectContaining({ eventType: 'stream.aborted', errorKind: 'cancelled' }),
+        }),
+      ]),
+    );
+    expect(correlationId).toBeUndefined();
+    instance.dispose();
+  });
+
+  it('keeps provider failure logging and cleanup for non-cancellation errors', async () => {
+    const provider = `completion-failure-logging-${Date.now()}`;
+    providers.add(provider);
+    const errorLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    let correlationId: string | undefined;
+    const testLogger: ILoggingService = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: (message, meta) => errorLogs.push({ message, meta }),
+      security: () => {},
+      setCorrelationId: (id) => {
+        correlationId = id;
+      },
+      clearCorrelationId: () => {
+        correlationId = undefined;
+      },
+      getCorrelationId: () => correlationId,
+      log: () => {},
+    } as ILoggingService;
+    registerProvider({
+      id: provider,
+      label: 'Completion failure logging test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          throw Object.assign(new Error('upstream rejected the request'), { status: 500 });
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      {},
+      testLogger,
+    );
+
+    const stream = await instance.startStream('run');
+    await expect(stream.completed).rejects.toMatchObject({ status: 500 });
+    await Promise.resolve();
+
+    expect(errorLogs).toEqual([
+      expect.objectContaining({
+        message: 'Agent stream failed',
+        meta: expect.objectContaining({ eventType: 'provider.response.failed', errorKind: 'provider' }),
+      }),
+    ]);
+    expect(correlationId).toBeUndefined();
     instance.dispose();
   });
 });

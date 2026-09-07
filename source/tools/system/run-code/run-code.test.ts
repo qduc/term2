@@ -810,6 +810,10 @@ describe('run_code', () => {
   it('guides bounded batches and scripted patches without a hidden direct fallback', () => {
     const description = build([]).description;
     expect(description).toContain('Promise.allSettled');
+    expect(description).toContain(`at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls`);
+    expect(description).toContain('calls remaining');
+    expect(description).toContain('return the partial results');
+    expect(description).toContain('Do not repeat completed tool effects');
     expect(description).toContain('30,000');
     expect(description).toContain('template literal');
     expect(description).not.toContain('apply_patch directly');
@@ -956,6 +960,39 @@ describe('run_code', () => {
 
     expect(output).toContain(`stopped after ${RUN_CODE_LIMITS.maxCalls}`);
     expect(output).toContain('Tool call limit reached');
+    expect(output).toContain(`${RUN_CODE_LIMITS.maxCalls} calls admitted, 0 remaining`);
+    expect(output).toContain('Return the partial results');
+    expect(output).toContain('Do not repeat completed tool effects');
+  }, 30_000);
+
+  it('returns completed bounded batches when a later batch reaches the call budget', async () => {
+    const execute = vi.fn((params: unknown) => `echo:${(params as { value: string }).value}`);
+    const output = await run(
+      [tool({ name: 'echo', execute, parallelSafe: true })],
+      `const collected = [];
+       for (let offset = 0; offset < ${RUN_CODE_LIMITS.maxCalls + 1}; offset += 100) {
+         const batch = [];
+         for (let i = offset; i < Math.min(offset + 100, ${RUN_CODE_LIMITS.maxCalls + 1}); i++) {
+           batch.push(tools.echo({ value: String(i) }));
+         }
+         try {
+           collected.push(...await Promise.all(batch));
+         } catch (error) {
+           console.log("budget:", error.message);
+           break;
+         }
+       }
+       return { count: collected.length, first: collected[0], last: collected[collected.length - 1] };`,
+      { timeout_ms: 30_000, include_console: true },
+    );
+
+    expect(execute).toHaveBeenCalledTimes(RUN_CODE_LIMITS.maxCalls);
+    expect(output).toContain(`"count":${RUN_CODE_LIMITS.maxCalls}`);
+    expect(output).toContain('"first":"echo:0"');
+    expect(output).toContain(`"last":"echo:${RUN_CODE_LIMITS.maxCalls - 1}"`);
+    expect(output).toContain(`${RUN_CODE_LIMITS.maxCalls} calls admitted, 0 remaining`);
+    expect(output).toContain('Return the partial results');
+    expect(output).not.toContain('Script failed');
   }, 30_000);
 
   it('surfaces a tool that needs approval as a catchable error and names it in the summary', async () => {

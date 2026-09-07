@@ -243,7 +243,10 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
 
         const admitted = ledger.admit();
         if (!admitted.ok) {
-          const outcome = handler.overBudget?.();
+          const outcome = handler.overBudget?.({
+            usedCalls: ledger.admitted(),
+            maxCalls: handler.limits.maxCalls,
+          });
           if (!outcome || outcome.kind === 'fail')
             fail(outcome?.code ?? 'limit_exceeded', outcome?.message ?? handler.limits.limitExceededMessage);
           else reply(outcome.result);
@@ -300,6 +303,7 @@ interface Pool {
 
 interface Ledger {
   admit(): { ok: true; callId: number } | { ok: false };
+  admitted(): number;
   acquire(lane: 'serial' | 'default'): Promise<(() => void) | undefined>;
   cancelWaiting(): void;
 }
@@ -329,9 +333,12 @@ function createLedger(handler: CapabilityHandler<any>, isDone: () => boolean): L
   };
   return {
     admit() {
+      if (admissions >= handler.limits.maxCalls) return { ok: false };
       admissions++;
-      if (admissions > handler.limits.maxCalls) return { ok: false };
       return { ok: true, callId: admissions };
+    },
+    admitted() {
+      return admissions;
     },
     async acquire(lane) {
       if (isDone()) return undefined;

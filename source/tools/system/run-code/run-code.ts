@@ -814,7 +814,6 @@ export function createRunCodeToolDefinition(
           maxConsoleBytes: RUN_CODE_LIMITS.maxConsoleBytes,
         },
         subject: 'Script',
-        cwd: getCwd(),
         allowVoidOutput: true,
         signal: callerSignal,
         onConsole: (values) => output.push(renderConsoleValues(values)),

@@ -50,7 +50,6 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           maxConsoleBytes: limits.maxConsoleBytes,
           subject,
           allowVoidOutput: input.allowVoidOutput,
-          cwd: input.cwd,
           capabilities: entries.map(([, handler]) => handler.binding),
         });
     } catch (error) {

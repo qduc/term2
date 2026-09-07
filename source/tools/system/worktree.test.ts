@@ -1,6 +1,11 @@
 import { it, expect } from 'vitest';
 import { createWorktreeToolDefinitions } from './worktree.js';
 import { ExecutionContext } from '../../services/execution-context.js';
+import {
+  getActiveWorkspaceRoot,
+  publishActiveWorkspaceRoot,
+  registerSessionRuntime,
+} from '../../services/workspace/active-workspace-root.js';
 import type { GitWorktree } from '../../services/workspace/parse-worktree-list.js';
 import type { RunningJob } from '../../services/workspace/worktree-transition.js';
 
@@ -71,6 +76,34 @@ it('enter_worktree refuses an ambiguous directory name without switching', async
   expect(output).toContain('branch-a');
 });
 
+it('enter_worktree leaves the existing lease unchanged when publication is rejected', async () => {
+  const executionContext = new ExecutionContext();
+  const releaseFirstRuntime = registerSessionRuntime();
+  executionContext.enterWorkspace(FEATURE);
+  const releaseSecondRuntime = registerSessionRuntime();
+  const { enter } = createWorktreeToolDefinitions({
+    executionContext,
+    listWorktrees: async () => [
+      worktree(HOME, 'main'),
+      worktree(FEATURE, 'feature'),
+      worktree(`${HOME}/.worktrees/replacement`, 'replacement'),
+    ],
+    getRunningJobs: () => [],
+  });
+
+  try {
+    await expect(enter.execute({ name: 'replacement' })).rejects.toThrow(/multiple session runtimes/i);
+    expect(executionContext.getActiveWorkspace()).toBe(FEATURE);
+    expect(executionContext.getCwd()).toBe(FEATURE);
+    expect(getActiveWorkspaceRoot()).toBe(FEATURE);
+  } finally {
+    releaseSecondRuntime();
+    executionContext.exitWorkspace();
+    releaseFirstRuntime();
+    publishActiveWorkspaceRoot(undefined);
+  }
+});
+
 it('exit_worktree returns the session to its home root', async () => {
   const { enter, exit, executionContext } = build();
   await enter.execute({ name: 'feature' });
@@ -79,6 +112,7 @@ it('exit_worktree returns the session to its home root', async () => {
 
   expect(executionContext.getCwd()).toBe(HOME);
   expect(executionContext.getActiveWorkspace()).toBeUndefined();
+  expect(getActiveWorkspaceRoot()).toBe(HOME);
 });
 
 it('exit_worktree refuses while a background job is running under the worktree', async () => {

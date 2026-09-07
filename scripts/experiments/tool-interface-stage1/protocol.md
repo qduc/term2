@@ -17,9 +17,19 @@ The candidate's `+8,471 B` figure is an **exploratory interactive fixture with a
 
 This driver owns reproducible measurement:
 
-- **Construction snapshot** (preflight / B1): factory-bound `buildAgentTools` + `bindRunCodeRegistry` on the **non-interactive CLI** surface. Session tools are absent. Label: `non-interactive-factory-bind`.
+- **Construction snapshot** (preflight / B1): factory-bound `buildAgentTools` + `bindRunCodeRegistry` on the **non-interactive CLI** surface. Session tools are absent. Label: `non-interactive-factory-bind`. Preflight snapshots **every pinned model**; pair name-set equality is within-model (luna's native-patch registry is 17 names including `apply_patch`; glm/deepseek are 20 names including grep/glob/create_file/search_replace).
 - **Trial measurement** (B4): `provider-traffic-raw` sidecar only. Construction snapshots never substitute for trial bytes.
 - Interactive production is an **upper bound** this driver does not claim. Report the non-interactive figure as a lower bound on interactive.
+
+Measured construction headers (2026-09-07, factory-bound, this worktree's snapshot script vs baseline `dist` and candidate `80f74884` `dist`):
+
+| model | baseline B | candidate B | delta B | names | static prose |
+| --- | ---: | ---: | ---: | ---: | --- |
+| luna | 1422 | 6453 | +5031 | 17 match | match |
+| glm | 2619 | 7650 | +5031 | 20 match | match |
+| deepseek | 2619 | 7650 | +5031 | 20 match | match |
+
+Same absolute +5031 B on all three. Luna ratio 4.54x, glm/deepseek 2.92x. **Not** the F3 replica +8471 / 3.31x–4.42x interactive fixture. Prior 3.9x signature-only plan-doc figure is reopened under these tri-model construction measurements; trial prompt tokens remain the live primary cost metric.
 
 ## Hard gates (B1–B9)
 

@@ -194,8 +194,7 @@ async function preflight(args, tasks) {
   if (!fs.existsSync(settingsPath)) throw new Error('settings.json not found at ' + settingsPath);
   const ephemeral = createEphemeralAuthState();
   let summary;
-  let baselineSnap;
-  let candidateSnap;
+  const snapshotsByModel = {};
   try {
     const settingsDir = ensureDir(path.join(ephemeral, 'term2-nodejs'));
     summary = writeIsolatedSettings({
@@ -204,14 +203,29 @@ async function preflight(args, tasks) {
       memoryDirectory: path.join(ephemeral, 'memory-unused'),
       pin: PINS.settingsPin,
     });
-    const representative = PINS.models.find((model) => model.id === 'glm') ?? PINS.models[0];
-    baselineSnap = await maybeSnapshot(args.baselineCli, settingsDir, 'baseline', representative);
-    candidateSnap = await maybeSnapshot(args.candidateCli, settingsDir, 'candidate', representative);
+    for (const modelPin of PINS.models) {
+      snapshotsByModel[modelPin.id] = {
+        baseline: await maybeSnapshot(args.baselineCli, settingsDir, 'baseline-' + modelPin.id, modelPin),
+        candidate: await maybeSnapshot(args.candidateCli, settingsDir, 'candidate-' + modelPin.id, modelPin),
+      };
+    }
   } finally {
     destroyEphemeralAuthState(ephemeral);
   }
+  const representativeId = PINS.models.find((model) => model.id === 'glm')?.id ?? PINS.models[0].id;
+  const baselineSnap = snapshotsByModel[representativeId]?.baseline;
+  const candidateSnap = snapshotsByModel[representativeId]?.candidate;
   const leakage = [];
-  const leakNames = baselineSnap.snapshot ?? { toolNames: [] };
+  const leakNames = {
+    toolNames: [
+      ...new Set(
+        Object.values(snapshotsByModel).flatMap((pair) => [
+          ...(pair.baseline?.snapshot?.toolNames ?? []),
+          ...(pair.candidate?.snapshot?.toolNames ?? []),
+        ]),
+      ),
+    ],
+  };
   for (const task of tasks) {
     try {
       assertNoPromptLeaks(task.prompt, leakNames);
@@ -236,6 +250,7 @@ async function preflight(args, tasks) {
     treatment,
     baselineSnap,
     candidateSnap,
+    snapshotsByModel,
   });
   const report = {
     generatedAt: new Date().toISOString(),
@@ -262,7 +277,31 @@ async function preflight(args, tasks) {
     providers,
     settingsSummary: summary,
     schedule,
-    snapshots: { baseline: baselineSnap, candidate: candidateSnap },
+    snapshots: { baseline: baselineSnap, candidate: candidateSnap, byModel: snapshotsByModel },
+    constructionHeaders: Object.fromEntries(
+      Object.entries(snapshotsByModel).map(([id, pair]) => [
+        id,
+        {
+          baselineBytes: pair.baseline?.snapshot?.combinedHeaderBytes ?? null,
+          candidateBytes: pair.candidate?.snapshot?.combinedHeaderBytes ?? null,
+          deltaBytes:
+            pair.baseline?.ok && pair.candidate?.ok
+              ? pair.candidate.snapshot.combinedHeaderBytes - pair.baseline.snapshot.combinedHeaderBytes
+              : null,
+          baselineCount: pair.baseline?.snapshot?.toolNameCount ?? null,
+          candidateCount: pair.candidate?.snapshot?.toolNameCount ?? null,
+          nameMatch:
+            pair.baseline?.ok && pair.candidate?.ok
+              ? [...(pair.baseline.snapshot.toolNames ?? [])].sort().join(',') ===
+                [...(pair.candidate.snapshot.toolNames ?? [])].sort().join(',')
+              : null,
+          staticProseMatch:
+            pair.baseline?.ok && pair.candidate?.ok
+              ? pair.baseline.snapshot.staticProseSha256 === pair.candidate.snapshot.staticProseSha256
+              : null,
+        },
+      ]),
+    ),
     staticProseTreatment: treatment,
     leakage,
     headerSurface: 'non-interactive-cli-lower-bound',
@@ -445,6 +484,7 @@ async function main() {
           estimated: report.estimated,
           git: report.git,
           headerBytes: report.snapshots?.baseline?.snapshot?.combinedHeaderBytes ?? null,
+          constructionHeaders: report.constructionHeaders,
           output: path.join(args.outputDir, 'preflight', 'preflight.json'),
         },
         null,

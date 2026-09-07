@@ -20,6 +20,7 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
     { createEditorImpl },
     { SkillsService },
     { RUN_CODE_PROHIBITED_TOOLS },
+    { shouldUseNativePatchTool },
   ] = await Promise.all([
     moduleAt('agent.js'),
     moduleAt('lib/agent-factory.js'),
@@ -30,6 +31,7 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
     moduleAt('lib/editor-impl.js'),
     moduleAt('services/skills/skills-service.js'),
     moduleAt('tools/system/run-code/index.js'),
+    moduleAt('lib/tool-selection-policy.js'),
   ]);
   const logger = new LoggingService({ disableLogging: true, suppressConsoleOutput: true });
   const settings = new SettingsService({
@@ -85,7 +87,10 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
   const boundTools = buildAgentTools({
     toolDefinitions: definition.tools,
     resolvedModel,
-    shouldUseNativePatchTool: false,
+    shouldUseNativePatchTool: shouldUseNativePatchTool({
+      providerId: resolvedProvider,
+      model: resolvedModel,
+    }),
     deps: factoryDeps,
   });
   const runCode = boundTools.find((tool) => tool.name === 'run_code');

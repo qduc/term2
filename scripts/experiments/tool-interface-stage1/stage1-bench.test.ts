@@ -276,6 +276,37 @@ it('blocks paid launch while protocol review is pending even with a pinned candi
   expect(blockers.some((line) => /protocol review pending/.test(line))).toBe(true);
 });
 
+it('blocks per-model name-set mismatches even when a representative pair matches', () => {
+  const ok = {
+    headerFound: true,
+    toolNameCount: 20,
+    toolNames: ['read_file', 'grep'],
+    combinedHeaderBytes: 2000,
+  };
+  const blockers = collectPreflightBlockers({
+    sourceMatch: { matches: true },
+    baselineCliExists: true,
+    candidateCliExists: true,
+    candidateRev: '80f7488401c1043445cf3974f163633693c8c20f',
+    candidateDirty: false,
+    candidateCommitFinal: '80f7488401c1043445cf3974f163633693c8c20f',
+    pendingFinalReview: false,
+    providers: { zai: true, DeepSeek: true },
+    leakage: [],
+    treatment: {},
+    baselineSnap: { ok: true, snapshot: ok },
+    candidateSnap: { ok: true, snapshot: ok },
+    snapshotsByModel: {
+      glm: { baseline: { ok: true, snapshot: ok }, candidate: { ok: true, snapshot: ok } },
+      luna: {
+        baseline: { ok: true, snapshot: { ...ok, toolNames: ['read_file', 'apply_patch'], toolNameCount: 2 } },
+        candidate: { ok: true, snapshot: { ...ok, toolNames: ['read_file', 'grep'], toolNameCount: 2 } },
+      },
+    },
+  });
+  expect(blockers.some((line) => /luna .*name sets differ/.test(line))).toBe(true);
+});
+
 it('blocks empty factory-bound headers and mismatched name sets', () => {
   const empty = collectPreflightBlockers({
     sourceMatch: { matches: true },

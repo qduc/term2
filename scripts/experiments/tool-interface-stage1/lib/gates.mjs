@@ -11,6 +11,7 @@ export function collectPreflightBlockers({
   treatment,
   baselineSnap,
   candidateSnap,
+  snapshotsByModel,
 }) {
   const blockers = [];
   if (!sourceMatch?.matches) {
@@ -30,18 +31,35 @@ export function collectPreflightBlockers({
   if (!providers?.zai || !providers?.DeepSeek) blockers.push('missing custom providers zai and/or DeepSeek');
   if (leakage?.length) blockers.push('task prompt leakage');
   if (treatment?.error) blockers.push(treatment.error);
-  if (!baselineSnap?.ok) blockers.push('baseline header snapshot failed: ' + (baselineSnap?.error || 'unknown'));
-  if (!candidateSnap?.ok) blockers.push('candidate header snapshot failed: ' + (candidateSnap?.error || 'unknown'));
-  if (baselineSnap?.ok && (baselineSnap.snapshot?.headerFound !== true || (baselineSnap.snapshot?.toolNameCount ?? 0) < 8)) {
-    blockers.push('baseline factory-bound header is empty or stub-sized');
-  }
-  if (candidateSnap?.ok && (candidateSnap.snapshot?.headerFound !== true || (candidateSnap.snapshot?.toolNameCount ?? 0) < 8)) {
-    blockers.push('candidate factory-bound header is empty or stub-sized');
-  }
-  if (baselineSnap?.ok && candidateSnap?.ok) {
-    const left = [...(baselineSnap.snapshot.toolNames ?? [])].sort().join(',');
-    const right = [...(candidateSnap.snapshot.toolNames ?? [])].sort().join(',');
-    if (left !== right) blockers.push('baseline/candidate header tool-name sets differ');
+  const pairs =
+    snapshotsByModel && Object.keys(snapshotsByModel).length > 0
+      ? Object.entries(snapshotsByModel)
+      : [['representative', { baseline: baselineSnap, candidate: candidateSnap }]];
+  for (const [id, pair] of pairs) {
+    const prefix = id === 'representative' ? '' : id + ' ';
+    if (!pair.baseline?.ok) {
+      blockers.push(prefix + 'baseline header snapshot failed: ' + (pair.baseline?.error || 'unknown'));
+    }
+    if (!pair.candidate?.ok) {
+      blockers.push(prefix + 'candidate header snapshot failed: ' + (pair.candidate?.error || 'unknown'));
+    }
+    if (
+      pair.baseline?.ok &&
+      (pair.baseline.snapshot?.headerFound !== true || (pair.baseline.snapshot?.toolNameCount ?? 0) < 8)
+    ) {
+      blockers.push(prefix + 'baseline factory-bound header is empty or stub-sized');
+    }
+    if (
+      pair.candidate?.ok &&
+      (pair.candidate.snapshot?.headerFound !== true || (pair.candidate.snapshot?.toolNameCount ?? 0) < 8)
+    ) {
+      blockers.push(prefix + 'candidate factory-bound header is empty or stub-sized');
+    }
+    if (pair.baseline?.ok && pair.candidate?.ok) {
+      const left = [...(pair.baseline.snapshot.toolNames ?? [])].sort().join(',');
+      const right = [...(pair.candidate.snapshot.toolNames ?? [])].sort().join(',');
+      if (left !== right) blockers.push(prefix + 'baseline/candidate header tool-name sets differ');
+    }
   }
   return blockers;
 }

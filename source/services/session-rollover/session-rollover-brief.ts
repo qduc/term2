@@ -12,6 +12,12 @@ export type SessionRolloverTaskInventoryEntry = {
   status: string;
 };
 
+const LIVE_TASK_STATUSES = new Set(['running', 'awaiting_approval', 'waiting_for_answer', 'cancelling']);
+
+export function isLiveRolloverTask(task: SessionRolloverTaskInventoryEntry): boolean {
+  return LIVE_TASK_STATUSES.has(task.status);
+}
+
 export function composeSessionRolloverBrief({
   previousSessionId,
   successorSessionId,
@@ -23,10 +29,11 @@ export function composeSessionRolloverBrief({
   request: SessionRolloverRequest;
   taskInventory?: readonly SessionRolloverTaskInventoryEntry[];
 }): string {
+  const liveTasks = taskInventory.filter(isLiveRolloverTask);
   const inventory =
-    taskInventory.length === 0
+    liveTasks.length === 0
       ? ['- none observed at cutover']
-      : taskInventory.map((task) => `- ${task.kind} \`${task.id}\` status: ${task.status}`);
+      : liveTasks.map((task) => `- ${task.kind} \`${task.id}\` status: ${task.status}`);
   return [
     '# Continuation briefing',
     '',

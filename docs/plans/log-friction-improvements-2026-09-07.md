@@ -38,7 +38,27 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Latest accepted checkpoint (2026-09-07 08:56)
+## Resume checkpoint (2026-09-07 09:22)
+
+ALL WORKERS FINISHED. Two final branches now merged: provider-compaction-debt93d61e98 (+df8e1e82 production) and conversation-cancellation-telemetry5a80b669 (+259e2894). Worktrees still exist and need cleanup after validation.
+
+Compaction key concern resolved by real AsyncLocalStorage/AgentClient test: root HTTP sessionId differs from worker providerHistoryKey intentionally; compact+stream retain same worker key. Tests ensure success clears worker only/root survives and failed compaction preserves chain/debt. Parent independently136tests green; post-merge typecheck+providerblackbox177pass/1skip (jobd6196d25,71.264s total,61.35sVitest). Report docs/reports/provider-compaction-debt-2026-09-07.md now merged.
+
+Cancellation cleanup uses strict explicit-marker helper to suppress UI/error/hook events only for classified cancellation. Parent found mixed AggregateError/abort-cause realfailure suppression risk, followup5a80b669 preserves concrete status/network failures; retry policy remains unchanged. Parent independently214original tests then121followup green. Provider logging siblings still NOT modified; potential remaining3Codex cancelled records. Main typecheck passed after final merge.
+
+FINAL COMBINED GATE ACTIVE: shell72940092-34a1-47ce-bdb3-3ea271eced90 command pnpm test:provider-black-box && pnpm test deadline900000ms, no monitor/checkin. Await terminal notification; do not poll or modify production while running. Compare exact failures against /tmp/qduc/term2-nodejs/tool-output/output-4026698-1788746039337-b688b5.txt (20baseline,8304pass); original22baseline output1788742893045-3772a6 includes CLIhelp/InputBox intermittent failures. If same20baseline no new regressions, report NOT green, elapsed and counts. Last merged code typecheck green.
+
+Safe to rollover now: no live subagents; only shell known to survive. Do not claim running coordinator hot-reloaded fixes. Remaining program scope after gate: provider cancellation log siblings, oversized/spooled output and repeated status UX, shell quoting friction,26of29script unknown cases still untraced (3canonical recovered), stale-anchor live cases beyondT1compaction. Need prioritize/finish authorized ALL findings or explicit evidence dispositions; not all closed. Preserve user untracked docs/plans/run-code-nested-approval-preflight.md.
+
+## Earlier live delta (2026-09-07 09:10)
+
+Main includes canonical3case evidence report docs/reports/script-failure-canonical-evidence-2026-09-07.md (89bd792b plus parent correction89314efa). Exact body proves197observed calls case DID exhaust200admission budget; unknown apply_patch lookup did0nested calls; suspiciously short29924 was script-authored assertion after2reads and recovered next attempt. Do not repeat original worker contradiction saying guard fired but not budget exhaustion.
+
+Two live workers remain: cancellation-siblings oblique-beet-934; compaction-key-review cheery-fawn-317 in provider-compaction-debt. Prior provider worker true-crane-334 returned df8e1e82 NOT MERGED. Parent reviewed proposed compactHistory keyed invalidation and report; found root-header compaction vs worker stream context could invalidate wrong key. Followup explicitly testing actual ApplicationRunLoop compaction context routing/providerHistoryKey and transactional failed-compaction/other-key preservation. Await result, review, independent tests, merge only if real seam correct.
+
+Rollover milestone150k reached. Deliberately defer rollover while workers active: running coordinator process not reloaded so merged survival fix may not be active. Last fullsuite gate valid for current merged code:8304pass/20same baseline failures. No active shell jobs.
+
+## Earlier accepted checkpoint (2026-09-07 08:56)
 
 Additional merged fixes: validation receipts0a441e0e (parse real first-line exit status; unknown instead of fabricated0; independent64tests), focused test selector f9198e79 (strip leading pnpm separator, preserve NODE_ENV/test/noarg suite; independent7tests), shell signalled-process timeout attribution144f54a0 (safe SIGTERM repro; external signal is process-terminated not deadline; independent109tests). Typecheck passed. Latest fullsuite8304passed/20failed/3expected fail/2skipped,625files,141.448s shell/139.28sVitest. Exact failure comparison unchanged20baseline, no new failures. Output /tmp/qduc/term2-nodejs/tool-output/output-4026698-1788746039337-b688b5.txt.
 

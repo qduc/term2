@@ -89,6 +89,160 @@ it.sequential('keeps six-plus tasks to one rendered row each in a short terminal
   expect(lines.every((line) => line.length <= 40)).toBe(true);
 });
 
+// This is deliberately a real Ink layout assertion rather than a `columns`
+// prop assertion. `renderInAct` uses ink-testing-library's fixed mock stdout,
+// so renderToString's `{ columns }` option is the available width seam here.
+// Ink's render-to-string API has no viewport-height option; this covers the
+// width half of the short-terminal regression, not screen-height clipping.
+it.each([120, 72])('keeps seven richly populated tasks to one bounded row at %s columns', (columns) => {
+  const tasks = [
+    {
+      kind: 'subagent' as const,
+      id: 'waiting-context',
+      role: 'explorer',
+      task: 'inspect provider request boundaries and report the stalled transition',
+      taskPreview: 'inspect provider request boundaries and report the stalled transition',
+      status: 'running' as const,
+      startedAt: 1_000,
+      elapsedMs: 30_000,
+      toolCounts: { grep: 4, read_file: 3 },
+      model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+      latestUsage: { prompt_tokens: 120_000 },
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'provider' as const,
+        lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 30_000 },
+      },
+      recentTools: [
+        { label: 'grep pattern=provider', state: 'success' as const },
+        { label: 'read_file path=source/providers/runtime.ts', state: 'success' as const },
+        { label: 'grep pattern=request boundary', state: 'running' as const },
+      ],
+    },
+    {
+      kind: 'subagent' as const,
+      id: 'active-tools',
+      role: 'worker',
+      task: 'implement the compact activity rendering guard',
+      taskPreview: 'implement the compact activity rendering guard',
+      status: 'running' as const,
+      startedAt: 2_000,
+      elapsedMs: 29_000,
+      toolCounts: { read_file: 5, apply_patch: 1 },
+      model: { provider: 'anthropic', id: 'claude-sonnet', contextWindow: 200_000 },
+      latestUsage: { prompt_tokens: 84_000 },
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'tool_started' as const, at: 29_000, toolName: 'apply_patch' },
+        liveness: { state: 'recent' as const, lastObservedAt: 29_000, ageMs: 1_000 },
+      },
+      recentTools: [
+        { label: 'read_file path=source/components/layout/BackgroundTasksPanel.tsx', state: 'success' as const },
+        { label: 'apply_patch compact rows', state: 'running' as const },
+      ],
+    },
+    {
+      kind: 'shell' as const,
+      id: 'build-output',
+      command: 'pnpm build --filter terminal-ui --verbose',
+      status: 'running' as const,
+      startedAt: 3_000,
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'shell_output_received' as const, at: 29_500 },
+        liveness: { state: 'recent' as const, lastObservedAt: 29_500, ageMs: 500 },
+      },
+      output: 'compiling layout/BackgroundTasksPanel.tsx\nwriting dist/cli.js\n',
+    },
+    {
+      kind: 'subagent' as const,
+      id: 'approval-wait',
+      role: 'worker',
+      task: 'check approval routing around nested tool execution',
+      taskPreview: 'check approval routing around nested tool execution',
+      status: 'running' as const,
+      startedAt: 4_000,
+      elapsedMs: 28_000,
+      toolCounts: { read_file: 2 },
+      model: { provider: 'openai', id: 'gpt-5', contextWindow: 272_000 },
+      latestUsage: { prompt_tokens: 55_000 },
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'approval' as const,
+        lastObservation: { kind: 'approval_requested' as const, at: 29_000 },
+        liveness: { state: 'recent' as const, lastObservedAt: 29_000, ageMs: 1_000 },
+      },
+      recentTools: [{ label: 'run_code script=approval-check', state: 'success' as const }],
+    },
+    {
+      kind: 'shell' as const,
+      id: 'test-output',
+      command: 'pnpm test source/components/layout --runInBand',
+      status: 'running' as const,
+      startedAt: 5_000,
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'shell_output_received' as const, at: 29_000 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 29_000, ageMs: 1_000 },
+      },
+      output: 'BackgroundTasksPanel.test.tsx 7 passed\nBackgroundTaskManager.test.tsx 12 passed\n',
+    },
+    {
+      kind: 'subagent' as const,
+      id: 'question-wait',
+      role: 'explorer',
+      task: 'trace the conversation viewport ownership across layout boundaries',
+      taskPreview: 'trace the conversation viewport ownership across layout boundaries',
+      status: 'running' as const,
+      startedAt: 6_000,
+      elapsedMs: 27_000,
+      toolCounts: { glob: 2, read_file: 6 },
+      model: { provider: 'openrouter', id: 'deepseek-r1', contextWindow: 64_000 },
+      latestUsage: { prompt_tokens: 40_000 },
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'answer' as const,
+        lastObservation: { kind: 'question_asked' as const, at: 29_500 },
+        liveness: { state: 'recent' as const, lastObservedAt: 29_500, ageMs: 500 },
+      },
+      recentTools: [
+        { label: 'glob pattern=source/components/**/*.tsx', state: 'success' as const },
+        { label: 'read_file path=source/components/layout/BottomArea.tsx', state: 'success' as const },
+      ],
+    },
+    {
+      kind: 'subagent' as const,
+      id: 'quiet-worker',
+      role: 'worker',
+      task: 'review terminal width budget and retain task identity',
+      taskPreview: 'review terminal width budget and retain task identity',
+      status: 'running' as const,
+      startedAt: 7_000,
+      elapsedMs: 26_000,
+      toolCounts: { grep: 8 },
+      model: { provider: 'openai', id: 'gpt-4o-mini', contextWindow: 128_000 },
+      latestUsage: { prompt_tokens: 24_000 },
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'text_received' as const, at: 29_500 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 7_000, ageMs: 22_500 },
+      },
+      recentTools: [{ label: 'grep pattern=BACKGROUND_TASK_PANEL', state: 'success' as const }],
+    },
+  ] as React.ComponentProps<typeof BackgroundTasksPanel>['tasks'];
+
+  const output = renderToString(<BackgroundTasksPanel tasks={tasks} now={30_000} columns={columns} />, { columns });
+  const lines = output.split('\n').filter((line) => line.trim().length > 0);
+  const taskLines = lines.filter((line) => line.startsWith('• '));
+
+  expect(lines).toHaveLength(tasks.length + 1);
+  expect(lines[0]).toContain(`Tasks · ${tasks.length} active`);
+  expect(taskLines).toHaveLength(tasks.length);
+  expect(taskLines.every((line) => line.length <= columns)).toBe(true);
+  expect(lines.every((line) => line.length <= columns)).toBe(true);
+});
+
 it.sequential('keeps normal context telemetry out of the compact medium-width row', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel

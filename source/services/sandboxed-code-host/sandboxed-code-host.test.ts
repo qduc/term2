@@ -1,8 +1,16 @@
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxedCodeHostImpl } from './sandboxed-code-host.js';
 import type { CapabilityHandler, CapabilityOutcome, HostResult } from './host-types.js';
+
+const require = createRequire(import.meta.url);
 
 const limits = {
   timeoutMs: 5_000,
@@ -17,6 +25,71 @@ const echoCapability: CapabilityHandler = {
   prepare: () => ({}),
   invoke: async () => ({ kind: 'result', result: { answer: 'ok' } }),
 };
+
+function runDeletedCwdChild(): Promise<{ result: HostResult; validWorkspace: string }> {
+  const hostModule = pathToFileURL(
+    join(process.cwd(), 'source/services/sandboxed-code-host/sandboxed-code-host.ts'),
+  ).href;
+  const childCode = `
+    const { mkdir, mkdtemp, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { SandboxedCodeHostImpl } = await import(${JSON.stringify(hostModule)});
+    const root = await mkdtemp(join(tmpdir(), 'term2-deleted-cwd-test-'));
+    const deletedCwd = join(root, 'deleted-cwd');
+    const validWorkspace = join(root, 'workspace');
+    await Promise.all([mkdir(deletedCwd), mkdir(validWorkspace)]);
+    process.chdir(deletedCwd);
+    await rm(deletedCwd, { recursive: true, force: true });
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return { ready: true };',
+      capabilities: {},
+      limits: { timeoutMs: 5000, maxCodeBytes: 65536, maxOutputBytes: 65536, maxConsoleBytes: 65536 },
+      subject: 'Script',
+      cwd: validWorkspace,
+    });
+    process.chdir(validWorkspace);
+    await rm(root, { recursive: true, force: true });
+    process.stdout.write(JSON.stringify({ result, validWorkspace }));
+  `;
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', require.resolve('tsx/esm'), '--input-type=module', '-e', childCode],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => (stdout += chunk));
+    child.stderr.on('data', (chunk: string) => (stderr += chunk));
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`deleted-cwd child exited ${code}: ${stderr || stdout}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as { result: HostResult; validWorkspace: string });
+      } catch (error) {
+        reject(new Error(`deleted-cwd child returned invalid JSON: ${stdout || stderr}`, { cause: error }));
+      }
+    });
+  });
+}
+
+describe('SandboxedCodeHostImpl worker startup', () => {
+  it('starts a real worker when the child process cwd was deleted', async () => {
+    const { result, validWorkspace } = await runDeletedCwdChild();
+
+    expect(validWorkspace).toMatch(/\/workspace$/);
+    expect(result).toEqual({ ok: true, output: { ready: true } });
+  });
+});
 
 describe('SandboxedCodeHostImpl isolation', () => {
   it('blocks host constructors on console, capabilities, and returned values', async () => {

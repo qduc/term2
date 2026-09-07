@@ -125,6 +125,8 @@ export interface HostRunInput {
   subject: string;
   /** When set, code that returns nothing completes with `null` rather than failing. */
   allowVoidOutput?: boolean;
+  /** Valid execution root used to bootstrap a worker if process.cwd is gone. */
+  cwd?: string;
   onConsole?: (values: JsonValue[]) => void;
   /** Test seam; defaults to a worker built from `capabilities`. */
   workerFactory?: (code: string, syncTimeoutMs: number) => import('node:worker_threads').Worker;

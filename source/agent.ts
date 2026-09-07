@@ -605,6 +605,7 @@ export const getAgentDefinition = (
         runtime: agentRuntime,
         parentTools: tools.map((tool) => tool.name),
         limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
+        getCwd: () => executionContext?.getCwd() || process.cwd(),
       }),
     );
   }

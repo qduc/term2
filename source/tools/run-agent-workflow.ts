@@ -20,6 +20,7 @@ export function createRunAgentWorkflowToolDefinition(deps: {
   runtime: Pick<AgentRuntime, 'agent'>;
   parentTools: readonly string[];
   limits?: Partial<WorkflowLimits>;
+  getCwd?: () => string;
 }): ToolDefinition<typeof schema> {
   return {
     name: 'run_agent_workflow',

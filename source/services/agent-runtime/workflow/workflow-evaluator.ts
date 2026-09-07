@@ -39,6 +39,7 @@ export interface WorkflowEvaluatorDeps {
   /** Allows callers/tests to report captured workflow console output without exposing it to code. */
   onConsole?: (values: JsonValue[]) => void;
   workerFactory?: (code: string, syncTimeoutMs: number) => Worker;
+  getCwd?: () => string;
 }
 
 function isJsonObject(value: unknown): value is Record<string, JsonValue> {
@@ -148,6 +149,7 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
         maxConsoleBytes: this.#limits.maxConsoleBytes,
       },
       subject: 'Workflow',
+      cwd: this.#deps.getCwd?.(),
       signal: input.signal,
       onConsole: this.#deps.onConsole,
       workerFactory: this.#deps.workerFactory,

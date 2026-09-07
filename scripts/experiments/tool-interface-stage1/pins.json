@@ -25,8 +25,14 @@
   "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
   "candidateCommitReviewed": "80f7488401c1043445cf3974f163633693c8c20f",
   "candidateCommitFinal": "80f7488401c1043445cf3974f163633693c8c20f",
-  "pendingFinalReview": true,
-  "candidateCommitNote": "Claude approved 80f74884 (revision2). 67560fa9 is not the pin. Paid launch stays blocked until this revised protocol is reviewed. Header measurements come from factory-bound non-interactive snapshots, not the interactive replica +8471 fixture (F3).",
+  "pendingFinalReview": false,
+  "protocolReview": {
+    "reviewedCommit": "0b2fc0b36fc93f7cb4dea45ddc4b9977ba78ba80",
+    "artifact": "/tmp/tool-interface-stage1-claude-protocol-review2.md",
+    "verdict": "CLEAR TO LAUNCH",
+    "conditions": "Parent verified G1 (both CLIs rebuilt from current HEADs) and G2 (fresh run, no --resume). G3 is post-hoc reporting."
+  },
+  "candidateCommitNote": "Claude approved candidate 80f7488401c1043445cf3974f163633693c8c20f (revision2). Protocol review2 CLEAR TO LAUNCH for 0b2fc0b3. 67560fa9 is not the pin. Header measurements come from factory-bound non-interactive snapshots, not the interactive replica +8471 fixture (F3).",
 
   "models": [
     {

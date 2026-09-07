@@ -129,7 +129,11 @@ const RUN_CODE_DESCRIPTION =
   'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
   'run immediately. Tools that require user approval present the existing approval prompt and resume this script after ' +
   'a decision; denial is catchable. Some tools are structurally unavailable inside scripts; those remain direct tools.\n\n' +
-  'Return only the fields, line ranges, or summaries you need: model-visible output is limited to 30,000 characters, ' +
+  `Each script may admit at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls. Track progress and split large work into chunks; catch individual ` +
+  'failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error ' +
+  'reports calls admitted and calls remaining: return the partial results and start another run_code call only for ' +
+  'unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: ' +
+  'model-visible output is limited to 30,000 characters, ' +
   'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
   '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
   'Use `tools.describe` before guessing parameters or returned fields. If a patch is scripted, escape backticks and ' +
@@ -573,7 +577,15 @@ export function createRunCodeToolDefinition(
         },
         // A budget-exhausted call is the script's problem, not a reason to
         // discard the work it has already printed.
-        overBudget: () => failed(`Tool call limit reached (${RUN_CODE_LIMITS.maxCalls} calls per script run).`),
+        overBudget: ({ usedCalls, maxCalls }) =>
+          failed(
+            `Tool call limit reached (${maxCalls} calls per script run; ${usedCalls} calls admitted, ${Math.max(
+              0,
+              maxCalls - usedCalls,
+            )} remaining). ` +
+              'Return the partial results you collected and start another run_code call only for unattempted work; ' +
+              'Do not repeat completed tool effects.',
+          ),
         prepare: async (payload) => {
           const started = Date.now();
           const name = typeof payload.member === 'string' ? payload.member : '';

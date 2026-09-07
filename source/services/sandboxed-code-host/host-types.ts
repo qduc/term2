@@ -103,9 +103,10 @@ export interface CapabilityHandler<Prepared = unknown> {
    * What to do with a call that exceeds {@link CapabilityLimits.maxCalls}.
    * Omitting it aborts the run with `limit_exceeded`; a capability that would
    * rather let the script keep the work it has already done returns a result
-   * in its own envelope instead.
+   * in its own envelope instead. The usage argument describes calls admitted
+   * before the rejected call; it does not expose worker or host objects.
    */
-  overBudget?(): CapabilityOutcome;
+  overBudget?(usage: { usedCalls: number; maxCalls: number }): CapabilityOutcome;
 }
 
 export interface HostLimits {

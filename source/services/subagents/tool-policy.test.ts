@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { z } from 'zod';
 import {
   SubagentToolFactory,
@@ -618,11 +619,10 @@ describe('foreground nested worker shell auto-approval', () => {
 });
 
 describe('shell-edit-hole measurement (plan D2)', () => {
-  // Documents the coverage gap of extractPathsFromCommand: it only captures
-  // redirection (>/>>/tee), so most shell-edit commands are invisible to
-  // filesChanged and therefore to diffStat. This drives the decision to defer
-  // git reconciliation: the prompt steers workers toward write tools, and
-  // worktree isolation makes git accurate as a cross-check.
+  // The shell wrapper can conservatively inspect redirect (>/>>/tee) targets,
+  // but most shell-edit commands remain outside this attribution surface. The
+  // prompt steers workers toward write tools, and worktree isolation makes git
+  // accurate as a cross-check.
   const policy = new SubagentToolPolicy({
     settings: createMockSettings(),
     logger: createMockLogger(),
@@ -634,6 +634,38 @@ describe('shell-edit-hole measurement (plan D2)', () => {
     expect(policy.extractPathsFromCommand('echo hello > out.txt', cwd)).toHaveLength(1);
     expect(policy.extractPathsFromCommand('echo hello >> out.txt', cwd)).toHaveLength(1);
     expect(policy.extractPathsFromCommand('echo hello | tee out.txt', cwd)).toHaveLength(1);
+  });
+
+  it('uses shell syntax rather than quoted command text for redirect targets', () => {
+    expect(
+      policy.extractPathsFromCommand(
+        `jq '.items | map(.value > 0) | .[] | "arrow => > ignored"' input.json > "report output.json"`,
+        cwd,
+      ),
+    ).toEqual([path.resolve(cwd, 'report output.json')]);
+    expect(policy.extractPathsFromCommand(`printf '%s' 'tee > ignored' | tee -- 'tee output.md'`, cwd)).toEqual([
+      path.resolve(cwd, 'tee output.md'),
+    ]);
+    expect(policy.extractPathsFromCommand('echo output 2>&1; echo error >&2', cwd)).toEqual([]);
+    expect(policy.extractPathsFromCommand('echo error &> stderr.log', cwd)).toEqual([path.resolve(cwd, 'stderr.log')]);
+    expect(policy.extractPathsFromCommand('echo error >& stderr.log', cwd)).toEqual([path.resolve(cwd, 'stderr.log')]);
+    expect(policy.extractPathsFromCommand('/usr/bin/tee output.log', cwd)).toEqual([path.resolve(cwd, 'output.log')]);
+    expect(policy.extractPathsFromCommand('env FOO=bar tee output.log', cwd)).toEqual([
+      path.resolve(cwd, 'output.log'),
+    ]);
+  });
+
+  it('does not search arbitrary env utility arguments for tee', () => {
+    expect(policy.extractPathsFromCommand('env printf tee output.log', cwd)).toEqual([]);
+  });
+
+  it('captures redirects attached to compound shell statements', () => {
+    expect(policy.extractPathsFromCommand('{ printf x; } > brace-output.txt', cwd)).toEqual([
+      path.resolve(cwd, 'brace-output.txt'),
+    ]);
+    expect(policy.extractPathsFromCommand('(printf x) > subshell-output.txt', cwd)).toEqual([
+      path.resolve(cwd, 'subshell-output.txt'),
+    ]);
   });
 
   it('does NOT capture sed -i, mv, rm, touch, cp (the shell-edit hole)', () => {
@@ -648,6 +680,265 @@ describe('shell-edit-hole measurement (plan D2)', () => {
     expect(policy.extractPathsFromCommand('pnpm test', cwd)).toHaveLength(0);
     expect(policy.extractPathsFromCommand('npx vitest run', cwd)).toHaveLength(0);
     expect(policy.extractPathsFromCommand('tsc --noEmit', cwd)).toHaveLength(0);
+  });
+});
+
+describe('shell write attribution and locking', () => {
+  function makePolicy() {
+    return new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'off' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+  }
+
+  function makeShell(execute: (params: { command: string }) => Promise<string>) {
+    return {
+      name: 'shell',
+      description: 'test shell',
+      parameters: z.object({ command: z.string() }),
+      needsApproval: () => false,
+      execute,
+      formatCommandMessage: () => [],
+    } as any;
+  }
+
+  it('does not attribute quoted redirect text, but records an actual partial redirect write', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-shell-'));
+    const actualTarget = path.join(cwd, 'actual output.txt');
+    const quotedTarget = path.join(cwd, 'bogus-target');
+    const filesChanged: string[] = [];
+    let bogusLockAvailableDuringExecution = false;
+
+    try {
+      const command = `printf '%s' 'jq .value > ${path.basename(quotedTarget)} ; arrow => > ignored' > "${path.basename(
+        actualTarget,
+      )}"`;
+      const shell = makeShell(async () => {
+        const release = policy.tryAcquireWorkerWriteLocks([quotedTarget], cwd);
+        bogusLockAvailableDuringExecution = release !== null;
+        release?.();
+        fs.writeFileSync(actualTarget, 'partial output\n');
+        return 'exit 1\nRuntime: 1ms\ncommand failed after writing';
+      });
+
+      const wrapped = policy.wrapShellTool(shell, cwd, filesChanged, 'test shell');
+      await expect(wrapped.execute({ command })).resolves.toContain('exit 1');
+
+      expect(bogusLockAvailableDuringExecution).toBe(true);
+      expect(filesChanged).toEqual([actualTarget]);
+      expect(filesChanged).not.toContain(quotedTarget);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps real worker redirects outside the workspace protected', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const filesChanged: string[] = [];
+    const wrapped = policy.wrapShellTool(makeShell(execute), process.cwd(), filesChanged, 'test shell');
+
+    await expect(wrapped.execute({ command: 'echo output > ../outside-worker.txt' })).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(filesChanged).toEqual([]);
+  });
+
+  it('keeps compound redirects outside the workspace protected', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const wrapped = policy.wrapShellTool(makeShell(execute), process.cwd(), [], 'test shell');
+
+    await expect(
+      wrapped.execute({ command: '{ printf output; } > ../outside-compound-worker.txt' }),
+    ).resolves.toContain('outside the allowed write boundary');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('protects a compound redirect with the worker lock', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-compound-lock-'));
+    const target = path.join(cwd, 'compound-output.txt');
+    const execute = vi.fn(async () => 'executed');
+    const held = policy.tryAcquireWorkerWriteLocks([target], cwd);
+
+    try {
+      expect(held).not.toBeNull();
+      const wrapped = policy.wrapShellTool(makeShell(execute), cwd, [], 'test shell');
+      await expect(wrapped.execute({ command: '{ printf output; } > compound-output.txt' })).resolves.toContain(
+        'already being modified',
+      );
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      held?.();
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves dynamic redirect containment to the sandbox', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const wrapped = policy.wrapShellTool(makeShell(execute), process.cwd(), [], 'test shell');
+
+    await expect(wrapped.execute({ command: 'echo output > "$TARGET_FILE"' })).resolves.toBe('executed');
+    await expect(wrapped.execute({ command: "printf '%s" })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects unresolved shell writes when sandbox containment is disabled', async () => {
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'sandbox.enabled': false, 'shell.autoApproveMode': 'off' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const execute = vi.fn(async () => 'executed');
+    const shell = policy.wrapNestedShellTool(makeShell(execute), process.cwd());
+
+    await expect(shell.execute({ command: 'echo output > "$TARGET_FILE"' })).resolves.toContain(
+      'could not determine shell write targets safely outside the sandbox',
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('does not read nonregular targets while collecting shell evidence', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-special-target-'));
+    const fifo = path.join(cwd, 'output.fifo');
+    const symlink = path.join(cwd, 'zero.link');
+    const execute = vi.fn(async () => 'executed');
+    const filesChanged: string[] = [];
+
+    try {
+      execFileSync('mkfifo', [fifo]);
+      fs.symlinkSync('/dev/zero', symlink);
+      const shell = policy.wrapShellTool(makeShell(execute), cwd, filesChanged, 'test shell');
+
+      await expect(shell.execute({ command: 'echo output > output.fifo' })).resolves.toBe('executed');
+      await expect(shell.execute({ command: 'echo output > zero.link' })).resolves.toBe('executed');
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(filesChanged).toEqual([]);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('attributes binary changes without UTF-8 decoding', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-binary-'));
+    const target = path.join(cwd, 'artifact.bin');
+    const filesChanged: string[] = [];
+    fs.writeFileSync(target, Buffer.from([0xff, 0x00, 0x01]));
+
+    try {
+      const shell = makeShell(async () => {
+        fs.writeFileSync(target, Buffer.from([0xff, 0x00, 0x02]));
+        return 'exit 0';
+      });
+      await expect(
+        policy.wrapShellTool(shell, cwd, filesChanged, 'test shell').execute({ command: 'echo > artifact.bin' }),
+      ).resolves.toBe('exit 0');
+      expect(filesChanged).toEqual([target]);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('uses bounded stat evidence for large artifacts', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-large-'));
+    const target = path.join(cwd, 'large.bin');
+    const filesChanged: string[] = [];
+    fs.writeFileSync(target, Buffer.alloc(64 * 1024 + 1, 0x01));
+
+    try {
+      const shell = makeShell(async () => {
+        fs.appendFileSync(target, Buffer.from([0x02]));
+        return 'exit 0';
+      });
+      await expect(
+        policy.wrapShellTool(shell, cwd, filesChanged, 'test shell').execute({ command: 'echo > large.bin' }),
+      ).resolves.toBe('exit 0');
+      expect(filesChanged).toEqual([target]);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('releases the worker lock when evidence collection is unavailable', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-evidence-error-'));
+    const target = path.join(cwd, 'output.txt');
+    fs.writeFileSync(target, 'before');
+    const filesChanged: string[] = [];
+    const execute = vi.fn(async () => 'executed');
+    const lstat = vi.spyOn(fs, 'lstatSync').mockImplementationOnce(() => {
+      throw new Error('evidence unavailable');
+    });
+
+    try {
+      const shell = policy.wrapShellTool(makeShell(execute), cwd, filesChanged, 'test shell');
+      await expect(shell.execute({ command: 'echo > output.txt' })).resolves.toBe('executed');
+      const release = policy.tryAcquireWorkerWriteLocks([target], cwd);
+      expect(release).not.toBeNull();
+      release?.();
+      expect(filesChanged).toEqual([]);
+    } finally {
+      lstat.mockRestore();
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps nested attribution and locks separate from quoted redirect text', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-nested-shell-'));
+    const actualTarget = path.join(cwd, 'nested output.txt');
+    const quotedTarget = path.join(cwd, 'nested-bogus-target');
+    const context = {
+      context: {
+        agentId: 'nested-test',
+        role: 'worker',
+        task: 'test shell',
+        filesChanged: [] as string[],
+        toolCounts: {},
+        activeCommandMessages: {},
+        turnCount: 0,
+        maxTurns: 1,
+      },
+    };
+    let bogusLockAvailableDuringExecution = false;
+
+    try {
+      const command = `printf '%s' 'jq .value > ${path.basename(quotedTarget)} ;' > "${path.basename(actualTarget)}"`;
+      const shell = makeShell(async () => {
+        const release = policy.tryAcquireWorkerWriteLocks([quotedTarget], cwd);
+        bogusLockAvailableDuringExecution = release !== null;
+        release?.();
+        fs.writeFileSync(actualTarget, 'nested partial output\n');
+        return 'exit 1\nRuntime: 1ms\ncommand failed after writing';
+      });
+
+      const wrapped = policy.wrapNestedShellTool(shell, cwd);
+      await expect(wrapped.execute({ command }, context)).resolves.toContain('exit 1');
+
+      expect(bogusLockAvailableDuringExecution).toBe(true);
+      expect(context.context.filesChanged).toEqual([actualTarget]);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps real nested redirects outside the workspace protected', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const shell = policy.wrapNestedShellTool(makeShell(execute), process.cwd());
+
+    await expect(shell.execute({ command: 'echo output > ../outside-nested.txt' })).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
   });
 });
 

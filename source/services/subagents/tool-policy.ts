@@ -8,6 +8,8 @@ import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } fr
 import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
+import { parse } from 'unbash';
+import type { Word, WordPart } from 'unbash';
 import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../lib/tool-invoke.js';
@@ -37,6 +39,7 @@ import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import { shouldBypassToolApproval } from '../approval/shell-auto-approval-resolver.js';
+import { extractWordText } from '../../utils/shell/command-safety/utils.js';
 import type { ISubagentClient } from './subagent-client-types.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
@@ -212,6 +215,260 @@ function readFileOrNull(resolvedPath: string): string | null {
   }
 }
 
+const MAX_SHELL_EVIDENCE_BYTES = 64 * 1024;
+
+type ShellRegularFileMetadata = {
+  size: bigint;
+  mtimeNs: bigint;
+  ctimeNs: bigint;
+  ino: bigint;
+};
+
+type ShellFileSnapshot =
+  | { kind: 'missing' }
+  | { kind: 'unknown' }
+  | { kind: 'nonregular' }
+  | (ShellRegularFileMetadata & { kind: 'regular-stat' })
+  | (ShellRegularFileMetadata & { kind: 'regular-bytes'; content: Buffer });
+
+function regularFileMetadata(stats: fs.BigIntStats): ShellRegularFileMetadata {
+  return {
+    size: stats.size,
+    mtimeNs: stats.mtimeNs,
+    ctimeNs: stats.ctimeNs,
+    ino: stats.ino,
+  };
+}
+
+/**
+ * Capture bounded, byte-preserving evidence for a shell target.
+ *
+ * lstat deliberately keeps symlink and other non-regular targets out of the
+ * read path. O_NOFOLLOW/O_NONBLOCK closes the race between lstat and open and
+ * prevents a FIFO from becoming a blocking evidence read. Large regular files
+ * use metadata only, which is bounded but can conservatively miss a write that
+ * preserves every recorded stat field; in that case no attribution claim is
+ * made.
+ */
+function snapshotShellFile(resolvedPath: string): ShellFileSnapshot {
+  let stats: fs.BigIntStats;
+  try {
+    stats = fs.lstatSync(resolvedPath, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT' || (error as NodeJS.ErrnoException)?.code === 'ENOTDIR') {
+      return { kind: 'missing' };
+    }
+    return { kind: 'unknown' };
+  }
+
+  if (!stats.isFile()) return { kind: 'nonregular' };
+  const metadata = regularFileMetadata(stats);
+  if (stats.size > BigInt(MAX_SHELL_EVIDENCE_BYTES)) {
+    return { kind: 'regular-stat', ...metadata };
+  }
+
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(
+      resolvedPath,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+    );
+    const openedStats = fs.fstatSync(fd, { bigint: true });
+    if (!openedStats.isFile()) return { kind: 'unknown' };
+    const openedMetadata = regularFileMetadata(openedStats);
+    if (openedStats.size > BigInt(MAX_SHELL_EVIDENCE_BYTES)) {
+      return { kind: 'regular-stat', ...openedMetadata };
+    }
+
+    const buffer = Buffer.allocUnsafe(MAX_SHELL_EVIDENCE_BYTES + 1);
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (bytesRead > MAX_SHELL_EVIDENCE_BYTES || BigInt(bytesRead) !== openedStats.size) {
+      return { kind: 'regular-stat', ...openedMetadata };
+    }
+    return { kind: 'regular-bytes', ...openedMetadata, content: buffer.subarray(0, bytesRead) };
+  } catch {
+    return { kind: 'unknown' };
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // Evidence is advisory; a close failure must not turn a shell result
+        // into an attribution failure or leak the worker lock.
+      }
+    }
+  }
+}
+
+function sameRegularMetadata(before: ShellRegularFileMetadata, after: ShellRegularFileMetadata): boolean {
+  return (
+    before.size === after.size &&
+    before.mtimeNs === after.mtimeNs &&
+    before.ctimeNs === after.ctimeNs &&
+    before.ino === after.ino
+  );
+}
+
+function shellFileChanged(before: ShellFileSnapshot, resolvedPath: string): boolean {
+  const after = snapshotShellFile(resolvedPath);
+  if (
+    before.kind === 'unknown' ||
+    after.kind === 'unknown' ||
+    before.kind === 'nonregular' ||
+    after.kind === 'nonregular'
+  ) {
+    return false;
+  }
+  if (before.kind === 'missing' || after.kind === 'missing') return before.kind !== after.kind;
+  if (before.kind === 'regular-bytes' && after.kind === 'regular-bytes') {
+    return !before.content.equals(after.content);
+  }
+  return !sameRegularMetadata(before, after);
+}
+
+const SHELL_FILE_REDIRECTS = new Set(['>', '>>', '>|', '&>', '&>>', '<>', '>&']);
+
+function hasDynamicShellWordPart(part: WordPart): boolean {
+  if (
+    part.type === 'SimpleExpansion' ||
+    part.type === 'ParameterExpansion' ||
+    part.type === 'CommandExpansion' ||
+    part.type === 'ArithmeticExpansion' ||
+    part.type === 'ProcessSubstitution' ||
+    part.type === 'ExtendedGlob' ||
+    part.type === 'BraceExpansion'
+  ) {
+    return true;
+  }
+  if (part.type === 'DoubleQuoted' || part.type === 'LocaleString') {
+    return part.parts.some(hasDynamicShellWordPart);
+  }
+  return false;
+}
+
+function extractConcreteShellWord(word: Word | undefined): string | undefined {
+  if (!word || word.parts?.some(hasDynamicShellWordPart)) return undefined;
+  const value = extractWordText(word);
+  if (!value || value === '~' || value.startsWith('~/')) return undefined;
+  return value;
+}
+
+type ShellWriteTargetInspection = {
+  paths: string[];
+  hasUnresolvedWrite: boolean;
+  parseUnknown: boolean;
+};
+
+/**
+ * Inspect shell syntax for targets that can actually be written by a redirect
+ * or tee. This is admission/locking evidence only; a path is added to
+ * filesChanged only after the corresponding file is observed to change.
+ */
+function inspectShellWriteTargets(command: string, cwd: string): ShellWriteTargetInspection {
+  const paths: string[] = [];
+  let hasUnresolvedWrite = false;
+  try {
+    const ast = parse(command);
+    if (ast.errors && ast.errors.length > 0) return { paths, hasUnresolvedWrite: false, parseUnknown: true };
+    const visited = new Set<object>();
+
+    const visit = (value: unknown): void => {
+      if (!value || typeof value !== 'object') return;
+      if (visited.has(value)) return;
+      visited.add(value);
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+
+      const node = value as Record<string, unknown>;
+      // unbash attaches redirects to the owning node: simple command redirects
+      // live on Command, while redirects after a compound command live on the
+      // wrapping Statement (and some compound nodes have their own property).
+      // Inspect every actual redirects property rather than assuming Command.
+      if ('redirects' in node) {
+        const redirects = Array.isArray(node.redirects) ? node.redirects : [];
+        if (!Array.isArray(node.redirects)) hasUnresolvedWrite = true;
+        for (const redirectValue of redirects) {
+          if (!redirectValue || typeof redirectValue !== 'object') {
+            hasUnresolvedWrite = true;
+            continue;
+          }
+          const redirect = redirectValue as Record<string, unknown>;
+          const operator = redirect.operator;
+          if (!SHELL_FILE_REDIRECTS.has(String(operator))) continue;
+          const target = extractConcreteShellWord(
+            redirect.target && typeof redirect.target === 'object' ? (redirect.target as Word) : undefined,
+          );
+          if (!target) {
+            hasUnresolvedWrite = true;
+          } else if (redirect.operator === '>&' && (/^\d+$/.test(target) || target === '-')) {
+            // >&N and >&- duplicate or close a descriptor; neither writes a file.
+          } else {
+            paths.push(path.resolve(cwd, target));
+          }
+        }
+      }
+
+      if (node.type === 'Command') {
+        const commandName = extractConcreteShellWord(node.name as Word | undefined);
+        const commandBaseName = commandName ? path.posix.basename(commandName) : undefined;
+        const suffix = Array.isArray(node.suffix) ? (node.suffix as Word[]) : [];
+        let teeSuffix: Word[] | undefined = commandBaseName === 'tee' ? suffix : undefined;
+        if (commandName === 'env') {
+          // `env`'s utility is the first non-option, non-assignment word. Do
+          // not search the whole suffix: `env printf tee out` runs printf and
+          // must not attribute `out` as a tee target.
+          let envIndex = 0;
+          while (envIndex < suffix.length) {
+            const value = extractConcreteShellWord(suffix[envIndex]);
+            if (!value) break;
+            if (value === '--') {
+              envIndex += 1;
+              break;
+            }
+            if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(value)) {
+              envIndex += 1;
+              continue;
+            }
+            if (value === '-i' || value === '-0' || value === '--ignore-environment' || value === '--null') {
+              envIndex += 1;
+              continue;
+            }
+            break;
+          }
+          if (extractConcreteShellWord(suffix[envIndex]) === 'tee') teeSuffix = suffix.slice(envIndex + 1);
+        }
+        if (teeSuffix) {
+          let afterEndOfOptions = false;
+          for (const word of teeSuffix) {
+            const value = extractConcreteShellWord(word);
+            if (!value) {
+              hasUnresolvedWrite = true;
+              continue;
+            }
+            if (!afterEndOfOptions && value === '--') {
+              afterEndOfOptions = true;
+              continue;
+            }
+            if (!afterEndOfOptions && value !== '-' && value.startsWith('-')) continue;
+            paths.push(path.resolve(cwd, value));
+          }
+        }
+      }
+
+      for (const child of Object.values(node)) visit(child);
+    };
+
+    visit(ast);
+  } catch {
+    // Parsing is advisory evidence only. The shell policy still owns whether
+    // an otherwise unsupported command may execute.
+    return { paths: [...new Set(paths)], hasUnresolvedWrite: false, parseUnknown: true };
+  }
+  return { paths: [...new Set(paths)], hasUnresolvedWrite, parseUnknown: false };
+}
+
 export function captureValidationIfMatch(
   capture: ValidationCapture | undefined,
   command: string,
@@ -278,26 +535,11 @@ export class SubagentToolPolicy {
   }
 
   extractPathsFromCommand(command: string, cwd: string): string[] {
-    const paths: string[] = [];
-    try {
-      classifyCommand(command, this.#logger);
-      const tokens = command.match(/>\s*(\S+)|>>\s*(\S+)|tee\s+(\S+)/gi);
-      if (tokens) {
-        for (const token of tokens) {
-          const match = token.match(/>+\s*(\S+)|tee\s+(\S+)/);
-          if (match) {
-            const p = match[1] ?? match[2];
-            if (p) {
-              const resolved = path.resolve(cwd, p);
-              paths.push(resolved);
-            }
-          }
-        }
-      }
-    } catch {
-      // Non-fatal
-    }
-    return [...new Set(paths)];
+    return inspectShellWriteTargets(command, cwd).paths;
+  }
+
+  private inspectShellWriteTargets(command: string, cwd: string): ShellWriteTargetInspection {
+    return inspectShellWriteTargets(command, cwd);
   }
 
   extractSuccessfulWritePaths(result: unknown): string[] {
@@ -394,7 +636,9 @@ export class SubagentToolPolicy {
         // mirroring the root agent's unrestricted shell approval path.
         const autoApproveMode = this.#settings.get('shell.autoApproveMode');
         const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(definition.name, autoApproveMode);
-        if (autoApproveMode !== 'always' && (await originalNeedsApproval(params, context))) {
+        const underlyingNeedsApproval =
+          autoApproveMode !== 'always' && (await originalNeedsApproval(params, context)) === true;
+        if (underlyingNeedsApproval) {
           const status = classifyCommand(command, this.#logger);
           if (status === SafetyStatus.RED) {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
@@ -407,7 +651,10 @@ export class SubagentToolPolicy {
           }
         }
 
-        const extractedPaths = this.extractPathsFromCommand(command, cwd);
+        const { paths: extractedPaths, hasUnresolvedWrite } = this.inspectShellWriteTargets(command, cwd);
+        if (hasUnresolvedWrite && underlyingNeedsApproval && !bypassWorkspaceWriteBoundary) {
+          return `Error: command blocked — could not determine shell write targets safely outside the sandbox. Command: ${command}`;
+        }
         if (extractedPaths.length > 0) {
           for (const filePath of extractedPaths) {
             if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
@@ -420,13 +667,22 @@ export class SubagentToolPolicy {
             return 'Error: command blocked — one or more target files are already being modified by another worker.';
           }
 
+          let beforeSnapshots: Map<string, ShellFileSnapshot> | undefined;
           try {
+            beforeSnapshots = new Map(extractedPaths.map((filePath) => [filePath, snapshotShellFile(filePath)]));
             const result = await originalExecute(params, context, details);
-            filesChanged.push(...extractedPaths);
             captureValidationIfMatch(validationCapture, command, result);
             return result;
           } finally {
-            releaseWorkerLocks();
+            try {
+              if (beforeSnapshots) {
+                filesChanged.push(
+                  ...extractedPaths.filter((filePath) => shellFileChanged(beforeSnapshots!.get(filePath)!, filePath)),
+                );
+              }
+            } finally {
+              releaseWorkerLocks();
+            }
           }
         }
 
@@ -451,11 +707,17 @@ export class SubagentToolPolicy {
         }
 
         const command = getShellCommand(params);
-        const extractedPaths = command ? this.extractPathsFromCommand(command, cwd) : [];
+        const { paths: extractedPaths, hasUnresolvedWrite } = command
+          ? this.inspectShellWriteTargets(command, cwd)
+          : ({ paths: [], hasUnresolvedWrite: false, parseUnknown: false } satisfies ShellWriteTargetInspection);
         const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(
           definition.name,
           this.#settings.get('shell.autoApproveMode'),
         );
+        const sandboxOwnsContainment = this.#settings.get('sandbox.enabled') !== false;
+        if (hasUnresolvedWrite && !sandboxOwnsContainment && !bypassWorkspaceWriteBoundary) {
+          return `Error: command blocked - could not determine shell write targets safely outside the sandbox. Command: ${command}`;
+        }
         for (const filePath of extractedPaths) {
           if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
             return `Error: command blocked - target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
@@ -468,16 +730,26 @@ export class SubagentToolPolicy {
           return 'Error: command blocked - one or more target files are already being modified by another worker.';
         }
 
+        let beforeSnapshots: Map<string, ShellFileSnapshot> | undefined;
         try {
+          beforeSnapshots = new Map(extractedPaths.map((filePath) => [filePath, snapshotShellFile(filePath)]));
           const result = await originalExecute(params, context, details);
           const ctx = getSubagentRunContext(context);
-          ctx?.filesChanged.push(...extractedPaths);
           if (ctx?.lastValidation) {
             captureValidationIfMatch(ctx.lastValidation, command, result);
           }
           return result;
         } finally {
-          releaseWorkerLocks();
+          try {
+            const ctx = getSubagentRunContext(context);
+            if (beforeSnapshots) {
+              ctx?.filesChanged.push(
+                ...extractedPaths.filter((filePath) => shellFileChanged(beforeSnapshots!.get(filePath)!, filePath)),
+              );
+            }
+          } finally {
+            releaseWorkerLocks();
+          }
         }
       },
     };

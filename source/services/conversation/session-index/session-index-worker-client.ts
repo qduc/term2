@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { workerBootstrapExecArgv } from '../../../utils/worker-bootstrap.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +36,7 @@ mod.runSessionIndexWorker();
 `;
   return new Worker(bootstrap, {
     eval: true,
+    execArgv: workerBootstrapExecArgv(),
     workerData: { workerFile },
   });
 }

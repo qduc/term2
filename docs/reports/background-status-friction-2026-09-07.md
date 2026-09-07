@@ -9,15 +9,22 @@ execution-event delivery, liveness controls, or the check-in schedule.
 
 The evidence supports one narrow behavior change: tell the agent explicitly to
 end a check-in turn silently when it has no action or user-facing update to
-make. The existing instruction that doing nothing is valid was directionally
-correct, but it did not prohibit a filler acknowledgement or a repeated
-progress paragraph. The formatter now says:
+make, without turning that instruction into a command to abandon authorized
+work already in progress. The existing instruction that doing nothing is valid
+was directionally correct, but it did not prohibit a filler acknowledgement or
+a repeated progress paragraph. The formatter now says:
 
-> If no action or user-facing update is warranted, end this check-in turn
-> silently: produce no assistant prose, acknowledgement, or filler.
+> Scope that silence instruction to this check-in acknowledgement: only if this
+> check-in is the sole reason for the turn and nothing remains actionable should
+> you end this check-in turn silently: produce no assistant prose,
+> acknowledgement, or filler. If ongoing authorized work is already in progress
+> when this notification arrives, continue that work; do not end the turn
+> merely because this check-in needs no action or update.
 
 This is guidance for the model-only check-in prompt, not a change to the
-user-facing command row. The latter remains a concise status presentation.
+user-facing command row. The latter remains a concise status presentation. The
+sole-reason and continuation clauses are intentional: an idle check-in can be
+quiet, while an injected check-in must not terminate an unrelated active turn.
 
 ## Evidence inspected
 
@@ -60,9 +67,11 @@ controls:
 * `BackgroundCheckInScheduler` permits per-task enable/disable, interval, and
   next-due overrides through the existing task-control path. User oversight is
   therefore preserved; no control was removed or hidden.
-* The check-in formatter already labels the input as an automatic system
-  notification, says that it does not by itself indicate a problem, permits
-  doing nothing, and limits user reports or intervention to cases where the
+* The check-in formatter labels the input as an automatic system notification,
+  says that it does not by itself indicate a problem, permits doing nothing,
+  scopes silence to a check-in-only turn with no remaining actionable work, and
+  explicitly preserves ongoing authorized work when a notification arrives
+  mid-turn. It still limits user reports or intervention to cases where the
   elapsed time or task nature warrants it.
 * Completion, question, budget/stall, shell-output, and user-control
   notifications continue through their existing paths. This work does not
@@ -77,7 +86,8 @@ elapsed time and task-specific risk, especially on an idle or resumed context.
 There is no matched experiment showing that a shortened brief preserves
 intervention quality. The minimum justified change is therefore to suppress
 unnecessary prose while retaining the task, status, liveness, recent narrative,
-tool, and control evidence.
+tool, and control evidence, and to clarify that this no-op path cannot end
+unrelated authorized work.
 
 No change was made to the five-minute default, scheduler cadence, task cards,
 provider-traffic logging, completion/blocker visibility, event identity, or
@@ -90,8 +100,9 @@ missing silence instruction.
 The regression assertions exercise the actual `ConversationOrchestrator`
 delivery seam in both cases: injection into an active turn and an idle hidden
 turn. They assert that the model-facing assembled notification contains the
-silence/no-filler direction, while the separately assembled user-facing command
-row remains concise and does not expose that instruction.
+silence/no-filler direction and the active-work continuation condition, while
+the separately assembled user-facing command row remains concise and does not
+expose that instruction.
 
 Red proof: adding the assertions before the formatter edit failed two tests.
 Green proof:

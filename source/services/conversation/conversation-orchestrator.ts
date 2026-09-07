@@ -266,7 +266,7 @@ export function formatBackgroundSubagentNotifications(notifications: readonly Ba
         '',
         ...entries,
         '',
-        'Decide freely: doing nothing and letting it keep running is a valid choice. If no action or user-facing update is warranted, end this check-in turn silently: produce no assistant prose, acknowledgement, or filler. To adjust check-in frequency or silence future check-ins for a task, use run_code with tools.configure_task_check_in(...). Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+        'Decide freely: doing nothing and letting it keep running is a valid choice. Scope that silence instruction to this check-in acknowledgement: only if this check-in is the sole reason for the turn and nothing remains actionable should you end this check-in turn silently: produce no assistant prose, acknowledgement, or filler. If ongoing authorized work is already in progress when this notification arrives, continue that work; do not end the turn merely because this check-in needs no action or update. To adjust check-in frequency or silence future check-ins for a task, use run_code with tools.configure_task_check_in(...). Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
       ].join('\n'),
     );
   }

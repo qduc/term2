@@ -1,0 +1,1 @@
+This workspace includes a project skill about the Northwind invoice contact. Follow that skill and reply with only the contact identifier it records.

@@ -1,0 +1,1 @@
+In this workspace, determine the release channel currently configured for the Northwind service. Reply with only that channel identifier and nothing else.

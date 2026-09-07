@@ -1,0 +1,4 @@
+{
+  "name": "sidecar",
+  "listenPort": 8081
+}

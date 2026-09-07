@@ -1,0 +1,125 @@
+{
+  "program": "tool-interface-stage-gates",
+  "stage": "stage1",
+  "question": "Does catalog-wide compact input signatures (purpose and returns on describe) retain Stage1 memory-repair benefit at lower prompt overhead than the full header?",
+  "combinedTreatment": {
+    "declared": true,
+    "variant": "compact-input-signatures",
+    "parts": [
+      "catalog-wide compact INPUT signatures for every scriptable nonessential tools.* member (required/optional/enums); no four-tool list",
+      "purpose prose and declared return shapes omitted from Other tools and left on tools.describe",
+      "essential tools keep detailed entries",
+      "honest schema fallback: unconvertible schemas render an explicit marker instead of a bogus zero-argument signature",
+      "model-visible schema lookup telemetry: successful tools.describe counts appear on the run_code result summary (N1 KEEP)"
+    ],
+    "causality": "Do not claim isolated catalog-expansion causality. Arm B is the compact combined treatment vs baseline names-only nonessentials. Compact-vs-full is a separate historical experiment, not a paired cell.",
+    "n1Decision": "KEEP model-visible schema lookup telemetry as part of the treatment.",
+    "hypothesis": "Smaller eager input catalog should retain memory argument-repair benefit at lower prompt overhead; missing return shapes or a weak describe pointer may cause extra work. Do not treat equal-turn excess as exact causal header tax, and do not treat the 50/50 task-set error rate as production prevalence."
+  },
+  "priorDecision": {
+    "source": "docs/plans/run-code-authoring-friction.md",
+    "status": "reopened-for-tri-model-measurement",
+    "claimedMeasurement": "Promoting full signatures for all non-essential tools was measured at ~3.9x header growth (honest delta +8,080 chars over the exact rendered registry). Header stayed names-only; signatures taught at failure time.",
+    "caveat": "That figure is a plan-doc hint, covers signatures only, and was already wrong once when a receipt used a 9-tool-larger stub registry (+10,482). Stage1 must re-measure the combined header (signature + purpose + declared returns) against the exact production non-interactive registry. Do not treat any declaration-site count as fact.",
+    "supersedeOnlyIf": "The three-model comparison shows a correctness win that outweighs the combined header growth. A candidate that improves tokens/time while reducing correctness on any pinned model is rejected before efficiency claims."
+  },
+  "baselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
+  "originalBaselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
+  "previousAcceptedStage": null,
+  "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1-compact",
+  "candidateCommitReviewed": "2890f0b9a78fa3af611d32472c6f400123485c92",
+  "candidateCommitFinal": "2890f0b9a78fa3af611d32472c6f400123485c92",
+  "pendingFinalReview": false,
+  "sourceApproval": {
+    "commit": "2890f0b9a78fa3af611d32472c6f400123485c92",
+    "artifact": "/tmp/tool-interface-compact-claude-review.md",
+    "verdict": "source-approved; no defects",
+    "note": "Source approval was independent of launch. Launch clearance is the compact-launch review of 9aa4e9a8."
+  },
+  "historicalFullCandidate": {
+    "commit": "80f7488401c1043445cf3974f163633693c8c20f",
+    "worktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
+    "results": "scripts/experiments/tool-interface-stage1/results-20260907.md",
+    "acceptance": "not accepted; 72-cell run preserved; compact-vs-full is indicative not paired",
+    "constructionBytes": {
+      "luna": { "baseline": 1454, "candidate": 6821, "delta": 5367, "names": 18 },
+      "glm": { "baseline": 2651, "candidate": 8018, "delta": 5367, "names": 21 }
+    }
+  },
+  "protocolReview": {
+    "reviewedCommit": "9aa4e9a811905ad763034bbed6abefc99ec6ee82",
+    "artifact": "/tmp/tool-interface-compact-launch-claude-review.md",
+    "verdict": "APPROVE clearing pendingFinalReview",
+    "conditions": "Parent rebuild → preflight → fresh bounded live pairs on all 3 models → 72-cell matrix only if raw-parity, identity, and effort gates pass.",
+    "priorFullLaunchReview": {
+      "reviewedCommit": "0b2fc0b36fc93f7cb4dea45ddc4b9977ba78ba80",
+      "artifact": "/tmp/tool-interface-stage1-claude-protocol-review2.md",
+      "verdict": "CLEAR TO LAUNCH applied only to the historical full candidate 80f74884"
+    }
+  },
+  "candidateCommitNote": "Compact candidate 2890f0b9 is source-approved. Compact-bench amendment 9aa4e9a8 is launch-cleared (Claude compact-launch review, 0 blockers; pendingFinalReview false). Parent sequence: rebuild/preflight, then fresh bounded pairs on 3 models, then 72-cell matrix if those gates pass. Historical full 80f74884 and results-20260907.md preserved, unaccepted. Construction: compact luna 2291 B / 18, glm+deepseek 3488 B / 21 vs baseline 1454 / 2651 (+837 B all); name and static-prose parity. Not the F3 replica +8471.",
+
+  "models": [
+    {
+      "id": "luna",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "glm",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "deepseek",
+      "provider": "DeepSeek",
+      "model": "deepseek-v4-flash",
+      "reasoningEffort": "medium"
+    }
+  ],
+  "settingsPin": {
+    "app.liteMode": false,
+    "app.planMode": false,
+    "app.mentorMode": false,
+    "app.orchestratorMode": false,
+    "app.searchViaShell": "auto",
+    "enable_agent_workflow": false,
+    "sandbox.enabled": true,
+    "logging.debugLogging": true,
+    "logging.logLevel": "debug"
+  },
+  "driver": {
+    "mode": "non-interactive-cli",
+    "autoApprove": true,
+    "json": true,
+    "quiet": true,
+    "trials": 3,
+    "costControl": "Default 2 treated + 2 untreated tasks x 3 trials = 72 cells. Do not reduce the matrix. Report strata separately; untreated tasks measure cost only.",
+    "timeoutMs": 900000,
+    "serial": true,
+    "rawTraffic": true
+  },
+  "primaryMetrics": ["taskCorrectness", "combinedHeaderBytes", "perTurnPromptTokens"],
+  "secondaryMetrics": [
+    "describeLookups",
+    "invalidParamsAttempted",
+    "unknownToolAttempted",
+    "recordedNestedCalls",
+    "admittedNestedCallsKnown",
+    "resultHandlingFailures",
+    "resultHandlingRecoveries",
+    "withinArmCacheReadTokens",
+    "costUsdIfKnown",
+    "wallTimeMs"
+  ],
+  "exclusions": [
+    "session_list/session_search/session_read (non-interactive CLI does not pass sessionBrowser)",
+    "ask_user (allowAskUser false)",
+    "background shell job tools (allowBackgroundShell false)",
+    "session_rollover",
+    "web_search/web_fetch as required actions (network/cost/flake; tools remain on the real registry)",
+    "paid subagent fan-out as a required action"
+  ]
+}

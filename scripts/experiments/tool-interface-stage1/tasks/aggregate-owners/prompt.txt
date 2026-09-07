@@ -1,0 +1,1 @@
+Each JSON file under teams/ names an ownerEmail. Collect every unique owner email, sort them lexicographically, and reply with those emails only, one per line, with no extra text.

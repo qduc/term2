@@ -1,0 +1,5 @@
+{
+  "service": "northwind",
+  "releaseChannel": "canary-osprey-7f3a",
+  "replicas": 3
+}

@@ -1,0 +1,5 @@
+{
+  "service": "inventory",
+  "releaseChannel": "beta-otter-2",
+  "replicas": 1
+}

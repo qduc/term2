@@ -632,10 +632,11 @@ const codexSanitizeRequestMiddleware: FetchMiddleware = (ctx, next) => {
   return next(ctx);
 };
 
-function codexHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
+export function codexHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
   return (ctx, next) => {
     const trafficContext = sessionContextService?.getContext() ?? null;
     const sessionId = trafficContext?.sessionId;
+    const providerHistoryKey = trafficContext?.providerHistoryKey ?? sessionId;
     const userAgent = `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`;
 
     const extraHeaders: Record<string, string> = {
@@ -649,7 +650,7 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
     const mergedHeaders = addCodexCompactHeaders(
       ctx.url,
       injectHeaders(ctx.init?.headers, extraHeaders),
-      sessionId,
+      providerHistoryKey,
       ctx.init?.body,
     );
     return next({ url: ctx.url, init: { ...ctx.init, headers: mergedHeaders } });

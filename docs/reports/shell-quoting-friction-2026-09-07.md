@@ -119,20 +119,37 @@ file claims.
 The confirmed repair is limited to `source/services/subagents/tool-policy.ts`
 and its focused tests. Redirect and `tee` targets are read from parsed shell
 operators, so `>` inside a quoted jq/arrow expression and descriptor forms such
-as `2>&1` do not become file targets. Unknown or unparseable write targets fail
-closed rather than bypassing the worker workspace boundary. Inferred targets
-remain the paths used to acquire locks and enforce the boundary; they are not
-effects. A shell target enters `filesChanged` only when its readable
-before/after snapshot differs, so a command that partially writes and then
-exits non-zero retains real evidence without attributing guesses.
+as `2>&1` do not become file targets. Static redirect/tee targets remain the
+paths used to acquire locks and enforce the worker boundary; they are not
+effects. Unresolved targets are rejected only on the unsandboxed path that
+already requires approval; a sandboxed command (including `> "$out"`) keeps
+the shell sandbox as its containment owner. Parser failure is recorded as
+unknown evidence and does not become a new global execution guard. A target
+enters `filesChanged` only when bounded, byte-preserving evidence differs:
+small regular files are compared as bytes, large regular files use size/time/
+inode metadata, and non-regular/symlink/inaccessible targets produce no
+attribution claim (a missing target becoming a regular file is observable).
+This intentionally can miss a large-file write that
+preserves every recorded metadata field; it cannot justify claiming a change.
+Evidence failures are advisory and do not replace an already-settled shell
+result; the limitation is that an inaccessible or metadata-only target may be
+omitted from `filesChanged`.
 
 The worker and foreground nested wrappers are both covered by assembled-wrapper
 regressions: quoted redirect text does not hold a bogus lock or appear in
-`filesChanged`, a real redirect outside the workspace remains blocked, and a
-non-zero result after a mocked partial write records the actual target. The
-historical `/tmp` artifact-writer effects and the uncertainty around the old
-cancelled-worker records remain unchanged; this repair does not retroactively
-claim those paths existed.
+`filesChanged`, a real redirect outside the workspace remains blocked, dynamic
+sandboxed redirects execute, unresolved unsandboxed redirects remain blocked,
+and a non-zero result after a mocked partial write records the actual target.
+FIFO, `/dev/zero`-style non-regular, binary, and large-artifact cases exercise
+the evidence boundary without executing a dangerous payload. The parser keeps
+the deliberately narrow redirect/tee model; it recognizes direct tee paths,
+`/usr/bin/tee`, simple assignment-prefixed `env ... tee` wrappers, and
+redirects attached to compound statements, but does not claim to model
+arbitrary shell commands or all effectful wrappers. In particular, an `env`
+argument is not searched for a later `tee` token when the utility is something
+else. The historical `/tmp` artifact-writer effects and the uncertainty around
+the old cancelled-worker records remain unchanged; this repair does not
+retroactively claim those paths existed.
 
 ### Verification receipts
 
@@ -149,7 +166,7 @@ The repaired focused suite and adjacent subagent security/runner tests passed:
 
 ```text
 NODE_ENV=test pnpm test source/services/subagents/tool-policy.test.ts
-PASS 1 file, 58 tests
+PASS 1 file, 67 tests
 
 NODE_ENV=test pnpm test source/services/subagents/subagent-manager.security.test.ts \
   source/services/subagents/nested-runner.test.ts \

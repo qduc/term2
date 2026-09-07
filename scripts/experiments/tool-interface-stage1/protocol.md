@@ -1,6 +1,6 @@
 # Stage 1 protocol (tool-interface-bench)
 
-Read this before launching cells. Paid launch is blocked until this protocol is reviewed.
+Read this before launching cells. Protocol review2 CLEAR TO LAUNCH (`0b2fc0b3`). Scorer at `3485623f`. The 72-cell matrix of 2026-09-07 is recorded in `results-20260907.md`; this file is the measurement protocol, not an acceptance decision.
 
 ## Pins
 
@@ -17,7 +17,7 @@ The candidate's `+8,471 B` figure is an **exploratory interactive fixture with a
 
 This driver owns reproducible measurement:
 
-- **Construction snapshot** (preflight / B1): factory-bound `buildAgentTools` + `bindRunCodeRegistry` on the **non-interactive CLI** surface. Session tools are absent. Label: `non-interactive-factory-bind`. Preflight snapshots **every pinned model**; pair name-set equality is within-model (luna's native-patch registry is 17 names including `apply_patch`; glm/deepseek are 20 names including grep/glob/create_file/search_replace).
+- **Construction snapshot** (preflight / B1): factory-bound `buildAgentTools` + `bindRunCodeRegistry` on the **non-interactive CLI** surface. Session tools are absent. Label: `non-interactive-factory-bind`. Preflight snapshots **every pinned model**; pair name-set equality is within-model (luna 18 names including `apply_patch` + `configure_task_check_in`; glm/deepseek 21 names including grep/glob/create_file/search_replace + `configure_task_check_in`).
 - **Trial measurement** (B4): `provider-traffic-raw` sidecar only. Construction snapshots never substitute for trial bytes.
 - Interactive production is an **upper bound** this driver does not claim. Report the non-interactive figure as a lower bound on interactive.
 
@@ -35,9 +35,9 @@ Includes `configure_task_check_in`. Luna construction matches the candidate pilo
 
 | ID | Gate | Enforcement |
 | --- | --- | --- |
-| B1 | Factory-bound header, not unbound `getAgentDefinition` | `snapshot-header.mjs` calls `buildAgentTools`. Empty/stub (`<8` names) fails preflight. Empirically: baseline glm header 20 names / 2619 B; interactive extras = session_list/search/read. |
+| B1 | Factory-bound header, not unbound `getAgentDefinition` | `snapshot-header.mjs` calls `buildAgentTools`. Empty/stub (`<8` names) fails preflight. Live matrix: luna 18 names / 1454→6821 B; glm and deepseek 21 names / 2651→8018 B. Interactive extras = session_list/search/read. |
 | B2 | Baseline pin by `source/` tree, not HEAD identity | `git diff --quiet <pin> HEAD -- source/` plus dirty `source/` checks. |
-| B3 | Candidate HEAD == `candidateCommitFinal` and clean | `80f74884`. Protocol review pending still refuses `--go`. |
+| B3 | Candidate HEAD == `candidateCommitFinal` and clean | `80f74884`. `pendingFinalReview` is false after protocol review2. |
 | B4 | Trial headers from raw sidecars only | `scorePair` requires `source === 'provider-traffic-raw'`. Well-formed construction headers are `raw-header-missing`. |
 | B5 | Ephemeral `XDG_STATE_HOME` | Per-cell `mkdtemp` auth dir, chmod 700, harvest logs, destroy. Real config dir is read-only for OAuth. |
 | B6 | Cost | 2 treated + 2 untreated × 3 models × 2 arms × 3 trials = 72 cells. Untreated tasks are cost-only; report strata separately. |
@@ -58,10 +58,12 @@ Correctness first. A candidate that reduces task correctness on any pinned model
 ```
 node scripts/experiments/tool-interface-stage1/driver.mjs preflight
 node scripts/experiments/tool-interface-stage1/driver.mjs run --go --output-dir <fresh-dir>
-# Fresh directory only. Do not --resume. Do not reuse .bench-runs/stage1-pilot-* cells.
+# Fresh directory only. Do not --resume. Do not reuse prior .bench-runs cells.
 ```
 
-Do not launch paid cells from this revision.
+Exit codes: preflight blockers → 2; `run --go` that throws on remaining blockers → 1 (not 2); `runInvalid` → 3; incomplete single-cellId → 4.
+
+The 72-cell matrix already ran (see `results-20260907.md`). Do not treat this protocol as authorization for additional paid cells.
 
 ## Pilot repair (2026-09-07)
 

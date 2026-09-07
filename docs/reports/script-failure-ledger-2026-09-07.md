@@ -30,7 +30,7 @@ used below. The failed-record count is stable:
 | --- | ---: | --- |
 | Parent prefix-classified records | 37 | Retained as historical prefix classes; a prefix is not proof that a mitigation resolved the failure. |
 | Five recovered records | 5 | Canonical bodies recovered in the preceding evidence work: unavailable-tool lookup, 197-call guard, `require__noop`, `c768...` unexpected-tail, and suspicious-length assertion. |
-| **Remaining canonical ledger below** | **24** | 23 Codex records plus one DeepSeek record; 22 have canonical result bodies and two have an exact, reproducible canonical-data absence. |
+| **Remaining canonical ledger below** | **24** | 23 Codex records plus one DeepSeek record; 23 have canonical result bodies and one has an exact, reproducible canonical-data absence. |
 | **Total failed finishes** | **66** | `37 + 5 + 24`. |
 
 No row is labelled a probe. The surrounding coding, audit, and review work is
@@ -40,30 +40,31 @@ not positive fault-injection evidence.
 
 Application paths are the exact `path:line` found by the parser. Conversation
 `seq` values are canonical event IDs. For a canonical result, the `failure`
-cell quotes the exact first error line and the exact persisted effect-count
-summary; syntax/location lines are included where present. `next observed`
-quotes the next canonical `tool_started` call and its first result line. A next
-call is evidence of what happened next, not evidence that the overall task was
-completed.
+cell quotes the exact first error line and the nested tool-call count; syntax/
+location lines are included where present. A nested tool-call count is not
+evidence that any external effect occurred. `next observed` quotes the next
+canonical call, its event sequence/timestamp, and its result success field. A
+next call is evidence of what happened next, not evidence that the overall task
+was completed.
 
-| local finish | app record / call ID | canonical conversation event(s) | exact failure and effects | next observed outcome |
+| local finish | app record / call ID | canonical conversation event(s) | exact failure and nested tool-call count | next observed outcome |
 | --- | --- | --- | --- | --- |
-| 2026-09-06 08:44:02 | `term2-2026-09-06.log.6:4023`; `call_eA0kuYTLujV5AV2Cque7dvRt` | `72e06ab7-c604-4148-b01d-f9a49be89de7.jsonl`, seq `84,86` | `Script failed: Unexpected identifier 'formatToolCommand'`; `Line 1: const patch='*** Begin Patch\n...`; `[no tool calls]` | `call_4k6daWmQOsC9SC9FKneX0ajh` (`run_code`): `Result: Updated /home/qduc/term2/source/utils/conversation/conversation-utils.test.ts` |
+| 2026-09-06 08:44:02 | `term2-2026-09-06.log.6:4023`; `call_eA0kuYTLujV5AV2Cque7dvRt` | `72e06ab7-c604-4148-b01d-f9a49be89de7.jsonl`, seq `84,86` | `Script failed: Unexpected identifier 'formatToolCommand'`; `Line 1: const patch='*** Begin Patch\n...`; `[0 nested tool calls]` | `call_4k6daWmQOsC9SC9FKneX0ajh` (`run_code`): `Result: Updated /home/qduc/term2/source/utils/conversation/conversation-utils.test.ts` |
 | 2026-09-06 09:10:21 | `.6:6207`; `call_yM115jeDyFW6J7bEz561zp74` | `d27dc356-4eda-4882-9c38-80d8aa46cdbd.jsonl`, seq `2121,2123` | `Script failed: Search failed: rg: regex parse error:` followed by `unclosed group`; `[1 tool call: grep]` | `call_7yUq9mKT5svBpSoRrIOpukGQ` (`run_code`): `Result: 841: ... clearConversations ...` |
 | 2026-09-06 10:24:25 | `.8:263`; `call_YA6SJsESph3JhsMwawyW6SMb` | `d27dc356-4eda-4882-9c38-80d8aa46cdbd.jsonl`, seq `5647,5649` | `Script failed: Search failed: rg: /home/qduc/term2/.worktrees/rollover-live-work/source/services/session/stream-error-handler.ts: No such file or directory (os error 2)`; `[1 tool call: grep]` | `call_SkQZarQBCmfV3F74nYi8tidN` (`run_code`): `Result: No matches found.` |
-| 2026-09-06 10:25:48 | `.8:467`; `call_n8wrw0jUYU48IMXb3HNnitzf` | `d27dc356-4eda-4882-9c38-80d8aa46cdbd.jsonl`, seq `5693,5695` | `Script failed: Search failed: rg: /home/qduc/term2/.worktrees/rollover-live-work/source/services/conversation/tool-execution-ledger.ts: No such file or directory (os error 2)`; `[1 tool call: grep]` | `call_ieDo1mUMe1MqWcVOB0FOfVRk` (`shell`): `Runtime: 64ms` |
+| 2026-09-06 10:25:48 | `.8:467`; `call_n8wrw0jUYU48IMXb3HNnitzf` | `d27dc356-4eda-4882-9c38-80d8aa46cdbd.jsonl`, seq `5693,5695` | `Script failed: Search failed: rg: /home/qduc/term2/.worktrees/rollover-live-work/source/services/conversation/tool-execution-ledger.ts: No such file or directory (os error 2)`; `[1 tool call: grep]` | `call_ieDo1mUMe1MqWcVOB0FOfVRk` (`shell`): event sequence/timestamp/result success field not retained by the prior projection; `Runtime: 64ms` is timing only |
 | 2026-09-06 12:21:13 | `.10:3067`; `call_ldYXK7zMlrogJcWI90WQ8iT3` | `b2799d1a-082e-44f6-9fcc-b913ae9ed3ff.jsonl`, seq `86,88` | `Script failed: Search failed: rg: /home/qduc/term2/source/tools/shell.ts: No such file or directory (os error 2)`; `[5 tool calls: grep×4, read_file]` | `call_otDOxPZBYvgVEu24nty5xuJD` (`run_code`): `Result: [{"status":"fulfilled",...` |
 | 2026-09-06 15:26:02 | `.12:836`; `call_z3Y9la0y8uF7TXvBA5tFhdV0` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `92,94` | `Script failed: Cannot read properties of undefined (reading 'length')`; `[1 tool call: read_file]` | `call_03TsiC5XhW2ZTUw8wi7hCeMK` (`run_code`): `Result: "{\"path\":\"/tmp/rc-batch1.json\",...` |
-| 2026-09-06 15:26:15 | `.12:867`; `call_Uu8xdF2AYQw2bF8VCjvQZgeH` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `100,102` | `Script failed: Bad control character in string literal in JSON at position 100000 (line 1 column 100001)`; `[1 tool call: read_file]` | `call_jKw9EJtsmYkIE6VlZBfEdFTR` (`shell`): `Runtime: 1518ms` |
+| 2026-09-06 15:26:15 | `.12:867`; `call_Uu8xdF2AYQw2bF8VCjvQZgeH` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `100,102` | `Script failed: Bad control character in string literal in JSON at position 100000 (line 1 column 100001)`; `[1 tool call: read_file]` | `call_jKw9EJtsmYkIE6VlZBfEdFTR` (`shell`): event sequence/timestamp/result success field not retained by the prior projection; `Runtime: 1518ms` is timing only |
 | 2026-09-06 15:48:24 | `.12:1974`; `call_bSJE0nclooO4XTSnxUBQ6BCd` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `1670,1672` | `Script failed: Search failed: rg: regex parse error:` followed by `unclosed group`; `[2 tool calls: read_file, grep]` | `call_SdsGNXzjNU4PQrJCNKSKLXZF` (`run_code`): `Result: {"session":{"name":"session_read",...` |
 | 2026-09-06 15:54:25 | `.12:2293`; `call_Bysly7TgqHWh31xDmZbv14Qs` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `2007,2009` | `Script failed: Missing initializer in const declaration`; `Line 1: const value: number = 1; return value;`; `[no tool calls]` | `call_i2htcZB7j68KkzPm98AdeQov` (`run_code`): `Result: <skill_content name="herdr">` |
 | 2026-09-06 16:02:12 | `.12:2558`; `call_bW1mWQ0rt9tdwMffp8OE7y4u` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `4555,4557` | `Script failed: Script sandbox failed: ENOENT: process.cwd failed with error no such file or directory, the current working directory was likely removed without changing the working directory, uv_cwd`; `[no tool calls]` | `call_2oqMtAM95RICPJlY966jeIuq` (`enter_worktree`): `Error: could not list worktrees (spawn git ENOENT. Is /home/qduc/term2/.worktrees/model-nicknames inside a git repository?)` |
-| 2026-09-06 16:03:12 | `.12:2627`; `call_c7iUopsD2IO1qt3gEK0gicBK` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `4579,4581` | `Script failed: Script sandbox failed: ENOENT: process.cwd failed with error no such file or directory, the current working directory was likely removed without changing the working directory, uv_cwd`; `[no tool calls]` | `call_mZnt9aD4vou6xDhU9CeAid8p` (`shell`): `Runtime: 3677ms` |
+| 2026-09-06 16:03:12 | `.12:2627`; `call_c7iUopsD2IO1qt3gEK0gicBK` | `501344fc-7bb0-4025-b98c-58c697c07486.jsonl`, seq `4579,4581` | `Script failed: Script sandbox failed: ENOENT: process.cwd failed with error no such file or directory, the current working directory was likely removed without changing the current working directory, uv_cwd`; `[no tool calls]` | `call_mZnt9aD4vou6xDhU9CeAid8p` (`shell`): event sequence/timestamp/result success field not retained by the prior projection; `Runtime: 3677ms` is timing only |
 | 2026-09-06 16:10:32 | `.12:2821`; `call_6C6a0gXwGfvlHIGmeOyulSc0` | `4595031d-adb6-4c05-84f0-fee400081058.jsonl`, seq `7,9` | `Script failed: Script sandbox failed: ENOENT: process.cwd failed with error no such file or directory, the current working directory was likely removed without changing the working directory, uv_cwd`; `[no tool calls]` | `call_kMM47p2yLeS2V9iHuJ6iFHtz` (`shell`): `2b77b39b Merge docs: record merged commit references for evidence-backed shell timeouts` |
-| 2026-09-06 16:46:30 | `.13:437`; `call_dQBZXX6v5f0CUuZDX09cFRsh` | **No matching canonical `tool_started`, `tool_result`, or `command_message` event found.** The provider response is app `.13` and identifies the call; the conversation search over all JSONL files found no canonical lifecycle record. | Exact app evidence: `ok:false`, `toolCalls:0`, script description `Check the report file writer`; no canonical result or effect count is available. This is an inaccessible-canonical-data record, not a guessed empty result. | No canonical next outcome. Do not infer that `tools.describe("create_file")` ran. |
+| 2026-09-06 16:46:30 | `.13:437`; `call_dQBZXX6v5f0CUuZDX09cFRsh` | **No matching canonical `tool_started`, `tool_result`, or `command_message` event found.** The provider response is app `.13` and identifies the call; the conversation search over all JSONL files found no canonical lifecycle record. | Exact app evidence: `ok:false`, nested tool-call count `0`, script description `Check the report file writer`; no canonical result or nested tool-call count is available. This is an inaccessible-canonical-data record, not a guessed empty result. | No canonical next outcome. Do not infer that `tools.describe("create_file")` ran. |
 | 2026-09-06 17:14:03 | `.13:1484`; `call_qN9UrWGptiukgipO2Kp9wiqq` | `bdd41931-1880-4e2f-8df1-4a053d0dab51.jsonl`, seq `56,58` | `Script failed: Search failed: rg: regex parse error:` followed by `unclosed group`; `[6 tool calls: grep, read_file×5]` | `call_7nt4pYkOb8BcUsck4gz8OEqg` (`run_code`): `Result: [{"status":"fulfilled",...` |
 | 2026-09-06 19:50:48 | `.13:4386`; `call_i2GNYuV1raVkpQKWkATNFbmS` | `b42bf6ab-194d-4628-83a3-dfa488ea6e15.jsonl`, seq `1536,1538` | `Script failed: Unknown tool "search_replace". Available: web_search, web_fetch, configure_task_check_in, get_shell_job, cancel_shell_job, cancel_shell_monitor, memory_list, memory_get, memory_create, memory_update, memory_delete, session_list, session_search, session_read, activate_skill, read_file, apply_patch, get_subagent_result, get_subagent_status, send_message, cancel_run`; `[no tool calls]` | `call_F8hWwW17xZeKug6jNKa2tW9N` (`run_code`): `Result: Error: Invalid patch: Patch failed: the context block was not found in the file.` |
-| 2026-09-06 23:22:26 | `.14:3587`; `call_00_9lC0n81Efw4FJrnkHEFR5641` | **No matching canonical lifecycle event found.** The no-correlation DeepSeek response at the same local second identifies the call and session, but neither that session nor the complete conversation corpus contains a direct canonical event for this call. | Exact app evidence: `ok:false`, `toolCalls:0`; the provider response's script body was a `run_code` call, but its returned failure body is not persisted in an accessible canonical record. This is an inaccessible-canonical-data record, not a `no tool calls` claim. | No canonical next outcome. |
+| 2026-09-06 23:22:26 | `.14:3587`; `call_00_9lC0n81Efw4FJrnkHEFR5641` | `e90a9686-1bd2-44b2-ab0c-303eb2004716.jsonl`, seq `43665,43667`; direct `assistant_journal_item` tool-call/result pair | Exact journal result: `Script was cancelled. Script was cancelled by its parent\n\n[no tool calls]`; nested tool-call count `0`. The journal result status is `completed` for the wrapper, while its body records cancellation; do not describe this as successful script work. | `call_00_7cKTgBBUkutzyUFGBz2Z5815` (`run_code`), event seq `44390`, timestamp `2026-09-06T16:22:55.494Z`: result event seq `44392`, success `true` for the next wrapper call. The next call is not proof this cancelled script completed. |
 | 2026-09-07 00:03:47 | `.log:500`; `call_L6VtJBCo0yMJBEOwomvSxvQK` | `eab6ba46-04d8-417d-9657-8de9312d68a3.jsonl`, seq `127,129` | `Script failed: tools.grep is not a function`; `[no tool calls]` | `call_hULSsIFWwsvkuXXDmjzH6Xj7` (`run_code`): `Result: [{"path":"/home/qduc/term2/.worktrees/session-tools-pain/...` |
 | 2026-09-07 00:05:11 | `.log:630`; `call_PoaPCothPE9GFFoVtK60UOXW` | `eab6ba46-04d8-417d-9657-8de9312d68a3.jsonl`, seq `155,157` | `Script failed: Unexpected identifier 'kinds'`; `Line 9: +  expect(tools[1]!.description).toContain('Use \\`kinds: ["user", "assistant"]\\`');`; `[no tool calls]` | `call_TRqsn0k1teEkVqhtTxTi9nBx` (`run_code`): `Script failed: Unexpected identifier 'from'` |
 | 2026-09-07 00:05:32 | `.log:659`; `call_TRqsn0k1teEkVqhtTxTi9nBx` | `eab6ba46-04d8-417d-9657-8de9312d68a3.jsonl`, seq `159,161` | `Script failed: Unexpected identifier 'from'`; `Line 11: expect(tools[2]!.description).toContain('without \\`from: "end"\\` the read starts at the first record');`; `[no tool calls]` | `call_lxRhX9zDtu92czuEavMZbgIn` (`run_code`): `Result: Error: Invalid patch: Patch failed: the context block was not found in the file.` |
@@ -102,10 +103,23 @@ outside the remaining-24 table:
    (`suspiciously short: 29924`). They are excluded from the remaining-24 rows
    so that `37 + 5 + 24` remains disjoint.
 
+The `15:26:15` body reports a JSON parse failure at position `100000` while
+reading a structured result. That is evidence of a truncated/corrupted read in
+this historical record, not a newly discovered copy of the same result-shape
+defect: the relevant output/recovery lane was repaired in the actual main-line
+commits `209eb350`, `7b6f0234`, `54b45c0a`, `5259d42f`, and `4936252c`.
+
+The three `uv_cwd` rows at `16:02:12`, `16:03:12`, and `16:10:32` all report a
+deleted-worktree process current directory. Their following `enter_worktree`
+or `shell` observations are not a terminal recovery trace. Establishing
+whether the terminal survived and how it recovered requires a separate
+workspace/terminal trace; this ledger does not infer recovery from those next
+calls.
+
 ## Deduplication and reproducibility
 
 The parser in
-[`scripts/experiments/script-failure-ledger-2026-09-07.py`](../../scripts/experiments/script-failure-ledger-2026-09-07.py)
+[`script-failure-ledger-2026-09-07.py`](./script-failure-ledger-2026-09-07.py)
 does the following without writing to logs or conversations:
 
 1. Reads the base log and all rotations for the two dates, filters the fixed
@@ -114,10 +128,11 @@ does the following without writing to logs or conversations:
 2. Joins each finish to the nearest preceding provider response carrying a
    `run_code` function call. Correlated records use `correlationId`; records
    without one use the same local wall-clock second plus message-ID ordering.
-3. Searches all persisted conversation JSONL for the exact nested call ID.
-   Only direct `tool_started`, `tool_result`, and `command_message` lifecycle
-   records are accepted. Embedded transcript/history copies are not counted as
-   new calls.
+3. Searches the complete persisted conversation JSONL corpus for the exact
+   nested call ID. Direct `tool_started`, `tool_result`, `command_message`,
+   and `assistant_journal_item.item` tool-call/result records are accepted.
+   `assistant_turn` embedded transcript/history copies are not counted as new
+   calls, and duplicate direct copies are retained for validation.
 4. For each direct canonical result, reads the subsequent canonical lifecycle
    to quote the next observed call/result. Missing direct lifecycle records are
    reported as inaccessible canonical data, not as a guessed empty result.
@@ -125,20 +140,25 @@ does the following without writing to logs or conversations:
 Commands used:
 
 ```bash
-python3 scripts/experiments/script-failure-ledger-2026-09-07.py \
+python3 docs/reports/script-failure-ledger-2026-09-07.py \
   > /tmp/script-failure-ledger-2026-09-07.json
 
-jq '{failedCount, joins:(.joins|length), direct:([.joins[]|select(.call != null)]|length), canonical:([.joins[]|select((.canonical|length)>0)]|length), noCanonical:([.joins[]|select(.call != null and (.canonical|length)==0)]|length)}' \
+jq '{failedCount, joins:(.joins|length), matched:([.joins[]|select(.joinStatus == "matched")]|length), ambiguous:([.joins[]|select(.joinStatus == "ambiguous")]|length), canonicalValidated:.validation.failedTimestamp, errorBodies:.validation.errorBody, noCanonical:([.joins[]|select((.canonical|length)==0 and (.canonicalCandidates|length? // 0)==0)]|length), validation}' \
   /tmp/script-failure-ledger-2026-09-07.json
 ```
 
-The validation projection returned `failedCount: 66`, `joins: 66`, `direct: 66`,
-`canonical: 64`, and `noCanonical: 2`. The two no-canonical rows are explicitly
-the `16:46:30` and `23:22:26` rows above. A second structured selection of
-all Codex failures minus the recovered unavailable-tool and high-call-count
-records, plus DeepSeek `23:22:26`, returned exactly 24 rows.
+The complete-corpus rerun returned `failedCount: 66`, `joins: 66`, `matched: 57`,
+`ambiguous: 8`, and `no_execution_start: 1`. It validated matching canonical
+timestamps and result bodies for all `64` previously canonical rows plus one
+new journal-backed row (`65` rows total). The journal lane changed the prior
+two apparent absences to one: the `23:22:26` DeepSeek call is now a direct
+`assistant_journal_item` call/result pair, while `16:46:30` remains an exact
+canonical absence. The eight ambiguous joins are retained as rejected joins;
+the parser does not choose a last parallel call. The one no-execution-start
+join has a canonical result candidate but lacks the required adjacent
+execution-start evidence.
 
 This report does not infer task success, semantic correctness of prior work,
 mitigation adequacy, timeout behavior, or effects beyond the exact canonical
-effect-count summaries. No production validation was required for this
+tool-call-count summaries. No production validation was required for this
 read-only evidence artifact.

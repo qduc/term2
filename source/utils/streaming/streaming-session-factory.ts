@@ -67,6 +67,15 @@ export interface StreamingSessionFactoryDeps {
    */
   setRunBudgetNotice?: (event: RunBudgetEvent) => void;
   reasoningThrottleMs: number;
+  /**
+   * Shared message-id sequence. The session must mint ids from the same
+   * monotonic sequence as the caller's other messages: separate
+   * createMessageIdFactory instances derive the same `<timestamp>-0` id when
+   * they both fire within one millisecond, and a colliding id makes in-place
+   * finalization find the wrong message (sender mismatch) and silently skip,
+   * stranding the bot message in status 'streaming'.
+   */
+  createMessageId?: () => string;
   now?: () => number;
   createStreamingState?: () => StreamingState;
   createStreamingUpdateCoordinator?: typeof createStreamingUpdateCoordinator;
@@ -85,7 +94,7 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
   const createState = deps.createStreamingState ?? createStreamingState;
   const createCoordinator = deps.createStreamingUpdateCoordinator ?? createStreamingUpdateCoordinator;
   const createEventHandler = deps.createConversationEventHandler ?? createConversationEventHandler;
-  const createMessageId = createMessageIdFactory(now);
+  const createMessageId = deps.createMessageId ?? createMessageIdFactory(now);
 
   const streamingState = createState();
 

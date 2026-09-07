@@ -659,9 +659,7 @@ export class ConversationOrchestrator {
         return false;
       }
 
-      applyConversationEvent({ type: 'final', finalText: '' });
-      botResponseUpdater.flush();
-      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
       return true;
     } catch (error) {
       this.logError('Error in retryLastToolOutput', error);
@@ -691,9 +689,7 @@ export class ConversationOrchestrator {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         replayFromHistory: true,
       });
-      applyConversationEvent({ type: 'final', finalText: '' });
-      botResponseUpdater.flush();
-      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
       return result !== null;
     } catch (error) {
       this.logError('Error in retryLastFailedTurn', error);
@@ -864,9 +860,7 @@ export class ConversationOrchestrator {
         preferredMessageId: userMessage.id,
       });
 
-      applyConversationEvent({ type: 'final', finalText: '' });
-      botResponseUpdater.flush();
-      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
     } catch (error) {
       this.logError('Error in sendUserMessage', error);
 
@@ -982,8 +976,7 @@ export class ConversationOrchestrator {
           onEvent: this.createOnEventHandler(applyConversationEvent),
         });
 
-        applyConversationEvent({ type: 'final', finalText: '' });
-        this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+        this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
       } catch (error) {
         this.logError('Error in continuation after max turns', error);
 
@@ -1029,9 +1022,7 @@ export class ConversationOrchestrator {
         approvalAnswer: resolution.approvalAnswer,
         ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
       });
-      applyConversationEvent({ type: 'final', finalText: '' });
-      botResponseUpdater.flush();
-      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
     } catch (error) {
       this.logError('Error in handleApprovalDecision', error);
 
@@ -1361,9 +1352,7 @@ export class ConversationOrchestrator {
       // A turn the queue refused to admit resolves without a terminal, so the
       // notifications were never seen and must go back on the queue.
       delivered = Boolean(result);
-      applyConversationEvent({ type: 'final', finalText: '' });
-      botResponseUpdater.flush();
-      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
     } catch (error) {
       this.logError('Error delivering background subagent notifications', error);
 
@@ -1403,6 +1392,11 @@ export class ConversationOrchestrator {
         },
         reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         now: this.config.now,
+        // One id sequence for the whole conversation: a session-private
+        // factory can mint `<timestamp>-0` in the same millisecond as this
+        // class's own ids, and the colliding id makes in-place finalization
+        // skip the live message (sender mismatch) and strand it streaming.
+        createMessageId: this.createMessageId,
       },
       label,
     );
@@ -1495,6 +1489,28 @@ export class ConversationOrchestrator {
     if (summary) this.config.ui.onCostUpdate?.(summary);
   }
 
+  /**
+   * Settle a turn this orchestrator owns: finalize the streamed tail, drop
+   * any pending throttled push, and apply the terminal result.
+   *
+   * The `final` event's flushBotText already wrote the accumulated tail into
+   * the list as finalized text, so a pending botResponseUpdater push is
+   * stale. flush() would fire it after the live slot was cleared and
+   * re-create a `status: 'streaming'` bot message that the settle below
+   * cannot account for — an orphaned streaming row that blocks static
+   * commit for the rest of the session. cancel() discards it instead.
+   */
+  #settleTurn(
+    applyConversationEvent: (event: { type: 'final'; finalText: string }) => void,
+    botResponseUpdater: { cancel: () => void },
+    result: ConversationTerminal | null,
+    streamingState: StreamingState,
+  ): void {
+    applyConversationEvent({ type: 'final', finalText: '' });
+    botResponseUpdater.cancel();
+    this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+  }
+
   private applyServiceResult(
     result: ConversationTerminal | null,
     streamingState: StreamingState,
@@ -1517,18 +1533,20 @@ export class ConversationOrchestrator {
       return;
     }
 
-    this.config.messages.setMessages(
-      (prev) =>
-        computeNextMessages({
-          prev,
-          result,
-          streamingState,
-          createMessageId: this.createMessageId,
-          trimMessages: this.config.messages.trimMessages,
-          annotateCommandMessage: (msg) => this.annotateCommandMessage(msg),
-        }).next,
-    );
-    if (result.type === 'response' && streamingState.currentBotMessageId !== null) {
+    let finalizedStreamingMessage = false;
+    this.config.messages.setMessages((prev) => {
+      const applied = computeNextMessages({
+        prev,
+        result,
+        streamingState,
+        createMessageId: this.createMessageId,
+        trimMessages: this.config.messages.trimMessages,
+        annotateCommandMessage: (msg) => this.annotateCommandMessage(msg),
+      });
+      finalizedStreamingMessage = applied.finalizedStreamingMessage;
+      return applied.next;
+    });
+    if (finalizedStreamingMessage) {
       clearStreamingBotMessage(streamingState);
     }
     this.config.ui.onApprovalResolved();

@@ -1,6 +1,56 @@
 import { it, expect } from 'vitest';
 import { createStreamingSession } from './streaming-session-factory.js';
 
+it('mints streaming message ids from the shared caller sequence when provided', () => {
+  // A session-private id factory can produce the same '<timestamp>-0' id as
+  // the caller's own ids within one millisecond; the colliding id makes
+  // in-place finalization find the wrong message and silently skip it.
+  let sharedCounter = 0;
+  let createdId: string | undefined;
+  let capturedMessages: any[] = [];
+
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: (updater) => {
+        capturedMessages = updater(capturedMessages);
+      },
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: () => {},
+      reasoningThrottleMs: 200,
+      createMessageId: () => 'shared-' + sharedCounter++,
+      // Cold coordinator: push is a no-op, flush fires the callback directly.
+      createStreamingUpdateCoordinator: (onUpdate) => {
+        const emit = onUpdate as unknown as (text: string) => void;
+        return {
+          push: () => {},
+          flush: () => emit('streamed text'),
+          cancel: () => {},
+        };
+      },
+    },
+    'shared-id-sequence',
+  );
+
+  session.applyConversationEvent({ type: 'text_delta', delta: 'streamed text' });
+  session.botResponseUpdater.flush();
+
+  createdId = session.streamingState.currentBotMessageId ?? undefined;
+  expect(createdId).toBe('shared-0');
+  expect(capturedMessages).toEqual([{ id: 'shared-0', sender: 'bot', status: 'streaming', text: 'streamed text' }]);
+});
+
 it('createStreamingSession wires state and logs final usage', () => {
   const calls: {
     eventHandlerEvents: any[];

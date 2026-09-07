@@ -104,6 +104,19 @@ export const computeNextMessages = ({
 
   const finalText = result.finalText;
   if (!finalText || !finalText.trim()) {
+    // An empty finalText must not orphan a live streaming message: a message
+    // still in status 'streaming' after the terminal settle blocks static
+    // commit for the rest of the session. Promote it in place with the text
+    // already rendered so the list is settled either way.
+    const liveBotMessageId = isStreamingBotMessageId(streamingState, merged);
+    if (liveBotMessageId !== null) {
+      const live = merged.find((message) => message.id === liveBotMessageId);
+      const liveText = live?.sender === 'bot' ? live.text : '';
+      return {
+        next: trimMessages(finalizeStreamingBotMessage(merged, liveBotMessageId, liveText)),
+        finalizedStreamingMessage: true,
+      };
+    }
     return { next: trimMessages(merged), finalizedStreamingMessage: false };
   }
 

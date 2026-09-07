@@ -15,6 +15,7 @@ import {
   sanitizeCodexRequestInit,
   addCodexResponsesLiteHeader,
   addCodexCompactHeaders,
+  codexHeadersMiddleware,
   CodexProvider,
 } from './codex.provider.js';
 
@@ -850,6 +851,103 @@ it('adds v2 compaction headers only to Responses requests carrying the trigger',
       JSON.stringify({ input: [{ type: 'message' }] }),
     ),
   ).toEqual(headers);
+});
+
+it('uses the scoped provider history identity for Codex compaction transport headers', async () => {
+  const rootSessionId = 'root-session';
+  const workerHistoryKey = 'root-session:subagent:worker-1';
+  const sessionContextService = {
+    getContext: () => ({
+      sessionId: rootSessionId,
+      sessionStartedAt: '2026-09-07T00:00:00.000Z',
+      providerHistoryKey: workerHistoryKey,
+    }),
+  };
+  const middleware = codexHeadersMiddleware(sessionContextService as any);
+  const requests: Array<{ url: RequestInfo | URL; init?: RequestInit }> = [];
+
+  await middleware(
+    {
+      url: 'https://chatgpt.com/backend-api/codex/responses',
+      init: {
+        method: 'POST',
+        headers: { 'x-codex-installation-id': 'installation-123' },
+        body: JSON.stringify({ input: [{ type: 'compaction_trigger' }] }),
+      },
+    },
+    async (ctx) => {
+      requests.push(ctx);
+      return new Response('ok');
+    },
+  );
+
+  expect(requests).toHaveLength(1);
+  const headers = requests[0]!.init?.headers as Record<string, string>;
+  expect(headers['session_id']).toBe(rootSessionId);
+  expect(headers['session-id']).toBe(workerHistoryKey);
+  expect(headers['thread-id']).toBe(workerHistoryKey);
+  expect(headers['x-client-request-id']).toBe(workerHistoryKey);
+  expect(headers['x-codex-window-id']).toBe(`${workerHistoryKey}:1`);
+  expect(JSON.parse(headers['x-codex-turn-metadata']!)).toMatchObject({
+    session_id: workerHistoryKey,
+    thread_id: workerHistoryKey,
+    window_id: `${workerHistoryKey}:1`,
+    request_kind: 'compaction',
+  });
+});
+
+it('falls back to the root session identity for Codex compaction when no provider history key exists', async () => {
+  const rootSessionId = 'root-session';
+  const middleware = codexHeadersMiddleware({
+    getContext: () => ({ sessionId: rootSessionId, sessionStartedAt: '2026-09-07T00:00:00.000Z' }),
+  } as any);
+  let request: { url: RequestInfo | URL; init?: RequestInit } | undefined;
+
+  await middleware(
+    {
+      url: 'https://chatgpt.com/backend-api/codex/responses',
+      init: { body: JSON.stringify({ input: [{ type: 'compaction_trigger' }] }) },
+    },
+    async (ctx) => {
+      request = ctx;
+      return new Response('ok');
+    },
+  );
+
+  const headers = request!.init?.headers as Record<string, string>;
+  expect(headers['session-id']).toBe(rootSessionId);
+  expect(headers['thread-id']).toBe(rootSessionId);
+  expect(JSON.parse(headers['x-codex-turn-metadata']!).session_id).toBe(rootSessionId);
+});
+
+it('keeps root observability identity and ordinary Codex requests unchanged for worker contexts', async () => {
+  const rootSessionId = 'root-session';
+  const middleware = codexHeadersMiddleware({
+    getContext: () => ({
+      sessionId: rootSessionId,
+      sessionStartedAt: '2026-09-07T00:00:00.000Z',
+      providerHistoryKey: 'root-session:subagent:worker-1',
+    }),
+  } as any);
+  let request: { url: RequestInfo | URL; init?: RequestInit } | undefined;
+
+  await middleware(
+    {
+      url: 'https://chatgpt.com/backend-api/codex/responses',
+      init: { headers: { 'x-existing': 'yes' }, body: JSON.stringify({ input: [{ type: 'message' }] }) },
+    },
+    async (ctx) => {
+      request = ctx;
+      return new Response('ok');
+    },
+  );
+
+  const headers = request!.init?.headers as Record<string, string>;
+  expect(headers['session_id']).toBe(rootSessionId);
+  expect(headers['x-existing']).toBe('yes');
+  expect(headers['session-id']).toBeUndefined();
+  expect(headers['thread-id']).toBeUndefined();
+  expect(headers['x-codex-turn-metadata']).toBeUndefined();
 });
 
 it.sequential('Codex provider createStreamedModel custom fetch injects chatgpt-account-id header', async () => {

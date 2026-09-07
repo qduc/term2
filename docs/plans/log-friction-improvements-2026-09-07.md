@@ -38,7 +38,17 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Latest accepted checkpoint (2026-09-07 08:33)
+## Latest accepted checkpoint (2026-09-07 08:56)
+
+Additional merged fixes: validation receipts0a441e0e (parse real first-line exit status; unknown instead of fabricated0; independent64tests), focused test selector f9198e79 (strip leading pnpm separator, preserve NODE_ENV/test/noarg suite; independent7tests), shell signalled-process timeout attribution144f54a0 (safe SIGTERM repro; external signal is process-terminated not deadline; independent109tests). Typecheck passed. Latest fullsuite8304passed/20failed/3expected fail/2skipped,625files,141.448s shell/139.28sVitest. Exact failure comparison unchanged20baseline, no new failures. Output /tmp/qduc/term2-nodejs/tool-output/output-4026698-1788746039337-b688b5.txt.
+
+Evidence reports merged: docs/reports/provider-continuity-friction-2026-09-07.md (94151cd1 provenance correction); docs/reports/timeout-hooks-attribution-2026-09-07.md (included144f54a0); docs/reports/run-code-error-attribution-2026-09-07.md (8071ffba). IMPORTANT review correction: coding/diagnosis activity is live harness usage, not deliberate probes. Provider10errors no probes established; d27 ordinary conversation verified using session_read and report corrected. 66script failures:37prefix classes with shipped diagnostic mitigations NOT resolved outcomes;29unclassified/projection gaps (25missing bodies in bounded projection,1high197call count NOT proofbudget exhaustion,3unknown prefixes). Canonical bodies not yet inspected for25. Do not report these closed.
+
+Active implementation/investigation lanes: provider-compaction-debt true-crane-334, branch same (trace representative live missing-output after compaction with no replay); cancellation-siblings oblique-beet-934, branch conversation-cancellation-telemetry (remaining conversation/provider abort logging, coordinate provider overlap). Completed lane worktrees cleaned; these2remain. No shell gate active. Current process was not restarted/reloaded; merged rollover fix does not prove running coordinator uses it. Avoid rollover while live workers until safe.
+
+Open work beyond these lanes: script result-body attribution29unknowns, oversized/spooled output, repetitive background status, shell probe quoting friction, remaining provider stale-anchor causal outcomes, possibly hooks diagnostic noise (25startup config events not hook execution failure). User authorized ALL observed issues; do not stop at merged batch or blame agents. Latest feature/test changes need providerblackbox final gate if new lifecycle changes land; fullsuite rerun only after new changes warrant.
+
+## Earlier accepted checkpoint (2026-09-07 08:33)
 
 Merged L1/L2/L3/L4/L8 and rollover-survival fixes into main. Implementation heads: cancellation 36625ca7; explorer c0656929; budget 5259d42f; UI cc310932; glob c83ccb0c; rollover ee03f328. Main follow-up 50196f02 updates BottomArea integration expectation to compact task contract (baseline red34pass/1fail, green35pass).
 

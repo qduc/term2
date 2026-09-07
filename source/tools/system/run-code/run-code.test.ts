@@ -1112,6 +1112,55 @@ describe('run_code', () => {
     expect(output).not.toContain('Tool call limit reached');
   });
 
+  it('counts successful schema lookups separately in human telemetry without execution budget charge', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `await tools.describe("inspect");
+       await tools.describe("inspect");
+       return await tools.inspect({ value: "ok" });`,
+    );
+
+    expect(output).toContain('Result:\necho:ok');
+    expect(output).toContain('[1 tool call: inspect; 2 schema lookups]');
+    expect(output).not.toContain('Tool call limit reached');
+  });
+
+  it('reports schema lookups when no tool calls were executed', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `await tools.describe("inspect");
+       return "done";`,
+    );
+
+    expect(output).toContain('Result:\ndone');
+    expect(output).toContain('[no tool calls; 1 schema lookup]');
+  });
+
+  it('does not count failed schema lookups in successful lookup telemetry', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `try { await tools.describe("missing"); } catch {}
+       return "done";`,
+    );
+
+    expect(output).toContain('[no tool calls]');
+    expect(output).not.toContain('schema lookup');
+  });
+
+  it('reports unconvertible schema honestly in tools.describe', async () => {
+    const output = await run(
+      [
+        tool({
+          name: 'unconvertible',
+          parameters: z.custom(() => true),
+        }),
+      ],
+      'return await tools.describe("unconvertible");',
+    );
+
+    expect(output).toContain('"unconvertible":true');
+  });
+
   it('uses the namespace unknown-tool wording for prohibited and absent descriptions', async () => {
     const output = await run(
       [tool({ name: 'echo' })],

@@ -71,15 +71,18 @@ function renderType(node: JsonSchemaNode | undefined, depth = 0): string {
   }
 }
 
-function schemaFor(parameters: unknown): JsonSchemaNode {
-  if (!isZodToolParameterSchema(parameters)) return (parameters as JsonSchemaNode) ?? {};
-  try {
-    return z.toJSONSchema(parameters, { io: 'input' }) as JsonSchemaNode;
-  } catch {
-    // A schema the converter cannot express still gets a callable member; the
-    // host validates it for real at call time.
-    return {};
+function schemaFor(parameters: unknown): JsonSchemaNode | null {
+  if (isZodToolParameterSchema(parameters)) {
+    try {
+      return z.toJSONSchema(parameters, { io: 'input' }) as JsonSchemaNode;
+    } catch {
+      return null;
+    }
   }
+  if (parameters && typeof parameters === 'object') {
+    return parameters as JsonSchemaNode;
+  }
+  return null;
 }
 
 const oneLine = (text: string): string => {
@@ -101,7 +104,11 @@ export function renderCompactSignature(tool: {
   canonicalParameters?: unknown;
 }): string {
   const targetSchema = tool.canonicalParameters ?? tool.parameters;
-  const fields = renderFields(schemaFor(targetSchema), 0);
+  const schema = schemaFor(targetSchema);
+  if (!schema) {
+    return `tools.${tool.name}(/* unconvertible schema */)`;
+  }
+  const fields = renderFields(schema, 0);
   return `tools.${tool.name}({ ${fields.join(', ')} })`.replace('({  })', '()');
 }
 
@@ -134,11 +141,7 @@ export function renderToolsHeader(registry: ToolRegistry): string {
     'Use tools.describe(name) when you need the full schema and description for a tool.',
     ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
     ...(other.length > 0
-      ? [
-          '',
-          'Other tools (names only; schemas are available on demand):',
-          ...other.map((tool) => `- tools.${tool.name}`),
-        ]
+      ? [...(essential.length > 0 ? [''] : []), 'Other tools:', ...other.map(renderDetailedEntry)]
       : []),
   ];
   return lines.join('\n');

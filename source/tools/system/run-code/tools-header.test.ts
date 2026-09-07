@@ -21,23 +21,47 @@ describe('renderToolsHeader', () => {
     expect(text).toContain('- tools.read_file({ path: string, limit?: number, raw?: boolean }) — Read a file');
   });
 
-  it('shows full shapes only for essential tools and names other tools for on-demand lookup', () => {
+  it('renders compact signature, short purpose, and declared return shape for all scriptable tools while preserving essential ordering', () => {
     const text = header([
       tool({
         name: 'read_file',
+        description: 'Read a file',
         parameters: z.object({ path: z.string(), start_line: z.number().optional() }),
+        scriptedReturnShape: '{ content: string }',
       }),
       tool({
         name: 'web_search',
         description: 'Search the web',
         parameters: z.object({ query: z.string(), domains: z.array(z.string()).optional() }),
+        scriptedReturnShape: '{ results: object[] }',
       }),
     ]);
 
-    expect(text).toContain('- tools.read_file({ path: string, start_line?: number })');
-    expect(text).toContain('- tools.web_search');
-    expect(text).not.toContain('tools.web_search({ query: string');
+    expect(text).toContain('Essential tools:');
+    expect(text).toContain(
+      '- tools.read_file({ path: string, start_line?: number }) — Read a file\n    returns { content: string }',
+    );
+    expect(text).toContain('Other tools:');
+    expect(text).toContain(
+      '- tools.web_search({ query: string, domains?: string[] }) — Search the web\n    returns { results: object[] }',
+    );
     expect(text).toContain('tools.describe(name)');
+    const essentialIndex = text.indexOf('Essential tools:');
+    const otherIndex = text.indexOf('Other tools:');
+    expect(essentialIndex).toBeLessThan(otherIndex);
+  });
+
+  it('reports unconvertible schema honestly rather than a bogus zero-argument signature', () => {
+    const text = header([
+      tool({
+        name: 'complex_tool',
+        description: 'Tool with unconvertible schema',
+        parameters: z.custom(() => true),
+      }),
+    ]);
+
+    expect(text).toContain('tools.complex_tool(/* unconvertible schema */) — Tool with unconvertible schema');
+    expect(text).not.toContain('tools.complex_tool()');
   });
 
   it('says plainly that the shapes are approximate and the real schema decides', () => {
@@ -133,6 +157,12 @@ describe('renderCompactSignature (shared with the invalid-parameters site)', () 
     );
     expect(text).not.toContain('replacements: object[]');
   });
+
+  it('reports unconvertible schema honestly rather than a bogus zero-argument signature', () => {
+    expect(renderCompactSignature(tool({ name: 'unconvertible', parameters: z.custom(() => true) }))).toBe(
+      'tools.unconvertible(/* unconvertible schema */)',
+    );
+  });
 });
 
 describe('renderToolsHeader scriptedReturnShape', () => {
@@ -143,10 +173,10 @@ describe('renderToolsHeader scriptedReturnShape', () => {
     expect(text).toContain('returns { content: string, truncated: boolean }');
   });
 
-  it('keeps non-essential tools name-only even when they declare a shape', () => {
+  it('renders a declared return shape for non-essential tools', () => {
     const text = header([tool({ name: 'session_list', scriptedReturnShape: '{ sessions: object[] }' })]);
 
-    expect(text).toContain('- tools.session_list');
-    expect(text).not.toContain('returns { sessions: object[] }');
+    expect(text).toContain('- tools.session_list()');
+    expect(text).toContain('returns { sessions: object[] }');
   });
 });

@@ -38,7 +38,19 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Successor update (2026-09-07)
+## Latest accepted checkpoint (2026-09-07 08:33)
+
+Merged L1/L2/L3/L4/L8 and rollover-survival fixes into main. Implementation heads: cancellation 36625ca7; explorer c0656929; budget 5259d42f; UI cc310932; glob c83ccb0c; rollover ee03f328. Main follow-up 50196f02 updates BottomArea integration expectation to compact task contract (baseline red34pass/1fail, green35pass).
+
+Rollover root cause: successor AgentClient configuration refresh -> SubagentBridge.clearSubagentCache -> SubagentManager.resetMentorSession also reset async registry. Fix removes unrelated registry reset; explicit cancellation/disposal retained. Integrated regression crosses public ConversationService rollover, successor first request, real AgentClient/bridge/manager, child completion/result and exactly-one pending notification. Fake provider/child boundary; no live coordinator rollover proof. Parent independently ran115tests across5files.
+
+Combined gates: typecheck passed; provider blackbox177passed/1skipped (59.03sVitest); fullsuite after BottomArea correction8290passed/20failed/3expected fail/2skipped,624files (617passed/6failed/1skipped),159.483s shell /157.44sVitest. Exact failure-identity comparison: no new failures versus original22. CLI help and InputBox failures did not recur. Fullsuite output /tmp/qduc/term2-nodejs/tool-output/output-4026698-1788744743427-e17dfe.txt. Suite is NOT green.
+
+Evidence-only active lanes: continuity sheen-copper-94 (provider-continuity-friction), timeout/hooks stout-globe-146 (log-timeout-attribution),66script errors trim-tortoise-225 (run-code-error-attribution). Continuity blocked log access was answered: use captured projections/specialized reads, no stopping live logger; mark unknowns.
+
+Remaining12-issue inventory beyond accepted checkpoint: oversized/spooled script output, repetitive status notifications, accidental test -- selector broad runs, cancelled summaries falsely displaying exit0, unsafe shell probe quoting/stray files, sibling cancellation telemetry. These are not all fixed. Four original log buckets remain under classification.
+
+## Earlier successor update (superseded by latest checkpoint)
 
 Baseline full suite finished FAILED: 22 failed, 8278 passed, 3 expected fail, 2 skipped; 8 failed files, 615 passed, 1 skipped. Shell elapsed 264.667s; Vitest 259.03s. Output: /tmp/qduc/term2-nodejs/tool-output/output-4026698-1788742893045-3772a6.txt. Includes known nested-TMPDIR signatures, approval model mismatches, CLI and UI failures; attribution remains open.
 

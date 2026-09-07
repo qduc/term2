@@ -1,16 +1,20 @@
 {
   "program": "tool-interface-stage-gates",
   "stage": "stage1",
-  "question": "Does the combined Stage1 treatment improve real-model correctness enough to outweigh a larger run_code header?",
+  "question": "Does catalog-wide compact input signatures (purpose and returns on describe) retain Stage1 memory-repair benefit at lower prompt overhead than the full header?",
   "combinedTreatment": {
     "declared": true,
+    "variant": "compact-input-signatures",
     "parts": [
-      "catalog expansion: compact signature + short purpose + declared return shape for every scriptable tools.* member instead of names-only nonessentials",
+      "catalog-wide compact INPUT signatures for every scriptable nonessential tools.* member (required/optional/enums); no four-tool list",
+      "purpose prose and declared return shapes omitted from Other tools and left on tools.describe",
+      "essential tools keep detailed entries",
       "honest schema fallback: unconvertible schemas render an explicit marker instead of a bogus zero-argument signature",
       "model-visible schema lookup telemetry: successful tools.describe counts appear on the run_code result summary (N1 KEEP)"
     ],
-    "causality": "Do not claim isolated catalog-expansion causality. Arm B differs by the whole combined treatment. Lookup telemetry is model-visible and can shape describe behavior.",
-    "n1Decision": "KEEP model-visible schema lookup telemetry as part of the treatment."
+    "causality": "Do not claim isolated catalog-expansion causality. Arm B is the compact combined treatment vs baseline names-only nonessentials. Compact-vs-full is a separate historical experiment, not a paired cell.",
+    "n1Decision": "KEEP model-visible schema lookup telemetry as part of the treatment.",
+    "hypothesis": "Smaller eager input catalog should retain memory argument-repair benefit at lower prompt overhead; missing return shapes or a weak describe pointer may cause extra work. Do not treat equal-turn excess as exact causal header tax, and do not treat the 50/50 task-set error rate as production prevalence."
   },
   "priorDecision": {
     "source": "docs/plans/run-code-authoring-friction.md",
@@ -22,17 +26,37 @@
   "baselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
   "originalBaselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
   "previousAcceptedStage": null,
-  "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
-  "candidateCommitReviewed": "80f7488401c1043445cf3974f163633693c8c20f",
-  "candidateCommitFinal": "80f7488401c1043445cf3974f163633693c8c20f",
-  "pendingFinalReview": false,
-  "protocolReview": {
-    "reviewedCommit": "0b2fc0b36fc93f7cb4dea45ddc4b9977ba78ba80",
-    "artifact": "/tmp/tool-interface-stage1-claude-protocol-review2.md",
-    "verdict": "CLEAR TO LAUNCH",
-    "conditions": "Parent verified G1 (both CLIs rebuilt from current HEADs) and G2 (fresh run, no --resume). G3 is post-hoc reporting."
+  "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1-compact",
+  "candidateCommitReviewed": "2890f0b9a78fa3af611d32472c6f400123485c92",
+  "candidateCommitFinal": "2890f0b9a78fa3af611d32472c6f400123485c92",
+  "pendingFinalReview": true,
+  "sourceApproval": {
+    "commit": "2890f0b9a78fa3af611d32472c6f400123485c92",
+    "artifact": "/tmp/tool-interface-compact-claude-review.md",
+    "verdict": "source-approved; no defects",
+    "note": "Source approval is not launch approval. pendingFinalReview stays true until this amendment is reviewed."
   },
-  "candidateCommitNote": "Claude approved candidate 80f7488401c1043445cf3974f163633693c8c20f (revision2). Protocol review2 CLEAR TO LAUNCH for 0b2fc0b3. 67560fa9 is not the pin. Header measurements come from factory-bound non-interactive snapshots, not the interactive replica +8471 fixture (F3).",
+  "historicalFullCandidate": {
+    "commit": "80f7488401c1043445cf3974f163633693c8c20f",
+    "worktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
+    "results": "scripts/experiments/tool-interface-stage1/results-20260907.md",
+    "acceptance": "not accepted; 72-cell run preserved; compact-vs-full is indicative not paired",
+    "constructionBytes": {
+      "luna": { "baseline": 1454, "candidate": 6821, "delta": 5367, "names": 18 },
+      "glm": { "baseline": 2651, "candidate": 8018, "delta": 5367, "names": 21 }
+    }
+  },
+  "protocolReview": {
+    "reviewedCommit": null,
+    "artifact": null,
+    "verdict": "PENDING compact-bench amendment review",
+    "priorFullLaunchReview": {
+      "reviewedCommit": "0b2fc0b36fc93f7cb4dea45ddc4b9977ba78ba80",
+      "artifact": "/tmp/tool-interface-stage1-claude-protocol-review2.md",
+      "verdict": "CLEAR TO LAUNCH applied only to the historical full candidate 80f74884"
+    }
+  },
+  "candidateCommitNote": "Compact candidate 2890f0b9 is SOURCE-APPROVED (Claude compact review, no defects). Launch remains blocked (pendingFinalReview). Historical full candidate 80f74884 and results-20260907.md are preserved and unsupported for acceptance. Construction: compact luna 2291 B / 18 names, glm+deepseek 3488 B / 21 names vs baseline 1454 / 2651 (+837 B all models); name and static-prose parity. Not the F3 replica +8471.",
 
   "models": [
     {

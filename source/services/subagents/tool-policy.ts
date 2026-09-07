@@ -8,6 +8,8 @@ import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } fr
 import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
+import { parse } from 'unbash';
+import type { Word, WordPart } from 'unbash';
 import { isPathInScopeSafe, isHostInScope } from '../agent-runtime/scope-resolver.js';
 import { getProvider } from '../../providers/index.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../lib/tool-invoke.js';
@@ -37,6 +39,7 @@ import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import { shouldBypassToolApproval } from '../approval/shell-auto-approval-resolver.js';
+import { extractWordText } from '../../utils/shell/command-safety/utils.js';
 import type { ISubagentClient } from './subagent-client-types.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
@@ -212,6 +215,139 @@ function readFileOrNull(resolvedPath: string): string | null {
   }
 }
 
+type ShellFileSnapshot = {
+  exists: boolean;
+  readable: boolean;
+  content: string | null;
+};
+
+function snapshotShellFile(resolvedPath: string): ShellFileSnapshot {
+  if (!fs.existsSync(resolvedPath)) {
+    return { exists: false, readable: true, content: null };
+  }
+  try {
+    return { exists: true, readable: true, content: fs.readFileSync(resolvedPath, 'utf-8') };
+  } catch {
+    return { exists: true, readable: false, content: null };
+  }
+}
+
+function shellFileChanged(before: ShellFileSnapshot, resolvedPath: string): boolean {
+  const after = snapshotShellFile(resolvedPath);
+  if (!before.readable || !after.readable) return false;
+  return before.exists !== after.exists || before.content !== after.content;
+}
+
+const SHELL_FILE_REDIRECTS = new Set(['>', '>>', '>|', '&>', '&>>', '<>', '>&']);
+
+function hasDynamicShellWordPart(part: WordPart): boolean {
+  if (
+    part.type === 'SimpleExpansion' ||
+    part.type === 'ParameterExpansion' ||
+    part.type === 'CommandExpansion' ||
+    part.type === 'ArithmeticExpansion' ||
+    part.type === 'ProcessSubstitution' ||
+    part.type === 'ExtendedGlob' ||
+    part.type === 'BraceExpansion'
+  ) {
+    return true;
+  }
+  if (part.type === 'DoubleQuoted' || part.type === 'LocaleString') {
+    return part.parts.some(hasDynamicShellWordPart);
+  }
+  return false;
+}
+
+function extractConcreteShellWord(word: Word | undefined): string | undefined {
+  if (!word || word.parts?.some(hasDynamicShellWordPart)) return undefined;
+  const value = extractWordText(word);
+  if (!value || value === '~' || value.startsWith('~/')) return undefined;
+  return value;
+}
+
+type ShellWriteTargetInspection = {
+  paths: string[];
+  hasUnknownTarget: boolean;
+};
+
+/**
+ * Inspect shell syntax for targets that can actually be written by a redirect
+ * or tee. This is admission/locking evidence only; a path is added to
+ * filesChanged only after the corresponding file is observed to change.
+ */
+function inspectShellWriteTargets(command: string, cwd: string, logger: ILoggingService): ShellWriteTargetInspection {
+  const paths: string[] = [];
+  let hasUnknownTarget = false;
+  try {
+    classifyCommand(command, logger);
+    const ast = parse(command);
+    if (ast.errors && ast.errors.length > 0) return { paths, hasUnknownTarget: true };
+    const visited = new Set<object>();
+
+    const visit = (value: unknown): void => {
+      if (!value || typeof value !== 'object') return;
+      if (visited.has(value)) return;
+      visited.add(value);
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+
+      const node = value as Record<string, unknown>;
+      if (node.type === 'Command') {
+        const redirects = Array.isArray(node.redirects) ? node.redirects : [];
+        for (const redirectValue of redirects) {
+          if (!redirectValue || typeof redirectValue !== 'object') {
+            hasUnknownTarget = true;
+            continue;
+          }
+          const redirect = redirectValue as Record<string, unknown>;
+          const operator = redirect.operator;
+          if (!SHELL_FILE_REDIRECTS.has(String(operator))) continue;
+          const target = extractConcreteShellWord(
+            redirect.target && typeof redirect.target === 'object' ? (redirect.target as Word) : undefined,
+          );
+          if (!target) {
+            hasUnknownTarget = true;
+          } else if (redirect.operator === '>&' && (/^\d+$/.test(target) || target === '-')) {
+            // >&N and >&- duplicate or close a descriptor; neither writes a file.
+          } else {
+            paths.push(path.resolve(cwd, target));
+          }
+        }
+
+        const commandName = extractWordText(node.name as Word | undefined);
+        if (commandName === 'tee') {
+          let afterEndOfOptions = false;
+          const suffix = Array.isArray(node.suffix) ? node.suffix : [];
+          for (const word of suffix as Word[]) {
+            const value = extractConcreteShellWord(word);
+            if (!value) {
+              hasUnknownTarget = true;
+              continue;
+            }
+            if (!afterEndOfOptions && value === '--') {
+              afterEndOfOptions = true;
+              continue;
+            }
+            if (!afterEndOfOptions && value !== '-' && value.startsWith('-')) continue;
+            paths.push(path.resolve(cwd, value));
+          }
+        }
+      }
+
+      for (const child of Object.values(node)) visit(child);
+    };
+
+    visit(ast);
+  } catch {
+    // A command that cannot be structurally inspected must not bypass the
+    // write boundary. The shell policy still decides whether it may execute.
+    hasUnknownTarget = true;
+  }
+  return { paths: [...new Set(paths)], hasUnknownTarget };
+}
+
 export function captureValidationIfMatch(
   capture: ValidationCapture | undefined,
   command: string,
@@ -278,26 +414,11 @@ export class SubagentToolPolicy {
   }
 
   extractPathsFromCommand(command: string, cwd: string): string[] {
-    const paths: string[] = [];
-    try {
-      classifyCommand(command, this.#logger);
-      const tokens = command.match(/>\s*(\S+)|>>\s*(\S+)|tee\s+(\S+)/gi);
-      if (tokens) {
-        for (const token of tokens) {
-          const match = token.match(/>+\s*(\S+)|tee\s+(\S+)/);
-          if (match) {
-            const p = match[1] ?? match[2];
-            if (p) {
-              const resolved = path.resolve(cwd, p);
-              paths.push(resolved);
-            }
-          }
-        }
-      }
-    } catch {
-      // Non-fatal
-    }
-    return [...new Set(paths)];
+    return inspectShellWriteTargets(command, cwd, this.#logger).paths;
+  }
+
+  private inspectShellWriteTargets(command: string, cwd: string): ShellWriteTargetInspection {
+    return inspectShellWriteTargets(command, cwd, this.#logger);
   }
 
   extractSuccessfulWritePaths(result: unknown): string[] {
@@ -407,7 +528,10 @@ export class SubagentToolPolicy {
           }
         }
 
-        const extractedPaths = this.extractPathsFromCommand(command, cwd);
+        const { paths: extractedPaths, hasUnknownTarget } = this.inspectShellWriteTargets(command, cwd);
+        if (hasUnknownTarget) {
+          return `Error: command blocked — could not determine shell write targets safely. Command: ${command}`;
+        }
         if (extractedPaths.length > 0) {
           for (const filePath of extractedPaths) {
             if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
@@ -420,12 +544,15 @@ export class SubagentToolPolicy {
             return 'Error: command blocked — one or more target files are already being modified by another worker.';
           }
 
+          const beforeSnapshots = new Map(extractedPaths.map((filePath) => [filePath, snapshotShellFile(filePath)]));
           try {
             const result = await originalExecute(params, context, details);
-            filesChanged.push(...extractedPaths);
             captureValidationIfMatch(validationCapture, command, result);
             return result;
           } finally {
+            filesChanged.push(
+              ...extractedPaths.filter((filePath) => shellFileChanged(beforeSnapshots.get(filePath)!, filePath)),
+            );
             releaseWorkerLocks();
           }
         }
@@ -451,7 +578,12 @@ export class SubagentToolPolicy {
         }
 
         const command = getShellCommand(params);
-        const extractedPaths = command ? this.extractPathsFromCommand(command, cwd) : [];
+        const { paths: extractedPaths, hasUnknownTarget } = command
+          ? this.inspectShellWriteTargets(command, cwd)
+          : { paths: [], hasUnknownTarget: false };
+        if (hasUnknownTarget) {
+          return `Error: command blocked - could not determine shell write targets safely. Command: ${command}`;
+        }
         const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(
           definition.name,
           this.#settings.get('shell.autoApproveMode'),
@@ -468,15 +600,19 @@ export class SubagentToolPolicy {
           return 'Error: command blocked - one or more target files are already being modified by another worker.';
         }
 
+        const beforeSnapshots = new Map(extractedPaths.map((filePath) => [filePath, snapshotShellFile(filePath)]));
         try {
           const result = await originalExecute(params, context, details);
           const ctx = getSubagentRunContext(context);
-          ctx?.filesChanged.push(...extractedPaths);
           if (ctx?.lastValidation) {
             captureValidationIfMatch(ctx.lastValidation, command, result);
           }
           return result;
         } finally {
+          const ctx = getSubagentRunContext(context);
+          ctx?.filesChanged.push(
+            ...extractedPaths.filter((filePath) => shellFileChanged(beforeSnapshots.get(filePath)!, filePath)),
+          );
           releaseWorkerLocks();
         }
       },

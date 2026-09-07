@@ -618,11 +618,10 @@ describe('foreground nested worker shell auto-approval', () => {
 });
 
 describe('shell-edit-hole measurement (plan D2)', () => {
-  // Documents the coverage gap of extractPathsFromCommand: it only captures
-  // redirection (>/>>/tee), so most shell-edit commands are invisible to
-  // filesChanged and therefore to diffStat. This drives the decision to defer
-  // git reconciliation: the prompt steers workers toward write tools, and
-  // worktree isolation makes git accurate as a cross-check.
+  // The shell wrapper can conservatively inspect redirect (>/>>/tee) targets,
+  // but most shell-edit commands remain outside this attribution surface. The
+  // prompt steers workers toward write tools, and worktree isolation makes git
+  // accurate as a cross-check.
   const policy = new SubagentToolPolicy({
     settings: createMockSettings(),
     logger: createMockLogger(),
@@ -634,6 +633,21 @@ describe('shell-edit-hole measurement (plan D2)', () => {
     expect(policy.extractPathsFromCommand('echo hello > out.txt', cwd)).toHaveLength(1);
     expect(policy.extractPathsFromCommand('echo hello >> out.txt', cwd)).toHaveLength(1);
     expect(policy.extractPathsFromCommand('echo hello | tee out.txt', cwd)).toHaveLength(1);
+  });
+
+  it('uses shell syntax rather than quoted command text for redirect targets', () => {
+    expect(
+      policy.extractPathsFromCommand(
+        `jq '.items | map(.value > 0) | .[] | "arrow => > ignored"' input.json > "report output.json"`,
+        cwd,
+      ),
+    ).toEqual([path.resolve(cwd, 'report output.json')]);
+    expect(policy.extractPathsFromCommand(`printf '%s' 'tee > ignored' | tee -- 'tee output.md'`, cwd)).toEqual([
+      path.resolve(cwd, 'tee output.md'),
+    ]);
+    expect(policy.extractPathsFromCommand('echo output 2>&1; echo error >&2', cwd)).toEqual([]);
+    expect(policy.extractPathsFromCommand('echo error &> stderr.log', cwd)).toEqual([path.resolve(cwd, 'stderr.log')]);
+    expect(policy.extractPathsFromCommand('echo error >& stderr.log', cwd)).toEqual([path.resolve(cwd, 'stderr.log')]);
   });
 
   it('does NOT capture sed -i, mv, rm, touch, cp (the shell-edit hole)', () => {
@@ -648,6 +662,132 @@ describe('shell-edit-hole measurement (plan D2)', () => {
     expect(policy.extractPathsFromCommand('pnpm test', cwd)).toHaveLength(0);
     expect(policy.extractPathsFromCommand('npx vitest run', cwd)).toHaveLength(0);
     expect(policy.extractPathsFromCommand('tsc --noEmit', cwd)).toHaveLength(0);
+  });
+});
+
+describe('shell write attribution and locking', () => {
+  function makePolicy() {
+    return new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'off' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+  }
+
+  function makeShell(execute: (params: { command: string }) => Promise<string>) {
+    return {
+      name: 'shell',
+      description: 'test shell',
+      parameters: z.object({ command: z.string() }),
+      needsApproval: () => false,
+      execute,
+      formatCommandMessage: () => [],
+    } as any;
+  }
+
+  it('does not attribute quoted redirect text, but records an actual partial redirect write', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-shell-'));
+    const actualTarget = path.join(cwd, 'actual output.txt');
+    const quotedTarget = path.join(cwd, 'bogus-target');
+    const filesChanged: string[] = [];
+    let bogusLockAvailableDuringExecution = false;
+
+    try {
+      const command = `printf '%s' 'jq .value > ${path.basename(quotedTarget)} ; arrow => > ignored' > "${path.basename(
+        actualTarget,
+      )}"`;
+      const shell = makeShell(async () => {
+        const release = policy.tryAcquireWorkerWriteLocks([quotedTarget], cwd);
+        bogusLockAvailableDuringExecution = release !== null;
+        release?.();
+        fs.writeFileSync(actualTarget, 'partial output\n');
+        return 'exit 1\nRuntime: 1ms\ncommand failed after writing';
+      });
+
+      const wrapped = policy.wrapShellTool(shell, cwd, filesChanged, 'test shell');
+      await expect(wrapped.execute({ command })).resolves.toContain('exit 1');
+
+      expect(bogusLockAvailableDuringExecution).toBe(true);
+      expect(filesChanged).toEqual([actualTarget]);
+      expect(filesChanged).not.toContain(quotedTarget);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps real worker redirects outside the workspace protected', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const filesChanged: string[] = [];
+    const wrapped = policy.wrapShellTool(makeShell(execute), process.cwd(), filesChanged, 'test shell');
+
+    await expect(wrapped.execute({ command: 'echo output > ../outside-worker.txt' })).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(filesChanged).toEqual([]);
+  });
+
+  it('fails closed for a redirect target that depends on shell expansion', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const wrapped = policy.wrapShellTool(makeShell(execute), process.cwd(), [], 'test shell');
+
+    await expect(wrapped.execute({ command: 'echo output > "$TARGET_FILE"' })).resolves.toContain(
+      'could not determine shell write targets safely',
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps nested attribution and locks separate from quoted redirect text', async () => {
+    const policy = makePolicy();
+    const cwd = fs.mkdtempSync(path.join(process.cwd(), '.tool-policy-nested-shell-'));
+    const actualTarget = path.join(cwd, 'nested output.txt');
+    const quotedTarget = path.join(cwd, 'nested-bogus-target');
+    const context = {
+      context: {
+        agentId: 'nested-test',
+        role: 'worker',
+        task: 'test shell',
+        filesChanged: [] as string[],
+        toolCounts: {},
+        activeCommandMessages: {},
+        turnCount: 0,
+        maxTurns: 1,
+      },
+    };
+    let bogusLockAvailableDuringExecution = false;
+
+    try {
+      const command = `printf '%s' 'jq .value > ${path.basename(quotedTarget)} ;' > "${path.basename(actualTarget)}"`;
+      const shell = makeShell(async () => {
+        const release = policy.tryAcquireWorkerWriteLocks([quotedTarget], cwd);
+        bogusLockAvailableDuringExecution = release !== null;
+        release?.();
+        fs.writeFileSync(actualTarget, 'nested partial output\n');
+        return 'exit 1\nRuntime: 1ms\ncommand failed after writing';
+      });
+
+      const wrapped = policy.wrapNestedShellTool(shell, cwd);
+      await expect(wrapped.execute({ command }, context)).resolves.toContain('exit 1');
+
+      expect(bogusLockAvailableDuringExecution).toBe(true);
+      expect(context.context.filesChanged).toEqual([actualTarget]);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps real nested redirects outside the workspace protected', async () => {
+    const policy = makePolicy();
+    const execute = vi.fn(async () => 'executed');
+    const shell = policy.wrapNestedShellTool(makeShell(execute), process.cwd());
+
+    await expect(shell.execute({ command: 'echo output > ../outside-nested.txt' })).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
   });
 });
 

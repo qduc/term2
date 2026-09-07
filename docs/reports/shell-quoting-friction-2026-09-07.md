@@ -2,13 +2,15 @@
 
 ## Decision
 
-**Disposition: no production change and no cleanup.** The historical record
-supports a cancelled-worker artifact-accounting error, not a reproduced shell
-quoting defect and not evidence that a suspect payload was executed. The
-reported `=` and `0)` paths are retained as claims made by the cancelled
-worker result, but their creation is not established by a command/result pair.
-The current absence check is only a present-state check; it does not prove that
-no transient file existed during the earlier worker run.
+**Disposition: the initial no-change conclusion is superseded.** The historical
+record still does not establish that the reported `=` or `0)` paths were ever
+created, and no suspect payload was executed. However, parent-runner source
+evidence confirmed the defect class: `extractPathsFromCommand` used a raw regex
+over quoted shell text, and both worker shell wrappers attributed those guessed
+paths as changed even when execution did not establish a file effect. The
+repair therefore uses the existing `unbash` syntax tree for conservative
+admission/locking targets and records `filesChanged` only for observed
+before/after file changes, including changes from non-zero shell results.
 
 This investigation did not execute any suspect payload, delete any artifact, or
 rerun the original worker commands. The shell examples below are quoted data
@@ -103,7 +105,7 @@ settle.
 The verification does **not** support the stronger statement “the historical
 files never existed.” It supports only “the paths are absent now.”
 
-## Product-policy check and follow-up
+## Product-policy check and repair
 
 The existing shell guidance in `AGENTS.md` and the shell tool guidance already
 forbid complex inline scripts and require command examples to be treated as
@@ -111,15 +113,64 @@ data. The later explorer fallback merge `c0656929` additionally keeps `grep`
 and `glob` available to read-only explorers when shell search is blocked, and
 tests the prompt and role assembly. That addresses the observed search
 availability blockage without relaxing shell policy; it does not justify
-executing a quoting probe or claim to repair this unproven stray-file report.
+executing a quoting probe or retroactively establishing the historical stray
+file claims.
 
-No concrete product bug was reproduced, so no reproduction design or
-production touch set is proposed. If a future incident supplies a settled
-shell command, its result, and an effect identity for a path such as `=`, the
-next investigation should classify the boundary that produced it (tool
-argument serialization, shell parsing, or artifact bookkeeping) before any
-runtime edit. Until then, retain this as an evidence-backed no-change
-disposition.
+The confirmed repair is limited to `source/services/subagents/tool-policy.ts`
+and its focused tests. Redirect and `tee` targets are read from parsed shell
+operators, so `>` inside a quoted jq/arrow expression and descriptor forms such
+as `2>&1` do not become file targets. Unknown or unparseable write targets fail
+closed rather than bypassing the worker workspace boundary. Inferred targets
+remain the paths used to acquire locks and enforce the boundary; they are not
+effects. A shell target enters `filesChanged` only when its readable
+before/after snapshot differs, so a command that partially writes and then
+exits non-zero retains real evidence without attributing guesses.
+
+The worker and foreground nested wrappers are both covered by assembled-wrapper
+regressions: quoted redirect text does not hold a bogus lock or appear in
+`filesChanged`, a real redirect outside the workspace remains blocked, and a
+non-zero result after a mocked partial write records the actual target. The
+historical `/tmp` artifact-writer effects and the uncertainty around the old
+cancelled-worker records remain unchanged; this repair does not retroactively
+claim those paths existed.
+
+### Verification receipts
+
+The focused red proof was run against the old implementation before the repair:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/tool-policy.test.ts \
+  -t "uses shell syntax|does not attribute quoted|keeps real worker|keeps nested attribution|keeps real nested"
+FAIL: 3 tests — quoted shell text produced false targets, and both assembled
+       wrapper regressions held the bogus lock.
+```
+
+The repaired focused suite and adjacent subagent security/runner tests passed:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/tool-policy.test.ts
+PASS 1 file, 58 tests
+
+NODE_ENV=test pnpm test source/services/subagents/subagent-manager.security.test.ts \
+  source/services/subagents/nested-runner.test.ts \
+  source/services/subagents/mentor-runner.test.ts
+PASS 3 files, 48 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check source/services/subagents/tool-policy.ts \
+  source/services/subagents/tool-policy.test.ts \
+  docs/reports/shell-quoting-friction-2026-09-07.md
+PASS
+```
+
+The required related and changed-test selections each completed 539 passing
+tests but exited non-zero on the same four unrelated existing failures:
+`source/non-interactive.test.ts` (2),
+`scripts/nested-approval/scripted-adapter.acceptance.test.ts` (1), and
+`source/app.nested-approval-hide.test.tsx` (1). None exercises the repaired
+shell attribution path. No full-suite retry was run.
 
 ## Queries run
 

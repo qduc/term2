@@ -38,7 +38,41 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Resume checkpoint (2026-09-07, final gate settled)
+## Resume checkpoint (2026-09-07, residual evidence resolved; cwd repair in review)
+
+Residual evidence supplement merged on main as `e42fd1a1`. Parent independently
+read all nine disputed app dispatch/start/finish/settlement envelopes. Each
+uniquely joins one failed call; the helper nearest-response ambiguity is not
+missing production identity. The bounded case also has direct canonical
+journal result seq 1944 in 78bb681e: session_read rejects from:start. Two
+explorer follow-ups were rejected for wrong joins/false absence; use the
+parent-verified supplement, not those reports or temporary helper candidates.
+The historical 37 prefix-class mitigations remain outcome-unestablished: no
+controlled build-version pre/post sample proves recurrence reduction. This is
+an explicit evidence disposition, not a new repair or an all-resolved claim.
+
+Historical uv_cwd terminal trace: shell work survived in rc-contract-repair,
+run_code did not recover in the inspected source/successor trace; no deleting
+owner identity was established. A current real-child reproduction confirmed
+Node worker bootstrap still fails after process-cwd deletion. New isolated
+branch/worktree `deleted-cwd-host`, base implementation `8668d892`, is NOT
+accepted or merged. Active follow-up `deleted-cwd-host-review` /
+`noisy-bell-767` revises startup to avoid using remote/session cwd as local
+bootstrap root, preserve normal native cwd behavior and inherited flags, and
+test the built preload. Parent reviewed the initial diff and obtained mentor
+pressure test. Await completion, inspect/retest independently, merge only on
+evidence, then rerun the combined gate because this is a production delta.
+The original final gate below remains the current-main validation receipt.
+No live shell jobs. User untracked preflight document untouched.
+
+Sibling audit located the separate eval worker in
+SessionIndexWorkerClient.createDefaultWorker. It loads jiti and its module,
+unlike the capability-only shared host. No historical index-worker uv_cwd
+incident is established; it is outside this repair and not claimed protected.
+No broader process-wide cwd recovery or worktree-removal ownership change is
+part of the proposed host fix.
+
+## Earlier checkpoint (2026-09-07, final gate settled)
 
 ALL WORKERS SETTLED; no live shell/subagent work. All owned worktrees cleaned. Safe rollover now. Shell attribution b471dd86+c98dd204 merged after parent inspected finalparser/snapshot and independently115tests/4files passed (5.145s shell,3.10s Vitest). Main typecheck passed. Final combined shell5d3a7ab7-626f-4c24-b2ac-e0c9e2821ffe settledexit1 in212.025s: provider177pass1skip/61.62sVitest; fullsuite8344pass20fail3expectedfail2skip626files/143.25sVitest. Parent exactfailureidentity comparison against prior20baseline: new[] gone[]. Output `/tmp/qduc/term2-nodejs/tool-output/output-4026698-1788752437371-f9ad93.txt`. No more fullgate rerun without newproductionchange.
 

@@ -10,6 +10,7 @@ import type { NestedSubagentResult } from '../services/subagents/types.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
 
 const providers = new Set<string>();
 const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
@@ -1352,6 +1353,73 @@ describe('AgentClient codex session-history compaction', () => {
     } finally {
       instance.dispose();
     }
+  });
+
+  it('routes automatic native compaction through the worker context that owns the stream', async () => {
+    const contextService = new SessionContextService();
+    const observations: Array<{ phase: 'compact' | 'stream'; providerHistoryKey?: string }> = [];
+    providers.add('codex');
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex context-routing fixture',
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          compactHistory: async () => {
+            observations.push({
+              phase: 'compact',
+              providerHistoryKey: contextService.getContext()?.providerHistoryKey,
+            });
+            return { history: [{ type: 'message', role: 'user', content: 'compacted' }] };
+          },
+          async *stream() {
+            observations.push({ phase: 'stream', providerHistoryKey: contextService.getContext()?.providerHistoryKey });
+            yield {
+              type: 'completion' as const,
+              responseId: 'worker-response',
+              output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+            };
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+
+    const instance = new AgentClient({
+      providerOverride: 'codex',
+      agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
+      deps: {
+        logger,
+        settings: makeSettings('codex', {
+          'agent.contextCompaction.enabled': true,
+          'agent.contextCompaction.mode': 'native',
+          'agent.contextCompaction.compactThresholdTokens': 1_000,
+        }),
+        sessionContextService: contextService,
+      },
+      toolOwnership: new ToolOwnershipRegistry(),
+    } as any);
+    const rootContext = { sessionId: 'root-session', sessionStartedAt: '2026-09-07T00:00:00.000Z' };
+    const workerContext = {
+      ...rootContext,
+      providerHistoryKey: 'root-session:subagent:worker-1',
+    };
+
+    try {
+      await contextService.runWithContext(rootContext, () =>
+        contextService.runWithContext(workerContext, async () => {
+          const stream = await instance.startStream(coldHistory as any);
+          await stream.completed;
+        }),
+      );
+    } finally {
+      instance.dispose();
+    }
+
+    expect(observations).toEqual([
+      { phase: 'compact', providerHistoryKey: workerContext.providerHistoryKey },
+      { phase: 'stream', providerHistoryKey: workerContext.providerHistoryKey },
+    ]);
   });
 
   it('explains the no-cold-turn limitation once without manufacturing genuine user turns', async () => {

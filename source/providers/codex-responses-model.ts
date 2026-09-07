@@ -1226,6 +1226,19 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
   }
 
+  override async compactHistory(request: {
+    input: readonly StreamedModelTurnInput[];
+    instructions?: string;
+    signal?: AbortSignal;
+  }): Promise<{ history: ReturnType<typeof compactOutputToProviderHistory> }> {
+    const result = await super.compactHistory(request);
+    // A native compaction item replaces the provider's prior transcript. The
+    // old Responses-Lite chain may still contain an unfinished function call,
+    // so retaining it would combine the checkpoint with stale server debt.
+    this.#forgetCodexServerHistoryForCurrentKey();
+    return result;
+  }
+
   #modelNameFallback(): string {
     return this.modelId;
   }
@@ -1607,6 +1620,22 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     // A continuation may explicitly reuse the prior response ID; retain the
     // consumed-output checkpoint under that anchor as well as the new response.
     if (previousResponseId) this.codexConsumedToolResultCallIdsByResponseId.set(previousResponseId, consumed);
+  }
+
+  #forgetCodexServerHistoryForCurrentKey(): void {
+    const key = this.#getCodexServerHistoryKey();
+    if (!key) return;
+
+    const responseId = this.chainedWireState.getStoredResponseId(key);
+    this.chainedWireState.invalidate(key);
+    this.codexPreviousResponseIds.delete(key);
+    this.codexTurnIdsBySession.delete(key);
+    this.#lastLogicalRequestByKey.delete(key);
+    if (responseId) {
+      this.codexConsumedToolResultCallIdsByResponseId.delete(responseId);
+      this.codexFunctionCallIdsByResponseId.delete(responseId);
+    }
+    this.#lastSentChainFingerprint = undefined;
   }
 
   #forgetCodexResponseId(): void {

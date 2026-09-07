@@ -245,7 +245,7 @@ it.sequential('BottomArea places active background tasks directly above the inpu
   });
 });
 
-it.sequential('BottomArea renders recent tools from backgroundTaskDetails', async () => {
+it.sequential('BottomArea keeps rich background task details in a compact row above the input', async () => {
   const details = {
     kind: 'subagent' as const,
     id: 'run-worker',
@@ -266,7 +266,14 @@ it.sequential('BottomArea renders recent tools from backgroundTaskDetails', asyn
   });
   const output = lastFrame() ?? '';
   expect(output).toContain('Tasks · 1 active');
-  expect(output).toContain('read_file path=source/app.ts');
+  expect(output).toContain('[Worker] implement the background overview');
+  expect(output).toContain('Ctrl+G manage');
+  expect(output).not.toContain('read_file path=source/app.ts');
+  const panelLines = output
+    .slice(output.indexOf('Tasks ·'), output.indexOf('❯'))
+    .split('\n')
+    .filter((line) => line.trim());
+  expect(panelLines).toHaveLength(2);
   act(() => {
     unmount();
   });

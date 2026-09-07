@@ -178,7 +178,7 @@ it.sequential(
                   type: 'tool_call' as const,
                   id: 'm4-hide-k1-outer-call',
                   name: 'run_code',
-                  arguments: JSON.stringify({ code: scriptCode }),
+                  arguments: JSON.stringify({ code: scriptCode, description: 'hidden nested edit' }),
                 },
               ],
             };

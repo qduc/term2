@@ -24,6 +24,37 @@ describe('parseRunCodeTrace', () => {
     expect(trace!.body).toBe('Result:\n7');
   });
 
+  it('parses real emitted summary fixtures with schema lookups (lookup-only and calls+lookups)', () => {
+    const lookupOnly = parseRunCodeTrace('Result:\ndone\n\n[no tool calls; 1 schema lookup]');
+    expect(lookupOnly).not.toBeNull();
+    expect(lookupOnly!.rows).toEqual([]);
+    expect(lookupOnly!.body).toBe('Result:\ndone');
+    expect(lookupOnly!.troubledCount).toBe(0);
+
+    const callsAndLookups = parseRunCodeTrace('Result:\necho:ok\n\n[1 tool call: inspect; 2 schema lookups]');
+    expect(callsAndLookups).not.toBeNull();
+    expect(callsAndLookups!.rows).toEqual([{ tool: 'inspect', count: 1, status: 'completed' }]);
+    expect(callsAndLookups!.body).toBe('Result:\necho:ok');
+    expect(callsAndLookups!.troubledCount).toBe(0);
+
+    const pluralLookupsOnly = parseRunCodeTrace('Result:\ndone\n\n[no tool calls; 3 schema lookups]');
+    expect(pluralLookupsOnly).not.toBeNull();
+    expect(pluralLookupsOnly!.rows).toEqual([]);
+    expect(pluralLookupsOnly!.body).toBe('Result:\ndone');
+    expect(pluralLookupsOnly!.troubledCount).toBe(0);
+
+    const pluralCallsSingularLookup = parseRunCodeTrace(
+      'Result:\n{"matches":12}\n\n[3 tool calls: grep, read_file×2; 1 schema lookup]',
+    );
+    expect(pluralCallsSingularLookup).not.toBeNull();
+    expect(pluralCallsSingularLookup!.rows).toEqual([
+      { tool: 'grep', count: 1, status: 'completed' },
+      { tool: 'read_file', count: 2, status: 'completed' },
+    ]);
+    expect(pluralCallsSingularLookup!.body).toBe('Result:\n{"matches":12}');
+    expect(pluralCallsSingularLookup!.troubledCount).toBe(0);
+  });
+
   it('marks approval-refused tools and drops the refusal prose from the body', () => {
     const output = [
       'Result:\n{"renamed":2}',

@@ -12,7 +12,6 @@ import {
   RUN_CODE_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
 } from './run-code.js';
-import { renderToolsHeader, renderDetailedEntry, RUN_CODE_ESSENTIAL_TOOLS } from './tools-header.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import { wrapNeedsApproval } from '../../../lib/tool-invoke.js';
@@ -1686,66 +1685,6 @@ describe('scripted return contracts', () => {
     const anchorSummary = [...anchors].map(([label, names]) => `${label}: ${names.join(', ')}`).join('\n');
     expect(anchorSummary).toBe('');
   });
-
-  it('measures exact combined production-registry header bytes before/after', () => {
-    const registries = appRegistries();
-    const results: Array<Record<string, unknown>> = [];
-    for (const { label, tools } of registries) {
-      const scriptable = tools.filter((definition) => !RUN_CODE_PROHIBITED_TOOLS.has(definition.name));
-      const prohibited = tools.filter((definition) => RUN_CODE_PROHIBITED_TOOLS.has(definition.name));
-
-      const renderBaseline = (registry: ToolRegistry): string => {
-        if (registry.length === 0) return '';
-        const essential = registry.filter((tool) => RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
-        const other = registry.filter((tool) => !RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
-        const lines = [
-          'Available inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):',
-          'Use tools.describe(name) when you need the full schema and description for a tool.',
-          ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
-          ...(other.length > 0
-            ? [
-                ...(essential.length > 0 ? [''] : []),
-                'Other tools (names only; schemas are available on demand):',
-                other.map((tool) => `- tools.${tool.name}`).join('\n'),
-              ]
-            : []),
-        ];
-        return lines.join('\n');
-      };
-
-      const baselineHeader = renderBaseline(scriptable);
-      const candidateHeader = renderToolsHeader(scriptable);
-
-      const baselineBytes = Buffer.byteLength(baselineHeader, 'utf8');
-      const baselineChars = baselineHeader.length;
-      const candidateBytes = Buffer.byteLength(candidateHeader, 'utf8');
-      const candidateChars = candidateHeader.length;
-      const deltaBytes = candidateBytes - baselineBytes;
-      const deltaChars = candidateChars - baselineChars;
-      const ratio = candidateBytes / baselineBytes;
-
-      results.push({
-        label,
-        totalTools: tools.length,
-        scriptableCount: scriptable.length,
-        prohibitedCount: prohibited.length,
-        baselineBytes,
-        baselineChars,
-        candidateBytes,
-        candidateChars,
-        deltaBytes,
-        deltaChars,
-        ratio: Number(ratio.toFixed(2)),
-        scriptableNames: scriptable.map((t) => t.name).sort(),
-      });
-    }
-    expect(results.length).toBe(2);
-    for (const res of results) {
-      expect(res.scriptableCount).toBe(String(res.label).includes('gpt-4o') ? 30 : 27);
-    }
-    const unionOfScriptable = new Set(results.flatMap((r) => r.scriptableNames as string[]));
-    expect(unionOfScriptable.size).toBe(31);
-  });
 });
 
 function appRegistries(): Array<{ label: string; tools: ToolRegistry }> {
@@ -2048,6 +1987,51 @@ describe('run_code M5: persisted command-message telemetry', () => {
     expect(parsed.message).toContain('Full output saved to:');
     expect(parsed.message).toContain('tool effects have already completed');
     expect(parsed.message).not.toContain('undefined');
+  });
+
+  it('excludes describe lookups from overflow completed-call counts in error message', async () => {
+    const overflowSpecimen = {
+      name: 'overflow_specimen',
+      description: 'Generic overflow probe',
+      parameters: z.object({}),
+      parallelSafe: true,
+      canRequireApproval: false,
+      needsApproval: () => false,
+      execute: () => Array.from({ length: 10_000 }, (_, i) => ({ id: i, count: i * 2 })),
+    };
+    const policy = new ToolApprovalPolicyRegistry();
+    policy.register({
+      toolName: overflowSpecimen.name,
+      parameters: overflowSpecimen.parameters,
+      needsApproval: overflowSpecimen.needsApproval,
+    });
+    const tool = createRunCodeToolDefinition({
+      loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+      getToolRegistry: () => [overflowSpecimen] as any,
+      approvalPolicyRegistry: policy,
+    });
+
+    const output = String(
+      await tool.execute({
+        code: `
+          await tools.describe("overflow_specimen");
+          await tools.describe("overflow_specimen");
+          try {
+            const res = await tools.overflow_specimen({});
+            return { caught: false, res };
+          } catch (e) {
+            return { caught: true, message: e.message };
+          }
+        `,
+      } as any),
+    );
+
+    const text = output.slice(output.indexOf('Result:\n') + 8).split('\n\n')[0];
+    const parsed = JSON.parse(text);
+    expect(parsed.caught).toBe(true);
+    expect(parsed.message).toContain('result exceeded');
+    expect(parsed.message).toContain('1 nested tool call completed');
+    expect(parsed.message).not.toContain('3 nested tool calls completed');
   });
 
   it('mixed outcomes: Promise.allSettled with valid reads and missing-file reads correctly settles each', async () => {

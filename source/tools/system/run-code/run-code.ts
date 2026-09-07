@@ -745,7 +745,7 @@ export function createRunCodeToolDefinition(
                     mediaReferences.capture(resolution.result),
                     RUN_CODE_LIMITS.maxResultChars,
                     prepared.tool.name,
-                    calls.length,
+                    calls.filter((c) => c.outcome !== 'describe').length,
                   );
                   return {
                     kind: 'result',
@@ -799,7 +799,7 @@ export function createRunCodeToolDefinition(
               mediaReferences.capture(result),
               RUN_CODE_LIMITS.maxResultChars,
               prepared.tool.name,
-              calls.length,
+              calls.filter((c) => c.outcome !== 'describe').length,
             );
             return {
               kind: 'result',

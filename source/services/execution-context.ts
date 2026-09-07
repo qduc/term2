@@ -59,14 +59,14 @@ export class ExecutionContext {
     if (!path.isAbsolute(root)) {
       throw new Error(`Active workspace must be an absolute path, received: ${root}`);
     }
-    this.activeWorkspace = root;
     publishActiveWorkspaceRoot(root);
+    this.activeWorkspace = root;
   }
 
   /** Releases the lease, returning the session to its home root. */
   exitWorkspace(): void {
-    this.activeWorkspace = undefined;
     publishActiveWorkspaceRoot(undefined);
+    this.activeWorkspace = undefined;
   }
 
   /**

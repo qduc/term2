@@ -1,7 +1,11 @@
 import { it, expect, afterEach } from 'vitest';
 import { ExecutionContext } from './execution-context.js';
 import { ISSHService } from './service-interfaces.js';
-import { getActiveWorkspaceRoot, publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+import {
+  getActiveWorkspaceRoot,
+  publishActiveWorkspaceRoot,
+  registerSessionRuntime,
+} from './workspace/active-workspace-root.js';
 
 // Entering a workspace also publishes a process-wide fallback root; clear it so
 // these tests stay order-independent.
@@ -81,6 +85,7 @@ it('exitWorkspace restores the session root', () => {
   ctx.exitWorkspace();
   expect(ctx.getCwd()).toBe(process.cwd());
   expect(ctx.getActiveWorkspace()).toBeUndefined();
+  expect(getActiveWorkspaceRoot()).toBe(process.cwd());
 });
 
 it('getActiveWorkspace is undefined until a workspace is entered', () => {
@@ -99,6 +104,24 @@ it('rejects a relative workspace root so the active root is always unambiguous',
   const ctx = new ExecutionContext();
   expect(() => ctx.enterWorkspace('.worktrees/feature')).toThrow(/absolute/i);
   expect(ctx.getActiveWorkspace()).toBeUndefined();
+});
+
+it('leaves the lease and fallback unchanged when publication rejects', () => {
+  const ctx = new ExecutionContext();
+  const releaseFirstRuntime = registerSessionRuntime();
+  ctx.enterWorkspace('/repo/.worktrees/current');
+  const releaseSecondRuntime = registerSessionRuntime();
+
+  try {
+    expect(() => ctx.enterWorkspace('/repo/.worktrees/replacement')).toThrow(/multiple session runtimes/i);
+    expect(ctx.getActiveWorkspace()).toBe('/repo/.worktrees/current');
+    expect(ctx.getCwd()).toBe('/repo/.worktrees/current');
+    expect(getActiveWorkspaceRoot()).toBe('/repo/.worktrees/current');
+  } finally {
+    releaseSecondRuntime();
+    ctx.exitWorkspace();
+    releaseFirstRuntime();
+  }
 });
 
 it('rejects entering a local workspace in remote mode, where the remote dir owns the root', () => {

@@ -230,6 +230,11 @@ it('fails closed when a second runtime tries to publish a workspace root', async
     // The fail-closed writer leaves session A's omitted-baseDir observation on
     // root A rather than allowing root B to retarget it.
     expect(normalizeToolPath('marker.txt')).toBe(join(rootA, 'marker.txt'));
+    // The rejected lease must not retarget session B either: its context is the
+    // other half of the root/lease transaction, not just a caller of the
+    // process-wide fallback.
+    expect(contextB.getActiveWorkspace()).toBeUndefined();
+    expect(contextB.getCwd()).toBe(process.cwd());
   } finally {
     await runtimeB.shutdown();
     contextA.exitWorkspace();

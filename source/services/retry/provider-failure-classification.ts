@@ -58,15 +58,50 @@ export function isClassifiedCancellation(error: unknown): boolean {
   return classifyProviderFailure(error).errorKind === 'cancelled' && hasExplicitCancellationMarker(error);
 }
 
-function hasExplicitCancellationMarker(error: unknown, seen = new Set<unknown>()): boolean {
-  if (!error || typeof error !== 'object' || seen.has(error)) return false;
-  seen.add(error);
-  const value = error as Record<string, unknown>;
-  if (value.name === 'AbortError' || value.code === 'ABORT_ERR' || value.kind === 'cancelled') return true;
-  if (Array.isArray(value.errors) && value.errors.some((child) => hasExplicitCancellationMarker(child, seen))) {
-    return true;
+/**
+ * Returns true only when an error tree contains an explicit cancellation and
+ * no concrete provider or transport failure. `classifyProviderFailure` keeps
+ * its broad abort-like precedence for retry policy; this stricter predicate is
+ * for boundaries where hiding a real failure would be worse than showing an
+ * abort from the same race.
+ */
+export function hasExplicitCancellationMarker(error: unknown): boolean {
+  const result = inspectCancellationTree(error, new Set<unknown>());
+  return result.hasCancellation && !result.hasFailure;
+}
+
+type CancellationTreeInspection = {
+  hasCancellation: boolean;
+  hasFailure: boolean;
+};
+
+function inspectCancellationTree(error: unknown, seen: Set<unknown>): CancellationTreeInspection {
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return { hasCancellation: false, hasFailure: false };
   }
-  return hasExplicitCancellationMarker(value.cause, seen);
+  seen.add(error);
+
+  const value = error as Record<string, unknown>;
+  let hasCancellation = value.name === 'AbortError' || value.code === 'ABORT_ERR';
+  let hasFailure = isConcreteProviderFailure(value);
+  const children = [...(Array.isArray(value.errors) ? value.errors : []), value.cause];
+  for (const child of children) {
+    const childResult = inspectCancellationTree(child, seen);
+    hasCancellation ||= childResult.hasCancellation;
+    hasFailure ||= childResult.hasFailure;
+  }
+  return { hasCancellation, hasFailure };
+}
+
+function isConcreteProviderFailure(value: Record<string, unknown>): boolean {
+  const statusRaw = value.status ?? value.statusCode;
+  const status = typeof statusRaw === 'number' ? statusRaw : Number(statusRaw);
+  return (
+    (Number.isInteger(status) && status >= 400) ||
+    value instanceof OpenRouterError ||
+    value instanceof OpenAICompatibleError ||
+    isNetworkProtocolError(value)
+  );
 }
 
 function findSafeField(error: unknown, field: 'code'): unknown {

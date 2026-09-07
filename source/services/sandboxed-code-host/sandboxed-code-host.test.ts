@@ -18,6 +18,21 @@ const echoCapability: CapabilityHandler = {
   invoke: async () => ({ kind: 'result', result: { answer: 'ok' } }),
 };
 
+describe('SandboxedCodeHostImpl worker startup', () => {
+  it('keeps the caller cwd native when it is available', async () => {
+    const callerCwd = process.cwd();
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return { ready: true };',
+      capabilities: {},
+      limits,
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({ ok: true, output: { ready: true } });
+    expect(process.cwd()).toBe(callerCwd);
+  });
+});
+
 describe('SandboxedCodeHostImpl isolation', () => {
   it('blocks host constructors on console, capabilities, and returned values', async () => {
     const consoleOutput: unknown[][] = [];

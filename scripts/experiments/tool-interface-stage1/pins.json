@@ -29,12 +29,12 @@
   "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1-compact",
   "candidateCommitReviewed": "2890f0b9a78fa3af611d32472c6f400123485c92",
   "candidateCommitFinal": "2890f0b9a78fa3af611d32472c6f400123485c92",
-  "pendingFinalReview": true,
+  "pendingFinalReview": false,
   "sourceApproval": {
     "commit": "2890f0b9a78fa3af611d32472c6f400123485c92",
     "artifact": "/tmp/tool-interface-compact-claude-review.md",
     "verdict": "source-approved; no defects",
-    "note": "Source approval is not launch approval. pendingFinalReview stays true until this amendment is reviewed."
+    "note": "Source approval was independent of launch. Launch clearance is the compact-launch review of 9aa4e9a8."
   },
   "historicalFullCandidate": {
     "commit": "80f7488401c1043445cf3974f163633693c8c20f",
@@ -47,16 +47,17 @@
     }
   },
   "protocolReview": {
-    "reviewedCommit": null,
-    "artifact": null,
-    "verdict": "PENDING compact-bench amendment review",
+    "reviewedCommit": "9aa4e9a811905ad763034bbed6abefc99ec6ee82",
+    "artifact": "/tmp/tool-interface-compact-launch-claude-review.md",
+    "verdict": "APPROVE clearing pendingFinalReview",
+    "conditions": "Parent rebuild → preflight → fresh bounded live pairs on all 3 models → 72-cell matrix only if raw-parity, identity, and effort gates pass.",
     "priorFullLaunchReview": {
       "reviewedCommit": "0b2fc0b36fc93f7cb4dea45ddc4b9977ba78ba80",
       "artifact": "/tmp/tool-interface-stage1-claude-protocol-review2.md",
       "verdict": "CLEAR TO LAUNCH applied only to the historical full candidate 80f74884"
     }
   },
-  "candidateCommitNote": "Compact candidate 2890f0b9 is SOURCE-APPROVED (Claude compact review, no defects). Launch remains blocked (pendingFinalReview). Historical full candidate 80f74884 and results-20260907.md are preserved and unsupported for acceptance. Construction: compact luna 2291 B / 18 names, glm+deepseek 3488 B / 21 names vs baseline 1454 / 2651 (+837 B all models); name and static-prose parity. Not the F3 replica +8471.",
+  "candidateCommitNote": "Compact candidate 2890f0b9 is source-approved. Compact-bench amendment 9aa4e9a8 is launch-cleared (Claude compact-launch review, 0 blockers; pendingFinalReview false). Parent sequence: rebuild/preflight, then fresh bounded pairs on 3 models, then 72-cell matrix if those gates pass. Historical full 80f74884 and results-20260907.md preserved, unaccepted. Construction: compact luna 2291 B / 18, glm+deepseek 3488 B / 21 vs baseline 1454 / 2651 (+837 B all); name and static-prose parity. Not the F3 replica +8471.",
 
   "models": [
     {
@@ -95,7 +96,7 @@
     "json": true,
     "quiet": true,
     "trials": 3,
-    "costControl": "Default 2 treated + 2 untreated tasks x 3 trials = 72 cells. Pass --trials 2 to cut cost. Report strata separately; untreated tasks measure cost only.",
+    "costControl": "Default 2 treated + 2 untreated tasks x 3 trials = 72 cells. Do not reduce the matrix. Report strata separately; untreated tasks measure cost only.",
     "timeoutMs": 900000,
     "serial": true,
     "rawTraffic": true

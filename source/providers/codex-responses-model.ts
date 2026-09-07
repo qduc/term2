@@ -19,6 +19,7 @@ import type {
 import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
 import { isOrphanedChainedToolOutputError, OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../services/retry/retry-errors.js';
+import { isClassifiedCancellation } from '../services/retry/provider-failure-classification.js';
 import { fingerprintChainRequest } from '../services/retry/chain-recovery-fingerprint.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
@@ -1386,7 +1387,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         // reached the wire; the wire-state decision above still keys off the
         // error as thrown.
         const failure = asProvablyUnsent?.(error) ?? error;
-        if (signal?.aborted && eventCount > 0) {
+        if (signal?.aborted && eventCount > 0 && isClassifiedCancellation(failure)) {
           // An active request can reject from the provider as soon as the
           // application's abort reaches the socket. Preserve the partial raw
           // transcript in the same aborted outcome used when the consumer

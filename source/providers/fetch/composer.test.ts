@@ -1,4 +1,7 @@
 import { it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
@@ -487,6 +490,36 @@ it('createLoggingMiddleware logs response failed on error', async () => {
     },
   });
   expect(logs[0].meta.requestId).toBe(logs[1].meta.requestId);
+});
+
+it('createLoggingMiddleware routes an explicit fetch cancellation to provider abort telemetry', async () => {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-fetch-cancel-'));
+  try {
+    const debug = vi.fn();
+    const error = vi.fn();
+    const loggingService = { debug, warn: vi.fn(), error, getCorrelationId: () => undefined } as any;
+    const providerTraffic = new ProviderTraffic(
+      loggingService,
+      makeSessionContextService(null),
+      new ProviderTrafficArtifactStore({ rootDir }),
+    );
+    const middleware = createLoggingMiddleware({ provider: 'openai', model: 'test-model', providerTraffic });
+    const cancellation = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+    const composed = composeFetch(async () => {
+      throw cancellation;
+    }, [middleware]);
+
+    await expect(composed('https://api.example.test/chat/completions', { method: 'POST', body: '{}' })).rejects.toBe(
+      cancellation,
+    );
+    expect(error).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      'openai request aborted',
+      expect.objectContaining({ eventType: 'stream.aborted', errorKind: 'cancelled' }),
+    );
+  } finally {
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  }
 });
 
 it('createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag', async () => {

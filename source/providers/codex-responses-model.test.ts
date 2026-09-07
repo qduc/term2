@@ -1450,7 +1450,7 @@ it('CodexResponsesWSModel retains the partial transcript of an aborted stream', 
   expect(typeof diagnostics.durationMs).toBe('number');
 });
 
-it('CodexResponsesWSModel retains the partial transcript when an abort interrupts a pending frame', async () => {
+it('CodexResponsesWSModel keeps a concrete failure when abort interrupts a pending frame', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficCalls: Array<{ method: string; args: any }> = [];
   const mockProviderTraffic: IProviderTraffic = {
@@ -1485,6 +1485,7 @@ it('CodexResponsesWSModel retains the partial transcript when an abort interrupt
   };
 
   const controller = new AbortController();
+  const providerFailure = Object.assign(new Error('upstream unavailable'), { status: 503 });
   const model = new CodexResponsesWSModel(
     { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
     'gpt-5-codex',
@@ -1501,12 +1502,77 @@ it('CodexResponsesWSModel retains the partial transcript when an abort interrupt
     value: { type: 'tool_call_streaming_delta', argumentCharCount: '{"type":"update_file"}'.length },
   });
   const pending = iterator.next();
-  controller.abort();
-  await expect(pending).rejects.toThrow();
+  controller.abort(providerFailure);
+  await expect(pending).rejects.toBe(providerFailure);
+
+  expect(trafficCalls.map(({ method }) => method)).toEqual(['recordRequestFailed']);
+  expect(trafficCalls[0]!.args.error).toBe(providerFailure);
+  const diagnostics = trafficCalls[0]!.args.diagnostics;
+  expect(diagnostics.eventCount).toBe(3);
+  expect(diagnostics.progressCategoryCounts).toMatchObject({ tool: 1 });
+  expect(diagnostics.toolArgumentDeltaFrames).toBe(1);
+  expect(diagnostics).not.toHaveProperty('events');
+});
+
+it('CodexResponsesWSModel retains the partial transcript when a pure abort interrupts a pending frame', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart() {},
+    async recordResponseReceived() {},
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+    recordResponseClosed(input: any) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function (request: any) {
+    const events = [
+      { type: 'response.created', response: { id: 'resp_ws_pending_abort_pure' } },
+      { type: 'response.output_item.added', output_item: { type: 'function_call', name: 'apply_patch' } },
+      { type: 'response.function_call_arguments.delta', delta: '{"type":"update_file"}' },
+    ];
+    let index = 0;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          if (index < events.length) return Promise.resolve({ done: false, value: events[index++] });
+          return new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          });
+        },
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  const controller = new AbortController();
+  const cancellation = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    undefined,
+    transport,
+  );
+  const iterator = model.stream({ input: [], tools: [], signal: controller.signal })[Symbol.asyncIterator]();
+
+  await expect(iterator.next()).resolves.toMatchObject({
+    value: { type: 'tool_call_streaming_delta', argumentCharCount: '{"type":"update_file"}'.length },
+  });
+  const pending = iterator.next();
+  controller.abort(cancellation);
+  await expect(pending).rejects.toBe(cancellation);
 
   expect(trafficCalls.map(({ method }) => method)).toEqual(['recordResponseClosed']);
-  const diagnostics = trafficCalls[0]!.args.diagnostics;
   expect(trafficCalls[0]!.args.outcome).toBe('aborted');
+  const diagnostics = trafficCalls[0]!.args.diagnostics;
+  expect(diagnostics.responseId).toBe('resp_ws_pending_abort_pure');
   expect(diagnostics.eventTypeCounts).toMatchObject({
     'response.created': 1,
     'response.output_item.added': 1,

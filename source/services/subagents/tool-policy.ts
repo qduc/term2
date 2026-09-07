@@ -159,20 +159,21 @@ function isValidationCommand(command: string): boolean {
 const MAX_VALIDATION_EXCERPT = 2000;
 
 /**
- * Parse the exit status from a shell tool result string.
- * Shell tool output in this codebase follows the format: `Exit: <number>` or
- * includes `exit code: <number>`. Returns undefined when unparseable.
+ * Parse the terminal status line emitted by the shell tool.
+ *
+ * This deliberately only considers the first line. The remaining output is
+ * command-owned text and can mention exit codes (or claim success) without
+ * being evidence of how the command terminated.
  */
 function parseExitStatus(result: string): number | undefined {
-  const exitMatch = result.match(/\bExit:\s*(\d+)/i) || result.match(/\bexit\s+code:\s*(\d+)/i);
+  const terminalStatus = result.split(/\r?\n/, 1)[0]?.trim() ?? '';
+  const exitMatch = terminalStatus.match(/^exit\s+(\d+)$/i);
   if (exitMatch) return parseInt(exitMatch[1], 10);
-  // Many commands output nothing on success (exit 0).
-  if (!result) return 0;
   return undefined;
 }
 
 function buildValidationEvidence(command: string, result: string): ValidationEvidence {
-  const exitStatus = parseExitStatus(result) ?? 0;
+  const exitStatus = parseExitStatus(result) ?? 'unknown';
   const excerpt =
     result.length > MAX_VALIDATION_EXCERPT ? result.slice(-(MAX_VALIDATION_EXCERPT - 20)) + '\n...(truncated)' : result;
   return { command, exitStatus, outputExcerpt: excerpt };

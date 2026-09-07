@@ -16,6 +16,7 @@ import {
   createMockSettings,
   createSessionContextService,
 } from './test-helpers/subagent-manager-fixtures.js';
+import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
 
 function createDefinition(overrides: Partial<SubagentDefinition>): SubagentDefinition {
   return {
@@ -673,33 +674,73 @@ describe('validation capture (plan D4)', () => {
     expect(isValidationCommand('')).toBe(false);
   });
 
-  it('captureValidationIfMatch records command, exit status from "Exit: N", and excerpt', () => {
+  it('captureValidationIfMatch records the shell terminal exit status and excerpt', () => {
     const capture: ValidationCapture = {};
-    captureValidationIfMatch(capture, 'pnpm vitest run', 'Tests passed\nExit: 0');
+    captureValidationIfMatch(capture, 'pnpm vitest run', 'exit 0\nRuntime: 42ms\nTests passed');
     expect(capture.value).toBeDefined();
     expect(capture.value!.command).toBe('pnpm vitest run');
     expect(capture.value!.exitStatus).toBe(0);
     expect(capture.value!.outputExcerpt).toContain('Tests passed');
   });
 
-  it('captures non-zero exit status from "exit code: N" format', () => {
+  it('captures a non-zero shell exit status', () => {
     const capture: ValidationCapture = {};
-    captureValidationIfMatch(capture, 'npm test', 'FAIL\nexit code: 1');
+    captureValidationIfMatch(capture, 'npm test', 'exit 1\nRuntime: 42ms\nFAIL');
     expect(capture.value!.exitStatus).toBe(1);
   });
 
   it('does NOT overwrite prior validation with a non-validation command', () => {
     const capture: ValidationCapture = {};
-    captureValidationIfMatch(capture, 'pnpm test', 'ok\nExit: 0');
+    captureValidationIfMatch(capture, 'pnpm test', 'exit 0\nok');
     const first = capture.value;
     captureValidationIfMatch(capture, 'ls -la', 'done');
     expect(capture.value).toBe(first); // unchanged
   });
 
-  it('defaults exit status to 0 when no exit marker is found (success output)', () => {
+  it.each([
+    ['a cancelled command', 'cancelled\nRuntime: 42ms\nInterrupted: the command was cancelled before completing.'],
+    [
+      'a timed-out command',
+      'timeout\nRuntime: 42ms\nTerminated: the command reached its timeout budget and was stopped.',
+    ],
+    ['output without terminal evidence', 'all tests passed, nice!'],
+    ['output that only mentions an exit code', 'Tests passed\nexit code: 1'],
+  ])('records unknown rather than success for %s', (_name, result) => {
     const capture: ValidationCapture = {};
-    captureValidationIfMatch(capture, 'pnpm test', 'all tests passed, nice!');
+    captureValidationIfMatch(capture, 'pnpm test', result);
+    expect(capture.value!.exitStatus).toBe('unknown');
+  });
+
+  it('preserves a legitimate shell exit 0 from the shell formatter when command output is empty', async () => {
+    const capture: ValidationCapture = {};
+    const shellResult = await formatShellExecutionOutput({
+      command: 'pnpm test',
+      cwd: process.cwd(),
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    captureValidationIfMatch(capture, 'pnpm test', shellResult.text);
+
     expect(capture.value!.exitStatus).toBe(0);
+  });
+
+  it('reads the terminal outcome emitted by the shell formatter, not Promise fulfillment', async () => {
+    const capture: ValidationCapture = {};
+    const shellResult = await formatShellExecutionOutput({
+      command: 'pnpm test',
+      cwd: process.cwd(),
+      stdout: 'ELIFECYCLE failed',
+      stderr: '',
+      exitCode: 1,
+      timedOut: false,
+    });
+
+    captureValidationIfMatch(capture, 'pnpm test', shellResult.text);
+
+    expect(capture.value?.exitStatus).toBe(1);
   });
 
   it('truncates output excerpt to 2k chars', () => {

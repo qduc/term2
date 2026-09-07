@@ -149,7 +149,8 @@ export interface DiffStatEntry {
  */
 export interface ValidationEvidence {
   command: string;
-  exitStatus: number;
+  /** The shell's terminal exit code, or unknown when it did not terminate normally. */
+  exitStatus: number | 'unknown';
   outputExcerpt: string;
 }
 

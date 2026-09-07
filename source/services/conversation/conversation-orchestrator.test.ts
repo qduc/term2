@@ -207,6 +207,44 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
   });
 
+  it('leaves no streaming bot message behind when the settle finalText is empty', async () => {
+    // Regression: the orchestrator's settle used botResponseUpdater.flush()
+    // after the final event. A text_delta push still pending inside the
+    // 150ms throttle then fired after flushBotText had cleared the live slot
+    // and re-created a streaming bot message; a settle whose finalText was
+    // empty left it in status: 'streaming' forever (static-commit blocker).
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      // First push fires immediately (throttle cold); the second lands
+      // inside the throttle window and stays pending until the settle.
+      options.onEvent({ type: 'text_delta', delta: 'The answer is ' });
+      options.onEvent({ type: 'text_delta', delta: 'X' });
+      return { type: 'response', finalText: '', commandMessages: [] };
+    });
+
+    await orchestrator.sendUserMessage('hello');
+
+    const bots = cfg.messages.getMessages().filter((m) => m.sender === 'bot');
+    expect(bots.every((m) => m.status === 'finalized')).toBe(true);
+    expect(bots.map((m) => m.text)).toContain('The answer is X');
+  });
+
+  it('renders streamed text exactly once when the settle finalText is non-empty', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'text_delta', delta: 'The answer is ' });
+      options.onEvent({ type: 'text_delta', delta: 'X' });
+      return { type: 'response', finalText: 'The answer is X', commandMessages: [] };
+    });
+
+    await orchestrator.sendUserMessage('hello');
+
+    const bots = cfg.messages.getMessages().filter((m) => m.sender === 'bot');
+    expect(bots).toEqual([{ id: expect.any(String), sender: 'bot', status: 'finalized', text: 'The answer is X' }]);
+  });
+
   it('carries workflow-issued input-surge approval with the exact submitted content', async () => {
     const cfg = makeConfig();
     (cfg.conversationService as any).isQueueActive = undefined;

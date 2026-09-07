@@ -190,14 +190,39 @@ it('merges command messages into the response result', () => {
   ]);
 });
 
-it('skips the bot text when finalText is empty/whitespace', () => {
+it('finalizes a live streaming message with its existing text when finalText is empty/whitespace', () => {
+  // Regression: a terminal settle whose finalText is empty used to return
+  // early without touching a live streaming message, leaving it in
+  // status: 'streaming' forever (a static-commit blocker for the session).
   const { options } = makeHarness();
   idCounter = 0;
-  const { next } = computeNextMessages({
+
+  const streamingState = options.streamingState;
+  streamingState.accumulatedText = 'Streamed answer';
+  streamingState.flushedTextLength = 0;
+  streamingState.currentBotMessageId = 'live-bot';
+
+  const prev: Message[] = [{ id: 'live-bot', sender: 'bot', status: 'streaming', text: 'Streamed answer' }];
+
+  const { next, finalizedStreamingMessage } = computeNextMessages({
+    ...options,
+    result: makeResponse({ finalText: '' }),
+    prev,
+  });
+
+  expect(finalizedStreamingMessage).toBe(true);
+  expect(next).toEqual([{ id: 'live-bot', sender: 'bot', status: 'finalized', text: 'Streamed answer' }]);
+});
+
+it('still appends nothing when finalText is empty/whitespace and no live message exists', () => {
+  const { options } = makeHarness();
+  idCounter = 0;
+  const { next, finalizedStreamingMessage } = computeNextMessages({
     ...options,
     result: makeResponse({ finalText: '   \n' }),
     prev: [],
   });
+  expect(finalizedStreamingMessage).toBe(false);
   expect(next).toEqual([]);
 });
 

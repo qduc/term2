@@ -127,15 +127,18 @@ does the following without writing to logs or conversations:
    records by `messageId`.
 2. Joins each finish to the nearest preceding provider response carrying a
    `run_code` function call. Correlated records use `correlationId`; records
-   without one use the same local wall-clock second plus message-ID ordering.
+   without one use the same local wall-clock second. Message IDs are ordered by
+   their embedded epoch; rotation names are only a stable tie-breaker and do
+   not fabricate chronology.
 3. Searches the complete persisted conversation JSONL corpus for the exact
    nested call ID. Direct `tool_started`, `tool_result`, `command_message`,
    and `assistant_journal_item.item` tool-call/result records are accepted.
    `assistant_turn` embedded transcript/history copies are not counted as new
    calls, and duplicate direct copies are retained for validation.
 4. For each direct canonical result, reads the subsequent canonical lifecycle
-   to quote the next observed call/result. Missing direct lifecycle records are
-   reported as inaccessible canonical data, not as a guessed empty result.
+   to quote the next observed call/result. Missing direct lifecycle records,
+   ambiguous joins, and bounded-candidate rows remain explicit; none is
+   presented as a proven join.
 
 Commands used:
 
@@ -143,20 +146,53 @@ Commands used:
 python3 docs/reports/script-failure-ledger-2026-09-07.py \
   > /tmp/script-failure-ledger-2026-09-07.json
 
-jq '{failedCount, joins:(.joins|length), matched:([.joins[]|select(.joinStatus == "matched")]|length), ambiguous:([.joins[]|select(.joinStatus == "ambiguous")]|length), canonicalValidated:.validation.failedTimestamp, errorBodies:.validation.errorBody, noCanonical:([.joins[]|select((.canonical|length)==0 and (.canonicalCandidates|length? // 0)==0)]|length), validation}' \
+jq '{failedCount, joins:(.joins|length), matched:([.joins[]|select(.joinStatus == "matched")]|length), ambiguous:([.joins[]|select(.joinStatus == "ambiguous")]|length), boundedCandidate:([.joins[]|select(.joinStatus == "bounded_candidate")]|length), bodyLocated:.validation.bodyLocated, provenJoins:.validation.provenJoin, skippedFiles, validation}' \
   /tmp/script-failure-ledger-2026-09-07.json
 ```
 
 The complete-corpus rerun returned `failedCount: 66`, `joins: 66`, `matched: 57`,
-`ambiguous: 8`, and `no_execution_start: 1`. It validated matching canonical
-timestamps and result bodies for all `64` previously canonical rows plus one
-new journal-backed row (`65` rows total). The journal lane changed the prior
-two apparent absences to one: the `23:22:26` DeepSeek call is now a direct
-`assistant_journal_item` call/result pair, while `16:46:30` remains an exact
-canonical absence. The eight ambiguous joins are retained as rejected joins;
-the parser does not choose a last parallel call. The one no-execution-start
-join has a canonical result candidate but lacks the required adjacent
-execution-start evidence.
+`ambiguous: 8`, and `bounded_candidate: 1`. It located direct result bodies for
+`64` rows; `62` rows have explicit failure evidence, but only `54` are
+`provenJoin` rows: body location is not proof that the app failure and
+canonical result are the same execution. The bounded
+candidate is the historical five-second candidate-window heuristic; it is not
+reported as an absent execution start, and a long-running script remains
+explicitly unresolved. `skippedFiles` was `[]`.
+
+The eight rejected ambiguous joins and their candidate call IDs are:
+
+| failed finish message ID | candidate call IDs |
+| --- | --- |
+| `msg-1788660621958-23f61a` | `call_nKkSeiyMyVvarDrQqCB5vOpz`, `call_yM115jeDyFW6J7bEz561zp74` |
+| `msg-1788673922975-djoeb0` | `call_00_P1ODVphrL3rZHURPqE3s0169`, `call_00_YTOZBlFRiu9gyf0fOrch3988` |
+| `msg-1788675672809-puz2gg` | `call_00_00UKLTxf9lyy3CTalgJv8306`, `call_00_YCjzCRDoF7tzSnulhiwb4046` |
+| `msg-1788675677609-7xa0yx` | `call_00_00UKLTxf9lyy3CTalgJv8306`, `call_00_L9RQdixozCQCzG8o2vh10532` |
+| `msg-1788684376749-5t0nps` | `call_4c77fe54d7d54e668d51d8cb`, `call_972c2b14de1f46429ed9859a` |
+| `msg-1788710661792-w9bm8u` | `call_00_6JWl0Cq9Uze4293OquZL1108`, `call_00_ET_cEECACPi4mZ2YICJmWQt0890` |
+| `msg-1788714449734-aq0j4q` | `call_0FcD5nG8itMsOmUhUpUyByKp`, `call_yYsHUCRM3eet5MdIU2lBbPyl` |
+| `msg-1788715575319-s7b3b0` | `call_6b1de638594149f7b62c7a55`, `call_8b451af798d94f73b580be57` |
+
+The one bounded candidate is failed finish
+`msg-1788708986902-bvdbay`, candidate `call_01_uhsdcBHyxTa4gqqBLcZ40270`.
+Its canonical rows may be inspected, but the helper does not promote the
+long-running execution across the bounded candidate window to a proven join.
+
+The journal lane changed the prior apparent absence at `23:22:26` to a direct
+`assistant_journal_item` call/result pair. The `16:46:30` row remains an exact
+canonical absence in the report table; this scan does not turn missing data
+into a successful or failed result claim.
+
+Final receipts for this bounded repair:
+
+```text
+python3 docs/reports/test-script-failure-ledger-2026-09-07.py
+Ran 7 tests in 0.003s — OK
+
+python3 docs/reports/script-failure-ledger-2026-09-07.py > /tmp/script-failure-ledger-2026-09-07.json
+jq '{failedCount, joins:(.joins|length), matched:([.joins[]|select(.joinStatus == "matched")]|length), ambiguous:([.joins[]|select(.joinStatus == "ambiguous")]|length), boundedCandidate:([.joins[]|select(.joinStatus == "bounded_candidate")]|length), bodyLocated:.validation.bodyLocated, provenJoins:.validation.provenJoin, skippedFiles, validation}' /tmp/script-failure-ledger-2026-09-07.json
+failedCount 66; joins 66; matched 57; ambiguous 8; boundedCandidate 1;
+bodyLocated 64; provenJoins 54; skippedFiles []
+```
 
 This report does not infer task success, semantic correctness of prior work,
 mitigation adequacy, timeout behavior, or effects beyond the exact canonical

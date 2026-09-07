@@ -38,7 +38,15 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Resume checkpoint (2026-09-07 09:22)
+## Resume checkpoint (2026-09-07, post-gate successor)
+
+Combined gate settled: provider black-box 177 passed/1 skipped (61.08s Vitest); full suite 8320 passed/20 failed/3 expected fail/2 skipped across 626 files (138.40s Vitest). Shell elapsed 206.546s, exit 1. Parent compared all 20 exact failure identities against the 8304-pass baseline: unchanged, no newly failing tests; suite is NOT green. Output `/tmp/qduc/term2-nodejs/tool-output/output-4026698-1788747873755-946b43.txt`. Duplicate notification was not another run. Both completed provider-compaction-debt and conversation-cancellation-telemetry worktrees/branches were removed after clean-status and ancestor checks. Compaction worker-key review is already merged, not outstanding.
+
+Active native workers: provider-cancel-logs (`radiant-grape-458`, worktree same name), script-output-friction (`steady-flora-457`, worktree same name). They own separate provider logging and script output recovery seams; parent verification/integration remains pending. Explorer `mint-lemur-727` completed evidence follow-ups; parent rejected incorrect call joins and verified the two actual canonical results directly. See additional cases in `docs/reports/script-failure-canonical-evidence-2026-09-07.md`. Of original29 body unknowns, five now recovered (including original3): remaining24 projection gaps, not a finalized issue count. Prefix classes with mitigations still lack systematic post-fix outcome evidence.
+
+Still open: remaining24 script bodies; provider stale-anchor outcomes beyondT1; repetitive status UX and shell-probe quoting disposition. Do not confuse worker reports with accepted evidence or normal coding with injected probes. No new final gate is running.
+
+## Earlier resume checkpoint (2026-09-07 09:22)
 
 ALL WORKERS FINISHED. Two final branches now merged: provider-compaction-debt93d61e98 (+df8e1e82 production) and conversation-cancellation-telemetry5a80b669 (+259e2894). Worktrees still exist and need cleanup after validation.
 

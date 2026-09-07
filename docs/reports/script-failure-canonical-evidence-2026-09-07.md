@@ -93,6 +93,15 @@ correct, or whether current diagnostics/guards are adequate after their
 respective merges. No timeout, provider transport, or deliberate probe class
 is supported by these three canonical records.
 
+## Additional parent-verified canonical cases
+
+Two further unknown prefixes were recovered in the successor session. These reduce the original29 unknown bodies to24: the original25 projection gaps minus the recovered unavailable-tool case; the high-call-count case and all three unknown prefixes now have canonical bodies. This is body attribution, not24 unique product defects or proof of mitigation adequacy.
+
+- **2026-09-07 00:05:23 local**, session `34372ad1-9c97-4dbd-9767-b995699af1ef`, call `call_7e42ef21c8ec491eb550ed03`: canonical conversation seq2853-2856 records a script starting with `const txt = require__noop; // not available; use read_file instead`, then `Script failed: require__noop is not defined` and `[no tool calls]`. This was a script-authored undefined reference before either planned read. Seq2945-2947 records recognition of the leftover line and intent to retry without it; that intent alone is not a successful-result receipt. The old missing runtime-location diagnostic was addressed by the separately merged diagnostics follow-up, not by this evidence collection. Worker citations to app lines505-512 were rejected: those lines describe an earlier00:03:53 successful memory retrieval with two calls, not this failure.
+- **2026-09-06 15:25:38 local**, session `ec8bdb0d-1c6f-4617-830d-ade80d5f9758`, call `call_c768ab5d208147ddb69fdeab`: canonical seq49262-49265 at08:25:38Z records `Script failed: unexpected tail: "();\n    });\n  },\n);\n"` and `[1 tool call: read_file]`. The script tested `full.endsWith(");")`, which rejected the trailing newline before the planned `search_replace`. This is an authoring assertion false positive, not a read failure or lost write. It precedes the same-session suspicious-length failure and recovery already traced above. The worker claim that another call (`call_52e67...`) was the original canonical event was not accepted: the direct canonical event establishes `call_c768...`.
+
+Canonical files are under `~/.local/share/term2-nodejs/conversations/<session>.jsonl`. Parent inspected matching event records directly; no production changes or runtime tests were needed for this evidence-only addition.
+
 ## Reproducible bounded queries
 
 The following read-only queries were used (paths are intentionally narrowed to

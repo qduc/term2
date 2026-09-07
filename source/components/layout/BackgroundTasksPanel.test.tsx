@@ -69,6 +69,26 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   expect(output).not.toContain('model');
 });
 
+it.sequential('keeps six-plus tasks to one rendered row each in a short terminal', async () => {
+  const tasks = Array.from({ length: 7 }, (_, index) =>
+    runningTask({
+      runId: `run-${index}`,
+      role: index % 2 === 0 ? 'worker' : 'explorer',
+      task: `inspect background task ${index} and preserve the conversation viewport`,
+      startedAt: 1_000 + index,
+    }),
+  );
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={tasks} now={8_000} columns={40} />);
+  const lines = (renderer.lastFrame() ?? '').split('\n').filter(Boolean);
+
+  // Before the strip was compact, the same seven tasks could render a header,
+  // an observation, and several tool rows per card. The strip is now exactly
+  // one header plus one bounded row per visible task.
+  expect(lines).toHaveLength(8);
+  expect(lines.filter((line) => line.startsWith('• '))).toHaveLength(7);
+  expect(lines.every((line) => line.length <= 40)).toBe(true);
+});
+
 it.sequential('keeps normal context telemetry out of the compact medium-width row', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel
@@ -89,7 +109,7 @@ it.sequential('keeps normal context telemetry out of the compact medium-width ro
   expect(output).not.toContain('Ctx 12.3k');
 });
 
-it.sequential('uses explicit wide, medium, and narrow information budgets without losing task identity', async () => {
+it.sequential('uses explicit wide, medium, and narrow label budgets without expanding task rows', async () => {
   const task = {
     kind: 'subagent' as const,
     id: 'liveness',
@@ -111,12 +131,13 @@ it.sequential('uses explicit wide, medium, and narrow information budgets withou
   };
   {
     const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={11_000} columns={120} />);
-    expect(renderer.lastFrame() ?? '').toContain('no activity observed for 10s');
-    expect(renderer.lastFrame() ?? '').toContain('Ctx 120k / 128k (93.8%)');
+    expect(renderer.lastFrame() ?? '').toContain('Awaiting provider response');
+    expect(renderer.lastFrame() ?? '').not.toContain('no activity observed for 10s');
+    expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={72} />);
     expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures for stalle…');
     expect(renderer.lastFrame() ?? '').toContain(' · Waiting');
-    expect(renderer.lastFrame() ?? '').toContain('Request handed to model runtime');
+    expect(renderer.lastFrame() ?? '').not.toContain('Request handed to model runtime');
     expect(renderer.lastFrame() ?? '').not.toContain('Awaiting provider response');
     expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={71} />);
@@ -128,71 +149,63 @@ it.sequential('uses explicit wide, medium, and narrow information budgets withou
   }
 });
 
-it.sequential(
-  'shows tool-call count and model on wide rows, and colors a stalled task apart from a fresh one',
-  async () => {
-    const stalled = {
-      kind: 'subagent' as const,
-      id: 'stalled-worker',
-      role: 'explorer',
-      task: 'audit provider fixtures for stalled request boundaries',
-      taskPreview: 'audit provider fixtures for stalled request boundaries',
-      status: 'running' as const,
-      startedAt: 1_000,
-      elapsedMs: 10_000,
-      toolCounts: { grep: 3, read_file: 4 },
-      model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
-      activity: {
-        phase: 'waiting' as const,
-        reason: 'provider' as const,
-        lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
-        liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
-      },
-    };
-    const fresh = {
-      ...stalled,
-      id: 'fresh-worker',
-      toolCounts: { grep: 1 },
-      activity: {
-        ...stalled.activity,
-        liveness: { state: 'recent' as const, lastObservedAt: 10_500, ageMs: 500 },
-      },
-    };
+it.sequential('keeps liveness and model telemetry in the manager instead of expanding strip rows', async () => {
+  const stalled = {
+    kind: 'subagent' as const,
+    id: 'stalled-worker',
+    role: 'explorer',
+    task: 'audit provider fixtures for stalled request boundaries',
+    taskPreview: 'audit provider fixtures for stalled request boundaries',
+    status: 'running' as const,
+    startedAt: 1_000,
+    elapsedMs: 10_000,
+    toolCounts: { grep: 3, read_file: 4 },
+    model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'provider' as const,
+      lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+      liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
+    },
+  };
+  const fresh = {
+    ...stalled,
+    id: 'fresh-worker',
+    toolCounts: { grep: 1 },
+    activity: {
+      ...stalled.activity,
+      liveness: { state: 'recent' as const, lastObservedAt: 10_500, ageMs: 500 },
+    },
+  };
 
-    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[stalled, fresh]} now={11_000} columns={120} />);
-    const output = renderer.lastFrame() ?? '';
-    expect(output).toContain('7 tools');
-    expect(output).toContain('1 tool');
-    expect(output).not.toContain('1 tools');
-    expect(output).toContain('gpt-4o');
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[stalled, fresh]} now={11_000} columns={120} />);
+  const output = renderer.lastFrame() ?? '';
+  expect(output.split('\n').filter((line) => line.startsWith('• '))).toHaveLength(2);
+  expect(output).not.toContain('7 tools');
+  expect(output).not.toContain('gpt-4o');
+  expect(output).not.toContain('no activity observed for 10s');
+});
 
-    expect(output).toContain('no activity observed for 10s');
-    expect(output).toContain('0s ago');
-  },
-);
-
-it.sequential(
-  'shows the last output line of a running shell task in place of the generic observation text',
-  async () => {
-    const task = {
-      kind: 'shell' as const,
-      id: 'output-preview',
-      command: 'pnpm build',
-      status: 'running' as const,
-      startedAt: 1_000,
-      output: 'compiling module a\ncompiling module b\n\n',
-      activity: {
-        phase: 'active' as const,
-        lastObservation: { kind: 'shell_output_received' as const, at: 1_000 },
-        liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 500 },
-      },
-    };
-    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={1_500} columns={120} />);
-    const output = renderer.lastFrame() ?? '';
-    expect(output).toContain('"compiling module b"');
-    expect(output).not.toContain('Shell output received');
-  },
-);
+it.sequential('keeps shell output out of the compact strip', async () => {
+  const task = {
+    kind: 'shell' as const,
+    id: 'output-preview',
+    command: 'pnpm build',
+    status: 'running' as const,
+    startedAt: 1_000,
+    output: 'compiling module a\ncompiling module b\n\n',
+    activity: {
+      phase: 'active' as const,
+      lastObservation: { kind: 'shell_output_received' as const, at: 1_000 },
+      liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 500 },
+    },
+  };
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={1_500} columns={120} />);
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('[Shell] pnpm build');
+  expect(output).not.toContain('compiling module b');
+  expect(output).not.toContain('Shell output received');
+});
 
 it.each([
   {
@@ -287,11 +300,10 @@ it.each([
     },
     identity: 'wide_identity',
     phase: 'Awaiting provider response',
-    context: 'Ctx 120k / 128k (93.8%)',
   },
 ])(
   'reserves identity and phase within a real $columns-column Ink layout',
-  ({ columns, task, identity, phase, foreground, context }) => {
+  ({ columns, task, identity, phase, foreground }) => {
     const tasks = (Array.isArray(task) ? task : [task]) as React.ComponentProps<typeof BackgroundTasksPanel>['tasks'];
     const output = renderToString(<BackgroundTasksPanel tasks={tasks} now={11_000} columns={columns} />, { columns });
     const taskLine = output.split('\n').find((line) => line.startsWith('• ')) ?? '';
@@ -299,7 +311,6 @@ it.each([
     expect(taskLine).toContain(phase);
     expect(taskLine.length).toBeLessThanOrEqual(columns);
     if (foreground) expect(taskLine).toContain('foreground');
-    if (context) expect(output).toContain(context);
     for (const line of output.split('\n')) expect(line.length).toBeLessThanOrEqual(columns);
   },
 );
@@ -322,7 +333,7 @@ it.sequential('keeps long task labels compact', async () => {
   expect(output).not.toContain(longTask.trim());
 });
 
-it.sequential('nests the most recent tool call under its running task', async () => {
+it.sequential('does not render a tool row for a task with recent tool activity', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel
       tasks={[runningTask({ lastTool: { label: 'grep "TODO" src/', state: 'running' } })]}
@@ -330,102 +341,10 @@ it.sequential('nests the most recent tool call under its running task', async ()
     />,
   );
 
-  const lines = (renderer.lastFrame() ?? '').split('\n');
-  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
-  const toolLine = lines[taskLine + 1] ?? '';
-
-  expect(toolLine).toContain('└');
-  expect(toolLine).toContain('▶');
-  expect(toolLine).toContain('grep "TODO" src/');
-  expect(toolLine.indexOf('└')).toBeGreaterThan(lines[taskLine]!.indexOf('•'));
-});
-
-it.sequential('nests the last three tool calls under its running task, one line each', async () => {
-  const renderer = await renderInAct(
-    <BackgroundTasksPanel
-      tasks={[
-        runningTask({
-          lastTool: { label: 'glob pattern=**/*.ts', state: 'running' },
-          recentTools: [
-            { label: 'grep "TODO" src/', state: 'success' },
-            { label: 'read_file path=source/app.ts', state: 'success' },
-            { label: 'glob pattern=**/*.ts', state: 'running' },
-          ],
-        }),
-      ]}
-      now={1_000}
-    />,
-  );
-
-  const lines = (renderer.lastFrame() ?? '').split('\n');
-  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
-  const toolLines = lines.slice(taskLine + 1, taskLine + 4);
-
-  expect(toolLines).toHaveLength(3);
-  expect(toolLines[0]).toContain('✔');
-  expect(toolLines[0]).toContain('grep "TODO" src/');
-  expect(toolLines[1]).toContain('read_file path=source/app.ts');
-  expect(toolLines[2]).toContain('▶');
-  expect(toolLines[2]).toContain('glob pattern=**/*.ts');
-  expect(toolLines[2]).toContain('└');
-});
-
-it.sequential('renders recent tool calls for a control task', async () => {
-  const controlTask = {
-    kind: 'subagent' as const,
-    id: 'sub-1',
-    role: 'explorer',
-    task: 'inspect source',
-    taskPreview: 'inspect source',
-    status: 'running' as const,
-    startedAt: 1_000,
-    elapsedMs: 1_000,
-    toolCounts: { glob: 1, read_file: 1 },
-    lastTool: { label: 'glob pattern=**/*.ts', state: 'running' as const },
-    recentTools: [
-      { label: 'read_file path=source/app.ts', state: 'success' as const },
-      { label: 'glob pattern=**/*.ts', state: 'running' as const },
-    ],
-  };
-  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[controlTask]} now={2_000} />);
-  const lines = (renderer.lastFrame() ?? '').split('\n');
-  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
-  const toolLines = lines.slice(taskLine + 1).filter((line) => line.includes('read_file') || line.includes('glob'));
-  expect(toolLines).toHaveLength(2);
-  expect(toolLines[0]).toContain('✔');
-  expect(toolLines[0]).toContain('read_file path=source/app.ts');
-  expect(toolLines[1]).toContain('▶');
-  expect(toolLines[1]).toContain('glob pattern=**/*.ts');
-});
-
-it.sequential('marks a settled tool call with its outcome', async () => {
-  const renderer = await renderInAct(
-    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'success' } })]} now={1_000} />,
-  );
-  expect(renderer.lastFrame() ?? '').toContain('✔ pnpm test');
-
-  await rerenderInAct(
-    renderer,
-    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'failed' } })]} now={1_000} />,
-  );
-  expect(renderer.lastFrame() ?? '').toContain('✖ pnpm test');
-});
-
-it.sequential('keeps long tool labels compact', async () => {
-  const longLabel = `grep "${'pattern-fragment '.repeat(10)}" source/`;
-  const renderer = await renderInAct(
-    <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: longLabel, state: 'running' } })]} now={1_000} />,
-  );
-
   const output = renderer.lastFrame() ?? '';
-  expect(output).toContain('…');
-  expect(output).not.toContain(longLabel);
-});
-
-it.sequential('omits the tool line for a task with no observed tool activity', async () => {
-  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[runningTask()]} now={1_000} />);
-
-  expect(renderer.lastFrame() ?? '').not.toContain('└');
+  expect(output).toContain('Explorer');
+  expect(output).not.toContain('└');
+  expect(output).not.toContain('grep "TODO" src/');
 });
 
 it.sequential('shows a concise recently completed indication without counting it as active', async () => {
@@ -495,90 +414,88 @@ it.sequential(
   },
 );
 
-it.sequential(
-  'distinguishes observed activity, provider waits, quiet work, and confirmed terminal failure',
-  async () => {
-    const renderer = await renderInAct(
-      <BackgroundTasksPanel
-        tasks={
-          [
-            {
-              kind: 'subagent',
-              id: 'active',
-              role: 'explorer',
-              task: 'observe activity',
-              taskPreview: 'observe activity',
-              status: 'running',
-              startedAt: 1_000,
-              elapsedMs: 2_000,
-              toolCounts: {},
-              activity: {
-                phase: 'active',
-                lastObservation: { kind: 'text_received', at: 2_000 },
-                liveness: { state: 'recent', lastObservedAt: 2_000, ageMs: 2_000 },
-              },
+it.sequential('keeps activity observations and terminal errors to one row per task', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={
+        [
+          {
+            kind: 'subagent',
+            id: 'active',
+            role: 'explorer',
+            task: 'observe activity',
+            taskPreview: 'observe activity',
+            status: 'running',
+            startedAt: 1_000,
+            elapsedMs: 2_000,
+            toolCounts: {},
+            activity: {
+              phase: 'active',
+              lastObservation: { kind: 'text_received', at: 2_000 },
+              liveness: { state: 'recent', lastObservedAt: 2_000, ageMs: 2_000 },
             },
-            {
-              kind: 'subagent',
-              id: 'waiting',
-              role: 'explorer',
-              task: 'wait for provider',
-              taskPreview: 'wait for provider',
-              status: 'running',
-              startedAt: 1_000,
-              elapsedMs: 3_000,
-              toolCounts: {},
-              activity: {
-                phase: 'waiting',
-                reason: 'provider',
-                lastObservation: { kind: 'request_dispatched', at: 3_000 },
-                liveness: { state: 'recent', lastObservedAt: 3_000, ageMs: 1_000 },
-              },
+          },
+          {
+            kind: 'subagent',
+            id: 'waiting',
+            role: 'explorer',
+            task: 'wait for provider',
+            taskPreview: 'wait for provider',
+            status: 'running',
+            startedAt: 1_000,
+            elapsedMs: 3_000,
+            toolCounts: {},
+            activity: {
+              phase: 'waiting',
+              reason: 'provider',
+              lastObservation: { kind: 'request_dispatched', at: 3_000 },
+              liveness: { state: 'recent', lastObservedAt: 3_000, ageMs: 1_000 },
             },
-            {
-              kind: 'shell',
-              id: 'quiet-shell',
-              command: 'tail -f log',
-              status: 'running',
-              startedAt: 1_000,
-              activity: {
-                phase: 'active',
-                lastObservation: { kind: 'shell_output_received', at: 1_000 },
-                liveness: { state: 'quiet', lastObservedAt: 1_000, ageMs: 3_000 },
-              },
+          },
+          {
+            kind: 'shell',
+            id: 'quiet-shell',
+            command: 'tail -f log',
+            status: 'running',
+            startedAt: 1_000,
+            activity: {
+              phase: 'active',
+              lastObservation: { kind: 'shell_output_received', at: 1_000 },
+              liveness: { state: 'quiet', lastObservedAt: 1_000, ageMs: 3_000 },
             },
-            {
-              kind: 'subagent',
-              id: 'failed',
-              role: 'worker',
-              task: 'fail',
-              taskPreview: 'fail',
-              status: 'failed',
-              startedAt: 1_000,
-              elapsedMs: 4_000,
-              toolCounts: {},
-              activity: {
-                phase: 'settled',
-                lastObservation: { kind: 'settled', at: 4_000 },
-                liveness: { state: 'recent', lastObservedAt: 4_000, ageMs: 0 },
-              },
-              error: 'exit 1',
+          },
+          {
+            kind: 'subagent',
+            id: 'failed',
+            role: 'worker',
+            task: 'fail',
+            taskPreview: 'fail',
+            status: 'failed',
+            startedAt: 1_000,
+            elapsedMs: 4_000,
+            toolCounts: {},
+            activity: {
+              phase: 'settled',
+              lastObservation: { kind: 'settled', at: 4_000 },
+              liveness: { state: 'recent', lastObservedAt: 4_000, ageMs: 0 },
             },
-          ] as any
-        }
-        now={4_000}
-      />,
-    );
+            error: 'exit 1',
+          },
+        ] as any
+      }
+      now={4_000}
+    />,
+  );
 
-    const output = renderer.lastFrame() ?? '';
-    expect(output).toContain('Active');
-    expect(output).toContain('Waiting');
-    expect(output).toContain('Text received');
-    expect(output).toContain('Shell output received');
-    expect(output).toContain('Failed · terminal');
-    expect(output).not.toContain('hung');
-  },
-);
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('Active');
+  expect(output).toContain('Waiting');
+  expect(output).toContain('Failed · terminal');
+  expect(output).not.toContain('Text received');
+  expect(output).not.toContain('Shell output received');
+  expect(output).not.toContain('hung');
+  expect(output.split('\n').filter((line) => line.startsWith('• '))).toHaveLength(4);
+});
 
 it.sequential('drops each settled row once its linger expires, leaving still-running rows', async () => {
   const finished = runningTask({ runId: 'run-done', task: 'finished work', status: 'completed' });

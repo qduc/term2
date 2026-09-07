@@ -1707,6 +1707,78 @@ it('CodexResponsesWSModel chains Luna turns when the caller omits previousRespon
   ]);
 });
 
+it('CodexResponsesWSModel drops Luna server history at a native compaction boundary', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordResponseClosed() {},
+    recordRequestFailed() {},
+  };
+
+  transport.fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: `resp_compaction_boundary_${responseCount}`,
+          output: responseCount === 1 ? [{ type: 'function_call', call_id: 'call-debt', name: 'shell' }] : [],
+          usage: {},
+        },
+      },
+    ]);
+  };
+  transport.compactHistory = async () => ({
+    history: [
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp-boundary', encrypted_content: 'opaque' },
+      },
+    ],
+  });
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    {
+      getContext: () =>
+        ({ sessionId: 'session-luna-compaction-boundary', traceId: 'trace-luna-compaction-boundary' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    } as any,
+    transport,
+  );
+
+  await collect(
+    model.stream({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'before compaction' }] }],
+      tools: [],
+    } as any),
+  );
+  await model.compactHistory({ input: [] });
+  await collect(
+    model.stream({
+      input: [{ type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-boundary' } }],
+      tools: [],
+    } as any),
+  );
+
+  expect(trafficBodies).toHaveLength(2);
+  expect(trafficBodies[1].previous_response_id).toBeUndefined();
+  expect(trafficBodies[1].input).toEqual([
+    expect.objectContaining({ type: 'additional_tools', role: 'developer' }),
+    expect.objectContaining({ type: 'compaction', id: 'cmp-boundary' }),
+  ]);
+});
+
 it('CodexResponsesWSModel does not replay a Luna tool transcript when server output differs from restored history', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];

@@ -1,0 +1,91 @@
+{
+  "program": "tool-interface-stage-gates",
+  "stage": "stage1",
+  "question": "Does the combined Stage1 treatment improve real-model correctness enough to outweigh a larger run_code header?",
+  "combinedTreatment": {
+    "declared": true,
+    "parts": [
+      "catalog expansion: compact signature + short purpose + declared return shape for every scriptable tools.* member instead of names-only nonessentials",
+      "honest schema fallback: unconvertible schemas render an explicit marker instead of a bogus zero-argument signature",
+      "model-visible schema lookup telemetry: successful tools.describe counts appear on the run_code result summary (N1 KEEP)"
+    ],
+    "causality": "Do not claim isolated catalog-expansion causality. Arm B differs by the whole combined treatment. Lookup telemetry is model-visible and can shape describe behavior.",
+    "n1Decision": "KEEP model-visible schema lookup telemetry as part of the treatment."
+  },
+  "priorDecision": {
+    "source": "docs/plans/run-code-authoring-friction.md",
+    "status": "reopened-for-tri-model-measurement",
+    "claimedMeasurement": "Promoting full signatures for all non-essential tools was measured at ~3.9x header growth (honest delta +8,080 chars over the exact rendered registry). Header stayed names-only; signatures taught at failure time.",
+    "caveat": "That figure is a plan-doc hint, covers signatures only, and was already wrong once when a receipt used a 9-tool-larger stub registry (+10,482). Stage1 must re-measure the combined header (signature + purpose + declared returns) against the exact production non-interactive registry. Do not treat any declaration-site count as fact.",
+    "supersedeOnlyIf": "The three-model comparison shows a correctness win that outweighs the combined header growth. A candidate that improves tokens/time while reducing correctness on any pinned model is rejected before efficiency claims."
+  },
+  "baselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
+  "originalBaselineCommit": "76e51d2497a2009f6011c15b694e201a08e9de79",
+  "previousAcceptedStage": null,
+  "candidateWorktree": "/home/qduc/term2/.worktrees/tool-interface-stage1",
+  "candidateCommitReviewed": "c9a47777b5f88c3059f470660294eca5381a4854",
+  "candidateCommitFinal": null,
+  "candidateCommitNote": "c9a47777 is NOT final. Agy is correcting tests/schema-root fallback. Do not launch paid cells until a final hash is recorded and protocol review passes.",
+  "models": [
+    {
+      "id": "luna",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "glm",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "deepseek",
+      "provider": "DeepSeek",
+      "model": "deepseek-v4-flash",
+      "reasoningEffort": "medium"
+    }
+  ],
+  "settingsPin": {
+    "app.liteMode": false,
+    "app.planMode": false,
+    "app.mentorMode": false,
+    "app.orchestratorMode": false,
+    "app.searchViaShell": "auto",
+    "enable_agent_workflow": false,
+    "sandbox.enabled": true,
+    "logging.debugLogging": true,
+    "logging.logLevel": "debug"
+  },
+  "driver": {
+    "mode": "non-interactive-cli",
+    "autoApprove": true,
+    "json": true,
+    "quiet": true,
+    "trials": 3,
+    "timeoutMs": 900000,
+    "serial": true,
+    "rawTraffic": true
+  },
+  "primaryMetrics": ["taskCorrectness", "combinedHeaderBytes", "perTurnPromptTokens"],
+  "secondaryMetrics": [
+    "describeLookups",
+    "invalidParamsAttempted",
+    "unknownToolAttempted",
+    "recordedNestedCalls",
+    "admittedNestedCallsKnown",
+    "resultHandlingFailures",
+    "resultHandlingRecoveries",
+    "withinArmCacheReadTokens",
+    "costUsdIfKnown",
+    "wallTimeMs"
+  ],
+  "exclusions": [
+    "session_list/session_search/session_read (non-interactive CLI does not pass sessionBrowser)",
+    "ask_user (allowAskUser false)",
+    "background shell job tools (allowBackgroundShell false)",
+    "session_rollover",
+    "web_search/web_fetch as required actions (network/cost/flake; tools remain on the real registry)",
+    "paid subagent fan-out as a required action"
+  ]
+}

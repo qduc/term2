@@ -1,0 +1,32 @@
+{
+  "id": "memory-billing-contact",
+  "family": "memory-retrieval",
+  "title": "Recover a billing contact from project memory",
+  "memory": {
+    "global": [
+      {
+        "id": "global-decoy-oncall",
+        "title": "Global on-call rotation",
+        "summary": "Weekend on-call is unrelated to Northwind billing.",
+        "tags": ["ops"],
+        "content": "Global on-call handle is pike-lantern-4. This is not a billing contact."
+      }
+    ],
+    "project": [
+      {
+        "id": "northwind-billing",
+        "title": "Northwind billing contact",
+        "summary": "Project billing contact identifier for Northwind invoices.",
+        "tags": ["billing", "northwind"],
+        "content": "The Northwind billing contact identifier is ora-keel-19. Use this identifier on invoices."
+      },
+      {
+        "id": "northwind-support",
+        "title": "Northwind support queue",
+        "summary": "Support queue name, not billing.",
+        "tags": ["support"],
+        "content": "Northwind support queue is queue-maple-3."
+      }
+    ]
+  }
+}

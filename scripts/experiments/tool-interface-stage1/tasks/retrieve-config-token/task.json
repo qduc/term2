@@ -1,0 +1,5 @@
+{
+  "id": "retrieve-config-token",
+  "family": "filesystem-read",
+  "title": "Recover a service release channel from workspace files"
+}

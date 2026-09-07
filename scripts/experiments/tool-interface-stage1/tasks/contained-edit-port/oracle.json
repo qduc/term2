@@ -1,0 +1,8 @@
+{
+  "kind": "file-json-subset",
+  "path": "config/gateway.json",
+  "subset": {
+    "listenPort": 9417,
+    "name": "gateway"
+  }
+}

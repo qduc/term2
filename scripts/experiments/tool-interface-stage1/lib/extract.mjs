@@ -1,0 +1,211 @@
+/** Extract metrics from a completed cell's conversation, logs, and run_code scripts. */
+
+const DESCRIBE_CALL = /tools\.describe\s*\(/g;
+const NESTED_CALL = /tools\.([A-Za-z0-9_]+)\s*\(/g;
+const INVALID_PARAMS = /Invalid parameters for "([^"]+)"/g;
+const UNKNOWN_TOOL = /Unknown tool "([^"]+)"/g;
+const SCHEMA_DIRECT = /Tool input did not match schema for ([A-Za-z0-9_]+)/g;
+const CALL_SUMMARY = /\[(\d+) tool calls?: ([^\]]*)\]/;
+const SCHEMA_LOOKUPS = /;\s*(\d+) schema lookups?/;
+const RESULT_FAILURE_PREFIXES = [
+  'Error:',
+  'Script failed',
+  'Script timed out',
+  'Script was cancelled',
+  'Script exceeded its deadline',
+];
+
+export function countMatches(text, regex) {
+  const source = regex.flags.includes('g') ? regex : new RegExp(regex.source, regex.flags + 'g');
+  return [...String(text).matchAll(source)].length;
+}
+
+export function extractNestedCallMetrics(scriptSource, resultText) {
+  const code = typeof scriptSource === 'string' ? scriptSource : '';
+  const result = typeof resultText === 'string' ? resultText : '';
+  const describeLookups = countMatches(code, DESCRIBE_CALL);
+  const nestedNames = [];
+  for (const match of code.matchAll(NESTED_CALL)) {
+    nestedNames.push(match[1]);
+  }
+  const attemptedNestedCalls = nestedNames.length;
+  const attemptedNonDescribe = nestedNames.filter((name) => name !== 'describe').length;
+  const invalidParamsAttempted = countMatches(result, INVALID_PARAMS);
+  const unknownToolAttempted = countMatches(result, UNKNOWN_TOOL);
+  const summary = result.match(CALL_SUMMARY);
+  const recordedNestedCalls = summary ? Number(summary[1]) : null;
+  const schemaLookupMatch = result.match(SCHEMA_LOOKUPS);
+  const modelVisibleSchemaLookups = schemaLookupMatch ? Number(schemaLookupMatch[1]) : null;
+  // describe is not recorded. invalid_params/unknown_tool are recorded but not admitted.
+  // Admitted count is therefore not recoverable from the user-visible summary alone.
+  const admittedNestedCallsKnown = false;
+  const admittedNestedCalls = null;
+  const scriptFailed = RESULT_FAILURE_PREFIXES.some((prefix) => result.startsWith(prefix));
+  const nestedErrorInResult = /\nResult:\n[\s\S]*\b(Error:|failed:)/.test('\n' + result) || result.includes('tools.');
+  return {
+    describeLookups,
+    attemptedNestedCalls,
+    attemptedNonDescribe,
+    invalidParamsAttempted,
+    unknownToolAttempted,
+    recordedNestedCalls,
+    modelVisibleSchemaLookups,
+    admittedNestedCallsKnown,
+    admittedNestedCalls,
+    scriptFailed,
+  };
+}
+
+export function extractRunCodeSources(events) {
+  const scripts = [];
+  const results = [];
+  for (const event of events) {
+    if (event.type === 'tool_started' && event.toolName === 'run_code') {
+      const args = event.arguments;
+      const code = args && typeof args === 'object' ? args.code : typeof args === 'string' ? args : '';
+      scripts.push(typeof code === 'string' ? code : '');
+    }
+    if (event.type === 'command_message' && event.message?.toolName === 'run_code') {
+      results.push(typeof event.message?.output === 'string' ? event.message.output : '');
+    }
+    if (event.type === 'tool_result' && event.toolName === 'run_code') {
+      if (typeof event.output === 'string') results.push(event.output);
+    }
+  }
+  return { scripts, results };
+}
+
+export function extractSessionIdentity(events) {
+  const init = events.find((event) => event.type === 'session_init') ?? {};
+  return {
+    sessionId: typeof init.id === 'string' ? init.id : null,
+    provider: typeof init.provider === 'string' ? init.provider : null,
+    model: typeof init.model === 'string' ? init.model : null,
+    reasoningEffort: typeof init.reasoningEffort === 'string' ? init.reasoningEffort : null,
+    projectPath: typeof init.projectPath === 'string' ? init.projectPath : null,
+  };
+}
+
+export function extractUsage(events) {
+  const turns = events.filter((event) => event.type === 'assistant_turn');
+  const perTurnPromptTokens = [];
+  const perTurnCacheReadTokens = [];
+  let lastUsage = null;
+  let costUsdMicros = null;
+  let costKnown = false;
+  for (const turn of turns) {
+    const usage = turn.usage ?? turn.displayUsage ?? null;
+    if (usage && typeof usage.prompt_tokens === 'number') {
+      perTurnPromptTokens.push(usage.prompt_tokens);
+    } else {
+      perTurnPromptTokens.push(null);
+    }
+    if (usage && typeof usage.cache_read_tokens === 'number') {
+      perTurnCacheReadTokens.push(usage.cache_read_tokens);
+    } else {
+      perTurnCacheReadTokens.push(null);
+    }
+    lastUsage = usage ?? lastUsage;
+    if (Array.isArray(turn.costRecords)) {
+      for (const record of turn.costRecords) {
+        if (record && typeof record.usdMicros === 'number') {
+          costUsdMicros = (costUsdMicros ?? 0) + record.usdMicros;
+          costKnown = true;
+        }
+      }
+    }
+  }
+  return {
+    turnCount: turns.length,
+    perTurnPromptTokens,
+    perTurnCacheReadTokens,
+    promptTokensSum: sumKnown(perTurnPromptTokens),
+    cacheReadTokensSum: sumKnown(perTurnCacheReadTokens),
+    lastUsage,
+    costUsdMicros: costKnown ? costUsdMicros : null,
+    costKnown,
+  };
+}
+
+function sumKnown(values) {
+  const known = values.filter((value) => typeof value === 'number');
+  if (known.length === 0) return null;
+  return known.reduce((sum, value) => sum + value, 0);
+}
+
+export function extractDirectSchemaFailures(events) {
+  let count = 0;
+  for (const event of events) {
+    const output =
+      event.type === 'command_message' && typeof event.message?.output === 'string'
+        ? event.message.output
+        : event.type === 'tool_result' && typeof event.output === 'string'
+          ? event.output
+          : '';
+    count += countMatches(output, SCHEMA_DIRECT);
+  }
+  return count;
+}
+
+export function extractResultHandling(events) {
+  const { scripts, results } = extractRunCodeSources(events);
+  let failures = 0;
+  let recoveries = 0;
+  for (let index = 0; index < results.length; index += 1) {
+    const metrics = extractNestedCallMetrics(scripts[index] ?? '', results[index]);
+    if (metrics.scriptFailed || metrics.invalidParamsAttempted > 0 || metrics.unknownToolAttempted > 0) {
+      failures += 1;
+      const laterSuccess = results.slice(index + 1).some((text) => {
+        const later = extractNestedCallMetrics('', text);
+        return !later.scriptFailed && later.invalidParamsAttempted === 0 && later.unknownToolAttempted === 0;
+      });
+      if (laterSuccess) recoveries += 1;
+    }
+  }
+  return { resultHandlingFailures: failures, resultHandlingRecoveries: recoveries, runCodeCalls: results.length };
+}
+
+export function extractCellMetrics({ events, wallTimeMs, headerSnapshot }) {
+  const identity = extractSessionIdentity(events);
+  const usage = extractUsage(events);
+  const { scripts, results } = extractRunCodeSources(events);
+  const nested = scripts.map((script, index) => extractNestedCallMetrics(script, results[index] ?? ''));
+  const handling = extractResultHandling(events);
+  const describeLookups = nested.reduce((sum, row) => sum + row.describeLookups, 0);
+  const invalidParamsAttempted = nested.reduce((sum, row) => sum + row.invalidParamsAttempted, 0);
+  const unknownToolAttempted = nested.reduce((sum, row) => sum + row.unknownToolAttempted, 0);
+  const recordedNestedCalls = nested.reduce((sum, row) => sum + (row.recordedNestedCalls ?? 0), 0);
+  const modelVisibleSchemaLookups = nested.reduce((sum, row) => {
+    return sum + (typeof row.modelVisibleSchemaLookups === 'number' ? row.modelVisibleSchemaLookups : 0);
+  }, 0);
+  const modelVisibleSchemaLookupsPresent = nested.some((row) => row.modelVisibleSchemaLookups != null);
+  return {
+    identity,
+    usage,
+    headerSnapshot: headerSnapshot ?? null,
+    describeLookups,
+    invalidParamsAttempted,
+    unknownToolAttempted,
+    directSchemaFailures: extractDirectSchemaFailures(events),
+    recordedNestedCalls,
+    describeLookupsFromScript: describeLookups,
+    modelVisibleSchemaLookups: modelVisibleSchemaLookupsPresent ? modelVisibleSchemaLookups : null,
+    admittedNestedCallsKnown: false,
+    admittedNestedCalls: null,
+    admittedNestedNote:
+      'describe lookups are not recorded; invalid_params and unknown_tool are recorded but not admitted. Admitted executions are not separately visible in conversation output.',
+    ...handling,
+    wallTimeMs: typeof wallTimeMs === 'number' ? wallTimeMs : null,
+    toolStarted: events.filter((event) => event.type === 'tool_started').map((event) => event.toolName),
+  };
+}
+
+export function modelMatchesPin(identity, pin) {
+  if (!identity?.provider || !identity?.model) return false;
+  if (identity.provider !== pin.provider) return false;
+  if (identity.model !== pin.model) return false;
+  if (pin.reasoningEffort && identity.reasoningEffort && identity.reasoningEffort !== pin.reasoningEffort) {
+    return false;
+  }
+  return true;
+}

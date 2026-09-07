@@ -165,7 +165,7 @@ describe('SubagentToolFactory search tool descriptions', () => {
   }
 
   it('references shell for file listing when glob is not registered (searchViaShell)', () => {
-    const definition = createDefinition({ role: 'explorer', canRead: true, canRunShell: true, model: 'gpt-4o' });
+    const definition = createDefinition({ role: 'worker', canRead: true, canRunShell: true, model: 'gpt-4o' });
     const tools = buildTools(definition, true);
     const toolNames = tools.map((tool) => tool.name);
 
@@ -177,6 +177,29 @@ describe('SubagentToolFactory search tool descriptions', () => {
     const codeContextTool = tools.find((tool) => tool.name === 'code_context_search');
     expect(codeContextTool?.description).toContain('use shell');
     expect(codeContextTool?.description).not.toContain('use glob');
+  });
+
+  it('keeps dedicated search tools as a fallback for a read-only explorer', () => {
+    const definition = createDefinition({
+      role: 'explorer',
+      canRead: true,
+      canWrite: false,
+      canRunShell: true,
+      model: 'gpt-5',
+    });
+    const tools = buildTools(definition, true);
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain('shell');
+    expect(toolNames).toContain('grep');
+    expect(toolNames).toContain('glob');
+
+    const grepTool = tools.find((tool) => tool.name === 'grep');
+    const codeContextTool = tools.find((tool) => tool.name === 'code_context_search');
+    expect(grepTool?.description).toContain('use tools.glob(...)');
+    expect(grepTool?.description).not.toContain('use shell');
+    expect(codeContextTool?.description).toContain('use tools.glob(...)');
+    expect(codeContextTool?.description).not.toContain('use shell');
   });
 
   it('references glob for file listing when glob is registered', () => {

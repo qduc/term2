@@ -21,31 +21,85 @@ describe('renderToolsHeader', () => {
     expect(text).toContain('- tools.read_file({ path: string, limit?: number, raw?: boolean }) — Read a file');
   });
 
-  it('shows full shapes only for essential tools and names other tools for on-demand lookup', () => {
+  it('keeps essential detailed entries and compact Other-tool input signatures without purpose or returns', () => {
     const text = header([
       tool({
         name: 'read_file',
+        description: 'Read a file',
         parameters: z.object({ path: z.string(), start_line: z.number().optional() }),
+        scriptedReturnShape: '{ content: string }',
       }),
       tool({
         name: 'web_search',
         description: 'Search the web',
-        parameters: z.object({ query: z.string(), domains: z.array(z.string()).optional() }),
+        parameters: z.object({
+          query: z.string(),
+          domains: z.array(z.string()).optional(),
+          mode: z.enum(['fast', 'deep']).optional(),
+        }),
+        scriptedReturnShape: '{ results: object[] }',
       }),
     ]);
 
-    expect(text).toContain('- tools.read_file({ path: string, start_line?: number })');
-    expect(text).toContain('- tools.web_search');
-    expect(text).not.toContain('tools.web_search({ query: string');
+    expect(text).toContain('Essential tools:');
+    expect(text).toContain(
+      '- tools.read_file({ path: string, start_line?: number }) — Read a file\n    returns { content: string }',
+    );
+    expect(text).toContain('Other tools:');
+    const other = text.slice(text.indexOf('Other tools:'));
+    expect(other).toContain('- tools.web_search({ query: string, domains?: string[], mode?: "fast"|"deep" })');
+    expect(other).not.toContain('Search the web');
+    expect(other).not.toContain('returns { results: object[] }');
+    expect(other).not.toMatch(/ — /);
     expect(text).toContain('tools.describe(name)');
+    const essentialIndex = text.indexOf('Essential tools:');
+    const otherIndex = text.indexOf('Other tools:');
+    expect(essentialIndex).toBeLessThan(otherIndex);
+  });
+
+  it('reports failed conversion, union root, and non-object root schemas honestly as unavailable', () => {
+    const text = header([
+      tool({
+        name: 'failing_tool',
+        description: 'Failed conversion tool',
+        parameters: z.custom(() => true),
+      }),
+      tool({
+        name: 'union_tool',
+        description: 'Union root tool',
+        parameters: z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]),
+      }),
+      tool({
+        name: 'non_object_tool',
+        description: 'Non-object root tool',
+        parameters: z.string(),
+      }),
+      tool({
+        name: 'empty_tool',
+        description: 'Truly empty schema tool',
+        parameters: z.object({}),
+      }),
+    ]);
+
+    expect(text).toContain('- tools.failing_tool(/* schema unavailable — use tools.describe */)');
+    expect(text).toContain('- tools.union_tool(/* schema unavailable — use tools.describe */)');
+    expect(text).toContain('- tools.non_object_tool(/* schema unavailable — use tools.describe */)');
+    expect(text).toContain('- tools.empty_tool()');
+    expect(text).not.toContain('Failed conversion tool');
+    expect(text).not.toContain('Union root tool');
+    expect(text).not.toContain('Non-object root tool');
+    expect(text).not.toContain('Truly empty schema tool');
+    expect(text).not.toContain('tools.failing_tool()');
+    expect(text).not.toContain('tools.union_tool()');
+    expect(text).not.toContain('tools.non_object_tool()');
   });
 
   it('says plainly that the shapes are approximate and the real schema decides', () => {
     expect(header([tool({ name: 'x' })])).toContain('approximate');
   });
 
-  it('renders a no-parameter tool as callable with nothing', () => {
-    expect(header([tool({ name: 'read_file' })])).toContain('- tools.read_file()');
+  it('renders a truly empty parameter tool as callable with nothing', () => {
+    expect(header([tool({ name: 'read_file', parameters: z.object({}) })])).toContain('- tools.read_file()');
   });
 
   it('renders enums and arrays structurally and falls back to unknown', () => {
@@ -133,6 +187,24 @@ describe('renderCompactSignature (shared with the invalid-parameters site)', () 
     );
     expect(text).not.toContain('replacements: object[]');
   });
+
+  it('reports schema unavailable marker for failed conversion, union root, and non-object root', () => {
+    expect(renderCompactSignature(tool({ name: 'unconvertible', parameters: z.custom(() => true) }))).toBe(
+      'tools.unconvertible(/* schema unavailable — use tools.describe */)',
+    );
+    expect(
+      renderCompactSignature(
+        tool({
+          name: 'union_tool',
+          parameters: z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]),
+        }),
+      ),
+    ).toBe('tools.union_tool(/* schema unavailable — use tools.describe */)');
+    expect(renderCompactSignature(tool({ name: 'string_tool', parameters: z.string() }))).toBe(
+      'tools.string_tool(/* schema unavailable — use tools.describe */)',
+    );
+    expect(renderCompactSignature(tool({ name: 'empty_tool', parameters: z.object({}) }))).toBe('tools.empty_tool()');
+  });
 });
 
 describe('renderToolsHeader scriptedReturnShape', () => {
@@ -143,10 +215,10 @@ describe('renderToolsHeader scriptedReturnShape', () => {
     expect(text).toContain('returns { content: string, truncated: boolean }');
   });
 
-  it('keeps non-essential tools name-only even when they declare a shape', () => {
+  it('omits declared return shapes from compact Other-tool listings', () => {
     const text = header([tool({ name: 'session_list', scriptedReturnShape: '{ sessions: object[] }' })]);
 
-    expect(text).toContain('- tools.session_list');
+    expect(text).toContain('- tools.session_list()');
     expect(text).not.toContain('returns { sessions: object[] }');
   });
 });

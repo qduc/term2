@@ -156,7 +156,8 @@ export interface RunCodeCallRecord {
     | 'interceptor_denied'
     | 'unknown_tool'
     | 'invalid_params'
-    | 'prohibited';
+    | 'prohibited'
+    | 'describe';
   durationMs: number;
   directlyCallable?: boolean;
 }
@@ -225,10 +226,12 @@ function describeTool(tool: AnyToolDefinition): JsonValue {
     try {
       parameters = z.toJSONSchema(targetSchema, { io: 'input' }) as JsonValue;
     } catch {
-      parameters = {};
+      parameters = { unconvertible: true };
     }
-  } else {
+  } else if (targetSchema && typeof targetSchema === 'object') {
     parameters = targetSchema as JsonValue;
+  } else {
+    parameters = { unconvertible: true };
   }
   return {
     name: tool.name,
@@ -244,11 +247,21 @@ function describeTool(tool: AnyToolDefinition): JsonValue {
 }
 
 const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
-  if (calls.length === 0) return 'no tool calls';
-  const counts = new Map<string, number>();
-  for (const call of calls) counts.set(call.tool, (counts.get(call.tool) ?? 0) + 1);
-  const parts = [...counts.entries()].map(([tool, count]) => (count > 1 ? `${tool}×${count}` : tool));
-  return `${calls.length} tool call${calls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
+  const describeCalls = calls.filter((call) => call.outcome === 'describe');
+  const executionCalls = calls.filter((call) => call.outcome !== 'describe');
+  let callSummary: string;
+  if (executionCalls.length === 0) {
+    callSummary = 'no tool calls';
+  } else {
+    const counts = new Map<string, number>();
+    for (const call of executionCalls) counts.set(call.tool, (counts.get(call.tool) ?? 0) + 1);
+    const parts = [...counts.entries()].map(([tool, count]) => (count > 1 ? `${tool}×${count}` : tool));
+    callSummary = `${executionCalls.length} tool call${executionCalls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
+  }
+  if (describeCalls.length > 0) {
+    return `${callSummary}; ${describeCalls.length} schema lookup${describeCalls.length === 1 ? '' : 's'}`;
+  }
+  return callSummary;
 };
 
 const clip = async (text: string): Promise<string> => {
@@ -556,6 +569,7 @@ export function createRunCodeToolDefinition(
         directlyCallable?: boolean,
       ) => {
         calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
+        if (outcome === 'describe') return;
         writeNestedCallRecord(
           tool,
           sessionId,
@@ -596,6 +610,7 @@ export function createRunCodeToolDefinition(
           if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
             const described = registry.find((candidate) => candidate.name === payload.params);
             if (!described) return failed(unknownToolMessage(payload.params, registry));
+            record(name, 'describe', started);
             return {
               kind: 'result',
               result: { ok: true, result: describeTool(described) } as JsonValue,
@@ -730,7 +745,7 @@ export function createRunCodeToolDefinition(
                     mediaReferences.capture(resolution.result),
                     RUN_CODE_LIMITS.maxResultChars,
                     prepared.tool.name,
-                    calls.length,
+                    calls.filter((c) => c.outcome !== 'describe').length,
                   );
                   return {
                     kind: 'result',
@@ -784,7 +799,7 @@ export function createRunCodeToolDefinition(
               mediaReferences.capture(result),
               RUN_CODE_LIMITS.maxResultChars,
               prepared.tool.name,
-              calls.length,
+              calls.filter((c) => c.outcome !== 'describe').length,
             );
             return {
               kind: 'result',
@@ -819,9 +834,12 @@ export function createRunCodeToolDefinition(
         onConsole: (values) => output.push(renderConsoleValues(values)),
       });
 
+      const describeCalls = calls.filter((call) => call.outcome === 'describe');
+      const executionCalls = calls.filter((call) => call.outcome !== 'describe');
       loggingService.debug('run_code execution finished', {
         ok: result.ok,
-        toolCalls: calls.length,
+        toolCalls: executionCalls.length,
+        schemaLookups: describeCalls.length,
       });
 
       const resolvedResult =

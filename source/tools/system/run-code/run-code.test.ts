@@ -1112,6 +1112,82 @@ describe('run_code', () => {
     expect(output).not.toContain('Tool call limit reached');
   });
 
+  it('counts successful schema lookups separately in human telemetry without execution budget charge', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `await tools.describe("inspect");
+       await tools.describe("inspect");
+       return await tools.inspect({ value: "ok" });`,
+    );
+
+    expect(output).toContain('Result:\necho:ok');
+    expect(output).toContain('[1 tool call: inspect; 2 schema lookups]');
+    expect(output).not.toContain('Tool call limit reached');
+  });
+
+  it('emits schema lookup count and tool call count separately in logging telemetry', async () => {
+    const logger = logging();
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [tool({ name: 'inspect' })],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([tool({ name: 'inspect' })]),
+    });
+
+    await definition.execute({
+      code: `await tools.describe("inspect");
+             await tools.describe("inspect");
+             return await tools.inspect({ value: "ok" });`,
+      description: 'telemetry test',
+      timeout_ms: 60_000,
+    } as never);
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      'run_code execution finished',
+      expect.objectContaining({
+        ok: true,
+        toolCalls: 1,
+        schemaLookups: 2,
+      }),
+    );
+  });
+
+  it('reports schema lookups when no tool calls were executed', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `await tools.describe("inspect");
+       return "done";`,
+    );
+
+    expect(output).toContain('Result:\ndone');
+    expect(output).toContain('[no tool calls; 1 schema lookup]');
+  });
+
+  it('does not count failed schema lookups in successful lookup telemetry', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `try { await tools.describe("missing"); } catch {}
+       return "done";`,
+    );
+
+    expect(output).toContain('[no tool calls]');
+    expect(output).not.toContain('schema lookup');
+  });
+
+  it('reports unconvertible schema honestly in tools.describe', async () => {
+    const output = await run(
+      [
+        tool({
+          name: 'unconvertible',
+          parameters: z.custom(() => true),
+        }),
+      ],
+      'return await tools.describe("unconvertible");',
+    );
+
+    expect(output).toContain('"unconvertible":true');
+  });
+
   it('uses the namespace unknown-tool wording for prohibited and absent descriptions', async () => {
     const output = await run(
       [tool({ name: 'echo' })],
@@ -1911,6 +1987,51 @@ describe('run_code M5: persisted command-message telemetry', () => {
     expect(parsed.message).toContain('Full output saved to:');
     expect(parsed.message).toContain('tool effects have already completed');
     expect(parsed.message).not.toContain('undefined');
+  });
+
+  it('excludes describe lookups from overflow completed-call counts in error message', async () => {
+    const overflowSpecimen = {
+      name: 'overflow_specimen',
+      description: 'Generic overflow probe',
+      parameters: z.object({}),
+      parallelSafe: true,
+      canRequireApproval: false,
+      needsApproval: () => false,
+      execute: () => Array.from({ length: 10_000 }, (_, i) => ({ id: i, count: i * 2 })),
+    };
+    const policy = new ToolApprovalPolicyRegistry();
+    policy.register({
+      toolName: overflowSpecimen.name,
+      parameters: overflowSpecimen.parameters,
+      needsApproval: overflowSpecimen.needsApproval,
+    });
+    const tool = createRunCodeToolDefinition({
+      loggingService: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, security: () => {} } as any,
+      getToolRegistry: () => [overflowSpecimen] as any,
+      approvalPolicyRegistry: policy,
+    });
+
+    const output = String(
+      await tool.execute({
+        code: `
+          await tools.describe("overflow_specimen");
+          await tools.describe("overflow_specimen");
+          try {
+            const res = await tools.overflow_specimen({});
+            return { caught: false, res };
+          } catch (e) {
+            return { caught: true, message: e.message };
+          }
+        `,
+      } as any),
+    );
+
+    const text = output.slice(output.indexOf('Result:\n') + 8).split('\n\n')[0];
+    const parsed = JSON.parse(text);
+    expect(parsed.caught).toBe(true);
+    expect(parsed.message).toContain('result exceeded');
+    expect(parsed.message).toContain('1 nested tool call completed');
+    expect(parsed.message).not.toContain('3 nested tool calls completed');
   });
 
   it('mixed outcomes: Promise.allSettled with valid reads and missing-file reads correctly settles each', async () => {

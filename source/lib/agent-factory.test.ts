@@ -165,7 +165,10 @@ it.sequential('keeps every registered tool reachable across direct and script pa
   const rawNames = raw.tools.map((tool) => tool.name);
   const exposedToolNames = exposed.filter((name) => name !== 'describe');
 
-  expect(runCode!.description).toContain('Other tools (names only; schemas are available on demand)');
+  expect(runCode!.description).toContain('Other tools:');
+  for (const name of exposedToolNames) {
+    expect(runCode!.description).toContain(`tools.${name}(`);
+  }
   expect(new Set([...direct, ...exposedToolNames])).toEqual(new Set(rawNames));
   expect(direct.filter((name) => exposedToolNames.includes(name))).toEqual([]);
   for (const tool of raw.tools) {

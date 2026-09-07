@@ -882,7 +882,7 @@ export type RunCodeTrace = {
 export const parseRunCodeTrace = (output: string | undefined): RunCodeTrace | null => {
   if (!output) return null;
 
-  const summaryMatch = output.match(/^\[(?:no tool calls|\d+ tool calls?: (.+))\]$/m);
+  const summaryMatch = output.match(/^\[(?:no tool calls|\d+ tool calls?: (.+?))(?:; \d+ schema lookups?)?\]$/m);
   if (!summaryMatch) return null;
 
   const noteByLine: Array<[RegExp, string]> = [

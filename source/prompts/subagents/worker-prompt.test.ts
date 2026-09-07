@@ -33,3 +33,10 @@ it('execution role prompts reserve ask_orchestrator for genuine blockers and nev
     expect(lower).toContain('do not contact the user');
   }
 });
+
+it('explorer prompt names web tools directly instead of routing through unregistered run_code', () => {
+  expect(explorerPrompt).toContain('Use `web_search` to find relevant external documentation');
+  expect(explorerPrompt).toContain('Use `web_fetch` to retrieve the content of specific URLs');
+  expect(explorerPrompt).not.toContain('Inside `run_code`, use `tools.web_search`');
+  expect(explorerPrompt).not.toContain('Inside `run_code`, use `tools.web_fetch`');
+});

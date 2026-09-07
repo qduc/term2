@@ -815,10 +815,14 @@ export class SubagentToolFactory {
     const fsReadScope = definition.filesystemScope?.read;
     const fsWriteScope = definition.filesystemScope?.write;
     const netScope = definition.networkScope;
-    // The glob/find-files tool is only registered when the subagent can read
-    // the filesystem and is not using shell-based search. Keep descriptions
-    // consistent so the model does not call an unregistered tool.
-    const globAvailable = definition.canRead && !searchViaShell;
+    // Shell-based search is preferred for roles that can use it, but explorer
+    // shell access is restricted to GREEN commands. Keep dedicated read tools
+    // available to read-only explorers as a safe fallback when shell search is
+    // blocked. Keep descriptions consistent so the model does not call an
+    // unregistered tool.
+    const readOnlyExplorerSearchFallback = definition.role === 'explorer' && definition.canRead && !definition.canWrite;
+    const dedicatedSearchAvailable = !searchViaShell || readOnlyExplorerSearchFallback;
+    const globAvailable = definition.canRead && dedicatedSearchAvailable;
 
     if (definition.canRead) {
       tools.push(
@@ -833,7 +837,7 @@ export class SubagentToolFactory {
         ),
       );
 
-      if (!searchViaShell) {
+      if (dedicatedSearchAvailable) {
         tools.push(
           this.#toolPolicy.wrapReadToolWithScope(
             createGrepToolDefinition({

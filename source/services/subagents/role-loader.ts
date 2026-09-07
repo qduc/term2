@@ -181,6 +181,10 @@ export function buildAvailableToolGuidance(
 
   if (searchViaShell && hasTool('shell')) {
     lines.push('For workspace search, use `shell` with commands like `rg` for text search and `fd` for file search.');
+    const fallbackSearchTools = ['grep', 'glob'].filter(hasTool).map((name) => `\`${name}\``);
+    if (fallbackSearchTools.length > 0) {
+      lines.push(`If shell search is blocked, use the dedicated search tools: ${fallbackSearchTools.join(', ')}.`);
+    }
   } else if (hasTool('grep') || hasTool('glob')) {
     const searchTools = ['grep', 'glob'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For workspace search, use the dedicated search tools: ${searchTools.join(', ')}.`);

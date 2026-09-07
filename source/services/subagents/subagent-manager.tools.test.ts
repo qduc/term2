@@ -60,15 +60,20 @@ const toolCases: ToolCase[] = [
     exclude: ['use `shell` with commands like `rg`'],
   },
   {
-    title: 'explorer with gpt-5 and searchViaShell auto searches through shell and keeps web tools',
+    title: 'read-only explorer with gpt-5 and searchViaShell auto keeps dedicated search fallback',
     model: 'gpt-5',
     role: 'explorer',
     searchViaShell: 'auto',
-    grep: false,
-    glob: false,
+    grep: true,
+    glob: true,
     shell: true,
-    include: ['For workspace search, use `shell` with commands like `rg`'],
-    exclude: ['For workspace search, use the dedicated search tools'],
+    include: [
+      'For workspace search, use `shell` with commands like `rg`',
+      'If shell search is blocked, use the dedicated search tools',
+      '`grep`',
+      '`glob`',
+    ],
+    exclude: [],
   },
 ];
 

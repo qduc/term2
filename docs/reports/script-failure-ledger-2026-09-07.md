@@ -1,5 +1,12 @@
 # Canonical `run_code` failure ledger (2026-09-07)
 
+## Current evidence status
+
+The parent-verified batch-envelope supplement below supersedes the helper's
+eight ambiguous joins and one bounded candidate. The helper remains a
+historical heuristic scan, not an authoritative identity join. Its aggregate
+counts are not recomputed or promoted by this manual correction.
+
 ## Scope and accounting
 
 This report is the canonical, deduplicated ledger for the remaining body gaps
@@ -193,6 +200,65 @@ jq '{failedCount, joins:(.joins|length), matched:([.joins[]|select(.joinStatus =
 failedCount 66; joins 66; matched 57; ambiguous 8; boundedCandidate 1;
 bodyLocated 64; provenJoins 54; skippedFiles []
 ```
+
+## Parent-verified batch-envelope supplement
+
+The coordinator independently read the exact app dispatch/start/failed-finish/
+settlement envelopes for these nine records. Each envelope dispatches one call,
+contains the failed finish under the same correlation, and settles that same
+call. These are identity joins, not nearest-response or five-second guesses.
+App paths below are under the log directory specified above; `.6`, `.11`,
+`.12`, and `.14` mean rotations of `term2-2026-09-06.log`, while Sept 7 means
+`term2-2026-09-07.log`. Batch IDs are scoped to their correlation/envelope, not
+globally unique. The original failed message IDs above remain the row keys.
+
+| Failed message ID | App envelope; batch | Verified call ID | Canonical session / result seq; failure |
+| --- | --- | --- | --- |
+| `msg-1788660621958-23f61a` | `.6:6203-6208`; 79 | `call_yM115jeDyFW6J7bEz561zp74` | `d27dc356-4eda-4882-9c38-80d8aa46cdbd`, 2123; regex unclosed group, one grep |
+| `msg-1788673922975-djoeb0` | `.11:1018-1023`; 101 | `call_00_P1ODVphrL3rZHURPqE3s0169` | `c6ffa98b-d973-43f4-bab2-999b49a60b3e`, 2000 at `05:52:02.976Z`; undefined `.split`, one read_file |
+| `msg-1788675672809-puz2gg` | `.11:1462-1467`; 144 | `call_00_00UKLTxf9lyy3CTalgJv8306` | `12c58dce-7a18-4124-9cf7-4908bd1440dc`, 11510 at `06:21:12.810Z`; session_read rejects from:end with cursor, two session_read calls |
+| `msg-1788675677609-7xa0yx` | `.11:1471-1476`; 145 | `call_00_L9RQdixozCQCzG8o2vh10532` | same `12c58dce` session, 11756 at `06:21:17.610Z`; undefined `.slice`, one session_read |
+| `msg-1788684376749-5t0nps` | `.12:1740-1745`; 146 | `call_972c2b14de1f46429ed9859a` | `ec8bdb0d-1c6f-4617-830d-ade80d5f9758`, 65653 at `08:46:16.750Z`; session_search rejects sessionId, one session_search |
+| `msg-1788710661792-w9bm8u` | `.14:2591-2596`; 227 | `call_00_6JWl0Cq9Uze4293OquZL1108` | `ddf87a17-4e3b-4d55-a0e4-12e2ee9b5047`, 605 at `16:04:21.793Z`; session_read maxChars exceeds 12000, one session_read |
+| `msg-1788714449734-aq0j4q` | Sept 7:801-806; 51 | `call_0FcD5nG8itMsOmUhUpUyByKp` | `eab6ba46-04d8-417d-9657-8de9312d68a3`, 189; unknown search_replace, no nested calls |
+| `msg-1788715575319-s7b3b0` | Sept 7:1563-1568; 57 | `call_8b451af798d94f73b580be57` | `34372ad1-9c97-4dbd-9767-b995699af1ef`, 27493 at `17:26:15.320Z`; rg rejects look-around, one grep |
+| `msg-1788708986902-bvdbay` | `.14:514-517`; 76 | `call_01_uhsdcBHyxTa4gqqBLcZ40270` | `78bb681e-6883-4743-936a-5ae814a2d099`, 1944 at `15:36:26.902Z`; session_read rejects from:start, one session_read |
+
+Canonical timestamps in this table are UTC on 2026-09-06. The final row has
+a direct assistant_journal_item call at seq 1939, result at 1944, and a
+command_message with success:false at 1945. Its exact first error line is
+`Script failed: Invalid parameters for "session_read": from: Invalid input: expected "end"`.
+The temporary helper output had incorrectly proposed the earlier successful
+`call_00_rIbF3H5KxtmulKIqGhox8003`. Both the proposed identity and the
+subsequent claim that the true direct result was absent were rejected by the
+parent. No helper-derived aggregate is upgraded from this correction.
+
+Disposition: these nine records establish argument/schema, result-shape,
+unavailable-tool, and regex authoring failures; they do not establish a new
+runtime defect. The relevant shipped diagnostics and tool guidance are
+mitigations, not proof of successful later work or absence of recurrence.
+No relaxation of validation or automatic replay follows from this evidence.
+
+## Historical deleted-cwd recovery boundary
+
+The separate terminal trace found successful shell activity after the three
+uv_cwd failures, but no successful run_code recovery in the inspected source
+and successor trace. Source session `501344fc` recorded successful `pwd` in
+rc-contract-repair (seq 4562-4565), an intact worktree listing without
+model-nicknames (4566-4569), recreation of that pathname on rc-session-anchor
+(4570-4573), then another failed run_code check (4579/4581). Successor
+`4595031d` explicitly rolls over from that source and still fails run_code at
+seq 7/9. Successful subsequent git, terminal-agent inspection and tests
+establish terminal continuity only.
+
+The traced repair agent was agy-rc-fix, pane w1:p2V, terminal
+term_65accbf14926f145, in rc-contract-repair. A prior pane listing showed
+two term2 processes rooted in model-nicknames, but the inspected sessions
+contain no deleting command or deleting owner identity. The narrative that
+another session removed it is not an independently joined removal event.
+Recreating a pathname is not evidence of repairing a deleted process cwd.
+Current shared-host startup reproduction/repair is a separate implementation
+lane; the workspace-publication ordering fix 2e935e2f does not close this case.
 
 This report does not infer task success, semantic correctness of prior work,
 mitigation adequacy, timeout behavior, or effects beyond the exact canonical

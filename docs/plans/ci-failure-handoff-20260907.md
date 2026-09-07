@@ -1,7 +1,7 @@
 # CI failure handoff — run 34119875565 (2026-09-07)
 
-Status: **Diagnosed, not fixed.** Fixes deferred to next session. Read this before touching
-the files it names; the worktree-bisect evidence below is the authoritative root-cause record.
+Status: **Fixed (2026-09-07).** Buckets 1-3 merged to main; bucket 4 confirmed flaky-only.
+The worktree-bisect evidence below is the authoritative root-cause record for the fixes.
 
 ## Scope
 
@@ -58,11 +58,16 @@ File: `source/services/models/model-picker-host.test.tsx`. Error `waitFor: condi
 within timeout`. PASSES locally (11/11); times out in CI under runner contention. Not a logic
 regression.
 
-## Next steps (this session's agreed plan)
+## Resolution (2026-09-07)
 
-1. Bucket 1 fix — migrate the two stale auto-approval test files to canonical keys.
-2. Bucket 2 fix — build `dist` in the `e2e` CI job.
-3. Bucket 3 fix — repair the nested run_code tool-binding regression from `54b45c0a`.
-4. Re-run full suite + e2e; verify bucket 4 clears.
+1. **Bucket 1** — migrated the two stale test files to canonical `agent.choreModel`/`agent.choreProvider`
+   keys (option A). The legacy fallback was removed intentionally in `a4400feb`; the plan's
+   E2 intent is tier-first reads, so the tests are the fix, not the evaluator.
+2. **Bucket 2** — added `SKIP_BUILD_BACKUP=1 pnpm build` to the `e2e` CI job before the suite.
+3. **Bucket 3** — added the missing `description` to the outer run_code call in
+   `app.nested-approval-hide.test.tsx`; `e7f966e5` had already updated every other outer
+   payload but missed this file. Match to the intended description-required contract; no
+   schema revert.
+4. **Bucket 4** — confirmed flaky timing only; passes locally, no logic change.
 
-Each fix in its own worktree per repo parallel-isolation guidance, then merge to main.
+Fixed in three worktrees then merged `--no-ff` to main.

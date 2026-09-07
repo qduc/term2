@@ -38,7 +38,19 @@ Live-session observations: glob default search returned no app logs until no_ign
 
 No automatic increase of caps/timeouts/retries; no automatic replay of tool effects; no expansion of explorer shell authority. Existing closed plans remain relevant, especially run-code authoring friction, nested approval, sandboxed code host, chain settlement, and evidence-backed shell timeouts. Separate confirmed defects, provider/network events, development fixtures, already-fixed behavior, and unresolved evidence.
 
-## Resume checkpoint (2026-09-07, post-gate successor)
+## Resume checkpoint (2026-09-07, late review)
+
+Merged since post-gate checkpoint: output recovery4936252c (parent154tests); provider cancellationsbd4f64f0+1f012056 via a27f9960 (parent186tests); provider anchor evidence78e2b7b8+1152fef3 via9e01757d (parent verified four replacementheaders/200/noanchor and all five historycall/output pair counts43/90/95/45/7); workspace switchatomicity2e935e2f (parent31tests); no-opcheckin c3541e60+db987d7a (parent32tests). All five corresponding worktrees cleaned. Main contains changes but current coordinator not assumed hotreloaded. Final combined gate still pending further production merge.
+
+New LIVE defect during parent review: enter_worktree returned multiple-session-root-publication error yet retargeted local ExecutionContext. Parent recovered using exit_worktree and verified main; fix publishes before mutating localroot. Distinct from historical uv_cwd/deleted processcwd cases.
+
+Only active lanes: shell-attribution-final (`serene-evening-340`) in shell-quoting-evidence; script-ledger-final-review (`swart-wigeon-622`) in script-ledger-recovery. Shell baseb471dd86 NOT accepted: parent rejected unbounded reads of FIFO/devzero and arbitrarydynamiccommand denial; nextreview changed to64KiB boundedrawbytes/largefilestat/nonregularunknown and sandboxpolicy preservation but returned dirty. Final worker correcting compoundredirect protection and false envargument-tee recognition, must commit. Ledger commits36627224+74a8ea45 NOT accepted yet: parent rejected completed=>success lie, arbitrary5secjoinwindow, ambiguous candidate counts presented verified. Finalworker making status/chronology/ambiguity honest with fixtures. Original66failures stable; unresolvedbodycounts now under review, do not state all65proven.
+
+Provider outcome evidence: eight concrete anchorlessaccepted replacements beyondT1; I2worker definitelyfailed, recoveryadmissionreason missing. Do not call review-requestchanges failedreview, equalcounts prove pairing, or200tasksuccess. T2-T4 compaction trigger not joinable; bounded evidence disposition, no speculative newproviderfix. Historical JSON100000 corruption maps actual mainrepairs209eb350+7b6f0234, NOT oldreportoriginalhashes5d83db4f/20fcd401. Historical3uv_cwd records still need terminalrecovery disposition after ledger; could reflect removed processcwd unlike newatomicitybug.
+
+Wait workers before rollover if practical (prior workers cancelled on oldcoordinator rollover; mergedretentionfix does not establish currentprocessloaded). Then review/merge/clean, run typecheck+providerblackbox+fullsuite explicit900000ms, compare exactbaseline20 at output1788747873755-946b43 below. Do not touch unrelated untracked preflightdoc/worktrees. Issuecount remains unfinalized.
+
+## Earlier post-gate successor checkpoint
 
 Combined gate settled: provider black-box 177 passed/1 skipped (61.08s Vitest); full suite 8320 passed/20 failed/3 expected fail/2 skipped across 626 files (138.40s Vitest). Shell elapsed 206.546s, exit 1. Parent compared all 20 exact failure identities against the 8304-pass baseline: unchanged, no newly failing tests; suite is NOT green. Output `/tmp/qduc/term2-nodejs/tool-output/output-4026698-1788747873755-946b43.txt`. Duplicate notification was not another run. Both completed provider-compaction-debt and conversation-cancellation-telemetry worktrees/branches were removed after clean-status and ancestor checks. Compaction worker-key review is already merged, not outstanding.
 

@@ -136,6 +136,9 @@ const RUN_CODE_DESCRIPTION =
   'model-visible output is limited to 30,000 characters, ' +
   'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
   '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
+  'If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; ' +
+  'for a large artifact, use line ranges or a focused `grep` projection. A scripted `read_file` result may itself have ' +
+  '`truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. ' +
   'Use `tools.describe` before guessing parameters or returned fields. If a patch is scripted, escape backticks and ' +
   '${...} inside a template literal, or use ordinary quoted strings with escaped newlines. ' +
   'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +

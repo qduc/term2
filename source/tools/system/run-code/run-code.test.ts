@@ -815,6 +815,8 @@ describe('run_code', () => {
     expect(description).toContain('return the partial results');
     expect(description).toContain('Do not repeat completed tool effects');
     expect(description).toContain('30,000');
+    expect(description).toContain('read that exact path with `read_file` rather than repeating completed calls');
+    expect(description).toContain('`truncated: true` and a `fullOutputPath`');
     expect(description).toContain('template literal');
     expect(description).not.toContain('apply_patch directly');
     expect(description).not.toContain('call it directly as a tool');

@@ -875,7 +875,7 @@ it('with autoApprove=true: rejects YELLOW command if no auto-approve model confi
 
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.autoApproveModel') return undefined;
+      if (key === 'agent.choreModel') return undefined;
       return undefined;
     },
     getDynamic() {
@@ -926,7 +926,7 @@ it('with autoApprove=true: exits without continuing when configured YELLOW histo
 
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return 'gpt-4o-mini';
       return undefined;
     },
     getDynamic() {
@@ -983,11 +983,11 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
 
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return 'gpt-4o-mini';
       return undefined;
     },
     getDynamic(key: string) {
-      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return 'gpt-4o-mini';
       return undefined;
     },
   };

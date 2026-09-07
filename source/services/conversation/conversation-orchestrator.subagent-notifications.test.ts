@@ -350,11 +350,20 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(text).toContain('pnpm test');
     expect(text).toContain('does not by itself mean anything is wrong');
     expect(text).toContain('Decide freely');
+    expect(text).toContain('end this check-in turn silently');
+    expect(text).toContain('no assistant prose, acknowledgement, or filler');
+    expect(text).toContain(
+      'ongoing authorized work is already in progress when this notification arrives, continue that work',
+    );
+    expect(text).toContain('do not end the turn merely because this check-in needs no action or update');
     expect(text).not.toContain('liveness:');
     expect(h.service.sendMessage).not.toHaveBeenCalled();
     expect(h.config.messages.getMessages()).toContainEqual(
       expect.objectContaining({ sender: 'command', toolName: 'background_check_in_notification' }),
     );
+    const display = h.config.messages.getMessages().find((message) => message.sender === 'command') as any;
+    expect(display.output).toBe('Check-in #1: background shell pnpm test still running, elapsed 300s');
+    expect(display.output).not.toContain('silently');
   });
 
   it('formats rich subagent progress details in the check-in prompt', async () => {
@@ -586,7 +595,16 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     const text = h.sentTexts()[0];
     expect(text).toContain('Periodic check-in');
     expect(text).toContain('still running, elapsed 300s, check-in #1');
+    expect(text).toContain('end this check-in turn silently');
+    expect(text).toContain('no assistant prose, acknowledgement, or filler');
+    expect(text).toContain(
+      'ongoing authorized work is already in progress when this notification arrives, continue that work',
+    );
+    expect(text).toContain('do not end the turn merely because this check-in needs no action or update');
     expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+    const display = h.config.messages.getMessages().find((message) => message.sender === 'command') as any;
+    expect(display.output).toBe('Check-in #1: background shell pnpm test still running, elapsed 300s');
+    expect(display.output).not.toContain('silently');
     expect(h.store.pendingCount).toBe(0);
   });
 

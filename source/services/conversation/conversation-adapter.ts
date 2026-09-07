@@ -23,6 +23,7 @@ import {
   type QueuePersistence,
   type QueueTurnDriver,
 } from '../queue/queue-controller.js';
+import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
 export type SendMessageOptions = {
   /** Internal admission callback; called when a queued submission is accepted or rejected. */
@@ -853,22 +854,23 @@ export class ConversationAdapter {
           error: queueError instanceof Error ? queueError.message : String(queueError),
         });
       }
-      try {
-        await this.#eventSink?.({
-          type: 'error',
-          message: failure instanceof Error ? failure.message : String(failure),
-          kind: 'turn_failed',
-        });
-      } catch (eventError) {
-        // The failure event is itself critical at the gateway boundary. It
-        // must not prevent the owning submission from settling or leave
-        // #activeTurn as an unhandled rejection.
-        this.#logger.error('Failed to publish queued turn failure event', {
-          error: eventError instanceof Error ? eventError.message : String(eventError),
-        });
-      } finally {
-        this.#settleFailure(execution.snapshot.requestId, failure);
+      if (!isClassifiedCancellation(failure)) {
+        try {
+          await this.#eventSink?.({
+            type: 'error',
+            message: failure instanceof Error ? failure.message : String(failure),
+            kind: 'turn_failed',
+          });
+        } catch (eventError) {
+          // The failure event is itself critical at the gateway boundary. It
+          // must not prevent the owning submission from settling or leave
+          // #activeTurn as an unhandled rejection.
+          this.#logger.error('Failed to publish queued turn failure event', {
+            error: eventError instanceof Error ? eventError.message : String(eventError),
+          });
+        }
       }
+      this.#settleFailure(execution.snapshot.requestId, failure);
     }
   }
 

@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { createSessionRuntimeInternals as createProductionSessionRuntimeInternals } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -42,11 +42,16 @@ const createSessionContextService = () => {
   };
 };
 
-function setupWorkflow(mockClient: any, retryOptions?: any, openAIRootFreshTurnSelectorParityObserver?: any) {
+function setupWorkflow(
+  mockClient: any,
+  retryOptions?: any,
+  openAIRootFreshTurnSelectorParityObserver?: any,
+  logger: any = mockLogger,
+) {
   const composition = createSessionRuntimeInternals({
     sessionId: 'test-session',
     agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    deps: { logger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
     retryOptions,
     openAIRootFreshTurnSelectorParityObserver,
@@ -131,6 +136,66 @@ it('executes initial turn successfully', async () => {
   expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
+});
+
+it('logs an aborted initial stream as cancellation and does not emit an error event', async () => {
+  const logger = { ...mockLogger, debug: vi.fn(), error: vi.fn() };
+  const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+  const stream = new MockStream([]);
+  (stream as any)[Symbol.asyncIterator] = async function* () {
+    throw abortError;
+  };
+  const { workflow } = setupWorkflow(
+    {
+      getProvider: () => 'openai',
+      startStream: async () => stream,
+    },
+    undefined,
+    undefined,
+    logger,
+  );
+
+  const result = await collectWithError(workflow.executeInitial('hello'));
+
+  expect(result.error).toBe(abortError);
+  expect(result.events).not.toContainEqual(expect.objectContaining({ type: 'error' }));
+  expect(logger.error).not.toHaveBeenCalled();
+  expect(logger.debug).toHaveBeenCalledWith(
+    'Conversation stream aborted',
+    expect.objectContaining({ eventType: 'stream.aborted', errorKind: 'cancelled' }),
+  );
+});
+
+it('logs an aborted continuation stream as cancellation and does not emit an error event', async () => {
+  const logger = { ...mockLogger, debug: vi.fn(), error: vi.fn() };
+  const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+  const stream = new MockStream([]);
+  (stream as any)[Symbol.asyncIterator] = async function* () {
+    throw abortError;
+  };
+  const { workflow, composition } = setupWorkflow(
+    {
+      getProvider: () => 'openai',
+      continueRunStream: async () => stream,
+    },
+    undefined,
+    undefined,
+    logger,
+  );
+  const token = composition.generationGuard.capture();
+  prepareApprovalContinuation(composition, token);
+
+  const result = await collectWithError(
+    workflow.executeContinuationAttempt({ kind: 'approval_decision', answer: 'y', generation: token }),
+  );
+
+  expect(result.error).toBe(abortError);
+  expect(result.events).not.toContainEqual(expect.objectContaining({ type: 'error' }));
+  expect(logger.error).not.toHaveBeenCalled();
+  expect(logger.debug).toHaveBeenCalledWith(
+    'Conversation stream aborted during continuation',
+    expect.objectContaining({ eventType: 'stream.aborted', errorKind: 'cancelled' }),
+  );
 });
 
 it('resets only the transient retry count after a successful initial stream cycle', async () => {

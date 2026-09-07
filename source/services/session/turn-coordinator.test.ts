@@ -3,7 +3,7 @@ import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
-const makeHarness = () => {
+const makeHarness = (hooks?: { lifecycle?: any; events?: any }) => {
   const statusMachine = new TurnStatusMachine();
 
   const initialCalls: any[] = [];
@@ -89,6 +89,7 @@ const makeHarness = () => {
     approvalFlow,
     providerContinuity,
     shellAutoApproval,
+    ...(hooks?.lifecycle && hooks?.events ? { hookLifecycle: hooks.lifecycle, hookEvents: hooks.events } : {}),
   });
 
   return {
@@ -105,6 +106,23 @@ const makeHarness = () => {
     getProviderContinuityCleared: () => providerContinuityCleared,
   };
 };
+
+it('does not emit a turn.error hook for an aborted stream', async () => {
+  const emitted: any[] = [];
+  const { coordinator, turnWorkflow } = makeHarness({
+    lifecycle: { emit: async (event: any) => emitted.push(event) },
+    events: { create: (type: string, payload: unknown) => ({ type, payload }) },
+  });
+  const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+  (turnWorkflow.executeInitial as any) = async function* () {
+    throw abortError;
+  };
+
+  const iterator = coordinator.start('hello')[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toBe(abortError);
+
+  expect(emitted.map((event) => event.type)).toEqual(['turn.start', 'turn.end']);
+});
 
 it('Foreground-turn admission: throws when already active', async () => {
   const { coordinator, statusMachine } = makeHarness();

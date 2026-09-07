@@ -56,6 +56,7 @@ import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { ApprovalFlowCoordinator, ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import { describeError } from '../../utils/error-helpers.js';
+import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
@@ -1022,20 +1023,30 @@ export class TurnWorkflow {
         }
       }
     } catch (error) {
-      this.deps.logger.error('Conversation stream error during continuation', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: resolveSessionId(this.deps.sessionId),
-        traceId: this.deps.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      yield {
-        type: 'error' as const,
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      };
+      const classification = classifyProviderFailure(error);
+      const cancelled = isClassifiedCancellation(error);
+      const log = cancelled ? this.deps.logger.debug : this.deps.logger.error;
+      log.call(
+        this.deps.logger,
+        cancelled ? 'Conversation stream aborted during continuation' : 'Conversation stream error during continuation',
+        {
+          eventType: cancelled ? 'stream.aborted' : 'stream.failed',
+          category: 'stream',
+          phase: 'abort',
+          sessionId: resolveSessionId(this.deps.sessionId),
+          traceId: this.deps.logger.getCorrelationId(),
+          errorMessage: describeError(error),
+          errorKind: classification.errorKind,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
+      if (!cancelled) {
+        yield {
+          type: 'error' as const,
+          message: describeError(error),
+          ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+        };
+      }
       throw error;
     }
   }

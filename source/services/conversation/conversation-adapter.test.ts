@@ -933,6 +933,7 @@ it('preserves a genuine stream error that races with intentional cancellation', 
     releaseActive = resolve;
   });
   const providerError = new Error('provider stream failed during abort');
+  const events: unknown[] = [];
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',
     startedAt: new Date().toISOString(),
@@ -953,12 +954,55 @@ it('preserves a genuine stream error that races with intentional cancellation', 
     },
     queueForeground: true,
   });
+  adapter.setEventSink(async (event) => {
+    events.push(event);
+  });
 
   const active = adapter.sendMessage('active');
   await new Promise((resolve) => setImmediate(resolve));
   adapter.abort();
 
   await expect(active).rejects.toBe(providerError);
+  expect(events).toContainEqual(expect.objectContaining({ type: 'error', kind: 'turn_failed' }));
+});
+
+it('does not publish a turn error event for an aborted stream during cancellation', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+  const events: unknown[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        await activeReleased;
+        throw abortError;
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => releaseActive(),
+    },
+    queueForeground: true,
+  });
+  adapter.setEventSink(async (event) => {
+    events.push(event);
+  });
+
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+
+  await expect(active).rejects.toBe(abortError);
+  expect(events).not.toContainEqual(expect.objectContaining({ type: 'error' }));
 });
 
 it('preserves a provider-origin ambiguous outcome that races with intentional cancellation', async () => {

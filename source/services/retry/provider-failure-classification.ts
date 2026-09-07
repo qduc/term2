@@ -47,6 +47,63 @@ export function classifyProviderFailure(error: unknown): ProviderFailureClassifi
   };
 }
 
+/**
+ * Cancellation classification is intentionally stricter at logging/UI
+ * boundaries than at retry policy boundaries. A provider error can mention
+ * "abort" while still being a real failure (for example, a failure that races
+ * a user stop), so those boundaries require an explicit abort marker as well
+ * as the shared typed classification.
+ */
+export function isClassifiedCancellation(error: unknown): boolean {
+  return classifyProviderFailure(error).errorKind === 'cancelled' && hasExplicitCancellationMarker(error);
+}
+
+/**
+ * Returns true only when an error tree contains an explicit cancellation and
+ * no concrete provider or transport failure. `classifyProviderFailure` keeps
+ * its broad abort-like precedence for retry policy; this stricter predicate is
+ * for boundaries where hiding a real failure would be worse than showing an
+ * abort from the same race.
+ */
+export function hasExplicitCancellationMarker(error: unknown): boolean {
+  const result = inspectCancellationTree(error, new Set<unknown>());
+  return result.hasCancellation && !result.hasFailure;
+}
+
+type CancellationTreeInspection = {
+  hasCancellation: boolean;
+  hasFailure: boolean;
+};
+
+function inspectCancellationTree(error: unknown, seen: Set<unknown>): CancellationTreeInspection {
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return { hasCancellation: false, hasFailure: false };
+  }
+  seen.add(error);
+
+  const value = error as Record<string, unknown>;
+  let hasCancellation = value.name === 'AbortError' || value.code === 'ABORT_ERR';
+  let hasFailure = isConcreteProviderFailure(value);
+  const children = [...(Array.isArray(value.errors) ? value.errors : []), value.cause];
+  for (const child of children) {
+    const childResult = inspectCancellationTree(child, seen);
+    hasCancellation ||= childResult.hasCancellation;
+    hasFailure ||= childResult.hasFailure;
+  }
+  return { hasCancellation, hasFailure };
+}
+
+function isConcreteProviderFailure(value: Record<string, unknown>): boolean {
+  const statusRaw = value.status ?? value.statusCode;
+  const status = typeof statusRaw === 'number' ? statusRaw : Number(statusRaw);
+  return (
+    (Number.isInteger(status) && status >= 400) ||
+    value instanceof OpenRouterError ||
+    value instanceof OpenAICompatibleError ||
+    isNetworkProtocolError(value)
+  );
+}
+
 function findSafeField(error: unknown, field: 'code'): unknown {
   const seen = new Set<unknown>();
   const visit = (value: unknown): unknown => {

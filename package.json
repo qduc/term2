@@ -51,7 +51,7 @@
     "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "tsc --build tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "test": "cross-env NODE_ENV=test vitest run --reporter=minimal",
+    "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
     "test:changed": "cross-env NODE_ENV=test vitest run --reporter=minimal --changed --passWithNoTests=false",
     "test:e2e": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts",
     "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",

@@ -132,6 +132,10 @@ export function renderDetailedEntry(tool: ToolRegistry[number]): string {
   return `- ${renderCompactSignature(tool)}${description}${returns}`;
 }
 
+function renderCompactEntry(tool: ToolRegistry[number]): string {
+  return `- ${renderCompactSignature(tool)}`;
+}
+
 /**
  * Renders the catalogue of `tools.*` members a script can call.
  *
@@ -149,7 +153,7 @@ export function renderToolsHeader(registry: ToolRegistry): string {
     'Use tools.describe(name) when you need the full schema and description for a tool.',
     ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
     ...(other.length > 0
-      ? [...(essential.length > 0 ? [''] : []), 'Other tools:', ...other.map(renderDetailedEntry)]
+      ? [...(essential.length > 0 ? [''] : []), 'Other tools:', ...other.map(renderCompactEntry)]
       : []),
   ];
   return lines.join('\n');

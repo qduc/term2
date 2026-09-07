@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   TestSubagentManager,
   createMockLogger,
@@ -19,6 +19,12 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { createAgentStream } from '../agent-stream.js';
+import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
+import { AgentClient } from '../../lib/agent-client.js';
+import { SubagentBridge } from '../../lib/subagent-bridge.js';
+import { ConversationService } from '../conversation/conversation-service.js';
+import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 const ROLE_UNKNOWN = 'nonexistent-role-xyz';
 const MODEL_MAIN = 'main-model';
@@ -203,6 +209,158 @@ describe('mentor role', () => {
     await manager.run({ role: ROLE_MENTOR, task: TASK_FRESH_QUESTION });
     // After reset, second call should have only 1 message (fresh start)
     expect(mentorManagerRunnerCalls[1].input.length).toBe(1);
+  });
+
+  it('resetMentorSession() does not cancel an async worker retained for the successor session', async () => {
+    const settings = createMockSettings({
+      'agent.model': MODEL_MAIN,
+      'agent.provider': mentorProviderId,
+      'agent.retryAttempts': 0,
+    });
+    let releaseWorker!: () => void;
+    const workerReleased = new Promise<void>((resolve) => {
+      releaseWorker = resolve;
+    });
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings,
+      sessionContextService: createSessionContextService() as any,
+      createClient: () =>
+        ({
+          abort: () => {},
+          chat: async () => 'worker result',
+          startStream: async () =>
+            createAgentStream({
+              interruptions: [],
+              state: undefined,
+              history: [],
+              newItems: [],
+              finalOutput: 'worker result',
+              lastResponseId: null,
+              completed: Promise.resolve(),
+              output: [],
+              async *[Symbol.asyncIterator](): AsyncGenerator<ApplicationRunEvent> {
+                await workerReleased;
+                yield { type: 'text_delta' as const, text: 'worker result' };
+              },
+            }),
+        } as any),
+    });
+
+    const handle = manager.startRunAsync({ role: ROLE_WORKER, task: 'keep working' });
+    await Promise.resolve();
+    manager.resetMentorSession();
+
+    expect(manager.getRunStatus(handle.runId)).toMatchObject({ status: 'running' });
+    releaseWorker();
+    const result = await manager.getRunResult(handle.runId);
+    expect(result).toMatchObject({
+      status: 'completed',
+      finalText: 'worker result',
+    });
+  });
+
+  it('retains an async worker through the public rollover and successor config refresh', async () => {
+    const settings = createMockSettings({
+      'agent.model': MODEL_MAIN,
+      'agent.provider': mentorProviderId,
+      'agent.retryAttempts': 0,
+    });
+    let releaseWorker!: () => void;
+    const workerReleased = new Promise<void>((resolve) => {
+      releaseWorker = resolve;
+    });
+    let workerStarted!: () => void;
+    const workerStart = new Promise<void>((resolve) => {
+      workerStarted = resolve;
+    });
+    const bridge = new SubagentBridge({
+      logger: createMockLogger(),
+      settings,
+      sessionContextService: createSessionContextService(),
+      chat: async () => '',
+      createClient: () =>
+        ({
+          abort: () => {},
+          chat: async () => 'worker result',
+          startStream: async () => {
+            workerStarted();
+            return createAgentStream({
+              interruptions: [],
+              state: undefined,
+              history: [],
+              newItems: [],
+              finalOutput: 'worker result',
+              lastResponseId: null,
+              completed: Promise.resolve(),
+              output: [],
+              async *[Symbol.asyncIterator](): AsyncGenerator<ApplicationRunEvent> {
+                await workerReleased;
+                yield { type: 'text_delta' as const, text: 'worker result' };
+              },
+            });
+          },
+        } as any),
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+    const agentClient = new AgentClient({
+      model: MODEL_MAIN,
+      providerOverride: mentorProviderId,
+      maxTurns: 1,
+      retryAttempts: 0,
+      deps: {
+        logger: createMockLogger(),
+        settings,
+        sessionContextService: createSessionContextService(),
+      },
+      subagentBridge: bridge,
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+    const service = new ConversationService({
+      agentClient,
+      toolOwnership: new ToolOwnershipRegistry(),
+      sessionId: 'predecessor',
+      deps: {
+        logger: createMockLogger(),
+        settingsService: settings,
+        sessionContextService: createSessionContextService(),
+      },
+    });
+
+    try {
+      // The old manager-only regression called resetMentorSession directly and
+      // therefore skipped AgentClient's successor first-start refresh. This
+      // public seam exercises rollover, that refresh, and retained push delivery.
+      const handle = await bridge.runSubagentAsync({ role: ROLE_WORKER, task: 'keep working' });
+      await workerStart;
+      service.rolloverWithNewId('successor');
+
+      const successorEvents: ConversationEvent[] = [];
+      const successor = await service.sendMessage('continue after rollover', {
+        onEvent: (event) => {
+          successorEvents.push(event);
+        },
+      });
+
+      expect(successor).toMatchObject({ type: 'response', finalText: expect.stringContaining('mentor-response') });
+      expect(successorEvents.filter((event) => event.type === 'final')).toHaveLength(1);
+      expect(bridge.getSubagentStatus({ runId: handle.runId })).toMatchObject({ status: 'running' });
+
+      releaseWorker();
+      const result = await bridge.getSubagentResult({ runId: handle.runId });
+      expect(result).toMatchObject({
+        status: 'completed',
+        finalText: 'worker result',
+      });
+      await vi.waitFor(() => expect(service.backgroundSubagentNotifications.pendingCount).toBe(1));
+      const notifications = service.backgroundSubagentNotifications.drain();
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: 'completion', runId: handle.runId, status: 'completed' });
+      expect(service.backgroundSubagentNotifications.pendingCount).toBe(0);
+    } finally {
+      releaseWorker();
+      service.dispose();
+    }
   });
 });
 

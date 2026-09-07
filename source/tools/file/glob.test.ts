@@ -232,6 +232,30 @@ it.sequential('execute: handles no matches found', async () => {
   });
 });
 
+it.sequential('execute: no-match output explains how to retry ignored-file discovery', async () => {
+  await withTempDir(async () => {
+    const result = (await findFilesToolDefinition.execute({
+      pattern: '*.log',
+    })) as string;
+
+    expect(result).toContain('No files found matching pattern: *.log');
+    expect(result).toContain('.gitignore/.ignore');
+    expect(result).toContain('no_ignore: true');
+  });
+});
+
+it.sequential('execute: an explicit no-ignore search does not repeat no-match guidance', async () => {
+  await withTempDir(async () => {
+    const result = (await findFilesToolDefinition.execute({
+      pattern: '*.log',
+      no_ignore: true,
+    })) as string;
+
+    expect(result).toContain('No files found matching pattern: *.log');
+    expect(result).not.toContain('no_ignore: true');
+  });
+});
+
 it.sequential('needsApproval: prompts for path outside workspace', async () => {
   await withTempDir(async () => {
     const result = await findFilesToolDefinition.needsApproval({

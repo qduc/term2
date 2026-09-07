@@ -279,7 +279,15 @@ export const createFindFilesToolDefinition = (
       }
 
       if (!trimmed) {
-        return `No files found matching pattern: ${pattern}`;
+        if (no_ignore) {
+          return `No files found matching pattern: ${pattern}`;
+        }
+
+        return (
+          `No files found matching pattern: ${pattern}. ` +
+          'The search respects .gitignore/.ignore and skips hidden files by default; ' +
+          'retry with no_ignore: true to include ignored or hidden files.'
+        );
       }
 
       let resultText = cleanedLines.slice(0, limit).join('\n');

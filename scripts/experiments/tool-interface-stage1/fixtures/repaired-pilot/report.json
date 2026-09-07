@@ -1,0 +1,271 @@
+{
+  "provenance": {
+    "source": "tool-interface-bench/.bench-runs/stage1-pilot-repaired-20260907-2118/report.json",
+    "note": "Sanitized pair retaining metrics.headerSnapshot nesting. No raw sidecars, auth, or request bodies."
+  },
+  "pairs": [
+    {
+      "pairId": "luna__memory-billing-contact__trial0",
+      "modelId": "luna",
+      "taskId": "memory-billing-contact",
+      "trial": 0,
+      "stratum": "treated-nonessential",
+      "baseline": {
+        "cell": {
+          "cellId": "luna__memory-billing-contact__trial0__baseline",
+          "pairId": "luna__memory-billing-contact__trial0",
+          "model": {
+            "id": "luna",
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "reasoningEffort": "medium"
+          },
+          "task": {
+            "id": "memory-billing-contact",
+            "family": "memory-retrieval",
+            "stratum": "treated-nonessential",
+            "title": "Recover a billing contact from project memory",
+            "prompt": "What billing contact identifier is recorded for Northwind in project memory? Reply with only that identifier.\n",
+            "oracle": {
+              "kind": "exact-token",
+              "token": "ora-keel-19"
+            },
+            "dir": "<task-dir>"
+          },
+          "trial": 0,
+          "arm": "baseline",
+          "order": 7
+        },
+        "cli": "<cli>",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "conversationPath": null,
+        "eventSource": "stdout-json",
+        "identityOk": true,
+        "identityMatch": {
+          "present": true,
+          "ok": true,
+          "reason": "identity-match"
+        },
+        "wrongModel": false,
+        "outcome": {
+          "kind": "correct",
+          "reason": "token-match"
+        },
+        "metrics": {
+          "identity": {
+            "sessionId": null,
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "reasoningEffort": null,
+            "projectPath": null,
+            "identitySource": "cost_update"
+          },
+          "usage": {
+            "turnCount": 3,
+            "perTurnPromptTokens": [9600, 9767, 10185],
+            "perTurnCacheReadTokens": [0, 8960, 8960],
+            "promptTokensSum": 29552,
+            "cacheReadTokensSum": 17920,
+            "lastUsage": {
+              "prompt_tokens": 10185,
+              "completion_tokens": 9,
+              "total_tokens": 10194,
+              "reasoning_tokens": 0,
+              "cache_read_tokens": 8960,
+              "cache_creation_tokens": 0
+            },
+            "costUsdMicros": 2905,
+            "costKnown": true,
+            "usageSource": "cost_update"
+          },
+          "headerSnapshot": {
+            "ok": true,
+            "reason": null,
+            "sidecarCount": 4,
+            "source": "provider-traffic-raw",
+            "sourceFile": "<raw-sidecar>",
+            "headerFound": true,
+            "combinedHeaderBytes": 1454,
+            "staticProseBytes": 2726,
+            "staticProseSha256": "de585058d760544f565f8b24b97501ef341157d0f9029f743488fe8f7e3e62da",
+            "headerSha256": "a439749096ccb2d59df49fff5e11b2c95ab53616709e562b047deed58931e9c3",
+            "toolNames": [
+              "read_file",
+              "apply_patch",
+              "web_search",
+              "web_fetch",
+              "configure_task_check_in",
+              "memory_list",
+              "memory_get",
+              "memory_search",
+              "memory_retrieve",
+              "memory_synthesize",
+              "memory_create",
+              "memory_update",
+              "memory_delete",
+              "activate_skill",
+              "get_subagent_result",
+              "get_subagent_status",
+              "send_message",
+              "cancel_run"
+            ],
+            "toolNameCount": 18
+          },
+          "describeLookups": 0,
+          "invalidParamsAttempted": 1,
+          "unknownToolAttempted": 0,
+          "directSchemaFailures": 0,
+          "recordedNestedCalls": 2,
+          "describeLookupsFromScript": 0,
+          "modelVisibleSchemaLookups": null,
+          "admittedNestedCallsKnown": false,
+          "admittedNestedCalls": null,
+          "admittedNestedNote": "describe lookups are not recorded; invalid_params and unknown_tool are recorded but not admitted. Admitted executions are not separately visible in conversation output.",
+          "resultHandlingFailures": 1,
+          "resultHandlingRecoveries": 1,
+          "runCodeCalls": 2,
+          "wallTimeMs": 18994,
+          "toolStarted": ["run_code", "run_code"]
+        },
+        "correctness": {
+          "correct": true,
+          "reason": "token-match",
+          "expected": "ora-keel-19",
+          "actual": "ora-keel-19"
+        },
+        "finalTextPreview": "ora-keel-19"
+      },
+      "candidate": {
+        "cell": {
+          "cellId": "luna__memory-billing-contact__trial0__candidate",
+          "pairId": "luna__memory-billing-contact__trial0",
+          "model": {
+            "id": "luna",
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "reasoningEffort": "medium"
+          },
+          "task": {
+            "id": "memory-billing-contact",
+            "family": "memory-retrieval",
+            "stratum": "treated-nonessential",
+            "title": "Recover a billing contact from project memory",
+            "prompt": "What billing contact identifier is recorded for Northwind in project memory? Reply with only that identifier.\n",
+            "oracle": {
+              "kind": "exact-token",
+              "token": "ora-keel-19"
+            },
+            "dir": "<task-dir>"
+          },
+          "trial": 0,
+          "arm": "candidate",
+          "order": 6
+        },
+        "cli": "<cli>",
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "conversationPath": null,
+        "eventSource": "stdout-json",
+        "identityOk": true,
+        "identityMatch": {
+          "present": true,
+          "ok": true,
+          "reason": "identity-match"
+        },
+        "wrongModel": false,
+        "outcome": {
+          "kind": "correct",
+          "reason": "token-match"
+        },
+        "metrics": {
+          "identity": {
+            "sessionId": null,
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "reasoningEffort": null,
+            "projectPath": null,
+            "identitySource": "cost_update"
+          },
+          "usage": {
+            "turnCount": 2,
+            "perTurnPromptTokens": [10812, 11250],
+            "perTurnCacheReadTokens": [0, 9984],
+            "promptTokensSum": 22062,
+            "cacheReadTokensSum": 9984,
+            "lastUsage": {
+              "prompt_tokens": 11250,
+              "completion_tokens": 9,
+              "total_tokens": 11259,
+              "reasoning_tokens": 0,
+              "cache_read_tokens": 9984,
+              "cache_creation_tokens": 0
+            },
+            "costUsdMicros": 2740,
+            "costKnown": true,
+            "usageSource": "cost_update"
+          },
+          "headerSnapshot": {
+            "ok": true,
+            "reason": null,
+            "sidecarCount": 3,
+            "source": "provider-traffic-raw",
+            "sourceFile": "<raw-sidecar>",
+            "headerFound": true,
+            "combinedHeaderBytes": 6821,
+            "staticProseBytes": 2726,
+            "staticProseSha256": "de585058d760544f565f8b24b97501ef341157d0f9029f743488fe8f7e3e62da",
+            "headerSha256": "80a5d679a52a4a2844d8b777c97f7661d51d3fa2cf321966fd60d45b1ba6eae2",
+            "toolNames": [
+              "read_file",
+              "apply_patch",
+              "web_search",
+              "web_fetch",
+              "configure_task_check_in",
+              "memory_list",
+              "memory_get",
+              "memory_search",
+              "memory_retrieve",
+              "memory_synthesize",
+              "memory_create",
+              "memory_update",
+              "memory_delete",
+              "activate_skill",
+              "get_subagent_result",
+              "get_subagent_status",
+              "send_message",
+              "cancel_run"
+            ],
+            "toolNameCount": 18
+          },
+          "describeLookups": 0,
+          "invalidParamsAttempted": 0,
+          "unknownToolAttempted": 0,
+          "directSchemaFailures": 0,
+          "recordedNestedCalls": 1,
+          "describeLookupsFromScript": 0,
+          "modelVisibleSchemaLookups": null,
+          "admittedNestedCallsKnown": false,
+          "admittedNestedCalls": null,
+          "admittedNestedNote": "describe lookups are not recorded; invalid_params and unknown_tool are recorded but not admitted. Admitted executions are not separately visible in conversation output.",
+          "resultHandlingFailures": 0,
+          "resultHandlingRecoveries": 0,
+          "runCodeCalls": 1,
+          "wallTimeMs": 14214,
+          "toolStarted": ["run_code"]
+        },
+        "correctness": {
+          "correct": true,
+          "reason": "token-match",
+          "expected": "ora-keel-19",
+          "actual": "ora-keel-19"
+        },
+        "finalTextPreview": "ora-keel-19"
+      }
+    }
+  ]
+}

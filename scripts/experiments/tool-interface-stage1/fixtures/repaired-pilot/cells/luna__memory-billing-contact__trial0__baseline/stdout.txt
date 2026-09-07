@@ -1,0 +1,2 @@
+{"type":"tool_started","toolName":"run_code","arguments":{"code":"const r = await tools.memory_retrieve({query:\"Northwind billing contact identifier\", scope:\"project\"}); return r;","description":"Retrieve the Northwind billing contact identifier from project memory"}}
+{"type":"tool_started","toolName":"run_code","arguments":{"code":"return await tools.memory_retrieve({query:\"Northwind billing contact identifier\", limit:5, maxChars:4000});","description":"Retrieve the Northwind billing contact identifier from memory"}}

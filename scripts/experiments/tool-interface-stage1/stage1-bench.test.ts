@@ -353,17 +353,21 @@ it('blocks empty factory-bound headers and mismatched name sets', () => {
   expect(mismatch.some((line) => /name sets differ/.test(line))).toBe(true);
 });
 
-it('snapshots a factory-bound non-interactive header with at least 8 tools', async () => {
-  const dist = path.resolve('dist');
-  if (!fs.existsSync(path.join(dist, 'cli.js'))) return;
-  const snap = await snapshotRunCodeHeader(dist, { model: 'glm-5.3-flash', providerId: 'zai' });
-  expect(snap.headerFound).toBe(true);
-  expect(snap.toolNameCount).toBeGreaterThanOrEqual(8);
-  expect(snap.combinedHeaderBytes).toBeGreaterThan(0);
-  expect(snap.interactiveMinusNonInteractive).toEqual(['session_list', 'session_search', 'session_read']);
-  expect(snap.mode).toBe('non-interactive-factory-bind');
-  expect(snap.toolNames).toContain('configure_task_check_in');
-});
+const DIST_CLI = path.join(path.resolve('dist'), 'cli.js');
+
+it.skipIf(!fs.existsSync(DIST_CLI))(
+  'snapshots a factory-bound non-interactive header with at least 8 tools',
+  async () => {
+    const dist = path.resolve('dist');
+    const snap = await snapshotRunCodeHeader(dist, { model: 'glm-5.3-flash', providerId: 'zai' });
+    expect(snap.headerFound).toBe(true);
+    expect(snap.toolNameCount).toBeGreaterThanOrEqual(8);
+    expect(snap.combinedHeaderBytes).toBeGreaterThan(0);
+    expect(snap.interactiveMinusNonInteractive).toEqual(['session_list', 'session_search', 'session_read']);
+    expect(snap.mode).toBe('non-interactive-factory-bind');
+    expect(snap.toolNames).toContain('configure_task_check_in');
+  },
+);
 
 it('does not classify missing identity as a proven wrong model', () => {
   const missing = matchIdentity(
@@ -453,12 +457,13 @@ it('reconstructs the luna memory pilot from the actual stdout event stream', () 
   ).toEqual({ kind: 'correct', reason: 'token-match' });
 });
 
-it('uses the preserved pilot artifact location when present', () => {
-  const resultPath = path.resolve(
-    '.bench-runs/stage1-pilot-20260907-2058/cells/luna__memory-billing-contact__trial0__candidate/result.json',
-  );
-  if (!fs.existsSync(resultPath)) return;
-  const saved = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+const FIXTURES = path.resolve('scripts/experiments/tool-interface-stage1/fixtures');
+const INVALID_PILOT_RESULT = path.join(FIXTURES, 'invalid-pilot-candidate-result.json');
+const REPAIRED_PILOT_REPORT = path.join(FIXTURES, 'repaired-pilot', 'report.json');
+const LIVE_BENCH_RUNS = process.env.STAGE1_LIVE_BENCH_RUNS === '1';
+
+it('records the invalid luna pilot result.json misclassification shape', () => {
+  const saved = JSON.parse(fs.readFileSync(INVALID_PILOT_RESULT, 'utf8'));
   expect(saved.conversationPath).toBeNull();
   expect(saved.metrics.identity.provider).toBeNull();
   expect(saved.wrongModel).toBe(true);
@@ -467,14 +472,24 @@ it('uses the preserved pilot artifact location when present', () => {
   expect(saved.metrics.headerSnapshot.toolNames).toContain('configure_task_check_in');
   expect(saved.metrics.headerSnapshot.toolNameCount).toBe(18);
   expect(saved.metrics.headerSnapshot.combinedHeaderBytes).toBe(6821);
+});
+
+it.skipIf(!LIVE_BENCH_RUNS)('rechecks live .bench-runs artifacts when STAGE1_LIVE_BENCH_RUNS=1', () => {
+  const resultPath = path.resolve(
+    '.bench-runs/stage1-pilot-20260907-2058/cells/luna__memory-billing-contact__trial0__candidate/result.json',
+  );
+  expect(fs.existsSync(resultPath)).toBe(true);
+  const saved = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+  expect(saved.conversationPath).toBeNull();
+  expect(saved.wrongModel).toBe(true);
   const stdoutPath = path.join(path.dirname(resultPath), 'stdout.txt');
   const events = stdoutEvents(fs.readFileSync(stdoutPath, 'utf8'));
   const repaired = extractCellMetrics({ events, wallTimeMs: saved.metrics.wallTimeMs });
   expect(matchIdentity(repaired.identity, saved.cell.model).ok).toBe(true);
   expect(repaired.usage.promptTokensSum).toBe(32892);
+  const liveReport = path.resolve('.bench-runs/stage1-pilot-repaired-20260907-2118/report.json');
+  expect(fs.existsSync(liveReport)).toBe(true);
 });
-
-const REPAIRED_PILOT_REPORT = path.resolve('.bench-runs/stage1-pilot-repaired-20260907-2118/report.json');
 
 it('scores the preserved serialized runCell shape via metrics.headerSnapshot', () => {
   expect(fs.existsSync(REPAIRED_PILOT_REPORT)).toBe(true);

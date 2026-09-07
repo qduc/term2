@@ -1,0 +1,117 @@
+{
+  "provenance": {
+    "source": "tool-interface-bench/.bench-runs/stage1-pilot-20260907-2058/cells/luna__memory-billing-contact__trial0__candidate/result.json",
+    "note": "Sanitized misclassified result.json. No raw logs or auth."
+  },
+  "cell": {
+    "cellId": "luna__memory-billing-contact__trial0__candidate",
+    "pairId": "luna__memory-billing-contact__trial0",
+    "model": {
+      "id": "luna",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "medium"
+    },
+    "task": {
+      "id": "memory-billing-contact",
+      "family": "memory-retrieval",
+      "stratum": "treated-nonessential",
+      "title": "Recover a billing contact from project memory",
+      "prompt": "What billing contact identifier is recorded for Northwind in project memory? Reply with only that identifier.\n",
+      "oracle": {
+        "kind": "exact-token",
+        "token": "ora-keel-19"
+      },
+      "dir": "<task-dir>"
+    },
+    "trial": 0,
+    "arm": "candidate",
+    "order": 6
+  },
+  "cli": "<cli>",
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "conversationPath": null,
+  "identityOk": false,
+  "wrongModel": true,
+  "outcome": {
+    "kind": "infrastructure-failure",
+    "reason": "wrong-model"
+  },
+  "metrics": {
+    "identity": {
+      "sessionId": null,
+      "provider": null,
+      "model": null,
+      "reasoningEffort": null,
+      "projectPath": null
+    },
+    "usage": {
+      "turnCount": 0,
+      "perTurnPromptTokens": [],
+      "perTurnCacheReadTokens": [],
+      "promptTokensSum": null,
+      "cacheReadTokensSum": null,
+      "lastUsage": null,
+      "costUsdMicros": null,
+      "costKnown": false
+    },
+    "headerSnapshot": {
+      "ok": true,
+      "reason": null,
+      "sidecarCount": 3,
+      "source": "provider-traffic-raw",
+      "sourceFile": "<raw-sidecar>",
+      "headerFound": true,
+      "combinedHeaderBytes": 6821,
+      "staticProseBytes": 2726,
+      "staticProseSha256": "de585058d760544f565f8b24b97501ef341157d0f9029f743488fe8f7e3e62da",
+      "headerSha256": "80a5d679a52a4a2844d8b777c97f7661d51d3fa2cf321966fd60d45b1ba6eae2",
+      "toolNames": [
+        "read_file",
+        "apply_patch",
+        "web_search",
+        "web_fetch",
+        "configure_task_check_in",
+        "memory_list",
+        "memory_get",
+        "memory_search",
+        "memory_retrieve",
+        "memory_synthesize",
+        "memory_create",
+        "memory_update",
+        "memory_delete",
+        "activate_skill",
+        "get_subagent_result",
+        "get_subagent_status",
+        "send_message",
+        "cancel_run"
+      ],
+      "toolNameCount": 18
+    },
+    "describeLookups": 0,
+    "invalidParamsAttempted": 0,
+    "unknownToolAttempted": 0,
+    "directSchemaFailures": 0,
+    "recordedNestedCalls": 0,
+    "describeLookupsFromScript": 0,
+    "modelVisibleSchemaLookups": null,
+    "admittedNestedCallsKnown": false,
+    "admittedNestedCalls": null,
+    "admittedNestedNote": "describe lookups are not recorded; invalid_params and unknown_tool are recorded but not admitted. Admitted executions are not separately visible in conversation output.",
+    "resultHandlingFailures": 0,
+    "resultHandlingRecoveries": 0,
+    "runCodeCalls": 0,
+    "wallTimeMs": 14397,
+    "toolStarted": []
+  },
+  "correctness": {
+    "correct": true,
+    "reason": "token-match",
+    "expected": "ora-keel-19",
+    "actual": "ora-keel-19"
+  },
+  "finalTextPreview": "ora-keel-19"
+}

@@ -116,16 +116,20 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
   ];
 };
 
+const GLOB_EMPTY_RESULT_DESCRIPTION =
+  'If no files are found, check the pattern and search path. By default, fd respects .gitignore/.ignore and skips hidden files; retry with no_ignore: true only when fd is available to include ignored or hidden files. no_ignore has no effect on the find fallback.';
 const GLOB_DESCRIPTION =
   'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
   'Do NOT use this to search file contents (inside run_code, use tools.grep(...)) or to find related code from a symbol (use tools.code_context_search(...) inside run_code). ' +
-  'Returns up to max_results matching file paths, one per line, or a note if truncated.';
+  'Returns up to max_results matching file paths, one per line, or a note if truncated. ' +
+  GLOB_EMPTY_RESULT_DESCRIPTION;
 const GLOB_DESCRIPTION_OUTSIDE =
   'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
   'Do NOT use this to search file contents (inside run_code, use tools.grep(...)). ' +
-  'Returns up to max_results matching file paths, one per line, or a note if truncated.';
+  'Returns up to max_results matching file paths, one per line, or a note if truncated. ' +
+  GLOB_EMPTY_RESULT_DESCRIPTION;
 
 export const createFindFilesToolDefinition = (
   deps: {
@@ -279,7 +283,7 @@ export const createFindFilesToolDefinition = (
       }
 
       if (!trimmed) {
-        if (no_ignore) {
+        if (!useFd || no_ignore) {
           return `No files found matching pattern: ${pattern}`;
         }
 

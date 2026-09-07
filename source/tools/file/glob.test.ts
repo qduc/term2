@@ -232,15 +232,13 @@ it.sequential('execute: handles no matches found', async () => {
   });
 });
 
-it.sequential('execute: no-match output explains how to retry ignored-file discovery', async () => {
+it.sequential('execute: no-match output identifies the missing pattern', async () => {
   await withTempDir(async () => {
     const result = (await findFilesToolDefinition.execute({
       pattern: '*.log',
     })) as string;
 
     expect(result).toContain('No files found matching pattern: *.log');
-    expect(result).toContain('.gitignore/.ignore');
-    expect(result).toContain('no_ignore: true');
   });
 });
 
@@ -254,6 +252,40 @@ it.sequential('execute: an explicit no-ignore search does not repeat no-match gu
     expect(result).toContain('No files found matching pattern: *.log');
     expect(result).not.toContain('no_ignore: true');
   });
+});
+
+it.sequential('execute: find fallback no-match does not suggest an ineffective no-ignore retry', async () => {
+  await withTempDir(async () => {
+    const result = (await findFilesToolDefinitionFindFallback.execute({
+      pattern: '*.log',
+    })) as string;
+
+    expect(result).toContain('No files found matching pattern: *.log');
+    expect(result).not.toContain('no_ignore: true');
+  });
+});
+
+it.sequential('execute: find fallback includes hidden and ignored files', async () => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, '.gitignore'), 'ignored.log\n');
+    await fs.writeFile(path.join(dir, '.hidden.log'), '');
+    await fs.writeFile(path.join(dir, 'ignored.log'), '');
+
+    const result = (await findFilesToolDefinitionFindFallback.execute({
+      pattern: '*.log',
+    })) as string;
+
+    expect(result).toContain('.hidden.log');
+    expect(result).toContain('ignored.log');
+  });
+});
+
+it('description: explains empty results and the fd-only no-ignore retry', () => {
+  for (const definition of [findFilesToolDefinition, findFilesToolDefinitionAllowOutside]) {
+    expect(definition.description).toContain('If no files are found, check the pattern and search path.');
+    expect(definition.description).toContain('retry with no_ignore: true only when fd is available');
+    expect(definition.description).toContain('no_ignore has no effect on the find fallback');
+  }
 });
 
 it.sequential('needsApproval: prompts for path outside workspace', async () => {

@@ -9,7 +9,7 @@ import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { NextRunInstruction, RecoveryState } from '../retry/retry-contracts.js';
 import { describeError } from '../../utils/error-helpers.js';
-import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
+import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
@@ -137,12 +137,14 @@ export class InitialTurnRecoveryHandler {
           canRetry: true,
         };
       }
-      yield {
-        type: 'error',
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-        ...(droppedUserMessage ? { droppedUserMessage } : {}),
-      };
+      if (!isClassifiedCancellation(error)) {
+        yield {
+          type: 'error',
+          message: describeError(error),
+          ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+          ...(droppedUserMessage ? { droppedUserMessage } : {}),
+        };
+      }
       this.#logFailure(error);
       return { kind: 'terminated' };
     }
@@ -292,13 +294,17 @@ export class InitialTurnRecoveryHandler {
   }
 
   #logFailure(error: unknown): void {
-    this.deps.logger.error('Conversation stream error', {
-      eventType: 'stream.failed',
+    const classification = classifyProviderFailure(error);
+    const cancelled = isClassifiedCancellation(error);
+    const log = cancelled ? this.deps.logger.debug : this.deps.logger.error;
+    log.call(this.deps.logger, cancelled ? 'Conversation stream aborted' : 'Conversation stream error', {
+      eventType: cancelled ? 'stream.aborted' : 'stream.failed',
       category: 'stream',
       phase: 'abort',
       sessionId: resolveSessionId(this.deps.sessionId),
       traceId: this.deps.logger.getCorrelationId(),
       errorMessage: describeError(error),
+      errorKind: classification.errorKind,
       stack: error instanceof Error ? error.stack : undefined,
     });
   }

@@ -49,7 +49,7 @@ import type {
   NestedApprovalDecision,
   NestedApprovalDecisionResult,
 } from '../approval/nested-approval-owner.js';
-import { isAbortLikeError } from '../../utils/error-helpers.js';
+import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
 import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
 
@@ -598,7 +598,7 @@ export class ConversationService {
         outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
       } estimated tokens).`;
     } catch (error) {
-      if (abort.signal.aborted || isAbortLikeError(error)) {
+      if (abort.signal.aborted || isClassifiedCancellation(error)) {
         return fail('request', 'Context compaction cancelled.');
       }
       await fail('request', 'Context compaction failed.');

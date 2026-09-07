@@ -1,4 +1,4 @@
-import { describeError, isAbortLikeError } from '../../utils/error-helpers.js';
+import { describeError } from '../../utils/error-helpers.js';
 import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -38,6 +38,7 @@ import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
 import type { RestoredState } from './conversation-replay.js';
 import { formatBackgroundTaskLiveness } from '../background-task-activity.js';
+import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
@@ -665,7 +666,7 @@ export class ConversationOrchestrator {
     } catch (error) {
       this.logError('Error in retryLastToolOutput', error);
 
-      if (isAbortLikeError(error)) {
+      if (isClassifiedCancellation(error)) {
         this.config.loggingService.debug('Suppressing abort error in retryLastToolOutput');
         return true;
       }
@@ -696,7 +697,9 @@ export class ConversationOrchestrator {
       return result !== null;
     } catch (error) {
       this.logError('Error in retryLastFailedTurn', error);
-      if (!isAbortLikeError(error)) this.appendBotError(enhanceApiKeyError(describeError(error)));
+      if (!isClassifiedCancellation(error)) {
+        this.appendBotError(enhanceApiKeyError(describeError(error)));
+      }
       return false;
     } finally {
       reasoningUpdater.flush();
@@ -871,7 +874,7 @@ export class ConversationOrchestrator {
         this.config.ui.onQueuedMessageRemoved?.(userMessage.id);
       }
 
-      if (isAbortLikeError(error)) {
+      if (isClassifiedCancellation(error)) {
         this.config.loggingService.debug('Suppressing abort error in sendUserMessage');
         return;
       }
@@ -984,7 +987,7 @@ export class ConversationOrchestrator {
       } catch (error) {
         this.logError('Error in continuation after max turns', error);
 
-        if (isAbortLikeError(error)) {
+        if (isClassifiedCancellation(error)) {
           this.config.loggingService.debug('Suppressing abort error in max turns continuation');
           return;
         }
@@ -1032,7 +1035,7 @@ export class ConversationOrchestrator {
     } catch (error) {
       this.logError('Error in handleApprovalDecision', error);
 
-      if (isAbortLikeError(error)) {
+      if (isClassifiedCancellation(error)) {
         this.config.loggingService.debug('Suppressing abort error in handleApprovalDecision');
         return;
       }
@@ -1364,7 +1367,7 @@ export class ConversationOrchestrator {
     } catch (error) {
       this.logError('Error delivering background subagent notifications', error);
 
-      if (isAbortLikeError(error)) {
+      if (isClassifiedCancellation(error)) {
         this.config.loggingService.debug('Suppressing abort error in background subagent notification turn');
         return;
       }
@@ -1635,7 +1638,7 @@ export class ConversationOrchestrator {
     // Abort-like failures are expected control flow for user cancellation and
     // must not be emitted as application errors. Keep this at the logging
     // boundary so every orchestrator call site shares the same classification.
-    if (isAbortLikeError(error)) return;
+    if (isClassifiedCancellation(error)) return;
 
     this.config.loggingService.error(message, {
       error: error instanceof Error ? error.message : String(error),

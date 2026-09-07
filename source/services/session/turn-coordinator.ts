@@ -14,6 +14,7 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { SessionIdSource } from './session-identity.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
+import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
 export type TurnStartOptions = Pick<
   InitialTurnRunOptions,
@@ -276,6 +277,7 @@ export class TurnCoordinator {
 
   async #emitTurnError(error: unknown): Promise<void> {
     if (!this.#activeTurnId || !this.deps.hookLifecycle || !this.deps.hookEvents) return;
+    if (isClassifiedCancellation(error)) return;
     const message = error instanceof Error ? error.message : String(error);
     await this.#emit(
       this.deps.hookEvents.create(

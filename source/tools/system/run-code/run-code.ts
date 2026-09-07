@@ -156,7 +156,8 @@ export interface RunCodeCallRecord {
     | 'interceptor_denied'
     | 'unknown_tool'
     | 'invalid_params'
-    | 'prohibited';
+    | 'prohibited'
+    | 'describe';
   durationMs: number;
   directlyCallable?: boolean;
 }
@@ -245,18 +246,20 @@ function describeTool(tool: AnyToolDefinition): JsonValue {
   } as JsonValue;
 }
 
-const summarizeCalls = (calls: readonly RunCodeCallRecord[], schemaLookups = 0): string => {
+const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
+  const describeCalls = calls.filter((call) => call.outcome === 'describe');
+  const executionCalls = calls.filter((call) => call.outcome !== 'describe');
   let callSummary: string;
-  if (calls.length === 0) {
+  if (executionCalls.length === 0) {
     callSummary = 'no tool calls';
   } else {
     const counts = new Map<string, number>();
-    for (const call of calls) counts.set(call.tool, (counts.get(call.tool) ?? 0) + 1);
+    for (const call of executionCalls) counts.set(call.tool, (counts.get(call.tool) ?? 0) + 1);
     const parts = [...counts.entries()].map(([tool, count]) => (count > 1 ? `${tool}×${count}` : tool));
-    callSummary = `${calls.length} tool call${calls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
+    callSummary = `${executionCalls.length} tool call${executionCalls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
   }
-  if (schemaLookups > 0) {
-    return `${callSummary}; ${schemaLookups} schema lookup${schemaLookups === 1 ? '' : 's'}`;
+  if (describeCalls.length > 0) {
+    return `${callSummary}; ${describeCalls.length} schema lookup${describeCalls.length === 1 ? '' : 's'}`;
   }
   return callSummary;
 };
@@ -558,7 +561,6 @@ export function createRunCodeToolDefinition(
       const output: string[] = [];
       const sessionId = getConversationSessionId(context);
       const mediaReferences = createMediaReferenceStore();
-      let successfulSchemaLookups = 0;
 
       const record = (
         tool: string,
@@ -567,6 +569,7 @@ export function createRunCodeToolDefinition(
         directlyCallable?: boolean,
       ) => {
         calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
+        if (outcome === 'describe') return;
         writeNestedCallRecord(
           tool,
           sessionId,
@@ -607,7 +610,7 @@ export function createRunCodeToolDefinition(
           if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
             const described = registry.find((candidate) => candidate.name === payload.params);
             if (!described) return failed(unknownToolMessage(payload.params, registry));
-            successfulSchemaLookups++;
+            record(name, 'describe', started);
             return {
               kind: 'result',
               result: { ok: true, result: describeTool(described) } as JsonValue,
@@ -831,17 +834,19 @@ export function createRunCodeToolDefinition(
         onConsole: (values) => output.push(renderConsoleValues(values)),
       });
 
+      const describeCalls = calls.filter((call) => call.outcome === 'describe');
+      const executionCalls = calls.filter((call) => call.outcome !== 'describe');
       loggingService.debug('run_code execution finished', {
         ok: result.ok,
-        toolCalls: calls.length,
-        schemaLookups: successfulSchemaLookups,
+        toolCalls: executionCalls.length,
+        schemaLookups: describeCalls.length,
       });
 
       const resolvedResult =
         result.ok && !result.voidOutput
           ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
           : result;
-      return renderResult(resolvedResult, output, calls, include_console, successfulSchemaLookups);
+      return renderResult(resolvedResult, output, calls, include_console);
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
@@ -997,7 +1002,6 @@ function renderResult(
   output: readonly string[],
   calls: readonly RunCodeCallRecord[],
   includeConsole: boolean,
-  schemaLookups = 0,
 ): Promise<string | readonly RunCodeContentPart[]> {
   const sections: string[] = [];
   const media: RunCodeContentPart[] = [];
@@ -1054,7 +1058,7 @@ function renderResult(
     const names = [...new Set([...directlyUnknown, ...indirectlyUnknown].map((call) => call.tool))].join(', ');
     sections.push(`Unavailable (no registered approval policy): ${names}`);
   }
-  sections.push(`[${summarizeCalls(calls, schemaLookups)}]`);
+  sections.push(`[${summarizeCalls(calls)}]`);
 
   if (media.length > 0) {
     return clip(sections.join('\n\n')).then((text) => [{ type: 'text', text }, ...media]);

@@ -105,8 +105,16 @@ export function renderCompactSignature(tool: {
 }): string {
   const targetSchema = tool.canonicalParameters ?? tool.parameters;
   const schema = schemaFor(targetSchema);
-  if (!schema) {
-    return `tools.${tool.name}(/* unconvertible schema */)`;
+  if (
+    !schema ||
+    schema.anyOf !== undefined ||
+    schema.oneOf !== undefined ||
+    schema.properties === undefined ||
+    (schema.type !== undefined &&
+      schema.type !== 'object' &&
+      (!Array.isArray(schema.type) || !schema.type.includes('object')))
+  ) {
+    return `tools.${tool.name}(/* schema unavailable — use tools.describe */)`;
   }
   const fields = renderFields(schema, 0);
   return `tools.${tool.name}({ ${fields.join(', ')} })`.replace('({  })', '()');

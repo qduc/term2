@@ -51,25 +51,49 @@ describe('renderToolsHeader', () => {
     expect(essentialIndex).toBeLessThan(otherIndex);
   });
 
-  it('reports unconvertible schema honestly rather than a bogus zero-argument signature', () => {
+  it('reports failed conversion, union root, and non-object root schemas honestly as unavailable', () => {
     const text = header([
       tool({
-        name: 'complex_tool',
-        description: 'Tool with unconvertible schema',
+        name: 'failing_tool',
+        description: 'Failed conversion tool',
         parameters: z.custom(() => true),
+      }),
+      tool({
+        name: 'union_tool',
+        description: 'Union root tool',
+        parameters: z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]),
+      }),
+      tool({
+        name: 'non_object_tool',
+        description: 'Non-object root tool',
+        parameters: z.string(),
+      }),
+      tool({
+        name: 'empty_tool',
+        description: 'Truly empty schema tool',
+        parameters: z.object({}),
       }),
     ]);
 
-    expect(text).toContain('tools.complex_tool(/* unconvertible schema */) — Tool with unconvertible schema');
-    expect(text).not.toContain('tools.complex_tool()');
+    expect(text).toContain(
+      '- tools.failing_tool(/* schema unavailable — use tools.describe */) — Failed conversion tool',
+    );
+    expect(text).toContain('- tools.union_tool(/* schema unavailable — use tools.describe */) — Union root tool');
+    expect(text).toContain(
+      '- tools.non_object_tool(/* schema unavailable — use tools.describe */) — Non-object root tool',
+    );
+    expect(text).toContain('- tools.empty_tool() — Truly empty schema tool');
+    expect(text).not.toContain('tools.failing_tool()');
+    expect(text).not.toContain('tools.union_tool()');
+    expect(text).not.toContain('tools.non_object_tool()');
   });
 
   it('says plainly that the shapes are approximate and the real schema decides', () => {
     expect(header([tool({ name: 'x' })])).toContain('approximate');
   });
 
-  it('renders a no-parameter tool as callable with nothing', () => {
-    expect(header([tool({ name: 'read_file' })])).toContain('- tools.read_file()');
+  it('renders a truly empty parameter tool as callable with nothing', () => {
+    expect(header([tool({ name: 'read_file', parameters: z.object({}) })])).toContain('- tools.read_file()');
   });
 
   it('renders enums and arrays structurally and falls back to unknown', () => {
@@ -158,10 +182,22 @@ describe('renderCompactSignature (shared with the invalid-parameters site)', () 
     expect(text).not.toContain('replacements: object[]');
   });
 
-  it('reports unconvertible schema honestly rather than a bogus zero-argument signature', () => {
+  it('reports schema unavailable marker for failed conversion, union root, and non-object root', () => {
     expect(renderCompactSignature(tool({ name: 'unconvertible', parameters: z.custom(() => true) }))).toBe(
-      'tools.unconvertible(/* unconvertible schema */)',
+      'tools.unconvertible(/* schema unavailable — use tools.describe */)',
     );
+    expect(
+      renderCompactSignature(
+        tool({
+          name: 'union_tool',
+          parameters: z.union([z.object({ a: z.string() }), z.object({ b: z.number() })]),
+        }),
+      ),
+    ).toBe('tools.union_tool(/* schema unavailable — use tools.describe */)');
+    expect(renderCompactSignature(tool({ name: 'string_tool', parameters: z.string() }))).toBe(
+      'tools.string_tool(/* schema unavailable — use tools.describe */)',
+    );
+    expect(renderCompactSignature(tool({ name: 'empty_tool', parameters: z.object({}) }))).toBe('tools.empty_tool()');
   });
 });
 

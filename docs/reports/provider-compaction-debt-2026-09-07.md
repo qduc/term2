@@ -83,12 +83,22 @@ the checkpoint is sent as a new, unchained request. The test also seeds the
 prior response with a function call, proving that the boundary removes stale
 provider debt rather than merely testing an ordinary message turn.
 
-## Remaining boundary
+## Context ownership follow-up
 
 The T1 compaction-trigger artifact has a root-session HTTP header while its
-body is the worker's history. That is an attribution/context observation worth
-separate investigation, but it is not needed to establish this provider-side
-failure: the worker's subsequent Luna request demonstrably reused the old
-anchor. No real external provider call or live rollover was used for the
-regression.
+body is the worker's history. The code trace and caller-seam regression now
+establish that this is not a worker-chain ownership mismatch. The Codex HTTP
+header middleware deliberately uses the conversation `sessionId` for its
+request metadata, while the Luna chain and WebSocket identity use the
+`providerHistoryKey`. Automatic native compaction is invoked at the
+`ApplicationRunLoop` request boundary, and `SubagentAsyncRegistry` wraps every
+worker segment in that worker traffic context; the context survives the
+`AgentClient` compaction call and the following stream request.
+
+The focused caller-seam test observes the worker key for both operations. The
+provider-model tests additionally use real `AsyncLocalStorage` contexts to
+prove that successful compaction drops only the worker key (the root key still
+chains) and that a failed compaction leaves the worker chain, including its
+function-call debt, intact. No real external provider call or live rollover
+was used for these regressions.
 

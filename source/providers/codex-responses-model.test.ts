@@ -1779,6 +1779,169 @@ it('CodexResponsesWSModel drops Luna server history at a native compaction bound
   ]);
 });
 
+it('CodexResponsesWSModel invalidates only the worker chain when native compaction runs in a nested context', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const sessionContextService = new SessionContextService();
+  const seenRequests: Array<{ request: any; providerHistoryKey?: string }> = [];
+  const trafficBodies: any[] = [];
+  const providerTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordResponseClosed() {},
+    recordRequestFailed() {},
+  };
+  let responseCount = 0;
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push({ request, providerHistoryKey: sessionContextService.getContext()?.providerHistoryKey });
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: `resp_nested_compaction_${responseCount}`,
+          output: [],
+          usage: {},
+        },
+      },
+    ]);
+  };
+  transport.compactHistory = async () => ({
+    history: [
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp-nested-boundary', encrypted_content: 'opaque' },
+      },
+    ],
+  });
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    providerTraffic,
+    sessionContextService,
+    transport,
+  );
+  const rootContext = {
+    sessionId: 'root-session',
+    sessionStartedAt: '2026-09-07T00:00:00.000Z',
+    providerHistoryKey: 'root-session:subagent:root',
+  };
+  const workerContext = {
+    sessionId: 'root-session',
+    sessionStartedAt: '2026-09-07T00:00:00.000Z',
+    providerHistoryKey: 'root-session:subagent:worker',
+  };
+  const rootInput = [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'root' }] }];
+  const rootContinuationInput = [
+    ...rootInput,
+    { type: 'message', role: 'user', content: [{ type: 'text', text: 'root continuation' }] },
+  ];
+  const workerInput = [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'worker' }] }];
+  const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
+  const run = (context: typeof rootContext, input: any[]) =>
+    sessionContextService.runWithContext(context, () =>
+      collect(model.stream({ input, instructions: 'Follow the repository instructions.', tools: [tool] } as any)),
+    );
+
+  await run(rootContext, rootInput);
+  await run(workerContext, workerInput);
+  await sessionContextService.runWithContext(workerContext, () => model.compactHistory({ input: [] }));
+  await run(workerContext, [
+    { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-nested-boundary' } },
+  ]);
+  await run(rootContext, rootContinuationInput);
+
+  expect(seenRequests.map(({ providerHistoryKey }) => providerHistoryKey)).toEqual([
+    rootContext.providerHistoryKey,
+    workerContext.providerHistoryKey,
+    workerContext.providerHistoryKey,
+    rootContext.providerHistoryKey,
+  ]);
+  expect(trafficBodies[2].previous_response_id).toBeUndefined();
+  expect(trafficBodies[2].input.at(-1)).toEqual(
+    expect.objectContaining({ type: 'compaction', id: 'cmp-nested-boundary' }),
+  );
+  expect(trafficBodies[3].previous_response_id).toBe('resp_nested_compaction_1');
+});
+
+it('CodexResponsesWSModel preserves the worker chain when native compaction fails in that context', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const sessionContextService = new SessionContextService();
+  const seenRequests: any[] = [];
+  const trafficBodies: any[] = [];
+  const providerTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordResponseClosed() {},
+    recordRequestFailed() {},
+  };
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_failed_compaction_worker',
+          output: [{ type: 'function_call', call_id: 'call-worker', name: 'shell' }],
+          usage: {},
+        },
+      },
+    ]);
+  };
+  transport.compactHistory = async () => {
+    throw new Error('temporary native compaction failure');
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    providerTraffic,
+    sessionContextService,
+    transport,
+  );
+  const workerContext = {
+    sessionId: 'root-session',
+    sessionStartedAt: '2026-09-07T00:00:00.000Z',
+    providerHistoryKey: 'root-session:subagent:worker-failed',
+  };
+  const initialInput = [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'worker' }] }];
+  const toolOutput = { type: 'tool_result', id: 'call-worker', output: 'completed' };
+  const tool = { type: 'function', name: 'shell', parameters: { type: 'object' } };
+
+  await sessionContextService.runWithContext(workerContext, () =>
+    collect(
+      model.stream({ input: initialInput, instructions: 'Follow the repository instructions.', tools: [tool] } as any),
+    ),
+  );
+  await expect(
+    sessionContextService.runWithContext(workerContext, () => model.compactHistory({ input: [] })),
+  ).rejects.toThrow('temporary native compaction failure');
+  await sessionContextService.runWithContext(workerContext, () =>
+    collect(
+      model.stream({
+        input: [...initialInput, { type: 'tool_call', id: 'call-worker', name: 'shell', arguments: '{}' }, toolOutput],
+        instructions: 'Follow the repository instructions.',
+        tools: [tool],
+      } as any),
+    ),
+  );
+
+  expect(seenRequests).toHaveLength(2);
+  expect(trafficBodies[1].previous_response_id).toBe('resp_failed_compaction_worker');
+  expect(trafficBodies[1].input).toEqual([
+    { type: 'function_call_output', call_id: 'call-worker', output: 'completed' },
+  ]);
+});
+
 it('CodexResponsesWSModel does not replay a Luna tool transcript when server output differs from restored history', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];

@@ -22,6 +22,25 @@ it('formatSubagentResult includes worktree path when the worker was pinned', () 
   expect(text).toContain('done');
 });
 
+it('formatSubagentResult does not turn unknown validation evidence into success', () => {
+  const text = formatSubagentResult({
+    agentId: 'a1',
+    role: 'worker',
+    status: 'cancelled',
+    finalText: '',
+    filesChanged: [],
+    toolsUsed: [],
+    validation: {
+      command: 'pnpm test',
+      exitStatus: 'unknown',
+      outputExcerpt: 'cancelled\nInterrupted: the command was cancelled before completing.',
+    },
+  });
+
+  expect(text).toContain('Validation: pnpm test → exit unknown');
+  expect(text).not.toContain('Validation: pnpm test → exit 0');
+});
+
 it('isMaxTurnsExceededError recognizes the run-loop budget class and its message', () => {
   expect(isMaxTurnsExceededError(new MaxTurnsExceededError(12))).toBe(true);
   expect(isMaxTurnsExceededError(new Error('Max turns (12) exceeded'))).toBe(true);

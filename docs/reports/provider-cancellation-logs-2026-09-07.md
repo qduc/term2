@@ -68,9 +68,11 @@ All commands ran in the isolated `provider-cancel-logs` worktree after
 | `pnpm test source/services/logging/provider-traffic.test.ts` (test-only red proof before implementation) | fail as expected | 46 passed, 2 new failures; Vitest 0.397s, shell 2.408s |
 | same three-file focused command after implementation | pass | 174 tests, 3 files; Vitest 0.768s, shell 2.789s |
 | `pnpm test source/services/retry/provider-failure-classification.test.ts source/services/logging/provider-traffic.test.ts source/providers/fetch/composer.test.ts source/providers/codex-responses-model.test.ts` | pass | 182 tests, 4 files; Vitest 0.862s, shell 2.922s |
+| same four-file focused command after parent-review follow-up coverage | pass | 186 tests, 4 files; Vitest 1.05s, shell 3.152s |
 | `pnpm typecheck` | pass | shell 8.953s |
+| `pnpm typecheck` after parent-review follow-up coverage | pass | shell 5.289s |
 | `pnpm test:provider-black-box` | pass | 177 passed, 1 skipped, 20 files; Vitest 84.87s, shell 93.979s |
-| `pnpm test:changed` | fail (pre-existing unrelated changed-file baseline) | 3294 passed, 22 failed, 2 expected fail, 2 skipped; Vitest 78.28s, shell 98.718s |
+| `pnpm test:changed` | fail (failure attribution unverified) | 3294 passed, 22 failed, 2 expected fail, 2 skipped; Vitest 78.28s, shell 98.718s |
 
 ## Unknowns and boundaries
 
@@ -84,8 +86,8 @@ All commands ran in the isolated `provider-cancel-logs` worktree after
 - The provider black-box gate covers Codex/OpenAI HTTP and WebSocket failure
   lifecycles, but it does not assert application log severity for a live user
   cancellation; the deterministic unit regressions own that contract.
-- `pnpm test:changed` selected the repository's existing broad changed-file
-  set and failed in eight unrelated files (approval/sandbox path expectations,
-  nested approval UI, subagent role status, and scripted-adapter behavior).
-  None of the three provider cancellation files failed in that run; the
-  focused provider gate above is the relevant green gate for this diff.
+- The `pnpm test:changed` failure set was not compared by exact test identity
+  with the main-worktree baseline (the available baseline receipt records 20
+  failures). Its 22 failures therefore have unverified attribution: this
+  report does not claim they were pre-existing or classify any extra failures.
+  The focused provider gate above is the relevant green gate for this diff.

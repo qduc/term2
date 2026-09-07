@@ -1243,6 +1243,133 @@ it('ProviderTraffic keeps mixed cancellation and provider failures on the error 
   );
 });
 
+it('ProviderTraffic.recordResponseReceived logs a pure cancellation as an aborted debug event while retaining the artifact', async () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, warn: vi.fn(), error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'received-cancelled-request';
+  const cancellation = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+
+  traffic.recordRequestStart({ requestId, provider: 'openai', model: 'gpt-5.6-luna', sentBody: {} });
+  await traffic.recordResponseReceived({
+    requestId,
+    provider: 'openai',
+    model: 'gpt-5.6-luna',
+    status: 200,
+    response: {},
+    error: cancellation as any,
+  });
+
+  expect(error).not.toHaveBeenCalled();
+  expect(debug).toHaveBeenCalledWith(
+    'openai response aborted',
+    expect.objectContaining({
+      eventType: 'stream.aborted',
+      category: 'stream',
+      phase: 'abort',
+      error: cancellation,
+      errorKind: 'cancelled',
+    }),
+  );
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+  expect(received).toMatchObject({ direction: 'received', requestId, error: { name: 'AbortError' } });
+});
+
+it('ProviderTraffic.recordResponseReceived keeps mixed cancellation and provider failures on the error path', async () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, warn: vi.fn(), error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const providerFailure = Object.assign(new Error('upstream unavailable'), { status: 503 });
+  const cancellation = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+  const mixed = new AggregateError([cancellation, providerFailure], 'request failed during cancellation');
+  const requestId = 'received-mixed-request';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: {} });
+  await traffic.recordResponseReceived({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    status: 200,
+    response: {},
+    error: mixed as any,
+  });
+
+  expect(debug).not.toHaveBeenCalledWith('codex response aborted', expect.anything());
+  expect(error).toHaveBeenCalledWith(
+    'codex request failed',
+    expect.objectContaining({
+      eventType: 'provider.response.failed',
+      category: 'provider',
+      error: mixed,
+      errorKind: 'cancelled',
+    }),
+  );
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  expect(readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received).toHaveProperty('error');
+});
+
+it('ProviderTraffic.recordResponseReceived keeps a concrete provider failure on the error path', async () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, warn: vi.fn(), error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const providerFailure = Object.assign(new Error('upstream unavailable'), { status: 503 });
+  const requestId = 'received-provider-failure-request';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: {} });
+  await traffic.recordResponseReceived({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    status: 503,
+    response: {},
+    error: providerFailure as any,
+  });
+
+  expect(debug).not.toHaveBeenCalledWith('codex response aborted', expect.anything());
+  expect(error).toHaveBeenCalledWith(
+    'codex request failed',
+    expect.objectContaining({
+      eventType: 'provider.response.failed',
+      category: 'provider',
+      error: providerFailure,
+      errorKind: 'provider',
+    }),
+  );
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  expect(readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received).toMatchObject({
+    requestId,
+    error: { status: 503 },
+  });
+});
+
 // A stream that fails after delivering frames (e.g. an abrupt WebSocket close)
 // previously reached recordRequestFailed with no evidence of what the model
 // was doing beforehand — the failed artifact retained nothing but the error

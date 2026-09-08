@@ -92,8 +92,16 @@ async function fetchOpenRouterModels(
   }
 
   const body = await response.json();
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
+  const minimumCreatedAt = twoYearsAgo.getTime() / 1000;
   const filteredData = (body?.data || []).filter(
-    (item: any) => Array.isArray(item?.supported_parameters) && item.supported_parameters.includes('tools'),
+    (item: any) =>
+      Array.isArray(item?.supported_parameters) &&
+      item.supported_parameters.includes('tools') &&
+      typeof item.created === 'number' &&
+      Number.isFinite(item.created) &&
+      item.created >= minimumCreatedAt,
   );
 
   if (!Array.isArray(filteredData)) return [];

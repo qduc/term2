@@ -69,6 +69,7 @@ it.sequential('fetchModels uses OpenRouter endpoint and caches results', async (
             id: 'openrouter/model-a',
             name: 'Model A',
             supported_parameters: ['tools', 'temperature'],
+            created: Math.floor(Date.now() / 1000),
           },
           {
             id: 'openrouter/model-b',
@@ -79,6 +80,7 @@ it.sequential('fetchModels uses OpenRouter endpoint and caches results', async (
             id: 'openrouter/model-c',
             name: 'Model C',
             supported_parameters: ['tools', 'max_tokens'],
+            created: Math.floor(Date.now() / 1000),
           },
         ],
       }),
@@ -471,7 +473,9 @@ describe.sequential('model disk cache', () => {
       return {
         ok: true,
         json: async () => ({
-          data: [{ id: 'openrouter/test-model', supported_parameters: ['tools'] }],
+          data: [
+            { id: 'openrouter/test-model', supported_parameters: ['tools'], created: Math.floor(Date.now() / 1000) },
+          ],
         }),
       };
     };

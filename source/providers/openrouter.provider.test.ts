@@ -1,6 +1,8 @@
 import { it, expect } from 'vitest';
 import { openRouterPreprocessingMiddleware } from './openrouter.provider.js';
 import type { FetchContext } from './fetch/compose.js';
+import { getProvider } from './registry.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 
 async function runMiddleware(body: Record<string, unknown>, model?: string): Promise<any> {
   let capturedInit: RequestInit | undefined;
@@ -77,4 +79,29 @@ it('passes the request through unmodified when the body is not JSON', async () =
     next,
   );
   expect(capturedInit!.body).toBe('not-json');
+});
+
+it('lists only tool-capable OpenRouter models released within the last two years', async () => {
+  const cutoff = new Date();
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
+  const cutoffSeconds = Math.floor(cutoff.getTime() / 1000);
+  const provider = getProvider('openrouter');
+
+  const models = await provider!.fetchModels(
+    { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+    async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'recent-tool-model', supported_parameters: ['tools'], created: cutoffSeconds + 60 },
+            { id: 'old-tool-model', supported_parameters: ['tools'], created: cutoffSeconds - 60 },
+            { id: 'recent-no-tools-model', supported_parameters: [], created: cutoffSeconds + 60 },
+            { id: 'missing-release-date-model', supported_parameters: ['tools'] },
+          ],
+        }),
+      } as any),
+  );
+
+  expect(models).toEqual([{ id: 'recent-tool-model', name: undefined }]);
 });

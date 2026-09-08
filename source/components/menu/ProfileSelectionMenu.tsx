@@ -29,15 +29,33 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
 
   const selectedProfile = items[selectedIndex];
 
+  // Fixed list width (24) minus the SelectionMarker gutter (2) and the
+  // column's trailing padding (1), minus the active `● ` prefix where
+  // present. List labels are truncated to this budget in JS: an unbreakable
+  // (truncate-mode) Text reports its full length as its minimum width,
+  // which would defeat the column's shrinking on narrow terminals and spill
+  // past the border. The full name stays visible in the detail pane.
+  const LIST_WIDTH = 24;
+  const MARKER_WIDTH = 2;
+
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} flexDirection="column" width="100%" paddingX={1}>
         <Text color={COLOR_TEXT_SUBTLE}>Profiles{query ? ` — ${query}` : ''}</Text>
-        <Box flexDirection="row" width="100%">
+        {/* flexWrap + minWidth is the narrow-terminal plan: while the detail
+            pane has at least half the row it sits beside the list with a
+            straight divider; below that it drops to its own full-width line
+            instead of squeezing the list gutter or fragmenting the text.
+            The list column only shrinks when it alone overflows the row
+            (never because of the detail), down to a floor that keeps the
+            marker plus a readable stub of the name. */}
+        <Box flexDirection="row" flexWrap="wrap" width="100%">
           {/* Left column: the list */}
           <Box
             flexDirection="column"
-            width={24}
+            width={LIST_WIDTH}
+            flexShrink={1}
+            minWidth={10}
             borderStyle="single"
             borderTop={false}
             borderBottom={false}
@@ -51,11 +69,15 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
               const actualIndex = scrollOffset + visibleIndex;
               const isSelected = actualIndex === selectedIndex;
               const isActive = profile.id === activeProfileId;
+              const label = isActive ? `● ${profile.displayName}` : profile.displayName;
+              const labelBudget = Math.max(LIST_WIDTH - MARKER_WIDTH - 1, 4);
+              const displayLabel =
+                label.length > labelBudget ? `${label.slice(0, Math.max(labelBudget - 1, 1))}…` : label;
               return (
                 <Box key={profile.id}>
                   <SelectionMarker selected={isSelected} />
                   <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected || isActive} wrap="truncate">
-                    {isActive ? `● ${profile.displayName}` : profile.displayName}
+                    {displayLabel}
                   </Text>
                 </Box>
               );
@@ -64,7 +86,7 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
           </Box>
 
           {/* Right column: detail for the highlighted profile */}
-          <Box flexDirection="column" flexGrow={1} paddingLeft={2}>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth="50%" paddingLeft={2}>
             {selectedProfile && (
               <Box flexDirection="column">
                 <Text bold color={COLOR_ACCENT}>

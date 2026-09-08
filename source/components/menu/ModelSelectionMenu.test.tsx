@@ -3,7 +3,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { afterEach, beforeEach, it, expect, vi } from 'vitest';
 import os from 'node:os';
 import React from 'react';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { Box } from 'ink';
+import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -356,6 +357,80 @@ it.sequential(
     expect(output).toContain('Nickname "op" is already in use.');
   },
 );
+
+// Regression: each row used to render the id, provider, nickname, and
+// display name as sibling Text fields that shrank and wrapped
+// independently — at 40 cols `claude-sonnet-4-20250514 (anthropic) — Claude
+// Sonnet 4` lost the `p` in the provider and scrambled reading order, and
+// favorites/nicknames broke the row even at 80. The row is now one
+// paragraph, so wrapping can never drop characters or reorder segments.
+const wrappingModel: ModelInfo = { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic' };
+
+for (const width of [80, 40, 24]) {
+  it.sequential(`keeps the model row intact and ordered at ${width} cols`, async () => {
+    const { lastFrame } = await renderInAct(
+      <Box width={width}>
+        <ModelSelectionMenu
+          settingsService={createMockSettingsService()}
+          items={[wrappingModel]}
+          selectedIndex={0}
+          query=""
+        />
+      </Box>,
+    );
+
+    const frame = toVisibleText(lastFrame()!);
+    const lines = frame.split('\n');
+
+    // Stable two-cell marker gutter on the row.
+    expect(lines.some((line) => /❯ claude-sonnet/.test(line))).toBe(true);
+
+    // No dropped characters anywhere on the row: strip window chrome and
+    // all whitespace (line breaks included) and require each segment
+    // verbatim, in order.
+    const compacted = frame.replace(/[│╭╮╰╯─]/g, '').replace(/\s+/g, '');
+    const idIdx = compacted.indexOf('claude-sonnet-4-20250514');
+    const providerIdx = compacted.indexOf('(anthropic)');
+    const nameIdx = compacted.indexOf('ClaudeSonnet4');
+    expect(idIdx).toBeGreaterThanOrEqual(0);
+    expect(providerIdx).toBeGreaterThanOrEqual(0);
+    expect(nameIdx).toBeGreaterThanOrEqual(0);
+    expect(providerIdx).toBeGreaterThan(idIdx);
+    expect(nameIdx).toBeGreaterThan(providerIdx);
+
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(width);
+    }
+  });
+}
+
+it.sequential('keeps a favorited, nicknamed row on one ordered line at 80 cols', async () => {
+  const { lastFrame } = await renderInAct(
+    <Box width={80}>
+      <ModelSelectionMenu
+        settingsService={createMockSettingsService()}
+        items={[wrappingModel]}
+        selectedIndex={0}
+        query=""
+        favoriteKeys={new Set([serializeFavorite('anthropic', 'claude-sonnet-4-20250514')])}
+        nicknameLabels={new Map([['anthropic/claude-sonnet-4-20250514', 'sonny']])}
+      />
+    </Box>,
+  );
+
+  const frame = toVisibleText(lastFrame()!);
+  const row = frame.split('\n').find((line) => line.includes('claude-sonnet-4-20250514'));
+  expect(row).toBeDefined();
+  expect(row).toContain('❯');
+  expect(row).toContain('★');
+  expect(row).toContain('aka "sonny"');
+  expect(row).toContain('(anthropic)');
+  expect(row).toContain('Claude Sonnet 4');
+  const order = ['❯', '★', 'claude-sonnet-4-20250514', 'aka "sonny"', '(anthropic)', 'Claude Sonnet 4'].map((s) =>
+    row!.indexOf(s),
+  );
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+});
 
 it.sequential('does not render the nickname editor row on provider tabs', async () => {
   const { lastFrame } = await renderInAct(

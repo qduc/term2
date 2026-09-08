@@ -15,11 +15,18 @@ import {
  * `inverse`, which paints the row with the *terminal's* background color and so
  * looks harsh (and differs machine to machine). It also keeps every row's text
  * on the same left edge, selected or not.
+ *
+ * The fixed-width, non-shrinking wrapper is the point: without it Yoga steals
+ * the gutter's cells first on narrow terminals (the marker collapses to `❯/`
+ * and then vanishes), so every row must treat this as an inflexible 2-cell
+ * gutter, never as shrinkable text.
  */
 export const SelectionMarker: React.FC<{ selected: boolean }> = ({ selected }) => (
-  <Text color={COLOR_ACCENT} bold>
-    {selected ? `${GLYPH_SELECTED} ` : '  '}
-  </Text>
+  <Box width={2} flexShrink={0}>
+    <Text color={COLOR_ACCENT} bold wrap="truncate">
+      {selected ? `${GLYPH_SELECTED} ` : '  '}
+    </Text>
+  </Box>
 );
 
 /**
@@ -116,8 +123,12 @@ export function MenuContainer<T>({
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + maxHeight < items.length;
 
+  // width="100%" keeps rows honest: without a definite container width the
+  // rows size to their content, percentage min-widths (the narrow-terminal
+  // wrap plans) resolve against nothing, and a wide terminal gets a
+  // shrink-wrapped menu instead of full-width rows.
   const content = (
-    <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
+    <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column" width="100%">
       {titleElement}
       {hasScrollUp && <Text color={COLOR_TEXT_SUBTLE}>↑ {scrollOffset} more</Text>}
       {visibleItems.map((item, visibleIndex) => {
@@ -159,7 +170,7 @@ export function MenuContainer<T>({
 
   if (footerOutsideBorder && footer) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" width="100%">
         {content}
         {typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer}
       </Box>

@@ -29,7 +29,7 @@ it('run_code header reads as an action and omits the script body', async () => {
   );
 
   const output = stripAnsi(lastFrame() ?? '');
-  expect(output).toContain('Ran code count callers');
+  expect(output).toContain('count callers');
   expect(output).not.toContain('tools.grep');
   unmount();
 });
@@ -86,7 +86,7 @@ it('concise mode stays on one line for a clean run', async () => {
   );
 
   const output = stripAnsi(lastFrame() ?? '').trim();
-  expect(output).toContain('Ran code count callers');
+  expect(output).toContain('count callers');
   expect(output).not.toContain('grep');
   expect(output.split('\n')).toHaveLength(1);
   unmount();
@@ -106,7 +106,7 @@ it('concise mode reports refused calls in the header', async () => {
   );
 
   const output = stripAnsi(lastFrame() ?? '');
-  expect(output).toContain('Ran code apply the rename (1 refused)');
+  expect(output).toContain('apply the rename (1 refused)');
   unmount();
 });
 
@@ -123,7 +123,7 @@ it('falls back to the generic card when the result carries no call summary', asy
   );
 
   const output = stripAnsi(lastFrame() ?? '');
-  expect(output).toContain('Ran code count callers');
+  expect(output).toContain('count callers');
   expect(output).not.toContain('needs approval');
   unmount();
 });

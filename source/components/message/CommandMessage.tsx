@@ -257,7 +257,7 @@ const CommandMessage: FC<Props> = ({
       case 'run_agent_workflow':
         return renderAction('Ran agent workflow');
       case 'run_code':
-        return renderAction('Ran code');
+        return renderAction('');
       case 'enter_worktree':
         return renderAction('Entered worktree');
       case 'exit_worktree':

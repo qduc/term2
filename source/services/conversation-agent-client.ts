@@ -31,6 +31,8 @@ export type AgentClientRunOptions = {
   /** Skip previous_response_id and transport history compression for this attempt. */
   disableChainingForAttempt?: boolean;
   sessionId?: string;
+  /** Stable root prompt-cache affinity, independent of a rolled-over sessionId. */
+  promptCacheKey?: string;
   toolResultCallIds?: readonly string[];
   knownToolCallIds?: readonly string[];
   /** Immutable, out-of-band authoritative history for provider compatibility seams. */

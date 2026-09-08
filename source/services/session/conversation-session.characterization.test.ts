@@ -962,6 +962,43 @@ it('sendMessage runs inside sessionContextService.runWithContext with session co
   expect(ctx.traceId).toBe('trace-abc-123');
 });
 
+it('keeps the root prompt-cache affinity across rollover while changing logical identity', async () => {
+  const contexts: any[] = [];
+  const sessionContextService = {
+    runWithContext(context: any, fn: () => any) {
+      contexts.push(context);
+      return fn();
+    },
+    getContext: () => null,
+  };
+  const startOptions: any[] = [];
+  const makeStream = (text: string) => {
+    const stream = new MockStream([]);
+    stream.finalOutput = text;
+    return stream;
+  };
+  const bundle = createConversationSession({
+    sessionId: 'root-before',
+    agentClient: createMockAgentClient({
+      startStream: async (_input: unknown, options: unknown) => {
+        startOptions.push(options);
+        return makeStream('ok');
+      },
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  await bundle.terminalAdapter.sendMessage('before');
+  const affinity = contexts[0].promptCacheKey;
+  bundle.rollover('root-after');
+  await bundle.terminalAdapter.sendMessage('after');
+
+  expect(affinity).toBe('root-before');
+  expect(contexts[1]).toMatchObject({ sessionId: 'root-after', promptCacheKey: affinity });
+  expect(startOptions[1]).toMatchObject({ sessionId: 'root-after', promptCacheKey: affinity });
+  bundle.dispose();
+});
+
 it('rollover forwards successor identity and start time through the adapter traffic context', async () => {
   const contextLog: any[] = [];
   const sessionContextService = {

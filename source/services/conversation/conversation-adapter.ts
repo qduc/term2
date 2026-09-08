@@ -14,6 +14,7 @@ import type { SessionManager } from '../session/session-manager.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
 import type { SessionIdentity } from '../session/session-identity.js';
+import { resolvePromptCacheKey } from '../session/session-identity.js';
 import {
   QueueController,
   type ActionId,
@@ -396,6 +397,7 @@ export class ConversationAdapter {
       {
         sessionId: this.#currentSessionId(),
         sessionStartedAt: this.#currentStartedAt(),
+        promptCacheKey: resolvePromptCacheKey(this.#sessionId),
         mode,
         traceId: this.#logger.getCorrelationId(),
         firstUserMessagePreview,

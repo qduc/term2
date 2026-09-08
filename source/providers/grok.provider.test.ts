@@ -171,6 +171,42 @@ it('sends the conversation id header xAI uses to pin prompt-cache affinity', asy
   expect(headers.get('x-grok-conv-id')).toBe('session-abc');
 });
 
+it('keeps Grok cache affinity stable across rollover without reusing the successor session metadata', async () => {
+  const manager = new GrokTokenManager({ authPath: tokenFile() });
+  const seen: Array<{ init: any }> = [];
+  const upstream = vi.fn(async (_url: any, init: any) => {
+    seen.push({ init });
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  const contexts = [
+    { sessionId: 'before', promptCacheKey: 'stable-affinity' },
+    { sessionId: 'after', promptCacheKey: 'stable-affinity' },
+  ];
+  let index = 0;
+  const sessionContextService = { getContext: () => contexts[index] } as any;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = upstream as any;
+  try {
+    const grokFetch = buildGrokFetch(
+      { settingsService: { get: () => undefined } as any, loggingService: silentLogging, sessionContextService } as any,
+      manager,
+      'grok-4.6',
+    );
+    await grokFetch(`${GROK_BASE_URL}/chat/completions`, { method: 'POST', body: '{}' });
+    index = 1;
+    await grokFetch(`${GROK_BASE_URL}/chat/completions`, { method: 'POST', body: '{}' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const first = new Headers(seen[0].init.headers);
+  const second = new Headers(seen[1].init.headers);
+  expect(first.get('x-grok-conv-id')).toBe('stable-affinity');
+  expect(second.get('x-grok-conv-id')).toBe('stable-affinity');
+  expect(first.get('x-grok-session-id')).toBe('before');
+  expect(second.get('x-grok-session-id')).toBe('after');
+});
+
 // Grok's proxy serves /v1/responses, which returns typed reasoning and
 // function_call items and accepts `include: ["reasoning.encrypted_content"]`.
 // Chat completions only ever gave us a reasoning *summary*, and forced the

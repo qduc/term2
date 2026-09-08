@@ -34,6 +34,8 @@ export type LogMetadataContract = {
 export type SessionTrafficContext = {
   sessionId: string;
   sessionStartedAt: string;
+  /** Stable root prompt-cache affinity; logical sessionId may rotate on rollover. */
+  promptCacheKey?: string;
   providerHistoryKey?: string;
   mode?: string;
   traceId?: string;
@@ -61,7 +63,24 @@ export interface ProviderTrafficRequest {
   headers?: Record<string, string>;
   modelClass?: string;
   modelWrapperClass?: string;
+  promptCacheKey?: string;
+  providerHistoryKey?: string;
 }
+
+export type ProviderRequestFingerprintMeasurement = {
+  sha256: string;
+  bytes: number;
+};
+
+export type ProviderRequestFingerprint = {
+  version: string;
+  prefix: ProviderRequestFingerprintMeasurement & {
+    parts: Array<ProviderRequestFingerprintMeasurement & { source: string }>;
+  };
+  instructions?: ProviderRequestFingerprintMeasurement;
+  system?: ProviderRequestFingerprintMeasurement;
+  tools?: ProviderRequestFingerprintMeasurement & { count: number };
+};
 
 export interface ProviderTrafficResponse {
   requestId: string;

@@ -24,7 +24,7 @@ import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-cod
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
-  getAgent(sessionId?: string): ApplicationAgent;
+  getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent;
   getProvider(): string;
   getModel(): string;
 }
@@ -167,15 +167,16 @@ export class AgentConfiguration implements AgentSource {
   }
 
   // AgentSource implementation
-  getAgent(sessionId?: string): ApplicationAgent {
+  getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
       const capabilities = getProvider(this.#provider)?.capabilities;
       const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
       }
+      const cacheKey = promptCacheKey ?? sessionId;
       if (capabilities?.promptCacheKeyPlacement !== 'responses-extra-body') {
-        return { ...this.#agent, modelSettings: { ...(this.#agent.modelSettings ?? {}), prompt_cache_key: sessionId } };
+        return { ...this.#agent, modelSettings: { ...(this.#agent.modelSettings ?? {}), prompt_cache_key: cacheKey } };
       }
       return {
         ...this.#agent,
@@ -185,7 +186,7 @@ export class AgentConfiguration implements AgentSource {
             ...((this.#agent.modelSettings?.providerData as any) ?? {}),
             extraBody: {
               ...((this.#agent.modelSettings?.providerData as any)?.extraBody ?? {}),
-              prompt_cache_key: sessionId,
+              prompt_cache_key: cacheKey,
             },
           },
         },
@@ -207,12 +208,12 @@ export class AgentConfiguration implements AgentSource {
    * The legacy SDK Agent remains available to the compatibility path until
    * every provider has moved to the application-owned model boundary.
    */
-  getApplicationAgent(sessionId?: string): ApplicationAgent {
+  getApplicationAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
     // The agent held by this configuration is already the factory-wrapped
     // application definition. Rebuilding from getAgentDefinition here loses
     // wrapped tool behavior (interceptors, approvals, and post-execute
     // gates), and used to discard transient/override agents altogether.
-    const agent = this.getAgent(sessionId);
+    const agent = this.getAgent(sessionId, promptCacheKey);
     if (this.#provider !== 'codex' || !agent.modelSettings) return agent;
     return {
       ...agent,

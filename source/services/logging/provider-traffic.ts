@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 export const TRAFFIC_TEXT_LIMIT = 100;
 const PREVIEW_LIMIT = 160;
@@ -14,6 +15,8 @@ import type {
   ProviderTrafficReceiveTiming,
   ProviderTrafficRequest,
   ProviderTrafficResponse,
+  ProviderRequestFingerprint,
+  ProviderRequestFingerprintMeasurement,
 } from '../service-interfaces.js';
 import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
@@ -28,8 +31,100 @@ export type SentTrafficRecord = {
   sessionStartedAt: string;
   mode?: string;
   firstUserMessagePreview?: string;
+  promptCacheKey?: string;
+  providerHistoryKey?: string;
+  requestFingerprint?: ProviderRequestFingerprint;
   sentBody: Record<string, unknown>;
 };
+
+export const PROVIDER_REQUEST_FINGERPRINT_VERSION = 'provider-request-fingerprint-v1';
+
+type FingerprintPart = ProviderRequestFingerprint['prefix']['parts'][number];
+
+function fingerprintValue(value: unknown): { sha256: string; bytes: number; encoded: string } {
+  let encoded: string;
+  if (typeof value === 'string') {
+    encoded = value;
+  } else {
+    try {
+      encoded = JSON.stringify(value) ?? String(value);
+    } catch {
+      encoded = '[unserializable-provider-request-component]';
+    }
+  }
+  return {
+    encoded,
+    sha256: createHash('sha256').update(encoded, 'utf8').digest('hex'),
+    bytes: Buffer.byteLength(encoded, 'utf8'),
+  };
+}
+
+/**
+ * Hash the unsanitized request prefix and tool definitions at the logging
+ * boundary. The ordered component hashes and byte counts show which prefix
+ * components were sent and whether they match across requests without putting
+ * prompt text or tool schemas in logs. This proves serialized-component
+ * equality, not provider tokenization or cache acceptance.
+ */
+export function buildProviderRequestFingerprint(body: Record<string, unknown>): ProviderRequestFingerprint {
+  const parts: FingerprintPart[] = [];
+  const rawParts: string[] = [];
+  const addPart = (source: string, value: unknown): ProviderRequestFingerprintMeasurement => {
+    const measurement = fingerprintValue(value);
+    parts.push({ source, sha256: measurement.sha256, bytes: measurement.bytes });
+    rawParts.push(source + '\0' + measurement.encoded);
+    return { sha256: measurement.sha256, bytes: measurement.bytes };
+  };
+
+  const direct: Pick<ProviderRequestFingerprint, 'instructions' | 'system'> = {};
+  if (body.instructions !== undefined) direct.instructions = addPart('instructions', body.instructions);
+  if (body.system !== undefined) direct.system = addPart('system', body.system);
+
+  const addRoleParts = (source: 'messages' | 'input', value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    value.forEach((item, index) => {
+      if (!item || typeof item !== 'object') return;
+      if ((item as { type?: unknown }).type === 'additional_tools') return;
+      const role = (item as { role?: unknown }).role;
+      if (role === 'system' || role === 'developer') addPart(source + '[' + index + ']', item);
+    });
+  };
+  addRoleParts('messages', body.messages);
+  addRoleParts('input', body.input);
+
+  const toolGroups: Array<{ source: string; value: unknown[] }> = [];
+  if (Array.isArray(body.tools)) toolGroups.push({ source: 'tools', value: body.tools });
+  if (Array.isArray(body.additional_tools))
+    toolGroups.push({ source: 'additional_tools', value: body.additional_tools });
+  if (Array.isArray(body.input)) {
+    body.input.forEach((item, index) => {
+      if (!item || typeof item !== 'object') return;
+      const itemTools = (item as Record<string, unknown>).tools;
+      if (!Array.isArray(itemTools)) return;
+      toolGroups.push({ source: 'input[' + index + '].tools', value: itemTools });
+    });
+  }
+  const toolValues = toolGroups.flatMap(({ source, value }) => value.map((tool) => ({ source, tool })));
+  const tools =
+    toolValues.length > 0
+      ? (() => {
+          const measurement = fingerprintValue(toolValues);
+          return { sha256: measurement.sha256, bytes: measurement.bytes, count: toolValues.length };
+        })()
+      : undefined;
+  const prefixMeasurement = fingerprintValue(rawParts.join('\0'));
+  return {
+    version: PROVIDER_REQUEST_FINGERPRINT_VERSION,
+    prefix: {
+      sha256: prefixMeasurement.sha256,
+      bytes: prefixMeasurement.bytes,
+      parts,
+    },
+    ...(direct.instructions ? { instructions: direct.instructions } : {}),
+    ...(direct.system ? { system: direct.system } : {}),
+    ...(tools ? { tools } : {}),
+  };
+}
 
 export type ReceivedTrafficSummary = {
   transport: 'json' | 'sse' | 'websocket' | 'text' | 'unknown';
@@ -801,6 +896,9 @@ type RequestStartInput = {
   sentBody: Record<string, unknown>;
   headers?: Record<string, string>;
   evaluator?: boolean;
+  promptCacheKey?: string;
+  providerHistoryKey?: string;
+  requestFingerprint?: ProviderRequestFingerprint;
 };
 
 type RequestCompleteInput = {
@@ -844,6 +942,9 @@ export class ProviderTrafficArtifactStore {
         ...(input.modelClass ? { modelClass: input.modelClass } : {}),
         ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
         sessionId: input.sessionId,
+        ...(input.promptCacheKey ? { promptCacheKey: input.promptCacheKey } : {}),
+        ...(input.providerHistoryKey ? { providerHistoryKey: input.providerHistoryKey } : {}),
+        ...(input.requestFingerprint ? { requestFingerprint: input.requestFingerprint } : {}),
         mode: input.mode ?? 'unknown',
         ...(input.headers ? { headers: input.headers } : {}),
         body: sanitizeSentTrafficBody(input.sentBody),
@@ -1241,6 +1342,9 @@ export class ProviderTraffic implements IProviderTraffic {
     const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
     const mode = trafficContext?.mode ?? 'unknown';
     const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+    const promptCacheKey = input.promptCacheKey ?? trafficContext?.promptCacheKey;
+    const providerHistoryKey = input.providerHistoryKey ?? trafficContext?.providerHistoryKey;
+    const requestFingerprint = buildProviderRequestFingerprint(input.sentBody);
 
     // 1. Write the sent request to artifact store directly
     this.#runArtifactStoreOperation('recordRequestStart', input.requestId, () => {
@@ -1255,6 +1359,9 @@ export class ProviderTraffic implements IProviderTraffic {
         sessionStartedAt,
         mode,
         firstUserMessagePreview,
+        promptCacheKey,
+        providerHistoryKey,
+        requestFingerprint,
         sentBody: input.sentBody,
         headers: input.headers,
         evaluator: isEvaluator,
@@ -1272,6 +1379,9 @@ export class ProviderTraffic implements IProviderTraffic {
       model: input.model,
       modelClass: input.modelClass,
       modelWrapperClass: input.modelWrapperClass,
+      promptCacheKey,
+      providerHistoryKey,
+      requestFingerprint,
     };
 
     // 2. Log request start via logging service for winston
@@ -1299,6 +1409,8 @@ export class ProviderTraffic implements IProviderTraffic {
     const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
     const mode = trafficContext?.mode ?? 'unknown';
     const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+    const promptCacheKey = trafficContext?.promptCacheKey;
+    const providerHistoryKey = trafficContext?.providerHistoryKey;
 
     const baseMeta = {
       requestId: input.requestId,
@@ -1311,6 +1423,8 @@ export class ProviderTraffic implements IProviderTraffic {
       model: input.model,
       modelClass: input.modelClass,
       modelWrapperClass: input.modelWrapperClass,
+      promptCacheKey,
+      providerHistoryKey,
     };
 
     if (input.error) {

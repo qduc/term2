@@ -70,6 +70,25 @@ it('builds privacy-safe, byte-sized fingerprints from every supported prompt sha
   expect(JSON.stringify(fingerprint)).not.toContain('read_file');
 });
 
+it('fingerprints detect hidden instruction and tool-schema changes independently of session routing', () => {
+  const body = {
+    instructions: 'x'.repeat(1000),
+    tools: [{ type: 'function', name: 'read_file', parameters: { type: 'object' } }],
+    prompt_cache_key: 'before',
+  };
+  const initial = buildProviderRequestFingerprint(body);
+  expect(buildProviderRequestFingerprint({ ...body, prompt_cache_key: 'after' })).toEqual(initial);
+  const changedInstructions = buildProviderRequestFingerprint({ ...body, instructions: body.instructions + 'y' });
+  expect(changedInstructions.instructions?.sha256).not.toBe(initial.instructions?.sha256);
+  expect(changedInstructions.tools).toEqual(initial.tools);
+  const changedTools = buildProviderRequestFingerprint({
+    ...body,
+    tools: [{ ...body.tools[0], parameters: { type: 'object', required: ['path'] } }],
+  });
+  expect(changedTools.tools?.sha256).not.toBe(initial.tools?.sha256);
+  expect(changedTools.instructions).toEqual(initial.instructions);
+});
+
 it('ProviderTraffic records fingerprint telemetry before body sanitization', async () => {
   const debug = vi.fn();
   const traffic = new ProviderTraffic(
@@ -82,7 +101,7 @@ it('ProviderTraffic records fingerprint telemetry before body sanitization', asy
         promptCacheKey: 'retained-cache-affinity',
       }),
     } as any,
-    new ProviderTrafficArtifactStore({ rootDir: fs.mkdtempSync(path.join(os.tmpdir(), 'term2-fingerprint-')) }),
+    new ProviderTrafficArtifactStore({ rootDir: makeTempDir() }),
   );
 
   traffic.recordRequestStart({

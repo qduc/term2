@@ -2,9 +2,9 @@
 global.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React from 'react';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import { Box, Text } from 'ink';
-import { MenuContainer } from './MenuContainer.js';
+import { MenuContainer, SelectionMarker } from './MenuContainer.js';
 
 it.sequential('MenuContainer renders items', async () => {
   const { lastFrame } = await renderInAct(
@@ -44,6 +44,40 @@ it.sequential('MenuContainer passes isInactive to renderItem and identifies them
   expect(output).toBeTruthy();
   expect(renderedInactiveArgs).toEqual([false, true, false]);
 });
+
+// Class guard: the marker is an inflexible 2-cell gutter. Yoga steals
+// shrinkable cells first on narrow terminals, so a bare-Text marker
+// collapses to `❯/` and then vanishes. Every menu row relies on this.
+for (const width of [80, 24]) {
+  it.sequential(`SelectionMarker keeps its two-cell gutter at ${width} cols`, async () => {
+    const { lastFrame } = await renderInAct(
+      <Box width={width}>
+        <Box flexDirection="column" width="100%">
+          <Box width="100%" flexDirection="row">
+            <SelectionMarker selected={true} />
+            <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
+              <Text>selected-row-label-that-keeps-going-and-going-and-going</Text>
+            </Box>
+          </Box>
+          <Box width="100%" flexDirection="row">
+            <SelectionMarker selected={false} />
+            <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
+              <Text>unselected-row-label</Text>
+            </Box>
+          </Box>
+        </Box>
+      </Box>,
+    );
+
+    const lines = toVisibleText(lastFrame()!).split('\n');
+    const selectedLine = lines.find((line) => line.includes('selected-row-label'));
+    expect(selectedLine).toBeDefined();
+    expect(selectedLine).toMatch(/❯ selected-row-label/);
+    const unselectedLine = lines.find((line) => line.includes('unselected-row-label'));
+    expect(unselectedLine).toBeDefined();
+    expect(unselectedLine).not.toContain('❯');
+  });
+}
 
 it.sequential('MenuContainer handles inactive items that return Box components without crashing', async () => {
   const items = ['a', 'b', 'c'];

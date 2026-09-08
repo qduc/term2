@@ -2,7 +2,9 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { act } from 'react';
+import { Box } from 'ink';
 import { render } from 'ink-testing-library';
+import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import ResumeSelectionMenu from './ResumeSelectionMenu.js';
 import type { ConversationListEntry } from '../../services/conversation/conversation-persistence.js';
 
@@ -119,3 +121,76 @@ it('ResumeSelectionMenu prefers canonical profile identity over legacy mode flag
     unmount();
   });
 });
+
+const WRAPPING_CONVERSATIONS: ConversationListEntry[] = [
+  {
+    id: 'session-alpha-123-with-a-very-long-suffix-to-force-overflow-conditions',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+    // Short enough to survive the intentional 150-char excerpt truncation
+    // even on a 24-col terminal; the long id above is the overflow stress.
+    firstUserMessage: 'Alpha opener',
+    model: 'gpt-5.5',
+    messageCount: 10,
+  },
+  {
+    id: 'session-beta-456',
+    updatedAt: '2026-08-29T15:30:00.000Z',
+    firstUserMessage: 'beta prompt',
+    messageCount: 5,
+  },
+];
+
+// Same split-pane contract as the skills menu: stable gutter, straight
+// divider, full detail, nothing past the terminal edge.
+for (const width of [80, 40, 24]) {
+  it.sequential(`keeps the list gutter, divider, and full detail at ${width} cols`, async () => {
+    const { lastFrame } = await renderInAct(
+      <Box width={width}>
+        <ResumeSelectionMenu items={WRAPPING_CONVERSATIONS} selectedIndex={0} query="" />
+      </Box>,
+    );
+
+    const frame = toVisibleText(lastFrame()!);
+    const lines = frame.split('\n');
+
+    expect(lines.some((line) => /❯ /.test(line))).toBe(true);
+    const betaLine = lines.find((line) => line.includes('session-beta-456'));
+    expect(betaLine).toBeDefined();
+    expect(betaLine).not.toContain('❯');
+
+    const dividerColumns = lines
+      .filter((line) => line.trim().length > 0)
+      .filter((line) => !/navigate|select|resume|cancel|switch/.test(line))
+      .map((line) => {
+        const indices: number[] = [];
+        for (let i = 1; i < line.length - 1; i++) {
+          if (line[i] === '│') indices.push(i);
+        }
+        return indices;
+      })
+      .filter((indices) => indices.length > 0)
+      .map((indices) => indices[0]);
+    expect(dividerColumns.length).toBeGreaterThan(0);
+    expect(new Set(dividerColumns).size).toBe(1);
+
+    // The full id survives in the detail pane even where the list shows a
+    // stub. The detail text is read down its own column: row-major order
+    // would interleave list rows between the detail's wrapped lines on wide
+    // terminals.
+    const divider = dividerColumns[0];
+    const detailCompact = lines
+      .map((line) => (line[divider] === '│' ? line.slice(divider + 1) : line))
+      .join('\n')
+      .replace(/[│╭╮╰╯─]/g, '')
+      .replace(/\s+/g, '');
+    const words = (s: string) => s.replace(/\s+/g, '');
+    expect(detailCompact).toContain('session-alpha-123-with-a-very-long-suffix-to-force-overflow-conditions');
+    expect(detailCompact).toContain(words('Alpha opener'));
+    expect(detailCompact).toContain(words('10 msgs'));
+    expect(detailCompact).toContain('gpt-5.5');
+
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(width);
+    }
+  });
+}

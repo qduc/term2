@@ -142,7 +142,7 @@ const ModelSelectionMenu: FC<Props> = ({
   );
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
       {!isUnified && canSwitchProvider && tabBar}
       {!isUnified && !canSwitchProvider && activeTab && (
         <Text color={COLOR_TEXT_SUBTLE}>Provider: {activeTab.label}</Text>
@@ -205,26 +205,43 @@ const ModelSelectionMenu: FC<Props> = ({
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
           const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));
           const nickname = nicknameLabels?.get(serializeFavorite(item.provider, item.id));
+          // One paragraph, not sibling Texts: siblings shrink and wrap
+          // independently, which drops characters and scrambles reading order
+          // on narrow terminals. Nested Texts wrap as a unit, so the id,
+          // provider, nickname, and display name stay intact and in order.
           return (
-            <Box key={`${item.provider}/${item.id}`}>
+            <Box key={`${item.provider}/${item.id}`} width="100%">
               <SelectionMarker selected={isSelected} />
-              {isFavorited && <Text color={COLOR_ACCENT}>{GLYPH_FAVORITE} </Text>}
-              <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
-                {item.id}
-              </Text>
-              {nickname && <Text color={COLOR_ACCENT}> — aka "{nickname}"</Text>}
-              {(isFavoritesTab || isUnified) && <Text color={COLOR_TEXT_SUBTLE}> ({item.provider})</Text>}
-              {item.unavailableReason === 'missing-codex-login' ? (
-                <Text color={COLOR_WARNING}>
-                  {' '}
-                  — unavailable: Not logged in on this host. Run `term2 --codex-login`.
+              {isFavorited && (
+                <Box width={2} flexShrink={0}>
+                  <Text color={COLOR_ACCENT} wrap="truncate">
+                    {GLYPH_FAVORITE}{' '}
+                  </Text>
+                </Box>
+              )}
+              <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
+                <Text>
+                  <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
+                    {item.id}
+                  </Text>
+                  {nickname && <Text color={COLOR_ACCENT}> — aka "{nickname}"</Text>}
+                  {(isFavoritesTab || isUnified) && <Text color={COLOR_TEXT_SUBTLE}> ({item.provider})</Text>}
+                  {item.unavailableReason === 'missing-codex-login' ? (
+                    <Text color={COLOR_WARNING}>
+                      {' '}
+                      — unavailable: Not logged in on this host. Run `term2 --codex-login`.
+                    </Text>
+                  ) : item.unavailableReason === 'missing-grok-login' ? (
+                    <Text color={COLOR_WARNING}>
+                      {' '}
+                      — unavailable: Not logged in on this host. Run `term2 --grok-login`.
+                    </Text>
+                  ) : item.unavailableReason === 'missing-credentials' ? (
+                    <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
+                  ) : null}
+                  {item.name && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}> — {item.name}</Text>}
                 </Text>
-              ) : item.unavailableReason === 'missing-grok-login' ? (
-                <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
-              ) : item.unavailableReason === 'missing-credentials' ? (
-                <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
-              ) : null}
-              {item.name && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}> — {item.name}</Text>}
+              </Box>
             </Box>
           );
         }}

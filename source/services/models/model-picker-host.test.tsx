@@ -69,15 +69,22 @@ class FakeStdout extends EventEmitter {
   };
 }
 
-const waitFor = async (predicate: () => boolean, timeoutMs = 2000): Promise<void> => {
-  const start = Date.now();
-  while (!predicate()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error('waitFor: condition not met within timeout');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-};
+// A loaded CI runner can push the real async work here (provider credential
+// resolution, the mocked provider's fetchModels promise chain, Ink's own
+// render loop on real timers) well past a budget that's generous locally.
+// vi.waitFor is vitest's own polling primitive (used the same way elsewhere
+// in this repo, e.g. app.nested-approval-hide.test.tsx) rather than a
+// bespoke setTimeout loop, and the timeout scales up under CI instead of
+// guessing a single fixed constant.
+const DEFAULT_WAIT_TIMEOUT_MS = process.env.CI ? 10000 : 2000;
+
+const waitFor = (predicate: () => boolean, timeoutMs = DEFAULT_WAIT_TIMEOUT_MS): Promise<void> =>
+  vi.waitFor(
+    () => {
+      if (!predicate()) throw new Error('waitFor: condition not met within timeout');
+    },
+    { timeout: timeoutMs, interval: 5 },
+  );
 
 describe('isModelPickerHostSupported', () => {
   it('requires both stdin and stdout to be a TTY', () => {
@@ -201,7 +208,7 @@ describe('runModelPickerHost', () => {
 
     stdin.write('');
     // Ink buffers a lone Escape for ~20ms before flushing it as key.escape.
-    await waitFor(() => stdin.setRawModeCalls.at(-1) === false, 2000);
+    await waitFor(() => stdin.setRawModeCalls.at(-1) === false);
 
     const result = await resultPromise;
 
@@ -232,7 +239,7 @@ describe('runModelPickerHost', () => {
     );
 
     stdin.write('');
-    await waitFor(() => stdin.setRawModeCalls.at(-1) === false, 2000);
+    await waitFor(() => stdin.setRawModeCalls.at(-1) === false);
     await resultPromise;
   });
 });

@@ -7,8 +7,15 @@ or a claim that Stage 3 is complete. The September 7 roadmap described Stage 3
 as "explicit failures/partial completion" (handoff in session `d2898582`).
 User decision (2026-09-08): develop the alternative that changes script-facing
 failure semantics, rather than evidence-only compatibility preservation.
-Successful return representations remain unchanged. No runtime edits or live
-runs are authorized merely by this specification revision.
+Successful return representations remain unchanged. The user also selected
+**type-checked TypeScript scripts**, rather than transpile-only support.
+[TypeScript specification](run-code-typescript.md) owns that additional slice.
+No runtime edits or live runs are authorized merely by these specification
+revisions.
+
+Proposed delivery sequence: **3A, explicit failure semantics; 3B, type-checked
+TypeScript against those contracts.** Measure each independently so compiler
+benefits and failure-contract benefits are not conflated.
 
 Baseline: compact discovery shipped in `60e55030`; action receipts shipped in
 `3e6e222e`, with clipping/adapter repair merged in `66ab91dc`. Stage 2 native
@@ -259,8 +266,10 @@ benefit, not receipt-text presence. Do not erase a failed cell by retrying it.
 
 ## Next decisions
 
-- **Settled by user:** specify the script-facing failure-contract alternative.
-  No further product choice is needed to investigate and refine this draft.
+- **Settled by user:** specify the script-facing failure-contract alternative
+  and type-checked TypeScript support. No further product choice is needed to
+  investigate these drafts; the proposed 3A/3B split separates their contracts
+  and measurement gates.
 - **Engineering investigation:** settle the smallest affected tool/path set,
   output layout, consumer semantics, reused record ownership, catchable error
   discriminants, and check-in negative-result provenance from code.

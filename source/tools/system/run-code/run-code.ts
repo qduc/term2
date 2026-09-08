@@ -184,10 +184,23 @@ const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActio
     if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
       return { outcome: 'unknown', reason: 'unrecognized action result shape' };
     }
-    if (parsed.ok === true) return { outcome: 'applied' };
-    const code = parsed.code === 'not_active' ? 'not_active' : 'action reported ok:false';
-    const target = typeof parsed.target === 'string' && parsed.target ? ` (target: ${parsed.target})` : '';
-    return { outcome: 'not_applied', reason: `${code}${target}` };
+    if (
+      parsed.ok === true &&
+      typeof parsed.runId === 'string' &&
+      parsed.runId.length > 0 &&
+      parsed.status === 'cancelling'
+    ) {
+      return { outcome: 'applied', reason: 'cancellation requested and accepted; settlement is reported separately' };
+    }
+    if (
+      parsed.ok === false &&
+      parsed.code === 'not_active' &&
+      typeof parsed.target === 'string' &&
+      parsed.target.length > 0
+    ) {
+      return { outcome: 'not_applied', reason: `not_active (target: ${parsed.target})` };
+    }
+    return { outcome: 'unknown', reason: 'unrecognized action result shape' };
   },
 };
 
@@ -327,7 +340,10 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   return callSummary;
 };
 
-const clip = async (text: string): Promise<string> => {
+const clip = async (
+  text: string,
+  protectedAction?: { prefix: string; full: string; compact: string },
+): Promise<string> => {
   if (text.length <= MAX_OUTPUT_CHARS) return text;
   let retrieval: string;
   try {
@@ -338,9 +354,15 @@ const clip = async (text: string): Promise<string> => {
       'Full output could not be saved; the omitted text is unavailable. Do not repeat completed tool effects.';
   }
   const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]\n${retrieval}`;
-  let prefix = text.slice(0, Math.max(0, MAX_OUTPUT_CHARS - marker.length));
+  // Preserve the lifecycle heading as well as host evidence. Script-authored
+  // output may consume the entire budget; it must not hide action outcomes.
+  const available = MAX_OUTPUT_CHARS - marker.length;
+  const action = protectedAction
+    ? `\n\n${protectedAction.full.length + 2 <= available - 64 ? protectedAction.full : protectedAction.compact}`
+    : '';
+  let prefix = (protectedAction?.prefix ?? text).slice(0, Math.max(0, available - action.length));
   if (/[\uD800-\uDBFF]$/.test(prefix)) prefix = prefix.slice(0, -1);
-  return `${prefix}${marker}`;
+  return `${prefix}${marker}${action}`;
 };
 
 const FAILURE_PREFIXES = [
@@ -1191,7 +1213,7 @@ const formatActionOutcome = (outcome: RunCodeActionOutcome): string =>
  * call was observed; an empty ledger renders nothing and certifies nothing.
  * Counts are over observed receipts only — never an inferred expected action.
  */
-const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[]): string | null => {
+const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[], includeDetails = true): string | null => {
   if (receipts.length === 0) return null;
   const lines = receipts.map((receipt) =>
     receipt.reason
@@ -1208,7 +1230,9 @@ const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[]): string
   const unit = receipts.length === 1 ? 'call' : 'calls';
   return [
     'Action outcomes (host-observed):',
-    ...lines,
+    ...(includeDetails
+      ? lines
+      : [`${receipts.length} receipt details omitted from this display; full-output availability is reported above.`]),
     `Action summary: ${parts.join(', ')} across ${receipts.length} observed action ${unit}. ` +
       'Host-observed tool outcomes are authoritative over conflicting script claims; ' +
       'they describe tool behavior, not user-request or task outcomes.',
@@ -1281,8 +1305,18 @@ function renderResult(
   }
   sections.push(`[${summarizeCalls(calls)}]`);
 
+  const clipped = clip(
+    sections.join('\n\n'),
+    actionSection
+      ? {
+          prefix: sections.filter((section) => section !== actionSection).join('\n\n'),
+          full: actionSection,
+          compact: renderActionReceipts(receipts, false)!,
+        }
+      : undefined,
+  );
   if (media.length > 0) {
-    return clip(sections.join('\n\n')).then((text) => [{ type: 'text', text }, ...media]);
+    return clipped.then((text) => [{ type: 'text', text }, ...media]);
   }
-  return clip(sections.join('\n\n'));
+  return clipped;
 }

@@ -144,6 +144,69 @@ const RUN_CODE_DESCRIPTION =
   'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
   'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
 
+/**
+ * Terminal semantic outcome of one observed nested action call, derived
+ * host-side from the raw executor result. Promise fulfillment alone is never
+ * success: only the per-tool adapter maps a resolved value to `applied`.
+ */
+export type RunCodeActionOutcome = 'applied' | 'not_applied' | 'failed' | 'unknown';
+
+/**
+ * One host-observed nested action receipt. The ledger is host-private: script
+ * code has no write path to it, so a script cannot catch, relabel, or
+ * contradict its way out of an observed outcome.
+ */
+export interface RunCodeActionReceipt {
+  /** Stable call identity (`<bridgeRunId>:<callId>`, or `:rejected-<seq>` pre-admission). */
+  callId: string;
+  tool: string;
+  outcome: RunCodeActionOutcome;
+  reason?: string;
+}
+
+/**
+ * Static host-owned classification: exactly the action tools with an explicit
+ * outcome adapter. Not a naming convention, not a script declaration, and not
+ * the generic `effect` flag (a stall-detection marker, not an action contract).
+ */
+const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
+  configure_task_check_in: (raw) => {
+    const parsed = parseActionPayload(raw);
+    if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
+      return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+    }
+    if (parsed.ok === true) return { outcome: 'applied' };
+    const detail = typeof parsed.error === 'string' && parsed.error ? parsed.error : 'action reported ok:false';
+    return { outcome: 'not_applied', reason: detail };
+  },
+  cancel_run: (raw) => {
+    const parsed = parseActionPayload(raw);
+    if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
+      return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+    }
+    if (parsed.ok === true) return { outcome: 'applied' };
+    const code = parsed.code === 'not_active' ? 'not_active' : 'action reported ok:false';
+    const target = typeof parsed.target === 'string' && parsed.target ? ` (target: ${parsed.target})` : '';
+    return { outcome: 'not_applied', reason: `${code}${target}` };
+  },
+};
+
+const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
+
+const parseActionPayload = (raw: unknown): unknown => {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const MAX_RECEIPT_REASON_CHARS = 280;
+
+const clipReason = (reason: string): string =>
+  reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
+
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
@@ -558,6 +621,12 @@ export function createRunCodeToolDefinition(
       const registry = exposedTools();
       const bridgeRunId = createBridgeRunId();
       const calls: RunCodeCallRecord[] = [];
+      // Host-private action receipt ledger. Script code has no write path
+      // here: every entry is recorded by prepare/admit/invoke settlement, so
+      // a script cannot catch, relabel, or contradict an observed outcome.
+      const receipts: RunCodeActionReceipt[] = [];
+      const pendingReceiptByCallId = new Map<string, number>();
+      let rejectedSeq = 0;
       const output: string[] = [];
       const sessionId = getConversationSessionId(context);
       const mediaReferences = createMediaReferenceStore();
@@ -580,6 +649,30 @@ export function createRunCodeToolDefinition(
         kind: 'result',
         result: { ok: false, error: message } as JsonValue,
       });
+      const recordReceipt = (
+        callId: string,
+        toolName: string,
+        outcome: RunCodeActionOutcome,
+        reason?: string,
+      ): void => {
+        const pendingIndex = pendingReceiptByCallId.get(callId);
+        if (pendingIndex !== undefined) {
+          receipts[pendingIndex] = {
+            callId,
+            tool: toolName,
+            outcome,
+            ...(reason ? { reason: clipReason(reason) } : {}),
+          };
+          pendingReceiptByCallId.delete(callId);
+          return;
+        }
+        receipts.push({
+          callId,
+          tool: toolName,
+          outcome,
+          ...(reason ? { reason: clipReason(reason) } : {}),
+        });
+      };
 
       const tools: CapabilityHandler<PreparedCall> = {
         binding: {
@@ -594,15 +687,34 @@ export function createRunCodeToolDefinition(
         },
         // A budget-exhausted call is the script's problem, not a reason to
         // discard the work it has already printed.
-        overBudget: ({ usedCalls, maxCalls }) =>
-          failed(
+        overBudget: ({ usedCalls, maxCalls }, rejected) => {
+          // The host supplies the exact prepared call that was rejected.
+          // Preparation is async and concurrent, so a local FIFO would be
+          // unable to attribute a budget rejection safely.
+          if (isActionTool(rejected.tool.name)) {
+            rejectedSeq += 1;
+            recordReceipt(
+              `${bridgeRunId}:rejected-${rejectedSeq}`,
+              rejected.tool.name,
+              'unknown',
+              'call budget exhausted before dispatch',
+            );
+          }
+          return failed(
             `Tool call limit reached (${maxCalls} calls per script run; ${usedCalls} calls admitted, ${Math.max(
               0,
               maxCalls - usedCalls,
             )} remaining). ` +
               'Return the partial results you collected and start another run_code call only for unattempted work; ' +
               'Do not repeat completed tool effects.',
-          ),
+          );
+        },
+        onAdmitted: (prepared, callContext) => {
+          if (!isActionTool(prepared.tool.name)) return;
+          const callId = `${bridgeRunId}:${callContext.callId}`;
+          pendingReceiptByCallId.set(callId, receipts.length);
+          receipts.push({ callId, tool: prepared.tool.name, outcome: 'unknown' });
+        },
         prepare: async (payload) => {
           const started = Date.now();
           const name = typeof payload.member === 'string' ? payload.member : '';
@@ -618,6 +730,15 @@ export function createRunCodeToolDefinition(
           }
           if (!tool) {
             record(name || '(unnamed)', 'unknown_tool', started);
+            if (isActionTool(name)) {
+              rejectedSeq += 1;
+              recordReceipt(
+                `${bridgeRunId}:rejected-${rejectedSeq}`,
+                name,
+                'failed',
+                unknownToolMessage(name, registry),
+              );
+            }
             return failed(unknownToolMessage(name, registry));
           }
 
@@ -635,6 +756,15 @@ export function createRunCodeToolDefinition(
               const issues = parsed.error.issues
                 .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
                 .join('; ');
+              if (isActionTool(name)) {
+                rejectedSeq += 1;
+                recordReceipt(
+                  `${bridgeRunId}:rejected-${rejectedSeq}`,
+                  name,
+                  'failed',
+                  `Invalid parameters: ${issues}`,
+                );
+              }
               return failed(`Invalid parameters for "${name}": ${issues}\nSignature: ${renderCompactSignature(tool)}`);
             }
             normalized = parsed.data;
@@ -644,9 +774,13 @@ export function createRunCodeToolDefinition(
           const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
           if (authority.kind === 'denied') {
             record(name, 'approval_required', started, isDirectlyCallable(tool));
+            if (isActionTool(name)) {
+              rejectedSeq += 1;
+              recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'not_applied', authority.message);
+            }
             return failed(authority.message);
           }
-          return {
+          const prepared: PreparedCall = {
             tool,
             params: authority.params,
             originalParams: normalized,
@@ -655,6 +789,7 @@ export function createRunCodeToolDefinition(
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
+          return prepared;
         },
         // Mirrors the run loop: only a definition that declares itself
         // parallel-safe may overlap another call, because tools such as
@@ -741,6 +876,15 @@ export function createRunCodeToolDefinition(
                 });
                 if (resolution.kind === 'approved') {
                   record(prepared.tool.name, 'ok', prepared.started);
+                  if (isActionTool(prepared.tool.name)) {
+                    const semantic = ACTION_SEMANTICS[prepared.tool.name](resolution.result);
+                    recordReceipt(
+                      `${bridgeRunId}:${callContext.callId}`,
+                      prepared.tool.name,
+                      semantic.outcome,
+                      semantic.reason,
+                    );
+                  }
                   const serialized = await serializeResult(
                     mediaReferences.capture(resolution.result),
                     RUN_CODE_LIMITS.maxResultChars,
@@ -754,11 +898,22 @@ export function createRunCodeToolDefinition(
                 }
                 if (resolution.kind === 'failed') {
                   record(prepared.tool.name, 'error', prepared.started);
-                  return failed(
-                    resolution.error instanceof Error ? resolution.error.message : String(resolution.error),
-                  );
+                  const message =
+                    resolution.error instanceof Error ? resolution.error.message : String(resolution.error);
+                  if (isActionTool(prepared.tool.name)) {
+                    recordReceipt(`${bridgeRunId}:${callContext.callId}`, prepared.tool.name, 'failed', message);
+                  }
+                  return failed(message);
                 }
                 record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
+                if (isActionTool(prepared.tool.name)) {
+                  recordReceipt(
+                    `${bridgeRunId}:${callContext.callId}`,
+                    prepared.tool.name,
+                    'not_applied',
+                    resolution.message,
+                  );
+                }
                 return failed(resolution.message);
               } finally {
                 tools.onResumed?.(callContext);
@@ -774,6 +929,17 @@ export function createRunCodeToolDefinition(
                 : 'approval_required';
             const directlyCallable = isDirectlyCallable(prepared.tool);
             record(prepared.tool.name, outcome, prepared.started, directlyCallable);
+            if (isActionTool(prepared.tool.name)) {
+              const denialReason =
+                decision.kind === 'unknown'
+                  ? 'no registered approval policy'
+                  : decision.kind === 'interceptor_denied'
+                  ? 'refused by an approval interceptor'
+                  : decision.kind === 'error'
+                  ? 'approval policy failed'
+                  : 'requires approval and is unavailable from inside a script';
+              recordReceipt(`${bridgeRunId}:${callContext.callId}`, prepared.tool.name, 'not_applied', denialReason);
+            }
             return failed(
               decision.kind === 'unknown'
                 ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script.`
@@ -795,6 +961,10 @@ export function createRunCodeToolDefinition(
             });
             const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
             record(prepared.tool.name, 'ok', started);
+            if (isActionTool(prepared.tool.name)) {
+              const semantic = ACTION_SEMANTICS[prepared.tool.name](result);
+              recordReceipt(callId, prepared.tool.name, semantic.outcome, semantic.reason);
+            }
             const serialized = await serializeResult(
               mediaReferences.capture(result),
               RUN_CODE_LIMITS.maxResultChars,
@@ -807,7 +977,11 @@ export function createRunCodeToolDefinition(
             };
           } catch (error) {
             record(prepared.tool.name, 'error', started);
-            return failed(error instanceof Error ? error.message : String(error));
+            const message = error instanceof Error ? error.message : String(error);
+            if (isActionTool(prepared.tool.name)) {
+              recordReceipt(callId, prepared.tool.name, 'failed', message);
+            }
+            return failed(message);
           }
         },
       };
@@ -842,11 +1016,23 @@ export function createRunCodeToolDefinition(
         schemaLookups: describeCalls.length,
       });
 
+      // Calls admitted but never settled (timeout, deadline, cancellation,
+      // worker exit) keep their pending `unknown` outcome with an honest
+      // reason rather than vanishing from the ledger.
+      for (const [callId, index] of pendingReceiptByCallId) {
+        receipts[index] = {
+          ...receipts[index],
+          outcome: 'unknown',
+          reason: 'did not settle before the script run ended',
+        };
+        pendingReceiptByCallId.delete(callId);
+      }
+
       const resolvedResult =
         result.ok && !result.voidOutput
           ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
           : result;
-      return renderResult(resolvedResult, output, calls, include_console);
+      return renderResult(resolvedResult, output, calls, receipts, include_console);
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
@@ -997,10 +1183,43 @@ async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context:
   }
 }
 
+const formatActionOutcome = (outcome: RunCodeActionOutcome): string =>
+  outcome === 'not_applied' ? 'not applied' : outcome;
+
+/**
+ * Host-rendered action section. Present only when at least one covered action
+ * call was observed; an empty ledger renders nothing and certifies nothing.
+ * Counts are over observed receipts only — never an inferred expected action.
+ */
+const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[]): string | null => {
+  if (receipts.length === 0) return null;
+  const lines = receipts.map((receipt) =>
+    receipt.reason
+      ? `- ${receipt.tool} [${receipt.callId}]: ${formatActionOutcome(receipt.outcome)} — ${receipt.reason}`
+      : `- ${receipt.tool} [${receipt.callId}]: ${formatActionOutcome(receipt.outcome)}`,
+  );
+  const counts = (outcome: RunCodeActionOutcome): number => receipts.filter((r) => r.outcome === outcome).length;
+  const parts = [
+    `${counts('applied')} applied`,
+    `${counts('not_applied')} not applied`,
+    `${counts('failed')} failed`,
+    `${counts('unknown')} unknown`,
+  ];
+  const unit = receipts.length === 1 ? 'call' : 'calls';
+  return [
+    'Action outcomes (host-observed):',
+    ...lines,
+    `Action summary: ${parts.join(', ')} across ${receipts.length} observed action ${unit}. ` +
+      'Host-observed tool outcomes are authoritative over conflicting script claims; ' +
+      'they describe tool behavior, not user-request or task outcomes.',
+  ].join('\n');
+};
+
 function renderResult(
   result: { ok: boolean; output?: JsonValue; voidOutput?: boolean; error?: { code: string; message: string } },
   output: readonly string[],
   calls: readonly RunCodeCallRecord[],
+  receipts: readonly RunCodeActionReceipt[],
   includeConsole: boolean,
 ): Promise<string | readonly RunCodeContentPart[]> {
   const sections: string[] = [];
@@ -1051,6 +1270,8 @@ function renderResult(
     const names = [...new Set(policyFailures.map((call) => call.tool))].join(', ');
     sections.push(`Unavailable (approval policy refused or failed; no user approval was requested): ${names}`);
   }
+  const actionSection = renderActionReceipts(receipts);
+  if (actionSection) sections.push(actionSection);
   const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
   const directlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === true);
   const indirectlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === false);

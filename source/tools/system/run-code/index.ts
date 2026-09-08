@@ -9,6 +9,8 @@ export {
   TOOL_NAME_RUN_CODE,
   isDirectlyCallable,
   type CreateRunCodeToolOptions,
+  type RunCodeActionOutcome,
+  type RunCodeActionReceipt,
   type RunCodeCallRecord,
   type RunCodeParams,
 } from './run-code.js';

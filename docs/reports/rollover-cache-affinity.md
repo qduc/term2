@@ -75,8 +75,10 @@ acceptance.
 
 ## Reading future evidence
 
-In a request artifact, compare `sent.requestFingerprint` components between the
-last predecessor and first successor requests. `sent.promptCacheKey` is the
+In a request artifact, compare `sent.requestFingerprint` components between a
+full-prefix predecessor request and the first successor request. Chained deltas
+may omit prefix and tools; do not compare their empty measurements as if they
+represented the reconstructed full prompt. `sent.promptCacheKey` is the
 root context affinity, not necessarily the actual nested or provider-specific
 wire key: inspect `sent.body.prompt_cache_key` and the recorded routing headers
 alongside `sent.providerHistoryKey`. Join the same artifact's received usage
@@ -98,3 +100,67 @@ affinity. Existing configuration tests asserted that mapping and did not cover
 rollover. A separate runtime-owned field and a real session rollover test now
 protect their different lifetimes; fingerprint tests protect the observability
 needed to challenge the cache-routing hypothesis rather than cement it as fact.
+
+## Live Herdr test: 2026-09-08
+
+**Result: the code-level repair works, but the observed caching bug still
+reproduces. A stable prompt_cache_key alone did not preserve cache hits in this
+run.** Socket reuse remains parked; this test made no transport changes.
+
+Built main `7e0bdc4a` successfully with `pnpm build`, then started a fresh real
+interactive Term2 session in Herdr tab `w18:t6`, pane `w18:p6`, using
+`codex / gpt-5.6-luna`, high effort, WebSocket transport. No settings were
+changed. The model performed two text-only warmup turns, exactly one
+`session_rollover`, a text-only successor response, and one text-only successor
+follow-up. No file reads or edits were requested of the measured session.
+Herdr agent prompt rejected the detected idle Term2 agent with agent_not_ready;
+input was submitted to the verified interactive pane and receipt was confirmed
+by rendered assistant responses and persisted provider artifacts, not echo.
+
+Marker: `ROLLOVER_CACHE_LIVE_20260908_B`.
+Predecessor: `871d0588-4d39-409f-9693-558f348ce0d8`.
+Successor: `ec476945-2734-4bbb-b234-c1f07b78ae89`.
+
+| Request (UTC) | Input | Cached | Previous response supplied |
+| --- | ---: | ---: | --- |
+| Initial warmup, 16:35:56.245 | 17,243 | 0 | no |
+| Second warmup, 16:36:32.230 | 17,282 | 16,128 | yes |
+| Rollover-trigger turn, 16:37:05.651 | 17,419 | 17,152 | yes |
+| First successor, 16:37:08.983 | 17,513 | **0** | no |
+| Second successor, 16:37:51.070 | 17,566 | 17,152 | yes |
+
+The actual wire prompt_cache_key stayed equal to the predecessor UUID in all
+five requests. The session-id header rotated to the successor UUID. Model,
+effort, and account were unchanged. The first successor did not reference the
+old response chain; the next request referenced the successor response.
+
+The initial predecessor and first successor full-prefix fingerprints matched:
+
+- Developer component `input[1]`: 61,217 UTF-8 bytes; SHA-256
+  `40ec1e9bbb3810afbdee3791f9a72cfa1621a8cdb00ca8bd5db6cd5d9cf078e0`.
+- Eight tool definitions: measurement 20,390 bytes; SHA-256
+  `42d5232f565c943ed2d6d20cfab049c575a9a49b650aa189d80a605a4e1d4be9`.
+- Aggregate prefix measurement SHA-256
+  `14bf7c09a81d6b3f2a8398894a9ec83fc7be3bd4d90b1c321ab70395157ce20c`.
+- This model uses the Responses-lite shape: empty instructions plus
+  additional_tools and a developer message in input. Chained requests omit
+  those input components; their smaller fingerprints are not prefix drift.
+
+Artifact root: `~/.local/state/term2-nodejs/logs/provider-traffic/2026-09-08/`.
+Files, in table order:
+
+- `16-35-10_871d0/16-35-56.245Z_e2e06.json`
+- `16-35-10_871d0/16-36-32.230Z_1d33d.json`
+- `16-35-10_871d0/16-37-05.651Z_f0853.json`
+- `16-37-08_ec476/16-37-08.983Z_191cf.json`
+- `16-37-08_ec476/16-37-51.070Z_8b893.json`
+
+This single real rollover rules out a changed measured developer/tool component
+or changed body cache key as necessary explanations for this instance. It does
+not isolate socket replacement, handshake identity, chain loss, backend
+placement, or cache policy: those remain confounded. No socket identifier is
+logged by this patch, so socket replacement is inferred from the current
+rollover disposal path, not independently measured in these artifacts.
+The next turn warming again is consistent with a fresh cache domain but does
+not prove one. No cross-model/provider generalization or causal cache-hit
+improvement claim is supported by this sample.

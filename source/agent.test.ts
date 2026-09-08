@@ -1417,6 +1417,36 @@ it('getEnvInfo omits the home directory for remote sessions, whose home this pro
   }
 });
 
+it('getEnvInfo flags SSH/remote sessions instead of asserting the controller OS/shell', () => {
+  const osTypeSpy = vi.spyOn(os, 'type').mockReturnValue('Darwin');
+  const osPlatformSpy = vi.spyOn(os, 'platform').mockReturnValue('darwin');
+  try {
+    const sshService = {
+      connect: async () => {},
+      disconnect: async () => {},
+      isConnected: () => true,
+      executeCommand: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+      readFile: async () => '',
+      writeFile: async () => {},
+      mkdir: async () => {},
+    } as any;
+    const remote = new ExecutionContext(sshService, '/srv/app');
+
+    const info = getEnvInfo(createMockSettingsService({ 'app.shellPath': '/bin/zsh' }), remote);
+    expect(info).toContain('remote via SSH');
+    expect(info).not.toContain('Darwin');
+    expect(info).not.toContain('darwin');
+    expect(info).not.toContain('/bin/zsh');
+
+    const lite = getEnvInfo(createMockSettingsService({ 'app.shellPath': '/bin/zsh' }), remote, true);
+    expect(lite).toContain('remote via SSH');
+    expect(lite).not.toContain('Darwin');
+  } finally {
+    osTypeSpy.mockRestore();
+    osPlatformSpy.mockRestore();
+  }
+});
+
 // ── Tool capability toggles (tools.<group>.enabled) ──────────────────────────
 // Phase 1 contract from docs/plans/tool-toggle-setting-design.md: disabling a
 // group must remove every tool whose registration consults it — including the

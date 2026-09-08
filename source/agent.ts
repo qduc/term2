@@ -84,11 +84,14 @@ export function getEnvInfo(
   executionContext?: ExecutionContext,
   lite = false,
 ): string {
-  const shellPath = settingsService.get('app.shellPath') || 'unknown';
+  const isRemote = !!executionContext?.isRemote();
+  // This process's own OS/shell are the controller's, not the remote host's —
+  // asserting them as fact over SSH tells the model the wrong platform outright.
+  const shellPath = isRemote ? undefined : settingsService.get('app.shellPath') || 'unknown';
   const cwd = executionContext?.getCwd() || process.cwd();
-  const osType = os.type();
-  const osRelease = os.release();
-  const osPlatform = os.platform();
+  const osType = isRemote ? undefined : os.type();
+  const osRelease = isRemote ? undefined : os.release();
+  const osPlatform = isRemote ? undefined : os.platform();
 
   const now = new Date().toISOString().slice(0, 10);
 
@@ -97,11 +100,15 @@ export function getEnvInfo(
   // container default (/root), producing paths that cannot exist on this host.
   // Remote sessions run against another machine's home, which this process
   // cannot know, so only claim it for local ones.
-  const home = executionContext?.isRemote() ? '' : `; home (\`~\`): ${os.homedir()}`;
+  const home = isRemote ? '' : `; home (\`~\`): ${os.homedir()}`;
+
+  const hostLine = isRemote
+    ? "Host: remote via SSH — OS/shell are the remote machine's, not this controller's, and are unknown here; use commands (e.g. `uname -a`) if you need them"
+    : `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
 
   if (lite) {
     // Minimal env info for lite mode
-    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
+    return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
   }
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
@@ -113,7 +120,7 @@ export function getEnvInfo(
     topLevel = `${getProjectTreeForPrompt(cwd)}`;
   }
 
-  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}\n${topLevel}\n\n`;
+  return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}\n${topLevel}\n\n`;
 }
 
 export function getAgentsInstructions(cwd: string): string {

@@ -98,7 +98,10 @@ Reasons are bounded (truncated, currently 280 chars) text only.
   has no write path to it: receipts are recorded in `prepare` short-circuits,
   the `onAdmitted` hook (pending `unknown` entry keyed by stable admission
   `callId`), and the `invoke` settlement paths (policy, nested-approval, and
-  auto-approve branches). Script code may continue returning arbitrary values.
+  auto-approve branches). The sandbox host supplies `overBudget` the exact
+  prepared call it rejected; receipt attribution does not depend on a local
+  FIFO because asynchronous preparation can overlap. Script code may continue
+  returning arbitrary values.
 - Stable call identity: admitted calls use `<bridgeRunId>:<callId>` (the same
   `callId` the host passes to `invoke`, stable across concurrency);
   pre-admission rejections use `<bridgeRunId>:rejected-<seq>`.

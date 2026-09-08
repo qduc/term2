@@ -243,10 +243,13 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
 
         const admitted = ledger.admit();
         if (!admitted.ok) {
-          const outcome = handler.overBudget?.({
-            usedCalls: ledger.admitted(),
-            maxCalls: handler.limits.maxCalls,
-          });
+          const outcome = handler.overBudget?.(
+            {
+              usedCalls: ledger.admitted(),
+              maxCalls: handler.limits.maxCalls,
+            },
+            prepared,
+          );
           if (!outcome || outcome.kind === 'fail')
             fail(outcome?.code ?? 'limit_exceeded', outcome?.message ?? handler.limits.limitExceededMessage);
           else reply(outcome.result);

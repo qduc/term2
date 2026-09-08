@@ -33,6 +33,41 @@ describe('SandboxedCodeHostImpl worker startup', () => {
   });
 });
 
+describe('SandboxedCodeHostImpl call budget', () => {
+  it('passes the exact prepared call rejected by the budget handler', async () => {
+    const overBudget = vi.fn(
+      (_, prepared: { target: string }): CapabilityOutcome => ({
+        kind: 'result',
+        result: { ok: true, result: { rejected: prepared.target } },
+      }),
+    );
+    const capability: CapabilityHandler<{ target: string }> = {
+      binding: { name: 'tools', kind: 'namespace', members: ['inspect'] },
+      limits: { maxCalls: 1, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: (payload) => ({ target: String(payload.params && (payload.params as { target?: string }).target) }),
+      invoke: async (prepared) => ({ kind: 'result', result: { ok: true, result: { accepted: prepared.target } } }),
+      overBudget,
+    };
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: `
+        const first = await tools.inspect({ target: 'first' });
+        const second = await tools.inspect({ target: 'second' });
+        return { first, second };
+      `,
+      capabilities: { tools: capability },
+      limits,
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      output: { first: { accepted: 'first' }, second: { rejected: 'second' } },
+    });
+    expect(overBudget).toHaveBeenCalledWith({ usedCalls: 1, maxCalls: 1 }, { target: 'second' });
+  });
+});
+
 describe('SandboxedCodeHostImpl isolation', () => {
   it('blocks host constructors on console, capabilities, and returned values', async () => {
     const consoleOutput: unknown[][] = [];

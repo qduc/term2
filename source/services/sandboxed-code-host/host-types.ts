@@ -104,9 +104,10 @@ export interface CapabilityHandler<Prepared = unknown> {
    * Omitting it aborts the run with `limit_exceeded`; a capability that would
    * rather let the script keep the work it has already done returns a result
    * in its own envelope instead. The usage argument describes calls admitted
-   * before the rejected call; it does not expose worker or host objects.
+   * before the rejected call; `prepared` is the exact already-validated call
+   * rejected by the budget and does not expose worker or host objects.
    */
-  overBudget?(usage: { usedCalls: number; maxCalls: number }): CapabilityOutcome;
+  overBudget?(usage: { usedCalls: number; maxCalls: number }, prepared: Prepared): CapabilityOutcome;
 }
 
 export interface HostLimits {

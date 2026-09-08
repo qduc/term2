@@ -626,7 +626,6 @@ export function createRunCodeToolDefinition(
       // a script cannot catch, relabel, or contradict an observed outcome.
       const receipts: RunCodeActionReceipt[] = [];
       const pendingReceiptByCallId = new Map<string, number>();
-      const unadmittedPrepared: PreparedCall[] = [];
       let rejectedSeq = 0;
       const output: string[] = [];
       const sessionId = getConversationSessionId(context);
@@ -688,15 +687,14 @@ export function createRunCodeToolDefinition(
         },
         // A budget-exhausted call is the script's problem, not a reason to
         // discard the work it has already printed.
-        overBudget: ({ usedCalls, maxCalls }) => {
-          // Attribute the rejection to the most recently prepared unadmitted
-          // action call (prepare/admit/overBudget run atomically per message,
-          // so FIFO order matches). Without attribution the observed attempt
-          // would be silently omitted from the ledger.
-          const rejected = unadmittedPrepared.shift();
-          if (rejected && isActionTool(rejected.tool.name)) {
+        overBudget: ({ usedCalls, maxCalls }, rejected) => {
+          // The host supplies the exact prepared call that was rejected.
+          // Preparation is async and concurrent, so a local FIFO would be
+          // unable to attribute a budget rejection safely.
+          if (isActionTool(rejected.tool.name)) {
+            rejectedSeq += 1;
             recordReceipt(
-              `${bridgeRunId}:unadmitted`,
+              `${bridgeRunId}:rejected-${rejectedSeq}`,
               rejected.tool.name,
               'unknown',
               'call budget exhausted before dispatch',
@@ -712,8 +710,6 @@ export function createRunCodeToolDefinition(
           );
         },
         onAdmitted: (prepared, callContext) => {
-          const index = unadmittedPrepared.indexOf(prepared);
-          if (index >= 0) unadmittedPrepared.splice(index, 1);
           if (!isActionTool(prepared.tool.name)) return;
           const callId = `${bridgeRunId}:${callContext.callId}`;
           pendingReceiptByCallId.set(callId, receipts.length);
@@ -793,7 +789,6 @@ export function createRunCodeToolDefinition(
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
-          if (isActionTool(name)) unadmittedPrepared.push(prepared);
           return prepared;
         },
         // Mirrors the run loop: only a definition that declares itself

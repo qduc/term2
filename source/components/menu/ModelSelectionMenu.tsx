@@ -30,6 +30,8 @@ type Props = {
   selectedIndex: number;
   query: string;
   provider?: string | null;
+  /** Top-level cross-provider view. Omit for legacy provider-tab callers. */
+  modelTab?: 'favorites' | 'all';
   loading?: boolean;
   error?: string | null;
   warning?: string | null;
@@ -52,6 +54,7 @@ const ModelSelectionMenu: FC<Props> = ({
   selectedIndex,
   query,
   provider,
+  modelTab,
   loading = false,
   error = null,
   warning = null,
@@ -65,7 +68,7 @@ const ModelSelectionMenu: FC<Props> = ({
   nicknameLabels,
   nicknameDraft = null,
 }) => {
-  const isFavoritesTab = provider === FAVORITES_TAB_ID;
+  const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
   const isUnified = provider == null;
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
@@ -141,8 +144,26 @@ const ModelSelectionMenu: FC<Props> = ({
     />
   );
 
+  const modelTabBar = modelTab && (
+    <ScrollableTabBar
+      items={[
+        { id: 'favorites', label: 'Favorites' },
+        { id: 'all', label: 'All' },
+      ]}
+      activeItemId={modelTab}
+      getItemWidth={(tab) => tab.label.length + 2}
+      renderTab={(tab, isActive) => (
+        <Text inverse={isActive} color={isActive ? COLOR_ACCENT : COLOR_TEXT_SUBTLE} bold={isActive}>
+          {' '}
+          {tab.label}{' '}
+        </Text>
+      )}
+    />
+  );
+
   return (
     <Box flexDirection="column" width="100%">
+      {modelTabBar}
       {!isUnified && canSwitchProvider && tabBar}
       {!isUnified && !canSwitchProvider && activeTab && (
         <Text color={COLOR_TEXT_SUBTLE}>Provider: {activeTab.label}</Text>
@@ -192,7 +213,11 @@ const ModelSelectionMenu: FC<Props> = ({
             hints={[
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
-              ...(!isUnified ? ([['←→', 'provider']] as [string, string][]) : []),
+              ...(modelTab
+                ? ([['←→', 'tab']] as [string, string][])
+                : !isUnified
+                ? ([['←→', 'provider']] as [string, string][])
+                : []),
               // In unified mode any favorited row can be named.
               ...(isFavoritesTab || isUnified ? ([['ctrl+n', 'nickname']] as [string, string][]) : []),
               ['ctrl+f', 'favorite'],

@@ -25,6 +25,8 @@ import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../ser
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 
+type ModelTab = 'favorites' | 'all';
+
 /**
  * Authoritative state of a favorited row's inline nickname editor. The
  * draft is bound to one row identity (provider + model id) and owns its own
@@ -55,6 +57,7 @@ export const useModelSelection = (deps: {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [modelTab, setModelTab] = useState<ModelTab>('all');
   const provider = null;
   const [scrollOffset, setScrollOffset] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -209,8 +212,21 @@ export const useModelSelection = (deps: {
 
   const filteredModels = useMemo(() => {
     const source = mergeUnifiedModels(providerIds, catalogs, [...favoriteModelInfos, ...unavailableConfiguredModels]);
-    return filterUnifiedModels(source, query, parsedQuery.provider);
-  }, [providerIds, catalogs, favoriteModelInfos, unavailableConfiguredModels, query, parsedQuery.provider]);
+    const tabModels =
+      modelTab === 'favorites'
+        ? source.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
+        : source;
+    return filterUnifiedModels(tabModels, query, parsedQuery.provider);
+  }, [
+    providerIds,
+    catalogs,
+    favoriteModelInfos,
+    unavailableConfiguredModels,
+    favoriteKeys,
+    modelTab,
+    query,
+    parsedQuery.provider,
+  ]);
   const filteredModelsRef = useRef(filteredModels);
   const selectedIndexRef = useRef(selectedIndex);
   filteredModelsRef.current = filteredModels;
@@ -310,6 +326,13 @@ export const useModelSelection = (deps: {
     });
   }, [filteredModels.length]);
 
+  const switchModelTab = useCallback(() => {
+    shouldPreselectRef.current = false;
+    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setSelectedIndex(0);
+    setScrollOffset(0);
+  }, []);
+
   const moveDown = useCallback(() => {
     shouldPreselectRef.current = false;
     setSelectedIndex((prev) => {
@@ -406,6 +429,8 @@ export const useModelSelection = (deps: {
     error,
     warning,
     provider,
+    modelTab,
+    switchModelTab,
     filteredModels,
     selectedIndex,
     scrollOffset,

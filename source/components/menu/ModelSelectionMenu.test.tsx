@@ -59,9 +59,15 @@ it.sequential('ModelSelectionMenu renders empty state', async () => {
   expect(lastFrame()?.includes('No models match "xyz"')).toBe(true);
 });
 
-it.sequential('ModelSelectionMenu renders a unified list with the provider on every row', async () => {
+it.sequential('ModelSelectionMenu renders the All tab and a unified list with the provider on every row', async () => {
   const { lastFrame } = await renderInAct(
-    <ModelSelectionMenu settingsService={createMockSettingsService()} items={mockModels} selectedIndex={0} query="" />,
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={mockModels}
+      selectedIndex={0}
+      query=""
+      modelTab="all"
+    />,
   );
   const output = lastFrame();
   expect(output?.includes('gpt-4o')).toBe(true);
@@ -70,7 +76,25 @@ it.sequential('ModelSelectionMenu renders a unified list with the provider on ev
   expect(output?.includes('claude-3-opus')).toBe(true);
   expect(output?.includes('(openai)')).toBe(true);
   expect(output?.includes('(openrouter)')).toBe(true);
-  expect(output).not.toContain(' Favorites ');
+  expect(output).toContain('Favorites');
+  expect(output).toContain('All');
+});
+
+it.sequential('ModelSelectionMenu renders the Favorites tab as active when requested', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[mockModels[0]!]}
+      selectedIndex={0}
+      query=""
+      modelTab="favorites"
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Favorites');
+  expect(output).toContain('All');
+  expect(output).toContain('←→ tab');
 });
 
 it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {

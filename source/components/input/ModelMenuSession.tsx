@@ -90,6 +90,11 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           }
         }
 
+        if (event.type === 'command' && (event.command === 'left' || event.command === 'right')) {
+          models.switchModelTab();
+          return keep();
+        }
+
         if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
 
         switch (event.type) {
@@ -211,6 +216,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}
+        modelTab={models.modelTab}
         loading={models.loading}
         error={models.error}
         warning={models.warning}

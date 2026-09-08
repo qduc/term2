@@ -18,6 +18,8 @@ import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../ser
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import type { NicknameDraftState } from './use-model-selection.js';
 
+type ModelTab = 'favorites' | 'all';
+
 /**
  * Drives `ModelSelectionMenu` outside the composer's autocomplete machinery
  * (`useInputContext`/`MenuController`), for the pre-app picker host. It
@@ -51,6 +53,7 @@ export const useStandaloneModelPicker = (deps: {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [modelTab, setModelTab] = useState<ModelTab>('all');
   const provider = lockProvider ?? null;
   const providerIds = useMemo(() => {
     if (lockProvider) return [lockProvider];
@@ -170,8 +173,12 @@ export const useStandaloneModelPicker = (deps: {
       catalogs,
       lockProvider ? [] : [...favoriteModelInfos, ...unavailableConfigured],
     );
-    return filterUnifiedModels(source, query);
-  }, [providerIds, catalogs, lockProvider, favoriteModelInfos, query, settingsService]);
+    const tabModels =
+      modelTab === 'favorites' && !lockProvider
+        ? source.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
+        : source;
+    return filterUnifiedModels(tabModels, query);
+  }, [providerIds, catalogs, lockProvider, favoriteModelInfos, favoriteKeys, modelTab, query, settingsService]);
   const filteredModelsRef = useRef(filteredModels);
   const selectedIndexRef = useRef(selectedIndex);
   filteredModelsRef.current = filteredModels;
@@ -247,6 +254,14 @@ export const useStandaloneModelPicker = (deps: {
       return prev > 0 ? prev - 1 : filteredModels.length - 1;
     });
   }, [filteredModels.length]);
+
+  const switchModelTab = useCallback(() => {
+    if (lockProvider) return;
+    shouldPreselectRef.current = false;
+    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setSelectedIndex(0);
+    setScrollOffset(0);
+  }, [lockProvider]);
 
   const moveDown = useCallback(() => {
     shouldPreselectRef.current = false;
@@ -340,6 +355,8 @@ export const useStandaloneModelPicker = (deps: {
     error,
     warning,
     provider,
+    modelTab,
+    switchModelTab,
     filteredModels,
     selectedIndex,
     scrollOffset,

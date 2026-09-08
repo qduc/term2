@@ -101,7 +101,7 @@ export function StandaloneModelPickerApp({
     } else if ((key as { end?: boolean }).end) {
       models.moveEnd();
     } else if (key.leftArrow || key.rightArrow) {
-      // The search field has no mid-string cursor; horizontal arrows are inert.
+      models.switchModelTab();
     } else if (key.ctrl && input === 'r') {
       models.refresh();
     } else if (key.ctrl && input.toLowerCase() === 'f') {
@@ -134,6 +134,7 @@ export function StandaloneModelPickerApp({
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}
+        modelTab={models.providerScope ? undefined : models.modelTab}
         provider={models.providerScope}
         loading={models.loading}
         error={models.error}

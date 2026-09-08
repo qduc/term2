@@ -2211,9 +2211,18 @@ and run_code display clipping without a retrieval path.
 | Guard | Signal and scope | Action and recovery | Preservation evidence |
 | --- | --- | --- | --- |
 | Codex automatic native compaction admission (`AgentClient`) | Compact endpoint 404/405, or 400/422 naming an incompatible compaction/request option; resolved model instance only | Suppress unchanged automatic attempts; manual retry bypasses suppression, success clears it; `auto` may use the existing safe local compactor, `native` retains history | Boundary tests preserve tool results and cold history in native mode; unrelated 400, 429 and 503 remain retryable; model switch and cancellation do not poison a new attempt |
-| run_code final display bound | Rendered result exceeds the existing 30,000-character budget | Save full rendered text through the existing output artifact owner, include its path within the budget; on storage failure disclose unavailable tail | Real host execution returns readable tail evidence without repeating the tool effect; storage failure remains successful execution; short output creates no artifact |
+| run_code final display bound | Rendered result exceeds the existing 30,000-character budget | Save full rendered text through the existing output artifact owner, include its path within the budget; reserve host action evidence before clipping script text, falling back to aggregate plus omitted-receipt count when the ledger cannot fit; on storage failure disclose unavailable details | Real host execution returns readable tail evidence without repeating the tool effect; action aggregate and authority survive large result/console/error output and ledger overflow even when storage fails; short and observation-only output retain existing behavior |
 | read_file scripted envelope budgeting (`read-file.ts`) | Scripted tool call whose full JSON envelope exceeds `maxResultBytes` (default 100,000 chars) | Truthfully set `truncated: true`, save full untruncated content to output artifact, set `fullOutputPath`, and binary-search slice `content` so the full serialized JSON envelope fits within budget without splitting surrogate pairs | Script receives valid, structured JSON object with truthful truncation and exact artifact path; context defaults for direct calls remain untouched; binary detection still rejects |
 | run_code nested transport overflow guard (`run-code.ts`) | Nested tool execution result whose serialized JSON exceeds `maxResultChars` (100,000 chars) and cannot be fitted by string property truncation | Save full output JSON to output artifact, reject with catchable error detailing exceeded limit, artifact path, and completed effect warning; never slice JSON into invalid strings | Nested calls preserve structured object contract; scripts catch generic overflow via standard try/catch without invalid JSON SyntaxErrors; completed tool effects are explicitly acknowledged |
+
+Action-receipt repair contract and red proof: [run-code-action-receipts.md](./run-code-action-receipts.md),
+Bounded review repair. Enforcement remains `clip`/`renderResult` in `run-code.ts`;
+recovery remains the temporary output artifact owner. Signal is rendered text
+length (a direct context-size measurement, not evidence of action failure). Large
+legitimate output retains the same bound, with protected host evidence. No action
+is replayed or cancelled, and no provider continuity or settings migration changes.
+Rollback is confined to receipt-aware clipping, adapter validation, and their tests.
+Final validation is recorded in the linked repair section.
 
 No new size or time limits, concurrency restrictions, or protected-history cuts.
 Local `no_complete_cold_turn` advice is admitted once per run as synthetic context;

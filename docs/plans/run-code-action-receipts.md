@@ -1,6 +1,8 @@
 # run_code host-owned action receipts
 
-Status: implemented and merged to `main` in `3e6e222e` (2026-09-08).
+Status: original implementation merged to `main` in `3e6e222e`; bounded review
+repair validated locally and with a three-model continuation probe (2026-09-08).
+See [Bounded review repair](#bounded-review-repair) for evidence and limits.
 Scope: `run_code` nested calls only. Distinct from the halted Stage 2
 native-structured-return experiment: this unit does **not** change the
 script-visible return representation of any tool.
@@ -11,7 +13,7 @@ script-visible return representation of any tool.
 script's return value. A script can call an action tool, ignore (or catch and
 relabel) a semantic non-application signal such as `{ok:false}`, and return
 `{ok:true}`; the host then renders `Result: {"ok":true}` with no visible
-counter-evidence. Promise fulfillment is transport success, not semantic
+counter-evidence in the pre-receipt implementation. Promise fulfillment is transport success, not semantic
 success: both `configure_task_check_in` and `cancel_run` resolve normally
 (JSON strings) when the action semantically did not apply.
 
@@ -61,8 +63,9 @@ Non-guarantees:
 - `applied` for `cancel_run` means cancellation was *requested and accepted*
   (`{ok:true, status:'cancelling'}`); settlement arrives separately through
   the normal completion path.
-- Unknown targets, unparseable shapes, and calls still in flight at run
-  termination resolve to `unknown`, never to success.
+- Recognized negative executor responses, including missing/inactive targets,
+  resolve to `not_applied`. Unparseable or unexpected shapes and calls still
+  in flight at run termination resolve to `unknown`, never to success.
 
 ## Outcome mapping
 
@@ -75,8 +78,8 @@ serialization, so script catch/relabel cannot alter them.
 | --- | --- | --- |
 | `configure_task_check_in` | JSON string `{ok:true, …}` | `applied` |
 | `configure_task_check_in` | JSON string `{ok:false, error}` | `not_applied`, reason = `error` (bounded) |
-| `cancel_run` | JSON string `{ok:true, runId, status:'cancelling'}` | `applied` |
-| `cancel_run` | JSON string `{ok:false, code:'not_active', target}` | `not_applied`, reason names `not_active` + target |
+| `cancel_run` | JSON string `{ok:true, runId, status:'cancelling'}` with non-empty string `runId` | `applied`, reason distinguishes accepted request from settlement |
+| `cancel_run` | JSON string `{ok:false, code:'not_active', target}` with non-empty string `target` | `not_applied`, reason names `not_active` + target |
 | either | unparseable / unexpected shape | `unknown`, reason `unrecognized action result shape` |
 
 Lifecycle mapping (all captured, none silently omitted):
@@ -115,6 +118,15 @@ Reasons are bounded (truncated, currently 280 chars) text only.
   the per-tool outcomes, an honest aggregate (counts of applied / not applied
   / failed / unknown, naming mixed and unknown cases as such), and one line
   declaring host observations authoritative over conflicting script claims.
+- The existing 30,000-character final display bound must preserve host evidence.
+  On overflow, save the complete output through the existing artifact owner and
+  reserve visible space for the action section before clipping script output.
+  If the ledger itself cannot fit, show its aggregate and authority statement
+  with an explicit count of omitted receipt details. The full artifact retains
+  all receipts; storage failure must disclose that omitted details are unavailable
+  without hiding the aggregate or inviting replay. Short and observation-only
+  output retains its existing rendering. This qualifies the per-call rendering
+  guarantee: individual receipts may require artifact retrieval on overflow.
 
 ## Regression coverage
 
@@ -135,7 +147,42 @@ rendered-result behavior (not private ledger state):
 
 - Focused tests, `pnpm test:related` per changed production file,
   `pnpm typecheck`, `pnpm test:changed`, formatting/diff check green.
-- Broader gate if shared host behavior is touched (this unit touches only
-  `run-code.ts` rendering/dispatch paths plus tests and this spec).
-- **Stage-level three-model live measurement remains a separate required gate
-  before acceptance.** No paid/live provider runs were performed in this unit.
+- The original merge also changed shared `sandboxed-code-host.ts` and
+  `host-types.ts` admission hooks. The isolated full suite (`pnpm test`) is
+  therefore the broader gate; focused receipt tests alone do not close it.
+- Stage-level three-model live measurement is separate from deterministic
+  rendering tests. The original merge had no live evidence. The bounded repair
+  now has the paired reporting/replay probe linked below; its scope is overflow
+  evidence consumption, not the complete lifecycle or cancellation matrix.
+
+## Bounded review repair
+
+The follow-up preserves the two-tool scope and script-visible returns; no
+new receipt framework, provider route, execution budget, or persisted setting.
+Baseline: focused suite passed 7 tests. Ten added regressions failed before
+production edits and then passed (17 total): malformed cancellation signals,
+large result/console/error text, and a ledger exceeding the display bound with
+and without artifact storage. Verification completed:
+
+- Focused: 17 passed (2.12 s).
+- Related and changed gates: each 47 files, 966 passed, one expected failure
+  (23.84 s and 23.15 s). Typecheck, source Prettier check, and diff check passed.
+- Isolated full suite: 628 files passed, one skipped; 8,450 tests passed,
+  three expected failures and four skips (149.06 s). The combined validation
+  command exited 0 after 216.22 s, within its explicit 900,000 ms allowance.
+- The first related run failed the documented nested-TMPDIR approval fixture
+  (`seen=[]`). The same gate passed with `TMPDIR=/tmp`; all subsequent test
+  gates used that environment. No test or production workaround was added.
+- [Live continuation probe](../reports/run-code-action-receipts-live-2026-09-08.md):
+  all three baseline cells falsely reported success; all three repaired cells
+  correctly reported non-application. No action replay occurred in either arm.
+  This is one supplied-evidence continuation pair per model, not a native
+  resumed-session benchmark or a population reliability estimate.
+
+Detection gap: the original tests used small script outputs and well-formed
+executor payloads. Receipt placement was implicitly coupled to generic prefix
+clipping, and the cancellation adapter treated a boolean as the full contract.
+The public-boundary overflow matrix and explicit accepted/negative shape checks
+protect these classes without a new abstraction. The sibling check-in adapter
+uses its documented boolean discriminator; observation-only overflow retains
+its existing artifact and storage-failure tests.

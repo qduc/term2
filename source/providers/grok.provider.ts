@@ -76,7 +76,11 @@ function grokAuthMiddleware(
 
 function grokHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
   return (ctx, next) => {
-    const sessionId = sessionContextService?.getContext()?.sessionId;
+    const context = sessionContextService?.getContext();
+    const sessionId = context?.sessionId;
+    const cacheAffinity =
+      context?.providerHistoryKey ??
+      (context?.evaluator ? String(sessionId) + ':evaluator' : context?.promptCacheKey ?? sessionId);
     const headers = injectHeaders(ctx.init?.headers, {
       'x-grok-client-version': GROK_CLIENT_VERSION,
       'x-grok-client-identifier': 'term2',
@@ -84,7 +88,7 @@ function grokHeadersMiddleware(sessionContextService?: ISessionContextService): 
       // xAI pins a conversation to one server by this header, and prompt-cache
       // entries live per server. Their caching docs say to always set it; the
       // undocumented `x-grok-session-id` we used to send bought no affinity.
-      ...(sessionId ? { 'x-grok-conv-id': sessionId, 'x-grok-session-id': sessionId } : {}),
+      ...(sessionId ? { 'x-grok-conv-id': cacheAffinity, 'x-grok-session-id': sessionId } : {}),
     });
     return next({ url: ctx.url, init: { ...ctx.init, headers } });
   };

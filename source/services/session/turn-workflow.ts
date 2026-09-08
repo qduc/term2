@@ -88,7 +88,7 @@ import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import type { SessionIdSource } from './session-identity.js';
-import { resolveSessionId } from './session-identity.js';
+import { resolvePromptCacheKey, resolveSessionId } from './session-identity.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -874,10 +874,13 @@ export class TurnWorkflow {
         // Parity must never change the established request path on failure.
       }
     }
+    const sessionId = resolveSessionId(this.deps.sessionId);
+    const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const startOptions: AgentClientRunOptions = {
       recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
-      sessionId: resolveSessionId(this.deps.sessionId),
+      sessionId,
+      ...(promptCacheKey !== sessionId ? { promptCacheKey } : {}),
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       hookTurnId: this.#hookTurnId,
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
@@ -1217,10 +1220,13 @@ export class TurnWorkflow {
       },
     void
   > {
+    const sessionId = resolveSessionId(this.deps.sessionId);
+    const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const continuationOptions: AgentClientRunOptions = {
       recoveryBudget: state.recoveryBudget,
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-      sessionId: resolveSessionId(this.deps.sessionId),
+      sessionId,
+      ...(promptCacheKey !== sessionId ? { promptCacheKey } : {}),
       toolResultCallIds: state.currentCallIds,
       knownToolCallIds: collectKnownToolCallIds(
         this.deps.conversationStore.getHistory(),

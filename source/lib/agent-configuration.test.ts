@@ -321,6 +321,20 @@ it.sequential('getApplicationAgent projects Codex session settings into typed Co
   expect(first.modelSettings).not.toHaveProperty('include');
 });
 
+it.sequential('getApplicationAgent keeps cache affinity independent from the logical session id', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'agent.provider': 'codex',
+      'agent.model': 'gpt-5.3-codex',
+    },
+  });
+  const config = new AgentConfiguration({}, deps);
+
+  const agent = config.getApplicationAgent('successor-session', 'retained-cache-affinity');
+
+  expect(agent.modelSettings?.codex?.promptCacheKey).toBe('retained-cache-affinity');
+});
+
 it.sequential('transient application agents do not inherit a Codex session cache key', () => {
   const { deps } = createDeps({ settingsValues: { 'agent.provider': 'codex' } });
   const overrideAgent = {

@@ -11,6 +11,8 @@ import {
   ENCRYPTED_CONTENT_REDACTION,
   isRawTrafficCaptureEnabled,
   rawCapturePathForRequestPath,
+  buildProviderRequestFingerprint,
+  PROVIDER_REQUEST_FINGERPRINT_VERSION,
   type DailySessionIndexEntry,
 } from './provider-traffic.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
@@ -36,6 +38,83 @@ const payloadToolCalls = (payload: any): Array<{ id?: string; name?: string; arg
     ?.filter((item: any) => item.type === 'function_call')
     .map((item: any) => ({ id: item.call_id, name: item.name, arguments: item.arguments })) ??
   [];
+
+it('builds privacy-safe, byte-sized fingerprints from every supported prompt shape', () => {
+  const instruction = 'secret system instruction';
+  const tool = { type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } };
+  const fingerprint = buildProviderRequestFingerprint({
+    instructions: instruction,
+    system: [{ type: 'text', text: 'anthropic system' }],
+    messages: [
+      { role: 'system', content: 'chat system' },
+      { role: 'user', content: 'user' },
+    ],
+    input: [
+      { type: 'additional_tools', role: 'developer', tools: [tool] },
+      { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'responses system' }] },
+      { role: 'user', content: 'user' },
+    ],
+    tools: [tool],
+  });
+
+  expect(fingerprint.version).toBe(PROVIDER_REQUEST_FINGERPRINT_VERSION);
+  expect(fingerprint.prefix.parts.map((part) => part.source)).toEqual([
+    'instructions',
+    'system',
+    'messages[0]',
+    'input[1]',
+  ]);
+  expect(fingerprint.prefix.bytes).toBeGreaterThan(0);
+  expect(fingerprint.tools?.bytes).toBeGreaterThan(0);
+  expect(JSON.stringify(fingerprint)).not.toContain(instruction);
+  expect(JSON.stringify(fingerprint)).not.toContain('read_file');
+});
+
+it('ProviderTraffic records fingerprint telemetry before body sanitization', async () => {
+  const debug = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, warn: vi.fn(), error: vi.fn(), getCorrelationId: () => undefined },
+    {
+      getContext: () => ({
+        sessionId: 'successor',
+        sessionStartedAt: '2026-09-08T00:00:00.000Z',
+        providerHistoryKey: 'fresh-provider-history',
+        promptCacheKey: 'retained-cache-affinity',
+      }),
+    } as any,
+    new ProviderTrafficArtifactStore({ rootDir: fs.mkdtempSync(path.join(os.tmpdir(), 'term2-fingerprint-')) }),
+  );
+
+  traffic.recordRequestStart({
+    requestId: 'fingerprint-request',
+    provider: 'openai',
+    model: 'gpt-test',
+    sentBody: {
+      instructions: 'x'.repeat(1000),
+      tools: [{ type: 'function', function: { name: 'private_tool' } }],
+    },
+  });
+
+  const [, meta] = debug.mock.calls[0]!;
+  expect(meta.promptCacheKey).toBe('retained-cache-affinity');
+  expect(meta.providerHistoryKey).toBe('fresh-provider-history');
+  expect(meta.requestFingerprint.version).toBe(PROVIDER_REQUEST_FINGERPRINT_VERSION);
+  expect(meta.requestFingerprint.instructions.bytes).toBe(1000);
+  expect(JSON.stringify(meta.requestFingerprint)).not.toContain('private_tool');
+  expect(JSON.stringify(meta.requestFingerprint)).not.toContain('x'.repeat(1000));
+
+  await traffic.recordResponseReceived({
+    requestId: 'fingerprint-request',
+    provider: 'openai',
+    model: 'gpt-test',
+    status: 200,
+    response: { usage: { prompt_tokens: 1000, prompt_tokens_details: { cached_tokens: 900 } } },
+  });
+  const [, responseMeta] = debug.mock.calls.at(-1)!;
+  expect(responseMeta.promptCacheKey).toBe('retained-cache-affinity');
+  expect(responseMeta.providerHistoryKey).toBe('fresh-provider-history');
+  expect(responseMeta.payload.payload.usage.prompt_tokens_details.cached_tokens).toBe(900);
+});
 
 const tempDirs: string[] = [];
 const makeTempDir = (): string => {

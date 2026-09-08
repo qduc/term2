@@ -1235,7 +1235,7 @@ export class AgentClient {
       }
       const provider = this.#agentConfig.getProvider();
       const supportsChaining = this.supportsConversationChaining();
-      const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
+      const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
       const runBudget = this.#runBudgetPolicy();

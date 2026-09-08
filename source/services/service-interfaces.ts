@@ -65,6 +65,7 @@ export interface ProviderTrafficRequest {
   modelWrapperClass?: string;
   promptCacheKey?: string;
   providerHistoryKey?: string;
+  transportDiagnostics?: ProviderTransportDiagnostics;
 }
 
 export type ProviderRequestFingerprintMeasurement = {
@@ -82,6 +83,14 @@ export type ProviderRequestFingerprint = {
   tools?: ProviderRequestFingerprintMeasurement & { count: number };
 };
 
+/** Bounded evidence for the physical transport used by one provider request. */
+export type ProviderTransportDiagnostics = {
+  connectionId?: string;
+  reused?: boolean;
+  affinityKey?: string;
+  logicalHistoryKey?: string;
+};
+
 export interface ProviderTrafficResponse {
   requestId: string;
   provider: string;
@@ -93,6 +102,7 @@ export interface ProviderTrafficResponse {
   modelWrapperClass?: string;
   transport?: 'websocket';
   receiveTiming?: ProviderTrafficReceiveTiming;
+  transportDiagnostics?: ProviderTransportDiagnostics;
 }
 
 export interface ProviderTrafficClosedResponse {
@@ -118,6 +128,7 @@ export interface ProviderTrafficClosedResponse {
    * client abort that full transcript retention is for.
    */
   diagnostics?: ProviderTrafficStreamDiagnostics | ProviderTrafficBoundedStreamDiagnostics;
+  transportDiagnostics?: ProviderTransportDiagnostics;
 }
 
 /**
@@ -218,6 +229,7 @@ export interface IProviderTraffic {
      * frames. Absent when the failure happened before any frame arrived.
      */
     diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
+    transportDiagnostics?: ProviderTransportDiagnostics;
   }): void;
 }
 

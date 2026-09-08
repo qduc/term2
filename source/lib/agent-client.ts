@@ -15,7 +15,11 @@ import { AgentConfiguration } from './agent-configuration.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
-import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type {
+  ContextCompactionSessionState,
+  StreamedModelConversationResetOptions,
+  StreamedModelTurn,
+} from '../contracts/streamed-model-turn.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
@@ -143,6 +147,7 @@ export class AgentClient {
   #lastCompletedProviderInputTokens?: number;
   #blockedCompactionRearmAtEstimatedTokens?: number;
   #blockedCompactionUserTurnCount?: number;
+  #lastLogicalSessionId?: string;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -1074,12 +1079,28 @@ export class AgentClient {
   rolloverRootContext(): void {
     this.#applicationRunLoop.abort();
     this.#clearCorrelationId();
-    this.#contextCompactionSessionState = { disabled: false };
+    // Keep the state object captured by an already-created provider model.
+    // Replacing it would leave the retained model bound to an obsolete
+    // compaction state object.
+    this.#contextCompactionSessionState.disabled = false;
     this.#contextMilestoneReminder = new ContextMilestoneReminder();
     this.#sessionRolloverRequest = null;
     this.#lastCompletedProviderInputTokens = undefined;
     this.#askUserAnswerStore.clear();
-    this.#clearStreamedModelCache();
+    const resetOptions: StreamedModelConversationResetOptions | undefined = this.#lastLogicalSessionId
+      ? { providerHistoryKey: this.#lastLogicalSessionId }
+      : undefined;
+    for (const cached of this.#streamedModelCache.values()) {
+      const reset = (model: StreamedModelTurn): void => {
+        model.resetConversationState?.(resetOptions);
+        this.#unavailableCodexCompaction.delete(model);
+      };
+      if (cached.model instanceof Promise) {
+        void cached.model.then(reset).catch(() => undefined);
+      } else {
+        reset(cached.model);
+      }
+    }
     this.#chatService.clearModelCache();
   }
 
@@ -1228,6 +1249,7 @@ export class AgentClient {
     this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const startController = new AbortController();
     this.#activeStartController = startController;
+    if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     try {
       await this.#prepareStart(userInput, options, startController.signal);
       if (startController.signal.aborted) {
@@ -1277,6 +1299,7 @@ export class AgentClient {
     // The turn is resuming, not ending: keep anything waiting for this segment.
     this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const provider = this.#agentConfig.getProvider();
+    if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     const supportsChaining = this.supportsConversationChaining();
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();

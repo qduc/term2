@@ -75,6 +75,28 @@ it('reuses an idle live socket for the next turn of the same agent', () => {
   expect(first.closeCount).toBe(0);
 });
 
+it('reuses an idle socket across logical rollover when transport affinity stays stable', () => {
+  const { pool, created } = sessions();
+
+  const before = pool.acquireWithMetadata(
+    { 'session-id': 'stable-cache-affinity', authorization: 'token' },
+    { affinityKey: 'stable-cache-affinity' },
+  );
+  const first = before.socket as FakeSocket;
+  first.socket.readyState = OPEN;
+  pool.release(first as never, { keepAlive: true });
+
+  const after = pool.acquireWithMetadata(
+    { 'session-id': 'stable-cache-affinity', authorization: 'token' },
+    { affinityKey: 'stable-cache-affinity' },
+  );
+
+  expect(created).toHaveLength(1);
+  expect(after.socket).toBe(first);
+  expect(after.reused).toBe(true);
+  expect(after.connectionId).toEqual(expect.any(String));
+});
+
 it('replaces an idle socket when connection headers other than turn metadata change', () => {
   const { pool, created } = sessions();
 

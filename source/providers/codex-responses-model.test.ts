@@ -1773,6 +1773,42 @@ it('CodexResponsesWSModel chains Luna turns when the caller omits previousRespon
   ]);
 });
 
+it('CodexResponsesWSModel resets one logical history scope without replacing its transport', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async (request: any) => {
+    seenRequests.push(request);
+    return makeStream([{ type: 'response.completed', response: { id: 'resp-before', output: [], usage: {} } }]);
+  };
+  const sessionContextService = new SessionContextService();
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'account-123',
+      getInstallationId: () => 'installation-123',
+    } as any,
+    undefined,
+    undefined,
+    sessionContextService,
+    transport,
+  );
+  const context = {
+    sessionId: 'before',
+    sessionStartedAt: '2026-09-08T00:00:00.000Z',
+    promptCacheKey: 'stable-cache-affinity',
+  };
+
+  await sessionContextService.runWithContext(context, () => collect(model.stream({ input: [], tools: [] })));
+  model.resetConversationState({ providerHistoryKey: 'before' });
+  await sessionContextService.runWithContext(context, () => collect(model.stream({ input: [], tools: [] })));
+
+  expect(seenRequests).toHaveLength(2);
+  expect(seenRequests[0].previousResponseId).toBeUndefined();
+  expect(seenRequests[1].previousResponseId).toBeUndefined();
+});
+
 it('CodexResponsesWSModel drops Luna server history at a native compaction boundary', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
@@ -2688,12 +2724,13 @@ it('CodexResponsesWSModel uses providerHistoryKey as websocket session identity'
       sessionId: 'parent-session',
       sessionStartedAt: '2026-08-20T00:00:00.000Z',
       providerHistoryKey: 'parent-session:subagent:call-explorer-1',
+      promptCacheKey: 'parent-session-cache',
     },
     () => collect(model.stream({ input: [], tools: [] })),
   );
 
-  expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session:subagent:call-explorer-1');
-  expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session:subagent:call-explorer-1');
+  expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session-cache');
+  expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session-cache');
   expect(seenRequest.providerOptions.client_metadata.session_id).toBe('parent-session:subagent:call-explorer-1');
 });
 

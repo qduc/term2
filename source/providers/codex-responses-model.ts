@@ -3,6 +3,7 @@ import { ResponsesWS } from 'openai/resources/responses/ws';
 import OpenAI, { InternalServerError } from 'openai';
 import type {
   ContextCompactionSessionState,
+  StreamedModelConversationResetOptions,
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
@@ -15,6 +16,7 @@ import type {
   IProviderTraffic,
   ProviderTrafficStreamDiagnostics,
   ProviderTrafficBoundedStreamDiagnostics,
+  ProviderTransportDiagnostics,
 } from '../services/service-interfaces.js';
 import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
 import { isOrphanedChainedToolOutputError, OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
@@ -105,6 +107,10 @@ const WEBSOCKET_OPEN = 1;
 export type CodexResponsesTransportOptions = {
   supportsContextCompaction?: boolean;
   contextCompactionSessionState?: ContextCompactionSessionState;
+};
+
+export type CodexTransportRequestContext = {
+  onConnectionAcquired?: (details: { connectionId: string; reused: boolean; affinityKey?: string }) => void;
 };
 
 /** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
@@ -206,14 +212,29 @@ export class CodexResponsesTransport {
     };
   }
 
-  async fetchResponse(request: StreamedModelTurnRequest, stream: boolean, requestData: any): Promise<any> {
+  async fetchResponse(
+    request: StreamedModelTurnRequest,
+    stream: boolean,
+    requestData: any,
+    requestContext?: CodexTransportRequestContext,
+  ): Promise<any> {
     try {
       if (stream && this.websocket) {
         if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
           return this.client.responses.create(requestData);
         }
         const headers = request.providerOptions?.extraHeaders as Record<string, string> | undefined;
-        const socket = this.#sessions.acquire(headers);
+        const affinityKey =
+          typeof request.codex?.promptCacheKey === 'string' && request.codex.promptCacheKey.length > 0
+            ? request.codex.promptCacheKey
+            : undefined;
+        const acquisition = this.#sessions.acquireWithMetadata(headers, { affinityKey });
+        const socket = acquisition.socket;
+        requestContext?.onConnectionAcquired?.({
+          connectionId: acquisition.connectionId,
+          reused: acquisition.reused,
+          ...(affinityKey ? { affinityKey } : {}),
+        });
 
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
@@ -343,9 +364,13 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
     return built;
   }
 
-  protected async fetchResponse(request: StreamedModelTurnRequest, stream: boolean): Promise<any> {
+  protected async fetchResponse(
+    request: StreamedModelTurnRequest,
+    stream: boolean,
+    requestContext?: CodexTransportRequestContext,
+  ): Promise<any> {
     const built = this.buildResponsesCreateRequest(request, stream);
-    return this.transport.fetchResponse(request, stream, built.requestData);
+    return this.transport.fetchResponse(request, stream, built.requestData, requestContext);
   }
 
   protected async fetchUnaryResponse(request: StreamedModelTurnRequest): Promise<any> {
@@ -1181,6 +1206,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #lastSentChainFingerprint?: string;
   #lastRejectedChainFingerprint?: string;
   #lastLogicalRequestByKey = new Map<string, { input: unknown[]; output: unknown[]; responseId: string }>();
+  #transportDiagnosticsByRequest = new WeakMap<object, ProviderTransportDiagnostics>();
 
   private readonly providerTraffic: IProviderTraffic;
   private readonly diagnosticLogger?: DiagnosticLogger;
@@ -1227,6 +1253,20 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.requestCapture = requestCapture instanceof CodexResponsesTransport ? undefined : requestCapture;
   }
 
+  /**
+   * Drop server-history bookkeeping for one logical scope while leaving the
+   * provider transport pool alive. Rollover supplies the predecessor key;
+   * refusing an unscoped reset protects live nested scopes sharing this model.
+   */
+  resetConversationState(options?: StreamedModelConversationResetOptions): void {
+    if (!options?.providerHistoryKey) return;
+    this.#forgetCodexServerHistoryForKey(options.providerHistoryKey);
+  }
+
+  #transportDiagnostics(request: StreamedModelTurnRequest): ProviderTransportDiagnostics | undefined {
+    return this.#transportDiagnosticsByRequest.get(request as object);
+  }
+
   override async compactHistory(request: {
     input: readonly StreamedModelTurnInput[];
     instructions?: string;
@@ -1244,7 +1284,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return this.modelId;
   }
 
-  #logTrafficStarted(requestId: string, requestData: Record<string, unknown>, headers?: HeadersInit): void {
+  #logTrafficStarted(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    headers?: HeadersInit,
+    transportDiagnostics?: ProviderTransportDiagnostics,
+  ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
     const sanitizedHeaders = headers ? sanitizeHeaders(headers) : undefined;
@@ -1255,6 +1300,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       model,
       sentBody: requestData,
       headers: sanitizedHeaders,
+      transportDiagnostics,
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1265,6 +1311,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     requestData: Record<string, unknown>,
     response: unknown,
     receiveTiming?: WebSocketReceiveTiming,
+    transportDiagnostics?: ProviderTransportDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -1277,6 +1324,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       response: response as any,
       transport: 'websocket',
       ...(receiveTiming ? { receiveTiming } : {}),
+      transportDiagnostics,
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1288,6 +1336,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     error: unknown,
     receiveTiming?: WebSocketReceiveTiming,
     diagnostics?: ProviderTrafficBoundedStreamDiagnostics,
+    transportDiagnostics?: ProviderTransportDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -1299,6 +1348,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       error,
       ...(receiveTiming ? { receiveTiming } : {}),
       ...(diagnostics ? { diagnostics } : {}),
+      transportDiagnostics,
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1310,6 +1360,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     outcome: 'consumer_closed' | 'aborted' | 'failed',
     eventCount: number,
     diagnostics?: ProviderTrafficStreamDiagnostics | ProviderTrafficBoundedStreamDiagnostics,
+    transportDiagnostics?: ProviderTransportDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -1321,6 +1372,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       outcome,
       eventCount,
       ...(diagnostics ? { diagnostics } : {}),
+      transportDiagnostics,
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1335,6 +1387,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     signal?: AbortSignal,
     receiveTiming?: () => WebSocketReceiveTiming,
     asProvablyUnsent?: (error: unknown) => UnsentWebSocketRequestError | undefined,
+    transportDiagnostics?: ProviderTransportDiagnostics,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
@@ -1373,7 +1426,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
               wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
             }
-            logReceived(requestId, requestData, response, receiveTiming?.());
+            logReceived(requestId, requestData, response, receiveTiming?.(), transportDiagnostics);
           }
           yield event;
         }
@@ -1394,13 +1447,20 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           // closes the iterator explicitly; otherwise a guard-triggered abort
           // would be reduced to bounded counters before the recorder's
           // finally block can retain it.
-          logClosed(requestId, requestData, 'aborted', eventCount, recorder.diagnostics());
+          logClosed(requestId, requestData, 'aborted', eventCount, recorder.diagnostics(), transportDiagnostics);
         } else {
           // Bounded evidence of whatever progress the recorder observed before
           // the failure (category/counter/timing, no raw frame payload) — a
           // stream that fails after thousands of frames (e.g. an abrupt close)
           // must not lose that evidence the way an unrecorded failure would.
-          logFailed(requestId, requestData, failure, receiveTiming?.(), recorder.boundedDiagnostics());
+          logFailed(
+            requestId,
+            requestData,
+            failure,
+            receiveTiming?.(),
+            recorder.boundedDiagnostics(),
+            transportDiagnostics,
+          );
         }
         throw failure;
       } finally {
@@ -1424,6 +1484,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
               : outcome === 'failed'
               ? recorder.boundedDiagnostics()
               : undefined,
+            transportDiagnostics,
           );
         }
         recorder.release();
@@ -1624,7 +1685,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   #forgetCodexServerHistoryForCurrentKey(): void {
-    const key = this.#getCodexServerHistoryKey();
+    this.#forgetCodexServerHistoryForKey(this.#getCodexServerHistoryKey());
+  }
+
+  #forgetCodexServerHistoryForKey(key: string | null): void {
     if (!key) return;
 
     const responseId = this.chainedWireState.getStoredResponseId(key);
@@ -1728,16 +1792,24 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     const sessionContext = this.sessionContextService?.getContext();
-    const sessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
-    const threadId = sessionId;
+    const logicalSessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
+    // WebSocket handshake headers cannot change after a socket is opened. Use
+    // the root cache affinity for that physical identity, while the per-frame
+    // client metadata below continues to identify the current logical scope.
+    // The backend's treatment of these two identity channels is not assumed;
+    // the distinction is kept explicit in tests and telemetry.
+    const transportSessionId = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
+    const threadId = logicalSessionId;
     const hasPreviousResponseId =
       typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
-    const turnId = hasPreviousResponseId ? this.codexTurnIdsBySession.get(sessionId) ?? randomUUID() : randomUUID();
-    this.codexTurnIdsBySession.set(sessionId, turnId);
+    const turnId = hasPreviousResponseId
+      ? this.codexTurnIdsBySession.get(logicalSessionId) ?? randomUUID()
+      : randomUUID();
+    this.codexTurnIdsBySession.set(logicalSessionId, turnId);
     const windowId = `${threadId}:1`;
     const turnMetadata = JSON.stringify({
       installation_id: installationId,
-      session_id: sessionId,
+      session_id: logicalSessionId,
       thread_id: threadId,
       turn_id: turnId,
       window_id: windowId,
@@ -1745,24 +1817,24 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
 
     return {
-      sessionId,
+      sessionId: logicalSessionId,
       threadId,
       turnId,
       windowId,
       turnMetadata,
       clientMetadata: {
         'x-codex-installation-id': installationId,
-        session_id: sessionId,
+        session_id: logicalSessionId,
         thread_id: threadId,
         'x-codex-window-id': windowId,
         turn_id: turnId,
         'x-codex-turn-metadata': turnMetadata,
       },
       headers: {
-        'x-client-request-id': threadId,
-        'session-id': sessionId,
-        'thread-id': threadId,
-        'x-codex-window-id': windowId,
+        'x-client-request-id': transportSessionId,
+        'session-id': transportSessionId,
+        'thread-id': transportSessionId,
+        'x-codex-window-id': transportSessionId + ':1',
         'x-codex-turn-metadata': turnMetadata,
       },
     };
@@ -2018,19 +2090,42 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     // transport's private fetch path. Capture it without changing the
     // prepared request or wire state.
     captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
-    this.#logTrafficStarted(requestId, requestData, extraHeaders);
+    const transportDiagnostics: ProviderTransportDiagnostics = {
+      ...(request.codex?.promptCacheKey ?? this.sessionContextService?.getContext()?.promptCacheKey
+        ? {
+            affinityKey: request.codex?.promptCacheKey ?? this.sessionContextService?.getContext()?.promptCacheKey,
+          }
+        : {}),
+      ...(this.#getCodexServerHistoryKey() ? { logicalHistoryKey: this.#getCodexServerHistoryKey()! } : {}),
+    };
+    this.#logTrafficStarted(requestId, requestData, extraHeaders, transportDiagnostics);
 
     if (!stream) {
       try {
         const response = await fetchAndReconstructUnaryResponse(
           async () =>
-            watchdog.wrap(await (super.fetchResponse(updatedRequest, true) as unknown as Promise<AsyncIterable<any>>)),
+            watchdog.wrap(
+              await (super.fetchResponse(updatedRequest, true, {
+                onConnectionAcquired: (details) =>
+                  this.#transportDiagnosticsByRequest.set(updatedRequest as object, {
+                    ...transportDiagnostics,
+                    connectionId: details.connectionId,
+                    reused: details.reused,
+                  }),
+              }) as unknown as Promise<AsyncIterable<any>>),
+            ),
           this.diagnosticLogger,
         );
         if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
           this.chainedWireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
         }
-        this.#logTrafficReceived(requestId, requestData, response, watchdog.receiveTiming());
+        this.#logTrafficReceived(
+          requestId,
+          requestData,
+          response,
+          watchdog.receiveTiming(),
+          this.#transportDiagnostics(updatedRequest),
+        );
         return response;
       } catch (error) {
         const timeoutError = watchdog.timeoutError();
@@ -2044,13 +2139,27 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             this.chainedWireState.invalidate(wireStateKey);
           }
         }
-        this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
+        this.#logTrafficFailed(
+          requestId,
+          requestData,
+          failure,
+          receiveTiming,
+          undefined,
+          this.#transportDiagnostics(updatedRequest),
+        );
         throw failure;
       }
     }
 
     try {
-      const response = (await super.fetchResponse(updatedRequest, stream)) as unknown as AsyncIterable<any>;
+      const response = (await super.fetchResponse(updatedRequest, stream, {
+        onConnectionAcquired: (details) =>
+          this.#transportDiagnosticsByRequest.set(updatedRequest as object, {
+            ...transportDiagnostics,
+            connectionId: details.connectionId,
+            reused: details.reused,
+          }),
+      })) as unknown as AsyncIterable<any>;
       const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
       return this.#withTrafficLogging(
         patched,
@@ -2063,6 +2172,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         (error) =>
           asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest) ??
           asProvablyUnsentConnectTimeout(error, updatedRequest, watchdog.receiveTiming().frameCount > 0),
+        this.#transportDiagnostics(updatedRequest),
       );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
@@ -2076,7 +2186,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           this.chainedWireState.invalidate(wireStateKey);
         }
       }
-      this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
+      this.#logTrafficFailed(
+        requestId,
+        requestData,
+        failure,
+        receiveTiming,
+        undefined,
+        this.#transportDiagnostics(updatedRequest),
+      );
       throw failure;
     }
   }

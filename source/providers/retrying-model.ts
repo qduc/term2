@@ -1,4 +1,5 @@
 import type {
+  StreamedModelConversationResetOptions,
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
@@ -80,6 +81,10 @@ export class RetryingModel implements StreamedModelTurn {
 
   get wrappedModel(): StreamedModelTurn {
     return this.model;
+  }
+
+  resetConversationState(options?: StreamedModelConversationResetOptions): void {
+    this.model.resetConversationState?.(options);
   }
 
   /** Rebind the request-scoped retry observer when a cached provider is reused. */

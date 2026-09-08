@@ -1,6 +1,6 @@
 # run_code host-owned action receipts
 
-Status: accepted for implementation (worker lane, 2026-09-08).
+Status: implemented and merged to `main` in `3e6e222e` (2026-09-08).
 Scope: `run_code` nested calls only. Distinct from the halted Stage 2
 native-structured-return experiment: this unit does **not** change the
 script-visible return representation of any tool.

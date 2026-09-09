@@ -2,7 +2,9 @@ import { expect, it, vi } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import { RetryingModel } from '../providers/retrying-model.js';
+import { createSessionRuntime } from '../services/session/session-composition.js';
 
 const settings = {
   get(key: string): unknown {
@@ -178,3 +180,52 @@ it.sequential('does not invoke a reset seam when rollover has no logical session
     unregisterProvider(providerId);
   }
 });
+
+it.sequential(
+  'retains the provider model through the production runtime rollover before a successor turn',
+  async () => {
+    const providerId = 'mock-rollover-runtime-provider';
+    const close = vi.fn();
+    const createStreamedModel = vi.fn(
+      () => new RetryingModel({ ...completedModel(() => undefined), close } as any, { retryAttempts: 0 }),
+    );
+    registerProvider(
+      { id: providerId, label: 'Runtime rollover provider', createStreamedModel, fetchModels: async () => [] },
+      { allowOverride: true },
+    );
+    const client = makeLifecycleClient(providerId);
+    const runtime = createSessionRuntime({
+      sessionId: 'before',
+      agentClient: client,
+      toolOwnership: new ToolOwnershipRegistry(),
+      approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+      deps: {
+        logger,
+        sessionContextService: {
+          runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+          getContext: () => null,
+        } as any,
+      },
+    });
+
+    try {
+      for await (const _event of runtime.turns.start('before')) {
+        // Consume the settled foreground turn through the session coordinator.
+      }
+      expect(createStreamedModel).toHaveBeenCalledTimes(1);
+
+      runtime.rollover('after');
+
+      for await (const _event of runtime.turns.start('after')) {
+        // The successor's first message is the lifecycle boundary under test.
+      }
+
+      expect(createStreamedModel).toHaveBeenCalledTimes(1);
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      runtime.dispose();
+      client.dispose();
+      unregisterProvider(providerId);
+    }
+  },
+);

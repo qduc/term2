@@ -1,11 +1,13 @@
 # Rollover cache-affinity repair
 
-Latest live result (2026-09-09): the OpenCode routing change `cd867f26`
-produced two consecutive first-successor cache hits (97.2% each) with a stable
-header and rotating logical IDs. Codex built `b96a6c65` also had two hits,
-but still replaced its socket; an earlier build had a first-successor miss
-despite stable affinity. Codex transport retention remains open. See the
-dated measurements below.
+Latest live result (2026-09-09): both selected providers produced two
+consecutive first-successor cache hits: Codex built `b96a6c65` reported
+17152/17586 and 17152/17592 cached input tokens (97.5% each); OpenCode
+with routing change `cd867f26` reported 17920/18435 (97.2%) each.
+The acceptance criterion is first-successor cache hits, not socket reuse.
+Codex replaced its socket and still hit cache; socket retention is not a
+release blocker. Earlier misses remain recorded below: these live successes
+do not guarantee backend cache admission, placement, or retention.
 
 ## Finding
 
@@ -262,9 +264,9 @@ Only x-codex-turn-metadata differed between the recorded predecessor and first
 successor headers; the pool fingerprint already excludes it. Cache key and
 full-prefix/tool fingerprints matched the earlier run; no predecessor response
 ID was sent. Thus the terminal-before-yield lease test passes, but does not
-establish that this race explains the live retirement. Follow-up lifecycle
-tracing remains necessary. Parent independently passed 16 focused lifecycle
-tests and typecheck on this build.
+establish that this race explains the live retirement. This does not block the cache-hit goal: socket reuse is not an acceptance
+criterion. Parent independently passed 16 focused lifecycle tests and
+typecheck on this build.
 
 OpenCode successor 1 violated the requested no-tool protocol: its predecessor
 omitted the response marker from the brief, then the successor read the prior
@@ -295,8 +297,8 @@ reconstruction across rollover. This adds that missing lifetime boundary
 without changing session-ID generation or introducing a new routing API.
 Related and changed gates each passed 2003 tests (one expected failure, two
 skipped); provider black-box passed 177 tests (one skipped), and ESLint passed.
-Combined gate elapsed time was 215.694 seconds. Full combined handoff gate
-will follow the remaining Codex lifecycle repair.
+Combined gate elapsed time was 215.694 seconds. The full combined handoff
+gate is recorded separately below; no additional socket repair is required.
 
 ## OpenCode live verification: `cd867f26`
 
@@ -326,3 +328,63 @@ and tool hashes stayed equal to the earlier OpenCode measurements. Both
 first successors reported 97.2% cached input. This establishes repeated live
 success in this run, not a provider-wide guarantee against backend failover
 or eviction.
+
+## Acceptance correction and final candidate
+
+The user clarified that cache hits, not socket reuse, are the goal. The latest
+two first-successor receipts for each provider meet that observed-live criterion.
+Socket-only follow-up `7ecb1a72` had committed before its worker was cancelled;
+`330cbe64` reverted it to retain the cache-hit-tested candidate. No additional
+live socket experiment is required. Earlier misses are retained as limitations,
+not erased or attributed to an unproven mechanism.
+
+## Retrospective
+
+Preventable: yes, for application-owned affinity drift; backend cache eviction
+and admission remain external. The latent lifetime mismatch made the rotating
+logical ID double as routing affinity. Its exact introducing commit was not
+established. The investigation and live repeats span September 8-9.
+
+- Representability and single source of truth: SessionIdentity now owns a
+  separate stable promptCacheKey; root provider routing derives from it.
+- Boundary contract and implicit coupling: reconstruction must rotate logical
+  history without rotating root cache affinity. Session rollover and provider
+  reconstruction tests exercise those distinct lifetimes and nested isolation.
+- Wrong assumption: equal prefix/body keys alone were treated as sufficient
+  evidence of cache reuse; later socket reuse was incorrectly elevated to the
+  goal. Neither is equivalent to provider-reported cached tokens.
+- Detection gap: existing identity tests covered one logical session, not
+  reconstruction. Pool unit tests also did not prove live cache admission.
+- Automation: regression tests cover reconstruction and key isolation; bounded
+  fingerprints and usage receipts expose drift without logging prompt contents.
+- Siblings checked: Codex body and handshake routing, OpenCode session routing,
+  Grok conversation headers, and OpenAI Responses extra-body placement.
+  Nested/evaluator overrides remain isolated; unrelated Chat Completions
+  must not inherit Codex request fields. The initial shared-key repair covered
+  Responses/Grok; this follow-up repaired Codex handshake and OpenCode routing.
+- Knowledge and observability: logical-history and affinity lifetimes were not
+  separately protected. The runtime-owned key plus reconstruction contracts
+  provide structural protection; full-component fingerprints and first-request
+  usage distinguish prefix drift from unproven backend hypotheses.
+- Remaining boundary: live samples demonstrate successful cache reuse, not a
+  guarantee under failover, eviction, or provider policy changes. No additional
+  socket-lifetime refactor is needed for this acceptance criterion.
+
+## Final combined validation
+
+Candidate `330cbe64` has the same production tree as the recorded cache-hit
+trials plus the OpenCode routing repair. Final parent validation on 2026-09-09:
+
+- `TMPDIR=/tmp pnpm test`: 628 files passed, one file skipped; **8465 tests
+  passed**, three expected failures, three skipped. Test duration **150.73s**.
+- `pnpm typecheck`: passed.
+- `TMPDIR=/tmp pnpm test:provider-black-box`: build passed; **177 passed**,
+  one skipped across 20 files. Test duration **82.35s**.
+- `TMPDIR=/tmp pnpm test:codex-network`: **15 passed**, test duration **0.662s**.
+- Combined shell result: exit **0**, elapsed **250.629s**, finite allowance
+  **900s**. An earlier incompatible shell timing wrapper failed at parse time
+  before any tests started; the corrected command above completed.
+- A non-fatal Node TimeoutNaNWarning appeared in the full-suite output.
+  No test failure accompanied it.
+
+Only report corrections followed these gates; source code did not change.

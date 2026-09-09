@@ -9,8 +9,10 @@
 
 ## Lifecycle review repair
 
-The bounded review traced the observed rollover miss to a lease-settlement race,
-not to an intentional socket retirement. The Codex transport received the
+The bounded review found a lease-settlement race, but did not establish it
+as the cause of the observed cache miss. Subsequent live trials still replaced
+the socket while reporting first-successor cache hits (see
+[the live report](rollover-cache-affinity.md)). The Codex transport received the
 terminal frame but did not release its pool slot until the transport generator
 was resumed for its `finally` block. Rollover can be committed after the
 application observes that terminal frame and before that resume, so the

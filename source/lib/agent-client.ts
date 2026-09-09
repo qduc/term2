@@ -1163,17 +1163,7 @@ export class AgentClient {
     if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
     const isFirstMessage =
       !options.previousResponseId && (!Array.isArray(userInput) || (userInput.length > 0 && userInput.length <= 1));
-    if (isFirstMessage && !agentRefreshed) {
-      // A first successor message after an in-place rollover has no response
-      // ID, but it must still use the retained provider transport. Refreshing
-      // the configuration invokes onConfigChanged, whose cache invalidation
-      // closes that transport immediately before the successor request.
-      // Settings changes already rebuild through the subscription path; when a
-      // cached model exists, rebuild the agent definition without tearing down
-      // its session-owned streamed model.
-      if (this.#streamedModelCache.size > 0) this.#agentConfig.rebuildAgent();
-      else this.#agentConfig.refreshAgent();
-    }
+    if (isFirstMessage && !agentRefreshed) this.#agentConfig.refreshAgent();
 
     this.#currentCorrelationId = randomUUID();
     this.#logger.setCorrelationId(this.#currentCorrelationId);

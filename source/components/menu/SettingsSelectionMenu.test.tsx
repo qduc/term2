@@ -56,6 +56,7 @@ it.sequential('SettingsSelectionMenu renders settings list and their current val
   expect(output.includes('agent.model')).toBe(true);
   expect(output.includes('gpt-5')).toBe(true);
   expect(output.includes('shell.timeout')).toBe(true);
+  expect(output.includes('2m')).toBe(true);
 });
 
 it.sequential('SettingsSelectionMenu shows category headers', async () => {
@@ -124,3 +125,47 @@ it.sequential('SettingsSelectionMenu updates bottom description when selectedInd
   expect(output.includes('The AI model to use')).toBe(false);
   expect(output.includes('└──')).toBe(false);
 });
+
+it.sequential(
+  'SettingsSelectionMenu formats durations, currencies, percentages, and collections in human-friendly format',
+  async () => {
+    const customItems: SettingCompletionItem[] = [
+      {
+        key: 'agent.runBudget.maxUsdMicros',
+        currentValue: 5000000,
+      },
+      {
+        key: 'agent.runBudget.maxActiveTimeMs',
+        currentValue: 3600000,
+      },
+      {
+        key: 'agent.contextCompaction.compactThreshold',
+        currentValue: 0.8,
+      },
+      {
+        key: 'agent.sessionRollover.milestones',
+        currentValue: [200000, 300000, 400000],
+      },
+      {
+        key: 'agent.smartModel',
+        currentValue: undefined,
+      },
+    ];
+
+    const { lastFrame } = await renderInAct(
+      <SettingsSelectionMenu
+        items={customItems}
+        selectedIndex={0}
+        query=""
+        activeCategoryId={defaultTabs.activeCategoryId}
+        categories={defaultTabs.categories}
+      />,
+    );
+    const output = lastFrame() ?? '';
+    expect(output.includes('$5.00')).toBe(true);
+    expect(output.includes('1h')).toBe(true);
+    expect(output.includes('80%')).toBe(true);
+    expect(output.includes('200k, 300k, 400k')).toBe(true);
+    expect(output.includes('(inherits agent.model)')).toBe(true);
+  },
+);

@@ -56,7 +56,7 @@ export function buildSettingsList(
   settingKeys: Record<string, string>,
   descriptions: Record<string, string>,
   excludeSensitive: boolean = true,
-  getCurrentValue?: (key: string) => string | number | boolean | undefined,
+  getCurrentValue?: (key: string) => unknown,
 ): SettingCompletionItem[] {
   const sensitiveKeys = excludeSensitive ? getSensitiveSettingKeysSet() : new Set<string>();
 

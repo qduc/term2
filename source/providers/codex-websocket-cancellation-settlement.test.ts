@@ -5,8 +5,12 @@ import { it, expect, vi } from 'vitest';
 // pattern already used in openai-responses-model.test.ts.
 let fakeStream: () => AsyncIterable<any> = async function* () {};
 let socketReturnCalls = 0;
+let socketCreateCalls = 0;
 vi.mock('openai/resources/responses/ws', () => ({
   ResponsesWS: class {
+    constructor() {
+      socketCreateCalls += 1;
+    }
     socket = { readyState: 1 };
     send() {}
     close() {
@@ -101,4 +105,57 @@ it('leaves an already-completed websocket stream unaffected by a later abort', a
   // completed response into a spurious cancellation.
   controller.abort();
   expect(next.value?.response?.id).toBe('resp_ok');
+});
+
+it('releases a terminal socket before yielding the terminal frame to the caller', async () => {
+  fakeStream = () => ({
+    [Symbol.asyncIterator]() {
+      let done = false;
+      return {
+        next: async () => {
+          if (done) return { done: true, value: undefined };
+          done = true;
+          return {
+            done: false,
+            value: { type: 'message', message: { type: 'response.completed', response: { id: 'resp_reusable' } } },
+          };
+        },
+        return: async () => ({ done: true, value: undefined }),
+      };
+    },
+  });
+  socketCreateCalls = 0;
+  const acquisitions: Array<{ connectionId: string; reused: boolean }> = [];
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', true);
+  const request = {
+    input: [],
+    tools: [],
+    codex: { promptCacheKey: 'stable-affinity' },
+    providerOptions: { extraHeaders: { 'session-id': 'stable-affinity', authorization: 'token' } },
+  } as any;
+
+  const first = await transport.fetchResponse(
+    request,
+    true,
+    { model: 'gpt-5-codex' },
+    {
+      onConnectionAcquired: (details) => acquisitions.push(details),
+    },
+  );
+  const firstIterator = first[Symbol.asyncIterator]();
+  const terminal = await firstIterator.next();
+  expect(terminal.done).toBe(false);
+
+  await transport.fetchResponse(
+    request,
+    true,
+    { model: 'gpt-5-codex' },
+    {
+      onConnectionAcquired: (details) => acquisitions.push(details),
+    },
+  );
+
+  expect(socketCreateCalls).toBe(1);
+  expect(acquisitions).toEqual([expect.objectContaining({ reused: false }), expect.objectContaining({ reused: true })]);
+  transport.close();
 });

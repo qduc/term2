@@ -17,6 +17,7 @@ import type {
   ProviderTrafficResponse,
   ProviderRequestFingerprint,
   ProviderRequestFingerprintMeasurement,
+  ProviderTransportDiagnostics,
 } from '../service-interfaces.js';
 import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 
@@ -33,6 +34,7 @@ export type SentTrafficRecord = {
   firstUserMessagePreview?: string;
   promptCacheKey?: string;
   providerHistoryKey?: string;
+  transportDiagnostics?: ProviderTransportDiagnostics;
   requestFingerprint?: ProviderRequestFingerprint;
   sentBody: Record<string, unknown>;
 };
@@ -145,6 +147,7 @@ export type ReceivedTrafficSummary = {
    */
   wireShape?: 'responses' | 'chat_completions' | 'unknown';
   receiveTiming?: ProviderTrafficReceiveTiming;
+  transportDiagnostics?: ProviderTransportDiagnostics;
 };
 
 export type DailySessionIndexEntry = {
@@ -898,6 +901,7 @@ type RequestStartInput = {
   evaluator?: boolean;
   promptCacheKey?: string;
   providerHistoryKey?: string;
+  transportDiagnostics?: ProviderTransportDiagnostics;
   requestFingerprint?: ProviderRequestFingerprint;
 };
 
@@ -944,6 +948,7 @@ export class ProviderTrafficArtifactStore {
         sessionId: input.sessionId,
         ...(input.promptCacheKey ? { promptCacheKey: input.promptCacheKey } : {}),
         ...(input.providerHistoryKey ? { providerHistoryKey: input.providerHistoryKey } : {}),
+        ...(input.transportDiagnostics ? { transportDiagnostics: input.transportDiagnostics } : {}),
         ...(input.requestFingerprint ? { requestFingerprint: input.requestFingerprint } : {}),
         mode: input.mode ?? 'unknown',
         ...(input.headers ? { headers: input.headers } : {}),
@@ -1361,6 +1366,7 @@ export class ProviderTraffic implements IProviderTraffic {
         firstUserMessagePreview,
         promptCacheKey,
         providerHistoryKey,
+        transportDiagnostics: input.transportDiagnostics,
         requestFingerprint,
         sentBody: input.sentBody,
         headers: input.headers,
@@ -1382,6 +1388,7 @@ export class ProviderTraffic implements IProviderTraffic {
       promptCacheKey,
       providerHistoryKey,
       requestFingerprint,
+      transportDiagnostics: input.transportDiagnostics,
     };
 
     // 2. Log request start via logging service for winston
@@ -1425,6 +1432,7 @@ export class ProviderTraffic implements IProviderTraffic {
       modelWrapperClass: input.modelWrapperClass,
       promptCacheKey,
       providerHistoryKey,
+      transportDiagnostics: input.transportDiagnostics,
     };
 
     if (input.error) {
@@ -1515,6 +1523,9 @@ export class ProviderTraffic implements IProviderTraffic {
     if (input.receiveTiming) {
       summary = { ...summary, receiveTiming: input.receiveTiming };
     }
+    if (input.transportDiagnostics) {
+      summary = { ...summary, transportDiagnostics: input.transportDiagnostics };
+    }
 
     // 1. Write complete payload to artifact store
     this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
@@ -1568,6 +1579,7 @@ export class ProviderTraffic implements IProviderTraffic {
       outcome: input.outcome,
       eventCount: input.eventCount,
       ...(input.diagnostics ? input.diagnostics : {}),
+      ...(input.transportDiagnostics ? { transportDiagnostics: input.transportDiagnostics } : {}),
     };
 
     this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
@@ -1601,6 +1613,7 @@ export class ProviderTraffic implements IProviderTraffic {
       sessionStartedAt,
       firstUserMessagePreview,
       mode,
+      transportDiagnostics: input.transportDiagnostics,
       provider: input.provider,
       model: input.model,
       modelClass: input.modelClass,
@@ -1624,6 +1637,7 @@ export class ProviderTraffic implements IProviderTraffic {
     phase?: string;
     physicalAttempt?: number;
     diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
+    transportDiagnostics?: ProviderTransportDiagnostics;
   }): void {
     const trafficContext = this.sessionContextService.getContext() ?? null;
     const isEvaluator = trafficContext?.evaluator === true;
@@ -1677,6 +1691,9 @@ export class ProviderTraffic implements IProviderTraffic {
     // retaining the transcript. See docs on ProviderTrafficBoundedStreamDiagnostics.
     if (input.diagnostics !== undefined) {
       errorDetails.diagnostics = input.diagnostics;
+    }
+    if (input.transportDiagnostics !== undefined) {
+      errorDetails.transportDiagnostics = input.transportDiagnostics;
     }
 
     // 1. Write failure to artifact store

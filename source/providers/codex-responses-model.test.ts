@@ -1773,6 +1773,106 @@ it('CodexResponsesWSModel chains Luna turns when the caller omits previousRespon
   ]);
 });
 
+it('CodexResponsesWSModel resets one logical history scope without replacing its transport', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async (request: any) => {
+    seenRequests.push(request);
+    return makeStream([{ type: 'response.completed', response: { id: 'resp-before', output: [], usage: {} } }]);
+  };
+  const sessionContextService = new SessionContextService();
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'account-123',
+      getInstallationId: () => 'installation-123',
+    } as any,
+    undefined,
+    undefined,
+    sessionContextService,
+    transport,
+  );
+  const context = {
+    sessionId: 'before',
+    sessionStartedAt: '2026-09-08T00:00:00.000Z',
+    promptCacheKey: 'stable-cache-affinity',
+  };
+
+  await sessionContextService.runWithContext(context, () => collect(model.stream({ input: [], tools: [] })));
+  model.resetConversationState({ providerHistoryKey: 'before' });
+  await sessionContextService.runWithContext(context, () => collect(model.stream({ input: [], tools: [] })));
+
+  expect(seenRequests).toHaveLength(2);
+  expect(seenRequests[0].previousResponseId).toBeUndefined();
+  expect(seenRequests[1].previousResponseId).toBeUndefined();
+});
+
+it('rollover starts the root successor from full input and preserves nested sibling chains', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const bodies: any[] = [];
+  let responseNumber = 0;
+  transport.fetchResponse = async (request: any, _stream: boolean, requestData: any) => {
+    bodies.push({ request, body: requestData });
+    responseNumber += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: 'resp-lifecycle-' + responseNumber, output: [], usage: {} },
+      },
+    ]);
+  };
+  let context: any = {
+    sessionId: 'root-before',
+    providerHistoryKey: 'root-before',
+    promptCacheKey: 'stable-cache-affinity',
+  };
+  const sessionContextService = {
+    getContext: () => context,
+    runWithContext: <T>(_next: any, fn: () => T) => fn(),
+  };
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'account-123',
+      getInstallationId: () => 'installation-123',
+    } as any,
+    undefined,
+    undefined,
+    sessionContextService,
+    undefined,
+    undefined,
+    transport,
+  );
+  const request = (text: string) => ({
+    input: [{ type: 'message' as const, role: 'user' as const, content: [{ type: 'text' as const, text }] }],
+    tools: [],
+    codex: { promptCacheKey: 'stable-cache-affinity' },
+  });
+
+  await collect(model.stream(request('root before')));
+  context = { ...context, sessionId: 'nested', providerHistoryKey: 'nested' };
+  await collect(model.stream(request('nested first')));
+  model.resetConversationState({ providerHistoryKey: 'root-before' });
+  context = { ...context, sessionId: 'root-after', providerHistoryKey: 'root-after' };
+  await collect(model.stream(request('root after rollover')));
+  await collect(model.stream(request('root successor')));
+  context = { ...context, sessionId: 'nested', providerHistoryKey: 'nested' };
+  await collect(model.stream(request('nested successor')));
+
+  expect(bodies[2]!.body.previous_response_id).toBeUndefined();
+  expect(bodies[2]!.body.input).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ content: [{ type: 'input_text', text: 'root after rollover' }] }),
+    ]),
+  );
+  expect(bodies[3]!.body.previous_response_id).toBe('resp-lifecycle-3');
+  expect(bodies[4]!.body.previous_response_id).toBe('resp-lifecycle-2');
+});
+
 it('CodexResponsesWSModel drops Luna server history at a native compaction boundary', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
@@ -2688,12 +2788,13 @@ it('CodexResponsesWSModel uses providerHistoryKey as websocket session identity'
       sessionId: 'parent-session',
       sessionStartedAt: '2026-08-20T00:00:00.000Z',
       providerHistoryKey: 'parent-session:subagent:call-explorer-1',
+      promptCacheKey: 'parent-session-cache',
     },
     () => collect(model.stream({ input: [], tools: [] })),
   );
 
-  expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session:subagent:call-explorer-1');
-  expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session:subagent:call-explorer-1');
+  expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session-cache');
+  expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session-cache');
   expect(seenRequest.providerOptions.client_metadata.session_id).toBe('parent-session:subagent:call-explorer-1');
 });
 

@@ -15,7 +15,11 @@ import { AgentConfiguration } from './agent-configuration.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
-import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type {
+  ContextCompactionSessionState,
+  StreamedModelConversationResetOptions,
+  StreamedModelTurn,
+} from '../contracts/streamed-model-turn.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
@@ -89,6 +93,21 @@ type StreamedModelCacheEntry = {
   ownership: 'owned' | 'borrowed';
 };
 
+function findConversationResetModel(model: StreamedModelTurn): StreamedModelTurn | undefined {
+  const visited = new Set<object>();
+  let current: StreamedModelTurn = model;
+  while (current && typeof current === 'object' && !visited.has(current)) {
+    visited.add(current);
+    const wrapped = (current as StreamedModelTurn & { wrappedModel?: unknown }).wrappedModel;
+    if (wrapped && typeof wrapped === 'object' && typeof (wrapped as StreamedModelTurn).stream === 'function') {
+      current = wrapped as StreamedModelTurn;
+      continue;
+    }
+    return typeof current.resetConversationState === 'function' ? current : undefined;
+  }
+  return undefined;
+}
+
 function createScopedToolLifecycle(
   lifecycle: ToolExecutionLifecyclePort,
   scope: { agentId: string; role: string },
@@ -143,6 +162,7 @@ export class AgentClient {
   #lastCompletedProviderInputTokens?: number;
   #blockedCompactionRearmAtEstimatedTokens?: number;
   #blockedCompactionUserTurnCount?: number;
+  #lastLogicalSessionId?: string;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -152,6 +172,15 @@ export class AgentClient {
         .catch(() => undefined);
     }
     this.#streamedModelCache.clear();
+  }
+
+  #discardStreamedModel(cacheKey: string, cached: StreamedModelCacheEntry): void {
+    if (this.#streamedModelCache.get(cacheKey) !== cached) return;
+    this.#streamedModelCache.delete(cacheKey);
+    if (cached.ownership !== 'owned') return;
+    void Promise.resolve(cached.model)
+      .then((model) => (model as StreamedModelTurn & { close?: () => unknown }).close?.())
+      .catch(() => undefined);
   }
 
   #resolveStreamedModel(selectedModel: string): StreamedModelTurn | Promise<StreamedModelTurn> {
@@ -1074,12 +1103,41 @@ export class AgentClient {
   rolloverRootContext(): void {
     this.#applicationRunLoop.abort();
     this.#clearCorrelationId();
-    this.#contextCompactionSessionState = { disabled: false };
+    // Keep the state object captured by an already-created provider model.
+    // Replacing it would leave the retained model bound to an obsolete
+    // compaction state object.
+    this.#contextCompactionSessionState.disabled = false;
     this.#contextMilestoneReminder = new ContextMilestoneReminder();
     this.#sessionRolloverRequest = null;
     this.#lastCompletedProviderInputTokens = undefined;
     this.#askUserAnswerStore.clear();
-    this.#clearStreamedModelCache();
+    const resetOptions: StreamedModelConversationResetOptions | undefined = this.#lastLogicalSessionId
+      ? { providerHistoryKey: this.#lastLogicalSessionId }
+      : undefined;
+    for (const [cacheKey, cached] of this.#streamedModelCache) {
+      // A retained root reset must never reach a transient client's borrowed
+      // model. Its provider state may be shared with a live nested sibling,
+      // while the root reset is scoped only to the root history key.
+      if (cached.ownership !== 'owned') continue;
+      const reset = (model: StreamedModelTurn): void => {
+        const resetModel = findConversationResetModel(model);
+        if (resetModel) {
+          if (!resetOptions) return;
+          resetModel.resetConversationState!(resetOptions);
+          this.#unavailableCodexCompaction.delete(model);
+          return;
+        }
+        // A provider without the reset seam has not proved that its cached
+        // state is safe to carry into a new logical session. Recreate it rather
+        // than silently retaining unknown conversation state.
+        this.#discardStreamedModel(cacheKey, cached);
+      };
+      if (cached.model instanceof Promise) {
+        void cached.model.then(reset).catch(() => undefined);
+      } else {
+        reset(cached.model);
+      }
+    }
     this.#chatService.clearModelCache();
   }
 
@@ -1228,6 +1286,7 @@ export class AgentClient {
     this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const startController = new AbortController();
     this.#activeStartController = startController;
+    if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     try {
       await this.#prepareStart(userInput, options, startController.signal);
       if (startController.signal.aborted) {
@@ -1277,6 +1336,7 @@ export class AgentClient {
     // The turn is resuming, not ending: keep anything waiting for this segment.
     this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const provider = this.#agentConfig.getProvider();
+    if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     const supportsChaining = this.supportsConversationChaining();
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();

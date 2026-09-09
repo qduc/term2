@@ -9,6 +9,11 @@ export interface ContextCompactionSessionState {
   disabled: boolean;
 }
 
+/** Logical provider state to discard when a retained session starts fresh. */
+export type StreamedModelConversationResetOptions = {
+  readonly providerHistoryKey?: string;
+};
+
 /** Codex-only request options. They are intentionally separate from opaque provider options. */
 export interface StreamedModelCodexOptions {
   readonly promptCacheKey?: string;
@@ -87,6 +92,8 @@ export type StreamedModelUnaryResult = {
 /** One application-owned streamed model invocation. */
 export interface StreamedModelTurn {
   stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
+  /** Reset provider history without closing a reusable transport. */
+  resetConversationState?(options?: StreamedModelConversationResetOptions): void;
   /** Optional unary fast path for providers whose native API is non-streaming. */
   getResponse?(request: StreamedModelTurnRequest): Promise<StreamedModelUnaryResult>;
   /**

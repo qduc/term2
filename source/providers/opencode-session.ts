@@ -76,6 +76,12 @@ export function resolveOpencodeSessionId(options: {
     return generateOpencodeSessionId(nestedKey);
   }
 
+  // The gateway uses this header for sticky upstream routing. Keep root
+  // affinity across logical rollover; nested scopes above remain isolated.
+  if (context?.promptCacheKey) {
+    return generateOpencodeSessionId(context.promptCacheKey);
+  }
+
   if (options.fallbackSessionIdOverride) {
     return options.fallbackSessionIdOverride;
   }

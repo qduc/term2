@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 const WEBSOCKET_CONNECTING = 0;
 const WEBSOCKET_OPEN = 1;
 const WEBSOCKET_CLOSING = 2;
@@ -13,8 +15,20 @@ export type ResponsesWebSocketRelease = {
   keepAlive: boolean;
 };
 
+export type ResponsesWebSocketAcquireOptions = {
+  /** Stable owner key independent of the logical session/header identity. */
+  affinityKey?: string;
+};
+
+export type ResponsesWebSocketAcquisition<T extends ResponsesWebSocketLike = ResponsesWebSocketLike> = {
+  socket: T;
+  connectionId: string;
+  reused: boolean;
+};
+
 type SessionSocket<T extends ResponsesWebSocketLike> = {
   socket: T;
+  connectionId: string;
   fingerprint: string;
   inFlight: number;
   openedAt: number;
@@ -37,7 +51,14 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
   constructor(private readonly createSocket: (headers?: Record<string, string>) => T) {}
 
   acquire(headers?: Record<string, string>): T {
-    const key = responsesWebSocketSessionKey(headers);
+    return this.acquireWithMetadata(headers).socket;
+  }
+
+  acquireWithMetadata(
+    headers?: Record<string, string>,
+    options: ResponsesWebSocketAcquireOptions = {},
+  ): ResponsesWebSocketAcquisition<T> {
+    const key = options.affinityKey ?? responsesWebSocketSessionKey(headers);
     const fingerprint = connectionFingerprint(headers);
     const retained: Array<SessionSocket<T>> = [];
     for (const slot of this.#slots.get(key) ?? []) {
@@ -62,7 +83,7 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
     if (reusable) {
       reusable.inFlight += 1;
       this.#slots.set(key, retained);
-      return reusable.socket;
+      return { socket: reusable.socket, connectionId: reusable.connectionId, reused: true };
     }
 
     const socket = this.createSocket(headers);
@@ -71,9 +92,10 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
     // the server (e.g. its 60-minute lifetime cap). Active streams attach
     // their own listener and still receive the same emitted event.
     socket.on?.('error', () => {});
-    retained.push({ socket, fingerprint, inFlight: 1, openedAt: Date.now() });
+    const connectionId = randomUUID();
+    retained.push({ socket, connectionId, fingerprint, inFlight: 1, openedAt: Date.now() });
     this.#slots.set(key, retained);
-    return socket;
+    return { socket, connectionId, reused: false };
   }
 
   release(socket: T, options: ResponsesWebSocketRelease): void {

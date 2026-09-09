@@ -73,7 +73,9 @@ scenario is the one whose CLI never reached the state it waits for.
 - Cover both success and failure/incomplete-stream behavior. A provider must
   not turn a missing terminal event into empty success.
 - Run the focused suite, fake-Codex E2E, relevant provider unit tests, and
-  `pnpm typecheck`; run the full suite before handoff.
+  `pnpm typecheck`. Use the full suite only when the change also meets a
+  broad-change or project-wide trigger in the `testing` skill; provider scope
+  alone requires this black-box suite, not the full suite.
 - For a regression fix, add or update a red-proof case when practical: apply
   the test-only change to the pre-fix parent and record that it fails before
   relying on green results after the fix.

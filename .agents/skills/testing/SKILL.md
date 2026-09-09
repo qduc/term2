@@ -40,6 +40,12 @@ paths directly to pnpm and begin every repository-relative source path with
 - **Any `.ts` or `.tsx` change** — run `pnpm typecheck`; Vitest transpiles TypeScript without proving it type-checks.
 - **Provider, bridge, run-loop, registry, or non-interactive changes** — these additionally require the provider black-box suite; use the `provider-testing` skill.
 
+The full suite is an escalation gate, not a routine completion gate. A finished
+change, commit, or handoff does not by itself require `pnpm test`. Before
+launching it, name the concrete broad-change trigger and why the focused,
+related, and changed-test gates are insufficient. When no trigger above applies,
+stop after the scope-appropriate narrower gates.
+
 Never claim a test, build, or check passed unless you actually ran it and it succeeded.
 
 ## Standards

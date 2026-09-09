@@ -1,10 +1,11 @@
 # Rollover cache-affinity repair
 
-Latest live result (2026-09-09): built `b96a6c65` had two Codex first-successor
-cache hits, but still replaced the physical socket on both rollovers. The
-previous build had a first-successor miss despite stable affinity. OpenCode
-omitted cached-token counts on both first successors of the latest build.
-Transport retention is not live-proven. See the dated measurements below.
+Latest live result (2026-09-09): the OpenCode routing change `cd867f26`
+produced two consecutive first-successor cache hits (97.2% each) with a stable
+header and rotating logical IDs. Codex built `b96a6c65` also had two hits,
+but still replaced its socket; an earlier build had a first-successor miss
+despite stable affinity. Codex transport retention remains open. See the
+dated measurements below.
 
 ## Finding
 

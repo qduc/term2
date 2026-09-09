@@ -292,4 +292,36 @@ OpenCode and nested-isolation checks passed 35 tests, and typecheck passed.
 Existing tests covered stable identity within one logical session but not
 reconstruction across rollover. This adds that missing lifetime boundary
 without changing session-ID generation or introducing a new routing API.
-Live verification of this OpenCode change is still pending.
+Related and changed gates each passed 2003 tests (one expected failure, two
+skipped); provider black-box passed 177 tests (one skipped), and ESLint passed.
+Combined gate elapsed time was 215.694 seconds. Full combined handoff gate
+will follow the remaining Codex lifecycle repair.
+
+## OpenCode live verification: `cd867f26`
+
+The provider black-box build included the OpenCode change, and pane w18:p8
+was restarted on that build. Same model and effort as above. Two consecutive
+real rollovers produced first-successor cache hits. Both successors returned
+the requested marker directly without tools. An extra warmup was used because
+the second initial-session request omitted cache accounting; the third
+confirmed a warm prefix before rollover.
+
+| Request | Artifact under the 2026-09-09 root | Input | Cached |
+| --- | --- | ---: | ---: |
+| Initial | `01-01-33_f36e2/01-01-55.814Z_80fd1.json` | 18136 | 0 |
+| Warmup 1 | `01-01-33_f36e2/01-02-13.961Z_64036.json` | 18270 | absent |
+| Warmup 2 | `01-01-33_f36e2/01-03-05.441Z_d7d1a.json` | 18328 | 18176 |
+| Rollover 1 trigger | `01-01-33_f36e2/01-03-18.964Z_4dbbd.json` | 18424 | 18176 |
+| First successor 1 | `01-03-22_3119c/01-03-23.116Z_e1d54.json` | 18435 | **17920** |
+| Follow-up | `01-03-22_3119c/01-03-34.594Z_de3e4.json` | 18515 | 18432 |
+| Rollover 2 trigger | `01-03-22_3119c/01-03-50.167Z_f5c73.json` | 18597 | 18432 |
+| First successor 2 | `01-03-52_67791/01-03-52.882Z_f9284.json` | 18435 | **17920** |
+
+Logical sessions were `f36e2ced-3b07-4ef5-b4ce-437989991674`,
+`3119cb2a-071e-445f-b6b4-b861cb14c6e0`, and
+`67791089-c317-4924-8ee3-3a1ffb51ae54`. The x-opencode-session header
+stayed `ses_080000000000qKycI8keeWcWIa` across all eight requests. Prefix
+and tool hashes stayed equal to the earlier OpenCode measurements. Both
+first successors reported 97.2% cached input. This establishes repeated live
+success in this run, not a provider-wide guarantee against backend failover
+or eviction.

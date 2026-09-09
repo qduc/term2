@@ -1,5 +1,11 @@
 # Rollover cache-affinity repair
 
+Latest live result (2026-09-09): two successive rollovers per provider on
+built `19ecb61b` did **not** establish a repeatable fix. The first successor
+hit cache on both Codex and OpenCode; the second Codex successor reported
+zero cached tokens, and OpenCode omitted the cached-token field. See the
+repeat measurement below.
+
 ## Finding
 
 The rollover path correctly rotates the logical session identity, but prompt
@@ -164,3 +170,70 @@ rollover disposal path, not independently measured in these artifacts.
 The next turn warming again is consistent with a fresh cache domain but does
 not prove one. No cross-model/provider generalization or causal cache-hit
 improvement claim is supported by this sample.
+
+## Live Herdr repeat: 2026-09-09, built `19ecb61b`
+
+Real interactive Term2 panes `w18:p7` (Codex/gpt-5.6-luna, high) and
+`w18:p8` (opencode/deepseek-v4-flash, high) each performed two text warmup
+turns, a real session_rollover, a successor response, a follow-up, and a
+second real session_rollover. Anchored assistant markers C1_AFTER/C2_AFTER
+and O1_AFTER/O2_AFTER confirmed completion, rather than terminal echo.
+No settings changed. The code adds stable Codex handshake affinity and
+transport-retention support; this build still opened a new socket at each
+measured rollover. OpenCode routing behavior was unchanged.
+
+Artifact root: `~/.local/state/term2-nodejs/logs/provider-traffic/2026-09-09/`.
+Cached counts are provider-reported; absent is not converted to zero.
+
+| Provider/request | Artifact | Input | Cached |
+| --- | --- | ---: | ---: |
+| Codex initial | `00-25-08_f1f25/00-25-24.769Z_a2187.json` | 17356 | 0 |
+| Codex warm | `00-25-08_f1f25/00-25-50.454Z_52bce.json` | 17401 | 17152 |
+| Codex rollover 1 trigger | `00-25-08_f1f25/00-26-11.834Z_c47a3.json` | 17494 | 17152 |
+| Codex successor 1 first | `00-26-15_ca57a/00-26-15.664Z_5931f.json` | 17621 | **17152** |
+| Codex successor 1 follow-up | `00-26-15_ca57a/00-28-37.061Z_1adbb.json` | 17672 | 17152 |
+| Codex rollover 2 trigger | `00-26-15_ca57a/00-28-52.127Z_bb88a.json` | 17734 | 17152 |
+| Codex successor 2 first | `00-28-54_5f53d/00-28-54.777Z_4b1ce.json` | 17582 | **0** |
+| Codex successor 2 follow-up | `00-28-54_5f53d/00-29-43.307Z_e0b72.json` | 17627 | 17152 |
+| OpenCode initial | `00-25-18_4dce0/00-25-32.688Z_f4cf9.json` | 18200 | absent |
+| OpenCode warm | `00-25-18_4dce0/00-25-50.482Z_cfe39.json` | 18243 | 18176 |
+| OpenCode rollover 1 trigger | `00-25-18_4dce0/00-26-11.848Z_dabf7.json` | 18360 | 18176 |
+| OpenCode successor 1 first | `00-26-22_9dff3/00-26-22.282Z_34bdc.json` | 18477 | **17920** |
+| OpenCode successor 1 follow-up | `00-26-22_9dff3/00-28-37.094Z_3b592.json` | 18503 | 18432 |
+| OpenCode rollover 2 trigger | `00-26-22_9dff3/00-28-52.148Z_603bc.json` | 18606 | 18432 |
+| OpenCode successor 2 first | `00-28-54_93ef6/00-28-54.592Z_0edc6.json` | 18361 | **absent** |
+| OpenCode successor 2 follow-up | `00-28-54_93ef6/00-33-32.195Z_79881.json` | 18700 | 18432 |
+
+Codex logical sessions rotated from `f1f25ddb-2703-4814-ab4e-abcdc34f57f3`
+to `ca57afdc-f6bf-433a-8187-3e2f78cdeb79`, then
+`5f53d483-dce5-4745-88dd-36ba04610d35`. Wire prompt_cache_key and
+session-id stayed equal to the initial UUID. Each first successor omitted
+previous_response_id; follow-ups used only the successor response. Connection
+IDs were respectively `ebc96ae3-4f5c-4746-bfa5-d49f8ea6bf2b`,
+`c0cd460c-76af-4ff2-b88e-c0746d16fc5f`, and
+`f1bdd7d8-5a47-45ba-8445-a925f3463147`, with reused=false on the first
+request of each logical session. Full-prefix SHA-256 stayed
+`1b28b1d17f9e0f53f4cedf5b2b2dd5e1c2abd14d144f4053a68cfaa10c5a0aac`;
+developer input[1] was 61685 bytes, hash
+`2f4a0c18853fad70879eb19fd0ab769f941f7f2a59228d22b19f2bafda6eeacc`.
+The eight-tool hash stayed
+`42d5232f565c943ed2d6d20cfab049c575a9a49b650aa189d80a605a4e1d4be9`.
+Chained delta fingerprints are excluded from this equality comparison.
+
+OpenCode logical sessions rotated from `4dce0398-652b-4345-9a18-7b9df5634e6c`
+to `9dff3005-342a-42e0-83b3-9241f4b6097c`, then
+`93ef65ce-725d-490a-b8ff-64d56a9e8713`. x-opencode-session rotated from
+`ses_000000000000aCcqMcqcu80QcW` to `ses_000000000000O8SmKieiyi6eEq`
+to `ses_000000000000K620mi84gK0Uc4`. Full-prefix hash stayed
+`a331dce47cfd989e1543b29c957dd05d81401286beb906215ca27691a2260dee`;
+system component was 56822 bytes, hash
+`d2cbe3b7b4dc1b20c9408515419cef5babdb03f732954fd81bd86588b1bacdfe`.
+Eight-tool hash stayed
+`0fea323a95ff44861c1de9065950240e1763ff5fa247c18e4e5068ea17eedd46`.
+
+These samples prove cache reuse is possible on a first successor for both
+selected providers, but not repeatable success of this repair. Stable Codex
+body and handshake affinity did not suffice in the second sample. OpenCode
+supplied no hit count for its second sample; its changed header is an observed
+variable, not a demonstrated cause. No guarantee about backend admission or
+cache retention follows from unchanged measured prefix components.

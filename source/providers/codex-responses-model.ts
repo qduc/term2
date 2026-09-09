@@ -285,12 +285,19 @@ export class CodexResponsesTransport {
                 const event = message.message;
                 if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
                   terminalReceived = true;
+                  // The terminal frame proves this lease is no longer in
+                  // flight. Release before yielding it: the application can
+                  // settle a rollover immediately after observing the
+                  // terminal event, before this generator is resumed for its
+                  // finally block.
+                  release(true);
                 }
                 yield event;
               } else if ((message as any).event) {
                 const event = (message as any).event;
                 if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
                   terminalReceived = true;
+                  release(true);
                 }
                 yield event;
               } else if (message.type === 'error') {

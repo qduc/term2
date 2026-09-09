@@ -4,7 +4,7 @@ import { getAllSettingDescriptions } from '../services/settings/settings-ui-meta
 export type SettingCompletionItem = {
   key: string;
   description?: string;
-  currentValue?: string | number | boolean;
+  currentValue?: unknown;
 };
 
 export type SettingsCategory = {

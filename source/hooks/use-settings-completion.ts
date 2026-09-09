@@ -21,14 +21,9 @@ const MAX_RESULTS = 10;
 /**
  * Get the current value of a setting for display in the menu
  */
-function getCurrentSettingValue(settingsService: SettingsService, key: string): string | number | boolean | undefined {
+function getCurrentSettingValue(settingsService: SettingsService, key: string): unknown {
   try {
-    const value = settingsService.getDynamic(key) as any;
-    // Format the value for display
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-    return value;
+    return settingsService.getDynamic(key);
   } catch {
     return undefined;
   }

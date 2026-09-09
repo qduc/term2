@@ -1,10 +1,10 @@
 # Rollover cache-affinity repair
 
-Latest live result (2026-09-09): two successive rollovers per provider on
-built `19ecb61b` did **not** establish a repeatable fix. The first successor
-hit cache on both Codex and OpenCode; the second Codex successor reported
-zero cached tokens, and OpenCode omitted the cached-token field. See the
-repeat measurement below.
+Latest live result (2026-09-09): built `b96a6c65` had two Codex first-successor
+cache hits, but still replaced the physical socket on both rollovers. The
+previous build had a first-successor miss despite stable affinity. OpenCode
+omitted cached-token counts on both first successors of the latest build.
+Transport retention is not live-proven. See the dated measurements below.
 
 ## Finding
 
@@ -17,7 +17,7 @@ to the successor UUID. The existing receipt logger truncated the instruction
 preview, and the two full lengths differed by five characters, so it did not prove
 serialized-prefix equality or explain the first miss by itself.
 
-## Repair
+## Initial repair (before transport and OpenCode follow-ups)
 
 SessionIdentity now owns a stable promptCacheKey alongside the mutable logical
 session ID. replace() keeps that key by default, while a newly created
@@ -237,3 +237,59 @@ body and handshake affinity did not suffice in the second sample. OpenCode
 supplied no hit count for its second sample; its changed header is an observed
 variable, not a demonstrated cause. No guarantee about backend admission or
 cache retention follows from unchanged measured prefix components.
+
+## Settlement repair live check: built `b96a6c65`
+
+Restarted the same two measured interactive panes on a fresh build. Codex
+initial session `18103c08-25b9-486a-9fd5-5fb21d7c1265` warmed to
+17152 cached tokens. Its successors were
+`d39bc8b0-f9f1-4f07-8105-42a166eda277` and
+`d26bde31-28f4-49eb-899e-6c9967ea36e2`. Both first requests hit cache:
+
+| Request | Artifact under the 2026-09-09 root | Input | Cached |
+| --- | --- | ---: | ---: |
+| Codex successor 1 | `00-52-18_d39bc/00-52-18.262Z_ba10c.json` | 17586 | 17152 |
+| Codex successor 2 | `00-55-18_d26bd/00-55-18.823Z_6cc51.json` | 17592 | 17152 |
+| OpenCode successor 1 | `00-52-18_22991/00-52-18.434Z_375a7.json` | 18338 | absent |
+| OpenCode successor 2 | `00-55-26_379d4/00-55-26.673Z_43b22.json` | 18435 | absent |
+
+However, Codex connection IDs still changed from
+`aded045d-1fe7-4a9f-8989-b34dc3551f7e` to
+`a26a8986-2d3a-4492-8ecb-da806c9b361d` to
+`7086c939-5730-4ac2-af23-cfe970fe570e`; both successors reported reused=false.
+Only x-codex-turn-metadata differed between the recorded predecessor and first
+successor headers; the pool fingerprint already excludes it. Cache key and
+full-prefix/tool fingerprints matched the earlier run; no predecessor response
+ID was sent. Thus the terminal-before-yield lease test passes, but does not
+establish that this race explains the live retirement. Follow-up lifecycle
+tracing remains necessary. Parent independently passed 16 focused lifecycle
+tests and typecheck on this build.
+
+OpenCode successor 1 violated the requested no-tool protocol: its predecessor
+omitted the response marker from the brief, then the successor read the prior
+session through run_code. The table deliberately counts its first request,
+not its later 18432-token cache hit. Successor 2 returned O4_AFTER directly.
+Neither first-request artifact reports cached tokens, so neither is called a
+hit or a measured zero.
+
+## OpenCode routing-affinity follow-up
+
+The earlier deferral of OpenCode header retention was based on unknown backend
+semantics. On 2026-09-09, inspection of the upstream gateway
+[handler.ts](https://github.com/anomalyco/opencode/blob/dev/packages/console/app/src/routes/zen/util/handler.ts)
+showed x-opencode-session is used as stickyId, supplied to createStickyTracker,
+and hashed by selectProvider to choose among eligible upstream providers. The
+header also scopes usage records and configurable upstream headers. This is
+source evidence for routing affinity, not a promise about the deployed route
+or backend cache lifetime.
+
+resolveOpencodeSessionId now derives root routing identity from the stable
+promptCacheKey before its captured fallback override. Explicit nested
+providerHistoryKey and evaluator scopes still take precedence. Logical
+conversation IDs still rotate, and request history is not reused. The new
+reconstruction regression failed before this change and then passed; focused
+OpenCode and nested-isolation checks passed 35 tests, and typecheck passed.
+Existing tests covered stable identity within one logical session but not
+reconstruction across rollover. This adds that missing lifetime boundary
+without changing session-ID generation or introducing a new routing API.
+Live verification of this OpenCode change is still pending.

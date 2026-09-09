@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import type { SessionTrafficContext } from '../services/service-interfaces.js';
 import { isOpencodeProvider } from './opencode.provider.js';
 import { createOpencodeSessionInjector, generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
@@ -151,6 +152,39 @@ it('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence ove
   const h = result!.headers as Record<string, string>;
   const sessionKey = Object.keys(h).find((k) => k.toLowerCase() === 'x-opencode-session')!;
   expect(h[sessionKey]).toBe('ses_overridden1234567890123456');
+});
+
+it('keeps root routing affinity across rollover and injector reconstruction without sharing nested routes', () => {
+  let context: SessionTrafficContext = {
+    sessionId: 'root-before',
+    sessionStartedAt: '2026-01-01T00:00:00.000Z',
+    promptCacheKey: 'root-affinity',
+  };
+  const sessionContextService = {
+    runWithContext: <T>(_context: SessionTrafficContext, fn: () => T) => fn(),
+    getContext: () => context,
+  };
+  const create = () =>
+    createOpencodeSessionInjector(
+      { type: 'opencode' },
+      {
+        sessionContextService,
+        fallbackSessionIdOverride: generateOpencodeSessionId(context.sessionId),
+      },
+    )!;
+  const before = readSessionHeader(create()({}));
+  context = { ...context, sessionId: 'root-after' };
+  const successor = create();
+  expect(readSessionHeader(successor({}))).toBe(before);
+  context = { ...context, providerHistoryKey: 'nested-sibling' };
+  const nested = readSessionHeader(successor({}));
+  expect(nested).not.toBe(before);
+  context = { ...context, sessionId: 'root-next' };
+  expect(readSessionHeader(create()({}))).toBe(nested);
+  context = { ...context, providerHistoryKey: undefined, evaluator: true };
+  expect(readSessionHeader(create()({}))).not.toBe(before);
+  context = { ...context, evaluator: false, promptCacheKey: 'independent-affinity' };
+  expect(readSessionHeader(create()({}))).not.toBe(before);
 });
 
 it('createOpencodeSessionInjector gives a subagent its own session ID', () => {

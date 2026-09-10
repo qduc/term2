@@ -16,8 +16,9 @@ ran before it.
 The split bought 11 s, not the target: `pnpm test` went 150.0 s → 138.6 s.
 **The <30s target is not reachable on the 4-vCPU workstation by any
 configuration measured so far.** The isolated unit tier is 138.6 s; the same
-tier unisolated is 58.0 s but fails 91 tests across 32 files, and 48.0 s once
-those 32 files are excluded. The only <30s run measured on this host is the
+tier unisolated is 58.0 s but fails 91 tests across 32 files, and excluding
+those 32 files drops it to 48.0 s — while still failing 12 tests in five
+*different* files, so no leak-free unisolated number has been measured. The only <30s run measured on this host is the
 curated `pnpm test:lane` at 28.6 s, and it covers 476 of the 608 unit files.
 
 Next steps, in the order the evidence supports:
@@ -53,7 +54,7 @@ document come from an 8-vCPU host, so they are not comparable to these.
 | `pnpm test` after the split (unit tier, isolated) | 608 | 138.6 s | 5 (TMPDIR env noise) |
 | `pnpm test:integration` (new) | 9 | 29.3 s | 0 (1 skipped) |
 | unit tier, `--isolate=false` | 608 | 58.0 s | 91 across 32 files |
-| unit tier, `--isolate=false`, the 32 leaking files excluded | 576 | 48.0 s | 0 |
+| unit tier, `--isolate=false`, the 32 observed victims excluded | 576 | 48.0 s | 12 across 5 *different* files |
 | `--experimental.fsModuleCache=true` (cold / warm) | 631 | 149.2 s / 141.3 s | 5 |
 | `--pool=threads` | 631 | 203.5 s | 60 |
 | `--pool=threads --isolate=false` | 631 | 125.6 s | 60 |
@@ -67,8 +68,11 @@ What these rule out:
 - **The threads pool.** Strictly worse (203.5 s) and it fails 60 tests that pass
   under the default forks pool, with or without isolation.
 - **`fsModuleCache`.** ~6% warm, nothing cold.
-- **Isolation as the whole problem.** With every leaky file removed, the
-  unisolated unit tier is still 48.0 s.
+- **Isolation as the whole problem.** Removing the observed victims does not
+  converge: excluding the 32 files that failed left 12 failures in 5 different
+  files, which is the same drift this document already records for the lane
+  manifest. The 48.0 s run is therefore a failing run, not a leak-free floor,
+  and no leak-free unisolated unit-tier number exists yet.
 
 Vitest's own breakdown of the 28.6 s lane — `transform 9.35 s, setup 1.44 s,
 import 14.96 s, tests 57.92 s` — is the other half of the picture: test bodies

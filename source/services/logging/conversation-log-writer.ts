@@ -129,6 +129,43 @@ function decodeSequence(line: string): number | null {
   }
 }
 
+function findLineStart(fileSystem: WriterFileSystem, fd: number, end: number): number {
+  let position = end;
+  while (position > 0) {
+    const length = Math.min(RECOVERY_CHUNK_BYTES, position);
+    const start = position - length;
+    const chunk = Buffer.allocUnsafe(length);
+    const bytesRead = fileSystem.readSync(fd, chunk, 0, length, start);
+    for (let index = bytesRead - 1; index >= 0; index -= 1) {
+      if (chunk[index] === 0x0a) return start + index + 1;
+    }
+    position = start;
+  }
+  return 0;
+}
+
+/**
+ * Read one known line without allowing a single read request to grow with the
+ * event. The returned string is necessarily line-sized for JSON.parse, but
+ * the recovery scan and individual filesystem reads remain bounded.
+ */
+function readLine(fileSystem: WriterFileSystem, fd: number, start: number, length: number): string {
+  const line = Buffer.allocUnsafe(length);
+  let offset = 0;
+  while (offset < length) {
+    const bytesRead = fileSystem.readSync(
+      fd,
+      line,
+      offset,
+      Math.min(RECOVERY_CHUNK_BYTES, length - offset),
+      start + offset,
+    );
+    if (bytesRead <= 0) break;
+    offset += bytesRead;
+  }
+  return line.subarray(0, offset).toString('utf8');
+}
+
 function readLogTailState(
   fileSystem: WriterFileSystem,
   filePath: string,
@@ -146,35 +183,26 @@ function readLogTailState(
     const needsLineBreak = finalByte[0] !== 0x0a;
     if (!recoverSequence) return { seq: 0, needsLineBreak };
 
-    let position = size;
-    let suffix = '';
-    let discardOversizedLine = false;
-
-    while (position > 0) {
-      const length = Math.min(RECOVERY_CHUNK_BYTES, position);
-      const start = position - length;
-      const chunk = Buffer.allocUnsafe(length);
-      const bytesRead = fileSystem.readSync(fd, chunk, 0, length, start);
-      const parts = (chunk.subarray(0, bytesRead).toString('utf8') + suffix).split('\n');
-      position = start;
-
-      if (start > 0) {
-        const prefix = parts.shift() ?? '';
-        if (prefix.length > MAX_RECOVERY_LINE_BYTES) {
-          suffix = '';
-          discardOversizedLine = true;
-        } else {
-          suffix = prefix;
-        }
-      }
-      if (discardOversizedLine && parts.length > 0) {
-        parts.pop();
-        discardOversizedLine = false;
-      }
-      for (let index = parts.length - 1; index >= 0; index -= 1) {
-        const seq = decodeSequence(parts[index]!);
+    // Walk complete lines from the tail. The final line is different from
+    // older lines: full event retention means it may exceed the scan bound,
+    // so read that one line in bounded filesystem chunks and decode it. Older
+    // oversized lines remain skippable, keeping recovery memory bounded.
+    let lineEnd = needsLineBreak ? size : size - 1;
+    let isFinalLine = true;
+    while (lineEnd > 0) {
+      const lineStart = findLineStart(fileSystem, fd, lineEnd);
+      const lineLength = lineEnd - lineStart;
+      // A missing terminal newline identifies a torn tail. Never allocate the
+      // entire oversized fragment just to prove that it is malformed; the
+      // preceding complete line is the recovery candidate instead.
+      if (lineLength <= MAX_RECOVERY_LINE_BYTES || (isFinalLine && !needsLineBreak)) {
+        const line = readLine(fileSystem, fd, lineStart, lineLength);
+        const seq = decodeSequence(line);
         if (seq !== null) return { seq, needsLineBreak };
       }
+      if (lineStart === 0) break;
+      lineEnd = lineStart - 1;
+      isFinalLine = false;
     }
     return { seq: 0, needsLineBreak };
   } finally {

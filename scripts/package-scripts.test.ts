@@ -4,6 +4,7 @@ import { expect, it } from 'vitest';
 const testRunnerScripts = [
   'test',
   'test:e2e',
+  'test:integration',
   'test:codex-network',
   'test:provider-black-box',
   'provider:fixture:scan',

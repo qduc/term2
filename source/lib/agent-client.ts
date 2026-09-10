@@ -1,6 +1,7 @@
 import {
   normalizeApplicationInput,
   type ApplicationAgent,
+  type ApplicationRunLoopDiagnosticOptions,
   type ApplicationRequestPreparation,
   type SteerOutcome,
 } from '../services/agent-runtime/application-run-loop.js';
@@ -702,7 +703,14 @@ export class AgentClient {
       getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
       resolveMaxParallelToolCalls: () => deps.settings.get('agent.maxParallelToolCalls'),
-      logDiagnostic: (message, meta) => deps.logger.info(message, meta),
+      logDiagnostic: (message, meta, options: ApplicationRunLoopDiagnosticOptions = {}) => {
+        const metadata = options.eventType ? { ...meta, eventType: options.eventType } : meta;
+        if (options.severity === 'debug') {
+          deps.logger.debug(message, metadata);
+          return;
+        }
+        deps.logger.info(message, metadata);
+      },
       resolveModel: (selectedModel) => this.#resolveStreamedModel(selectedModel),
     });
     this.#chatService = new AgentChatService({

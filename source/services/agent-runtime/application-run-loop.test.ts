@@ -3149,7 +3149,7 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     const diagnostics: any[] = [];
     const loop = new ApplicationRunLoop({
       resolveModel: () => model,
-      logDiagnostic: (msg, meta) => diagnostics.push({ msg, meta }),
+      logDiagnostic: (msg, meta, options) => diagnostics.push({ msg, meta, options }),
       waitBeforeModelRetry: async () => undefined,
     });
 
@@ -3167,6 +3167,7 @@ describe('ApplicationRunLoop in-loop request retry', () => {
       { type: 'text_delta', text: 'Clean response on retry.' },
     ]);
     expect(diagnostics.some((d) => d.msg === 'Retrying model request in run loop')).toBe(true);
+    expect(diagnostics.find((d) => d.msg === 'Retrying model request in run loop')?.options).toBeUndefined();
   });
 
   it('disables chaining on retry after connection drop of an unchained request', async () => {

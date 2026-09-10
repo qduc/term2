@@ -74,6 +74,45 @@ function modelForCalls(
 }
 
 describe('ApplicationRunLoop parallel-safe tool dispatch', () => {
+  it('emits typed identities and debug severity for tool-batch diagnostics', async () => {
+    const diagnostics: Array<{
+      message: string;
+      meta: Record<string, unknown>;
+      options?: { severity?: 'debug' | 'info'; eventType?: string };
+    }> = [];
+    const model = modelForCalls([
+      { id: 'call-first', name: 'first' },
+      { id: 'call-second', name: 'second' },
+    ]);
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      logDiagnostic: (message, meta, options) => diagnostics.push({ message, meta, options }),
+    });
+
+    const stream = loop.startStream(
+      {
+        ...agent,
+        tools: [
+          tool('first', () => 'first result', { parallelSafe: true }),
+          tool('second', () => 'second result', { parallelSafe: true }),
+        ],
+      },
+      'inspect',
+    );
+    await stream.completed;
+
+    expect(diagnostics.map(({ message }) => message)).toEqual([
+      'tool parallel eligibility',
+      'tool batch dispatched',
+      'tool batch settled',
+    ]);
+    expect(diagnostics.map(({ options }) => options)).toEqual([
+      { severity: 'debug', eventType: 'tool.parallel.eligibility' },
+      { severity: 'debug', eventType: 'tool.batch.dispatched' },
+      { severity: 'debug', eventType: 'tool.batch.settled' },
+    ]);
+  });
+
   it('settles a reverse-completing eligible batch in provider order', async () => {
     const first = deferred<string>();
     const second = deferred<string>();

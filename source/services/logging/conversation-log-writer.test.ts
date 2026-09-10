@@ -212,6 +212,73 @@ describe('ConversationLogWriter sequence continuity', () => {
     );
   });
 
+  it('continues sequence numbers after reopening a valid oversized final event', async () => {
+    const dir = tempDir();
+    const sessionId = 'oversized-final-event';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const firstWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    firstWriter.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    firstWriter.append({
+      type: 'tool_result',
+      callId: 'call-oversized',
+      toolName: 'read_file',
+      status: 'completed',
+      output: 'x'.repeat(600_000),
+    });
+    await firstWriter.close();
+
+    const persistedBeforeResume = readSeqs(filePath);
+    expect(persistedBeforeResume).toEqual([1, 2]);
+    expect(fs.readFileSync(filePath, 'utf8').split('\n').at(-2)?.length).toBeGreaterThan(512 * 1024);
+
+    const resumedWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    resumedWriter.init({ id: sessionId, createdAt: '2026-06-01T00:01:00.000Z' });
+    resumedWriter.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' });
+    await resumedWriter.close();
+
+    const persisted = readSeqs(filePath);
+    expect(persisted).toEqual([1, 2, 3, 4]);
+    expect(persisted.slice(-2)[0]!).toBeGreaterThan(persistedBeforeResume.at(-1)!);
+  });
+
+  it('skips a torn oversized tail and recovers the preceding sequence', async () => {
+    const dir = tempDir();
+    const sessionId = 'torn-oversized-tail';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const firstWriter = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    firstWriter.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    firstWriter.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-4o' });
+    await firstWriter.close();
+
+    fs.appendFileSync(
+      filePath,
+      `${JSON.stringify({
+        v: 3,
+        seq: 999,
+        ts: '2026-06-01T00:01:00.000Z',
+        event: { type: 'settings_changed', key: 'agent.model', value: 'x'.repeat(600_000) },
+      }).slice(0, -2)}`,
+    );
+
+    let largestRead = 0;
+    const fileSystem = {
+      ...fs,
+      readSync: ((fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+        largestRead = Math.max(largestRead, length);
+        return fs.readSync(fd, buffer, offset, length, position);
+      }) as unknown as typeof fs.readSync,
+    };
+    const resumedWriter = createConversationLogWriter({ sessionId, dir, logger, fileSystem, saveLast: vi.fn() });
+    resumedWriter.init({ id: sessionId, createdAt: '2026-06-01T00:02:00.000Z' });
+    resumedWriter.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' });
+    await resumedWriter.close();
+
+    expect(readSeqs(filePath)).toEqual([1, 2, 3, 4]);
+    expect(largestRead).toBeLessThanOrEqual(64 * 1024);
+  });
+
   it('continues sequence numbers when reopening a log with legacy and malformed trailing records', async () => {
     const dir = tempDir();
     const sessionId = 'resumed-session';

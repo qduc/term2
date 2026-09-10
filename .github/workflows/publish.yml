@@ -46,6 +46,13 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      # vitest.config.ts excludes the integration tier, so the release gate
+      # needs this second command to keep covering the nine *.integration.*
+      # files. The provider black-box tier is deliberately not run here: it
+      # needs a built dist/ and PTY-driven scenarios, and CI owns it.
+      - name: Run integration tests
+        run: pnpm test:integration
+
       - name: Publish package
         # Tag checkouts are detached; pnpm's git checks would reject them.
         # npm generates provenance automatically for GitHub OIDC publishing.

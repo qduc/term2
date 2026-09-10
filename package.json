@@ -54,6 +54,7 @@
     "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
     "test:changed": "cross-env NODE_ENV=test vitest run --reporter=minimal --changed --passWithNoTests=false",
     "test:e2e": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts",
+    "test:integration": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts",
     "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
     "test:provider-black-box": "cross-env NODE_ENV=test node scripts/run-provider-black-box.mjs",
     "provider:record": "tsx scripts/provider-record.ts",

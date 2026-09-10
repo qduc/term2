@@ -112,6 +112,17 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
       stdin,
       stdout,
       stderr,
+      // Interactive by construction: the guard above already requires a real
+      // TTY on both ends, which is what interactivity actually needs. Ink's
+      // own default is `!is-in-ci && stdout.isTTY`, and CI detection wins
+      // even over a TTY (see node_modules/ink/build/ink.js
+      // `resolveInteractiveOption`). Left to that default, a run with `CI` set
+      // renders no frame at all while the menu is up — it defers output and
+      // writes only the final frame at unmount — so the picker the user is
+      // choosing from never appears. Note this is not test-only: the same
+      // shape (a PTY under a CI-marked environment) is why the provider
+      // black-box harness deletes `CI` from its child env.
+      interactive: true,
       // The picker never writes to `console` itself, and nothing else logs
       // while it is mounted, so Ink's own console patch/restore machinery
       // (there to keep stray console output from corrupting the frame) has

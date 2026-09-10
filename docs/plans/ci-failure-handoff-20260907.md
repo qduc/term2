@@ -1,7 +1,7 @@
 # CI failure handoff — run 34119875565 (2026-09-07)
 
-Status: **Fixed (2026-09-07).** Buckets 1-3 merged to main; bucket 4 confirmed flaky-only.
-The worktree-bisect evidence below is the authoritative root-cause record for the fixes.
+Status: **Buckets 1-3 fixed (2026-09-07); bucket 4 fixed (2026-09-10).** The
+worktree-bisect evidence below is the authoritative root-cause record for the fixes.
 
 ## Scope
 
@@ -52,11 +52,24 @@ still fails. Making `description` required in the sandboxed-code-host tool bindi
 nested `tools.create_file(...)` approval flow inside run_code — the M4-hide nested file-edit
 approval never triggers.
 
-## Bucket 4 — Model-picker-host (3 failures, flaky timing)
+## Bucket 4 — Model-picker-host (3 failures, deterministic, REAL defect)
 
-File: `source/services/models/model-picker-host.test.tsx`. Error `waitFor: condition not met
-within timeout`. PASSES locally (11/11); times out in CI under runner contention. Not a logic
-regression.
+File: `source/services/models/model-picker-host.test.tsx`. Error `Test timed out in 10000ms`;
+the `waitFor` for a frame containing the mocked model never resolves. Reproduced deterministically
+outside CI: `CI=true pnpm test source/services/models/model-picker-host.test.tsx` fails 3 of 11 on
+an idle machine, `CI=false` passes 11/11. Runner contention was never the cause.
+
+Cause: Ink 7.0.1 resolves `interactive` as `!is-in-ci && stdout.isTTY`
+(`node_modules/ink/build/ink.js`, `resolveInteractiveOption`), and CI detection wins even over a
+real TTY. In non-interactive mode Ink defers output and writes only the final frame at unmount, so
+`runModelPickerHost` mounted, accepted input, and exited — but never painted the menu, and the
+frame assertion could not hold. `is-in-ci` reads the environment once at import, so the picker's
+two env values produce two different renders, not slower and faster runs of one render.
+
+Fix: pass `interactive: true` at the picker's `render()` call site. Interactivity is already
+guaranteed there by `isModelPickerHostSupported` (a real TTY on both ends), and the shipped CLI
+hits the same Ink default in any CI-marked PTY — which is why
+`scripts/provider-black-box/provider-test-harness.ts` deletes `CI` from its child env.
 
 ## Resolution (2026-09-07)
 
@@ -68,6 +81,7 @@ regression.
    `app.nested-approval-hide.test.tsx`; `e7f966e5` had already updated every other outer
    payload but missed this file. Match to the intended description-required contract; no
    schema revert.
-4. **Bucket 4** — confirmed flaky timing only; passes locally, no logic change.
+4. **Bucket 4** — was passed as flaky timing with no code change, which is why CI kept failing on
+   every push until 2026-09-10; see the bucket 4 root cause above for the actual fix.
 
 Fixed in three worktrees then merged `--no-ff` to main.

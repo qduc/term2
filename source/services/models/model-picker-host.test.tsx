@@ -69,13 +69,17 @@ class FakeStdout extends EventEmitter {
   };
 }
 
-// A loaded CI runner can push the real async work here (provider credential
-// resolution, the mocked provider's fetchModels promise chain, Ink's own
-// render loop on real timers) well past a budget that's generous locally.
-// vi.waitFor is vitest's own polling primitive (used the same way elsewhere
-// in this repo, e.g. app.nested-approval-hide.test.tsx) rather than a
-// bespoke setTimeout loop, and the timeout scales up under CI instead of
-// guessing a single fixed constant.
+// The real async work here (provider credential resolution, the mocked
+// provider's fetchModels promise chain, Ink's own render loop on real
+// timers) settles in a few hundred ms locally; a loaded CI runner gets a
+// larger allowance rather than one fixed constant. vi.waitFor is vitest's
+// own polling primitive (used the same way elsewhere in this repo, e.g.
+// app.nested-approval-hide.test.tsx) rather than a bespoke setTimeout loop.
+//
+// Exceeding this budget under CI is not by itself evidence of runner
+// contention: it is also exactly what a non-interactive Ink render looks
+// like, because Ink writes no frame at all while mounted. Check
+// runModelPickerHost's `interactive: true` before blaming the runner.
 const DEFAULT_WAIT_TIMEOUT_MS = process.env.CI ? 10000 : 2000;
 
 const waitFor = (predicate: () => boolean, timeoutMs = DEFAULT_WAIT_TIMEOUT_MS): Promise<void> =>

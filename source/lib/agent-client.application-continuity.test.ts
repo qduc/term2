@@ -3,6 +3,7 @@ import { AgentClient } from './agent-client.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import { RetryingModel } from '../providers/retrying-model.js';
+import { z } from 'zod';
 
 const settings = {
   get(key: string): unknown {
@@ -173,6 +174,103 @@ it.sequential('does not invoke a reset seam when rollover has no logical session
     client.rolloverRootContext();
 
     expect(resetConversationState).not.toHaveBeenCalled();
+  } finally {
+    client.dispose();
+    unregisterProvider(providerId);
+  }
+});
+
+it.sequential('routes tool-batch diagnostics to debug with stable event identities', async () => {
+  const providerId = 'tool-batch-diagnostic-routing-provider';
+  const debugLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+  const infoLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+  let requests = 0;
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Tool-batch diagnostic routing provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          requests += 1;
+          if (requests === 1) {
+            yield {
+              type: 'completion' as const,
+              responseId: 'tool-batch-response',
+              output: [{ type: 'tool_call' as const, id: 'call-1', name: 'lookup', arguments: '{}' }],
+            };
+            return;
+          }
+          yield { type: 'completion' as const, responseId: 'tool-batch-done', output: [] };
+        },
+      }),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+  const testLogger = {
+    ...logger,
+    debug: (message: string, meta?: Record<string, unknown>) => debugLogs.push({ message, meta }),
+    info: (message: string, meta?: Record<string, unknown>) => infoLogs.push({ message, meta }),
+  };
+  const client = new AgentClient({
+    providerOverride: providerId,
+    maxTurns: 2,
+    agentOverride: {
+      name: 'diagnostic-routing-agent',
+      model: 'lifecycle-model',
+      instructions: 'test',
+      tools: [
+        {
+          name: 'lookup',
+          description: 'lookup',
+          parameters: z.object({}),
+          needsApproval: async () => false,
+          execute: async () => 'result',
+          formatCommandMessage: () => [],
+        },
+      ],
+    },
+    deps: {
+      logger: testLogger,
+      settings: {
+        get(key: string): unknown {
+          if (key === 'agent.provider') return providerId;
+          if (key === 'agent.model') return 'lifecycle-model';
+          if (key === 'agent.retryAttempts') return 0;
+          return settings.get(key);
+        },
+        getDynamic(key: string): unknown {
+          return this.get(key);
+        },
+      } as any,
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      } as any,
+    },
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  try {
+    const stream = await client.startStream('run');
+    await stream.completed;
+    expect(debugLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: 'tool parallel eligibility',
+          meta: expect.objectContaining({ eventType: 'tool.parallel.eligibility' }),
+        }),
+        expect.objectContaining({
+          message: 'tool batch dispatched',
+          meta: expect.objectContaining({ eventType: 'tool.batch.dispatched' }),
+        }),
+        expect.objectContaining({
+          message: 'tool batch settled',
+          meta: expect.objectContaining({ eventType: 'tool.batch.settled' }),
+        }),
+      ]),
+    );
+    expect(infoLogs.some(({ message }) => message.startsWith('tool '))).toBe(false);
   } finally {
     client.dispose();
     unregisterProvider(providerId);

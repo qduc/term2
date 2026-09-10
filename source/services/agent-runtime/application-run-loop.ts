@@ -226,11 +226,21 @@ export interface ApplicationRunLoopDeps {
    * one. Used to report the fate of steers, which is otherwise invisible: a
    * turn spans several runs, and a steer only survives the run it was handed to.
    */
-  readonly logDiagnostic?: (message: string, meta: Record<string, unknown>) => void;
+  readonly logDiagnostic?: (
+    message: string,
+    meta: Record<string, unknown>,
+    options?: ApplicationRunLoopDiagnosticOptions,
+  ) => void;
   readonly contextCompactionSessionState?: ContextCompactionSessionState;
   /** Injectable wait boundary so retry behavior can be tested without real timers. */
   readonly waitBeforeModelRetry?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
 }
+
+/** Explicit routing metadata for diagnostics emitted by the run loop. */
+export type ApplicationRunLoopDiagnosticOptions = {
+  readonly severity?: 'debug' | 'info';
+  readonly eventType?: string;
+};
 
 /**
  * The fate of a message handed to `steer`/`retractSteer`/`editSteer`.
@@ -1536,14 +1546,18 @@ export class ApplicationRunLoop {
 
     state.pendingApproval = state.pendingApprovals?.[0];
     stream.interruptions = (state.pendingApprovals ?? []).map((item) => item.interruption);
-    this.#deps.logDiagnostic?.('tool parallel eligibility', {
-      decisions: plan.map((entry) => ({
-        callId: entry.event.id,
-        toolName: entry.event.name,
-        parallelSafe: entry.parallelSafe,
-        approvalPending: entry.status === 'approval_pending',
-      })),
-    });
+    this.#deps.logDiagnostic?.(
+      'tool parallel eligibility',
+      {
+        decisions: plan.map((entry) => ({
+          callId: entry.event.id,
+          toolName: entry.event.name,
+          parallelSafe: entry.parallelSafe,
+          approvalPending: entry.status === 'approval_pending',
+        })),
+      },
+      { severity: 'debug', eventType: 'tool.parallel.eligibility' },
+    );
     // A main-agent budget escalation is a real boundary: retain the planned
     // calls, but do not execute one more tool while human judgement is pending.
     if (!state.pendingRunBudgetInteraction) {
@@ -1583,13 +1597,17 @@ export class ApplicationRunLoop {
       }
 
       const batchId = `tool-batch-${++nextToolBatchSeq}`;
-      this.#deps.logDiagnostic?.('tool batch dispatched', {
-        batchId,
-        callIds: group.map((entry) => entry.event.id),
-        parallel: group.length > 1,
-        maxParallelToolCalls,
-        dispatchOrder: group.map((entry) => entry.event.id),
-      });
+      this.#deps.logDiagnostic?.(
+        'tool batch dispatched',
+        {
+          batchId,
+          callIds: group.map((entry) => entry.event.id),
+          parallel: group.length > 1,
+          maxParallelToolCalls,
+          dispatchOrder: group.map((entry) => entry.event.id),
+        },
+        { severity: 'debug', eventType: 'tool.batch.dispatched' },
+      );
       for (const entry of group) {
         outputPush(stream, queue, {
           type: 'tool_call_dispatched',
@@ -1613,10 +1631,14 @@ export class ApplicationRunLoop {
         group[0].result = result;
         this.#appendToolResult(state, stream, queue, group[0], result);
       }
-      this.#deps.logDiagnostic?.('tool batch settled', {
-        batchId,
-        settlementOrder: group.map((entry) => entry.event.id),
-      });
+      this.#deps.logDiagnostic?.(
+        'tool batch settled',
+        {
+          batchId,
+          settlementOrder: group.map((entry) => entry.event.id),
+        },
+        { severity: 'debug', eventType: 'tool.batch.settled' },
+      );
       if (group.some((entry) => shouldTerminateAfterExecution(entry.definition, entry.result))) {
         state.terminateAfterToolExecution = true;
         state.toolPlan = undefined;

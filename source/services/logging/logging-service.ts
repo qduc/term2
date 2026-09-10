@@ -103,6 +103,7 @@ export class LoggingService {
     this.providerTrafficStore = new ProviderTrafficArtifactStore({
       rootDir: this.providerTrafficDir,
       rawCaptureEnabled: rawTrafficCaptureEnabled,
+      enabled: !resolvedDisableLogging,
     });
     this.providerTraffic = new ProviderTraffic(
       this,

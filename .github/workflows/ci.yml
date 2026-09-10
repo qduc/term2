@@ -1,9 +1,10 @@
 name: CI
 
-# Run on every push to main: the full unit/e2e vitest suite (`pnpm test`),
-# plus the provider black-box suite (`test:provider-black-box`), which builds
-# dist/ and drives the shipped CLI through PTY-driven scenarios against
-# deterministic loopback fixtures.
+# Run on every push to main: the unit tier (`pnpm test`) and the integration
+# tier (`pnpm test:integration`) in the same job, plus the provider black-box
+# suite (`test:provider-black-box`), which builds dist/ and drives the shipped
+# CLI through PTY-driven scenarios against deterministic loopback fixtures. The
+# process-level e2e tier runs in its own job below.
 on:
   push:
     branches:
@@ -48,8 +49,15 @@ jobs:
 
       # The script sets NODE_ENV=test itself via cross-env; do not rely on the
       # ambient value (see AGENTS.md on why production mode breaks Ink tests).
-      - name: Run full test suite
+      - name: Run unit test suite
         run: pnpm test
+
+      # vitest.config.ts excludes the integration tier, so it needs this second
+      # command: without it CI would silently stop running the nine
+      # *.integration.* files. It needs no dist/ — cli.integration.test.ts
+      # compiles the CLI into node_modules/.cache itself.
+      - name: Run integration test suite
+        run: pnpm test:integration
 
   # The process-level e2e tier (terminal UI smoke test, build/rollback round
   # trip, fake-codex network scenarios) is excluded from the default suite

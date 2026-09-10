@@ -26,33 +26,23 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + maxHeight < items.length;
 
-  const longestNameLength = Math.max(...items.map((item) => item.name.length), 10);
-  // +4 covers the two-cell selection gutter plus breathing room.
-  const leftColWidth = Math.min(longestNameLength + 4, 30);
-  // Width of the SelectionMarker gutter. List labels are truncated to the
-  // column budget minus this gutter and the column's trailing padding.
-  const MARKER_WIDTH = 2;
-
   const selectedSkill = items[selectedIndex];
 
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} flexDirection="column" width="100%" paddingX={1}>
         <Text color={COLOR_TEXT_SUBTLE}>Skills</Text>
-        {/* flexWrap + minWidth is the narrow-terminal plan: while the detail
-            pane has at least half the row it sits beside the list with a
-            straight divider; below that it drops to its own full-width line
-            instead of squeezing the list gutter or fragmenting the text.
-            The list column only shrinks when it alone overflows the row
-            (never because of the description), down to a floor that keeps
-            the marker plus a readable stub of the name. */}
-        <Box flexDirection="row" flexWrap="wrap" width="100%">
+        {/* The two columns split the row evenly at every terminal width: each
+            takes half, so the divider sits in the middle instead of tracking
+            the longest name. Both columns have a definite width, which lets
+            Yoga hand each `wrap="truncate"` label a finite budget — the label
+            is clipped to its own column and never spills past the divider or
+            the border. */}
+        <Box flexDirection="row" width="100%">
           {/* Left column: the list */}
           <Box
             flexDirection="column"
-            width={leftColWidth}
-            flexShrink={1}
-            minWidth={10}
+            width="50%"
             borderStyle="single"
             borderTop={false}
             borderBottom={false}
@@ -65,19 +55,11 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
             {visibleItems.map((skill, visibleIndex) => {
               const actualIndex = scrollOffset + visibleIndex;
               const isSelected = actualIndex === selectedIndex;
-              // Truncate to the column's own budget in JS: an unbreakable
-              // (truncate-mode) Text reports its full length as its minimum
-              // width, which would defeat the column's shrinking on narrow
-              // terminals and spill past the border. The full name stays
-              // visible in the detail pane.
-              const nameBudget = Math.max(leftColWidth - MARKER_WIDTH - 1, 4);
-              const displayName =
-                skill.name.length > nameBudget ? `${skill.name.slice(0, Math.max(nameBudget - 1, 1))}…` : skill.name;
               return (
                 <Box key={skill.name}>
                   <SelectionMarker selected={isSelected} />
                   <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
-                    {displayName}
+                    {skill.name}
                   </Text>
                 </Box>
               );
@@ -86,7 +68,7 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
           </Box>
 
           {/* Right column: detail for the highlighted skill */}
-          <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth="50%" paddingLeft={2}>
+          <Box flexDirection="column" width="50%" paddingLeft={2}>
             {selectedSkill && (
               <Box flexDirection="column">
                 <Text bold color={COLOR_ACCENT}>

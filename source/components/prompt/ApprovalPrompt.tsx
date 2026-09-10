@@ -331,22 +331,22 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
  * ask_user branch explained its options; every other approval was a bare
  * list, so a reviewer had to already know what "Allow this folder for this
  * session" does. Reusing one layout means every approval gets that
- * explanation for free.
+ * explanation for free. Each pane takes half the row, so the divider lands in
+ * the same place regardless of which approval this is or how long its option
+ * labels are.
  */
 const TwoPaneApprovalLayout: FC<{
-  leftWidth: number;
   left: React.ReactNode;
   rightTitle: React.ReactNode;
   rightDescription: React.ReactNode;
-}> = ({ leftWidth, left, rightTitle, rightDescription }) => (
+}> = ({ left, rightTitle, rightDescription }) => (
   <Box flexDirection="row" width="100%" marginTop={1}>
-    <Box flexDirection="column" width={leftWidth} flexShrink={0} flexGrow={0}>
+    <Box flexDirection="column" width="50%" flexShrink={0} flexGrow={0}>
       {left}
     </Box>
     <Box
       flexDirection="column"
-      flexGrow={1}
-      flexShrink={1}
+      width="50%"
       paddingLeft={2}
       borderStyle="single"
       borderTop={false}
@@ -864,19 +864,6 @@ const ApprovalPrompt: FC<Props> = ({
       ? 'Submit answer'
       : highlightedMenuItem ?? 'Details';
 
-    // Calculate dynamic left column width
-    const leftColWidth = Math.max(
-      ...askUserMenuItems.map((item, idx) => {
-        const isOption = idx < askUserOptions.length;
-        let label = `${idx + 1}. ${item}`;
-        if (isMultiSelect && isOption) {
-          label = `${idx + 1}. [x] ${item}`;
-        }
-        return label.length + 6; // Add padding/gutter prefix
-      }),
-      36, // minimum width
-    );
-
     const askUserFooterHints: [string, string][] = [
       [
         isMultiSelect ? `1-${askUserOptions.length}` : `1-${askUserMenuItems.length}`,
@@ -908,7 +895,6 @@ const ApprovalPrompt: FC<Props> = ({
           </Box>
         )}
         <TwoPaneApprovalLayout
-          leftWidth={leftColWidth}
           left={askUserMenuItems.map((item, idx) => {
             const isOption = idx < askUserOptions.length;
             const isRecommended = idx === 0 && isOption;
@@ -1006,10 +992,6 @@ const ApprovalPrompt: FC<Props> = ({
     );
   }
 
-  // Left column width scales with the longest option label so the description
-  // pane's border lands in the same place regardless of which approval this is.
-  const plainApprovalLeftWidth = Math.max(...askUserMenuItems.map((item) => item.length + 4), 20);
-
   const plainApprovalSection = !isAskUser && !isDeniedReadShell && (
     <Box flexDirection="column" marginTop={1}>
       <Text>
@@ -1022,7 +1004,6 @@ const ApprovalPrompt: FC<Props> = ({
           : 'Allow this action?'}
       </Text>
       <TwoPaneApprovalLayout
-        leftWidth={plainApprovalLeftWidth}
         left={askUserMenuItems.map((item, index) => {
           const isSelected = selectedIndex === index;
           const isDangerLabel = item === 'Reject' || item === 'Deny';

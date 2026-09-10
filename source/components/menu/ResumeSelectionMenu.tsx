@@ -52,32 +52,23 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + maxHeight < items.length;
 
-  const longestIdLength = Math.max(...items.map((item) => item.id.length), 10);
-  const leftColWidth = Math.min(longestIdLength + 4, 32);
-  // Width of the SelectionMarker gutter. List labels are truncated to the
-  // column budget minus this gutter and the column's trailing padding.
-  const MARKER_WIDTH = 2;
-
   const selectedEntry = items[selectedIndex];
 
   return (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} flexDirection="column" width="100%" paddingX={1}>
         <Text color={COLOR_TEXT_SUBTLE}>Resume Conversation</Text>
-        {/* flexWrap + minWidth is the narrow-terminal plan: while the detail
-            pane has at least half the row it sits beside the list with a
-            straight divider; below that it drops to its own full-width line
-            instead of squeezing the list gutter or fragmenting the text.
-            The list column only shrinks when it alone overflows the row
-            (never because of the detail), down to a floor that keeps the
-            marker plus a readable stub of the id. */}
-        <Box flexDirection="row" flexWrap="wrap" width="100%">
+        {/* The two columns split the row evenly at every terminal width: each
+            takes half, so the divider sits in the middle instead of tracking
+            the longest id. Both columns have a definite width, which lets
+            Yoga hand each `wrap="truncate"` label a finite budget — the label
+            is clipped to its own column and never spills past the divider or
+            the border. The full id stays visible in the detail pane. */}
+        <Box flexDirection="row" width="100%">
           {/* Left column: the list */}
           <Box
             flexDirection="column"
-            width={leftColWidth}
-            flexShrink={1}
-            minWidth={10}
+            width="50%"
             borderStyle="single"
             borderTop={false}
             borderBottom={false}
@@ -90,19 +81,11 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
             {visibleItems.map((entry, visibleIndex) => {
               const actualIndex = scrollOffset + visibleIndex;
               const isSelected = actualIndex === selectedIndex;
-              // Truncate to the column's own budget in JS: an unbreakable
-              // (truncate-mode) Text reports its full length as its minimum
-              // width, which would defeat the column's shrinking on narrow
-              // terminals and spill past the border. The full id stays
-              // visible in the detail pane.
-              const idBudget = Math.max(leftColWidth - MARKER_WIDTH - 1, 4);
-              const displayId =
-                entry.id.length > idBudget ? `${entry.id.slice(0, Math.max(idBudget - 1, 1))}…` : entry.id;
               return (
                 <Box key={entry.id}>
                   <SelectionMarker selected={isSelected} />
                   <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
-                    {displayId}
+                    {entry.id}
                   </Text>
                 </Box>
               );
@@ -111,7 +94,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
           </Box>
 
           {/* Right column: detail for the highlighted conversation */}
-          <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth="50%" paddingLeft={2}>
+          <Box flexDirection="column" width="50%" paddingLeft={2}>
             {selectedEntry && (
               <Box flexDirection="column">
                 <Text bold color={COLOR_ACCENT}>

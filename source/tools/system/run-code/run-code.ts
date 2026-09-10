@@ -32,6 +32,7 @@ import {
 } from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
+import { emitRunCodeCompletionTelemetry } from './run-code-telemetry.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
@@ -642,6 +643,7 @@ export function createRunCodeToolDefinition(
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
       const registry = exposedTools();
       const bridgeRunId = createBridgeRunId();
+      const startedAt = Date.now();
       const calls: RunCodeCallRecord[] = [];
       // Host-private action receipt ledger. Script code has no write path
       // here: every entry is recorded by prepare/admit/invoke settlement, so
@@ -1049,6 +1051,19 @@ export function createRunCodeToolDefinition(
         };
         pendingReceiptByCallId.delete(callId);
       }
+
+      // Emitted before rendering: a script whose result cannot be rendered has
+      // still produced an outcome worth counting.
+      emitRunCodeCompletionTelemetry(loggingService, {
+        code,
+        result,
+        durationMs: Date.now() - startedAt,
+        timeoutMs: timeout,
+        sessionId,
+        runId: bridgeRunId,
+        calls,
+        receipts,
+      });
 
       const resolvedResult =
         result.ok && !result.voidOutput

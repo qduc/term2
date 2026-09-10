@@ -1152,6 +1152,136 @@ describe('run_code', () => {
     );
   });
 
+  it('emits a completion event with the nested ledger and no script text', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+    const code = 'await tools.describe("inspect"); return await tools.inspect({ value: "ok" });';
+
+    await definition.execute({ code, description: 'completion telemetry', timeout_ms: 60_000 } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        eventType: 'tool.run_code.completion',
+        toolName: 'run_code',
+        outcome: 'success',
+        durationMs: expect.any(Number),
+        sourceBytes: Buffer.byteLength(code, 'utf8'),
+        sourceDigest: expect.stringMatching(/^[0-9a-f]{16}$/),
+        nested: expect.objectContaining({ calls: 1, schemaLookups: 1, ok: 1 }),
+        effectReceipts: { applied: 0, notApplied: 0, failed: 0, unknown: 0 },
+      }),
+    );
+    const meta = vi.mocked(logger.info).mock.calls.at(-1)?.[1] ?? {};
+    expect(JSON.stringify(meta)).not.toContain('inspect');
+  });
+
+  it('classifies an uncaught nested parameter rejection as statically preventable', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+
+    await definition.execute({
+      code: 'return await tools.inspect({ wrong: 1 });',
+      description: 'completion telemetry',
+      timeout_ms: 60_000,
+    } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        outcome: 'nested-validation',
+        failureClass: 'parameter-shape',
+        hostErrorCode: 'runtime_error',
+        nested: expect.objectContaining({ calls: 1, invalidParams: 1, ok: 0 }),
+      }),
+    );
+  });
+
+  it('classifies an unknown namespace member without inventing a nested call', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+
+    await definition.execute({
+      code: 'return await tools.notAThing({});',
+      description: 'completion telemetry',
+      timeout_ms: 60_000,
+    } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        outcome: 'nested-validation',
+        failureClass: 'unknown-tool',
+        nested: expect.objectContaining({ calls: 0, unknownTool: 0 }),
+      }),
+    );
+  });
+
+  it('keeps a caught nested rejection in the ledger while the invocation succeeds', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+
+    await definition.execute({
+      code: 'try { await tools.inspect({ wrong: 1 }); } catch { return "recovered"; }',
+      description: 'completion telemetry',
+      timeout_ms: 60_000,
+    } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        outcome: 'success',
+        nested: expect.objectContaining({ calls: 1, invalidParams: 1 }),
+      }),
+    );
+  });
+
+  it('records a timeout as its own outcome', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+
+    await definition.execute({
+      code: 'while (true) {}',
+      description: 'completion telemetry',
+      timeout_ms: 1_500,
+    } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({ outcome: 'timeout', hostErrorCode: 'timeout' }),
+    );
+  }, 20_000);
+
   it('reports schema lookups when no tool calls were executed', async () => {
     const output = await run(
       [tool({ name: 'inspect' })],

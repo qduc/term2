@@ -1,3 +1,50 @@
+## [0.22.0] - 2026-09-11
+
+### Features
+- Added `run_code`, a script tool that exposes the toolset as a `tools` namespace, and made it the primary tool path: when `run_code` is available the direct surface is `run_code` plus script-prohibited tools only.
+- Added inline approval for tool calls made from inside a `run_code` script, with per-tool-graph approval policy ownership and a work-clock that pauses only while a nested approval waits.
+- Added a SQLite session index behind the session browser and session tools, with FTS5 trigram search, indexed message reads, and canonical-log fallback; the indexed backend is now the default.
+- Added declarable scripted return shapes on scriptable tools, surfaced through `describe`, so scripts can see a tool's result contract before calling it.
+- Added a unified cross-provider model picker with favorites, model nicknames, an all-models tab, and `--list-models --refresh` to bust a stale catalog cache.
+- Added an interactive picker for ambiguous, no-match, or valueless `--model` arguments.
+- Added a GPT-6 Astra prompt profile.
+- Added a `run_code` nested-call tool trace to the UI, and recent subagent tool calls to the background tasks panel.
+- Added comma-separated entry for array-typed settings, in-place Space toggling of booleans, and free-form string value entry seeded with the current value.
+- Added typed shell termination reasons (`deadline`, `cancelled`, `output-overflow`) with paused-time accounting, so a cancellation no longer reads as a timeout.
+- Added live task inventory to the session rollover brief and preserved live background work across an in-place rollover.
+- Added human-friendly display units for setting values in the settings UI.
+
+### Bug Fixes
+- Fixed `run_code` scripts receiving context-capped fragments: scripts now get whole files, whole glob and grep match sets, and structured results.
+- Fixed a vm realm-isolation escape where a value exposed to a script could recover the host `Function` and then `process`; all bindings are now constructed inside the context at one site.
+- Fixed `run_code` JSON serialization parity, image and large-media delivery, call-budget diagnostics, syntax and runtime error locations, and nested tool error attribution.
+- Fixed action receipts under output clipping and misattributed budget receipts on rejected calls.
+- Fixed model catalog cache poisoning from degraded provider catalogs, and made `--provider` no longer widen the model search.
+- Fixed context compaction triggering early, and added backoff when a trigger is blocked.
+- Fixed Codex compaction worker identity, Luna provider chain reset after native compaction, and parallel tool calls during Lite compaction.
+- Fixed sandbox worker startup after the launch directory was deleted.
+- Fixed orphaned streaming bot messages blocking the static commit, and render crashes on malformed tool arguments.
+- Fixed menu rows wrapping as separate fragments instead of one layout unit.
+- Fixed background check-ins interrupting active work and firing with no content to report.
+- Fixed cancelled agent streams being classified as errors rather than aborts, and worker validation receipts claiming success on unknown outcomes.
+- Fixed async subagents being dropped across session rollover, and settled tasks appearing in the rollover live inventory.
+- Fixed non-interactive mode exiting with background subagent work still pending.
+- Fixed `glob` no-match results not explaining that matches were ignored.
+- Fixed the standalone model picker refusing to render interactively under CI.
+- Fixed provider-traffic capture still writing after it was disabled, and a lost log sequence after an oversized tail event.
+- Fixed session rollover losing provider cache affinity, so a rollover no longer discards the prompt cache.
+- Fixed `--model`/`-m` treating its value as a prompt, and the picker opening on the default tab instead of the matched provider.
+
+### Improvements
+- Reduced session tool search and cursor friction, and repaired backward tail reads (`from: "end"`) to be a real tail region with page-local omitted counts.
+- Made `--model` resolution lazy with deterministic fuzzy ranking; raised the model catalog cache TTL to 24h with a 7-day grace.
+- Filtered the OpenRouter model catalog by age.
+- Stopped asserting the local OS and shell as fact in SSH and remote sessions.
+- Compacted the background task strip and stopped concise tool groups reprinting on text-free continuation steps.
+- Required the `description` parameter on `run_code`, and made unexposed tool names throw a descriptive `Unknown tool` error.
+- Removed dead settings scaffolding and legacy Zod v3 branches; settings UI metadata and provider suggestions are now schema- and registry-derived.
+- Reduced repeated compaction and tool recovery work in the run loop.
+
 ## [0.21.0] - 2026-09-03
 
 ### Features

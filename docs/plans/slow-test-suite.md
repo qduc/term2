@@ -1,18 +1,122 @@
-Status: plan. Lane verification complete 2026-08-29 — see "Deterministic lane".
+Status: plan. Tier split merged to main (`33e5e6f2`, 2026-09-10); the <30s target is measured as host-bound on the 4-vCPU workstation — see "Tier split and 4-vCPU measurements (2026-09-10)".
 
 ## Resume here
 
-The deterministic no-isolate lane is landed and verified: `pnpm test:lane`
-(476-file manifest, 180 s hang guard) passed five consecutive rounds
-(20260829, 314159, plus fresh seeds 24680/135791/987654) with no failures
-and no hangs, ~14 s per seed. The verification round also surfaced three
-more order/timing-dependent leaks, now excluded (see "Deterministic lane").
-The remaining options in "Future work" apply, in order: re-run the
-worker-scaling comparison in a quiet window (item 5), then
-`jsx: react-jsx` (item 6). Head repairs (item 4) need the test-suite-audit
-approval check first. Context for the current state (leak classes, the
-seed-888 hang, what was measured) is in the "Deterministic lane" section
-below and in project memory `slow-test-suite-profile-2026-08-29`.
+`pnpm test` is now the unit tier only. `vitest.config.ts` excludes
+`**/*.integration.*` and `scripts/provider-black-box/**`; the new
+`pnpm test:integration` (`vitest.integration.config.ts`) owns the nine
+`*.integration.*` files, and `vitest.provider-black-box.config.ts` keeps
+owning the black-box scripts — which `scripts/**/*.test.ts` had also been
+matching in the default suite, so each of those files ran twice. CI and the
+publish gate run both commands. The split is coverage-neutral: 608 files /
+8342 tests (`pnpm test`) + 9 files / 80 tests (`test:integration`) + 14
+files / 95 tests (black-box) = the 631 files / 8517 tests the default suite
+ran before it.
+
+The split bought 11 s, not the target: `pnpm test` went 150.0 s → 138.6 s.
+**The <30s target is not reachable on the 4-vCPU workstation by any
+configuration measured so far.** The isolated unit tier is 138.6 s; the same
+tier unisolated is 58.0 s but fails 91 tests across 32 files, and 48.0 s once
+those 32 files are excluded. The only <30s run measured on this host is the
+curated `pnpm test:lane` at 28.6 s, and it covers 476 of the 608 unit files.
+
+Next steps, in the order the evidence supports:
+
+1. **Repair the no-isolate leak set.** It is the only lever that touches the
+   dominant cost — the unit tier is 138.6 s isolated against 58.0 s unisolated
+   on identical files. The unit-tier victims observed on 2026-09-10 are listed
+   below, but membership is order- and load-dependent (the same run produces
+   different victims on repeat), so re-verify with shuffled seeds under
+   contention and keep the isolated suite as the authority.
+2. **Shard the stragglers** once (1) lands. Packing, not work, is the second
+   cost: `cli.integration.test.ts` is ~31 s of serial child-process spawns in
+   one file, and the 449-file tail experiment below already showed a small
+   number of long files extending the wall.
+3. Re-run the worker-scaling comparison in a quiet window (old item 5), then
+   `jsx: react-jsx` (old item 6); neither is covered by the 2026-09-10 runs.
+
+Context for the older state (leak classes, the seed-888 hang, the manifest
+drift) is in "Deterministic lane" below and in project memory
+`slow-test-suite-profile-2026-08-29`. The 2026-09-10 numbers are in project
+memory `full-suite-runtime-4vcpu-measurements`.
+
+## Tier split and 4-vCPU measurements (2026-09-10)
+
+All runs on the 4-vCPU workstation (`nproc` = 4), `NODE_ENV=test`, warm
+caches, wall time from `/usr/bin/time`. **The host was not quiet** — other
+work kept load around 1.6–1.9 — and the 84 s / 77 s figures elsewhere in this
+document come from an 8-vCPU host, so they are not comparable to these.
+
+| configuration | files | wall | failures |
+| --- | ---: | ---: | --- |
+| `pnpm test` before the split (forks, isolated) | 631 | 150.0 s | 5 (TMPDIR env noise) |
+| `pnpm test` after the split (unit tier, isolated) | 608 | 138.6 s | 5 (TMPDIR env noise) |
+| `pnpm test:integration` (new) | 9 | 29.3 s | 0 (1 skipped) |
+| unit tier, `--isolate=false` | 608 | 58.0 s | 91 across 32 files |
+| unit tier, `--isolate=false`, the 32 leaking files excluded | 576 | 48.0 s | 0 |
+| `--experimental.fsModuleCache=true` (cold / warm) | 631 | 149.2 s / 141.3 s | 5 |
+| `--pool=threads` | 631 | 203.5 s | 60 |
+| `--pool=threads --isolate=false` | 631 | 125.6 s | 60 |
+| `pnpm test:lane` (curated no-isolate manifest, seed 20260829) | 476 | 28.6 s | 2 (TMPDIR env noise) |
+
+What these rule out:
+
+- **Worker scaling.** `--isolate=false --maxWorkers=8` on 4 cores moved 77.0 s
+  to 66.0 s (~14%), so the suite is CPU-bound rather than I/O-bound; adding
+  workers is not a route to 30 s.
+- **The threads pool.** Strictly worse (203.5 s) and it fails 60 tests that pass
+  under the default forks pool, with or without isolation.
+- **`fsModuleCache`.** ~6% warm, nothing cold.
+- **Isolation as the whole problem.** With every leaky file removed, the
+  unisolated unit tier is still 48.0 s.
+
+Vitest's own breakdown of the 28.6 s lane — `transform 9.35 s, setup 1.44 s,
+import 14.96 s, tests 57.92 s` — is the other half of the picture: test bodies
+dominate the work, and per-file module instantiation is what isolation adds on
+top of it.
+
+Unit-tier leak victims in the 58.0 s run (order-dependent; this is one sample,
+not a stable set):
+
+```
+scripts/package-scripts.test.ts
+scripts/run-test.test.ts
+scripts/nested-approval/scripted-adapter.acceptance.test.ts
+source/agent.test.ts
+source/app.navigate-question.test.tsx
+source/components/input/ApplicationInputSurface.test.tsx
+source/hooks/use-grok-credit-usage.test.tsx
+source/hooks/use-shell-mode.test.tsx
+source/lib/agent-configuration.test.ts
+source/lib/subagent-bridge.background-sink.test.ts
+source/providers/codex-websocket-cancellation-settlement.test.ts
+source/providers/codex.provider.test.ts
+source/providers/oauth-pkce.test.ts
+source/providers/openai-responses-model.test.ts
+source/providers/openai.provider.test.ts
+source/providers/provider-service.test.ts
+source/services/approval/approval-decision-executor.test.ts
+source/services/approval/approval-flow-coordinator.test.ts
+source/services/execution-context.test.ts
+source/services/file-service.test.ts
+source/services/models/model-picker-host.test.tsx
+source/services/providers/provider-management-session.test.ts
+source/services/session/conversation-session.provider.test.ts
+source/services/session/session-runtime.isolation.test.ts
+source/services/subagents/execution-runner.test.ts
+source/services/workspace/active-workspace-root.test.ts
+source/services/workspace/workspace-lease-authority.test.ts
+source/tools/file/apply-patch.test.ts
+source/tools/file/search-replace.test.ts
+source/utils/shell/execute-shell.network-approval-timeout.test.ts
+source/utils/shell/sandbox/sandbox-policy.test.ts
+source/utils/shell/sandbox/shell-sandbox-runner.test.ts
+```
+
+Three of those (`apply-patch`, `search-replace`, `scripted-adapter`) also
+fail **isolated** on this machine for a TMPDIR reason unrelated to isolation —
+see `tmpdir-local-test-failures` in project memory. Fixing them is not leak
+work; removing them from the victim list is.
 
 # Slow test suite
 
@@ -21,6 +125,9 @@ below and in project memory `slow-test-suite-profile-2026-08-29`.
 The default Vitest run takes about 77 seconds locally, which is too slow for
 fast development feedback. It currently runs the complete source and scripts
 test inventory together rather than providing a fast unit-test-only gate.
+(The 77 s figure is from the 8-vCPU host of 2026-08-29; the same run measured
+150.0 s on the current 4-vCPU workstation — see "Tier split and 4-vCPU
+measurements (2026-09-10)".)
 
 ## Evidence captured 2026-08-29
 

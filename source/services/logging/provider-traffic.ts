@@ -924,9 +924,19 @@ export class ProviderTrafficArtifactStore {
   readonly #rootDir: string;
   readonly #requestPaths = new Map<string, string>();
   readonly #rawCaptureEnabled: boolean;
+  readonly #enabled: boolean;
 
-  constructor({ rootDir, rawCaptureEnabled }: { rootDir: string; rawCaptureEnabled?: boolean }) {
+  constructor({
+    rootDir,
+    rawCaptureEnabled,
+    enabled = true,
+  }: {
+    rootDir: string;
+    rawCaptureEnabled?: boolean;
+    enabled?: boolean;
+  }) {
     this.#rootDir = rootDir;
+    this.#enabled = enabled;
     // Resolved once at construction so a mid-process env change cannot flip
     // capture on for a store that started with it off (and tests can inject
     // the flag directly without touching process.env).
@@ -934,6 +944,8 @@ export class ProviderTrafficArtifactStore {
   }
 
   recordRequestStart(input: RequestStartInput): void {
+    if (!this.#enabled) return;
+
     const { dayDir, requestPath, sessionDirName } = this.#pathsFor(input);
     this.#requestPaths.set(input.requestId, requestPath);
     try {
@@ -982,6 +994,8 @@ export class ProviderTrafficArtifactStore {
   }
 
   recordRequestComplete(input: RequestCompleteInput): void {
+    if (!this.#enabled) return;
+
     const { dayDir, requestPath: fallbackRequestPath, sessionDirName } = this.#pathsFor(input);
     const requestPath = this.#requestPaths.get(input.requestId) ?? fallbackRequestPath;
     try {

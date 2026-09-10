@@ -113,13 +113,52 @@ it.sequential('respects DISABLE_LOGGING flag', () => {
   expect(fs.existsSync(logDir)).toBe(false);
 });
 
-it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', () => {
+it.sequential('does not persist provider traffic artifacts when logging is disabled', async () => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: true,
+  });
+
+  logger.providerTraffic.recordRequestStart({
+    requestId: 'disabled-request',
+    provider: 'openai',
+    model: 'gpt-test',
+    sentBody: { messages: [{ role: 'user', content: 'do not persist this' }] },
+  });
+  await logger.providerTraffic.recordResponseReceived({
+    requestId: 'disabled-request',
+    provider: 'openai',
+    model: 'gpt-test',
+    status: 200,
+    response: { outputText: 'do not persist this either' },
+  });
+
+  expect(fs.existsSync(logDir)).toBe(false);
+  expect(fs.existsSync(path.join(logDir, 'provider-traffic'))).toBe(false);
+});
+
+it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', async () => {
   const logDir = getTestLogDir();
   const originalDisableLogging = process.env.DISABLE_LOGGING;
   process.env.DISABLE_LOGGING = '1';
 
   try {
-    new LoggingService({ logDir });
+    const logger = new LoggingService({ logDir });
+
+    logger.providerTraffic.recordRequestStart({
+      requestId: 'disabled-by-env',
+      provider: 'openai',
+      model: 'gpt-test',
+      sentBody: { messages: [{ role: 'user', content: 'do not persist this' }] },
+    });
+    await logger.providerTraffic.recordResponseReceived({
+      requestId: 'disabled-by-env',
+      provider: 'openai',
+      model: 'gpt-test',
+      status: 200,
+      response: { outputText: 'do not persist this either' },
+    });
 
     expect(fs.existsSync(logDir)).toBe(false);
   } finally {

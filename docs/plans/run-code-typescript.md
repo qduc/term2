@@ -12,6 +12,12 @@ TypeScript checking against that contract. Keep the treatments independently
 reviewable and measurable. TypeScript is not a reason to reopen Stage 2 native
 structured returns. Successful JSON-string returns remain strings.
 
+Telemetry status (2026-09-10): the privacy-safe completion event this plan
+requires is implemented — one `tool.run_code.completion` event per invocation,
+including the nested-call and effect-receipt ledgers, source digest, and size,
+duration, and tool-call counts — and is the instrument for the 100-script
+reconsideration. It is a measurement path, not authorization to add a compiler.
+
 ## Goal and limits
 
 Before a TypeScript script executes, check its syntax and statically knowable
@@ -179,6 +185,49 @@ dispatch. Secondary measures: repair turns, tool calls, tokens, checker time/
 memory, end-to-end latency, and distribution size. A checker can prevent a bad
 call yet cost more recovery turns; report both rather than equating static
 rejection with model success.
+
+## Completion telemetry (implemented 2026-09-10)
+
+`source/tools/system/run-code/run-code-telemetry.ts` emits one structured event
+per invocation at `info` level, `eventType: tool.run_code.completion`, through
+the application logger so it lands in the same daily JSONL app log at the
+default log level. The older `run_code execution finished` line stays, at
+`debug`.
+
+Fields: `outcome`, `hostErrorCode`, `failureClass`, `durationMs`, `timeoutMs`,
+`sourceBytes`, `sourceLines`, `sourceDigest` (sha256, first 16 hex characters),
+`nested` counts by ledger outcome, `effectReceipts` counts by action outcome,
+and `sessionId`/`runId` correlation.
+
+`outcome` is the requested set — `success`, `parse`, `nested-validation`,
+`runtime`, `return-serialization`, `timeout` — plus `cancelled`,
+`input-rejected`, and `host-unavailable` for host outcomes with no honest home
+among those (folding a cancellation into `timeout` would contradict the
+termination-reason distinction settled for shell timeouts). `failureClass`
+narrows `nested-validation`: `unknown-tool`, `parameter-shape`, `nested-call`,
+`approval-denied`, `budget`, and the reserved `typescript-syntax` and
+`known-return-shape` classes that nothing emits until a checked path exists.
+
+Privacy: every emitted value is a number, an enum from a closed set, or a source
+digest. Source text, arguments, failure messages, tool names, workspace paths,
+and the model-authored `description` are never emitted; the classifier reads
+failure messages in-process and emits only a class.
+
+No correlation store ships with this. Derived at query time from the app log
+(`eventType == "tool.run_code.completion"`): repetition is a repeated
+`sourceDigest` within one `sessionId`; a replay is a repeated digest whose
+`effectReceipts.applied` is non-zero; repair turns are the invocations between a
+non-`success` outcome and the next `success` in that session.
+
+Known limits. Attribution reads the namespace binding's own
+`tools.<member> failed: ` prefix, so a script that throws identical text is
+misattributed as a nested rejection; the host code and both ledgers stay exact.
+`nested-validation` covers every uncaught nested rejection, so the statically
+preventable set is `failureClass` in {`unknown-tool`, `parameter-shape`, and
+later `typescript-syntax`, `known-return-shape`}. Stage 3A's typed refusal
+envelope is the replacement for the text match. The 100-script threshold above
+requires at least that many events across several sessions before this plan is
+reconsidered.
 
 ## Remaining engineering decisions
 

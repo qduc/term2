@@ -173,5 +173,13 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
     },
   },
+  // `.cts` files are CommonJS by contract (worker preloads loaded by `require`),
+  // so `require()` is the only import form available to them.
+  {
+    files: ['**/*.cts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
   eslintConfigPrettier,
 );

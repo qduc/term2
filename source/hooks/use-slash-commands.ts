@@ -77,16 +77,20 @@ export function executeSlashCommandSelection({
   if (shouldAutocomplete(command, filter)) {
     // Close the slash frame before writing a command prefix that activates a
     // successor menu. The controller reconciles `setInput` synchronously, so
-    // closing afterward would dismiss that newly opened menu instead.
+    // closing afterward would dismiss that newly opened menu instead. Defer
+    // the action as well: actions such as /clear and /quit must not run until
+    // the close transition has been published and rendered.
     close();
     const nextValue = `/${command.name} `;
-    setInput(nextValue);
-    setCursorOverride(nextValue.length);
-    const shouldClose = command.action();
-    if (shouldClose !== false) {
-      setInput('');
-      setCursorOverride(null);
-    }
+    queueMicrotask(() => {
+      setInput(nextValue);
+      setCursorOverride(nextValue.length);
+      const shouldClose = command.action();
+      if (shouldClose !== false) {
+        setInput('');
+        setCursorOverride(null);
+      }
+    });
     return;
   }
 
@@ -94,11 +98,13 @@ export function executeSlashCommandSelection({
   // Close slash menu first. Mode-changing actions (e.g. /rewind opening rewind_selection)
   // can then take effect without a second local mode transition.
   close();
-  const shouldClose = command.action(args || undefined);
-  if (shouldClose !== false) {
-    setInput('');
-    setCursorOverride(null);
-  }
+  queueMicrotask(() => {
+    const shouldClose = command.action(args || undefined);
+    if (shouldClose !== false) {
+      setInput('');
+      setCursorOverride(null);
+    }
+  });
 }
 
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {

@@ -294,7 +294,7 @@ it('Integration - filter and execute flow for command without args', () => {
   expect(args).toBe('');
 });
 
-it('executeSlashCommandSelection clears input after successful command execution', () => {
+it('executeSlashCommandSelection closes the menu before executing a command', async () => {
   let input = '/cle';
   let cursorOverride: number | null = 4;
   let closed = false;
@@ -321,13 +321,15 @@ it('executeSlashCommandSelection clears input after successful command execution
     },
   });
 
-  expect(actionCalled).toBe(true);
   expect(closed).toBe(true);
+  expect(actionCalled).toBe(false);
+  await Promise.resolve();
+  expect(actionCalled).toBe(true);
   expect(input).toBe('');
   expect(cursorOverride).toBe(null);
 });
 
-it('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', () => {
+it('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', async () => {
   let input = '/mod';
   let cursorOverride: number | null = null;
   let closed = false;
@@ -356,13 +358,15 @@ it('executeSlashCommandSelection autocompletes and executes for expectsArgs comm
     },
   });
 
-  expect(actionCalled).toBe(true);
   expect(closed).toBe(true);
+  expect(actionCalled).toBe(false);
+  await Promise.resolve();
+  expect(actionCalled).toBe(true);
   expect(input).toBe('/model ');
   expect(cursorOverride).toBe(7);
 });
 
-it('executeSlashCommandSelection executes undo command after autocomplete', () => {
+it('executeSlashCommandSelection executes undo command after autocomplete', async () => {
   let input = '/un';
   let cursorOverride: number | null = null;
   let closed = false;
@@ -391,8 +395,10 @@ it('executeSlashCommandSelection executes undo command after autocomplete', () =
     },
   });
 
-  expect(undoMenuOpened).toBe(true);
   expect(closed).toBe(true);
+  expect(undoMenuOpened).toBe(false);
+  await Promise.resolve();
+  expect(undoMenuOpened).toBe(true);
   expect(input).toBe('');
   expect(cursorOverride).toBe(null);
 });

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import { useStandaloneModelPicker } from '../../hooks/use-standalone-model-picker.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -25,7 +25,7 @@ export type StandaloneModelPickerAppProps = {
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. "No models match ..."). */
   bannerLines?: string[];
-  /** Called exactly once after the picker has been asked to unmount. */
+  /** Called exactly once when the picker has an outcome. The host owns teardown. */
   onDone: (outcome: StandaloneModelPickerOutcome) => void;
 };
 
@@ -34,9 +34,8 @@ export type StandaloneModelPickerAppProps = {
  * (the same presentational component the interactive app uses) with its own
  * `useInput` boundary, since there is no composer here to own keys through
  * the app's `MenuSurface`/`MenuController` machinery. Calls `onDone` exactly
- * once and then exits, which the host uses to unmount and restore the
- * terminal before returning control to the caller. Teardown starts before the
- * host is notified so startup actions cannot race the picker close transition.
+ * once, which lets the host clear the transient frame before unmounting and
+ * restoring the terminal.
  */
 export function StandaloneModelPickerApp({
   settingsService,
@@ -48,7 +47,6 @@ export function StandaloneModelPickerApp({
   bannerLines,
   onDone,
 }: StandaloneModelPickerAppProps) {
-  const { exit } = useApp();
   const models = useStandaloneModelPicker({
     loggingService,
     settingsService,
@@ -60,10 +58,9 @@ export function StandaloneModelPickerApp({
 
   const finish = useCallback(
     (outcome: StandaloneModelPickerOutcome) => {
-      exit();
       onDone(outcome);
     },
-    [onDone, exit],
+    [onDone],
   );
 
   useInput((input, key) => {

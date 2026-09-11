@@ -76,10 +76,10 @@ export type ModelPickerHostOptions = ModelPickerHostStreams & {
  * app's own `render()` call in cli.tsx. Never mounts without a real TTY on
  * both ends (`isModelPickerHostSupported`), returning `cancelled` instead.
  *
- * Teardown is Ink's own normal app-exit path: `StandaloneModelPickerApp`
- * calls `useApp().exit()` exactly once before notifying the host, which runs Ink's
- * `unmount()` synchronously (raw mode, the resize listener, and the cursor
- * are restored by Ink itself) before `waitUntilExit()` resolves. Ink keys its
+ * The host clears the transient picker frame before unmounting it (Ink's
+ * normal unmount commits the final frame to scrollback). Unmount synchronously
+ * restores raw mode, the resize listener, and the cursor before
+ * `waitUntilExit()` resolves. Ink keys its
  * one live renderer per stdout object and deletes that entry on unmount, so
  * a later `render()` call against the same stdout (the main app's) creates a
  * fresh instance rather than colliding with this one.
@@ -95,7 +95,8 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
 
   let outcome: StandaloneModelPickerOutcome = { status: 'cancelled' };
 
-  const { waitUntilExit } = render(
+  let picker: ReturnType<typeof render>;
+  picker = render(
     <StandaloneModelPickerApp
       settingsService={options.settingsService}
       loggingService={options.loggingService}
@@ -106,6 +107,8 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
       bannerLines={options.bannerLines}
       onDone={(result) => {
         outcome = result;
+        picker.clear();
+        picker.unmount();
       }}
     />,
     {
@@ -133,6 +136,6 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
     },
   );
 
-  await waitUntilExit();
+  await picker.waitUntilExit();
   return outcome;
 }

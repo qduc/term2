@@ -3,8 +3,8 @@ import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubmissionMutation } from './conversation-adapter.js';
-import type { BotMessage, CommandMessage, Message, UserMessage } from '../../types/message.js';
-import { isCommandMessage, isUserMessage } from '../../types/message.js';
+import type { BotMessage, CommandMessage, Message, ReasoningMessage, UserMessage } from '../../types/message.js';
+import { isBotMessage, isCommandMessage, isReasoningMessage, isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
 import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -1096,6 +1096,11 @@ export class ConversationOrchestrator {
     if (this.#activeTurns > 0) return;
     if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
 
+    this.#abortStrandedCommandRows();
+    this.#finalizeStrandedStreamingRows();
+  }
+
+  #abortStrandedCommandRows(): void {
     const stranded = this.config.messages
       .getMessages()
       .filter(
@@ -1120,6 +1125,41 @@ export class ConversationOrchestrator {
     this.config.loggingService.warn('Command rows left running at turn end; aborting them', {
       tools: unreported.map((message) => message.toolName ?? 'unknown'),
       callIds: unreported.map((message) => message.callId ?? message.id),
+    });
+  }
+
+  /**
+   * Finalize streamed bot/reasoning tails that no completion will ever close.
+   *
+   * A live tail row is created by a throttled push and finalized only by the
+   * `final` event's flush. Cancellation resolves the turn promise as a
+   * classified cancellation, so the catch returns before any finalization, and
+   * `botResponseUpdater.cancel()` discards only the pending push — the live
+   * row survives with status 'streaming'. That is the static-commit blocker
+   * the status bar reports: a streaming row is the first message that cannot
+   * render statically, so one stranded row keeps every later message outside
+   * Ink's Static region for the rest of the session.
+   *
+   * Unlike a command row, a streaming row can never legitimately outlive its
+   * turn: the `final` flush closes it on every settle, and an approval pause
+   * finalizes it through computeNextMessages before the turn ends.
+   */
+  #finalizeStrandedStreamingRows(): void {
+    const isStrandedStreamingRow = (message: Message): message is BotMessage | ReasoningMessage =>
+      (isBotMessage(message) || isReasoningMessage(message)) && message.status === 'streaming';
+
+    const stranded = this.config.messages.getMessages().filter(isStrandedStreamingRow);
+    if (stranded.length === 0) return;
+
+    this.config.messages.setMessages((messages) =>
+      messages.map((message) =>
+        isStrandedStreamingRow(message) ? { ...message, status: 'finalized' as const } : message,
+      ),
+    );
+
+    this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
+      senders: stranded.map((message) => message.sender),
+      ids: stranded.map((message) => message.id),
     });
   }
 

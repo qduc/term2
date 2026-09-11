@@ -230,6 +230,49 @@ describe('ConversationOrchestrator', () => {
     expect(bots.map((m) => m.text)).toContain('The answer is X');
   });
 
+  it('finalizes the live bot message when the turn ends in a user cancellation', async () => {
+    // Regression: pressing stop mid-stream resolves the turn promise as a
+    // classified cancellation; the catch returned before any finalization and
+    // botResponseUpdater.cancel() only discards the pending throttled push.
+    // The live status:'streaming' bot row survived for the rest of the
+    // session, blocking static commit behind it (status bar:
+    // "Static blocked: bot/streaming ...").
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'text_delta', delta: 'Partial answer' });
+      const abort = new Error('Operation aborted');
+      abort.name = 'AbortError';
+      throw abort;
+    });
+
+    await orchestrator.sendUserMessage('hello');
+
+    const bots = cfg.messages.getMessages().filter((m) => m.sender === 'bot');
+    expect(bots.map((m) => m.text)).toContain('Partial answer');
+    expect(bots.every((m) => m.status !== 'streaming')).toBe(true);
+  });
+
+  it('finalizes the live reasoning message when the turn ends in a user cancellation', async () => {
+    // Same strand as the bot row above: reasoningUpdater.flush() fires the
+    // pending push but never finalizes, so an aborted reasoning row also
+    // blocked static commit (reason 'reasoning_streaming').
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'reasoning_delta', delta: 'Thinking about it', fullText: 'Thinking about it' });
+      const abort = new Error('Operation aborted');
+      abort.name = 'AbortError';
+      throw abort;
+    });
+
+    await orchestrator.sendUserMessage('hello');
+
+    const reasoning = cfg.messages.getMessages().filter((m) => m.sender === 'reasoning');
+    expect(reasoning.map((m) => m.text)).toContain('Thinking about it');
+    expect(reasoning.every((m) => m.status !== 'streaming')).toBe(true);
+  });
+
   it('renders streamed text exactly once when the settle finalText is non-empty', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);

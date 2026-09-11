@@ -180,7 +180,7 @@ it('healSearchReplaceParams returns unmodified params with low confidence reason
   expect(result.failureReason).toBe('model output similarity was below threshold');
 });
 
-it('healSearchReplaceParams uses tools.editHealingProvider before agent.provider', async () => {
+it('healSearchReplaceParams ignores the legacy tools.editHealingProvider override (D1)', async () => {
   const fileContent = 'const foo = 1;\n';
   let providerId = '';
   const runModel = async (_prompt: string, meta: { providerId: string }) => {
@@ -200,7 +200,7 @@ it('healSearchReplaceParams uses tools.editHealingProvider before agent.provider
     settingsService: settingsService as any,
   });
 
-  expect(providerId).toBe('openrouter');
+  expect(providerId).toBe('openai');
 });
 
 it('edit healing returns model text on the OpenAI provider (F3 regression)', async () => {

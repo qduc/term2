@@ -55,9 +55,9 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('resolves "efficient" from agent.efficientModel setting', () => {
+  it('resolves "efficient" from agent.cheapModel setting', () => {
     const s = settings({
-      'agent.efficientModel': 'gpt-4o-mini',
+      'agent.cheapModel': 'gpt-4o-mini',
       'agent.provider': 'openai',
     });
     expect(resolveModelPolicy('efficient', s)).toEqual({
@@ -66,9 +66,9 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('resolves "capable" from agent.capableModel setting', () => {
+  it('resolves "capable" from agent.smartModel setting', () => {
     const s = settings({
-      'agent.capableModel': 'gpt-4o',
+      'agent.smartModel': 'gpt-4o',
       'agent.provider': 'openai',
     });
     expect(resolveModelPolicy('capable', s)).toEqual({
@@ -82,80 +82,55 @@ describe('resolveModelPolicy', () => {
       'agent.model': 'gpt-4o',
       'agent.provider': 'openai',
     });
-    // No agent.efficientModel set → falls back to agent.model
+    // No agent.cheapModel set → falls back to agent.model
     expect(resolveModelPolicy('efficient', s)).toEqual({
       provider: 'openai',
       model: 'gpt-4o',
     });
   });
 
-  it('prefers efficientModel over subagentExplorerModel and agent.model', () => {
+  // ── Legacy keys ignored (D1 deprecation-window closure) ──
+  // settings-legacy-debt D1: legacy role keys stay parse-accepted and
+  // migration-mapped, but the resolver must read tier keys only.
+  it('ignores legacy efficient-tier keys instead of falling back through them', () => {
     const s = settings({
-      'agent.efficientModel': 'efficient-model',
-      'agent.subagentExplorerModel': 'explorer-model',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('efficient', s).model).toBe('efficient-model');
-  });
-
-  it('falls back from efficientModel to subagentExplorerModel before agent.model', () => {
-    const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': 'explorer-model',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('efficient', s).model).toBe('explorer-model');
-  });
-
-  it('falls back from efficientModel and subagentExplorerModel to agent.model', () => {
-    const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': undefined,
+      'agent.efficientModel': 'legacy-efficient',
+      'agent.subagentExplorerModel': 'legacy-explorer',
       'agent.model': 'main-model',
     });
     expect(resolveModelPolicy('efficient', s).model).toBe('main-model');
   });
 
-  it('falls back from efficient tier settings to the terminal model fallback', () => {
+  it('ignores legacy capable-tier keys instead of falling back through them', () => {
     const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': undefined,
-      'agent.model': undefined,
-    });
-    expect(resolveModelPolicy('efficient', s).model).toBe('gpt-4o');
-  });
-
-  it('prefers capableModel over mentorModel and agent.model', () => {
-    const s = settings({
-      'agent.capableModel': 'capable-model',
-      'agent.mentorModel': 'mentor-model',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('capable', s).model).toBe('capable-model');
-  });
-
-  it('falls back from capableModel to mentorModel before agent.model', () => {
-    const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': 'mentor-model',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('capable', s).model).toBe('mentor-model');
-  });
-
-  it('falls back from capableModel and mentorModel to agent.model', () => {
-    const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': undefined,
+      'agent.capableModel': 'legacy-capable',
+      'agent.mentorModel': 'legacy-mentor',
       'agent.model': 'main-model',
     });
     expect(resolveModelPolicy('capable', s).model).toBe('main-model');
   });
 
-  it('falls back from capable tier settings to the terminal model fallback', () => {
+  it('prefers tier keys over any legacy keys', () => {
     const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': undefined,
+      'agent.cheapModel': 'cheap-model',
+      'agent.efficientModel': 'legacy-efficient',
+      'agent.subagentExplorerModel': 'legacy-explorer',
+      'agent.model': 'main-model',
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('cheap-model');
+  });
+
+  it('falls back from unset cheap tier settings to the terminal model fallback', () => {
+    const s = settings({
+      'agent.cheapModel': undefined,
+      'agent.model': undefined,
+    });
+    expect(resolveModelPolicy('efficient', s).model).toBe('gpt-4o');
+  });
+
+  it('falls back from unset smart tier settings to the terminal model fallback', () => {
+    const s = settings({
+      'agent.smartModel': undefined,
       'agent.model': undefined,
     });
     expect(resolveModelPolicy('capable', s).model).toBe('gpt-4o');
@@ -170,7 +145,7 @@ describe('resolveModelPolicy', () => {
   // ── Relative tier with parent ─────────────────────────
   it('resolves relative "lower" tier against parent exact model', () => {
     const s = settings({
-      'agent.efficientModel': 'gpt-4o-mini',
+      'agent.cheapModel': 'gpt-4o-mini',
       'agent.provider': 'openai',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
@@ -180,30 +155,19 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('prefers efficientModel for relative lower tier over subagentExplorerModel and agent.model', () => {
+  it('prefers cheapModel for relative lower tier over agent.model', () => {
     const s = settings({
-      'agent.efficientModel': 'efficient-model',
-      'agent.subagentExplorerModel': 'explorer-model',
+      'agent.cheapModel': 'cheap-model',
       'agent.model': 'main-model',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('efficient-model');
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('cheap-model');
   });
 
-  it('falls back from efficientModel to subagentExplorerModel for relative lower tier', () => {
+  it('ignores legacy keys for relative lower tier and falls back to agent.model', () => {
     const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': 'explorer-model',
-      'agent.model': 'main-model',
-    });
-    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('explorer-model');
-  });
-
-  it('falls back to agent.model for relative lower tier after efficient tier settings', () => {
-    const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': undefined,
+      'agent.efficientModel': 'legacy-efficient',
+      'agent.subagentExplorerModel': 'legacy-explorer',
       'agent.model': 'main-model',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
@@ -212,8 +176,7 @@ describe('resolveModelPolicy', () => {
 
   it('falls back to the parent model for relative lower tier when all settings are unset', () => {
     const s = settings({
-      'agent.efficientModel': undefined,
-      'agent.subagentExplorerModel': undefined,
+      'agent.cheapModel': undefined,
       'agent.model': undefined,
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
@@ -231,7 +194,7 @@ describe('resolveModelPolicy', () => {
 
   it('resolves relative "higher" tier against parent exact model', () => {
     const s = settings({
-      'agent.capableModel': 'gpt-4.1',
+      'agent.smartModel': 'gpt-4.1',
       'agent.provider': 'openai',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
@@ -241,30 +204,10 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('prefers capableModel for relative higher tier over mentorModel and agent.model', () => {
+  it('ignores legacy keys for relative higher tier and falls back to agent.model', () => {
     const s = settings({
-      'agent.capableModel': 'capable-model',
-      'agent.mentorModel': 'mentor-model',
-      'agent.model': 'main-model',
-    });
-    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('capable-model');
-  });
-
-  it('falls back from capableModel to mentorModel for relative higher tier', () => {
-    const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': 'mentor-model',
-      'agent.model': 'main-model',
-    });
-    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('mentor-model');
-  });
-
-  it('falls back to agent.model for relative higher tier after capable tier settings', () => {
-    const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': undefined,
+      'agent.capableModel': 'legacy-capable',
+      'agent.mentorModel': 'legacy-mentor',
       'agent.model': 'main-model',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
@@ -273,8 +216,7 @@ describe('resolveModelPolicy', () => {
 
   it('falls back to the parent model for relative higher tier when all settings are unset', () => {
     const s = settings({
-      'agent.capableModel': undefined,
-      'agent.mentorModel': undefined,
+      'agent.smartModel': undefined,
       'agent.model': undefined,
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
@@ -312,7 +254,7 @@ describe('resolveModelPolicy', () => {
 
   it('preserves parent provider when resolving relative tier', () => {
     const s = settings({
-      'agent.efficientModel': 'claude-haiku',
+      'agent.cheapModel': 'claude-haiku',
     });
     const parent: ModelPolicy = { provider: 'anthropic', model: 'claude-sonnet' };
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent)).toEqual({

@@ -243,11 +243,7 @@ export async function healSearchReplaceParams(
   apiKey: string,
   deps: HealingDeps = {},
 ): Promise<HealingResult> {
-  const providerId =
-    deps.providerId ??
-    deps.settingsService?.get('tools.editHealingProvider') ??
-    deps.settingsService?.get('agent.provider') ??
-    'openai';
+  const providerId = deps.providerId ?? deps.settingsService?.get('agent.provider') ?? 'openai';
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const confidenceThreshold = deps.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
   const maxFileChars = deps.maxFileChars ?? DEFAULT_MAX_FILE_CHARS;

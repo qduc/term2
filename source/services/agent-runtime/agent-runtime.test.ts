@@ -445,7 +445,7 @@ describe('AgentRuntime', () => {
 
   it('nested relative model policy resolves against parent', () => {
     const s = settings({
-      'agent.efficientModel': 'gpt-4o-mini',
+      'agent.cheapModel': 'gpt-4o-mini',
       'agent.provider': 'openai',
     });
     const { executor } = mockExecutor();

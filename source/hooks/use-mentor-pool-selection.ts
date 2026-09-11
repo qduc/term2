@@ -3,13 +3,15 @@ import { z } from 'zod';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
-import { filterModels, type ModelInfo } from '../services/model-service.js';
-import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
+import { type ModelInfo } from '../services/model-service.js';
+import { ModelCatalogSession, orderedProviderIds } from '../services/models/model-catalog-session.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { loadProviderItems, type ProviderSelectionItem } from '../providers/provider-service.js';
-import { resolveProviderCredentials } from '../utils/ai/provider-credentials.js';
 import { useSelection } from './use-selection.js';
 import type { MenuEffect } from '../components/input/menu-types.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
+import { getProviderIds } from '../providers/index.js';
+import { getFavoriteModelInfos, serializeFavorite } from '../services/models/model-favorites.js';
 
 export const MENTOR_POOL_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 export type MentorPoolReasoningEffort = (typeof MENTOR_POOL_REASONING_EFFORTS)[number];
@@ -120,7 +122,7 @@ export function resolveMentorPoolModelSelection(
   return models[selectedIndex]?.id ?? typedModel.trim();
 }
 
-/** Starting provider tab for the mentor-pool model browser. */
+/** Starting provider for custom mentor-pool model rows. */
 export function resolveMentorPoolBrowseProvider({
   draftProvider,
   mentorProvider,
@@ -133,7 +135,7 @@ export function resolveMentorPoolBrowseProvider({
   return draftProvider || mentorProvider || agentProvider || '';
 }
 
-/** Apply a model catalog pick: pin both model id and the active provider tab. */
+/** Apply a model catalog pick: pin both model id and its provider. */
 export function applyMentorPoolModelPick(draft: MentorPoolDraft, model: string, provider: string): MentorPoolDraft {
   return {
     ...draft,
@@ -184,13 +186,13 @@ export function useMentorPoolSelection(
     () => new ModelCatalogSession({ settingsService, loggingService: loggingService ?? noOpLoggingService }),
     [loggingService, settingsService],
   );
-  const [catalogModels, setCatalogModels] = useState<ModelInfo[]>([]);
+  const [catalogs, setCatalogs] = useState<Map<string, ModelInfo[]>>(new Map());
   const [modelLoading, setModelLoading] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [modelSelectedIndex, setModelSelectedIndex] = useState(0);
   const [modelScrollOffset, setModelScrollOffset] = useState(0);
   const [modelRefreshKey, setModelRefreshKey] = useState(0);
-  /** Provider tab currently browsed in the model menu (independent of draft until pick). */
+  const [modelTab, setModelTab] = useState<'favorites' | 'all'>('all');
   const [browsingProvider, setBrowsingProvider] = useState<string | null>(null);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
@@ -200,17 +202,35 @@ export function useMentorPoolSelection(
     agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
   });
   const modelProvider = browsingProvider ?? fallbackModelProvider;
-  const modelItems = useMemo(
-    () =>
-      mergeMentorPoolModels({
-        catalogModels,
-        entries,
-        provider: modelProvider,
-        currentModel: draft?.model ?? '',
-      }),
-    [catalogModels, draft?.model, entries, modelProvider],
+  const providerIds = useMemo(
+    () => orderedProviderIds(settingsService, getProviderIds()),
+    [settingsService, modelRefreshKey],
   );
-  const filteredModels = useMemo(() => filterModels(modelItems, input), [input, modelItems]);
+  const favoriteModels = useMemo(() => getFavoriteModelInfos(settingsService), [settingsService, modelRefreshKey]);
+  const favoriteKeys = useMemo(
+    () => new Set(favoriteModels.map((model) => serializeFavorite(model.provider, model.id))),
+    [favoriteModels],
+  );
+  const modelItems = useMemo(() => {
+    const unified = mergeUnifiedModels(providerIds, catalogs, favoriteModels);
+    return mergeMentorPoolModels({
+      catalogModels: unified,
+      entries,
+      provider: fallbackModelProvider,
+      currentModel: draft?.model ?? '',
+    });
+  }, [catalogs, draft?.model, entries, fallbackModelProvider, favoriteModels, providerIds]);
+  const filteredModels = useMemo(
+    () =>
+      filterUnifiedModels(
+        modelTab === 'favorites'
+          ? modelItems.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
+          : modelItems,
+        input,
+        undefined,
+      ),
+    [favoriteKeys, input, modelItems, modelTab],
+  );
 
   const activeItems = useMemo<MentorPoolMenuItem[]>(() => {
     if (phase === 'list') {
@@ -286,28 +306,34 @@ export function useMentorPoolSelection(
   }, [active]);
 
   useEffect(() => {
-    if (!active || phase !== 'edit_model' || !modelProvider) return;
+    if (!active || phase !== 'edit_model' || providerIds.length === 0) return;
     /* eslint-disable react-hooks/set-state-in-effect */
-    const credentials = resolveProviderCredentials(settingsService, modelProvider);
-    const cachedModels = catalogSession.getCached(modelProvider);
-    setCatalogModels(cachedModels ?? []);
+    const cached = new Map(providerIds.map((provider) => [provider, catalogSession.getCached(provider) ?? []]));
+    setCatalogs(cached);
     setModelSelectedIndex(0);
     setModelScrollOffset(0);
     setModelError(null);
 
-    if (credentials.required && !credentials.configured) {
-      setModelLoading(false);
-      return;
-    }
-
     catalogSession.begin();
     let disposed = false;
     const load = async () => {
-      setModelLoading(!cachedModels);
+      setModelLoading(true);
       try {
-        const result = await catalogSession.load(modelProvider);
-        if (disposed || result.kind === 'stale') return;
-        setCatalogModels(result.models);
+        const results = await Promise.allSettled(
+          providerIds.map(async (provider) => ({ provider, result: await catalogSession.load(provider) })),
+        );
+        if (disposed) return;
+        const next = new Map(cached);
+        const failures: string[] = [];
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value.result.kind !== 'stale') {
+            next.set(result.value.provider, result.value.result.models);
+          } else if (result.status === 'rejected') {
+            failures.push(String(result.reason));
+          }
+        }
+        setCatalogs(next);
+        if (failures.length > 0) setModelError('Some providers failed: ' + failures.join(', '));
       } catch (error) {
         if (!disposed) setModelError(error instanceof Error ? error.message : String(error));
       } finally {
@@ -319,7 +345,7 @@ export function useMentorPoolSelection(
       disposed = true;
     };
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [active, catalogSession, modelProvider, modelRefreshKey, phase, settingsService]);
+  }, [active, catalogSession, modelRefreshKey, phase, providerIds]);
 
   useEffect(() => {
     // Changing the search text starts a new list navigation session.
@@ -522,7 +548,7 @@ export function useMentorPoolSelection(
   }, [activeItems, phase, selection.selectedIndex, selection.setSelectedIndex]);
 
   const saveModel = useCallback(
-    (value: string) => {
+    (value: string, provider: string) => {
       if (phase !== 'edit_model' || !draft) return false;
       const model = value.trim();
       if (!model) {
@@ -530,9 +556,8 @@ export function useMentorPoolSelection(
         setErrorMessage('Fix the highlighted fields before saving.');
         return false;
       }
-      // Pin the active provider tab with the model so the separate "Select
-      // Provider" step is optional (only needed for Inherit).
-      setDraft(applyMentorPoolModelPick(draft, model, modelProvider));
+      // Pin the provider belonging to the selected unified row.
+      setDraft(applyMentorPoolModelPick(draft, model, provider));
       setDraftModified(true);
       setFieldErrors({});
       setErrorMessage(null);
@@ -542,12 +567,18 @@ export function useMentorPoolSelection(
       setInput('');
       return true;
     },
-    [draft, modelProvider, phase, setInput, selection.setSelectedIndex],
+    [draft, phase, setInput, selection.setSelectedIndex],
   );
 
   const selectModel = useCallback(
-    (typedValue: string) => saveModel(resolveMentorPoolModelSelection(filteredModels, modelSelectedIndex, typedValue)),
-    [filteredModels, modelSelectedIndex, saveModel],
+    (typedValue: string) => {
+      const selected = filteredModels[modelSelectedIndex];
+      return saveModel(
+        resolveMentorPoolModelSelection(filteredModels, modelSelectedIndex, typedValue),
+        selected?.provider ?? modelProvider,
+      );
+    },
+    [filteredModels, modelProvider, modelSelectedIndex, saveModel],
   );
 
   const moveModelUp = useCallback(() => {
@@ -573,26 +604,15 @@ export function useMentorPoolSelection(
     [filteredModels.length],
   );
   const refreshModels = useCallback(() => {
-    if (!modelProvider) return;
-    catalogSession.refresh(modelProvider);
+    for (const provider of providerIds) catalogSession.refresh(provider);
     setModelRefreshKey((key) => key + 1);
-  }, [catalogSession, modelProvider]);
+  }, [catalogSession, providerIds]);
 
-  const toggleModelProvider = useCallback(
-    (direction: 'next' | 'prev' = 'next') => {
-      if (phase !== 'edit_model') return;
-      const next = catalogSession.nextProvider(modelProvider || null, direction);
-      if (!next || next === modelProvider) return;
-      const cachedModels = catalogSession.getCached(next);
-      setCatalogModels(cachedModels ?? []);
-      setModelSelectedIndex(0);
-      setModelScrollOffset(0);
-      setModelLoading(!cachedModels);
-      setModelError(null);
-      setBrowsingProvider(next);
-    },
-    [catalogSession, modelProvider, phase],
-  );
+  const switchModelTab = useCallback(() => {
+    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setModelSelectedIndex(0);
+    setModelScrollOffset(0);
+  }, []);
 
   const movePoolUp = useCallback(() => {
     if (phase !== 'reorder' || selection.selectedIndex <= 0) return;
@@ -703,6 +723,8 @@ export function useMentorPoolSelection(
     errorMessage,
     fieldErrors,
     modelProvider,
+    modelTab,
+    modelQuery: input,
     filteredModels,
     modelLoading,
     modelError,
@@ -719,7 +741,7 @@ export function useMentorPoolSelection(
     pageModelUp,
     pageModelDown,
     refreshModels,
-    toggleModelProvider,
+    switchModelTab,
     moveUp: selection.moveUp,
     moveDown: selection.moveDown,
     moveHome: selection.moveHome,

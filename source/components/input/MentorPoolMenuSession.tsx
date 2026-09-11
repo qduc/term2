@@ -46,8 +46,8 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
         }
 
         const editingModel = pool.phase === 'edit_model';
-        // Match ModelMenuSession: typing edits the search box; left/right switch
-        // provider tabs (not the cursor), so model + provider are chosen together.
+        // The mentor model picker uses the unified Favorites/All model view.
+        // Provider is taken from the selected row rather than from a provider tab.
         if (editingModel && applyMenuEditorEvent(controller, event, { horizontal: false })) {
           return keep();
         }
@@ -69,10 +69,8 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
             else pool.pageDown();
             return keep();
           case 'command':
-            if (editingModel && event.command === 'left') {
-              pool.toggleModelProvider('prev');
-            } else if (editingModel && event.command === 'right') {
-              pool.toggleModelProvider('next');
+            if (editingModel && (event.command === 'tab' || event.command === 'left' || event.command === 'right')) {
+              pool.switchModelTab();
             } else if (editingModel && event.command === 'refresh') {
               pool.refreshModels();
             } else if (event.command === 'delete') {
@@ -119,8 +117,8 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
         settingsService={settingsService}
         items={pool.filteredModels}
         selectedIndex={pool.modelSelectedIndex}
-        query={controller.getSnapshot().editor.text}
-        provider={pool.modelProvider}
+        query={pool.modelQuery}
+        modelTab={pool.modelTab}
         loading={pool.modelLoading}
         error={pool.modelError}
         scrollOffset={pool.modelScrollOffset}

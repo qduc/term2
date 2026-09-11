@@ -8,6 +8,12 @@ import SubagentActivityMessage from './SubagentActivityMessage.js';
 import { groupCommandRuns, type CommandGroupMessage } from './command-grouping.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { Message } from '../../types/message.js';
+import {
+  classifyStaticCommitBlocker,
+  isBlockingStaticCommit,
+  type StaticCommitBlockerReason,
+  type StaticCommitSubject,
+} from '../../utils/conversation/static-commit-policy.js';
 
 type Props<T extends MessageLike = Message> = {
   messages: T[];
@@ -46,13 +52,7 @@ export type StaticCommitBlocker = {
   index: number;
   sender?: string;
   status?: string;
-  reason:
-    | 'bot_streaming'
-    | 'reasoning_streaming'
-    | 'command_pending'
-    | 'command_running'
-    | 'subagent_activity'
-    | 'unknown_active';
+  reason: StaticCommitBlockerReason;
   dynamicMessageCount: number;
   dynamicTextLength: number;
 };
@@ -84,31 +84,13 @@ export const EMPTY_RESTORED_STATIC_MESSAGE_IDS: readonly string[] = [];
 const STATIC_BLOCKER_MESSAGE_COUNT_THRESHOLD = 12;
 const STATIC_BLOCKER_TEXT_LENGTH_THRESHOLD = 12_000;
 
-const canRenderStatically = (message: MessageLike) => {
-  if (message.sender === 'reasoning') {
-    return message.status === 'finalized';
-  }
-
-  if (message.sender === 'command') {
-    return message.status !== 'pending' && message.status !== 'running';
-  }
-
-  if (message.sender === 'subagent') {
-    return (
-      message.status === 'completed' ||
-      message.status === 'failed' ||
-      message.status === 'cancelled' ||
-      message.status === 'interrupted' ||
-      message.status === 'backgrounded'
-    );
-  }
-
-  if (message.sender === 'bot') {
-    return message.status !== 'streaming';
-  }
-
-  return true;
-};
+// MessageLike is a structural superset kept for rendering and tests; the
+// static-commit policy needs the discriminated sender/status unions of the
+// real Message rows. Production rows are Message, so the cast is safe, and the
+// policy degrades an unrecognized runtime string to "committable" rather than
+// throwing inside the render loop.
+const canRenderStatically = (message: MessageLike) =>
+  !isBlockingStaticCommit(message as unknown as StaticCommitSubject);
 
 const isGroupableToolMessage = (message: MessageLike | undefined): boolean =>
   message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
@@ -177,30 +159,6 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[], options
   };
 };
 
-const getStaticBlockerReason = (message: MessageLike): StaticCommitBlocker['reason'] => {
-  if (message.sender === 'bot' && message.status === 'streaming') {
-    return 'bot_streaming';
-  }
-
-  if (message.sender === 'reasoning' && message.status !== 'finalized') {
-    return 'reasoning_streaming';
-  }
-
-  if (message.sender === 'command' && message.status === 'pending') {
-    return 'command_pending';
-  }
-
-  if (message.sender === 'command' && message.status === 'running') {
-    return 'command_running';
-  }
-
-  if (message.sender === 'subagent') {
-    return 'subagent_activity';
-  }
-
-  return 'unknown_active';
-};
-
 export const detectStaticCommitBlocker = <T extends MessageLike>(
   messages: T[],
   options: StaticCommitBlockerOptions = {},
@@ -223,12 +181,16 @@ export const detectStaticCommitBlocker = <T extends MessageLike>(
   }
 
   const blocker = filteredMessages[activeStart];
+  const reason = classifyStaticCommitBlocker(blocker as unknown as StaticCommitSubject);
+  if (reason === null) {
+    return null;
+  }
   return {
     id: blocker.id,
     index: activeStart,
     sender: blocker.sender,
     status: blocker.status,
-    reason: getStaticBlockerReason(blocker),
+    reason,
     dynamicMessageCount: active.length,
     dynamicTextLength,
   };

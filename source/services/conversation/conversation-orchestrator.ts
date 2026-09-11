@@ -3,8 +3,13 @@ import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubmissionMutation } from './conversation-adapter.js';
-import type { BotMessage, CommandMessage, Message, ReasoningMessage, UserMessage } from '../../types/message.js';
-import { isBotMessage, isCommandMessage, isReasoningMessage, isUserMessage } from '../../types/message.js';
+import type { BotMessage, CommandMessage, Message, UserMessage } from '../../types/message.js';
+import { isCommandMessage, isUserMessage } from '../../types/message.js';
+import {
+  classifyStaticCommitBlocker,
+  turnEndSettlement,
+  type TurnEndSettlement,
+} from '../../utils/conversation/static-commit-policy.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
 import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -1069,97 +1074,82 @@ export class ConversationOrchestrator {
   #endTurn(flushNotifications = true): void {
     this.#activeTurns = Math.max(0, this.#activeTurns - 1);
     this.config.ui.onTurnEnd();
-    this.#finalizeStrandedCommandMessages();
+    this.#settleStrandedRows();
     if (flushNotifications) {
       void this.#deliverBackgroundSubagentNotifications();
     }
   }
 
   /**
-   * Close command rows that no completion will ever close.
+   * Settle rows that still block static commit once a turn this orchestrator
+   * owns has ended. What blocks and what a closing turn may do about it are
+   * owned entirely by the static-commit policy (classifyStaticCommitBlocker +
+   * turnEndSettlement); this method owns only the guards and the reporting.
+   * That keeps a new Message variant or status from being added to the
+   * renderer's blocker list without also getting a settlement rule — the drift
+   * that left bot/reasoning rows stranded after command rows were covered.
    *
-   * A row opens as `running` on `tool_started` and closes only when a command
-   * message carrying the same callId arrives. Anything that ends a turn without
-   * that message — a stream error, a retry, a tool whose result is never
-   * rendered — leaves the row running for the rest of the session. That is not
-   * cosmetic: a running command is the first message that cannot render
-   * statically, so one stranded row keeps every later message re-rendering
-   * outside Ink's Static region.
-   *
-   * The warning is half the point. A silent net would hide the next tool that
-   * strands a row the way the last one hid for fourteen hours.
+   * History: command rows were netted first after one incident, and a later
+   * abort still stranded streaming bot/reasoning rows for a whole session —
+   * the status bar's "Static blocked: ..." warning. The warning is half the
+   * point: a silent net would hide the next row type that strands.
    */
-  #finalizeStrandedCommandMessages(): void {
+  #settleStrandedRows(): void {
     // A turn that parks on an approval closes and reopens around the prompt, so
     // reaching here does not mean the work finished. Anything still running is
     // legitimately in flight until the user decides.
     if (this.#activeTurns > 0) return;
     if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
 
-    this.#abortStrandedCommandRows();
-    this.#finalizeStrandedStreamingRows();
-  }
+    const settlesTo = (message: Message): TurnEndSettlement | null => {
+      const reason = classifyStaticCommitBlocker(message);
+      return reason === null ? null : turnEndSettlement(reason);
+    };
 
-  #abortStrandedCommandRows(): void {
     const stranded = this.config.messages
       .getMessages()
-      .filter(
-        (message): message is CommandMessage =>
-          isCommandMessage(message) && (message.status === 'running' || message.status === 'pending'),
-      );
+      .map((message) => ({ message, settlement: settlesTo(message) }))
+      .filter((entry): entry is { message: Message; settlement: TurnEndSettlement } => entry.settlement !== null);
     if (stranded.length === 0) return;
 
+    // Turn-owned streaming rows (bot/reasoning tails) can never legitimately
+    // outlive their turn: the `final` flush closes them on every settle, and
+    // an approval pause finalizes them through computeNextMessages before the
+    // turn ends. A live row at this point was abandoned by its producer.
+    const finalizeIds = new Set(
+      stranded.filter((entry) => entry.settlement === 'finalize').map((entry) => entry.message.id),
+    );
+    if (finalizeIds.size > 0) {
+      this.config.messages.setMessages((messages) =>
+        messages.map((message) =>
+          finalizeIds.has(message.id) ? ({ ...message, status: 'finalized' } as Message) : message,
+        ),
+      );
+      this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
+        ids: [...finalizeIds],
+      });
+    }
+
+    const abortEntries = stranded.filter((entry) => entry.settlement === 'abort');
+    if (abortEntries.length === 0) return;
+
+    const abortIds = new Set(abortEntries.map((entry) => entry.message.id));
     this.config.messages.setMessages((messages) =>
-      messages.map((message) =>
-        message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
-          ? { ...message, status: 'aborted' as const }
-          : message,
-      ),
+      messages.map((message) => (abortIds.has(message.id) ? ({ ...message, status: 'aborted' } as Message) : message)),
     );
 
-    const unreported = stranded.filter((message) => !this.#reportedStrandedCallIds.has(message.callId ?? message.id));
+    const callKey = (entry: (typeof abortEntries)[number]): string =>
+      (isCommandMessage(entry.message) ? entry.message.callId : undefined) ?? entry.message.id;
+    const unreported = abortEntries.filter((entry) => !this.#reportedStrandedCallIds.has(callKey(entry)));
     if (unreported.length === 0) return;
-    for (const message of unreported) {
-      this.#reportedStrandedCallIds.add(message.callId ?? message.id);
+    for (const entry of unreported) {
+      this.#reportedStrandedCallIds.add(callKey(entry));
     }
     this.config.loggingService.warn('Command rows left running at turn end; aborting them', {
-      tools: unreported.map((message) => message.toolName ?? 'unknown'),
-      callIds: unreported.map((message) => message.callId ?? message.id),
-    });
-  }
-
-  /**
-   * Finalize streamed bot/reasoning tails that no completion will ever close.
-   *
-   * A live tail row is created by a throttled push and finalized only by the
-   * `final` event's flush. Cancellation resolves the turn promise as a
-   * classified cancellation, so the catch returns before any finalization, and
-   * `botResponseUpdater.cancel()` discards only the pending push — the live
-   * row survives with status 'streaming'. That is the static-commit blocker
-   * the status bar reports: a streaming row is the first message that cannot
-   * render statically, so one stranded row keeps every later message outside
-   * Ink's Static region for the rest of the session.
-   *
-   * Unlike a command row, a streaming row can never legitimately outlive its
-   * turn: the `final` flush closes it on every settle, and an approval pause
-   * finalizes it through computeNextMessages before the turn ends.
-   */
-  #finalizeStrandedStreamingRows(): void {
-    const isStrandedStreamingRow = (message: Message): message is BotMessage | ReasoningMessage =>
-      (isBotMessage(message) || isReasoningMessage(message)) && message.status === 'streaming';
-
-    const stranded = this.config.messages.getMessages().filter(isStrandedStreamingRow);
-    if (stranded.length === 0) return;
-
-    this.config.messages.setMessages((messages) =>
-      messages.map((message) =>
-        isStrandedStreamingRow(message) ? { ...message, status: 'finalized' as const } : message,
+      tools: unreported.map((entry) =>
+        isCommandMessage(entry.message) ? entry.message.toolName ?? 'unknown' : 'unknown',
       ),
-    );
-
-    this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
-      senders: stranded.map((message) => message.sender),
-      ids: stranded.map((message) => message.id),
+      callIds: unreported.map(callKey),
     });
   }
 

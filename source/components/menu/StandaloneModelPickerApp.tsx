@@ -100,7 +100,9 @@ export function StandaloneModelPickerApp({
       models.moveHome();
     } else if ((key as { end?: boolean }).end) {
       models.moveEnd();
-    } else if (key.leftArrow || key.rightArrow) {
+    } else if (key.tab || key.leftArrow || key.rightArrow) {
+      // Tab and the arrows all switch the Favorites/All tab; Tab never
+      // completes a model id into a buffer here.
       models.switchModelTab();
     } else if (key.ctrl && input === 'r') {
       models.refresh();
@@ -114,9 +116,8 @@ export function StandaloneModelPickerApp({
       finish({ status: 'selected', selection: { modelId: selected.id, provider: selected.provider } });
     } else if (key.backspace) {
       models.backspaceQuery();
-    } else if (key.tab || key.delete) {
-      // No standalone meaning here (Tab inserts into the composer in the
-      // interactive app; forward-delete has no mid-string cursor to act on).
+    } else if (key.delete) {
+      // Forward-delete has no mid-string cursor to act on here.
     } else if (input && !key.ctrl && !key.meta) {
       models.typeQuery(input);
     }

@@ -214,7 +214,7 @@ const ModelSelectionMenu: FC<Props> = ({
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
               ...(modelTab
-                ? ([['←→', 'tab']] as [string, string][])
+                ? ([['Tab/←→', 'tab']] as [string, string][])
                 : !isUnified
                 ? ([['←→', 'provider']] as [string, string][])
                 : []),
@@ -286,7 +286,7 @@ const ModelSelectionMenu: FC<Props> = ({
       {!isUnified && (error || (items.length === 0 && !loading)) && (
         <MenuFooter
           hints={[
-            ['tab', 'switch provider'],
+            ['←→', 'switch provider'],
             ['esc', 'cancel'],
           ]}
         />

@@ -94,7 +94,7 @@ it.sequential('ModelSelectionMenu renders the Favorites tab as active when reque
   const output = lastFrame() ?? '';
   expect(output).toContain('Favorites');
   expect(output).toContain('All');
-  expect(output).toContain('←→ tab');
+  expect(output).toContain('Tab/←→ tab');
 });
 
 it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {

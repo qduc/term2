@@ -359,7 +359,41 @@ it('a field-error IntentResult keeps the model frame open instead of reopening o
   expect(controller.getSnapshot().stack[0]?.id).toBe(child?.id);
 });
 
-it('Tab inserts the typed model id without the provider suffix and without submitting', async () => {
+it('Tab switches the Favorites/All tab instead of inserting the model id', async () => {
+  const intentHost = vi.fn();
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  // The All tab lists the catalog; nothing is favorited, so the Favorites
+  // tab is the one that shows its empty-state copy.
+  expect(view.lastFrame()).toContain('gpt-test');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().editor.text).toBe('/model ');
+  expect(intentHost).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+  expect(view.lastFrame()).toContain('No favorites yet');
+});
+
+it('Tab does not complete a model id into a settings-model frame', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);
   const settingsService = createMockSettingsService({ 'agent.provider': providerId });
@@ -385,7 +419,7 @@ it('Tab inserts the typed model id without the provider suffix and without submi
 
   expect(intentHost).not.toHaveBeenCalled();
   expect(controller.getSnapshot().stack).toHaveLength(1);
-  expect(controller.getSnapshot().editor.text).toBe('/settings agent.model gpt-test ');
+  expect(controller.getSnapshot().editor.text).toBe('/settings agent.model ');
 });
 
 it('ctrl+f (command "favorite") toggles the highlighted model immediately, with no naming prompt or modal state', async () => {

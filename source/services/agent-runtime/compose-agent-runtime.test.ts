@@ -27,8 +27,8 @@ function settings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = {
     'agent.provider': 'openai',
     'agent.model': 'gpt-4o',
-    'agent.efficientModel': 'gpt-4o-mini',
-    'agent.mentorModel': 'gpt-4o',
+    'agent.cheapModel': 'gpt-4o-mini',
+    'agent.smartModel': 'gpt-4o',
     ...values,
   };
   return {

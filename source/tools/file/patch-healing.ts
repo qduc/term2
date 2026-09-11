@@ -157,11 +157,7 @@ export async function healPatchOperation(
   apiKey: string,
   deps: PatchHealingDeps = {},
 ): Promise<PatchHealingResult> {
-  const providerId =
-    deps.providerId ??
-    deps.settingsService?.get('tools.editHealingProvider') ??
-    deps.settingsService?.get('agent.provider') ??
-    'openai';
+  const providerId = deps.providerId ?? deps.settingsService?.get('agent.provider') ?? 'openai';
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxFileChars = deps.maxFileChars ?? DEFAULT_MAX_FILE_CHARS;
 

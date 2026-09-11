@@ -37,8 +37,7 @@ function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModel
 }
 
 export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
-  const model =
-    (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? resolveLegacyTierModel(tier, settings);
+  const model = settings.getDynamic(`agent.${tier}Model`) as string | undefined;
   const provider =
     (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? settings.get('agent.provider') ?? 'openai';
   return { provider, model: model ?? settings.get('agent.model') ?? 'gpt-4o' };
@@ -70,19 +69,10 @@ function resolveRelativePolicy(
   const tier = policy.tier === 'lower' ? 'cheap' : 'smart';
   const model =
     (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ??
-    resolveLegacyTierModel(tier, settings) ??
     settings.get('agent.model') ??
     parentExact.model;
   const provider = (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? parentExact.provider;
   return { provider, model };
-}
-
-function resolveLegacyTierModel(tier: AncillaryModelTier, settings: ISettingsService): string | undefined {
-  for (const settingKey of legacyTierModelSettingKeys(tier)) {
-    const model = settings.getDynamic(settingKey) as string | undefined;
-    if (model !== undefined && model !== null) return model;
-  }
-  return undefined;
 }
 
 function policyTierToAncillaryTier(tier: string): AncillaryModelTier {
@@ -94,19 +84,5 @@ function policyTierToAncillaryTier(tier: string): AncillaryModelTier {
     case 'balanced':
     default:
       return 'balanced';
-  }
-}
-
-function legacyTierModelSettingKeys(tier: AncillaryModelTier): string[] {
-  switch (tier) {
-    case 'cheap':
-      return ['agent.efficientModel', 'agent.subagentExplorerModel'];
-    case 'smart':
-      return ['agent.capableModel', 'agent.mentorModel'];
-    case 'chore':
-      return [];
-    case 'balanced':
-    default:
-      return ['agent.model'];
   }
 }

@@ -474,10 +474,7 @@ export function createSearchReplaceToolDefinition(deps: {
               {
                 settingsService,
                 loggingService,
-                providerId:
-                  settingsService.get('agent.choreProvider') ??
-                  settingsService.get('tools.editHealingProvider') ??
-                  choreModel.provider,
+                providerId: settingsService.get('agent.choreProvider') ?? choreModel.provider,
               },
             );
 

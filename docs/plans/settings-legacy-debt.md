@@ -408,5 +408,15 @@ Verdict: plan goals substantially met and green on the focused gates; findings 1
 are the D1 follow-up (remove the remaining smart/cheap and healing-provider legacy
 reads) and should be tracked as the deprecation-window closure work.
 
+**D1 follow-up status (2026-09-11):** the runtime fallback *reads* are removed
+(branch `settings-d1-followup`): `resolveLegacyTierModel`/`legacyTierModelSettingKeys`
+deleted from `model-resolver.ts` (tier keys are the sole model readers), and the
+`tools.editHealingProvider` overrides dropped from `edit-healing.ts`,
+`patch-healing.ts`, and `search-replace.ts`. Schema/parser acceptance, the
+startup migration table, and the legacy write paths are unchanged — this closes
+the read half of the deprecation window; schema field retirement (finding 1's
+"deprecation window closes" clause) remains future work. Resolver, healing, and
+agent-resolver tests now assert legacy keys are ignored.
+
 
 

@@ -454,7 +454,9 @@ export function useMentorPoolSelection(
         if (item.field === 'model') {
           setBrowsingProvider(resolveBrowseProvider(draft.provider));
           setPhase('edit_model');
-          replaceInput(draft.model);
+          // Open with an empty filter; the existing model remains in the draft
+          // and is only replaced if the user explicitly selects another row.
+          replaceInput('');
         } else if (item.field === 'provider') {
           setPhase('edit_provider');
           selection.setSelectedIndex(

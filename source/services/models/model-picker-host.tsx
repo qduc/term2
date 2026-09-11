@@ -77,7 +77,7 @@ export type ModelPickerHostOptions = ModelPickerHostStreams & {
  * both ends (`isModelPickerHostSupported`), returning `cancelled` instead.
  *
  * Teardown is Ink's own normal app-exit path: `StandaloneModelPickerApp`
- * calls `useApp().exit()` exactly once (via `onDone`), which runs Ink's
+ * calls `useApp().exit()` exactly once before notifying the host, which runs Ink's
  * `unmount()` synchronously (raw mode, the resize listener, and the cursor
  * are restored by Ink itself) before `waitUntilExit()` resolves. Ink keys its
  * one live renderer per stdout object and deletes that entry on unmount, so

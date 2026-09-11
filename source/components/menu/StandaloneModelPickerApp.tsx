@@ -25,7 +25,7 @@ export type StandaloneModelPickerAppProps = {
   lockProvider?: string;
   /** One-line explanations shown above the menu (e.g. "No models match ..."). */
   bannerLines?: string[];
-  /** Called exactly once, right before the picker unmounts. */
+  /** Called exactly once after the picker has been asked to unmount. */
   onDone: (outcome: StandaloneModelPickerOutcome) => void;
 };
 
@@ -35,7 +35,8 @@ export type StandaloneModelPickerAppProps = {
  * `useInput` boundary, since there is no composer here to own keys through
  * the app's `MenuSurface`/`MenuController` machinery. Calls `onDone` exactly
  * once and then exits, which the host uses to unmount and restore the
- * terminal before returning control to the caller.
+ * terminal before returning control to the caller. Teardown starts before the
+ * host is notified so startup actions cannot race the picker close transition.
  */
 export function StandaloneModelPickerApp({
   settingsService,
@@ -59,8 +60,8 @@ export function StandaloneModelPickerApp({
 
   const finish = useCallback(
     (outcome: StandaloneModelPickerOutcome) => {
-      onDone(outcome);
       exit();
+      onDone(outcome);
     },
     [onDone, exit],
   );

@@ -1,5 +1,5 @@
-import React, { ReactNode } from 'react';
-import { Box, Text } from 'ink';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import { Box, measureElement, Text } from 'ink';
 import {
   COLOR_ACCENT,
   COLOR_BORDER,
@@ -44,6 +44,44 @@ export const MenuFooter: React.FC<{ hints: ReadonlyArray<[key: string, action: s
     ))}
   </Text>
 );
+
+/** A compact, terminal-friendly scrollbar for a fixed-height menu list. */
+export const MenuScrollbar: React.FC<{
+  itemCount: number;
+  scrollOffset: number;
+  maxHeight: number;
+  /** Measured terminal lines occupied by the visible rows. */
+  visibleHeight?: number;
+  /** Estimated terminal lines occupied by the complete list. */
+  totalHeight?: number;
+}> = ({
+  itemCount,
+  scrollOffset,
+  maxHeight,
+  visibleHeight: measuredVisibleHeight,
+  totalHeight: measuredTotalHeight,
+}) => {
+  const visibleHeight = measuredVisibleHeight ?? maxHeight;
+  const totalHeight = measuredTotalHeight ?? itemCount;
+  const maxScrollOffset = Math.max(1, totalHeight - visibleHeight);
+  const scrollPosition =
+    totalHeight === itemCount ? scrollOffset : (scrollOffset / Math.max(1, itemCount - maxHeight)) * maxScrollOffset;
+  const thumbSize = Math.min(visibleHeight, Math.max(1, Math.round((visibleHeight * visibleHeight) / totalHeight)));
+  const thumbStart = Math.round((scrollPosition / maxScrollOffset) * (visibleHeight - thumbSize));
+
+  return (
+    <Box flexDirection="column" width={1} flexShrink={0}>
+      {Array.from({ length: visibleHeight }, (_, index) => {
+        const isThumb = index >= thumbStart && index < thumbStart + thumbSize;
+        return (
+          <Text key={index} color={isThumb ? COLOR_ACCENT : COLOR_BORDER}>
+            {isThumb ? '┃' : '│'}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+};
 
 type Props<T> = {
   items: T[];
@@ -90,6 +128,25 @@ export function MenuContainer<T>({
   isInactive,
   renderItem,
 }: Props<T>) {
+  const rowRefs = useRef<Array<any>>([]);
+  const [rowHeights, setRowHeights] = useState<number[]>([]);
+  const visibleItems = items.slice(scrollOffset, scrollOffset + maxHeight);
+  const hasScrollUp = scrollOffset > 0;
+  const hasScrollDown = scrollOffset + maxHeight < items.length;
+
+  useEffect(() => {
+    if (!hasScrollUp && !hasScrollDown) return;
+    const measured = visibleItems.map((_, index) => {
+      const row = rowRefs.current[index];
+      return row ? measureElement(row).height || 1 : 1;
+    });
+    setRowHeights((previous) =>
+      measured.length === previous.length && measured.every((height, index) => height === previous[index])
+        ? previous
+        : measured,
+    );
+  }, [hasScrollDown, hasScrollUp, visibleItems, scrollOffset]);
+
   const titleElement = title ? <Text color={COLOR_TEXT_SUBTLE}>{title}</Text> : null;
 
   if (loading) {
@@ -119,9 +176,9 @@ export function MenuContainer<T>({
     );
   }
 
-  const visibleItems = items.slice(scrollOffset, scrollOffset + maxHeight);
-  const hasScrollUp = scrollOffset > 0;
-  const hasScrollDown = scrollOffset + maxHeight < items.length;
+  const visibleHeight = rowHeights.reduce((sum, height) => sum + height, 0) || visibleItems.length;
+  const averageRowHeight = visibleItems.length > 0 ? visibleHeight / visibleItems.length : 1;
+  const totalHeight = Math.max(items.length, Math.round(items.length * averageRowHeight));
 
   // width="100%" keeps rows honest: without a definite container width the
   // rows size to their content, percentage min-widths (the narrow-terminal
@@ -130,28 +187,43 @@ export function MenuContainer<T>({
   const content = (
     <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column" width="100%">
       {titleElement}
-      {hasScrollUp && <Text color={COLOR_TEXT_SUBTLE}>↑ {scrollOffset} more</Text>}
-      {visibleItems.map((item, visibleIndex) => {
-        const actualIndex = scrollOffset + visibleIndex;
-        const isSelected = actualIndex === selectedIndex;
-        const isItemInactive = isInactive?.(item) || (item as any)?.inactive === true;
-        const element = renderItem(item, actualIndex, isSelected, isItemInactive);
-        if (isItemInactive) {
-          if (React.isValidElement(element) && element.type === Text) {
-            return React.cloneElement(element as React.ReactElement<any>, { color: COLOR_TEXT_SUBTLE });
-          }
-          if (typeof element === 'string' || typeof element === 'number') {
+      <Box flexDirection="row" width="100%">
+        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          {visibleItems.map((item, visibleIndex) => {
+            const actualIndex = scrollOffset + visibleIndex;
+            const isSelected = actualIndex === selectedIndex;
+            const isItemInactive = isInactive?.(item) || (item as any)?.inactive === true;
+            const element = renderItem(item, actualIndex, isSelected, isItemInactive);
+            let renderedElement = element;
+            if (isItemInactive) {
+              if (React.isValidElement(element) && element.type === Text) {
+                renderedElement = React.cloneElement(element as React.ReactElement<any>, { color: COLOR_TEXT_SUBTLE });
+              } else if (typeof element === 'string' || typeof element === 'number') {
+                renderedElement = <Text color={COLOR_TEXT_SUBTLE}>{element}</Text>;
+              }
+            }
             return (
-              <Box key={actualIndex}>
-                <Text color={COLOR_TEXT_SUBTLE}>{element}</Text>
+              <Box
+                key={actualIndex}
+                ref={(node) => {
+                  rowRefs.current[visibleIndex] = node;
+                }}
+              >
+                {renderedElement}
               </Box>
             );
-          }
-          return element;
-        }
-        return element;
-      })}
-      {hasScrollDown && <Text color={COLOR_TEXT_SUBTLE}>↓ {items.length - scrollOffset - maxHeight} more</Text>}
+          })}
+        </Box>
+        {hasScrollUp || hasScrollDown ? (
+          <MenuScrollbar
+            itemCount={items.length}
+            scrollOffset={scrollOffset}
+            maxHeight={maxHeight}
+            visibleHeight={visibleHeight}
+            totalHeight={totalHeight}
+          />
+        ) : null}
+      </Box>
       {!footerOutsideBorder && footer && (
         <Box
           marginTop={1}

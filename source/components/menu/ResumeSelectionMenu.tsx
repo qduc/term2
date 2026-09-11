@@ -4,7 +4,7 @@ import type { ConversationListEntry } from '../../services/conversation/conversa
 import type { SavedAppMode } from '../../services/conversation/conversation-persistence-types.js';
 import { profileIdFromLegacyMode } from '../../services/profiles/legacy-adapter.js';
 import { getProfileLabel } from '../../services/profiles/labels.js';
-import { SelectionMarker, MenuFooter } from '../common/MenuContainer.js';
+import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_ACTIVE, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
 type Props = {
@@ -77,20 +77,25 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
             borderColor={COLOR_BORDER}
             paddingRight={1}
           >
-            {hasScrollUp && <Text color={COLOR_TEXT_SUBTLE}>↑ more</Text>}
-            {visibleItems.map((entry, visibleIndex) => {
-              const actualIndex = scrollOffset + visibleIndex;
-              const isSelected = actualIndex === selectedIndex;
-              return (
-                <Box key={entry.id}>
-                  <SelectionMarker selected={isSelected} />
-                  <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
-                    {entry.id}
-                  </Text>
-                </Box>
-              );
-            })}
-            {hasScrollDown && <Text color={COLOR_TEXT_SUBTLE}>↓ more</Text>}
+            <Box flexDirection="row" width="100%">
+              <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                {visibleItems.map((entry, visibleIndex) => {
+                  const actualIndex = scrollOffset + visibleIndex;
+                  const isSelected = actualIndex === selectedIndex;
+                  return (
+                    <Box key={entry.id}>
+                      <SelectionMarker selected={isSelected} />
+                      <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
+                        {entry.id}
+                      </Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+              {hasScrollUp || hasScrollDown ? (
+                <MenuScrollbar itemCount={items.length} scrollOffset={scrollOffset} maxHeight={maxHeight} />
+              ) : null}
+            </Box>
           </Box>
 
           {/* Right column: detail for the highlighted conversation */}

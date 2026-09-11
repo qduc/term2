@@ -65,7 +65,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         // reason — and Escape cancels back to the untouched filter row rather
         // than closing the menu, so a second Escape closes the menu as usual.
         // ctrl+f stays live: it toggles the highlighted row's favorite.
-        // Tab-insert, refresh, reset, and list navigation are deliberately
+        // Tab, refresh, reset, and list navigation are deliberately
         // suspended: the editor is bound
         // to one highlighted row, so navigating away would orphan it.
         if (models.nicknameDraft) {
@@ -90,7 +90,14 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           }
         }
 
-        if (event.type === 'command' && (event.command === 'left' || event.command === 'right')) {
+        // Tab and the horizontal arrows all switch the Favorites/All tab. Tab
+        // deliberately does not complete the highlighted model id into the
+        // composer: it is the user's key for moving between tabs, and Enter
+        // already selects.
+        if (
+          event.type === 'command' &&
+          (event.command === 'tab' || event.command === 'left' || event.command === 'right')
+        ) {
           models.switchModelTab();
           return keep();
         }
@@ -109,24 +116,6 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             return keep();
           case 'command': {
             setApplyError(null);
-            if (event.command === 'tab') {
-              const modelId = resolvedModelId();
-              const currentEditor = controller.getSnapshot().editor;
-              const insertion = computeModelInsertion({
-                selection: models.getSelectedItem(),
-                modelId,
-                triggerIndex: frame.binding.replacement.start,
-                provider: effectiveProvider(),
-                value: currentEditor.text,
-                appendTrailingSpace: true,
-                includeProvider: false,
-              });
-              if (!insertion) return keep();
-              return {
-                buffer: { type: 'replace', text: insertion.nextValue, cursor: insertion.nextCursor },
-                stack: { type: 'keep' },
-              };
-            }
             if (event.command === 'refresh') models.refresh();
             else if (event.command === 'favorite') models.toggleFavorite();
             else if (event.command === 'nickname') models.startNicknameEdit();

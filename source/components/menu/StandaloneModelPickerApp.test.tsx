@@ -108,6 +108,28 @@ it('filters the list as the user types the seeded query further', async () => {
   expect(outcome).toEqual({ status: 'selected', selection: { modelId: 'gpt-5.4-mini', provider: providerId } });
 });
 
+it('Tab switches to the Favorites tab instead of completing a model id', async () => {
+  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  let outcome: StandaloneModelPickerOutcome | undefined;
+
+  const { stdin, lastFrame } = await renderInAct(
+    <StandaloneModelPickerApp
+      settingsService={settingsService}
+      loggingService={noopLoggingService}
+      onDone={(o) => (outcome = o)}
+    />,
+  );
+
+  expect(lastFrame()).toContain('gpt-5.4');
+
+  await send(stdin, '\t');
+
+  // The tab switched; the catalog rows are gone and nothing was selected.
+  expect(lastFrame()).toContain('No favorites yet');
+  expect(lastFrame()).not.toContain('gpt-5.4');
+  expect(outcome).toBeUndefined();
+});
+
 it('cancels on Escape without selecting anything', async () => {
   const settingsService = createMockSettingsService({ 'agent.provider': providerId });
   let outcome: StandaloneModelPickerOutcome | undefined;

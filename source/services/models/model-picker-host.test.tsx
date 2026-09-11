@@ -195,6 +195,33 @@ describe('runModelPickerHost', () => {
     expect(stdin.listenerCount('readable')).toBe(0);
   });
 
+  it('erases the picker frame before committing its exit', async () => {
+    const stdin = new FakeStdin();
+    const stdout = new FakeStdout();
+    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+
+    const resultPromise = runModelPickerHost({
+      settingsService,
+      loggingService: noopLoggingService,
+      stdin: stdin as any,
+      stdout: stdout as any,
+      stderr: new FakeStdout() as any,
+    });
+
+    await waitFor(() => stdout.frames.some((frame) => frame.includes('gpt-test')));
+    let lastPickerFrame = -1;
+    stdout.frames.forEach((frame, index) => {
+      if (frame.includes('gpt-test')) lastPickerFrame = index;
+    });
+
+    stdin.write('\r');
+    await resultPromise;
+
+    const teardownOutput = stdout.frames.slice(lastPickerFrame + 1).join('');
+    expect(teardownOutput).toContain('\u001B[2K');
+    expect(teardownOutput).not.toContain('gpt-test');
+  });
+
   it('cancels on Escape and still restores the terminal', async () => {
     const stdin = new FakeStdin();
     const stdout = new FakeStdout();

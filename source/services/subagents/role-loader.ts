@@ -10,7 +10,8 @@ import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
-import { resolveAncillaryModelTier, type AncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { getAncillaryTierForRole } from './subagent-pool-config.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -21,13 +22,6 @@ export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
  * approach it; settlement reports a budget stop rather than failing.
  */
 export const ROLE_MAX_TURNS_DEFAULT = 200;
-
-const roleModelTiers: Record<string, AncillaryModelTier> = {
-  mentor: 'smart',
-  worker: 'balanced',
-  explorer: 'cheap',
-  librarian: 'cheap',
-};
 
 const isInherited = (value: unknown): boolean =>
   value === 'inherit' || value === undefined || value === null || value === '';
@@ -105,7 +99,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   const subagentPrefix =
     role === 'mentor' ? 'agent.mentor' : `agent.subagent${role.charAt(0).toUpperCase() + role.slice(1)}`;
 
-  const tier = roleModelTiers[role] ?? 'balanced';
+  const tier = getAncillaryTierForRole(role);
   const tierModel = resolveAncillaryModelTier(tier, settings);
   const legacyModel = settings.getDynamic(`${subagentPrefix}Model`) as string | undefined;
   const legacyProvider = settings.getDynamic(`${subagentPrefix}Provider`) as string | undefined;
@@ -113,7 +107,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
   const model = isInherited(frontmatter.model)
-    ? (settings.getDynamic(`agent.${tier}Model`) as string | undefined) ?? legacyModel ?? tierModel.model
+    ? getTierModelPool(tier, settings)[0] ?? legacyModel ?? tierModel.model
     : frontmatter.model;
   const provider = isInherited(frontmatter.provider)
     ? (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? legacyProvider ?? tierModel.provider

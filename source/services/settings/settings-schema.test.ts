@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(151);
-  expect(new Set(exportedKeys).size).toBe(151);
+  expect(exportedKeys).toHaveLength(148);
+  expect(new Set(exportedKeys).size).toBe(148);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -175,14 +175,17 @@ it('accepts the exact maximum mentor samples and mentor pool size', () => {
   expect(() => SettingsSchema.parse({ agent: { mentorPool: [...mentorPool, { model: 'mentor-9' }] } })).toThrow();
 });
 
-it.each(['subagentExplorerPool', 'subagentWorkerPool', 'subagentLibrarianPool'] as const)(
-  'accepts the exact maximum pool size and rejects overflow for agent.%s',
+it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
+  'tier model settings are pools: strings normalize to one entry, max size is enforced for agent.%s',
   (key) => {
-    const pool = Array.from({ length: 8 }, (_, index) => ({ model: `role-${index + 1}` }));
+    const pool = Array.from({ length: 8 }, (_, index) => `role-${index + 1}`);
 
+    expect(SettingsSchema.parse({ agent: { [key]: 'single-model' } }).agent).toMatchObject({
+      [key]: ['single-model'],
+    });
     expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent).toMatchObject({ [key]: pool });
-    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, { model: 'role-9' }] } })).toThrow();
-    expect(AgentSettingsSchema.parse({})[key]).toEqual([]);
+    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, 'role-9'] } })).toThrow();
+    expect(AgentSettingsSchema.parse({})[key]).toBeUndefined();
   },
 );
 
@@ -481,13 +484,13 @@ it('SettingsSchema preserves optional flat ancillary model tiers and their provi
   });
 
   expect(parsed.agent).toMatchObject({
-    smartModel: 'smart-model',
+    smartModel: ['smart-model'],
     smartProvider: 'smart-provider',
-    balancedModel: 'balanced-model',
+    balancedModel: ['balanced-model'],
     balancedProvider: 'balanced-provider',
-    cheapModel: 'cheap-model',
+    cheapModel: ['cheap-model'],
     cheapProvider: 'cheap-provider',
-    choreModel: 'chore-model',
+    choreModel: ['chore-model'],
     choreProvider: 'chore-provider',
   });
   const defaults = AgentSettingsSchema.parse({});

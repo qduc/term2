@@ -368,7 +368,8 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
   ];
 
   for (const entry of entries) {
-    lines.push(`${entry.key}: ${entry.value} (${entry.source})`);
+    const value = Array.isArray(entry.value) ? entry.value.join(', ') : entry.value;
+    lines.push(`${entry.key}: ${value} (${entry.source})`);
   }
 
   return lines.join('\n');

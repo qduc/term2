@@ -1,28 +1,43 @@
 import { SETTING_KEYS } from '../settings/settings-schema.js';
+import type { AncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import type { SupportedSubagentRole } from './types.js';
 
 /**
- * Registry of model pool settings the settings UI opens a structured editor
- * for (`SubagentPoolMenuSession`), keyed by the setting that stores the
- * pool. `roleLabel` supplies the editor's copy ("Explorer Pool", "Inherit
- * explorer provider", ...).
+ * Each subagent role draws its model from one ancillary tier; the tier's
+ * model setting (`agent.<tier>Model`) is the role's round-robin model pool.
+ * Mentor fans a question out across its own `agent.mentorPool` entries
+ * (`MentorRunner`) instead of drawing from a tier.
+ */
+export const ROLE_ANCILLARY_TIERS: Record<Exclude<SupportedSubagentRole, 'mentor'>, AncillaryModelTier> = {
+  explorer: 'cheap',
+  worker: 'balanced',
+  librarian: 'cheap',
+};
+
+export function getAncillaryTierForRole(role: SupportedSubagentRole | string): AncillaryModelTier {
+  if (role === 'mentor') return 'smart';
+  return (ROLE_ANCILLARY_TIERS as Record<string, AncillaryModelTier | undefined>)[role] ?? 'balanced';
+}
+
+/**
+ * Model pool settings the settings UI opens a structured editor for
+ * (`SubagentPoolMenuSession`), keyed by the setting that stores the pool.
+ * `roleLabel` supplies the editor's copy ("Mentor Pool", "Smart Pool", ...).
  *
- * `role` ties the setting to a `SupportedSubagentRole` for pools the round-
- * robin `SubagentRolePoolSelector` actually resolves. Mentor is
- * deliberately omitted here even though it has a pool editor: mentor fans a
- * question out across every entry (`MentorRunner`) rather than round-
- * robining one entry per spawn, so it must never be looked up through this
- * role mapping.
+ * `entryShape` selects the editor's entry model: tier model pools hold plain
+ * model-id strings (`'models'`), while the mentor pool holds
+ * `{model, provider, reasoningEffort}` entries (`'entries'`).
  */
 export const SUBAGENT_POOL_SETTINGS: ReadonlyArray<{
   key: string;
   roleLabel: string;
-  role?: SupportedSubagentRole;
+  entryShape: 'entries' | 'models';
 }> = [
-  { key: SETTING_KEYS.AGENT_MENTOR_POOL, roleLabel: 'Mentor' },
-  { key: SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_POOL, roleLabel: 'Explorer', role: 'explorer' },
-  { key: SETTING_KEYS.AGENT_SUBAGENT_WORKER_POOL, roleLabel: 'Worker', role: 'worker' },
-  { key: SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_POOL, roleLabel: 'Librarian', role: 'librarian' },
+  { key: SETTING_KEYS.AGENT_MENTOR_POOL, roleLabel: 'Mentor', entryShape: 'entries' },
+  { key: SETTING_KEYS.AGENT_SMART_MODEL, roleLabel: 'Smart', entryShape: 'models' },
+  { key: SETTING_KEYS.AGENT_BALANCED_MODEL, roleLabel: 'Balanced', entryShape: 'models' },
+  { key: SETTING_KEYS.AGENT_CHEAP_MODEL, roleLabel: 'Cheap', entryShape: 'models' },
+  { key: SETTING_KEYS.AGENT_CHORE_MODEL, roleLabel: 'Chore', entryShape: 'models' },
 ];
 
 export const SUBAGENT_POOL_SETTING_KEYS: ReadonlySet<string> = new Set(
@@ -33,26 +48,47 @@ export function getSubagentPoolRoleLabel(settingKey: string): string {
   return SUBAGENT_POOL_SETTINGS.find((entry) => entry.key === settingKey)?.roleLabel ?? 'Subagent';
 }
 
-/** Maps a runtime role to its pool setting key, when one exists. */
+export function getSubagentPoolEntryShape(settingKey: string): 'entries' | 'models' {
+  return SUBAGENT_POOL_SETTINGS.find((entry) => entry.key === settingKey)?.entryShape ?? 'entries';
+}
+
+/**
+ * Maps a runtime role to its pool setting key (its tier's model setting).
+ * Mentor is excluded: it draws from `agent.mentorPool`, never a tier pool.
+ */
 export function getSubagentPoolSettingKeyForRole(role: SupportedSubagentRole): string | undefined {
-  return SUBAGENT_POOL_SETTINGS.find((entry) => entry.role === role)?.key;
+  if (role === 'mentor') return undefined;
+  const tier = getAncillaryTierForRole(role);
+  if (!tier) return undefined;
+  switch (tier) {
+    case 'smart':
+      return SETTING_KEYS.AGENT_SMART_MODEL;
+    case 'balanced':
+      return SETTING_KEYS.AGENT_BALANCED_MODEL;
+    case 'cheap':
+      return SETTING_KEYS.AGENT_CHEAP_MODEL;
+    case 'chore':
+      return SETTING_KEYS.AGENT_CHORE_MODEL;
+  }
 }
 
 /**
  * Fallback provider setting per pool: the "inherit" copy and the model
- * picker's default provider come from the role's own provider setting
- * (mentor: `agent.mentorProvider`; other roles: `agent.subagent<Role>Provider`).
+ * picker's default provider come from the pool's own provider setting
+ * (mentor: `agent.mentorProvider`; tiers: `agent.<tier>Provider`).
  */
 export function getSubagentPoolFallbackProviderKey(settingKey: string): string | undefined {
   switch (settingKey) {
     case SETTING_KEYS.AGENT_MENTOR_POOL:
       return SETTING_KEYS.AGENT_MENTOR_PROVIDER;
-    case SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_POOL:
-      return SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER;
-    case SETTING_KEYS.AGENT_SUBAGENT_WORKER_POOL:
-      return SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER;
-    case SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_POOL:
-      return SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER;
+    case SETTING_KEYS.AGENT_SMART_MODEL:
+      return SETTING_KEYS.AGENT_SMART_PROVIDER;
+    case SETTING_KEYS.AGENT_BALANCED_MODEL:
+      return SETTING_KEYS.AGENT_BALANCED_PROVIDER;
+    case SETTING_KEYS.AGENT_CHEAP_MODEL:
+      return SETTING_KEYS.AGENT_CHEAP_PROVIDER;
+    case SETTING_KEYS.AGENT_CHORE_MODEL:
+      return SETTING_KEYS.AGENT_CHORE_PROVIDER;
     default:
       return undefined;
   }

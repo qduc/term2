@@ -8,7 +8,7 @@ it('buildSettingsWithSources maps nested values and sources including optional u
     agent: {
       ...DEFAULT_SETTINGS.agent,
       temperature: undefined,
-      smartModel: 'smart-model',
+      smartModel: ['smart-model'],
       smartProvider: 'smart-provider',
       codex: {
         websocketFirstFrameTimeoutMs: 12_345,
@@ -47,7 +47,7 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(result.agent.model.source).toBe('cli');
   expect(result.agent.temperature.value).toBe(undefined);
   expect(result.agent.temperature.source).toBe('default');
-  expect(result.agent.smartModel.value).toBe('smart-model');
+  expect(result.agent.smartModel.value).toEqual(['smart-model']);
   expect(result.agent.smartModel.source).toBe('config');
   expect(result.agent.smartProvider.value).toBe('smart-provider');
   expect(result.agent.smartProvider.source).toBe('default');

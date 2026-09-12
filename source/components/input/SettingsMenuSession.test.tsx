@@ -177,7 +177,7 @@ it('selecting a free-form string setting seeds its value frame with the current 
   expect(controller.getSnapshot().stack[0]?.kind).toBe('settings');
   expect(controller.getSnapshot().editor).toMatchObject({ text: filterText, cursor: filterText.length });
 });
-it('does not seed a model-backed key even though it is a free-form string', async () => {
+it('does not seed a pool-backed key when opening the tier pool editor', async () => {
   const controller = buildController();
   const settingsService = createMockSettingsService({ 'agent.smartModel': 'claude-sonnet-x' });
 
@@ -207,9 +207,12 @@ it('does not seed a model-backed key even though it is a free-form string', asyn
   });
 
   const child = controller.getSnapshot().stack.at(-1);
-  // agent.smartModel routes to the settings-backed model frame, which owns its
-  // own selection state — the value text stays empty there (no seeding).
-  expect(child?.kind).toBe('model');
+  // agent.smartModel is a tier model pool: it routes to the pool editor,
+  // which owns its own selection state — the value text stays empty there
+  // (no seeding).
+  expect(child?.kind).toBe('subagent_pool');
+  expect((child as { settingKey?: string } | undefined)?.settingKey).toBe('agent.smartModel');
+  expect((child as { entryShape?: string } | undefined)?.entryShape).toBe('models');
   expect(controller.getSnapshot().editor.text).toBe('/settings agent.smartModel ');
   expect(controller.getSnapshot().editor.text).not.toContain('claude-sonnet-x');
 });

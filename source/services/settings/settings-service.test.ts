@@ -631,10 +631,12 @@ it('migrates legacy ancillary settings into tier settings without overwriting ne
     ],
     chore: [service.get('agent.choreModel'), service.get('agent.choreProvider')],
   }).toEqual({
-    smart: ['new-smart', 'legacy-smart-provider', 'high'],
-    balanced: ['legacy-worker', 'legacy-balanced-provider', 'medium'],
-    cheap: ['legacy-efficient', 'legacy-cheap-provider', 'low'],
-    chore: ['legacy-chore', 'legacy-chore-provider'],
+    // Tier model settings are pools; a legacy string value normalizes to a
+    // single-entry pool.
+    smart: [['new-smart'], 'legacy-smart-provider', 'high'],
+    balanced: [['legacy-worker'], 'legacy-balanced-provider', 'medium'],
+    cheap: [['legacy-efficient'], 'legacy-cheap-provider', 'low'],
+    chore: [['legacy-chore'], 'legacy-chore-provider'],
   });
 });
 
@@ -652,7 +654,7 @@ it.sequential('startup persists migrated ancillary tier settings', async () => {
     new SettingsService({ settingsDir, disableLogging: true });
 
     const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-    expect(persisted.agent.balancedModel).toBe('legacy-worker');
+    expect(persisted.agent.balancedModel).toEqual(['legacy-worker']);
     expect(persisted.agent.balancedReasoningEffort).toBe('high');
   });
 });

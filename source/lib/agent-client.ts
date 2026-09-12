@@ -768,6 +768,7 @@ export class AgentClient {
               executionContext: deps.executionContext,
               sessionContextService: this.#sessionContextService,
               skillsService: deps.skillsService,
+              readOnly: deps.readOnly,
             },
             agentOverride: agent,
             providerOverride: provider,

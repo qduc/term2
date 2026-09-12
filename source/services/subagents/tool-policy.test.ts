@@ -15,6 +15,7 @@ import type { SubagentDefinition } from './types.js';
 import {
   createMockLogger,
   createMockSettings,
+  createMockExecutionContext,
   createSessionContextService,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
@@ -615,6 +616,35 @@ describe('foreground nested worker shell auto-approval', () => {
         sandbox: 'unsandboxed',
       }),
     ).resolves.toContain('unsandboxed shell execution is not available to subagents');
+  });
+});
+
+describe('read-only worker shell construction', () => {
+  it('keeps a write-capable worker shell read-only', async () => {
+    const cwd = fs.mkdtempSync(path.join('/tmp', 'subagent-read-only-shell-'));
+    try {
+      const settings = createMockSettings({ 'sandbox.enabled': false });
+      const policy = new SubagentToolPolicy({
+        settings,
+        logger: createMockLogger(),
+        sessionContextService: createSessionContextService(),
+      });
+      const shell = new SubagentToolFactory({
+        settings,
+        logger: createMockLogger(),
+        executionContext: createMockExecutionContext(cwd),
+        toolPolicy: policy,
+        readOnly: true,
+      })
+        .buildToolDefinitions(createDefinition({ role: 'worker', canRunShell: true }), [], '', false, false)
+        .find((tool) => tool.name === 'shell');
+
+      expect(shell).toBeDefined();
+      await expect(shell!.execute({ command: 'printf blocked > blocked.txt' })).resolves.toMatch(/read-only|blocked/i);
+      expect(fs.existsSync(path.join(cwd, 'blocked.txt'))).toBe(false);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 

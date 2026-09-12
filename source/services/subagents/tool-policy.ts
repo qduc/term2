@@ -1177,6 +1177,7 @@ export class SubagentToolFactory {
           loggingService: this.#logger,
           executionContext,
           searchViaShell,
+          readOnly: this.#readOnly,
           nestedCompatibility: this.#nestedCompatibility,
         }),
         fsReadScope,

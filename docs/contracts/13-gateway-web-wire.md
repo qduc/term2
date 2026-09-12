@@ -19,8 +19,9 @@ and `source/services/conversation/conversation-events.ts`. ChatForge
 `backend/src/routes/agentGateway.js`, `backend/src/lib/agentProtocol.js`,
 `backend/src/lib/term2LocalControlBroker.js`, `frontend/lib/term2/event-adapter.ts`,
 `frontend/lib/term2/types.ts`, `frontend/lib/api/term2.ts`, `frontend/hooks/useTerm2Session.ts`.
-The ChatForge checkout is **not a git repository**, so every ChatForge claim below is
-pinned by file and symbol only, not by a revision.
+The ChatForge checkout is a git repository at `~/chat-term2-integration/chat`, on branch
+`integration/v1-chat`, HEAD `2757fbd87cce0153146b51cf279b9a140856bc7c`. Every ChatForge claim
+below is pinned to that revision, together with the file and symbol that carries it.
 
 ## 1. Routes
 
@@ -43,7 +44,7 @@ purpose assertion that must equal the route's purpose. The table's "Purpose" col
 | `POST /private/agent/v1/oauth/:provider/login` | `oauth_login` | — | `200` login result | `Term2LocalControlBroker.oauthLogin` |
 | `POST /private/agent/v1/oauth/:provider/select` | `oauth_select` | `{ accountId }` | `200` select result | `Term2LocalControlBroker.oauthSelect` |
 | `DELETE /private/agent/v1/oauth/:provider/accounts/:accountId` | `oauth_delete` | — | `200` delete result | `Term2LocalControlBroker.oauthDelete` |
-| `POST /private/agent/v1/sessions` | `session_create` | `{ workspaceId }`, and nothing else — `isSessionCreateBody` rejects other keys; `model`/`reasoningEffort`/`mode` produce `422 model_selection_deferred` | `201 { session }` **when `config.persistence` is present**; otherwise `200 { sessionId, workspaceId, accepted }` | BFF routes `POST /term2/sessions` and `POST /agent/sessions` → `createForwarder` |
+| `POST /private/agent/v1/sessions` | `session_create` | `{ workspaceId }`, and nothing else — `isSessionCreateBody` rejects other keys; `model`/`reasoningEffort`/`mode` produce `422 model_selection_deferred` | `201` in both branches — `{ session }` when `config.persistence` is present, otherwise `{ sessionId, workspaceId, accepted }` | BFF routes `POST /term2/sessions` and `POST /agent/sessions` → `createForwarder` |
 | `POST /` (legacy) | `session_create` | `null` | same as above | Not called: `safeRpcPath` requires the `/private/agent/v1/` prefix |
 | `GET /private/agent/v1/sessions` | `session_list` | `?limit=` and `?cursor=` | `200 { sessions: [{ id, workspaceId, status, createdAt, updatedAt, latestSequence }], nextCursor }` from `GatewaySessionIndex.list` | BFF route `GET /agent/sessions` → `createForwarder` (the BFF replaces its public cursor with the stored upstream cursor) |
 | `POST /private/agent/v1/sessions/:sessionId` | `session_read` | — | `200 { session }` — `toSessionProjection` | BFF routes `GET /agent/sessions/:sessionId` and `GET /term2/sessions/:sessionId`; `#requestOnce` forces the upstream method to POST for this purpose |
@@ -342,12 +343,15 @@ value through unchanged, so the browser sees it.
    `credential_invalid`, `flow_in_progress`, `not_persisted`, `local_owner_required`,
    `pairing_disabled`, `settings_not_allowed`. Also note the gateway's SSE cursor rejection
    code is `cursor_invalid` while the BFF's own pre-check emits `invalid_cursor`.
-6. **`session_create` depends on persistence being configured.** `expectedStatuses()`
-   requires 201 for `session_create`, but the gateway returns 201 with `{ session }` only
-   when `config.persistence` is set; without it the response is `200 { sessionId, workspaceId,
-   accepted }`, which the BFF converts to `gateway_unavailable`. So the M2 launcher must
-   always supply the persistence coordinator, or every session create fails at the BFF even
-   though the gateway answered successfully.
+6. **`session_create`'s body depends on persistence being configured; its status does not.**
+   Both branches return `201`, so the BFF's `expectedStatuses()` check passes either way. The
+   body differs: `{ session }` when `config.persistence` is set, otherwise
+   `{ sessionId, workspaceId, accepted }`. `validateSessionResponse` requires exactly a
+   `session` key (`exactKeys(value, new Set(['session']), ['session'])`), and `protocolFail()`
+   raises `Term2GatewayError('gateway_unavailable', ...)` — so the persistence-less body
+   reaches the browser as `503 gateway_unavailable` **even though the gateway created the
+   session successfully**, leaving an orphaned session behind. The M2 launcher must always
+   supply the persistence coordinator for session create to be usable.
 7. **The session projection is not the source of `sessionConfig`.** The gateway's
    `toSessionProjection` has no `sessionConfig` field; the BFF attaches one from its own
    in-memory `sessionConfigStore` (populated by `rememberSessionConfig` from

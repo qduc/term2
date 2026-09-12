@@ -12,6 +12,8 @@ const providerId = 'm1-scripted-provider';
 let observedCredential: unknown;
 let observedAutoApprove: unknown;
 let observedSandbox: unknown;
+let observedTools: string[] = [];
+let observedRunCodeDescription = '';
 
 const provider: ProviderDefinition = {
   id: providerId,
@@ -26,7 +28,11 @@ const provider: ProviderDefinition = {
       // without making host approval/sandbox posture part of the session.
 
       stream: async function* (request: any) {
-        void request;
+        observedTools = (request.tools ?? []).map((tool: any) => tool.name ?? tool.function?.name);
+        observedRunCodeDescription = String(
+          (request.tools ?? []).find((tool: any) => (tool.name ?? tool.function?.name) === 'run_code')?.description ??
+            '',
+        );
         yield { type: 'text_delta' as const, text: 'real runtime response' };
         yield {
           type: 'completion' as const,
@@ -102,6 +108,53 @@ describe('production gateway runtime factory', () => {
       mapConversationEvent({ type: 'final', finalText: 'real runtime response' }, 'm1-turn', 'm1-session')?.type,
     ).toBe('turn_completed');
     await session.dispose();
+    await factory.shutdown();
+  });
+
+  it('composes read-only and read-write tool surfaces from the gateway grant', async () => {
+    registerProvider(provider);
+    const settings = new SettingsService({
+      settingsDir: tempRoot('f1-settings-'),
+      disableFilePersistence: true,
+      disableLogging: true,
+      env: {},
+      cli: {},
+    });
+    settings.set('agent.provider', providerId, { persist: false });
+    settings.set('agent.model', 'm1-scripted-model', { persist: false });
+    const workspace = tempRoot('f1-workspace-');
+    const factory = createProductionRuntimeFactory({
+      settingsAuthority: settings,
+      tmpDir: tempRoot('f1-data-'),
+      sandboxAvailable: true,
+      allowWrite: true,
+    });
+    const run = async (sessionId: string, access: 'read' | 'read_write') => {
+      settings.set('agent.model', 'm1-scripted-model-' + access, { persist: false });
+      const session = await factory.create({
+        sessionId,
+        ownerUserId: sessionId,
+        workspaceId: sessionId,
+        grantVersion: 1,
+        canonicalRoot: workspace,
+        access,
+      });
+      expect(session.resources.settings.toolPolicy?.allowWrite).toBe(access === 'read_write');
+      const prepared = await session.prepareMessage('inspect tools', { turnId: sessionId, clientRequestId: sessionId });
+      if (prepared.kind !== 'prepared') throw new Error('test setup');
+      await session.commitMessage(prepared.leaseId);
+      await vi.waitFor(() => expect(observedTools.length).toBeGreaterThan(0));
+      const names = [...observedTools];
+      await session.dispose();
+      return names;
+    };
+
+    const readOnlyTools = await run('f1-read', 'read');
+    expect(readOnlyTools).not.toEqual(expect.arrayContaining(['apply_patch', 'create_file', 'search_replace']));
+    expect(observedRunCodeDescription).not.toContain('tools.apply_patch');
+    const readWriteTools = await run('f1-write', 'read_write');
+    expect(readWriteTools).toEqual(expect.arrayContaining(['run_code']));
+    expect(observedRunCodeDescription).toContain('tools.create_file');
     await factory.shutdown();
   });
 });

@@ -239,6 +239,7 @@ export function createProductionRuntimeFactory(input: {
       toolLifecycle,
       continuationProjectionMode,
       sessionSettingsSnapshot,
+      readOnly,
     }) => {
       const client = new AgentClient({
         model: sessionSettingsSnapshot.modelId,
@@ -252,6 +253,7 @@ export function createProductionRuntimeFactory(input: {
           sessionContextService,
           skillsService,
           requestCapture,
+          readOnly,
         },
         toolOwnership,
         postExecutePauseCapability,

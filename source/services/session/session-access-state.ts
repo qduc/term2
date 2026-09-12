@@ -18,6 +18,10 @@ export class SessionAccessState {
 
   constructor(private readonly settings: ISettingsService, private readonly options: { allowEdit?: boolean } = {}) {}
 
+  get isReadOnly(): boolean {
+    return this.options.allowEdit === false;
+  }
+
   recordCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
     this.#createdFiles.add(path.resolve(baseDir, file));
   }

@@ -37,6 +37,7 @@ export interface SubagentBridgeDeps {
   toolOwnership: ToolOwnershipRegistry;
   /** Session-owned delivery path for approvals after foreground adoption. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
+  readOnly?: boolean;
 }
 
 type SubagentEventScope = 'foreground' | 'background';
@@ -76,6 +77,7 @@ export class SubagentBridge {
         createClient: deps.createClient,
         skillsService: deps.skillsService,
         toolOwnership: deps.toolOwnership,
+        readOnly: deps.readOnly,
         ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
       });
     }

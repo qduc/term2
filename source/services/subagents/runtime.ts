@@ -29,6 +29,7 @@ export interface SubagentRuntimeDeps {
   nestedCompatibility?: NestedToolCompatibilityState;
   /** Session-owned queue/control sink for pauses from adopted child runs. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
+  readOnly?: boolean;
 }
 
 export interface SubagentRuntime {
@@ -76,6 +77,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     toolPolicy,
     skillsService: deps.skillsService,
     nestedCompatibility,
+    readOnly: deps.readOnly,
   });
 
   const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();

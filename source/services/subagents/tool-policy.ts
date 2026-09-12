@@ -1033,6 +1033,7 @@ export class SubagentToolFactory {
   #skillsService?: SkillsService;
   #memoryCapabilities: MemoryCapabilityBuilder;
   #nestedCompatibility?: NestedToolCompatibilityState;
+  #readOnly: boolean;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -1041,6 +1042,7 @@ export class SubagentToolFactory {
     toolPolicy: SubagentToolPolicy;
     skillsService?: SkillsService;
     nestedCompatibility?: NestedToolCompatibilityState;
+    readOnly?: boolean;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;
@@ -1048,6 +1050,7 @@ export class SubagentToolFactory {
     this.#toolPolicy = deps.toolPolicy;
     this.#skillsService = deps.skillsService;
     this.#nestedCompatibility = deps.nestedCompatibility;
+    this.#readOnly = deps.readOnly ?? false;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
@@ -1179,7 +1182,7 @@ export class SubagentToolFactory {
         fsReadScope,
       );
 
-      if (definition.canWrite) {
+      if (definition.canWrite && !this.#readOnly) {
         tools.push(
           nestedApprovals
             ? this.#toolPolicy.wrapNestedShellTool(shellDef, cwd)
@@ -1190,7 +1193,7 @@ export class SubagentToolFactory {
       }
     }
 
-    if (definition.canWrite) {
+    if (definition.canWrite && !this.#readOnly) {
       const isGpt5 = shouldPreferPatchEditingModel(definition.model);
       if (isGpt5) {
         tools.push(

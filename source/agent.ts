@@ -467,7 +467,12 @@ export const getAgentDefinition = (
 
   // Worktree switching re-roots the local filesystem; in remote mode the remote
   // directory owns the execution root, so the tools have nothing to lease.
-  if ((filesystemReadEnabled || filesystemWriteEnabled) && executionContext && !executionContext.isRemote()) {
+  if (
+    !readOnly &&
+    (filesystemReadEnabled || filesystemWriteEnabled) &&
+    executionContext &&
+    !executionContext.isRemote()
+  ) {
     const worktreeTools = createWorktreeToolDefinitions({
       executionContext,
       getRunningJobs: () =>

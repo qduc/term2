@@ -69,13 +69,31 @@ const noopPatchHealing = async (): Promise<{ wasModified: false }> => ({
   wasModified: false,
 });
 
-function createTool(settingsService = createMockSettingsService()) {
+function createTool(settingsService = createMockSettingsService(), sessionAccess?: SessionAccessState) {
   return createApplyPatchToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
     patchHealing: noopPatchHealing,
+    sessionAccess,
   });
 }
+
+it.sequential('read-only session refuses an in-workspace write without approval', async () => {
+  await withTempDir(async (dir) => {
+    const access = new SessionAccessState(createMockSettingsService(), { allowEdit: false });
+    const tool = createTool(createMockSettingsService(), access);
+    expect(
+      await tool.needsApproval({
+        patch: ['*** Begin Patch', '*** Add File: blocked.txt', '+content', '*** End Patch'].join('\\n'),
+      }),
+    ).toBe(false);
+    const result = await tool.execute({
+      patch: ['*** Begin Patch', '*** Add File: blocked.txt', '+content', '*** End Patch'].join('\\n'),
+    });
+    expect(String(result)).toContain('unavailable in a read-only session');
+    await expect(fs.access(path.join(dir, 'blocked.txt'))).rejects.toThrow();
+  });
+});
 
 it.sequential('create_file: creates a new file with content', async () => {
   await withTempDir(async (dir) => {

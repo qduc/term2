@@ -243,6 +243,7 @@ export function createApplyPatchToolDefinition(deps: {
     parameters: applyPatchParametersSchema,
     strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {
+      if (sessionAccess?.isReadOnly) return false;
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         loggingService.security('apply_patch needsApproval: auto-approved in YOLO mode', {
           operationCount: getApplyPatchOperations(params).length,
@@ -404,6 +405,7 @@ export function createApplyPatchToolDefinition(deps: {
       }
     },
     execute: async (params, context) => {
+      if (sessionAccess?.isReadOnly) return 'Error: apply_patch is unavailable in a read-only session.';
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();

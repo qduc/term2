@@ -25,6 +25,34 @@ const makeTemp = () => {
   tempRoots.push(root);
   return root;
 };
+const assistantMessageItem = (text: string) => ({
+  role: 'assistant',
+  type: 'message',
+  status: 'completed',
+  content: [{ type: 'output_text', text }],
+});
+
+/**
+ * Production-shaped agent client: a completed turn commits its assistant
+ * message to canonical history through the stream's run items. The default
+ * mock returns no items, so a turn it "completes" leaves only the user message
+ * in history — which is exactly the shape of a turn that committed nothing.
+ */
+const completedTurnClient = (): ConversationAgentClient =>
+  ({
+    chat: async () => '',
+    abort: () => {},
+    setModel: () => {},
+    addToolInterceptor: () => () => {},
+    startStream: async () => {
+      const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
+      stream.finalOutput = 'assistant reply';
+      stream.newItems = [assistantMessageItem('assistant reply')];
+      stream.output = [assistantMessageItem('assistant reply')];
+      return stream;
+    },
+    continueRunStream: async () => createMockStream([]),
+  } as ConversationAgentClient);
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const privateKey = keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' }).toString();
@@ -110,7 +138,12 @@ describe('Gateway commands RPC route', () => {
     }
   });
 
-  function setupGateway(options?: { createAgentClient?: () => ConversationAgentClient; auditRecords?: unknown[] }) {
+  function setupGateway(options?: {
+    createAgentClient?: () => ConversationAgentClient;
+    auditRecords?: unknown[];
+    /** Catalogued model for the session settings; the window gates compaction. */
+    modelId?: string;
+  }) {
     const root = makeTemp();
     const { manifestPath } = createTestManifest(root);
     const boundaryProbe = (canonicalRoot: string, access: 'read' | 'read_write') => ({
@@ -148,7 +181,7 @@ describe('Gateway commands RPC route', () => {
           cli: {},
         });
         settings.set('agent.provider', defaults.providerId, { persist: false });
-        settings.set('agent.model', 'gpt-4', { persist: false });
+        settings.set('agent.model', options?.modelId ?? 'gpt-4', { persist: false });
         settings.set('agent.contextCompaction.compactThresholdTokens', 10_000, { persist: false });
         return settings;
       },
@@ -467,7 +500,67 @@ describe('Gateway commands RPC route', () => {
     }
   });
 
-  it('starts a turn on retry-turn and records assistant_started … turn_completed in journal', async () => {
+  it('refuses retry-turn when the last turn committed output', async () => {
+    const { gateway, token, socketPath, persistence } = setupGateway({ createAgentClient: completedTurnClient });
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      const submitted = await rpc(
+        socketPath,
+        token('message_submit', sessionId),
+        { text: 'initial question', clientRequestId: 'msg-succeeded' },
+        `/private/agent/v1/sessions/${sessionId}/messages`,
+      );
+      expect(submitted.status).toBe(202);
+
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8').split('\n').filter(Boolean);
+          return events.some((line) => (JSON.parse(line) as { type: string }).type === 'turn_completed');
+        })
+        .toBe(true);
+
+      // The turn committed output, so there is no failed turn to replay.
+      const retryResult = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'retry-turn', clientRequestId: 'retry-succeeded' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+
+      expect(retryResult.status).toBe(200);
+      expect(retryResult.body).toEqual({
+        commandId: 'retry-turn',
+        outcome: 'nothing_to_retry',
+      });
+
+      // The refusal settles the admission rather than admitting a turn whose
+      // replay cannot start.
+      const admission = persistence.index.admission('user-a', sessionId, 'retry-succeeded');
+      expect(admission?.turnId).toBe('nothing_to_retry');
+      expect(admission?.state).toBe('terminal');
+
+      // Nothing was admitted: the journal still holds exactly one started turn.
+      const events = readFileSync(eventPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string });
+      expect(events.filter((event) => event.type === 'assistant_started')).toHaveLength(1);
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('admits retry-turn when the last turn committed nothing, and records assistant_started … turn_completed in journal', async () => {
     const { gateway, token, socketPath, persistence } = setupGateway();
     await gateway.start();
     try {
@@ -479,7 +572,8 @@ describe('Gateway commands RPC route', () => {
       );
       const sessionId = (created.body as { session: { id: string } }).session.id;
 
-      // Submit first turn so session has history
+      // A turn that committed nothing leaves its user message as the last
+      // canonical item, which is the only retryable shape.
       const submitted = await rpc(
         socketPath,
         token('message_submit', sessionId),
@@ -841,6 +935,192 @@ describe('Gateway commands RPC route', () => {
         tokensAfter: 450,
         replayed: true,
       });
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('settles a retry that resolves null after admission instead of stranding assistant_started', async () => {
+    const { gateway, token, socketPath, persistence } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      // History whose last turn committed no output, so the retry is admitted.
+      const submitted = await rpc(
+        socketPath,
+        token('message_submit', sessionId),
+        { text: 'question with no committed answer', clientRequestId: 'msg-null' },
+        `/private/agent/v1/sessions/${sessionId}/messages`,
+      );
+      expect(submitted.status).toBe(202);
+
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8').split('\n').filter(Boolean);
+          return events.some((line) => (JSON.parse(line) as { type: string }).type === 'turn_completed');
+        })
+        .toBe(true);
+
+      const original = ConversationService.prototype.retryLastFailedTurn;
+      ConversationService.prototype.retryLastFailedTurn = async function (
+        options?: Parameters<typeof ConversationService.prototype.retryLastFailedTurn>[0],
+      ) {
+        options?.onAdmission?.();
+        return null;
+      };
+
+      try {
+        const retryResult = await rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'retry-turn', clientRequestId: 'retry-null' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+
+        // The HTTP request is answered from the admission, and the failure is
+        // reported through the journal rather than left as a stranded turn.
+        expect(retryResult.status).toBe(200);
+        expect(retryResult.body).toMatchObject({ commandId: 'retry-turn', outcome: 'accepted' });
+        const retryTurnId = (retryResult.body as { turnId: string }).turnId;
+
+        await expect
+          .poll(() => {
+            const events = readFileSync(eventPath, 'utf8')
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => JSON.parse(line) as { type: string; payload?: { turnId?: string } });
+            return events.filter((event) => event.payload?.turnId === retryTurnId).map((event) => event.type);
+          })
+          .toEqual(['assistant_started', 'turn_failed']);
+
+        const admission = persistence.index.admission('user-a', sessionId, 'retry-null');
+        expect(admission?.state).toBe('terminal');
+        expect(admission?.result).toBe('failed');
+      } finally {
+        ConversationService.prototype.retryLastFailedTurn = original;
+      }
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('reports not_reduced when a compaction grows the context', async () => {
+    const { gateway, token, socketPath } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      const original = ConversationService.prototype.compactContext;
+      ConversationService.prototype.compactContext = async () =>
+        'Context compacted locally (60 → 360 estimated tokens).';
+
+      try {
+        const first = await rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'compact', clientRequestId: 'compact-grown' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+        expect(first.status).toBe(200);
+        expect(first.body).toEqual({
+          commandId: 'compact',
+          outcome: 'not_reduced',
+          tokensBefore: 60,
+          tokensAfter: 360,
+        });
+
+        // The recorded outcome decodes on replay instead of failing as an
+        // unrecognized compaction state.
+        const replayed = await rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'compact', clientRequestId: 'compact-grown' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+        expect(replayed.status).toBe(200);
+        expect(replayed.body).toMatchObject({
+          commandId: 'compact',
+          outcome: 'not_reduced',
+          tokensBefore: 60,
+          tokensAfter: 360,
+          replayed: true,
+        });
+      } finally {
+        ConversationService.prototype.compactContext = original;
+      }
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('journals compaction lifecycle events for a command issued outside a turn', async () => {
+    const { gateway, token, socketPath, persistence } = setupGateway({ modelId: 'gpt-4-turbo' });
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+
+      // Local compaction needs at least three genuine user turns.
+      for (const [index, clientRequestId] of ['msg-compact-1', 'msg-compact-2', 'msg-compact-3'].entries()) {
+        const submitted = await rpc(
+          socketPath,
+          token('message_submit', sessionId),
+          { text: `compaction question ${index}`, clientRequestId },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(202);
+        const expected = index + 1;
+        await expect
+          .poll(() => {
+            const events = readFileSync(eventPath, 'utf8').split('\n').filter(Boolean);
+            return events.filter((line) => (JSON.parse(line) as { type: string }).type === 'turn_completed').length;
+          })
+          .toBe(expected);
+      }
+
+      const compact = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'compact-events' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(compact.status).toBe(200);
+      const compactBody = compact.body as { outcome: string; tokensBefore?: number; tokensAfter?: number };
+      expect(compactBody.outcome).toBe('not_reduced');
+      expect(compactBody.tokensAfter).toBeGreaterThanOrEqual(compactBody.tokensBefore!);
+
+      const events = readFileSync(eventPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; payload?: { turnId?: string } });
+      const started = events.filter((event) => event.type === 'context_compaction_started');
+      const completed = events.filter((event) => event.type === 'context_compaction_completed');
+      expect(started).toHaveLength(1);
+      expect(completed).toHaveLength(1);
+      expect(started[0]?.payload?.turnId).toEqual(expect.any(String));
+      expect(started[0]?.payload?.turnId).toBe(completed[0]?.payload?.turnId);
     } finally {
       await gateway.shutdown(100);
     }

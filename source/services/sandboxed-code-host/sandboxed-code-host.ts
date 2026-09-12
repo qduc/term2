@@ -73,6 +73,20 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
     let workPaused = false;
     let workRemainingMs = limits.timeoutMs;
     let workDeadline = Date.now() + workRemainingMs;
+    let admissionClosed = false;
+    let closeSent = false;
+    let bodyTerminal:
+      | { kind: 'complete'; output: JsonValue; voidOutput?: boolean }
+      | { kind: 'error'; error: { message?: unknown }; syntax?: boolean }
+      | null = null;
+    const admittedCalls = new Map<
+      string,
+      {
+        handler: CapabilityHandler<any>;
+        prepared: unknown;
+        context: { callId: number; requestId: string; signal: AbortSignal };
+      }
+    >();
     const delayUntil = (deadline: number) => Math.max(0, Math.min(deadline - Date.now(), MAX_TIMER_DELAY_MS));
     const originals = entries.map(([, handler]) => ({
       handler,
@@ -102,13 +116,23 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         resolve(value);
       };
       const fail = (code: HostErrorCode, message: string) => finish(failure(code, message) as HostResult);
+      const markUnsettledUnknown = (reason: string) => {
+        for (const [requestId, call] of admittedCalls) {
+          call.handler.onAborted?.(call.prepared, call.context, reason);
+          admittedCalls.delete(requestId);
+        }
+      };
+      const abortAndFail = (code: HostErrorCode, message: string) => {
+        markUnsettledUnknown('did not settle before the script run ended');
+        controller.abort();
+        fail(code, message);
+      };
       const armWorkClock = () => {
         if (workTimer) clearTimeout(workTimer);
         workTimer = undefined;
         if (workPaused) return;
         workTimer = setTimeout(() => {
-          controller.abort();
-          fail('timeout', `${subject} exceeded its configured timeout`);
+          abortAndFail('timeout', `${subject} exceeded its configured timeout`);
         }, delayUntil(workDeadline));
       };
       const pauseWorkClock = () => {
@@ -146,11 +170,10 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           reevaluatePause();
         };
       }
-      failFromParentAbort = () => fail('cancelled', `${subject} was cancelled by its parent`);
+      failFromParentAbort = () => abortAndFail('cancelled', `${subject} was cancelled by its parent`);
       armWorkClock();
       longStopTimer = setTimeout(() => {
-        controller.abort();
-        fail('deadline', `${subject} exceeded its deadline`);
+        abortAndFail('deadline', `${subject} exceeded its deadline`);
       }, delayUntil(Date.now() + Math.max(limits.timeoutMs, LONG_STOP_FLOOR_MS)));
       if (input.signal?.aborted) onAbort();
       input.signal?.addEventListener('abort', onAbort, { once: true });
@@ -185,7 +208,75 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           }
           return;
         }
+        const maybeCloseWorker = () => {
+          if (!bodyTerminal || admittedCalls.size > 0 || closeSent || settled) return;
+          closeSent = true;
+          worker.postMessage({ type: 'workflow.close' });
+        };
+        if (message?.type === 'workflow.body-complete') {
+          admissionClosed = true;
+          bodyTerminal = {
+            kind: 'complete',
+            output: message.output,
+            ...(message.voidOutput === true ? { voidOutput: true } : {}),
+          };
+          maybeCloseWorker();
+          return;
+        }
+        if (message?.type === 'workflow.body-error') {
+          admissionClosed = true;
+          bodyTerminal = { kind: 'error', error: message.error, syntax: message.syntax };
+          maybeCloseWorker();
+          return;
+        }
+        if (message?.type === 'workflow.settled') {
+          const unhandled = Array.isArray(message.unhandled)
+            ? message.unhandled.filter(
+                (entry: any) =>
+                  entry &&
+                  typeof entry.requestId === 'string' &&
+                  typeof entry.message === 'string' &&
+                  entry.message.length > 0,
+              )
+            : [];
+          if (!bodyTerminal) {
+            fail('runtime_error', `${subject} completed without a script-body result`);
+            return;
+          }
+          if (bodyTerminal.kind === 'error') {
+            const errorMessage = safeMessage(bodyTerminal.error?.message ?? `${subject} failed`);
+            fail(
+              bodyTerminal.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
+              errorMessage,
+            );
+          } else if (unhandled.length > 0) {
+            const details = unhandled.map((entry: any) => `${entry.requestId}: ${entry.message}`).join('; ');
+            fail('runtime_error', `unhandled_nested_failure: ${details}`);
+          } else if (!isJsonValue(bodyTerminal.output)) {
+            fail('invalid_output', `${subject} return value is not JSON-safe`);
+          } else if (bytes(bodyTerminal.output) > limits.maxOutputBytes) {
+            fail(
+              'invalid_output',
+              `${subject} returned ${bytes(bodyTerminal.output)} bytes, over the ${
+                limits.maxOutputBytes
+              }-byte limit. ` +
+                `Return less per call: select the fields you need, summarise instead of returning full contents, ` +
+                `or process the input in batches across several calls.`,
+            );
+          } else {
+            finish({
+              ok: true,
+              output: bodyTerminal.output,
+              ...(bodyTerminal.voidOutput === true ? { voidOutput: true } : {}),
+            });
+          }
+          return;
+        }
+        // Keep the old completion messages as a small compatibility seam for
+        // custom worker factories. The built-in worker uses body-complete plus
+        // settled so normal completion cannot outrun admitted calls.
         if (message?.type === 'workflow.complete') {
+          admissionClosed = true;
           // Size and JSON-safety are reported separately: a model told only
           // "must be JSON-safe and within the size limit" cannot tell whether
           // to change the shape of its result or the amount of it. Only the
@@ -206,6 +297,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           return;
         }
         if (message?.type === 'workflow.error') {
+          admissionClosed = true;
           const errorMessage = safeMessage(message.error?.message ?? `${subject} failed`);
           fail(
             message.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
@@ -214,6 +306,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           return;
         }
         if (typeof message?.type !== 'string' || !message.type.endsWith('.run')) return;
+        if (admissionClosed) return;
         const name = message.type.slice(0, -'.run'.length);
         const handler = input.capabilities[name];
         const ledger = ledgers.get(name);
@@ -261,26 +354,39 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           signal: controller.signal,
         };
         handler.onAdmitted?.(prepared, callContext);
+        admittedCalls.set(callContext.requestId, { handler, prepared, context: callContext });
 
         const releasePermit = await ledger.acquire(handler.lane?.(prepared) ?? 'default');
         if (!releasePermit) return;
         if (settled || controller.signal.aborted) {
+          if (admittedCalls.delete(callContext.requestId))
+            handler.onAborted?.(prepared, callContext, 'did not settle before the script run ended');
           releasePermit();
           return;
         }
         try {
           const outcome = await handler.invoke(prepared, callContext);
-          if (outcome.kind === 'fail') fail(outcome.code, outcome.message);
-          else reply(outcome.result);
+          if (admittedCalls.delete(callContext.requestId)) {
+            if (outcome.kind === 'fail') fail(outcome.code, outcome.message);
+            else reply(outcome.result);
+          }
         } catch (error) {
-          fail('runtime_error', safeMessage(error));
+          if (admittedCalls.delete(callContext.requestId)) fail('runtime_error', safeMessage(error));
         } finally {
           releasePermit();
+          maybeCloseWorker();
         }
       });
-      worker.once('error', (error) => fail('sandbox_unavailable', `${subject} sandbox failed: ${safeMessage(error)}`));
+      worker.once('error', (error) => {
+        if (settled) return;
+        markUnsettledUnknown('did not settle before the script run ended');
+        fail('sandbox_unavailable', `${subject} sandbox failed: ${safeMessage(error)}`);
+      });
       worker.once('exit', (code) => {
-        if (!settled) fail('sandbox_unavailable', `${subject} sandbox exited unexpectedly (${code})`);
+        if (!settled) {
+          markUnsettledUnknown('did not settle before the script run ended');
+          fail('sandbox_unavailable', `${subject} sandbox exited unexpectedly (${code})`);
+        }
       });
     });
 

@@ -223,6 +223,8 @@ const clipReason = (reason: string): string =>
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
+  /** Stable identity for an admitted call; pre-admission validation has none. */
+  callId?: string;
   tool: string;
   outcome:
     | 'ok'
@@ -234,7 +236,8 @@ export interface RunCodeCallRecord {
     | 'unknown_tool'
     | 'invalid_params'
     | 'prohibited'
-    | 'describe';
+    | 'describe'
+    | 'unknown';
   durationMs: number;
   directlyCallable?: boolean;
 }
@@ -650,6 +653,7 @@ export function createRunCodeToolDefinition(
       // a script cannot catch, relabel, or contradict an observed outcome.
       const receipts: RunCodeActionReceipt[] = [];
       const pendingReceiptByCallId = new Map<string, number>();
+      const abortedCallIds = new Set<string>();
       let rejectedSeq = 0;
       const output: string[] = [];
       const sessionId = getConversationSessionId(context);
@@ -660,8 +664,15 @@ export function createRunCodeToolDefinition(
         outcome: RunCodeCallRecord['outcome'],
         started: number,
         directlyCallable?: boolean,
+        callId?: string,
       ) => {
-        calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
+        calls.push({
+          tool,
+          outcome,
+          durationMs: Date.now() - started,
+          directlyCallable,
+          ...(callId ? { callId } : {}),
+        });
         if (outcome === 'describe') return;
         writeNestedCallRecord(
           tool,
@@ -679,6 +690,7 @@ export function createRunCodeToolDefinition(
         outcome: RunCodeActionOutcome,
         reason?: string,
       ): void => {
+        if (abortedCallIds.has(callId)) return;
         const pendingIndex = pendingReceiptByCallId.get(callId);
         if (pendingIndex !== undefined) {
           receipts[pendingIndex] = {
@@ -738,6 +750,14 @@ export function createRunCodeToolDefinition(
           const callId = `${bridgeRunId}:${callContext.callId}`;
           pendingReceiptByCallId.set(callId, receipts.length);
           receipts.push({ callId, tool: prepared.tool.name, outcome: 'unknown' });
+        },
+        onAborted: (prepared, callContext, reason) => {
+          const callId = `${bridgeRunId}:${callContext.callId}`;
+          abortedCallIds.add(callId);
+          record(prepared.tool.name, 'unknown', prepared.started, undefined, callId);
+          if (isActionTool(prepared.tool.name)) {
+            recordReceipt(callId, prepared.tool.name, 'unknown', reason);
+          }
         },
         prepare: async (payload) => {
           const started = Date.now();
@@ -899,7 +919,7 @@ export function createRunCodeToolDefinition(
                     prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
                 });
                 if (resolution.kind === 'approved') {
-                  record(prepared.tool.name, 'ok', prepared.started);
+                  record(prepared.tool.name, 'ok', prepared.started, undefined, `${bridgeRunId}:${callContext.callId}`);
                   if (isActionTool(prepared.tool.name)) {
                     const semantic = ACTION_SEMANTICS[prepared.tool.name](resolution.result);
                     recordReceipt(
@@ -921,7 +941,13 @@ export function createRunCodeToolDefinition(
                   };
                 }
                 if (resolution.kind === 'failed') {
-                  record(prepared.tool.name, 'error', prepared.started);
+                  record(
+                    prepared.tool.name,
+                    'error',
+                    prepared.started,
+                    undefined,
+                    `${bridgeRunId}:${callContext.callId}`,
+                  );
                   const message =
                     resolution.error instanceof Error ? resolution.error.message : String(resolution.error);
                   if (isActionTool(prepared.tool.name)) {
@@ -929,7 +955,13 @@ export function createRunCodeToolDefinition(
                   }
                   return failed(message);
                 }
-                record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
+                record(
+                  prepared.tool.name,
+                  'approval_required',
+                  prepared.started,
+                  isDirectlyCallable(prepared.tool),
+                  `${bridgeRunId}:${callContext.callId}`,
+                );
                 if (isActionTool(prepared.tool.name)) {
                   recordReceipt(
                     `${bridgeRunId}:${callContext.callId}`,
@@ -952,7 +984,13 @@ export function createRunCodeToolDefinition(
                 ? 'interceptor_denied'
                 : 'approval_required';
             const directlyCallable = isDirectlyCallable(prepared.tool);
-            record(prepared.tool.name, outcome, prepared.started, directlyCallable);
+            record(
+              prepared.tool.name,
+              outcome,
+              prepared.started,
+              directlyCallable,
+              `${bridgeRunId}:${callContext.callId}`,
+            );
             if (isActionTool(prepared.tool.name)) {
               const denialReason =
                 decision.kind === 'unknown'
@@ -984,7 +1022,7 @@ export function createRunCodeToolDefinition(
               scripted: true,
             });
             const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
-            record(prepared.tool.name, 'ok', started);
+            record(prepared.tool.name, 'ok', started, undefined, callId);
             if (isActionTool(prepared.tool.name)) {
               const semantic = ACTION_SEMANTICS[prepared.tool.name](result);
               recordReceipt(callId, prepared.tool.name, semantic.outcome, semantic.reason);
@@ -1000,7 +1038,7 @@ export function createRunCodeToolDefinition(
               result: serialized as JsonValue,
             };
           } catch (error) {
-            record(prepared.tool.name, 'error', started);
+            record(prepared.tool.name, 'error', started, undefined, callId);
             const message = error instanceof Error ? error.message : String(error);
             if (isActionTool(prepared.tool.name)) {
               recordReceipt(callId, prepared.tool.name, 'failed', message);

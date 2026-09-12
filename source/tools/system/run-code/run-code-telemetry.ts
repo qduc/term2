@@ -124,6 +124,7 @@ const NESTED_BUCKET_BY_OUTCOME: Record<RunCodeCallRecord['outcome'], NestedBucke
   invalid_params: 'invalidParams',
   prohibited: 'prohibited',
   describe: 'schemaLookups',
+  unknown: 'otherFailures',
 };
 
 type NestedBucket = Exclude<keyof RunCodeNestedCallCounts, 'calls' | 'schemaLookups'>;

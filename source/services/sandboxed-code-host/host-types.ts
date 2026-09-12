@@ -85,6 +85,8 @@ export interface CapabilityHandler<Prepared = unknown> {
   invoke(prepared: Prepared, context: CapabilityCallContext): Promise<CapabilityOutcome>;
   /** Fires when a call is admitted, before it runs. Used for run bookkeeping. */
   onAdmitted?(prepared: Prepared, context: CapabilityCallContext): void;
+  /** Fires when an admitted call cannot settle before an abort or worker failure. */
+  onAborted?(prepared: Prepared, context: CapabilityCallContext, reason: string): void;
   /**
    * Nested-approval wait started. The host keys its waiting-set by
    * {@link CapabilityCallContext.requestId}. Missing {@link onResumed} is work.

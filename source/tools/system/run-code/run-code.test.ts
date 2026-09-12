@@ -1368,9 +1368,7 @@ describe('run_code', () => {
   });
 
   describe('admitted nested-call settlement', () => {
-    // Milestone 0 contract pins. These are expected failures until the shared
-    // host makes admission create settlement debt; remove `.fails` in M1.
-    it.fails('drains an unawaited successful call before returning', async () => {
+    it('drains an unawaited successful call before returning', async () => {
       const started = deferred<void>();
       const release = deferred<string>();
       const slow = tool({
@@ -1402,7 +1400,7 @@ describe('run_code', () => {
       expect(output).toContain('[1 tool call: slow]');
     });
 
-    it.fails('reports an unobserved nested rejection as unhandled_nested_failure', async () => {
+    it('reports an unobserved nested rejection as unhandled_nested_failure', async () => {
       const started = deferred<void>();
       const release = deferred<string>();
       const slow = tool({
@@ -1427,7 +1425,7 @@ describe('run_code', () => {
       expect(output).toContain('[1 tool call: slow]');
     });
 
-    it.fails('drains admitted work after the script body throws', async () => {
+    it('drains admitted work after the script body throws', async () => {
       const started = deferred<void>();
       const release = deferred<string>();
       const slow = tool({
@@ -1460,7 +1458,7 @@ describe('run_code', () => {
       expect(output).toContain('[1 tool call: slow]');
     });
 
-    it.fails('drains a slow successful Promise.race loser', async () => {
+    it('drains a slow successful Promise.race loser', async () => {
       const slowStarted = deferred<void>();
       const slowRelease = deferred<string>();
       const fast = tool({ name: 'fast', parallelSafe: true, execute: () => 'fast done' });
@@ -1494,7 +1492,7 @@ describe('run_code', () => {
       expect(output).toContain('[2 tool calls: fast, slow]');
     });
 
-    it.fails('drains a mutating Promise.race loser and reports its applied receipt', async () => {
+    it('drains a mutating Promise.race loser and reports its applied receipt', async () => {
       const actionStarted = deferred<void>();
       const actionRelease = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
       const fast = tool({ name: 'fast', parallelSafe: true, execute: () => 'fast done' });
@@ -1530,7 +1528,7 @@ describe('run_code', () => {
       expect(output).toContain('[2 tool calls: fast, cancel_run]');
     });
 
-    it.fails('aborts a mutating in-flight call on parent cancellation and records it as unknown', async () => {
+    it('aborts a mutating in-flight call on parent cancellation and records it as unknown', async () => {
       const actionStarted = deferred<void>();
       const release = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
       const cancel = tool({
@@ -1561,37 +1559,33 @@ describe('run_code', () => {
       expect(output).toContain('[1 tool call: cancel_run]');
     });
 
-    it.fails(
-      'aborts a mutating in-flight call at timeout and records it as unknown',
-      async () => {
-        const started = deferred<void>();
-        const release = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
-        const cancel = tool({
-          name: 'cancel_run',
-          execute: () => {
-            started.resolve();
-            return release.promise;
-          },
-        });
+    it('aborts a mutating in-flight call at timeout and records it as unknown', async () => {
+      const started = deferred<void>();
+      const release = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
+      const cancel = tool({
+        name: 'cancel_run',
+        execute: () => {
+          started.resolve();
+          return release.promise;
+        },
+      });
 
-        const pending = build([cancel]).execute({
-          description: 'settlement characterization',
-          code: 'await tools.cancel_run({ value: "late" });',
-          timeout_ms: 500,
-        } as never);
-        await started.promise;
-        const output = String(await pending);
-        release.resolve({ ok: true, runId: 'late', status: 'cancelling' });
+      const pending = build([cancel]).execute({
+        description: 'settlement characterization',
+        code: 'await tools.cancel_run({ value: "late" });',
+        timeout_ms: 500,
+      } as never);
+      await started.promise;
+      const output = String(await pending);
+      release.resolve({ ok: true, runId: 'late', status: 'cancelling' });
 
-        expect(output).toContain('Script timed out.');
-        expect(output).toContain('0 applied, 0 not applied, 0 failed, 1 unknown');
-        expect(output).toContain('did not settle before the script run ended');
-        expect(output).toContain('[1 tool call: cancel_run]');
-      },
-      20_000,
-    );
+      expect(output).toContain('Script timed out.');
+      expect(output).toContain('0 applied, 0 not applied, 0 failed, 1 unknown');
+      expect(output).toContain('did not settle before the script run ended');
+      expect(output).toContain('[1 tool call: cancel_run]');
+    }, 20_000);
 
-    it.fails('keeps an unawaited approval-waiting call attached to the invocation', async () => {
+    it('keeps an unawaited approval-waiting call attached to the invocation', async () => {
       const barrierStarted = deferred<void>();
       const barrierRelease = deferred<string>();
       const effects: string[] = [];

@@ -131,6 +131,9 @@ const context = vm.createContext(Object.create(null), { codeGeneration: { string
 const inflight = new Set();
 let resultsConsumed = 0;
 let finished = false;
+let closeRequested = false;
+let admissionClosed = false;
+let settlementScheduled = false;
 let lastWasIdle = false;
 let idleScheduled = false;
 function emitBusy() {
@@ -156,6 +159,16 @@ function finishSend(type, payload) {
   finished = true;
   send(type, payload);
 }
+function emitSettledIfReady() {
+  if (!closeRequested || inflight.size !== 0 || finished || settlementScheduled) return;
+  settlementScheduled = true;
+  queueMicrotask(() => {
+    settlementScheduled = false;
+    if (!closeRequested || inflight.size !== 0 || finished) return;
+    const unhandled = getUnhandled();
+    finishSend('workflow.settled', { unhandled });
+  });
+}
 // This is the only host-realm callable made available during context setup.
 // Its prototype is severed, it returns no host value, and it is deleted from
 // the global object before user code runs. The context-created wrappers retain
@@ -172,6 +185,7 @@ const bridge = (type, payload) => {
     return;
   }
   if (typeof type === 'string' && type.endsWith('.run')) {
+    if (admissionClosed) return;
     emitBusy();
     if (payload && payload.requestId !== undefined) inflight.add(String(payload.requestId));
     parentPort.postMessage({ type, ...(payload || {}) });
@@ -200,27 +214,58 @@ function installContextBindings() {
   delete globalThis.__capabilities;
   let sequence = 0;
   const pending = new Map();
+  const nestedStates = new Map();
+  function trackedPromise(promise, state) {
+    // Keep the worker alive for unawaited calls without letting Node report an
+    // unhandled rejection. Script-supplied rejection handlers are tracked
+    // separately so an unobserved nested failure remains diagnosable.
+    promise.catch(() => {});
+    const tracked = {
+      then(onFulfilled, onRejected) {
+        if (typeof onRejected === 'function') state.observed = true;
+        return trackedPromise(promise.then(onFulfilled, onRejected), state);
+      },
+      catch(onRejected) {
+        if (typeof onRejected === 'function') state.observed = true;
+        return trackedPromise(promise.catch(onRejected), state);
+      },
+      finally(onFinally) {
+        return trackedPromise(promise.finally(onFinally), state);
+      },
+    };
+    return tracked;
+  }
   function call(name, payload) {
     const requestId = String(++sequence);
-    return new Promise((resolve) => {
-      pending.set(requestId, resolve);
+    const state = { observed: false, rejected: false, message: '' };
+    nestedStates.set(requestId, state);
+    const promise = new Promise((resolve) => {
+      pending.set(requestId, { resolve, state });
       bridge(name + '.run', Object.assign({ requestId }, payload));
     });
+    return { promise: trackedPromise(promise, state), state };
   }
   function factoryBinding(name) {
-    return (config) => Object.freeze({ run(input) { return call(name, { config, input }); } });
+    return (config) => Object.freeze({ run(input) { return call(name, { config, input }).promise; } });
   }
   function namespaceBinding(name, members) {
     const namespace = Object.create(null);
-    for (const member of members) namespace[member] = (params) => call(name, { member, params }).then((response) => {
+    for (const member of members) namespace[member] = (params) => {
+      const callState = call(name, { member, params });
+      return callState.promise.then((response) => {
       // Namespace members speak an { ok, result | error } envelope so a refused or
       // failed call is catchable inside the script instead of a silent value.
       if (!response || typeof response !== 'object') return response;
       // Naming the tool here is what lets a model tell which call of a fan-out
       // failed: the underlying message often does not (e.g. 'rg: regex parse error').
-      if (response.ok === false) throw new Error('tools.' + member + ' failed: ' + String(response.error));
+      if (response.ok === false) {
+        callState.state.rejected = true;
+        callState.state.message = 'tools.' + member + ' failed: ' + String(response.error);
+        throw new Error(callState.state.message);
+      }
       return response.result;
-    });
+      });
+    };
     // Unknown members explain themselves instead of surfacing as
     // 'tools.x is not a function', which names neither the problem nor the fix.
     const guarded = new Proxy(namespace, {
@@ -245,15 +290,25 @@ function installContextBindings() {
     if (!values.every(value => json(value))) return;
     bridge('console.log', { values });
   } });
-  return (requestId, result) => {
-    const resolve = pending.get(requestId);
-    pending.delete(requestId);
-    if (!resolve) return;
-    const encoded = JSON.stringify(result);
-    resolve(encoded === undefined ? null : JSON.parse(encoded));
+  return {
+    resolve(requestId, result) {
+      const entry = pending.get(requestId);
+      pending.delete(requestId);
+      if (!entry) return;
+      const encoded = JSON.stringify(result);
+      entry.resolve(encoded === undefined ? null : JSON.parse(encoded));
+    },
+    getUnhandled() {
+      return Array.from(nestedStates).filter(([, state]) => state.rejected && !state.observed).map(([requestId, state]) => ({
+        requestId,
+        message: state.message || 'nested call failed',
+      }));
+    },
   };
 }
-const resolveResponse = vm.runInContext('(' + installContextBindings.toString() + ')()', context);
+const responseHandlers = vm.runInContext('(' + installContextBindings.toString() + ')()', context);
+const resolveResponse = responseHandlers.resolve;
+const getUnhandled = responseHandlers.getUnhandled;
 function firstScriptFrame(stack) {
   var stackLines = stack ? String(stack).split('\\n') : [];
   for (var i = 0; i < stackLines.length; i++) {
@@ -283,7 +338,7 @@ function runtimeErrorDetail(code, err) {
   return located ? '\\n\\nAt script ' + located : '';
 }
 
-if (typeof resolveResponse !== 'function') throw new Error('Failed to install sandbox bindings');
+if (typeof resolveResponse !== 'function' || typeof getUnhandled !== 'function') throw new Error('Failed to install sandbox bindings');
 parentPort.on('message', (message) => {
   if (typeof message.type === 'string' && message.type.endsWith('.result')) {
     resultsConsumed++;
@@ -291,6 +346,12 @@ parentPort.on('message', (message) => {
     resolveResponse(message.requestId, message.result);
     emitBusy();
     scheduleIdle();
+    emitSettledIfReady();
+    return;
+  }
+  if (message.type === 'workflow.close') {
+    closeRequested = true;
+    emitSettledIfReady();
   }
 });
 (async () => {
@@ -298,7 +359,8 @@ parentPort.on('message', (message) => {
     const script = new vm.Script('(async () => { "use strict";\\n' + workerData.code + '\\n})()', { filename: 'workflow.js' });
     const output = await script.runInContext(context, { timeout: workerData.syncTimeoutMs });
     if (output === undefined && workerData.allowVoidOutput) {
-      finishSend('workflow.complete', { output: null, voidOutput: true });
+      admissionClosed = true;
+      send('workflow.body-complete', { output: null, voidOutput: true });
       return;
     }
     const serialized = serializeJson(output);
@@ -313,7 +375,8 @@ parentPort.on('message', (message) => {
           resultsConsumed +
           ' nested tool calls already completed — inspect state before retrying.',
       );
-    finishSend('workflow.complete', { output: serialized.value });
+    admissionClosed = true;
+    send('workflow.body-complete', { output: serialized.value });
   } catch (err) {
     // Compile errors are raised by the host-realm 'new vm.Script(...)' above, so
     // 'err instanceof SyntaxError' is meaningful only here. A SyntaxError thrown
@@ -329,7 +392,8 @@ parentPort.on('message', (message) => {
       var at = runtimeErrorDetail(workerData.code, err);
       if (at) reported.message = reported.message + at;
     }
-    finishSend('workflow.error', { error: reported, syntax: err instanceof SyntaxError });
+    admissionClosed = true;
+    send('workflow.body-error', { error: reported, syntax: err instanceof SyntaxError });
   }
 })();
 "

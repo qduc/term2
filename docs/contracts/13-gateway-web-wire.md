@@ -522,3 +522,44 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 - Replayed compaction records are safely decoded: completed, non-reducing, and no-op compactions return status 200 with `outcome: 'completed'`, `'not_reduced'`, or `'nothing_to_retry'` (a replayed `not_reduced` carries the recorded `tokensBefore`/`tokensAfter`). Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
 - Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
 
+## 9. Restart recovery: the per-session provider/model snapshot (F3, 2026-09-12)
+
+A restart-restored session must come back on the provider/model it was created
+with, not on whatever the launcher currently defaults to. The gateway therefore
+persists an immutable per-session snapshot at session creation — a sidecar file
+`session-snapshot.json` (`{ schemaVersion: 1, providerId, modelId,
+reasoningEffort }`, atomic write, mode 0600) in the session directory, because
+the session-index schema gains no new columns.
+
+Rules, and why they are shaped this way:
+
+- **Creation is durable in the snapshot.** `session_create` does not return a
+  session until the sidecar is written. A write failure disposes the created
+  runtime, closes the persistence handle, removes the admission, and responds
+  `503 snapshot_unwritable` (`retryable: true` — state is rolled back, so a
+  retry creates a fresh session). A best-effort write here is what re-enables
+  silent substitution after a restart.
+- **Restore validates the exact snapshot.** On revival the stored
+  provider/model are checked against the live provider registry and model
+  catalog: gone provider → `409 provider_unavailable`; gone model →
+  `409 model_unavailable`; catalog unreachable → `503
+  model_catalog_unavailable` (`retryable: true`). The restored runtime is
+  built from the persisted snapshot via the `RuntimeFactory.create`
+  `settingsSnapshot` override — never by re-reading current launcher settings.
+- **Absent vs corrupt (the legacy-record rule).** A session created before the
+  sidecar existed has *no* record: restore falls back to the launcher's
+  current snapshot, which is validated like any other, so the fallback can
+  still refuse — but when it succeeds it legitimately changes the session's
+  provider/model. That identity-changing behavior is the compatibility cost of
+  pre-change sessions having no recorded identity. A record that exists but is
+  unreadable or does not parse as `schemaVersion: 1` is corruption: revival is
+  refused with `500 session_snapshot_invalid` (`retryable: false`) and never
+  treated as legacy, because silently substituting on top of an untrustworthy
+  identity record is indistinguishable from the substitution this rule exists
+  to prevent.
+- **Owner scoping during revival.** Revival is keyed per owner and session; a
+  different owner's valid assertion for the same session id is `404 not_found`
+  both while a revival is in flight and against a live session, and can never
+  inherit another owner's restored runtime.
+
+

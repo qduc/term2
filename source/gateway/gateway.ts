@@ -2061,6 +2061,8 @@ export class Term2Gateway {
       return publicError(403, 'workspace_forbidden', 'workspace access denied');
     }
     if (error instanceof GatewayPersistenceError) {
+      if (error.code === 'snapshot_unwritable')
+        return publicError(503, 'snapshot_unwritable', 'session snapshot could not be persisted', true);
       if (error.code === 'not_found' || error.code === 'owner_mismatch')
         return publicError(404, 'not_found', 'session not found');
       if (error.code === 'cursor_invalid') return publicError(400, 'invalid_cursor', 'cursor is invalid');
@@ -2176,6 +2178,7 @@ export class Term2Gateway {
         : undefined);
     let persisted: GatewayPersistedSession | undefined = this.#persisted.get(binding.sessionId);
     let openedHere = false;
+    let createdSession: ServerSession | undefined;
     try {
       if (!persisted) {
         persisted = await this.#config.persistence?.open(binding);
@@ -2198,11 +2201,13 @@ export class Term2Gateway {
           return undefined;
         },
       });
+      createdSession = session;
       options.hydrate?.(session);
       if (runtimeSnapshot && !options.snapshot && persisted) {
-        // Fresh session: durably record the exact provider/model it was
-        // created on so a restart restores it verbatim. Absence of the file
-        // later falls back to the launcher snapshot, which is still validated.
+        // Session-creation durability: a session must not become reachable
+        // unless its provider/model identity is durably recorded, or a restart
+        // could silently substitute the launcher's current default. Failure
+        // rolls the whole composition back in the catch below.
         try {
           await writeSessionSnapshot(persisted.persistence.directory, {
             schemaVersion: 1,
@@ -2211,7 +2216,10 @@ export class Term2Gateway {
             reasoningEffort: runtimeSnapshot.reasoningEffort,
           });
         } catch {
-          // Best effort; the fallback rule covers an unwritten snapshot.
+          throw new GatewayPersistenceError(
+            'snapshot_unwritable',
+            'session provider/model snapshot could not be persisted',
+          );
         }
       }
       if (persisted) {
@@ -2278,6 +2286,15 @@ export class Term2Gateway {
       );
       return { session, persisted };
     } catch (error) {
+      // The runtime was created but the composition failed (snapshot
+      // durability): dispose it before the persistence it may still write to.
+      if (createdSession) {
+        try {
+          await createdSession.dispose();
+        } catch {
+          // Preserve the original composition failure.
+        }
+      }
       // Only unwind what this composition opened: a restored session may
       // already hold a persistence handle shared with the read path.
       if (openedHere) {
@@ -2377,6 +2394,7 @@ export class Term2Gateway {
       const binding = this.#admission.restore(sessionId, ownerUserId, record.workspaceId, grantVersion);
       const persisted = await this.#ensurePersistedSession(ownerUserId, sessionId);
       const snapshot = await this.#restoredSessionSnapshot(persisted);
+      if (snapshot && 'body' in snapshot) return snapshot;
       const unavailable = await this.#sessionSnapshotUnavailable(snapshot);
       if (unavailable) return unavailable;
       if (this.#lifecycle.state !== 'running')
@@ -2419,20 +2437,27 @@ export class Term2Gateway {
    * provider or model. Only the production stack (settings authority) has a
    * snapshot to restore against; fixture gateways compose without one.
    */
-  async #restoredSessionSnapshot(persisted: GatewayPersistedSession): Promise<SessionSettingsSnapshot | undefined> {
+  async #restoredSessionSnapshot(
+    persisted: GatewayPersistedSession,
+  ): Promise<SessionSettingsSnapshot | undefined | GatewayRpcResult> {
     const settings = this.#config.runtimeFactory?.settingsAuthority;
     if (!settings) return undefined;
     const stored = await readSessionSnapshot(persisted.persistence.directory);
-    if (!stored) return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: false } });
+    // Absent is the documented pre-change compatibility state; a record that
+    // exists but cannot be trusted is corruption and is refused — falling
+    // back would silently change the session's provider/model identity.
+    if (stored.state === 'corrupt')
+      return publicError(500, 'session_snapshot_invalid', 'persisted session snapshot is unreadable or malformed');
+    if (stored.state === 'absent')
+      return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: false } });
     return createSessionSettingsSnapshot({
       settings,
-      providerId: stored.providerId,
-      modelId: stored.modelId,
-      reasoningEffort: stored.reasoningEffort,
+      providerId: stored.snapshot.providerId,
+      modelId: stored.snapshot.modelId,
+      reasoningEffort: stored.snapshot.reasoningEffort,
       effectiveToolPolicy: { allowWrite: false },
     });
   }
-
   /**
    * A restored session replays into the runtime built from its snapshot.
    * Refuse instead of silently substituting when that snapshot's provider or

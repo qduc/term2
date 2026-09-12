@@ -21,23 +21,27 @@ const SNAPSHOT_FILENAME = 'session-snapshot.json';
 export const sessionSnapshotPath = (sessionDirectory: string): string => path.join(sessionDirectory, SNAPSHOT_FILENAME);
 
 /**
- * Returns the stored snapshot, or null when there is none. Absence is a
- * documented state, not an error: sessions created before the sidecar existed
- * fall back to the launcher's current snapshot (which is still validated
- * against the live registry/catalog before the runtime is created). A file
- * that exists but does not parse as the current schema is treated the same
- * way; the fallback keeps such a session recoverable.
+ * Reading is three-valued on purpose: a session created before the sidecar
+ * existed has *no* record (a documented compatibility state), while a record
+ * that exists but cannot be trusted is corruption and must be refused, never
+ * silently treated as legacy.
  */
-export const readSessionSnapshot = async (sessionDirectory: string): Promise<PersistedSessionSnapshot | null> => {
+export type SessionSnapshotRead =
+  | { state: 'absent' }
+  | { state: 'readable'; snapshot: PersistedSessionSnapshot }
+  | { state: 'corrupt' };
+
+export const readSessionSnapshot = async (sessionDirectory: string): Promise<SessionSnapshotRead> => {
   let raw: string;
   try {
     raw = await fs.readFile(sessionSnapshotPath(sessionDirectory), 'utf8');
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { state: 'absent' };
+    return { state: 'corrupt' };
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== 'object') return null;
+    if (parsed === null || typeof parsed !== 'object') return { state: 'corrupt' };
     const record = parsed as Record<string, unknown>;
     if (
       record.schemaVersion !== 1 ||
@@ -47,16 +51,19 @@ export const readSessionSnapshot = async (sessionDirectory: string): Promise<Per
       record.modelId.length === 0 ||
       typeof record.reasoningEffort !== 'string'
     ) {
-      return null;
+      return { state: 'corrupt' };
     }
     return {
-      schemaVersion: 1,
-      providerId: record.providerId,
-      modelId: record.modelId,
-      reasoningEffort: record.reasoningEffort,
+      state: 'readable',
+      snapshot: {
+        schemaVersion: 1,
+        providerId: record.providerId,
+        modelId: record.modelId,
+        reasoningEffort: record.reasoningEffort,
+      },
     };
   } catch {
-    return null;
+    return { state: 'corrupt' };
   }
 };
 

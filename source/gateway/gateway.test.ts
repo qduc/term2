@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { request as httpRequest } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionVerifier, createGatewayAssertion, GatewayAssertionError } from './assertion.js';
 import {
   classifyInteractionResolution,
@@ -33,6 +33,20 @@ import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contrac
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 const tempRoots: string[] = [];
+// Injects sidecar write failures without touching the filesystem; the real
+// implementation stays in place for every other test.
+const snapshotWriteControl = vi.hoisted(() => ({ failWrites: false }));
+vi.mock('./persistence/session-snapshot.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./persistence/session-snapshot.js')>();
+  return {
+    ...actual,
+    writeSessionSnapshot: async (...args: Parameters<typeof actual.writeSessionSnapshot>) => {
+      if (snapshotWriteControl.failWrites) throw new Error('injected snapshot write failure');
+      return actual.writeSessionSnapshot(...args);
+    },
+  };
+});
+
 const makeTemp = () => {
   const root = mkdtempSync(path.join(tmpdir(), 'term2-gateway-'));
   tempRoots.push(root);
@@ -2304,6 +2318,97 @@ describe('gateway startup and assertion verifier', () => {
         }
       } finally {
         unregisterProvider('retry-provider');
+      }
+    });
+
+    it('refuses session_create when the provider/model snapshot cannot be persisted', async () => {
+      const root = makeTemp();
+      const manifestPath = path.join(root, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+      const settings = authoritySettings(root, 'unwritable-provider', 'unwritable-model');
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'answer', { settingsAuthority: settings });
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const socketPath = path.join(root, 'gateway.sock');
+        snapshotWriteControl.failWrites = true;
+        const created = await rpc(
+          socketPath,
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        // Creation durability: no session is exposed unless its snapshot is
+        // durably written; the runtime is disposed and the admission rolled back.
+        expect(created.status).toBe(503);
+        expect((created.body as { error: { code: string } }).error.code).toBe('snapshot_unwritable');
+        // The runtime was created and then disposed with the rolled-back composition.
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(0);
+
+        // The gateway stays healthy once the failure clears.
+        snapshotWriteControl.failWrites = false;
+        const retried = await rpc(
+          socketPath,
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        expect(retried.status).toBe(201);
+        expect((retried.body as { session: { id: string } }).session.id).toBeTruthy();
+      } finally {
+        snapshotWriteControl.failWrites = false;
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses a restored session whose snapshot sidecar is corrupt', async () => {
+      const root = makeTemp();
+      registerProvider({
+        id: 'corrupt-provider',
+        label: 'Corrupt provider',
+        fetchModels: async () => [{ id: 'corrupt-model', name: 'Corrupt model', default_reasoning_level: 'medium' }],
+      });
+      try {
+        const settings = authoritySettings(root, 'corrupt-provider', 'corrupt-model');
+        const sessionId = await seedRestorableSession(
+          root,
+          scriptedFactory(root, { inputs: [], created: 0 }, 'first answer', { settingsAuthority: settings }),
+        );
+        // The provider and model are still available, so only the malformed
+        // record can explain a refusal: corruption is never read as legacy.
+        const snapshotPath = path.join(
+          createGatewayStorageLayout(path.join(root, 'data')).sessionPath('user-a', 'workspace-a', sessionId),
+          'session-snapshot.json',
+        );
+        writeFileSync(snapshotPath, '{not json');
+        const capture = { inputs: [] as unknown[], created: 0 };
+        const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const submitted = await rpc(
+            path.join(root, 'gateway.sock'),
+            tokenFor('message_submit', sessionId),
+            { text: 'after corruption', clientRequestId: 'corrupt-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(submitted.status).toBe(500);
+          expect((submitted.body as { error: { code: string } }).error.code).toBe('session_snapshot_invalid');
+          expect(capture.created).toBe(0);
+          expect(factory.liveSessionCount).toBe(0);
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('corrupt-provider');
       }
     });
   });

@@ -2,11 +2,10 @@
 
 ## Resume here
 
-Status: complete through Milestone 6 and merged to `main` in `5b795496`
-(2026-09-12). Milestones 0–3 are implemented through `c2f65197`; Milestone 4
-closed with no catalog change after measurement; Milestone 5 landed in
-`ff3616fd`; and the Milestone 6 extraction and dead-path cleanup landed in
-`9d2ce6c6` and `034bb633`. The program exit criteria are satisfied.
+Status: complete through Milestone 6 and merged to `main` (2026-09-12).
+Milestones 0–3 are implemented; Milestone 4 closed with no catalog change after
+measurement; Milestone 5 landed; and the Milestone 6 extraction and dead-path
+cleanup landed. The program exit criteria are satisfied.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -167,7 +166,7 @@ undesired current behavior must be red before production changes.
 The current behavior matrix and the intended contract are test-pinned, and any
 guard change has a reviewed `guard-design` contract before implementation.
 
-### Milestone 0 evidence (merged in `89e7e0ab`)
+### Milestone 0 evidence (merged)
 
 The `admitted nested-call settlement` block in
 `source/tools/system/run-code/run-code.test.ts` exercises the public tool
@@ -241,7 +240,7 @@ Persisted-setting migration, if any: none.
 Rollback boundary: the host/worker settlement-barrier change and the conversion
   of the eight expected-failure pins to ordinary passing tests.
 Ledger row: confirmed defect — admitted nested-call early settlement.
-Disposition: repaired in `8aead140`; the settlement barrier is retained as a
+Disposition: repaired; the settlement barrier is retained as a
   shared-host invariant.
 ```
 
@@ -389,11 +388,17 @@ namespace/name handling must be explicit before nested namespaces ship.
 
 ### Measurement result and disposition (2026-09-12)
 
-The current bound built-in profile registries were measured by constructing each
-profile through `getAgentDefinition`, binding its final registry with
-`bindRunCodeRegistry`, and reading the resulting `run_code` description. The
-token estimate is the explicit coarse convention `ceil(characters / 4)`, not a
-provider tokenizer measurement.
+The registries were measured by constructing each profile through
+`getAgentDefinition`, binding its final registry with `bindRunCodeRegistry`, and
+reading the resulting `run_code` description. The token estimate is the explicit
+coarse convention `ceil(characters / 4)`, not a provider tokenizer measurement.
+
+Two fixtures were measured on 2026-09-12.
+
+**Reduced fixture.** The built-in profile plus its required orchestrator
+controls, omitting the optional session-browser, skills, and background-shell
+adapters; model `gpt-5.6-luna` with `searchViaShell` off. This reproduces the
+figures recorded when Milestone 4 closed:
 
 | Built-in profile | Scriptable tools in measured fixture | Description characters | Estimated tokens |
 | --- | ---: | ---: | ---: |
@@ -403,11 +408,32 @@ provider tokenizer measurement.
 | mentor | 14 | 5,725 | 1,432 |
 | orchestrator | 18 | 6,008 | 1,502 |
 
-The fixture enabled the built-in profile and its required orchestrator controls,
-but omitted optional session-browser, skills, and background-shell adapters. A
-separate observed production invocation on 2026-09-06 exposed 27 scriptable
-tools; its exact list is preserved in
+**App-faithful fixture.** Adds the adapters the application actually wires
+(mentor, subagents, user interaction, skills, session browser, background shell,
+check-in, rollover, agent runtime):
+
+| Model / profile | Scriptable tools | Description characters | Estimated tokens |
+| --- | ---: | ---: | ---: |
+| `gpt-5.6-luna` standard | 27 | 6,933 | 1,734 |
+| `gpt-5.6-luna` lite | 23 | 6,650 | 1,663 |
+| `gpt-5.6-luna` plan | 27 | 6,933 | 1,734 |
+| `gpt-5.6-luna` mentor | 27 | 6,933 | 1,734 |
+| `gpt-5.6-luna` orchestrator | 27 | 6,933 | 1,734 |
+| `deepseek-v4.1-flash` standard | 30 | 8,235 | 2,059 |
+| `deepseek-v4.1-flash` lite | 26 | 7,951 | 1,988 |
+| `deepseek-v4.1-flash` plan | 30 | 8,235 | 2,059 |
+| `deepseek-v4.1-flash` mentor | 30 | 8,235 | 2,059 |
+| `deepseek-v4.1-flash` orchestrator | 30 | 8,235 | 2,059 |
+
+`gpt-5.6-luna` is a patch-editing model, so `grep` and `glob` are hidden, which
+is why its surface is smaller than the non-patch `deepseek-v4.1-flash`. The
+27-tool surface matches the separate production invocation observed on
+2026-09-06; its exact list is preserved in
 `docs/reports/script-failure-canonical-evidence-2026-09-07.md`.
+
+The reduced fixture therefore understates the real bound surface: an
+application-faithful invocation exposes 27–30 scriptable tools and roughly
+1.7–2.1k estimated tokens, not 14–18 tools and 1.4–1.5k tokens.
 
 Existing natural groups are filesystem, code-context, web, memory, sessions,
 skills, background shell, user interaction, mentor, subagents, workflow, and
@@ -422,20 +448,37 @@ Usage evidence remains low:
   completed `run_code` records. The recovered failure ledger contains three
   unknown/wrong-tool-name records (0.37% of completions): one unavailable
   `apply_patch` lookup and two `search_replace` calls.
-- No checked-in telemetry identifies turns spent discovering non-essential
-  tools. The available 12-run field test is qualitative and found no validation
-  errors attributable to discovery.
+- Completion telemetry now carries the discovery metric the earlier record
+  lacked: `tool.run_code.completion` (see `run-code-typescript.md`) records
+  `nested.schemaLookups` (the `tools.describe` usage count) and a `failureClass`
+  per invocation. On this host over 2026-09-10 through 2026-09-12 — the only
+  days the event exists — there were 1,648 completions across 51 sessions.
+  `tools.describe` was used twice (0.12%); `nested.unknownTool` was zero;
+  `failureClass: unknown-tool` appeared 21 times (1.27%), of which 19 came from
+  the pre-`45ac2df4` text classifier and only 2 were structured (both the
+  analyst session's own `tools.shell` calls). All 83 failures in the window have
+  distinct source digests, so no `sourceDigest` failed twice.
+- Every tool named in a resent `Script failed: Unknown tool "X"` output —
+  `grep` 9, `shell` 7, `glob` 3, `create_file` 3, `search_replace` 2, and one
+  ambiguous `missing` — was deliberately absent from that invocation's script
+  surface. `shell` is prohibited in scripts, `grep`/`glob` are hidden when
+  `searchViaShell` is on, and `create_file`/`search_replace` are hidden for
+  patch-editing models. None was a catalog member that discovery failed to
+  surface.
 - No concrete MCP or OpenAPI registry consumer, planned tool count, or catalog
   growth projection exists. The repository references are comparative or
   explicitly deferred.
 
 **Disposition:** keep the current complete header plus exact `tools.describe`;
 do not add catalog budgeting, namespace-fair selection, search, or pagination.
-A roughly 1.4–1.5k-token measured header, 3.08% describe usage, 0.37% recovered
-unknown-name incidence, and no planned growth consumer do not demonstrate the
+A 27–30-tool header of roughly 1.7–2.1k estimated tokens, 0.12%
+`tools.describe` usage, 1.27% unknown-tool incidence with no `sourceDigest`
+failing twice (and every unknown name a deliberately hidden tool rather than an
+unlisted catalog member), and no planned growth consumer do not demonstrate the
 material discovery problem required by this milestone. Reopen Milestone 4 only
 for a concrete large registry consumer or fresh normalized telemetry showing
-material discovery failures or turn cost.
+material discovery failures or turn cost, or on the pre-registered trigger
+under *Deferred follow-ups*.
 
 ## Milestone 5 — Harden and document the confinement boundary
 
@@ -494,7 +537,7 @@ OS/container boundary against hostile JavaScript. A requirement for hostile-code
 containment must open a separate architecture decision; M5 does not choose an
 interpreter, isolate runtime, or OS-contained process.
 
-Independent review after `ff3616fd` found no concrete host-realm escape in the
+Independent review after Milestone 5 found no concrete host-realm escape in the
 default `WORKER_TEMPLATE` path and independently traced every M5 acceptance
 criterion to source and tests. It identified one important scope boundary:
 `HostRunInput.workerFactory` accepts a trusted custom worker for tests, so an
@@ -588,8 +631,7 @@ reproduced on untouched `main`: the nested-approval failure above, two
 outside-workspace approval assertions in `apply-patch.test.ts`, three approval
 or relaxed-match assertions in `search-replace.test.ts`, and one equal-time
 ordering assertion in `session-index-database.test.ts`. The integration tier
-passed 79 tests with one skipped. Implementation commits: `9d2ce6c6` and
-`034bb633` (2026-09-12).
+passed 79 tests with one skipped. The implementation landed 2026-09-12.
 
 ## Deferred follow-ups
 
@@ -608,6 +650,21 @@ needs it. It must skip unsupported encodings rather than guess, keep
 authentication host-side, and feed the same wrapped registry and discovery
 contracts as native tools. Milestone 4 may be pulled forward if that consumer
 makes the current catalog materially too large.
+
+### Milestone 4 reopen trigger (pre-registered)
+
+Reopen the Milestone 4 conditional implementation only if fresh
+`tool.run_code.completion` telemetry crosses one of these gates:
+
+- `failureClass: unknown-tool` exceeds roughly 2% of completions over a
+  structured window spanning at least five sessions;
+- any single `sourceDigest` fails `unknown-tool` twice; or
+- an unknown-tool name that *is* a catalog member for that invocation, rather
+  than a deliberately hidden or prohibited tool.
+
+`failureClass` and `sourceDigest` are already fields of the completion event, so
+monitoring needs no new instrumentation. The 2026-09-10..12 window measured
+above sits below all three gates.
 
 ### Broader action semantics
 

@@ -12,6 +12,8 @@ term2 stores logs, sessions, settings, and caches in platform-standard directori
 - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
 - **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
 
+OAuth tokens are stored separately under `envPaths('term2').config` (Linux example: `~/.config/term2-nodejs/`; macOS Preferences). `TERM2_CONFIG_DIR` overrides it; this is not the settings state/log directory.
+
 ### Application Logs
 - **Linux**: `~/.local/state/term2-nodejs/logs/` (or `$XDG_STATE_HOME/term2-nodejs/logs/`)
 - **macOS**: `~/Library/Logs/term2-nodejs/logs/`
@@ -68,7 +70,7 @@ term2 stores logs, sessions, settings, and caches in platform-standard directori
 
 **Symptom**: Running `term2 "do something that writes a file"` outputs text but makes no modifications.
 
-**Explanation**: In non-interactive mode, tool execution is disabled by default for safety because no human is present to confirm actions.
+**Explanation**: A positional prompt without `--auto-approve` selects `builtin:lite` (except persisted Mentor/Orchestrator), so tools are unavailable. `--auto-approve` opts out of implicit Lite and enables GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell remains refused, and the process may still exit 0. Inspect stderr or JSON `approval_rejected`.
 
 **Fix**: Pass `--auto-approve`:
 ```bash
@@ -84,7 +86,4 @@ term2 --auto-approve "Fix the typo in README.md"
   ```bash
   ps aux | grep "term2 serve"
   ```
-- Remove an orphaned socket file if no process is holding it:
-  ```bash
-  rm ~/.local/state/term2-nodejs/gateway/gateway.sock
-  ```
+- Kill the process holding the `--listen` port or socket path. The server removes a stale Unix socket itself and refuses to unlink a path that is not a socket; inspect or move a conflicting non-socket path instead.

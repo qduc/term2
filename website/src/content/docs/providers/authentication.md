@@ -15,8 +15,8 @@ term2 --grok-login
 
 1. term2 starts a temporary local loopback callback server.
 2. Your default browser opens the authentication page.
-3. Once you sign in and authorize, tokens are stored securely in your platform state directory.
-4. If running in a headless or remote SSH session where a browser cannot open, copy the redirected URL from your browser's address bar, paste it back into the terminal prompt, and press `Enter`.
+3. Once you sign in and authorize, tokens are stored under `envPaths('term2').config` (for example `~/.config/term2-nodejs/` on Linux, or macOS Preferences), not the settings state/log directory. `TERM2_CONFIG_DIR` overrides this location. The credential file is created mode `0600` in its configuration directory; protect that directory as well.
+4. If running in a headless or remote SSH session where a browser cannot open, use a TTY (`ssh -t`). Copy the redirected URL from your browser's address bar, paste it into the terminal prompt, and press `Enter`; paste input is ignored when stdin is not a TTY.
 
 ### Logging in to Codex / ChatGPT
 
@@ -57,3 +57,5 @@ You can also store API keys permanently in your `settings.json` via the `/settin
 ```
 
 Keys stored in `settings.json` persist across shell sessions and reboot cycles.
+
+These keys are plaintext in `settings.json` (not guaranteed mode `0600`), and the standard sandbox does not deny term2's settings/OAuth paths. Prefer environment variables or OAuth for credentials.

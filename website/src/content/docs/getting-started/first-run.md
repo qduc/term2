@@ -19,7 +19,7 @@ term2 --grok-login
 term2 --codex-login
 ```
 
-This launches your default browser to authenticate. Once complete, term2 stores the tokens locally and exits.
+This launches your default browser to authenticate. Once complete, term2 stores the tokens under `envPaths('term2').config` (for example `~/.config/term2-nodejs/` on Linux; macOS uses Preferences). `TERM2_CONFIG_DIR` overrides this location. OAuth files use mode `0600`; prefer OAuth or environment variables over plaintext settings.
 
 ### Option 2: Environment Variables (API Keys)
 
@@ -45,7 +45,7 @@ export EXA_API_KEY="..."
 
 ### Option 3: Persistent Configuration File (`settings.json`)
 
-You can configure API keys and settings permanently in `settings.json` in your platform's application state directory (e.g. `~/.local/state/term2-nodejs/settings.json` on Linux):
+You can configure API keys and settings permanently in `settings.json` in your platform's application state directory (e.g. `~/.local/state/term2-nodejs/settings.json` on Linux): Keys in this file are plaintext and it is not guaranteed to have mode `0600`; the standard sandbox does not deny term2 settings/OAuth paths.
 
 ```json
 {

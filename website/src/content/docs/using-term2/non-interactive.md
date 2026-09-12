@@ -17,11 +17,13 @@ Execute one-off queries with stdout output:
 term2 "Explain the purpose of package.json in this project"
 ```
 
+A positional prompt without `--auto-approve` uses `builtin:lite` by default (unless a persisted Mentor or Orchestrator profile takes precedence), so tools are unavailable. `--auto-approve` opts out of that implicit Lite selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+
 The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
 
 ## Enabling Tool Execution (`--auto-approve`)
 
-By default in non-interactive mode, tool execution is disabled because there is no interactive prompt to confirm actions. To permit the agent to run tools (such as reading files, writing changes, or executing commands), pass `--auto-approve`:
+To permit the agent to run tools (such as reading files, writing changes, or executing commands), pass `--auto-approve`:
 
 ```bash
 term2 --auto-approve "Run pnpm typecheck and fix any trivial lint errors"
@@ -45,7 +47,7 @@ Emit newline-delimited JSON (NDJSON) events on standard output for machine consu
 term2 --json "Find potential security issues in auth.ts"
 ```
 
-Each NDJSON event contains structured type, content, tool call, and usage records.
+The conversation event stream can emit these `type` values: `approval_required`, `background_check_in_due`, `background_shell_completed`, `background_shell_output`, `background_shell_started`, `codex_rate_limits`, `command_message`, `context_compaction_completed`, `context_compaction_failed`, `context_compaction_started`, `cost_update`, `error`, `final`, `reasoning_delta`, `retry`, `retry_exhausted`, `run_budget`, `subagent_approval_required`, `subagent_command_message`, `subagent_completed`, `subagent_interrupted`, `subagent_question`, `subagent_run_budget`, `subagent_started`, `subagent_streaming_text`, `subagent_streaming_tool`, `subagent_text_turn`, `subagent_tool_started`, `subagent_transferred`, `text_delta`, `tool_call_streaming_delta`, `tool_dispatched`, `tool_recovery`, `tool_started`, `usage_update`, and `user_message_consumed_for_abort`. Non-interactive JSON also emits `approval_rejected` for a refusal and `completed` after success.
 
 ### Streaming Reasoning Deltas (`--show-reasoning`)
 

@@ -25,6 +25,10 @@ function getAllHtmlFiles(dir) {
 }
 
 const htmlFiles = getAllHtmlFiles(distDir);
+if (htmlFiles.length === 0) {
+  console.error('No HTML files found in dist; refusing to report a successful link check.');
+  process.exit(1);
+}
 console.log(`Checking links across ${htmlFiles.length} HTML files...`);
 
 let brokenLinksCount = 0;

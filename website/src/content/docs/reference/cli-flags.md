@@ -14,10 +14,10 @@ Usage:
 | Flag | Alias | Type | Default | Description |
 | :--- | :---: | :--- | :--- | :--- |
 | `--model <model>` | `-m` | String | Configured | Model pattern or ID. Supports `provider/id` and optional `:<thinking>` (e.g. `o3-mini:high`). Bare `-m`/`--model` opens the interactive picker in a TTY. |
-| `--provider <provider>` | `-p` | String | `openai` | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
-| `--reasoning <effort>` | `-r` | String | `default` | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
+| `--provider <provider>` | `-p` | String | Configured | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
+| `--reasoning <effort>` | `-r` | String | Configured | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
 | `--lite` | `-l` | Boolean | `false` | Start in lite mode (minimal prompt, session-only context, no codebase indexing). |
-| `--auto-approve` | — | Boolean | `false` | Allow tool execution without interactive prompts in non-interactive mode. |
+| `--auto-approve` | — | Boolean | `false` | Opt out of implicit Lite mode and enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
 | `--quiet` | `-q` | Boolean | `false` | Suppress non-error diagnostics on stderr in non-interactive mode. |
 | `--show-reasoning` | — | Boolean | `false` | Stream reasoning/thinking deltas to stderr in non-interactive mode. |
 | `--json` | — | Boolean | `false` | Emit newline-delimited JSON (NDJSON) events on stdout in non-interactive mode. |
@@ -39,7 +39,7 @@ Usage:
 
 ```
 Usage:
-  $ term2 serve --local-owner <userId> [options]
+  $ term2 serve --local-owner <userId> --pairing [options]
 ```
 
 | Flag | Type | Required | Description |
@@ -51,9 +51,11 @@ Usage:
 | `--tls-cert <pem>` | String | Conditional | TLS certificate PEM path (required with `--listen`). |
 | `--tls-key <pem>` | String | Conditional | TLS private key PEM path (required with `--listen`). |
 | `--allow-remote` | Boolean | No | Allow binding non-loopback network interfaces with `--listen`. |
-| `--pairing` | Boolean | No | Enable interactive client pairing mode for initial credential setup. |
-| `--bff-key <kid>=<pem>` | String | No | A trusted client's public key (by key ID and public-key PEM path) for signed requests (repeatable). |
-| `--workspace-root <dir>` | String | No | Allowed workspace root directories (repeatable). Defaults to user home directory. |
+| `--pairing` | Boolean | Conditional | Enable interactive client pairing mode for initial credential setup. |
+| `--bff-key <kid>=<pem>` | String | Conditional | A trusted client's public key (by key ID and public-key PEM path) for signed requests (repeatable). |
+| `--workspace-root <dir>` | String | No | Allowed absolute workspace root directories (repeatable). Defaults to user home directory. |
 | `--issuer <iss>` | String | No | Expected token issuer value for client authentication. |
 | `--audience <aud>` | String | No | Expected token audience value for client authentication. |
-| `--allow-write` | Boolean | No | Admit `read_write` workspace grants. Without this flag, every root is strictly read-only. |
+| `--allow-write` | Boolean | No | Admit `read_write` workspace grants. Use only with an explicit root narrower than `$HOME`; otherwise roots are strictly read-only. |
+
+Gateway examples must include either `--pairing` or `--bff-key`. In BFF-only mode, the browser does not pair or call the gateway directly; the BFF holds the key. BFF-key clients may assert `--local-owner`.

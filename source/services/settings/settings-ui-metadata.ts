@@ -155,14 +155,15 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]:
     'Enable code-context tools for the main agent (true|false). Applies on the next model request.',
   [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations to disk (true|false)',
-  [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto)',
+  [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]:
+    'Shell command auto-approval mode (off|advisory|auto|always); `always` disables sandbox.enabled',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT]:
     'Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
-  [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:default, builtin:plan, etc.)',
+  [SETTING_KEYS.APP_ACTIVE_PROFILE_ID]: 'Active profile identifier (builtin:standard, builtin:plan, etc.)',
   [SETTING_KEYS.APP_MENTOR_MODE]: 'Legacy mentor mode flag (mapped to active profile)',
   [SETTING_KEYS.APP_LITE_MODE]: 'Legacy lite mode flag (mapped to active profile)',
   [SETTING_KEYS.APP_SHELL_PATH]: 'Path to shell executable',
@@ -173,7 +174,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily search API key',
   [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa search API key',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
-    'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
+    'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (auto|on|off)',
   [SETTING_KEYS.SHELL_USE_RTK_COMPRESSION]:
     'Use RTK (third-party) to compress shell command output; term2 downloads it automatically (true|false)',
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',

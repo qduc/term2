@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --dir .. exec tsx website/scripts/generate-settings.ts && astro dev",
-    "start": "astro dev",
+    "start": "pnpm --dir .. exec tsx website/scripts/generate-settings.ts && astro dev",
     "build": "pnpm --dir .. exec tsx website/scripts/generate-settings.ts && astro build && node scripts/check-links.mjs",
     "check-links": "node scripts/check-links.mjs",
     "preview": "astro preview"

@@ -369,6 +369,9 @@ export class RuntimeFactory {
   get settingsAuthority(): ISettingsService | undefined {
     return this.#options.settingsAuthority;
   }
+  get allowWriteEnabled(): boolean {
+    return this.#options.allowWrite === true;
+  }
   get modelCatalogLogger(): ILoggingService | undefined {
     return this.#options.modelCatalogLogger;
   }
@@ -485,9 +488,9 @@ export class RuntimeFactory {
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,
           gatewayMode: true,
+          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
-          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
         });
       },
       undefined,

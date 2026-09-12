@@ -244,12 +244,13 @@ describe('production gateway runtime factory', () => {
     };
 
     const readOnlyTools = await run('f1-read', 'read');
-    expect(readOnlyTools).not.toEqual(
-      expect.arrayContaining(['apply_patch', 'create_file', 'search_replace', 'enter_worktree']),
-    );
+    expect(readOnlyTools).not.toContain('enter_worktree');
+    expect(readOnlyTools).not.toContain('exit_worktree');
     expect(observedRunCodeDescription).not.toContain('tools.apply_patch');
     const readWriteTools = await run('f1-write', 'read_write');
     expect(readWriteTools).toEqual(expect.arrayContaining(['run_code']));
+    expect(readWriteTools).toContain('enter_worktree');
+    expect(readWriteTools).toContain('exit_worktree');
     expect(observedRunCodeDescription).toContain('tools.create_file');
     const revivedReadOnlyTools = await run('f1-revived-read-only', 'read_write', {
       providerId,
@@ -258,9 +259,9 @@ describe('production gateway runtime factory', () => {
       mode: 'standard',
       effectiveToolPolicy: { allowWrite: false },
     });
-    expect(revivedReadOnlyTools).not.toEqual(
-      expect.arrayContaining(['apply_patch', 'create_file', 'search_replace', 'enter_worktree']),
-    );
+    expect(revivedReadOnlyTools).not.toContain('enter_worktree');
+    expect(revivedReadOnlyTools).not.toContain('exit_worktree');
+    expect(observedRunCodeDescription).not.toContain('tools.apply_patch');
     await factory.shutdown();
   });
 

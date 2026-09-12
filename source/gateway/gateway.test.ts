@@ -1781,7 +1781,11 @@ describe('gateway startup and assertion verifier', () => {
       root: string,
       capture: { inputs: unknown[]; created: number; snapshots?: unknown[] },
       finalText: string,
-      options?: { settingsAuthority?: SettingsService },
+      options?: {
+        settingsAuthority?: SettingsService;
+        allowWrite?: boolean;
+        onAgentClientDeps?: (input: { readOnly: boolean; sessionAccess: any }) => void;
+      },
     ) =>
       new RuntimeFactory({
         tmpDir: path.join(root, 'runtime'),
@@ -1789,9 +1793,12 @@ describe('gateway startup and assertion verifier', () => {
         providerProbe: { available: true, secretFree: true },
         sandboxAvailable: true,
         settingsAuthority: options?.settingsAuthority,
+        allowWrite: options?.allowWrite,
+        onAgentClientDeps: options?.onAgentClientDeps,
         createAgentClient: (input) => {
           capture.created += 1;
           capture.snapshots?.push(input.sessionSettingsSnapshot);
+          options?.onAgentClientDeps?.({ readOnly: input.readOnly, sessionAccess: input.sessionAccess });
           return {
             chat: async () => '',
             abort: () => {},
@@ -1874,9 +1881,15 @@ describe('gateway startup and assertion verifier', () => {
     };
 
     /** Gateway 1: create a session, complete one turn, shut down cleanly. */
-    const seedRestorableSession = async (root: string, seedFactory?: RuntimeFactory) => {
+    const seedRestorableSession = async (
+      root: string,
+      seedFactory?: RuntimeFactory,
+      access: 'read' | 'read_write' = 'read_write',
+    ) => {
       const manifestPath = path.join(root, 'manifest.json');
-      writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+      const manifest = makeManifest(root);
+      manifest.grants[0] = { ...manifest.grants[0], access };
+      writeFileSync(manifestPath, JSON.stringify(manifest));
       const capture = { inputs: [] as unknown[], created: 0 };
       const factory = seedFactory ?? scriptedFactory(root, capture, 'first answer');
       const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
@@ -1976,6 +1989,64 @@ describe('gateway startup and assertion verifier', () => {
         await gateway.shutdown(100);
         persistence.closeIndex();
         await factory.shutdown();
+      }
+    });
+
+    it('restores read-only and read-write posture across a gateway restart', async () => {
+      registerProvider({
+        id: 'f1-restart-provider',
+        label: 'F1 restart provider',
+        fetchModels: async () => [{ id: 'f1-restart-model' }],
+      });
+      try {
+        for (const access of ['read', 'read_write'] as const) {
+          const root = makeTemp();
+          const authority = authoritySettings(root, 'f1-restart-provider', 'f1-restart-model');
+          const seedCapture = { inputs: [] as unknown[], created: 0, snapshots: [] as unknown[] };
+          const seedFactory = scriptedFactory(root, seedCapture, 'seed answer', {
+            settingsAuthority: authority,
+            allowWrite: true,
+          });
+          const sessionId = await seedRestorableSession(root, seedFactory, access);
+
+          const reviveCapture = { inputs: [] as unknown[], created: 0, snapshots: [] as unknown[] };
+          let revivedReadOnly: boolean | undefined;
+          const reviveFactory = scriptedFactory(root, reviveCapture, 'revived answer', {
+            settingsAuthority: authority,
+            allowWrite: true,
+            onAgentClientDeps: ({ readOnly, sessionAccess }) => {
+              revivedReadOnly = readOnly && sessionAccess.isReadOnly;
+            },
+          });
+          const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+          const gateway = makeGateway(root, reviveFactory, persistence);
+          try {
+            await gateway.start();
+            const restored = await rpc(
+              path.join(root, 'gateway.sock'),
+              tokenFor('session_read', sessionId),
+              null,
+              `/private/agent/v1/sessions/${sessionId}`,
+            );
+            expect(restored.status).toBe(200);
+            const submitted = await rpc(
+              path.join(root, 'gateway.sock'),
+              tokenFor('message_submit', sessionId),
+              { text: 'revive posture', clientRequestId: 'revive-posture-' + access },
+              `/private/agent/v1/sessions/${sessionId}/messages`,
+            );
+            expect(submitted.status).toBe(202);
+            expect(reviveCapture.created).toBe(1);
+            expect(revivedReadOnly).toBe(access === 'read');
+            expect((reviveCapture.snapshots[0] as any).effectiveToolPolicy.allowWrite).toBe(access === 'read_write');
+          } finally {
+            await gateway.shutdown(100);
+            persistence.closeIndex();
+            await reviveFactory.shutdown();
+          }
+        }
+      } finally {
+        unregisterProvider('f1-restart-provider');
       }
     });
 

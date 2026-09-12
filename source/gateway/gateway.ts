@@ -2174,7 +2174,12 @@ export class Term2Gateway {
     const runtimeSnapshot =
       options.snapshot ??
       (authority
-        ? createSessionSettingsSnapshot({ settings: authority, effectiveToolPolicy: { allowWrite: false } })
+        ? createSessionSettingsSnapshot({
+            settings: authority,
+            effectiveToolPolicy: {
+              allowWrite: this.#config.runtimeFactory?.allowWriteEnabled === true && binding.access === 'read_write',
+            },
+          })
         : undefined);
     let persisted: GatewayPersistedSession | undefined = this.#persisted.get(binding.sessionId);
     let createdSession: ServerSession | undefined;
@@ -2394,7 +2399,7 @@ export class Term2Gateway {
       // a typed admission error instead of a generic not-found.
       const binding = this.#admission.restore(sessionId, ownerUserId, record.workspaceId, grantVersion);
       const persisted = await this.#ensurePersistedSession(ownerUserId, sessionId);
-      const snapshot = await this.#restoredSessionSnapshot(persisted);
+      const snapshot = await this.#restoredSessionSnapshot(persisted, binding);
       if (snapshot && 'body' in snapshot) return snapshot;
       const unavailable = await this.#sessionSnapshotUnavailable(snapshot);
       if (unavailable) return unavailable;
@@ -2440,6 +2445,7 @@ export class Term2Gateway {
    */
   async #restoredSessionSnapshot(
     persisted: GatewayPersistedSession,
+    binding: SessionBinding,
   ): Promise<SessionSettingsSnapshot | undefined | GatewayRpcResult> {
     const settings = this.#config.runtimeFactory?.settingsAuthority;
     if (!settings) return undefined;
@@ -2449,14 +2455,16 @@ export class Term2Gateway {
     // back would silently change the session's provider/model identity.
     if (stored.state === 'corrupt')
       return publicError(500, 'session_snapshot_invalid', 'persisted session snapshot is unreadable or malformed');
+    const allowWrite = this.#config.runtimeFactory?.allowWriteEnabled === true;
+    const effectiveAllowWrite = allowWrite && binding.access === 'read_write';
     if (stored.state === 'absent')
-      return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: false } });
+      return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: effectiveAllowWrite } });
     return createSessionSettingsSnapshot({
       settings,
       providerId: stored.snapshot.providerId,
       modelId: stored.snapshot.modelId,
       reasoningEffort: stored.snapshot.reasoningEffort,
-      effectiveToolPolicy: { allowWrite: false },
+      effectiveToolPolicy: { allowWrite: effectiveAllowWrite },
     });
   }
   /**

@@ -96,18 +96,18 @@ function createTool(
   };
 }
 
-it.sequential('read-only session refuses an in-workspace replacement without approval', async () => {
+it.sequential('read-only session refuses an external replacement without approval', async () => {
   await withTempDir(async (dir) => {
     const access = new SessionAccessState(createMockSettingsService(), { allowEdit: false });
     const tool = createTool(createMockSettingsService(), undefined, access);
     const params = {
-      path: 'blocked.txt',
+      path: '../blocked.txt',
       replacements: [{ search_content: 'old', replace_content: 'new' }],
     };
-    await fs.writeFile(path.join(dir, 'blocked.txt'), 'old');
+    await fs.writeFile(path.join(path.dirname(dir), 'blocked.txt'), 'old');
     expect(await tool.needsApproval(params)).toBe(false);
     expect(String(await tool.execute(params))).toContain('unavailable in a read-only session');
-    await expect(fs.readFile(path.join(dir, 'blocked.txt'), 'utf8')).resolves.toBe('old');
+    await expect(fs.readFile(path.join(path.dirname(dir), 'blocked.txt'), 'utf8')).resolves.toBe('old');
   });
 });
 

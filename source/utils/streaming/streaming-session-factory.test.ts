@@ -562,7 +562,7 @@ it('marks settled TPS estimated when hidden tokens inflate the numerator', () =>
   expect(lastUsage?.tokens_per_second_estimated).toBe(true);
 });
 
-it('pairs a burst-inflated settled rate with its coverage of the turn', () => {
+it('flags a burst-inflated settled rate', () => {
   let lastUsage: any = null;
   let currentTime = 0;
   const session = createStreamingSession(
@@ -584,7 +584,7 @@ it('pairs a burst-inflated settled rate with its coverage of the turn', () => {
 
   // Tracker starts at t=0; the first visible delta lands at t=1200
   // (TTFT 1200ms) and usage settles at t=1400 with 300 billed completion
-  // tokens: 1500 tok/s over the 200ms decode window, covering 200/1400.
+  // tokens: 1500 tok/s over the 200ms decode window.
   currentTime = 1200;
   session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(40), fullText: 'a'.repeat(40) } as const);
   session.applyConversationEvent({
@@ -599,13 +599,10 @@ it('pairs a burst-inflated settled rate with its coverage of the turn', () => {
   } as const);
 
   expect(lastUsage?.tokens_per_second).toBe(1500);
-  expect(lastUsage?.tokens_per_second_coverage).toBeCloseTo(200 / 1400, 5);
-  // 1500 × 0.143 ≈ 214: the marked rate reconstructs the effective turn rate
-  // (300 tokens ÷ 1.4s wall ≈ 214 tok/s).
-  expect(lastUsage.tokens_per_second * lastUsage.tokens_per_second_coverage).toBeCloseTo(300 / 1.4, 0);
+  expect(lastUsage?.tokens_per_second_burst).toBe(true);
 });
 
-it('omits coverage for a plausible sustained settled rate', () => {
+it('does not flag a plausible sustained settled rate', () => {
   let lastUsage: any = null;
   let currentTime = 0;
   const session = createStreamingSession(
@@ -633,7 +630,7 @@ it('omits coverage for a plausible sustained settled rate', () => {
   } as const);
 
   expect(lastUsage?.tokens_per_second).toBe(20);
-  expect(lastUsage?.tokens_per_second_coverage).toBeUndefined();
+  expect(lastUsage?.tokens_per_second_burst).toBeUndefined();
 });
 
 it('seeds live estimates from the conversation chars-per-token ratio and reports recalibration', () => {

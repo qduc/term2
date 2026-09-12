@@ -283,26 +283,6 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentResearcherModel: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerModel instead.',
-    ),
-  subagentResearcherProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerProvider instead.',
-    ),
-  subagentResearcherReasoningEffort: z
-    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
-    .optional()
-    .describe(
-      'Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerReasoningEffort instead.',
-    ),
   subagentLibrarianModel: z
     .string()
     .min(1)
@@ -795,9 +775,6 @@ export interface SettingsWithSources {
     subagentWorkerModel: SettingWithSource<string | undefined>;
     subagentWorkerProvider: SettingWithSource<string | undefined>;
     subagentWorkerReasoningEffort: SettingWithSource<string | undefined>;
-    subagentResearcherModel: SettingWithSource<string | undefined>;
-    subagentResearcherProvider: SettingWithSource<string | undefined>;
-    subagentResearcherReasoningEffort: SettingWithSource<string | undefined>;
     subagentLibrarianModel: SettingWithSource<string | undefined>;
     subagentLibrarianProvider: SettingWithSource<string | undefined>;
     subagentLibrarianReasoningEffort: SettingWithSource<string | undefined>;
@@ -987,9 +964,6 @@ export const SETTING_KEYS = {
   AGENT_SUBAGENT_WORKER_MODEL: 'agent.subagentWorkerModel',
   AGENT_SUBAGENT_WORKER_PROVIDER: 'agent.subagentWorkerProvider',
   AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
-  AGENT_SUBAGENT_RESEARCHER_MODEL: 'agent.subagentResearcherModel',
-  AGENT_SUBAGENT_RESEARCHER_PROVIDER: 'agent.subagentResearcherProvider',
-  AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT: 'agent.subagentResearcherReasoningEffort',
   AGENT_SUBAGENT_LIBRARIAN_MODEL: 'agent.subagentLibrarianModel',
   AGENT_SUBAGENT_LIBRARIAN_PROVIDER: 'agent.subagentLibrarianProvider',
   AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
@@ -1143,9 +1117,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
-  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
@@ -1273,9 +1244,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
     subagentWorkerModel: undefined,
     subagentWorkerProvider: undefined,
     subagentWorkerReasoningEffort: undefined,
-    subagentResearcherModel: undefined,
-    subagentResearcherProvider: undefined,
-    subagentResearcherReasoningEffort: undefined,
     subagentLibrarianModel: undefined,
     subagentLibrarianProvider: undefined,
     subagentLibrarianReasoningEffort: undefined,

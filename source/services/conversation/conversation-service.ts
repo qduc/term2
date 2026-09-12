@@ -57,6 +57,29 @@ import type { SessionRolloverEvent } from '../logging/conversation-log-events.js
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
 
+/** Bounded failure reasons for a manual compaction that did not compact. Derived from the
+ * typed compaction outcome (LocalCompactionOutcome 'blocked' reasons plus the runtime's
+ * non-compaction kinds), never from result text. 'busy' and the pre-start refusals are not
+ * failure reasons: they yield nothing_to_compact without any journal frames. */
+export type ConversationCompactionFailureReason =
+  | 'cancelled'
+  | 'native_failed'
+  | 'native_unavailable'
+  | 'deferred'
+  | 'single_turn_too_large'
+  | 'result_still_too_large'
+  | 'hot_tail_would_orphan_tool_result';
+
+/**
+ * Typed result of a manual context compaction. Consumers that must agree with the
+ * journaled compaction events (the gateway command route) consume this instead of
+ * inferring an outcome from the display message.
+ */
+export type ConversationCompactionOutcome =
+  | { kind: 'compacted'; message: string; tokensBefore?: number; tokensAfter?: number }
+  | { kind: 'nothing_to_compact'; message: string }
+  | { kind: 'failed'; message: string; reason: ConversationCompactionFailureReason };
+
 /**
  * Backward-compatible facade for the CLI.
  *
@@ -540,49 +563,96 @@ export class ConversationService {
   }
 
   async compactContext(): Promise<string> {
+    return (await this.compactContextDetailed()).message;
+  }
+
+  /** Typed manual compaction; compactContext() projects this to its display message. */
+  async compactContextDetailed(): Promise<ConversationCompactionOutcome> {
     const startedAt = Date.now();
-    const fail = async (errorCategory: 'validation' | 'request', message: string): Promise<string> => {
+    const provider = (): string => this.#deps.settingsService?.get('agent.provider') ?? 'openai';
+    // Invariant (contract 13 §8): every context_compaction_started frame is
+    // followed by exactly one terminal frame, and the command response agrees
+    // in kind with that terminal frame. The runtime invokes onStarted exactly
+    // when it commits to compacting — after every pre-start refusal (busy,
+    // no_complete_cold_turn) has been decided — so a refusal produces no
+    // frames at all and the response is nothing_to_compact.
+    let startedFramePublished = false;
+    const journalStarted = async (): Promise<void> => {
+      startedFramePublished = true;
+      await this.#eventSink?.({
+        type: 'context_compaction_started',
+        provider: provider(),
+        sessionId: this.sessionId,
+        strategy: 'local',
+      });
+    };
+    const journalFailure = async (errorCategory: 'validation' | 'request'): Promise<void> => {
       await this.#eventSink?.({
         type: 'context_compaction_failed',
-        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        provider: provider(),
         sessionId: this.sessionId,
         errorCategory,
         durationMs: Date.now() - startedAt,
         strategy: 'local',
       });
-      return message;
+    };
+    const failed = (message: string, reason: ConversationCompactionFailureReason): ConversationCompactionOutcome => {
+      // A compaction that did not compact must be visible in the session log with
+      // its typed reason; the journaled event alone carries no cause.
+      this.#deps.logger.warn('Manual context compaction failed', {
+        eventType: 'context_compaction.failed',
+        sessionId: this.sessionId,
+        reason,
+      });
+      return { kind: 'failed', message, reason };
     };
     if (!this.#adapter.holdForegroundQueue()) {
-      await this.#eventSink?.({
-        type: 'context_compaction_started',
-        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
-        sessionId: this.sessionId,
-        strategy: 'local',
-      });
-      return fail('validation', 'Context compaction is available only while the conversation is idle.');
+      return {
+        kind: 'nothing_to_compact',
+        message: 'Context compaction is available only while the conversation is idle.',
+      };
     }
     const abort = new AbortController();
     this.#adapter.attachCompactionAbort(abort);
-    await this.#eventSink?.({
-      type: 'context_compaction_started',
-      provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
-      sessionId: this.sessionId,
-      strategy: 'local',
-    });
     try {
-      const outcome = await this.#runtime.compactContext({ signal: abort.signal });
+      const outcome = await this.#runtime.compactContext({ signal: abort.signal, onStarted: journalStarted });
       if (outcome.kind === 'busy') {
-        return fail('validation', 'Context compaction is available only while the conversation is idle.');
+        return {
+          kind: 'nothing_to_compact',
+          message: 'Context compaction is available only while the conversation is idle.',
+        };
       }
       if (outcome.kind === 'stale') throw new Error('Conversation changed while context compaction was running');
       if (outcome.kind === 'blocked') {
-        const message =
-          outcome.reason === 'no_complete_cold_turn'
-            ? 'Nothing to compact: at least one complete cold turn is required.'
-            : `Context compaction was blocked: ${outcome.reason}.`;
-        return fail('validation', message);
+        if (outcome.reason === 'no_complete_cold_turn') {
+          return {
+            kind: 'nothing_to_compact',
+            message: 'Nothing to compact: at least one complete cold turn is required.',
+          };
+        }
+        await journalFailure('validation');
+        return failed(`Context compaction was blocked: ${outcome.reason}.`, outcome.reason);
       }
-      if (outcome.kind !== 'compacted') return 'Nothing to compact.';
+      if (outcome.kind === 'failed') {
+        // A codex native compaction failure is a provider-request failure, not a
+        // local validation problem, and must not borrow a size reason.
+        await journalFailure('request');
+        return failed('Native context compaction failed.', 'native_failed');
+      }
+      if (outcome.kind === 'not_needed') {
+        // Codex reported the native compaction unavailable ('unchanged', the
+        // model's compactHistory hook is missing). That is a started compaction
+        // whose result did not compact, so it fails with its own typed reason
+        // instead of reading as "nothing to compact".
+        await journalFailure('request');
+        return failed('Native context compaction is unavailable for this model.', 'native_unavailable');
+      }
+      if (outcome.kind === 'deferred') {
+        // Automatic-scheduling refusals never reach a manual compaction today;
+        // if one ever does it is a started compaction that did not compact.
+        await journalFailure('request');
+        return failed('Context compaction was deferred.', 'deferred');
+      }
       if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
         await this.#eventSink?.({
           type: 'usage_update',
@@ -603,21 +673,36 @@ export class ConversationService {
         durationMs: Date.now() - startedAt,
         strategy: 'local',
       });
-      return `Context compacted locally (${outcome.checkpoint.contextSummary.estimatedTokensBefore ?? '?'} → ${
-        outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
-      } estimated tokens).`;
+      return {
+        kind: 'compacted',
+        message: `Context compacted locally (${outcome.checkpoint.contextSummary.estimatedTokensBefore ?? '?'} → ${
+          outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
+        } estimated tokens).`,
+        ...(outcome.checkpoint.contextSummary.estimatedTokensBefore !== undefined
+          ? { tokensBefore: outcome.checkpoint.contextSummary.estimatedTokensBefore }
+          : {}),
+        ...(outcome.checkpoint.contextSummary.estimatedTokensAfter !== undefined
+          ? { tokensAfter: outcome.checkpoint.contextSummary.estimatedTokensAfter }
+          : {}),
+      };
     } catch (error) {
-      if (abort.signal.aborted || isClassifiedCancellation(error)) {
-        return fail('request', 'Context compaction cancelled.');
+      // A throw before the runtime committed (e.g. the manual threshold is
+      // unconfigured for an uncatalogued model) never published the start
+      // frame, so it must not strand a terminal frame either — the RPC error
+      // itself reports the failure.
+      if (startedFramePublished) {
+        if (abort.signal.aborted || isClassifiedCancellation(error)) {
+          await journalFailure('request');
+          return failed('Context compaction cancelled.', 'cancelled');
+        }
+        await journalFailure('request');
       }
-      await fail('request', 'Context compaction failed.');
       throw error;
     } finally {
       this.#adapter.detachCompactionAbort(abort);
       this.#adapter.releaseForegroundQueue({ pauseIfQueued: abort.signal.aborted });
     }
   }
-
   /** Resume foreground messages retained after an execution failure or abort. */
   resumeQueue(): Promise<void> {
     return this.#adapter.resumeQueue();

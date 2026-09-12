@@ -92,6 +92,15 @@ export interface LocalCompactionInput {
   rearmAtEstimatedTokens?: number;
   lastCompletedInputTokens?: number;
   signal?: AbortSignal;
+  /**
+   * Invoked (and awaited) exactly once at the compaction's commit point: after
+   * every precondition refusal has been decided and before the first summary
+   * generation begins. The caller journals its start marker here so that no
+   * start frame precedes a refusal (busy, not_needed, deferred,
+   * no_complete_cold_turn) and every outcome past this point is reported with
+   * a terminal frame. Unused by the automatic boundary path.
+   */
+  onStarted?: () => void | Promise<void>;
 }
 
 const addUsage = (
@@ -242,6 +251,12 @@ export class LocalContextCompactor {
     );
     const plan = planLocalCompaction({ history: input.history, usableInputTokens });
     const rearmAt = rearmAtTokens(measuredTokens, threshold.effectiveThreshold);
+    if (plan.kind === 'blocked' && plan.reason === 'no_complete_cold_turn') {
+      // A pre-start refusal: nothing has been attempted, so the caller reports
+      // it without any compaction frames.
+      return { kind: 'blocked', reason: plan.reason, estimate, rearmAtTokens: rearmAt };
+    }
+    await input.onStarted?.();
     if (plan.kind === 'blocked') {
       return { kind: 'blocked', reason: plan.reason, estimate, rearmAtTokens: rearmAt };
     }

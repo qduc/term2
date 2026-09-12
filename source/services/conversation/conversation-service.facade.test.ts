@@ -500,7 +500,7 @@ it('addShellContext ignores blank history text', async () => {
   service.dispose();
 });
 
-it('compactContext reports busy through its event sink while a turn is running', async () => {
+it('compactContext reports busy with no compaction frames while a turn is running', async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -520,15 +520,16 @@ it('compactContext reports busy through its event sink while a turn is running',
   await expect(service.compactContext()).resolves.toBe(
     'Context compaction is available only while the conversation is idle.',
   );
-  expect(events.map((event) => event.type)).toEqual(['context_compaction_started', 'context_compaction_failed']);
-  expect(events[1]).toMatchObject({ errorCategory: 'validation', strategy: 'local' });
+  // Pre-start refusal (contract 13 §8 frame invariant): the compaction never
+  // began, so no frame is published and nothing_to_compact is the response.
+  expect(events.map((event) => event.type)).toEqual([]);
 
   release();
   await active;
   service.dispose();
 });
 
-it('compactContext reports blocked when no complete cold turn exists', async () => {
+it('compactContext reports nothing to compact with no frames when no complete cold turn exists', async () => {
   const events: ConversationEvent[] = [];
   const service = new ConversationService({
     agentClient: partialClient(),
@@ -542,8 +543,87 @@ it('compactContext reports blocked when no complete cold turn exists', async () 
   await expect(service.compactContext()).resolves.toBe(
     'Nothing to compact: at least one complete cold turn is required.',
   );
+  // Pre-start refusal (contract 13 §8 frame invariant): the runtime decides
+  // no_complete_cold_turn before committing to compact, so neither the started
+  // frame nor a terminal frame is published (regression pin for the D3b class:
+  // the response must not disagree with the event stream).
+  expect(events.map((event) => event.type)).toEqual([]);
+  service.dispose();
+});
+
+it('compactContextDetailed reports failed/native_unavailable when the codex native compaction is unavailable', async () => {
+  const events: ConversationEvent[] = [];
+  const warn = vi.spyOn(mockLogger, 'warn').mockImplementation(() => {});
+  const service = new ConversationService({
+    agentClient: partialClient({
+      getProvider: () => 'codex',
+      compactCodexSessionHistory: async () => ({ kind: 'unchanged' }),
+    }),
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.setEventSink((event) => {
+    events.push(event);
+  });
+
+  // Codex 'unchanged' (the model's native compactHistory hook is missing) is a
+  // started compaction that did not compact: it fails with its own typed
+  // reason instead of reading as nothing_to_compact.
+  await expect(service.compactContextDetailed()).resolves.toEqual({
+    kind: 'failed',
+    message: 'Native context compaction is unavailable for this model.',
+    reason: 'native_unavailable',
+  });
+
   expect(events.map((event) => event.type)).toEqual(['context_compaction_started', 'context_compaction_failed']);
-  expect(events[1]).toMatchObject({ errorCategory: 'validation', strategy: 'local' });
+  expect(events[1]).toMatchObject({ errorCategory: 'request', strategy: 'local' });
+  expect(warn).toHaveBeenCalledWith(
+    'Manual context compaction failed',
+    expect.objectContaining({ eventType: 'context_compaction.failed', reason: 'native_unavailable' }),
+  );
+  warn.mockRestore();
+  service.dispose();
+});
+
+it('compactContextDetailed reports failed/native_failed when the codex native compaction fails', async () => {
+  const events: ConversationEvent[] = [];
+  const warn = vi.spyOn(mockLogger, 'warn').mockImplementation(() => {});
+  const service = new ConversationService({
+    agentClient: partialClient({
+      getProvider: () => 'codex',
+      compactCodexSessionHistory: async () => ({ kind: 'failed', provider: 'codex' }),
+    }),
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.setEventSink((event) => {
+    events.push(event);
+  });
+
+  // The typed outcome, and the display message the CLI's /compact shows.
+  await expect(service.compactContextDetailed()).resolves.toEqual({
+    kind: 'failed',
+    message: 'Native context compaction failed.',
+    reason: 'native_failed',
+  });
+  await expect(service.compactContext()).resolves.toBe('Native context compaction failed.');
+
+  // The failure is a provider-request failure, journaled as such, and leaves a
+  // log line with the typed reason. Both invocations (typed + string) journal
+  // the same started -> failed pair.
+  expect(events.map((event) => event.type)).toEqual([
+    'context_compaction_started',
+    'context_compaction_failed',
+    'context_compaction_started',
+    'context_compaction_failed',
+  ]);
+  expect(events[1]).toMatchObject({ errorCategory: 'request', strategy: 'local' });
+  expect(events[3]).toMatchObject({ errorCategory: 'request', strategy: 'local' });
+  expect(warn).toHaveBeenCalledWith(
+    'Manual context compaction failed',
+    expect.objectContaining({ eventType: 'context_compaction.failed', reason: 'native_failed' }),
+  );
+  warn.mockRestore();
   service.dispose();
 });
 

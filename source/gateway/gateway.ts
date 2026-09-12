@@ -1311,29 +1311,47 @@ export class Term2Gateway {
             });
           }
 
-          let outcome: 'completed' | 'not_reduced' | 'nothing_to_retry' = 'nothing_to_retry';
+          // The outcome is mapped from the typed compaction result, never from
+          // result text, so the response agrees with the journaled compaction
+          // events: failed compactions return { outcome: 'failed', reason } with
+          // a bounded reason code, and 'nothing_to_retry' is reserved for
+          // genuinely nothing to compact (contract 13 §8).
+          let outcome: 'completed' | 'not_reduced' | 'nothing_to_retry' | 'failed';
           let tokensBefore: number | undefined;
           let tokensAfter: number | undefined;
+          let failureReason: string | undefined;
           const compactTurnId = crypto.randomUUID();
           try {
-            const resultText = await session.withCommandTurn(compactTurnId, () => session.service.compactContext());
-            const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
-            const isCompacted = resultText.toLowerCase().includes('context compacted locally');
-            tokensBefore = match?.[1] ? Number(match[1]) : undefined;
-            tokensAfter = match?.[2] ? Number(match[2]) : undefined;
-            // A compaction that grew the context is not a completed one; the
-            // numbers come from the same estimator on both sides.
-            outcome = !isCompacted
-              ? 'nothing_to_retry'
-              : tokensBefore !== undefined && tokensAfter !== undefined && tokensAfter >= tokensBefore
-              ? 'not_reduced'
-              : 'completed';
+            const result = await session.withCommandTurn(compactTurnId, () => session.service.compactContextDetailed());
+            switch (result.kind) {
+              case 'compacted': {
+                tokensBefore = result.tokensBefore;
+                tokensAfter = result.tokensAfter;
+                // A compaction that grew the context is not a completed one; the
+                // numbers come from the same estimator on both sides.
+                outcome =
+                  tokensBefore !== undefined && tokensAfter !== undefined && tokensAfter >= tokensBefore
+                    ? 'not_reduced'
+                    : 'completed';
+                break;
+              }
+              case 'nothing_to_compact':
+                outcome = 'nothing_to_retry';
+                break;
+              case 'failed':
+                outcome = 'failed';
+                failureReason = result.reason;
+                break;
+            }
 
             if (this.#admissions) {
-              const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
+              const turnId =
+                outcome === 'failed'
+                  ? `compact:failed:${failureReason}`
+                  : `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
               this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
                 state: 'terminal',
-                result: 'accepted',
+                result: outcome === 'failed' ? 'failed' : 'accepted',
                 phase: 'committed',
                 turnId,
               });
@@ -1359,6 +1377,7 @@ export class Term2Gateway {
             body: {
               commandId: 'compact',
               outcome,
+              ...(outcome === 'failed' ? { reason: failureReason } : {}),
               ...(tokensBefore !== undefined ? { tokensBefore } : {}),
               ...(tokensAfter !== undefined ? { tokensAfter } : {}),
             },

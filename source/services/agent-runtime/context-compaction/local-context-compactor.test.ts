@@ -77,6 +77,48 @@ it('returns blocked without a summary request when no cold turn exists', async (
   expect(generate).not.toHaveBeenCalled();
 });
 
+it('never invokes onStarted for the no_complete_cold_turn pre-start refusal', async () => {
+  const generate = vi.fn();
+  const onStarted = vi.fn();
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(2),
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: null,
+    manual: true,
+    onStarted,
+  });
+  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'no_complete_cold_turn' });
+  // Commit-point contract: a pre-start refusal must leave the caller without
+  // a started marker, so it reports the refusal with no compaction frames.
+  expect(onStarted).not.toHaveBeenCalled();
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it('invokes onStarted exactly once, before the first summary generation', async () => {
+  const generate = vi.fn().mockResolvedValue({ text: 'summary', usage: { inputTokens: 10, outputTokens: 2 } });
+  const onStarted = vi.fn();
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(6, 4_000),
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 7,
+    contextWindow: 8_000,
+    maxOutputTokens: 500,
+    compactThreshold: 0.2,
+    compactThresholdTokens: null,
+    manual: true,
+    onStarted,
+  });
+  expect(outcome.kind).toBe('compacted');
+  expect(onStarted).toHaveBeenCalledTimes(1);
+  expect(onStarted.mock.invocationCallOrder[0]).toBeLessThan(generate.mock.invocationCallOrder[0]);
+});
+
 it('fails before generation for an uncatalogued model without a raw threshold', async () => {
   const generate = vi.fn();
   await expect(

@@ -444,6 +444,175 @@ describe('Gateway commands RPC route', () => {
     }
   });
 
+  it('maps a blocked codex compaction to outcome failed with the typed reason, agreeing with the journal', async () => {
+    // Regression (D3b): the route once inferred the outcome from the result text,
+    // so a failed compaction's display text — with no "compacted locally" in it —
+    // was reported as nothing_to_retry while the journal published
+    // context_compaction_failed. The outcome must come from the typed compaction
+    // result, and non-compaction text must never map to nothing_to_retry.
+    // Coordinator follow-up: a codex native failure is reported under its own
+    // typed reason (native_failed), not the fabricated result_still_too_large.
+    const codexCompactClient = (): ConversationAgentClient =>
+      ({
+        chat: async () => '',
+        abort: () => {},
+        setModel: () => {},
+        addToolInterceptor: () => () => {},
+        getProvider: () => 'codex',
+        compactCodexSessionHistory: async () => ({ kind: 'failed', provider: 'codex' }),
+        startStream: async () => {
+          const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
+          stream.finalOutput = 'assistant reply';
+          return stream;
+        },
+        continueRunStream: async () => createMockStream([]),
+      } as ConversationAgentClient);
+    const { gateway, persistence, token, socketPath } = setupGateway({ createAgentClient: codexCompactClient });
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      const first = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-compact-blocked' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(first.status).toBe(200);
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'failed', reason: 'native_failed' });
+
+      // A replayed failed compaction stays a failure.
+      const replayed = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-compact-blocked' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(replayed.status).toBe(409);
+      expect((replayed.body as any).error.code).toBe('compact_failed');
+
+      // The response agrees with the durable journal: one started frame and one
+      // terminal failed frame for the command.
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { type: string });
+          return events.filter((event) => event.type.startsWith('context_compaction')).map((event) => event.type);
+        })
+        .toEqual(['context_compaction_started', 'context_compaction_failed']);
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('returns nothing_to_retry with no compaction frames when there is no complete cold turn', async () => {
+    // Mapping-table row (contract 13 §8 frame invariant): a pre-start refusal
+    // is decided before the start frame is journaled, so the command response
+    // is nothing_to_retry and the journal carries no compaction frames at all.
+    // Regression pin for the D3b class: this input used to journal
+    // started -> failed/validation while answering nothing_to_retry.
+    const { gateway, token, socketPath, persistence } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+
+      const first = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-compact-nothing' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(first.status).toBe(200);
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'nothing_to_retry' });
+
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { type: string });
+          return events.filter((event) => event.type.startsWith('context_compaction')).map((event) => event.type);
+        })
+        .toEqual([]);
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('maps an unavailable codex native compaction to failed/native_unavailable, agreeing with the journal', async () => {
+    // Mapping-table row (contract 13 §8 frame invariant): codex 'unchanged'
+    // (the model's native compactHistory hook is unavailable) is a started
+    // compaction that did not compact, so it is a failure with its own typed
+    // reason — not nothing_to_retry — and the journal carries started -> failed.
+    const codexUnavailableClient = (): ConversationAgentClient =>
+      ({
+        chat: async () => '',
+        abort: () => {},
+        setModel: () => {},
+        addToolInterceptor: () => () => {},
+        getProvider: () => 'codex',
+        compactCodexSessionHistory: async () => ({ kind: 'unchanged' }),
+        startStream: async () => {
+          const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
+          stream.finalOutput = 'assistant reply';
+          return stream;
+        },
+        continueRunStream: async () => createMockStream([]),
+      } as ConversationAgentClient);
+    const { gateway, persistence, token, socketPath } = setupGateway({ createAgentClient: codexUnavailableClient });
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      const first = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-compact-native-unavailable' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(first.status).toBe(200);
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'failed', reason: 'native_unavailable' });
+
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { type: string });
+          return events.filter((event) => event.type.startsWith('context_compaction')).map((event) => event.type);
+        })
+        .toEqual(['context_compaction_started', 'context_compaction_failed']);
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
   it('handles retry-tool when nothing to retry', async () => {
     const { gateway, token, socketPath } = setupGateway();
     await gateway.start();
@@ -684,8 +853,8 @@ describe('Gateway commands RPC route', () => {
         gateResolve = resolve;
       });
       let compactCallCount = 0;
-      const origCompact = ConversationService.prototype.compactContext;
-      ConversationService.prototype.compactContext = async function () {
+      const origCompact = ConversationService.prototype.compactContextDetailed;
+      ConversationService.prototype.compactContextDetailed = async function () {
         compactCallCount++;
         await gate;
         return origCompact.apply(this);
@@ -728,7 +897,7 @@ describe('Gateway commands RPC route', () => {
         expect(fresh[0].commandId).toBe('compact');
         expect(replayed[0].outcome).toBe(fresh[0].outcome);
       } finally {
-        ConversationService.prototype.compactContext = origCompact;
+        ConversationService.prototype.compactContextDetailed = origCompact;
       }
     } finally {
       await gateway.shutdown(100);
@@ -1025,9 +1194,13 @@ describe('Gateway commands RPC route', () => {
       );
       const sessionId = (created.body as { session: { id: string } }).session.id;
 
-      const original = ConversationService.prototype.compactContext;
-      ConversationService.prototype.compactContext = async () =>
-        'Context compacted locally (60 → 360 estimated tokens).';
+      const original = ConversationService.prototype.compactContextDetailed;
+      ConversationService.prototype.compactContextDetailed = async () => ({
+        kind: 'compacted',
+        message: 'Context compacted locally (60 → 360 estimated tokens).',
+        tokensBefore: 60,
+        tokensAfter: 360,
+      });
 
       try {
         const first = await rpc(
@@ -1061,7 +1234,7 @@ describe('Gateway commands RPC route', () => {
           replayed: true,
         });
       } finally {
-        ConversationService.prototype.compactContext = original;
+        ConversationService.prototype.compactContextDetailed = original;
       }
     } finally {
       await gateway.shutdown(100);

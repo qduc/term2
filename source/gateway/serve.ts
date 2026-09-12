@@ -29,6 +29,8 @@ import {
 import { DynamicWorkspaceRegistry } from './dynamic-workspace-registry.js';
 import { createRealWorkspaceBoundaryProbe } from './workspace-boundary-probe.js';
 import { parseServeArgs } from './serve-args.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 
 /**
  * `term2 serve` entry point: compose the real settings authority, the
@@ -44,6 +46,43 @@ import { parseServeArgs } from './serve-args.js';
 
 /** A launcher precondition failed; runServe turns this into a stderr message and exit 1. */
 export class ServeStartupError extends Error {}
+
+/**
+ * Per-session logger for gateway sessions, pointed at term2's standard log
+ * destination — the same XDG log directory the CLI writes, so gateway session
+ * diagnostics (e.g. a failed compaction's typed reason or the codex native
+ * compaction error) are visible next to CLI session logs. Console output stays
+ * suppressed (the LoggingService default) so serve's stdio contract is intact,
+ * and record contents follow the app log's sanitization rules.
+ */
+export function createServeSessionLogger(context: ISessionContextService, logDir?: string): LoggingService {
+  return new LoggingService({ sessionContextService: context, ...(logDir !== undefined ? { logDir } : {}) });
+}
+
+/**
+ * Session-logger wiring for the whole serve process: one LoggingService and one
+ * SessionContextService, handed to every session the runtime factory composes.
+ *
+ * One instance, not one per session: each per-session LoggingService would
+ * construct its own winston-daily-rotate-file transport against the same
+ * rotation audit file (term2-audit.json), and concurrent rotation bookkeeping
+ * on a shared audit file is not something the transport guarantees. The
+ * per-session traffic attribution is unaffected by sharing, because
+ * SessionContextService is an AsyncLocalStorage cell — sessions still run
+ * their provider traffic inside their own context, and the shared logger's
+ * provider-traffic store reads whichever context is current.
+ */
+export function createServeSessionLogWiring(logDir?: string): {
+  createSessionContext: () => SessionContextService;
+  createLogger: (sessionId: string, context: ISessionContextService) => LoggingService;
+} {
+  const context = new SessionContextService();
+  const logger = createServeSessionLogger(context, logDir);
+  return {
+    createSessionContext: () => context,
+    createLogger: () => logger,
+  };
+}
 
 /**
  * Derive the gateway manifest for a state dir. A state dir with no manifest
@@ -235,6 +274,7 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     tmpDir: ensureDir(stateDir, 'runtime-tmp'),
     sandboxAvailable: true,
     allowWrite: args.allowWrite,
+    ...createServeSessionLogWiring(),
   });
 
   const persistence = new GatewayPersistenceCoordinator(

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { SubagentRole, SubagentDefinition } from './types.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
-import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
+import { isGpt5OrGpt6Model, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import type { ExecutionContext } from '../execution-context.js';
 import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
@@ -142,13 +142,13 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
 
 export function selectSubagentBasePromptFile(model: string): string {
   const normalizedModel = model.toLowerCase();
-  if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex')) {
+  if (isGpt5OrGpt6Model(normalizedModel) && normalizedModel.includes('codex')) {
     return 'base-codex.md';
   }
   if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku')) {
     return 'base-anthropic.md';
   }
-  if (normalizedModel.includes('gpt-5')) {
+  if (isGpt5OrGpt6Model(normalizedModel)) {
     return 'base-gpt-5-modern.md';
   }
   return 'base-simple.md';

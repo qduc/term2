@@ -1200,8 +1200,8 @@ export class SubagentToolFactory {
     }
 
     if (definition.canWrite && !this.#readOnly) {
-      const isGpt5 = shouldPreferPatchEditingModel(definition.model);
-      if (isGpt5) {
+      const usesPatchEditingSurface = shouldPreferPatchEditingModel(definition.model);
+      if (usesPatchEditingSurface) {
         tools.push(
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(

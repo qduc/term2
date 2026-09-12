@@ -142,6 +142,9 @@ it('buildPromptSpec routes gpt-5.6 to its own base prompt without capturing othe
   expect(buildPromptSpec({ model: 'gpt-5.2', profile: profile('builtin:standard') }).basePromptFile).toBe(
     'gpt-5-modern.md',
   );
+  expect(buildPromptSpec({ model: 'gpt-6', profile: profile('builtin:standard') }).basePromptFile).toBe(
+    'gpt-5-modern.md',
+  );
 });
 
 it('buildPromptSpec keeps gpt-5.6 codex variants on the codex base prompt', () => {

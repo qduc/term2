@@ -1,3 +1,5 @@
+import { isGpt5OrGpt6Model } from '../lib/tool-selection-policy.js';
+
 export type PromptProfile = {
   id: string;
   basePromptFile: string;
@@ -30,7 +32,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   {
     id: 'gpt-5-codex',
     basePromptFile: 'codex.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'),
+    matches: ({ normalizedModel }) => isGpt5OrGpt6Model(normalizedModel) && normalizedModel.includes('codex'),
   },
   {
     id: 'gpt-5.6',
@@ -56,7 +58,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   {
     id: 'gpt-5-modern',
     basePromptFile: 'gpt-5-modern.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5'),
+    matches: ({ normalizedModel }) => isGpt5OrGpt6Model(normalizedModel),
   },
   {
     id: 'kimi',

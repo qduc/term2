@@ -298,7 +298,7 @@ export const getAgentDefinition = (
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
-  const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
+  const usesPatchEditingSurface = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get('sandbox.enabled');
   // Async delegation is an all-or-nothing parent capability: launch, status
   // preflight, result retrieval, and the two non-blocking control tools share
@@ -403,7 +403,7 @@ export const getAgentDefinition = (
   // The glob/find-files tool is only registered in certain configurations; keep
   // the search-tool descriptions consistent so the model does not call a tool
   // that is not on its allowlist.
-  const globAvailable = !searchViaShell && (liteMode || !isGpt5);
+  const globAvailable = !searchViaShell && (liteMode || !usesPatchEditingSurface);
   const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, isLiteEnv) : '';
   const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
@@ -531,7 +531,7 @@ export const getAgentDefinition = (
       );
     }
     if (filesystemWriteEnabled) {
-      if (isGpt5) {
+      if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
         );
@@ -548,7 +548,7 @@ export const getAgentDefinition = (
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
     }
     if (filesystemWriteEnabled) {
-      if (isGpt5) {
+      if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
         );

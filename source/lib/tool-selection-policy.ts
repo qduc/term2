@@ -56,8 +56,14 @@ function matchesNativePatchPrefix(model: string, prefix: string): boolean {
   return normalizedModel.startsWith(normalizedPrefix);
 }
 
+/** Model families that use the modern patch-first tool surface. */
+export function isGpt5OrGpt6Model(model: string): boolean {
+  const normalized = model.toLowerCase();
+  return normalized.includes('gpt-5') || normalized.includes('gpt-6');
+}
+
 export function shouldPreferPatchEditingModel(model: string): boolean {
-  return model.toLowerCase().includes('gpt-5');
+  return isGpt5OrGpt6Model(model);
 }
 
 export function shouldUseNativePatchTool({

@@ -370,12 +370,14 @@ it('exposes only the tool groups selected by the resolved Profile', () => {
   }
 });
 
-it('uses the patch editing surface for gpt-5 in standard and lite modes', () => {
+it('uses the patch editing surface for modern GPT models in standard and lite modes', () => {
   for (const liteMode of [false, true]) {
-    const names = getToolNames({ 'agent.model': 'gpt-5', ...(liteMode ? { 'app.liteMode': true } : {}) });
+    for (const model of ['gpt-5', 'gpt-6']) {
+      const names = getToolNames({ 'agent.model': model, ...(liteMode ? { 'app.liteMode': true } : {}) });
 
-    expect(names).toContain('apply_patch');
-    expect(names).not.toEqual(expect.arrayContaining(['grep', 'glob', 'create_file', 'search_replace']));
+      expect(names).toContain('apply_patch');
+      expect(names).not.toEqual(expect.arrayContaining(['grep', 'glob', 'create_file', 'search_replace']));
+    }
   }
 });
 

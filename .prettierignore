@@ -12,3 +12,4 @@ eval/*
 .pi/**
 .pnpm-store/**
 pnpm-lock.yaml
+website/**

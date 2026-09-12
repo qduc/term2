@@ -1,0 +1,17 @@
+{
+  "name": "website",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --dir .. exec tsx website/scripts/generate-settings.ts && astro dev",
+    "start": "astro dev",
+    "build": "pnpm --dir .. exec tsx website/scripts/generate-settings.ts && astro build && node scripts/check-links.mjs",
+    "check-links": "node scripts/check-links.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.0",
+    "astro": "^7.3.2"
+  }
+}

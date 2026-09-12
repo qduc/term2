@@ -33,6 +33,7 @@ export default tseslint.config(
       'scripts/**',
       '.worktrees/**',
       '.claude/worktrees/**',
+      'website/**',
     ],
   },
   eslint.configs.recommended,

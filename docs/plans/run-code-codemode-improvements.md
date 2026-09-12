@@ -489,6 +489,20 @@ OS/container boundary against hostile JavaScript. A requirement for hostile-code
 containment must open a separate architecture decision; M5 does not choose an
 interpreter, isolate runtime, or OS-contained process.
 
+Independent review after `ff3616fd` found no concrete host-realm escape in the
+default `WORKER_TEMPLATE` path and independently traced every M5 acceptance
+criterion to source and tests. It identified one important scope boundary:
+`HostRunInput.workerFactory` accepts a trusted custom worker for tests, so an
+arbitrary injected worker is outside the template's confinement claim. Repository
+usage has no production caller; `WorkflowEvaluator` only forwards the optional
+test dependency used by its tests. The interface now states that trust boundary.
+
+Residual low-risk coverage limits are explicit rather than silently promoted to
+proof: representative values, hostile names, serialization failures, and async
+continuations are exercised, but the suite does not enumerate every JavaScript
+prototype shape or every possible property name. Reopen M5 if a new binding,
+non-test custom worker, non-JSON transport, or concrete counterexample appears.
+
 ## Milestone 6 — Deepen the product/runtime boundary
 
 After Milestones 1–3 stabilize the contracts, evaluate a cohesive runtime object

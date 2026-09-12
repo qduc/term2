@@ -131,7 +131,11 @@ export interface HostRunInput {
   /** When set, code that returns nothing completes with `null` rather than failing. */
   allowVoidOutput?: boolean;
   onConsole?: (values: JsonValue[]) => void;
-  /** Test seam; defaults to a worker built from `capabilities`. */
+  /**
+   * Trusted test seam; defaults to the confined worker built from
+   * `capabilities`. A custom worker is outside the WORKER_TEMPLATE realm
+   * invariant and has no production caller.
+   */
   workerFactory?: (code: string, syncTimeoutMs: number) => import('node:worker_threads').Worker;
 }
 

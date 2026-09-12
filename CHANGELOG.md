@@ -1,3 +1,16 @@
+## [0.22.1] - 2026-09-12
+
+### Improvements
+- Replaced the "N more" overflow hints in menus with scrollbars.
+- Tab now switches tabs in the model menu instead of completing the model id.
+- The mentor pool model setting now uses the unified model picker, and its filter starts empty.
+- Removed the legacy smart/cheap tier and `tools.editHealingProvider` fallback settings reads; use the tier-primary keys.
+
+### Bug Fixes
+- Fixed streaming and reasoning rows left unfinished after an aborted turn.
+- Fixed the startup model picker leaving its frame on screen after a selection.
+- Fixed the slash menu staying open while its action runs.
+
 ## [0.22.0] - 2026-09-11
 
 ### Features

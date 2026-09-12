@@ -10,6 +10,7 @@ export type InteractionCheckpoint = {
   readonly interaction: PendingInteractionDto;
   readonly revision: number;
   readonly generation: string;
+  readonly settleOnRecovery?: 'child_interrupted';
 };
 
 export class InteractionCheckpointStore {
@@ -80,6 +81,29 @@ export class InteractionCheckpointStore {
       },
       { durability: 'critical' },
     );
+    if (checkpoint.settleOnRecovery === 'child_interrupted') {
+      await journal.append(
+        {
+          sessionId: journal.sessionId,
+          type: 'interaction_resolved',
+          payload: {
+            turnId: checkpoint.turnId,
+            interactionId: checkpoint.interaction.interactionId,
+            outcome: 'cancelled',
+            variant: checkpoint.interaction.variant,
+          },
+        },
+        { durability: 'critical' },
+      );
+      await journal.append(
+        {
+          sessionId: journal.sessionId,
+          type: 'turn_failed',
+          payload: { turnId: checkpoint.turnId, outcome: 'failed', reason: 'runtime_error' },
+        },
+        { durability: 'critical' },
+      );
+    }
     this.clear();
   }
 }

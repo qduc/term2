@@ -1910,6 +1910,7 @@ export class Term2Gateway {
           interaction: childBinding.dto,
           revision: childBinding.revision,
           generation: childBinding.continuationGeneration,
+          settleOnRecovery: 'child_interrupted',
         });
       }
       // An ask_user answer can advance the live binding before the original
@@ -3219,5 +3220,5 @@ export function mapConversationEvent(
   }
 }
 
-export { createGatewayAssertion, interactionDtoFromSnapshot, isPublicEventEnvelope, mapConversationEvent };
+export { createGatewayAssertion, interactionDtoFromSnapshot, isPublicEventEnvelope };
 export type { SessionBinding };

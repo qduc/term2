@@ -243,6 +243,48 @@ describe('SessionPersistenceHandle and critical persistence', () => {
     journal.close();
   });
 
+  it('settles a recovered child interaction and marks its turn failed', async () => {
+    const layout = createGatewayStorageLayout(root());
+    const directory = path.join(layout.sessionsPath, 'journal');
+    const journal = createGatewayEventJournal({ sessionId: 'session-child', directory });
+    const checkpoint = new InteractionCheckpointStore(directory);
+    checkpoint.save({
+      turnId: 'child-turn-a',
+      interaction: {
+        version: 1,
+        interactionId: 'child-interaction',
+        kind: 'ask_user',
+        variant: 'ask_user',
+        descriptor: { agentName: 'Child', toolName: 'ask_user', argumentsText: 'question' },
+        choices: [{ id: 'answer', label: 'Answer' }],
+        revision: 1,
+      },
+      revision: 1,
+      generation: 'child-generation',
+      settleOnRecovery: 'child_interrupted',
+    });
+
+    await checkpoint.recover(journal);
+
+    expect(journal.events().map((event) => event.type)).toEqual([
+      'interaction_recovered',
+      'interaction_resolved',
+      'turn_failed',
+    ]);
+    expect(journal.events()[1]?.payload).toMatchObject({
+      turnId: 'child-turn-a',
+      interactionId: 'child-interaction',
+      outcome: 'cancelled',
+    });
+    expect(journal.events()[2]?.payload).toEqual({
+      turnId: 'child-turn-a',
+      outcome: 'failed',
+      reason: 'runtime_error',
+    });
+    expect(checkpoint.current).toBeNull();
+    journal.close();
+  });
+
   it('does not overlay recovery after a resolved interaction when turn_failed was not appended', async () => {
     const layout = createGatewayStorageLayout(root());
     const index = new GatewaySessionIndex(layout);

@@ -433,9 +433,10 @@ Child approval frames are emitted from the session-owned FIFO approval
 controller after its foreground lease publishes a pause, and the existing
 interaction resolve route calls that controller rather than the root approval
 state. Child questions use the async registry mailbox through the same route.
-Pending child checkpoints are recovered as non-resolvable
-interaction_recovered after restart; the gateway never fabricates a continuation
-for a lease that lived in the previous process.
+Pending child checkpoints are recovered as interaction_recovered, then
+explicitly settled as cancelled and followed by turn_failed with the bounded
+runtime_error reason. The gateway never fabricates a continuation for a lease
+that lived in the previous process.
 ```
 
 ## 8. M5b additions: Session Commands RPC

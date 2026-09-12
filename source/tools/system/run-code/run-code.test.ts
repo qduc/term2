@@ -73,6 +73,24 @@ const run = async (
   approvalPolicyRegistry = makeApprovalRegistry(registry),
 ) => String(await build(registry, approvalPolicyRegistry).execute({ code, timeout_ms: 60_000, ...params } as never));
 
+const deferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
+const settlementObservationWindow = () => new Promise<void>((resolve) => setTimeout(resolve, 250));
+
+const recordSettlement = (value: unknown, onSettled: () => void): Promise<unknown> =>
+  Promise.resolve(value).then((result) => {
+    onSettled();
+    return result;
+  });
+
 describe('run_code', () => {
   it('denies a nested call when the active workspace changes while approval waits', async () => {
     let cwd = '/workspace/one';
@@ -1347,6 +1365,292 @@ describe('run_code', () => {
 
     expect(output).toContain('Script failed');
     expect(output).toContain('script failed on purpose');
+  });
+
+  describe('admitted nested-call settlement', () => {
+    // Milestone 0 contract pins. These are expected failures until the shared
+    // host makes admission create settlement debt; remove `.fails` in M1.
+    it.fails('drains an unawaited successful call before returning', async () => {
+      const started = deferred<void>();
+      const release = deferred<string>();
+      const slow = tool({
+        name: 'slow',
+        execute: () => {
+          started.resolve();
+          return release.promise;
+        },
+      });
+      let settled = false;
+      const pending = recordSettlement(
+        build([slow]).execute({
+          description: 'settlement characterization',
+          code: 'tools.slow({ value: "late" }); return "body done";',
+          timeout_ms: 60_000,
+        } as never),
+        () => {
+          settled = true;
+        },
+      );
+
+      await started.promise;
+      await settlementObservationWindow();
+      const settledBeforeRelease = settled;
+      release.resolve('slow done');
+      const output = String(await pending);
+
+      expect(settledBeforeRelease).toBe(false);
+      expect(output).toContain('[1 tool call: slow]');
+    });
+
+    it.fails('reports an unobserved nested rejection as unhandled_nested_failure', async () => {
+      const started = deferred<void>();
+      const release = deferred<string>();
+      const slow = tool({
+        name: 'slow',
+        execute: () => {
+          started.resolve();
+          return release.promise;
+        },
+      });
+      const pending = build([slow]).execute({
+        description: 'settlement characterization',
+        code: 'tools.slow({ value: "late" }); return "body done";',
+        timeout_ms: 60_000,
+      } as never);
+
+      await started.promise;
+      release.reject(new Error('late nested failure'));
+      const output = String(await pending);
+
+      expect(output).toContain('unhandled_nested_failure');
+      expect(output).toContain('late nested failure');
+      expect(output).toContain('[1 tool call: slow]');
+    });
+
+    it.fails('drains admitted work after the script body throws', async () => {
+      const started = deferred<void>();
+      const release = deferred<string>();
+      const slow = tool({
+        name: 'slow',
+        execute: () => {
+          started.resolve();
+          return release.promise;
+        },
+      });
+      let settled = false;
+      const pending = recordSettlement(
+        build([slow]).execute({
+          description: 'settlement characterization',
+          code: 'tools.slow({ value: "late" }); throw new Error("script boom");',
+          timeout_ms: 60_000,
+        } as never),
+        () => {
+          settled = true;
+        },
+      );
+
+      await started.promise;
+      await settlementObservationWindow();
+      const settledBeforeRelease = settled;
+      release.resolve('slow done');
+      const output = String(await pending);
+
+      expect(settledBeforeRelease).toBe(false);
+      expect(output).toContain('script boom');
+      expect(output).toContain('[1 tool call: slow]');
+    });
+
+    it.fails('drains a slow successful Promise.race loser', async () => {
+      const slowStarted = deferred<void>();
+      const slowRelease = deferred<string>();
+      const fast = tool({ name: 'fast', parallelSafe: true, execute: () => 'fast done' });
+      const slow = tool({
+        name: 'slow',
+        parallelSafe: true,
+        execute: () => {
+          slowStarted.resolve();
+          return slowRelease.promise;
+        },
+      });
+      let settled = false;
+      const pending = recordSettlement(
+        build([fast, slow]).execute({
+          description: 'settlement characterization',
+          code: 'return await Promise.race([tools.fast({ value: "fast" }), tools.slow({ value: "slow" })]);',
+          timeout_ms: 60_000,
+        } as never),
+        () => {
+          settled = true;
+        },
+      );
+
+      await slowStarted.promise;
+      await settlementObservationWindow();
+      const settledBeforeRelease = settled;
+      slowRelease.resolve('slow done');
+      const output = String(await pending);
+
+      expect(settledBeforeRelease).toBe(false);
+      expect(output).toContain('[2 tool calls: fast, slow]');
+    });
+
+    it.fails('drains a mutating Promise.race loser and reports its applied receipt', async () => {
+      const actionStarted = deferred<void>();
+      const actionRelease = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
+      const fast = tool({ name: 'fast', parallelSafe: true, execute: () => 'fast done' });
+      const cancel = tool({
+        name: 'cancel_run',
+        parallelSafe: true,
+        execute: () => {
+          actionStarted.resolve();
+          return actionRelease.promise;
+        },
+      });
+      let settled = false;
+      const pending = recordSettlement(
+        build([fast, cancel]).execute({
+          description: 'settlement characterization',
+          code: 'return await Promise.race([tools.fast({ value: "fast" }), tools.cancel_run({ value: "slow" })]);',
+          timeout_ms: 60_000,
+        } as never),
+        () => {
+          settled = true;
+        },
+      );
+
+      await actionStarted.promise;
+      await settlementObservationWindow();
+      const settledBeforeRelease = settled;
+      actionRelease.resolve({ ok: true, runId: 'slow', status: 'cancelling' });
+      const output = String(await pending);
+
+      expect(settledBeforeRelease).toBe(false);
+      expect(output).toContain('cancel_run');
+      expect(output).toContain('1 applied, 0 not applied, 0 failed, 0 unknown');
+      expect(output).toContain('[2 tool calls: fast, cancel_run]');
+    });
+
+    it.fails('aborts a mutating in-flight call on parent cancellation and records it as unknown', async () => {
+      const actionStarted = deferred<void>();
+      const release = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
+      const cancel = tool({
+        name: 'cancel_run',
+        execute: async (_params: unknown, context: unknown) => {
+          actionStarted.resolve();
+          return release.promise;
+        },
+      });
+      const controller = new AbortController();
+      const pending = build([cancel]).execute(
+        {
+          description: 'settlement characterization',
+          code: 'await tools.cancel_run({ value: "late" });',
+          timeout_ms: 60_000,
+        } as never,
+        { signal: controller.signal } as never,
+      );
+
+      await actionStarted.promise;
+      controller.abort();
+      const output = String(await pending);
+      release.resolve({ ok: true, runId: 'late', status: 'cancelling' });
+
+      expect(output).toContain('Script was cancelled.');
+      expect(output).toContain('0 applied, 0 not applied, 0 failed, 1 unknown');
+      expect(output).toContain('did not settle before the script run ended');
+      expect(output).toContain('[1 tool call: cancel_run]');
+    });
+
+    it.fails(
+      'aborts a mutating in-flight call at timeout and records it as unknown',
+      async () => {
+        const started = deferred<void>();
+        const release = deferred<{ ok: true; runId: string; status: 'cancelling' }>();
+        const cancel = tool({
+          name: 'cancel_run',
+          execute: () => {
+            started.resolve();
+            return release.promise;
+          },
+        });
+
+        const pending = build([cancel]).execute({
+          description: 'settlement characterization',
+          code: 'await tools.cancel_run({ value: "late" });',
+          timeout_ms: 500,
+        } as never);
+        await started.promise;
+        const output = String(await pending);
+        release.resolve({ ok: true, runId: 'late', status: 'cancelling' });
+
+        expect(output).toContain('Script timed out.');
+        expect(output).toContain('0 applied, 0 not applied, 0 failed, 1 unknown');
+        expect(output).toContain('did not settle before the script run ended');
+        expect(output).toContain('[1 tool call: cancel_run]');
+      },
+      20_000,
+    );
+
+    it.fails('keeps an unawaited approval-waiting call attached to the invocation', async () => {
+      const barrierStarted = deferred<void>();
+      const barrierRelease = deferred<string>();
+      const effects: string[] = [];
+      const protectedTool = tool({
+        name: 'protected',
+        needsApproval: () => true,
+        execute: () => {
+          effects.push('protected');
+          return 'approved';
+        },
+      });
+      const barrier = tool({
+        name: 'barrier',
+        parallelSafe: true,
+        execute: () => {
+          barrierStarted.resolve();
+          return barrierRelease.promise;
+        },
+      });
+      const approvalRegistry = makeApprovalRegistry([protectedTool, barrier]);
+      const owner = new NestedApprovalOwner();
+      let tools: ToolRegistry = [protectedTool, barrier];
+      const runCode = createRunCodeToolDefinition({
+        loggingService: logging(),
+        getToolRegistry: () => tools,
+        approvalPolicyRegistry: approvalRegistry,
+        nestedApprovalOwner: owner,
+      });
+      tools = [protectedTool, barrier, runCode];
+      bindRunCodeRegistry(tools);
+      bindRunCodeNestedApprovalOwner(tools, owner);
+      let settled = false;
+      const pending = recordSettlement(
+        runCode.execute(
+          {
+            description: 'settlement characterization',
+            code: 'tools.protected({ value: "approve" }); await tools.barrier({ value: "release" }); return "body done";',
+            timeout_ms: 60_000,
+          },
+          { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+        ),
+        () => {
+          settled = true;
+        },
+      );
+
+      await barrierStarted.promise;
+      await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+      barrierRelease.resolve('released');
+      await settlementObservationWindow();
+      const settledBeforeApproval = settled;
+      const request = owner.getSnapshot();
+      if (request) await owner.decide(request.requestId, { answer: 'y' });
+      const output = String(await pending);
+
+      expect(settledBeforeApproval).toBe(false);
+      expect(effects).toEqual(['protected']);
+      expect(output).toContain('[2 tool calls: barrier, protected]');
+    });
   });
 
   it('reports a timeout rather than hanging the turn', async () => {

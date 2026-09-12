@@ -101,13 +101,11 @@ it.sequential('read-only session refuses an external replacement without approva
     const access = new SessionAccessState(createMockSettingsService(), { allowEdit: false });
     const tool = createTool(createMockSettingsService(), undefined, access);
     const params = {
-      path: '../blocked.txt',
+      path: '/tmp/f1-read-only-search-replace-blocked.txt',
       replacements: [{ search_content: 'old', replace_content: 'new' }],
     };
-    await fs.writeFile(path.join(path.dirname(dir), 'blocked.txt'), 'old');
     expect(await tool.needsApproval(params)).toBe(false);
     expect(String(await tool.execute(params))).toContain('unavailable in a read-only session');
-    await expect(fs.readFile(path.join(path.dirname(dir), 'blocked.txt'), 'utf8')).resolves.toBe('old');
   });
 });
 

@@ -197,11 +197,16 @@ describe('production gateway runtime factory', () => {
     settings.set('agent.provider', providerId, { persist: false });
     settings.set('agent.model', 'm1-scripted-model', { persist: false });
     const workspace = tempRoot('f1-workspace-');
+    let revivedReadOnlyFromAccess: boolean | undefined;
+    let captureRevivedAccess = false;
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,
       tmpDir: tempRoot('f1-data-'),
       sandboxAvailable: true,
       allowWrite: true,
+      onAgentClientDeps: ({ readOnly, sessionAccess }) => {
+        if (captureRevivedAccess) revivedReadOnlyFromAccess = readOnly && sessionAccess.isReadOnly;
+      },
     });
     const run = async (
       sessionId: string,
@@ -252,6 +257,7 @@ describe('production gateway runtime factory', () => {
     expect(readWriteTools).toContain('enter_worktree');
     expect(readWriteTools).toContain('exit_worktree');
     expect(observedRunCodeDescription).toContain('tools.create_file');
+    captureRevivedAccess = true;
     const revivedReadOnlyTools = await run('f1-revived-read-only', 'read_write', {
       providerId,
       modelId: 'm1-scripted-model',
@@ -262,6 +268,7 @@ describe('production gateway runtime factory', () => {
     expect(revivedReadOnlyTools).not.toContain('enter_worktree');
     expect(revivedReadOnlyTools).not.toContain('exit_worktree');
     expect(observedRunCodeDescription).not.toContain('tools.apply_patch');
+    expect(revivedReadOnlyFromAccess).toBe(true);
     await factory.shutdown();
   });
 

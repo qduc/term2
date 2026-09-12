@@ -53,7 +53,7 @@ purpose assertion that must equal the route's purpose. The table's "Purpose" col
 | `POST /private/agent/v1/sessions/:sessionId/config` | `session_update` | `{ model?, reasoningEffort?, mode? }` (`isSessionUpdateBody`) | `200` `sessionConfigProjection(session)` | `Term2LocalControlBroker.sessionUpdate` ← BFF route `POST /term2/sessions/:sessionId/config` |
 | `POST /private/agent/v1/sessions/:sessionId/interactions/:interactionId` | `interaction_resolve` | `{ revision, answer, rejectionReason?, approvalAnswer? }` (`isInteractionResolveRequest`) | `202 { sessionId, turnId, interactionId, accepted: true }`, or `200 { accepted: false, interaction }` for an ask_user follow-up question | BFF route `POST /agent/sessions/:sessionId/interactions/:interactionId` → `createForwarder` |
 
-There are no gateway routes without a BFF caller. The BFF declares one path constant it
+Every gateway route except the legacy `POST /` alias has a BFF caller; `POST /` is unreachable from the BFF because `safeRpcPath` requires the `/private/agent/v1/` prefix. The BFF declares one path constant it
 never uses — `rpc.sessionConfig` in `term2GatewayClient.js` is shadowed by the broker's own
 `RPC.sessionConfig`, which is the one actually sent.
 

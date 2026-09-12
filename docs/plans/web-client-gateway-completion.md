@@ -19,6 +19,14 @@ Three rules carried into later milestones, because they were learned the hard wa
   both the gateway projection and ChatForge. Child approvals currently work only
   through the foreground-lease path; async subagents can only ask questions
   (contract 13 §7).
+- A restored session comes back on the provider/model it was created with, never on the
+  launcher's current default. Creation durably records a per-session snapshot sidecar in
+  the session directory (a failed write rolls the whole `session_create` back with
+  `503 snapshot_unwritable`); restore validates that snapshot against the live
+  registry/catalog and refuses on substitution risks. Absent sidecar = pre-change legacy
+  session, restored on the validated current launcher snapshot (identity may change);
+  corrupt sidecar = `500 session_snapshot_invalid`, never treated as legacy. Full rule:
+  contract 13 §9.
 
 The web client is ChatForge at `~/chat-term2-integration/chat/` (a git repo on
 branch `integration/v1-chat`). It has a frontend and a BFF backend that calls this

@@ -173,7 +173,9 @@ export class GatewayPersistenceError extends Error {
     | 'storage_capacity'
     | 'cursor_invalid'
     | 'cursor_compacted'
-    | 'journal_unhealthy';
+    | 'journal_unhealthy'
+    /** A new session's provider/model snapshot could not be durably recorded; creation rolls back. */
+    | 'snapshot_unwritable';
   constructor(code: GatewayPersistenceError['code'], message = 'gateway persistence rejected the operation') {
     super(message);
     this.name = 'GatewayPersistenceError';

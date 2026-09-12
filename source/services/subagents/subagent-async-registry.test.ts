@@ -623,6 +623,33 @@ it('reuses the same run id and session only for a completed continuation', async
   expect(sessions[0]).toBe(sessions[1]);
 });
 
+it('resolves a definition once per fresh spawn and keeps it across a continuation', async () => {
+  const picks = ['pool-a', 'pool-b'];
+  const resolveDefinition = vi.fn((role: string) => ({ role, model: picks.shift()!, provider: 'openai' } as any));
+  const seenModels: string[] = [];
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    resolveDefinition,
+    run: async ({ request, definition }: any) => {
+      seenModels.push(definition.model);
+      return result(request.role);
+    },
+  });
+
+  const first = registry.startRun({ role: 'explorer', task: 'one' });
+  await registry.getResult(first.runId);
+  const continued = registry.startRun({ role: 'explorer', task: 'two', continueRunId: first.runId });
+  await registry.getResult(continued.runId);
+  const fresh = registry.startRun({ role: 'explorer', task: 'three' });
+  await registry.getResult(fresh.runId);
+
+  expect(resolveDefinition).toHaveBeenCalledTimes(2);
+  expect(seenModels).toEqual(['pool-a', 'pool-a', 'pool-b']);
+  expect(registry.getRunStatus(first.runId)).toMatchObject({ model: { provider: 'openai', id: 'pool-a' } });
+  expect(registry.getRunStatus(fresh.runId)).toMatchObject({ model: { provider: 'openai', id: 'pool-b' } });
+  registry.dispose();
+});
+
 it('applies role continuation policy', async () => {
   const registry = make();
   const worker = registry.startRun({ role: 'worker', task: 'fresh' });

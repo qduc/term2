@@ -2,8 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import { getModelSettingConfig } from '../../utils/ai/model-settings.js';
 import { buildSettingValueSuggestions, isSecretSetting, isStringSetting } from '../../utils/value-suggestions.js';
-import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 import { SETTINGS_RESET_TRIGGER } from './triggers.js';
+import { SUBAGENT_POOL_SETTING_KEYS, getSubagentPoolRoleLabel } from '../../services/subagents/subagent-pool-config.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { EditorSnapshot, MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
@@ -43,10 +43,10 @@ const pushChildEffect = (
   const valuePrefix = `${beforeReplacement}${key} `;
 
   const modelConfig = getModelSettingConfig(key);
-  const isMentorPool = key === SETTING_KEYS.AGENT_MENTOR_POOL;
+  const isSubagentPool = SUBAGENT_POOL_SETTING_KEYS.has(key);
   const isFreeFormStringSetting =
     !modelConfig &&
-    !isMentorPool &&
+    !isSubagentPool &&
     isStringSetting(key) &&
     !isSecretSetting(key) &&
     buildSettingValueSuggestions(key).length === 0;
@@ -62,9 +62,11 @@ const pushChildEffect = (
   const trigger = { range: { start: 0, end: valueStart }, text: valuePrefix };
   const back = { type: 'restore' as const, point: { editor: currentEditor } };
 
-  const childFrame = isMentorPool
+  const childFrame = isSubagentPool
     ? {
-        kind: 'mentor_pool' as const,
+        kind: 'subagent_pool' as const,
+        settingKey: key,
+        roleLabel: getSubagentPoolRoleLabel(key),
         origin: { type: 'settings-list' as const, operation: 'set' as const, back },
         binding: {
           trigger,

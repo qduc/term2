@@ -1,25 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../../context/InputContext.js';
 import { SETTING_KEYS } from '../../services/settings/settings-service.js';
-import { useMentorPoolSelection } from '../../hooks/use-mentor-pool-selection.js';
-import MentorPoolSelectionMenu from '../menu/MentorPoolSelectionMenu.js';
+import { useSubagentPoolSelection } from '../../hooks/use-subagent-pool-selection.js';
+import { getSubagentPoolFallbackProviderKey } from '../../services/subagents/subagent-pool-config.js';
+import SubagentPoolSelectionMenu from '../menu/SubagentPoolSelectionMenu.js';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 
-type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'mentor_pool' }>>;
+type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'subagent_pool' }>>;
 
-export function MentorPoolMenuSession({ frame, active, controller, interactions, services }: Props) {
+export function SubagentPoolMenuSession({ frame, active, controller, interactions, services }: Props) {
   const { setMenuPromptLabel } = useInputContext();
   const settingsService = services.settingsService as
     | import('../../services/settings/settings-service.js').SettingsService
     | undefined;
-  if (!settingsService) throw new Error('MentorPoolMenuSession requires settingsService');
+  if (!settingsService) throw new Error('SubagentPoolMenuSession requires settingsService');
   const loggingService = services.loggingService as
     | import('../../services/service-interfaces.js').ILoggingService
     | undefined;
-  const pool = useMentorPoolSelection(settingsService, active, loggingService);
+  const poolKind: 'fanout' | 'round-robin' =
+    frame.settingKey === SETTING_KEYS.AGENT_MENTOR_POOL ? 'fanout' : 'round-robin';
+  const pool = useSubagentPoolSelection(settingsService, active, loggingService, {
+    settingKey: frame.settingKey,
+    roleLabel: frame.roleLabel,
+    fallbackProviderKey: getSubagentPoolFallbackProviderKey(frame.settingKey),
+  });
   const [applyError, setApplyError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,12 +48,12 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
       handle: (event) => {
         if (!('type' in event)) {
           if (event.ok) return { stack: { type: 'close-top' } };
-          setApplyError(event.fieldErrors?.[SETTING_KEYS.AGENT_MENTOR_POOL] ?? event.message);
+          setApplyError(event.fieldErrors?.[frame.settingKey] ?? event.message);
           return keep();
         }
 
         const editingModel = pool.phase === 'edit_model';
-        // The mentor model picker uses the unified Favorites/All model view.
+        // The pool's model picker uses the unified Favorites/All model view.
         // Provider is taken from the selected row rather than from a provider tab.
         if (editingModel && applyMenuEditorEvent(controller, event, { horizontal: false })) {
           return keep();
@@ -103,7 +110,7 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
         }
       },
     };
-  }, [controller, frame.id, pool]);
+  }, [controller, frame.id, frame.settingKey, pool]);
 
   useEffect(() => {
     if (!active) return;
@@ -127,13 +134,15 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
     );
   }
   return (
-    <MentorPoolSelectionMenu
+    <SubagentPoolSelectionMenu
       phase={pool.phase}
       selectedIndex={pool.selectedIndex}
       activeItems={pool.activeItems}
       draft={pool.draft}
       errorMessage={pool.errorMessage ?? applyError}
       fieldErrors={pool.fieldErrors}
+      roleLabel={frame.roleLabel}
+      poolKind={poolKind}
     />
   );
 }

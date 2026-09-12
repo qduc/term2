@@ -14,6 +14,7 @@ import { loadRoleDefinition } from './role-loader.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
+import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -81,6 +82,11 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   });
 
   const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
+  // One cursor per role, shared by both spawn paths below (the foreground
+  // `run_subagent` tool and the async registry's fresh-run resolution) so a
+  // pool round-robins across every spawn regardless of which path it came
+  // through.
+  const rolePoolSelector = new SubagentRolePoolSelector(deps.settings);
 
   const nestedRunner = new NestedSubagentRunner({
     logger: deps.logger,
@@ -90,6 +96,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     toolFactory,
     onEvent: onEventWithPeek,
     roleToolCache,
+    rolePoolSelector,
     skillsService: deps.skillsService,
     toolOwnership: deps.toolOwnership,
     ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
@@ -119,15 +126,24 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
 
   asyncRegistry = new SubagentAsyncRegistry({
     logger: deps.logger,
-    run: async ({ request, runId, session, signal, input, control }) => {
+    run: async ({ request, runId, session, signal, input, control, definition }) => {
       if (request.role === 'mentor') {
         return mentorRunner.run(runId, input, signal, session, request.executionBudget);
       }
-      const definition = loadRoleDefinition(request.role, deps.settings);
+      // `definition` is resolved once per run by `resolveDefinition` below and
+      // carried across every later segment (including steering continuations
+      // and an explicit `continue_run_id`), so it is never recomputed here —
+      // recomputing per segment would draw another pool entry per turn
+      // instead of once per spawn. The fallback only covers callers that
+      // never went through `resolveDefinition` (e.g. a bare test double).
+      const resolvedDefinition = definition ?? loadRoleDefinition(request.role, deps.settings);
       return executionRunner.runInSession(
         runId,
         { ...request, signal },
-        { ...definition, ...(request.executionBudget ? { executionBudget: request.executionBudget } : {}) },
+        {
+          ...resolvedDefinition,
+          ...(request.executionBudget ? { executionBudget: request.executionBudget } : {}),
+        },
         session,
         undefined,
         signal,
@@ -141,6 +157,12 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     ttlMs: deps.settings.get('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
     messageCap: deps.settings.get('subagent.asyncMessageCap') ?? 50,
     sessionForRole: (role) => (role === 'mentor' ? mentorSession : undefined),
+    // Called once per fresh (non-continuation) spawn; a configured pool
+    // advances its round-robin cursor here.
+    resolveDefinition: (role) => {
+      const base = loadRoleDefinition(role as SupportedSubagentRole, deps.settings);
+      return rolePoolSelector.resolveForSpawn(role as SupportedSubagentRole, base);
+    },
     modelForRole: (role) => {
       const mentorPool = role === 'mentor' ? deps.settings.get('agent.mentorPool') : undefined;
       if (Array.isArray(mentorPool) && mentorPool.length > 0) return undefined;

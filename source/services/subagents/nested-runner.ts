@@ -23,6 +23,7 @@ import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
 import { loadRoleDefinition, resolveSubagentSearchViaShell, buildInstructions } from './role-loader.js';
+import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
 import {
   extractFinalText,
   extractPartialToolEvidence,
@@ -116,6 +117,7 @@ export class NestedSubagentRunner {
   #toolFactory: SubagentToolFactory;
   #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
+  #rolePoolSelector: SubagentRolePoolSelector;
   #skillsService?: SkillsService;
   #toolOwnership: ToolOwnershipRegistry;
   /** Live foreground runs, addressable by the stable root tool-call id. */
@@ -146,6 +148,8 @@ export class NestedSubagentRunner {
     toolOwnership: ToolOwnershipRegistry;
     /** Session-owned queue/control sink for approvals from adopted child runs. */
     backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
+    /** Session-scoped round-robin cursor over each role's model pool. Shared with the async registry so both spawn paths draw from the same cursor. */
+    rolePoolSelector?: SubagentRolePoolSelector;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -158,6 +162,7 @@ export class NestedSubagentRunner {
     this.#skillsService = deps.skillsService;
     this.#toolOwnership = deps.toolOwnership;
     this.#backgroundApprovalPauseSink = deps.backgroundApprovalPauseSink;
+    this.#rolePoolSelector = deps.rolePoolSelector ?? new SubagentRolePoolSelector(deps.settings);
   }
 
   clearCache(): void {
@@ -231,14 +236,36 @@ export class NestedSubagentRunner {
   }
 
   /**
+   * Resolves the role tool for one foreground spawn (one `runAsTool` call).
+   * The role cache pins whichever model built its cached tool for the life
+   * of the session, so a configured pool bypasses the cache entirely and
+   * builds a fresh tool per spawn — the same ephemeral-build path the
+   * worktree pin already uses — advancing the pool's round-robin cursor
+   * exactly once for this call.
+   */
+  #resolveRoleToolForSpawn(role: SupportedSubagentRole): CachedRoleTool {
+    if (!this.#rolePoolSelector.hasPool(role)) return this.#getOrCreateRoleTool(role);
+    return this.#buildRoleTool(role, { applyPool: true });
+  }
+
+  /**
    * Builds role tools for one nested run. When `executionContext` is supplied
    * (worker worktree pin), tools are ephemeral and must not enter the role
-   * cache — that cache freezes the session root.
+   * cache — that cache freezes the session root. `applyPool` runs this
+   * spawn's role definition through the round-robin pool selector; only set
+   * it from a call site that builds exactly once per spawn (never from a
+   * cached path), or the cursor advances more than once for one spawn.
    */
-  #buildRoleTool(role: SupportedSubagentRole, options?: { executionContext?: ExecutionContext }): CachedRoleTool {
+  #buildRoleTool(
+    role: SupportedSubagentRole,
+    options?: { executionContext?: ExecutionContext; applyPool?: boolean },
+  ): CachedRoleTool {
     // Use the injected resolver when available (shared ResolvedAgentDefinition
     // adaptation path); otherwise fall back to direct loadRoleDefinition.
-    const definition = this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings);
+    let definition = this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings);
+    if (options?.applyPool) {
+      definition = this.#rolePoolSelector.resolveForSpawn(role, definition);
+    }
     const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
     const runExecutionContext = options?.executionContext ?? this.#executionContext;
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(
@@ -592,7 +619,7 @@ export class NestedSubagentRunner {
         return failed;
       }
       worktreePath = pin.worktreePath;
-      pinnedRoleTool = this.#buildRoleTool(role, { executionContext: pin.executionContext });
+      pinnedRoleTool = this.#buildRoleTool(role, { executionContext: pin.executionContext, applyPool: true });
     }
 
     // ── Budget enforcement ──
@@ -617,7 +644,13 @@ export class NestedSubagentRunner {
     // detachable parent link preserves ordinary foreground abort beforehand.
     const candidateRunId = detailsRecord?.toolCall?.callId ?? randomUUID();
     const parentComposite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
-    const roleTool = pinnedRoleTool ?? this.#getOrCreateRoleTool(role);
+    // A `resumeState` call resumes a previously interrupted invocation of
+    // this same tool call (SDK-level continuation), not a new spawn: it must
+    // reuse whatever tool the original call resolved to rather than drawing
+    // another pool entry, so it always takes the cache path.
+    const roleTool =
+      pinnedRoleTool ??
+      (detailsRecord?.resumeState ? this.#getOrCreateRoleTool(role) : this.#resolveRoleToolForSpawn(role));
     const lease = new ForegroundSubagentLease({
       runId: candidateRunId,
       parentSignal: parentComposite?.signal,

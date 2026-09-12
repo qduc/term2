@@ -37,8 +37,8 @@ describe('Phase 4 rule-id split (graph 3 vs graph 4)', () => {
     const settingsRule = registry.getRule('settings');
     expect(settingsRule).toBeDefined();
     expect(settingsRule?.successors.map((s) => s.ruleId).sort()).toEqual([
-      'settings-mentor-pool-child',
       'settings-model',
+      'settings-subagent-pool-child',
       'settings-value-child',
     ]);
   });

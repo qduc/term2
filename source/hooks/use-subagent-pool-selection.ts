@@ -12,16 +12,25 @@ import type { MenuEffect } from '../components/input/menu-types.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import { getProviderIds } from '../providers/index.js';
 import { getFavoriteModelInfos, serializeFavorite } from '../services/models/model-favorites.js';
+import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
 
-export const MENTOR_POOL_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
-export type MentorPoolReasoningEffort = (typeof MENTOR_POOL_REASONING_EFFORTS)[number];
-export type MentorPoolEntry = {
+export const SUBAGENT_POOL_REASONING_EFFORTS = [
+  'default',
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+] as const;
+export type SubagentPoolReasoningEffort = (typeof SUBAGENT_POOL_REASONING_EFFORTS)[number];
+export type SubagentPoolEntry = {
   model: string;
   provider?: string;
-  reasoningEffort?: MentorPoolReasoningEffort;
+  reasoningEffort?: SubagentPoolReasoningEffort;
 };
-export type MentorPoolDraft = MentorPoolEntry & { _isNew?: boolean };
-export type MentorPoolPhase =
+export type SubagentPoolDraft = SubagentPoolEntry & { _isNew?: boolean };
+export type SubagentPoolPhase =
   | 'list'
   | 'edit_fields'
   | 'edit_model'
@@ -31,20 +40,24 @@ export type MentorPoolPhase =
   | 'confirm_discard'
   | 'reorder';
 
-export type MentorPoolMenuItem =
-  | { kind: 'entry'; entry: MentorPoolEntry; index: number; label: string }
+export type SubagentPoolMenuItem =
+  | { kind: 'entry'; entry: SubagentPoolEntry; index: number; label: string }
   | { kind: 'action'; action: 'add' | 'reorder' | 'save' | 'cancel'; label: string; tone?: 'default' | 'destructive' }
   | { kind: 'field'; field: 'model' | 'provider' | 'reasoning'; label: string; detail: string }
   | { kind: 'provider'; id: string; label: string }
-  | { kind: 'reasoning'; value: MentorPoolReasoningEffort | undefined; label: string }
-  | { kind: 'reorder-entry'; entry: MentorPoolEntry; index: number; label: string };
+  | { kind: 'reasoning'; value: SubagentPoolReasoningEffort | undefined; label: string }
+  | { kind: 'reorder-entry'; entry: SubagentPoolEntry; index: number; label: string };
 
-const mentorPoolEntrySchema = z.object({
+const subagentPoolEntrySchema = z.object({
   model: z.string().min(1, 'Model is required'),
   provider: z.string().min(1, 'Provider cannot be empty').optional(),
-  reasoningEffort: z.enum(MENTOR_POOL_REASONING_EFFORTS).optional(),
+  reasoningEffort: z.enum(SUBAGENT_POOL_REASONING_EFFORTS).optional(),
 });
-const mentorPoolSchema = z.array(mentorPoolEntrySchema).max(8, 'Mentor pool cannot contain more than 8 entries');
+const MAX_SUBAGENT_POOL_ENTRIES = 8;
+const subagentPoolSchema = (roleLabel: string) =>
+  z
+    .array(subagentPoolEntrySchema)
+    .max(MAX_SUBAGENT_POOL_ENTRIES, `${roleLabel} pool cannot contain more than 8 entries`);
 
 const noOpLoggingService: ILoggingService = {
   info: () => {},
@@ -57,16 +70,19 @@ const noOpLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-const cloneEntries = (value: unknown): MentorPoolEntry[] => {
-  const parsed = mentorPoolSchema.safeParse(value);
+const cloneEntries = (value: unknown, roleLabel: string): SubagentPoolEntry[] => {
+  const parsed = subagentPoolSchema(roleLabel).safeParse(value);
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
 };
 
-export function formatMentorPoolProvider(provider?: string): string {
-  return provider || 'Inherit mentor provider';
+export function formatSubagentPoolProvider(provider: string | undefined, roleLabel: string): string {
+  return provider || `Inherit ${roleLabel.toLowerCase()} provider`;
 }
 
-export function formatMentorPoolReasoning(reasoningEffort?: MentorPoolReasoningEffort): string {
+export function formatSubagentPoolReasoning(
+  reasoningEffort: SubagentPoolReasoningEffort | undefined,
+  roleLabel: string,
+): string {
   switch (reasoningEffort) {
     case 'none':
       return 'None';
@@ -81,20 +97,20 @@ export function formatMentorPoolReasoning(reasoningEffort?: MentorPoolReasoningE
     case 'xhigh':
       return 'Extra high';
     case undefined:
-      return 'Inherit mentor reasoning';
+      return `Inherit ${roleLabel.toLowerCase()} reasoning`;
     case 'default':
       return 'Provider default';
   }
 }
 
-export function mergeMentorPoolModels({
+export function mergeSubagentPoolModels({
   catalogModels,
   entries,
   provider,
   currentModel,
 }: {
   catalogModels: readonly ModelInfo[];
-  entries: readonly MentorPoolEntry[];
+  entries: readonly SubagentPoolEntry[];
   provider: string;
   currentModel: string;
 }): ModelInfo[] {
@@ -109,12 +125,12 @@ export function mergeMentorPoolModels({
 
   addSuggestion(currentModel, 'Current model (not in catalog)');
   for (const entry of entries) {
-    if (entry.provider === undefined || entry.provider === provider) addSuggestion(entry.model, 'In mentor pool');
+    if (entry.provider === undefined || entry.provider === provider) addSuggestion(entry.model, 'In pool');
   }
   return [...suggestions, ...catalogModels];
 }
 
-export function resolveMentorPoolModelSelection(
+export function resolveSubagentPoolModelSelection(
   models: readonly ModelInfo[],
   selectedIndex: number,
   typedModel: string,
@@ -122,21 +138,25 @@ export function resolveMentorPoolModelSelection(
   return models[selectedIndex]?.id ?? typedModel.trim();
 }
 
-/** Starting provider for custom mentor-pool model rows. */
-export function resolveMentorPoolBrowseProvider({
+/** Starting provider for custom pool model rows. */
+export function resolveSubagentPoolBrowseProvider({
   draftProvider,
-  mentorProvider,
+  roleProvider,
   agentProvider,
 }: {
   draftProvider?: string;
-  mentorProvider?: string;
+  roleProvider?: string;
   agentProvider?: string;
 }): string {
-  return draftProvider || mentorProvider || agentProvider || '';
+  return draftProvider || roleProvider || agentProvider || '';
 }
 
 /** Apply a model catalog pick: pin both model id and its provider. */
-export function applyMentorPoolModelPick(draft: MentorPoolDraft, model: string, provider: string): MentorPoolDraft {
+export function applySubagentPoolModelPick(
+  draft: SubagentPoolDraft,
+  model: string,
+  provider: string,
+): SubagentPoolDraft {
   return {
     ...draft,
     model,
@@ -144,15 +164,15 @@ export function applyMentorPoolModelPick(draft: MentorPoolDraft, model: string, 
   };
 }
 
-export function formatMentorPoolEntry(entry: MentorPoolEntry): string {
+export function formatSubagentPoolEntry(entry: SubagentPoolEntry): string {
   const provider = entry.provider ? ` @ ${entry.provider}` : '';
   const effort = entry.reasoningEffort && entry.reasoningEffort !== 'default' ? ` (${entry.reasoningEffort})` : '';
   return `${entry.model}${provider}${effort}`;
 }
 
-export function buildMentorPoolListItems(entries: readonly MentorPoolEntry[]): MentorPoolMenuItem[] {
-  const actions: MentorPoolMenuItem[] = [];
-  if (entries.length < 8) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
+export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
+  const actions: SubagentPoolMenuItem[] = [];
+  if (entries.length < MAX_SUBAGENT_POOL_ENTRIES) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
   if (entries.length > 1) actions.push({ kind: 'action', action: 'reorder', label: 'Reorder Entries' });
   actions.push({ kind: 'action', action: 'save', label: 'Save Changes' });
   return [
@@ -166,20 +186,32 @@ export function buildMentorPoolListItems(entries: readonly MentorPoolEntry[]): M
   ];
 }
 
-export function useMentorPoolSelection(
+export type SubagentPoolSelectionConfig = {
+  /** Setting key the pool is persisted under (e.g. `agent.mentorPool`). */
+  settingKey: string;
+  /** Human label used in editor copy ("Mentor", "Explorer", ...). */
+  roleLabel: string;
+  /** Setting key the "inherit provider" fallback reads from, when one exists. */
+  fallbackProviderKey?: string;
+};
+
+export function useSubagentPoolSelection(
   settingsService: SettingsService,
   active: boolean,
-  loggingService?: ILoggingService,
+  loggingService: ILoggingService | undefined,
+  config: SubagentPoolSelectionConfig,
 ) {
+  const { settingKey, roleLabel } = config;
+  const fallbackProviderKey = config.fallbackProviderKey ?? getSubagentPoolFallbackProviderKey(settingKey);
   const { input, setInput, replaceInput } = useInputContext();
-  const [phase, setPhase] = useState<MentorPoolPhase>('list');
-  const [entries, setEntries] = useState<MentorPoolEntry[]>([]);
-  const [draft, setDraft] = useState<MentorPoolDraft | null>(null);
+  const [phase, setPhase] = useState<SubagentPoolPhase>('list');
+  const [entries, setEntries] = useState<SubagentPoolEntry[]>([]);
+  const [draft, setDraft] = useState<SubagentPoolDraft | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [reorderList, setReorderList] = useState<MentorPoolEntry[]>([]);
+  const [reorderList, setReorderList] = useState<SubagentPoolEntry[]>([]);
   const [providerItems, setProviderItems] = useState<ProviderSelectionItem[]>([]);
   const [draftModified, setDraftModified] = useState(false);
-  const [discardFromPhase, setDiscardFromPhase] = useState<MentorPoolPhase | null>(null);
+  const [discardFromPhase, setDiscardFromPhase] = useState<SubagentPoolPhase | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const catalogSession = useMemo(
@@ -196,9 +228,12 @@ export function useMentorPoolSelection(
   const [browsingProvider, setBrowsingProvider] = useState<string | null>(null);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
-  const fallbackModelProvider = resolveMentorPoolBrowseProvider({
+  const roleProvider = fallbackProviderKey
+    ? (settingsService.get(fallbackProviderKey as any) as string | undefined)
+    : undefined;
+  const fallbackModelProvider = resolveSubagentPoolBrowseProvider({
     draftProvider: draft?.provider,
-    mentorProvider: settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER),
+    roleProvider,
     agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
   });
   const modelProvider = browsingProvider ?? fallbackModelProvider;
@@ -213,7 +248,7 @@ export function useMentorPoolSelection(
   );
   const modelItems = useMemo(() => {
     const unified = mergeUnifiedModels(providerIds, catalogs, favoriteModels);
-    return mergeMentorPoolModels({
+    return mergeSubagentPoolModels({
       catalogModels: unified,
       entries,
       provider: fallbackModelProvider,
@@ -232,20 +267,25 @@ export function useMentorPoolSelection(
     [favoriteKeys, input, modelItems, modelTab],
   );
 
-  const activeItems = useMemo<MentorPoolMenuItem[]>(() => {
+  const activeItems = useMemo<SubagentPoolMenuItem[]>(() => {
     if (phase === 'list') {
-      return buildMentorPoolListItems(entries);
+      return buildSubagentPoolListItems(entries);
     }
     if (phase === 'edit_fields') {
       if (!draft) return [];
       return [
         { kind: 'field', field: 'model', label: 'Model', detail: draft.model || '<empty>' },
-        { kind: 'field', field: 'provider', label: 'Provider', detail: formatMentorPoolProvider(draft.provider) },
+        {
+          kind: 'field',
+          field: 'provider',
+          label: 'Provider',
+          detail: formatSubagentPoolProvider(draft.provider, roleLabel),
+        },
         {
           kind: 'field',
           field: 'reasoning',
           label: 'Reasoning',
-          detail: formatMentorPoolReasoning(draft.reasoningEffort),
+          detail: formatSubagentPoolReasoning(draft.reasoningEffort, roleLabel),
         },
         { kind: 'action', action: 'save', label: 'Save Changes' },
         { kind: 'action', action: 'cancel', label: 'Cancel' },
@@ -253,17 +293,17 @@ export function useMentorPoolSelection(
     }
     if (phase === 'edit_provider') {
       return [
-        { kind: 'provider', id: '', label: 'Inherit (use mentor provider)' },
+        { kind: 'provider', id: '', label: `Inherit (use ${roleLabel.toLowerCase()} provider)` },
         ...providerItems.map((provider) => ({ kind: 'provider' as const, id: provider.id, label: provider.label })),
       ];
     }
     if (phase === 'edit_reasoning') {
       return [
-        { kind: 'reasoning' as const, value: undefined, label: formatMentorPoolReasoning() },
-        ...MENTOR_POOL_REASONING_EFFORTS.map((value) => ({
+        { kind: 'reasoning' as const, value: undefined, label: formatSubagentPoolReasoning(undefined, roleLabel) },
+        ...SUBAGENT_POOL_REASONING_EFFORTS.map((value) => ({
           kind: 'reasoning' as const,
           value,
-          label: formatMentorPoolReasoning(value),
+          label: formatSubagentPoolReasoning(value, roleLabel),
         })),
       ];
     }
@@ -285,14 +325,14 @@ export function useMentorPoolSelection(
       entry,
       label: entry.model,
     }));
-  }, [draft, entries, phase, providerItems, reorderList]);
+  }, [draft, entries, phase, providerItems, reorderList, roleLabel]);
 
   const selection = useSelection(activeItems);
 
   useEffect(() => {
     if (!active) return;
     const currentSettingsService = settingsServiceRef.current;
-    const loaded = cloneEntries(currentSettingsService.get(SETTING_KEYS.AGENT_MENTOR_POOL));
+    const loaded = cloneEntries(currentSettingsService.get(settingKey as any), roleLabel);
     setEntries(loaded);
     setProviderItems(loadProviderItems(currentSettingsService));
     setPhase('list');
@@ -303,7 +343,7 @@ export function useMentorPoolSelection(
     setDiscardFromPhase(null);
     setErrorMessage(null);
     setFieldErrors({});
-  }, [active]);
+  }, [active, roleLabel, settingKey]);
 
   useEffect(() => {
     if (!active || phase !== 'edit_model' || providerIds.length === 0) return;
@@ -374,16 +414,18 @@ export function useMentorPoolSelection(
 
   const resolveBrowseProvider = useCallback(
     (draftProvider?: string) =>
-      resolveMentorPoolBrowseProvider({
+      resolveSubagentPoolBrowseProvider({
         draftProvider,
-        mentorProvider: settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER),
+        roleProvider: fallbackProviderKey
+          ? (settingsService.get(fallbackProviderKey as any) as string | undefined)
+          : undefined,
         agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
       }),
-    [settingsService],
+    [fallbackProviderKey, settingsService],
   );
 
   const openDraft = useCallback(
-    (entry: MentorPoolEntry | null, index: number | null) => {
+    (entry: SubagentPoolEntry | null, index: number | null) => {
       setDraft(entry ? { ...entry, _isNew: false } : { model: '', _isNew: true });
       setEditingIndex(index);
       setDraftModified(false);
@@ -407,7 +449,7 @@ export function useMentorPoolSelection(
 
   const saveDraft = useCallback(() => {
     if (!draft) return;
-    const result = mentorPoolEntrySchema.safeParse({
+    const result = subagentPoolEntrySchema.safeParse({
       model: draft.model.trim(),
       ...(draft.provider === undefined ? {} : { provider: draft.provider.trim() }),
       ...(draft.reasoningEffort === undefined ? {} : { reasoningEffort: draft.reasoningEffort }),
@@ -466,7 +508,9 @@ export function useMentorPoolSelection(
         } else {
           setPhase('edit_reasoning');
           selection.setSelectedIndex(
-            draft.reasoningEffort === undefined ? 0 : MENTOR_POOL_REASONING_EFFORTS.indexOf(draft.reasoningEffort) + 1,
+            draft.reasoningEffort === undefined
+              ? 0
+              : SUBAGENT_POOL_REASONING_EFFORTS.indexOf(draft.reasoningEffort) + 1,
           );
           setInput('');
         }
@@ -490,7 +534,7 @@ export function useMentorPoolSelection(
     }
     if (phase === 'edit_reasoning' && item.kind === 'reasoning' && draft) {
       // Keep an explicitly stored `default` distinct from an omitted value:
-      // the runner treats an omitted value as falling back to the mentor
+      // the runner treats an omitted value as falling back to the role
       // setting, while `default` uses the provider default.
       setDraft({ ...draft, reasoningEffort: item.value });
       setDraftModified(true);
@@ -559,7 +603,7 @@ export function useMentorPoolSelection(
         return false;
       }
       // Pin the provider belonging to the selected unified row.
-      setDraft(applyMentorPoolModelPick(draft, model, provider));
+      setDraft(applySubagentPoolModelPick(draft, model, provider));
       setDraftModified(true);
       setFieldErrors({});
       setErrorMessage(null);
@@ -576,7 +620,7 @@ export function useMentorPoolSelection(
     (typedValue: string) => {
       const selected = filteredModels[modelSelectedIndex];
       return saveModel(
-        resolveMentorPoolModelSelection(filteredModels, modelSelectedIndex, typedValue),
+        resolveSubagentPoolModelSelection(filteredModels, modelSelectedIndex, typedValue),
         selected?.provider ?? modelProvider,
       );
     },
@@ -693,12 +737,12 @@ export function useMentorPoolSelection(
 
   const saveIntent = useCallback(
     (frameId: string): MenuEffect | null => {
-      const result = mentorPoolSchema.safeParse(entries);
+      const result = subagentPoolSchema(roleLabel).safeParse(entries);
       if (!result.success) {
-        setErrorMessage(result.error.issues[0]?.message ?? 'Invalid mentor pool');
+        setErrorMessage(result.error.issues[0]?.message ?? `Invalid ${roleLabel.toLowerCase()} pool`);
         return null;
       }
-      const persistence = settingsService.isRuntimeModifiable(SETTING_KEYS.AGENT_MENTOR_POOL) ? 'runtime' : 'restart';
+      const persistence = settingsService.isRuntimeModifiable(settingKey as any) ? 'runtime' : 'restart';
       return {
         stack: { type: 'keep' },
         intent: {
@@ -706,12 +750,12 @@ export function useMentorPoolSelection(
           sourceFrameId: frameId,
           intent: {
             type: 'apply-settings',
-            changes: [{ key: SETTING_KEYS.AGENT_MENTOR_POOL, value: result.data, persistence }],
+            changes: [{ key: settingKey, value: result.data, persistence }],
           },
         },
       };
     },
-    [entries, settingsService],
+    [entries, roleLabel, settingKey, settingsService],
   );
 
   return {

@@ -163,7 +163,7 @@ export class MenuControllerImpl implements MenuController {
 
   private backPolicyFor(frame: MenuFrame | undefined): BackPolicy | undefined {
     if (frame?.kind === 'settings_value') return frame.origin.back;
-    if (frame?.kind === 'mentor_pool') return frame.origin.back;
+    if (frame?.kind === 'subagent_pool') return frame.origin.back;
     if (frame?.kind === 'model') return frame.back;
     return undefined;
   }
@@ -290,8 +290,11 @@ export class MenuControllerImpl implements MenuController {
     const topFrame = stack.at(-1);
 
     // Explicitly opened frames ignore text trigger reconciliation until closed
-    if (topFrame && (topFrame.kind === 'rewind' || topFrame.kind === 'providers' || topFrame.kind === 'mentor_pool')) {
-      if (topFrame.kind === 'mentor_pool' && 'binding' in topFrame) {
+    if (
+      topFrame &&
+      (topFrame.kind === 'rewind' || topFrame.kind === 'providers' || topFrame.kind === 'subagent_pool')
+    ) {
+      if (topFrame.kind === 'subagent_pool' && 'binding' in topFrame) {
         const binding = {
           ...topFrame.binding,
           query: editor.text.slice(topFrame.binding.queryStart, editor.cursor),

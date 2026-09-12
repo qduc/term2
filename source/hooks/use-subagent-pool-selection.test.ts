@@ -1,17 +1,17 @@
 import { expect, it } from 'vitest';
 import {
-  applyMentorPoolModelPick,
-  buildMentorPoolListItems,
-  formatMentorPoolReasoning,
-  mergeMentorPoolModels,
-  resolveMentorPoolBrowseProvider,
-  resolveMentorPoolModelSelection,
-} from './use-mentor-pool-selection.js';
+  applySubagentPoolModelPick,
+  buildSubagentPoolListItems,
+  formatSubagentPoolReasoning,
+  mergeSubagentPoolModels,
+  resolveSubagentPoolBrowseProvider,
+  resolveSubagentPoolModelSelection,
+} from './use-subagent-pool-selection.js';
 
 it('only offers reorder when a pool has at least two entries', () => {
-  const emptyActions = buildMentorPoolListItems([]).filter((item) => item.kind === 'action');
-  const oneEntryActions = buildMentorPoolListItems([{ model: 'gpt-5' }]).filter((item) => item.kind === 'action');
-  const twoEntryActions = buildMentorPoolListItems([{ model: 'gpt-5' }, { model: 'sonnet' }]).filter(
+  const emptyActions = buildSubagentPoolListItems([]).filter((item) => item.kind === 'action');
+  const oneEntryActions = buildSubagentPoolListItems([{ model: 'gpt-5' }]).filter((item) => item.kind === 'action');
+  const twoEntryActions = buildSubagentPoolListItems([{ model: 'gpt-5' }, { model: 'sonnet' }]).filter(
     (item) => item.kind === 'action',
   );
 
@@ -21,14 +21,15 @@ it('only offers reorder when a pool has at least two entries', () => {
 });
 
 it('describes inherited and explicit reasoning without changing stored values', () => {
-  expect(formatMentorPoolReasoning()).toBe('Inherit mentor reasoning');
-  expect(formatMentorPoolReasoning('default')).toBe('Provider default');
-  expect(formatMentorPoolReasoning('high')).toBe('High');
-  expect(formatMentorPoolReasoning('none')).toBe('None');
+  expect(formatSubagentPoolReasoning(undefined, 'Mentor')).toBe('Inherit mentor reasoning');
+  expect(formatSubagentPoolReasoning('default', 'Mentor')).toBe('Provider default');
+  expect(formatSubagentPoolReasoning('high', 'Mentor')).toBe('High');
+  expect(formatSubagentPoolReasoning('none', 'Mentor')).toBe('None');
+  expect(formatSubagentPoolReasoning(undefined, 'Explorer')).toBe('Inherit explorer reasoning');
 });
 
 it('offers saved pool IDs and the current draft value when they are absent from the provider catalog', () => {
-  const models = mergeMentorPoolModels({
+  const models = mergeSubagentPoolModels({
     catalogModels: [{ id: 'catalog-model', provider: 'openai' }],
     entries: [
       { model: 'saved-model', provider: 'openai' },
@@ -46,11 +47,11 @@ it('offers saved pool IDs and the current draft value when they are absent from 
     'catalog-model',
   ]);
   expect(models[0]).toMatchObject({ name: 'Current model (not in catalog)', provider: 'openai' });
-  expect(models[1]).toMatchObject({ name: 'In mentor pool', provider: 'openai' });
+  expect(models[1]).toMatchObject({ name: 'In pool', provider: 'openai' });
 });
 
 it('keeps catalog metadata when a saved pool model is already known to the provider', () => {
-  const models = mergeMentorPoolModels({
+  const models = mergeSubagentPoolModels({
     catalogModels: [{ id: 'known-model', name: 'Known Model', provider: 'openai' }],
     entries: [{ model: 'known-model', provider: 'openai' }],
     provider: 'openai',
@@ -63,19 +64,19 @@ it('keeps catalog metadata when a saved pool model is already known to the provi
 it('selects the highlighted catalog model but accepts a typed custom ID when there is no match', () => {
   const models = [{ id: 'catalog-model', provider: 'openai' }];
 
-  expect(resolveMentorPoolModelSelection(models, 0, 'custom-model')).toBe('catalog-model');
-  expect(resolveMentorPoolModelSelection([], 0, ' custom-model ')).toBe('custom-model');
+  expect(resolveSubagentPoolModelSelection(models, 0, 'custom-model')).toBe('catalog-model');
+  expect(resolveSubagentPoolModelSelection([], 0, ' custom-model ')).toBe('custom-model');
 });
 
 it('pins both model and provider when a catalog pick is applied to a draft', () => {
-  expect(applyMentorPoolModelPick({ model: '', _isNew: true }, 'gpt-5', 'openai')).toEqual({
+  expect(applySubagentPoolModelPick({ model: '', _isNew: true }, 'gpt-5', 'openai')).toEqual({
     model: 'gpt-5',
     provider: 'openai',
     _isNew: true,
   });
 
   expect(
-    applyMentorPoolModelPick(
+    applySubagentPoolModelPick(
       { model: 'old', provider: 'openrouter', reasoningEffort: 'high' },
       'claude-sonnet',
       'anthropic',
@@ -87,25 +88,25 @@ it('pins both model and provider when a catalog pick is applied to a draft', () 
   });
 });
 
-it('resolves the model browser starting provider from the entry, then mentor, then agent', () => {
+it('resolves the model browser starting provider from the entry, then the role, then the agent', () => {
   expect(
-    resolveMentorPoolBrowseProvider({
+    resolveSubagentPoolBrowseProvider({
       draftProvider: 'openrouter',
-      mentorProvider: 'openai',
+      roleProvider: 'openai',
       agentProvider: 'anthropic',
     }),
   ).toBe('openrouter');
   expect(
-    resolveMentorPoolBrowseProvider({
+    resolveSubagentPoolBrowseProvider({
       draftProvider: undefined,
-      mentorProvider: 'openai',
+      roleProvider: 'openai',
       agentProvider: 'anthropic',
     }),
   ).toBe('openai');
   expect(
-    resolveMentorPoolBrowseProvider({
+    resolveSubagentPoolBrowseProvider({
       draftProvider: undefined,
-      mentorProvider: undefined,
+      roleProvider: undefined,
       agentProvider: 'anthropic',
     }),
   ).toBe('anthropic');

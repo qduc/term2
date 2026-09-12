@@ -2,7 +2,7 @@ import type { SlashCommand } from '../../slash-commands.js';
 import { TriggerRuleRegistry } from './menu-controller.js';
 import { determineActiveMenu } from './determine-active-menu.js';
 import { getModelSettingConfigForInput } from '../../utils/ai/model-settings.js';
-import { SETTING_KEYS } from '../../services/settings/settings-service.js';
+import { SUBAGENT_POOL_SETTING_KEYS, getSubagentPoolRoleLabel } from '../../services/subagents/subagent-pool-config.js';
 
 export const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
@@ -167,22 +167,24 @@ export function createDefaultTriggerRegistry(
   });
 
   registerRule({
-    id: 'settings-mentor-pool-child',
+    id: 'settings-subagent-pool-child',
     priority: 45,
     parse: (editor) => {
       const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
       if (
         active.type !== 'settings_value' ||
         active.origin !== 'settings-list' ||
-        active.key !== SETTING_KEYS.AGENT_MENTOR_POOL
+        !SUBAGENT_POOL_SETTING_KEYS.has(active.key)
       ) {
         return null;
       }
       return {
-        ruleId: 'settings-mentor-pool-child',
-        identity: `settings-mentor-pool-child:${active.startIndex}`,
+        ruleId: 'settings-subagent-pool-child',
+        identity: `settings-subagent-pool-child:${active.startIndex}`,
         frame: {
-          kind: 'mentor_pool' as const,
+          kind: 'subagent_pool' as const,
+          settingKey: active.key,
+          roleLabel: getSubagentPoolRoleLabel(active.key),
           origin: {
             type: 'settings-list' as const,
             operation: 'set' as const,
@@ -257,7 +259,7 @@ export function createDefaultTriggerRegistry(
     },
     successors: [
       { ruleId: 'settings-value-child', operation: 'push' },
-      { ruleId: 'settings-mentor-pool-child', operation: 'push' },
+      { ruleId: 'settings-subagent-pool-child', operation: 'push' },
       { ruleId: 'settings-model', operation: 'push' },
     ],
   });

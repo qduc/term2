@@ -3,37 +3,43 @@ import { Box, Text } from 'ink';
 import { MenuContainer } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 import {
-  formatMentorPoolProvider,
-  formatMentorPoolReasoning,
-  type MentorPoolDraft,
-  type MentorPoolMenuItem,
-  type MentorPoolPhase,
-} from '../../hooks/use-mentor-pool-selection.js';
+  formatSubagentPoolProvider,
+  formatSubagentPoolReasoning,
+  type SubagentPoolDraft,
+  type SubagentPoolMenuItem,
+  type SubagentPoolPhase,
+} from '../../hooks/use-subagent-pool-selection.js';
 
 type Props = {
-  phase: MentorPoolPhase;
+  phase: SubagentPoolPhase;
   selectedIndex: number;
-  activeItems: MentorPoolMenuItem[];
-  draft: MentorPoolDraft | null;
+  activeItems: SubagentPoolMenuItem[];
+  draft: SubagentPoolDraft | null;
   errorMessage: string | null;
   fieldErrors: Record<string, string>;
+  /** Human label used in copy ("Mentor", "Explorer", ...). */
+  roleLabel: string;
+  /** Mentor fans a question out to every pool entry; other roles round-robin one entry per spawn. */
+  poolKind: 'fanout' | 'round-robin';
 };
 
-export function MentorPoolSelectionMenu({
+export function SubagentPoolSelectionMenu({
   phase,
   selectedIndex,
   activeItems,
   draft,
   errorMessage,
   fieldErrors,
+  roleLabel,
+  poolKind,
 }: Props) {
   const title =
     phase === 'list'
-      ? 'Mentor Pool'
+      ? `${roleLabel} Pool`
       : phase === 'edit_fields'
       ? draft?._isNew
-        ? 'Add Mentor Entry'
-        : 'Edit Mentor Entry'
+        ? `Add ${roleLabel} Entry`
+        : `Edit ${roleLabel} Entry`
       : phase === 'edit_model'
       ? 'Enter Model ID'
       : phase === 'edit_provider'
@@ -41,9 +47,9 @@ export function MentorPoolSelectionMenu({
       : phase === 'edit_reasoning'
       ? 'Select Reasoning Effort'
       : phase === 'reorder'
-      ? 'Reorder Mentor Entries'
+      ? `Reorder ${roleLabel} Entries`
       : phase === 'confirm_delete'
-      ? 'Delete Mentor Entry?'
+      ? `Delete ${roleLabel} Entry?`
       : 'Discard Changes?';
 
   if (phase === 'edit_model') {
@@ -78,6 +84,14 @@ export function MentorPoolSelectionMenu({
 
   const entryCount = activeItems.filter((item) => item.kind === 'entry').length;
   const isListEmpty = phase === 'list' && entryCount === 0;
+  const listSummary =
+    poolKind === 'fanout'
+      ? 'Each entry gets one independent answer for each question.'
+      : 'Each spawn uses the next entry, round-robin.';
+  const listCountSuffix =
+    poolKind === 'fanout'
+      ? 'A configured pool overrides mentor samples.'
+      : 'A configured pool overrides the role model.';
 
   return (
     <Box flexDirection="column">
@@ -86,10 +100,14 @@ export function MentorPoolSelectionMenu({
       </Text>
       {phase === 'list' && (
         <Box flexDirection="column">
-          <Text color={COLOR_TEXT_SUBTLE}>Each entry gets one independent answer for each question.</Text>
-          <Text color={COLOR_TEXT_SUBTLE}>{entryCount}/8 entries · A configured pool overrides mentor samples.</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>{listSummary}</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>
+            {entryCount}/8 entries · {listCountSuffix}
+          </Text>
           {isListEmpty && (
-            <Text color={COLOR_TEXT_SUBTLE}>No mentor entries configured yet. Add one to get started.</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>
+              No {roleLabel.toLowerCase()} entries configured yet. Add one to get started.
+            </Text>
           )}
         </Box>
       )}
@@ -137,8 +155,8 @@ export function MentorPoolSelectionMenu({
                 </Text>
                 {item.kind === 'entry' || item.kind === 'reorder-entry' ? (
                   <Text color={selected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>
-                    {'  '}· Provider: {formatMentorPoolProvider(item.entry.provider)} · Reasoning:{' '}
-                    {formatMentorPoolReasoning(item.entry.reasoningEffort)}
+                    {'  '}· Provider: {formatSubagentPoolProvider(item.entry.provider, roleLabel)} · Reasoning:{' '}
+                    {formatSubagentPoolReasoning(item.entry.reasoningEffort, roleLabel)}
                   </Text>
                 ) : null}
               </Box>
@@ -151,4 +169,4 @@ export function MentorPoolSelectionMenu({
   );
 }
 
-export default MentorPoolSelectionMenu;
+export default SubagentPoolSelectionMenu;

@@ -358,11 +358,11 @@ it.sequential('opens the mentor pool editor without repeatedly updating the cont
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   await writeInput(stdin, '\r');
-  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'mentor_pool');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'subagent_pool');
   await settle();
 
   expect(lastFrame()).toContain('Mentor Pool');
-  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('subagent_pool');
 });
 
 it.sequential('accepting a /model prefix opens the model successor menu', async () => {

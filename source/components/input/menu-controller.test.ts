@@ -112,7 +112,9 @@ describe('MenuControllerImpl', () => {
               ruleId: 'mentor_pool',
               identity: 'mentor-pool',
               frame: {
-                kind: 'mentor_pool',
+                kind: 'subagent_pool',
+                settingKey: 'agent.mentorPool',
+                roleLabel: 'Mentor',
                 origin: {
                   type: 'settings-list',
                   operation: 'set',

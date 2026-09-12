@@ -1,20 +1,24 @@
 import React from 'react';
 import { expect, it } from 'vitest';
 import { render } from 'ink-testing-library';
-import MentorPoolSelectionMenu from './MentorPoolSelectionMenu.js';
+import SubagentPoolSelectionMenu from './SubagentPoolSelectionMenu.js';
 
 const renderMenu = (
-  phase: React.ComponentProps<typeof MentorPoolSelectionMenu>['phase'],
-  activeItems: React.ComponentProps<typeof MentorPoolSelectionMenu>['activeItems'],
+  phase: React.ComponentProps<typeof SubagentPoolSelectionMenu>['phase'],
+  activeItems: React.ComponentProps<typeof SubagentPoolSelectionMenu>['activeItems'],
+  overrides: Partial<React.ComponentProps<typeof SubagentPoolSelectionMenu>> = {},
 ) => {
   const view = render(
-    <MentorPoolSelectionMenu
+    <SubagentPoolSelectionMenu
       phase={phase}
       selectedIndex={0}
       activeItems={activeItems}
       draft={null}
       errorMessage={null}
       fieldErrors={{}}
+      roleLabel="Mentor"
+      poolKind="fanout"
+      {...overrides}
     />,
   );
   return { frame: view.lastFrame() ?? '', unmount: view.unmount };
@@ -63,13 +67,15 @@ it('shows entry metadata and only offers reorder once there are multiple entries
 
 it('keeps model editing guidance visible for both empty and existing values', () => {
   const empty = render(
-    <MentorPoolSelectionMenu
+    <SubagentPoolSelectionMenu
       phase="edit_model"
       selectedIndex={0}
       activeItems={[]}
       draft={{ model: '', _isNew: true }}
       errorMessage={null}
       fieldErrors={{}}
+      roleLabel="Mentor"
+      poolKind="fanout"
     />,
   );
   expect(empty.lastFrame()).toContain('Type the model ID below and press Enter');
@@ -79,16 +85,34 @@ it('keeps model editing guidance visible for both empty and existing values', ()
 
 it('labels a new draft as an add flow instead of an edit flow', () => {
   const view = render(
-    <MentorPoolSelectionMenu
+    <SubagentPoolSelectionMenu
       phase="edit_fields"
       selectedIndex={0}
       activeItems={[{ kind: 'field', field: 'model', label: 'Model', detail: '<empty>' }]}
       draft={{ model: '', _isNew: true }}
       errorMessage={null}
       fieldErrors={{}}
+      roleLabel="Mentor"
+      poolKind="fanout"
     />,
   );
 
   expect(view.lastFrame()).toContain('Add Mentor Entry');
   view.unmount();
+});
+
+it('uses round-robin copy and a role-specific label for non-mentor roles', () => {
+  const { frame, unmount } = renderMenu(
+    'list',
+    [
+      { kind: 'action', action: 'add', label: 'Add Entry' },
+      { kind: 'action', action: 'save', label: 'Save Changes' },
+    ],
+    { roleLabel: 'Explorer', poolKind: 'round-robin' },
+  );
+
+  expect(frame).toContain('Explorer Pool');
+  expect(frame).toContain('Each spawn uses the next entry, round-robin');
+  expect(frame).toContain('No explorer entries configured yet');
+  unmount();
 });

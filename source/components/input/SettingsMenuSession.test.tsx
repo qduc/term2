@@ -42,7 +42,7 @@ const buildController = (intentHost?: IntentHost) => {
   controller.setTriggerRegistry(
     createDefaultTriggerRegistry(
       [settingsCommand],
-      ['settings', 'settings-value-child', 'settings-mentor-pool-child', 'settings-model'],
+      ['settings', 'settings-value-child', 'settings-subagent-pool-child', 'settings-model'],
     ),
   );
   return controller;
@@ -358,7 +358,7 @@ it('selecting agent.mentorPool opens the structured mentor pool editor and saves
     await Promise.resolve();
   });
 
-  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('subagent_pool');
   await act(async () => {
     controller.escape();
     await Promise.resolve();
@@ -445,7 +445,7 @@ it.skip('edits an entry model locally before persisting the complete pool', asyn
     });
     await Promise.resolve();
   });
-  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('subagent_pool');
 
   await act(async () => {
     controller.dispatchActiveEvent({

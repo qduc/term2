@@ -64,6 +64,8 @@ function buildNestedRunner(
     failRoleResolutionAfterFirst?: boolean;
     /** Advertise conversation chaining on the nested provider. */
     supportsConversationChaining?: boolean;
+    /** Configures `agent.subagentWorkerPool`. */
+    workerPool?: { model: string; provider?: string }[];
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
     logger?: ReturnType<typeof createMockLogger>;
@@ -148,6 +150,7 @@ function buildNestedRunner(
       'agent.model': 'nested-model',
       'agent.provider': providerId,
       'agent.runBudget.extensionPercent': 0,
+      ...(options.workerPool ? { 'agent.subagentWorkerPool': options.workerPool } : {}),
       ...(options.turnBackstop !== undefined
         ? { 'agent.runBudget.turnBackstop': options.turnBackstop }
         : options.alwaysCallsTool
@@ -362,6 +365,24 @@ describe('NestedSubagentRunner end to end', () => {
     candidate.lease.adopt();
 
     await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'immutable-transfer-model' });
+  });
+
+  it('draws one worker pool entry per foreground spawn instead of pinning the cached first model', async () => {
+    const { runner, providerId } = buildNestedRunner({ workerPool: [{ model: 'pool-a' }, { model: 'pool-b' }] });
+    const models: unknown[] = [];
+    for (const callId of ['pool-spawn-1', 'pool-spawn-2', 'pool-spawn-3']) {
+      const run = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+        toolCall: { callId },
+      });
+      models.push(runner.getForegroundCandidate(callId)?.model);
+      await run;
+    }
+
+    expect(models).toEqual([
+      { provider: providerId, id: 'pool-a' },
+      { provider: providerId, id: 'pool-b' },
+      { provider: providerId, id: 'pool-a' },
+    ]);
   });
 
   it('turns a synchronous retained-loop launch failure into one durable adopted terminal without retaining the pause', async () => {

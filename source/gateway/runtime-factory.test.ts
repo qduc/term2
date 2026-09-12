@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import { createAgentStream } from '../services/agent-stream.js';
-import { RuntimeFactory, RuntimeFactoryError } from './runtime-factory.js';
+import { PRODUCTION_AUTHORITY_SETTING_KEYS, RuntimeFactory, RuntimeFactoryError } from './runtime-factory.js';
 import type { ProviderBrokerCapability, SessionBinding } from './contracts.js';
 
 const roots: string[] = [];
@@ -380,5 +380,38 @@ describe('RuntimeFactory and ServerSession', () => {
     expect(session.status).toBe('idle');
 
     await session.dispose();
+  });
+});
+
+describe('production authority settings allowlist', () => {
+  // The allowlist is the one seam between the launcher's credential owner and
+  // gateway sessions. The guard is a positive list, not a denylist: only
+  // provider inputs (agent.*) and web-search keys (webSearch.*) may cross it,
+  // so a new schema prefix (hooks, ssh, debug, logging, subagent, ...) cannot
+  // silently grant host authority to a web session.
+  const ALLOWED_PREFIXES = ['agent.', 'webSearch.'];
+
+  it('routes only provider and web-search settings from the launcher into sessions', () => {
+    for (const key of PRODUCTION_AUTHORITY_SETTING_KEYS) {
+      const allowed = ALLOWED_PREFIXES.some((prefix) => key.startsWith(prefix));
+      expect(allowed, `allowlist entry "${key}" must start with agent. or webSearch.`).toBe(true);
+    }
+  });
+
+  it('routes exactly the provider, transport, and web-search keys the launcher owns', () => {
+    expect([...PRODUCTION_AUTHORITY_SETTING_KEYS].sort()).toEqual(
+      [
+        'agent.openai.apiKey',
+        'agent.openrouter.apiKey',
+        'agent.openrouter.baseUrl',
+        'agent.openrouter.referrer',
+        'agent.openrouter.title',
+        'agent.transport',
+        'agent.codex.websocketFirstFrameTimeoutMs',
+        'agent.codex.websocketInterFrameTimeoutMs',
+        'webSearch.tavily.apiKey',
+        'webSearch.exa.apiKey',
+      ].sort(),
+    );
   });
 });

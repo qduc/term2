@@ -18,6 +18,7 @@ export const ASSERTION_PURPOSES = [
   'session_create',
   'session_read',
   'message_submit',
+  'command_invoke',
   'interaction_resolve',
   'abort',
   'events_connect',
@@ -165,6 +166,7 @@ export type GatewaySafeLogMetadata = {
     | 'session_create'
     | 'session_read'
     | 'message_submit'
+    | 'command_invoke'
     | 'interaction_resolve'
     | 'abort'
     | 'events_connect'

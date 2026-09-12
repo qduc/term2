@@ -24,6 +24,9 @@ import type { SessionAccessState } from '../services/session/session-access-stat
 import type { ProviderContinuity } from '../services/provider-continuity.js';
 import type { OpenAICandidateObserver } from '../services/openai-candidate-observer.js';
 import type { ToolExecutionLifecyclePort } from '../tools/types.js';
+import { AgentClient } from '../lib/agent-client.js';
+import { installPlanModeInterceptor } from '../services/plan-mode-interceptor.js';
+import type { ModelSettingsReasoningEffort } from '../services/models/reasoning-effort.js';
 
 export type RuntimeResourcePolicy = Readonly<{
   maxLiveSessions: number;
@@ -50,6 +53,37 @@ export const DEFAULT_RUNTIME_RESOURCE_POLICY: RuntimeResourcePolicy = Object.fre
   shutdownGraceMs: 5_000,
   maxLiveSessionsPerOwner: 4,
 });
+
+/**
+ * Settings the production factory reads from the launcher's authority on
+ * behalf of every session. Every entry needs a reason, and every entry must
+ * stay a provider/transport/web-search input: the structural test in
+ * `runtime-factory.test.ts` fails if an entry grants shell, sandbox,
+ * profile, or tool-enablement authority to a session.
+ */
+export const PRODUCTION_AUTHORITY_SETTING_KEYS: readonly string[] = [
+  // Provider API keys are read in-process by the provider adapter and never
+  // enter a DTO, log record, or child-process environment.
+  'agent.openai.apiKey',
+  // OpenRouter's adapter resolves this key when constructing its model.
+  'agent.openrouter.apiKey',
+  // OpenRouter adapter's API endpoint override for gateways and mirrors.
+  'agent.openrouter.baseUrl',
+  // OpenRouter attribution header (HTTP-Referer) the adapter sends.
+  'agent.openrouter.referrer',
+  // OpenRouter attribution header (X-Title) the adapter sends.
+  'agent.openrouter.title',
+  // Selects which Codex transport (websocket vs HTTP) the adapter opens.
+  'agent.transport',
+  // Bounds the Codex websocket's first-frame wait inside the adapter.
+  'agent.codex.websocketFirstFrameTimeoutMs',
+  // Bounds the Codex websocket's inter-frame idle wait inside the adapter.
+  'agent.codex.websocketInterFrameTimeoutMs',
+  // The web-search tool reads this key when it executes in-process.
+  'webSearch.tavily.apiKey',
+  // The web-search tool reads this key when it executes in-process.
+  'webSearch.exa.apiKey',
+];
 
 export class RuntimeFactoryError extends Error {
   readonly code:
@@ -82,6 +116,7 @@ export type GatewayAgentClientFactory = (input: {
   providerContinuity: ProviderContinuity;
   requestCapture: OpenAICandidateObserver;
   toolLifecycle?: ToolExecutionLifecyclePort;
+  continuationProjectionMode: import('../lib/continuation-projection-mode.js').ContinuationProjectionMode;
   env: Readonly<Record<string, string>>;
   spawnOptions: GatewaySessionComposition['spawnOptions'];
   policy: RuntimeResourcePolicy;
@@ -101,7 +136,7 @@ export type RuntimeFactoryOptions = {
   createAgentClient: GatewayAgentClientFactory;
   createLogger?: (sessionId: string, context: ISessionContextService) => ILoggingService;
   createSettings?: (
-    defaults: SecretFreeWorkerSettings,
+    _defaults: SecretFreeWorkerSettings,
     tmpDir: string,
     snapshot: SessionSettingsSnapshot,
   ) => ISettingsService;
@@ -115,6 +150,115 @@ export type RuntimeFactoryOptions = {
   /** Test seam; production uses the adapter's conservative bound. */
   activeCancelTimeoutMs?: number;
 };
+
+/**
+ * Build the production gateway runtime around the launcher's settings owner.
+ * The owner is deliberately used as a credential source only; each session
+ * gets its own settings overlay and its own AgentClient graph.
+ */
+export function createProductionRuntimeFactory(input: {
+  settingsAuthority: ISettingsService;
+  tmpDir: string;
+  sandboxAvailable: true;
+  policy?: Partial<RuntimeResourcePolicy>;
+  providerProbe?: WorkerBoundaryProbe;
+  createLogger?: RuntimeFactoryOptions['createLogger'];
+  createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
+  modelCatalogLogger?: ILoggingService;
+}): RuntimeFactory {
+  const providerSettingKeys = new Set(PRODUCTION_AUTHORITY_SETTING_KEYS);
+  const providerDynamicKeys = new Set([
+    // Runtime provider definitions are installed by the launcher and may
+    // contain provider-local credentials; they stay process-local here.
+    'providers',
+  ]);
+  const createSettings = (
+    _defaults: SecretFreeWorkerSettings,
+    sessionDir: string,
+    snapshot: SessionSettingsSnapshot,
+  ) => {
+    const local = createDefaultSettings(_defaults, sessionDir, input.policy?.maxParallelToolCalls ?? 1, snapshot);
+    const authority = input.settingsAuthority;
+    // SettingsService intentionally has no public clone operation. This
+    // narrow overlay preserves launcher-owned credentials and defaults while
+    // keeping mutable model/session choices isolated per gateway session.
+    return {
+      get: ((key: string) =>
+        providerSettingKeys.has(key)
+          ? authority.get(key as never)
+          : local.get(key as never)) as ISettingsService['get'],
+      getDynamic: (key: string) => (providerDynamicKeys.has(key) ? authority.getDynamic(key) : local.getDynamic(key)),
+      set: ((key: string, value: unknown, options?: { persist?: boolean }) =>
+        local.set(key as never, value as never, options)) as ISettingsService['set'],
+      setDynamic: (key: string, value: unknown, options?: { persist?: boolean }) =>
+        local.setDynamic(key, value, options),
+      setPersistent: ((key: string, value: unknown) =>
+        local.setPersistent(key as never, value as never)) as ISettingsService['setPersistent'],
+      setPersistentDynamic: (key: string, value: unknown) => local.setPersistentDynamic(key, value),
+      onChange: (listener: (key?: string) => void) => {
+        const localUnsubscribe = local.onChange?.(listener);
+        const authorityUnsubscribe = authority.onChange?.(listener);
+        return () => {
+          localUnsubscribe?.();
+          authorityUnsubscribe?.();
+        };
+      },
+    } satisfies ISettingsService;
+  };
+
+  return new RuntimeFactory({
+    tmpDir: input.tmpDir,
+    policy: input.policy,
+    providerProbe: input.providerProbe,
+    sandboxAvailable: input.sandboxAvailable,
+    settingsAuthority: input.settingsAuthority,
+    modelCatalogLogger: input.modelCatalogLogger,
+    createLogger: input.createLogger,
+    createSessionContext: input.createSessionContext,
+    createSettingsSnapshot: (_binding) => createSessionSettingsSnapshot({ settings: input.settingsAuthority }),
+    createSettings,
+    createAgentClient: ({
+      settings,
+      logger,
+      sessionContextService,
+      executionContext,
+      skillsService,
+      toolOwnership,
+      postExecutePauseCapability,
+      sessionAccess,
+      requestCapture,
+      toolLifecycle,
+      continuationProjectionMode,
+      sessionSettingsSnapshot,
+    }) => {
+      const client = new AgentClient({
+        model: sessionSettingsSnapshot.modelId,
+        reasoningEffort: sessionSettingsSnapshot.reasoningEffort as ModelSettingsReasoningEffort,
+        maxTurns: settings.get('agent.maxTurns'),
+        retryAttempts: settings.get('agent.retryAttempts'),
+        deps: {
+          logger,
+          settings,
+          executionContext,
+          sessionContextService,
+          skillsService,
+          requestCapture,
+        },
+        toolOwnership,
+        postExecutePauseCapability,
+        sessionAccess,
+        continuationProjectionMode,
+        toolLifecycle,
+        // Background shells are deferred from the gateway wire; maxShellJobs
+        // is fixed at zero by the gateway resource policy.
+        allowBackgroundShell: false,
+        allowAskUser: true,
+      });
+      installPlanModeInterceptor(client, { settingsService: settings });
+      return client;
+    },
+  });
+}
 
 export function resolveRuntimeResourcePolicy(input?: Partial<RuntimeResourcePolicy>): RuntimeResourcePolicy {
   const merged = { ...DEFAULT_RUNTIME_RESOURCE_POLICY, ...(input ?? {}) };
@@ -290,7 +434,7 @@ export class RuntimeFactory {
         toolOwnership,
         postExecutePauseCapability,
         access,
-        _continuationProjectionMode,
+        continuationProjectionMode,
         providerContinuity,
         requestCapture,
         toolLifecycle,
@@ -312,6 +456,7 @@ export class RuntimeFactory {
           providerContinuity,
           requestCapture,
           toolLifecycle,
+          continuationProjectionMode,
           env: composition.env,
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,

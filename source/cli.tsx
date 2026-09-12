@@ -199,6 +199,21 @@ const cli = meow(
       ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
       no-op. A value right after -m/--model is always the model, exactly as before.
 
+    Gateway launcher (term2 serve)
+      Runs the private web gateway for the ChatForge BFF until SIGINT/SIGTERM.
+
+      $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
+          [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
+          [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+          [--issuer <iss>] [--audience <aud>] [--allow-write]
+
+      Transport defaults to a Unix socket at <state-dir>/gateway.sock (mode 0660). TLS network
+      mode requires --listen with --tls-cert and --tls-key, and binds loopback unless
+      --allow-remote is also given. Browser-selected workspaces must live under your home
+      directory unless --workspace-root (repeatable) adds allowed roots. --allow-write admits
+      read_write workspace grants (workspace write access); without it every admitted root is
+      read-only.
+
     Examples
       $ term2
       $ term2 "explain this function"
@@ -336,6 +351,18 @@ if (cli.flags.codexLogin) {
     console.error(`Codex login failed: ${error?.message ?? error}`);
     process.exit(1);
   }
+}
+
+// `serve` is a standalone launcher errand like the logins above: it composes
+// the gateway runtime and blocks until SIGINT/SIGTERM, so it must dispatch
+// before any Ink render, session setup, home-directory guard, or positional
+// prompt handling. Its flags are parsed by gateway/serve-args.ts, not meow.
+if (cli.input[0] === 'serve') {
+  const { runServe } = await import('./gateway/serve.js');
+  const argv = process.argv.slice(2);
+  const serveIndex = argv.indexOf('serve');
+  await runServe(serveIndex >= 0 ? argv.slice(serveIndex + 1) : []);
+  process.exit(0);
 }
 
 // Model listing is a standalone errand like the logins above: it prints and

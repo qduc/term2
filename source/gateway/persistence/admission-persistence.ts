@@ -116,7 +116,7 @@ export class GatewayAdmissionPersistence {
     turnId: string;
     runtime: GatewayMessageAdmissionRuntime;
     persistence: GatewayCriticalPersistence;
-    term2Fact: LogEvent;
+    term2Fact?: LogEvent;
     acceptedEvent: DurableEventCandidate;
     /** Runs after accepted facts are durable and before runtime execution starts. */
     beforeCommit?: () => Promise<void>;
@@ -166,7 +166,7 @@ export class GatewayAdmissionPersistence {
   async accept(input: {
     record: AdmissionRecord;
     persistence: GatewayCriticalPersistence;
-    term2Fact: LogEvent;
+    term2Fact?: LogEvent;
     acceptedEvent: DurableEventCandidate;
   }): Promise<AdmissionRecord> {
     const current = this.#index.admission(
@@ -177,18 +177,24 @@ export class GatewayAdmissionPersistence {
     if (!current) throw new GatewayPersistenceError('not_found', 'prepared admission not found');
     if (current.state === 'accepted' || current.state === 'committed') return current;
     if (current.state !== 'prepared') throw new GatewayPersistenceError('conflict', 'admission is no longer prepared');
-    const transcript = await input.persistence.appendTranscriptCritical(input.term2Fact);
-    this.#index.updateAdmission(current.ownerUserId, current.sessionId, current.clientRequestId, {
-      phase: 'transcript_written',
-      transcriptChecksum: transcript.checksum,
-    });
+    let transcriptChecksum: string | undefined;
+    if (input.term2Fact) {
+      const transcript = await input.persistence.appendTranscriptCritical(input.term2Fact);
+      transcriptChecksum = transcript.checksum;
+      this.#index.updateAdmission(current.ownerUserId, current.sessionId, current.clientRequestId, {
+        phase: 'transcript_written',
+        transcriptChecksum: transcript.checksum,
+      });
+    }
     const journal = await input.persistence.appendJournalCritical(input.acceptedEvent);
     this.#index.updateAdmission(current.ownerUserId, current.sessionId, current.clientRequestId, {
       phase: 'journal_written',
       journalChecksum: journal.checksum,
     });
     if (
-      !input.persistence.verifyTranscriptFact(input.term2Fact, transcript.checksum) ||
+      (input.term2Fact &&
+        transcriptChecksum &&
+        !input.persistence.verifyTranscriptFact(input.term2Fact, transcriptChecksum)) ||
       !input.persistence.verifyJournalEvent(input.acceptedEvent, journal.checksum)
     ) {
       throw new GatewayPersistenceError('readonly', 'admission durable facts failed checksum validation');
@@ -197,7 +203,7 @@ export class GatewayAdmissionPersistence {
       state: 'accepted',
       result: 'accepted',
       phase: 'committed',
-      transcriptChecksum: transcript.checksum,
+      ...(transcriptChecksum ? { transcriptChecksum } : {}),
       journalChecksum: journal.checksum,
     });
   }
@@ -207,6 +213,7 @@ export class GatewayAdmissionPersistence {
     sessionId: string,
     clientRequestId: string,
     result: AdmissionResult,
+    turnId?: string,
   ): AdmissionRecord {
     const current = this.#index.admission(ownerUserId, sessionId, clientRequestId);
     if (!current) throw new GatewayPersistenceError('not_found', 'admission not found');
@@ -214,12 +221,14 @@ export class GatewayAdmissionPersistence {
       return this.#index.updateAdmission(ownerUserId, sessionId, clientRequestId, {
         state: 'rejected',
         result: result === 'accepted' ? 'failed' : result,
+        ...(turnId !== undefined ? { turnId } : {}),
       });
     }
     return this.#index.updateAdmission(ownerUserId, sessionId, clientRequestId, {
       state: 'terminal',
       result,
       phase: 'committed',
+      ...(turnId !== undefined ? { turnId } : {}),
     });
   }
 
@@ -274,15 +283,19 @@ export class GatewayAdmissionPersistence {
       });
     }
     if (record.phase === 'journal_written') {
-      if (!callbacks.verifyTranscript || !callbacks.verifyJournal)
+      if (!callbacks.verifyJournal)
         throw new GatewayPersistenceError('readonly', 'accepted admission facts cannot be verified');
-      return Promise.all([callbacks.verifyTranscript(record), callbacks.verifyJournal(record)]).then(
-        ([transcript, journal]) => {
-          if (!transcript || !journal)
-            throw new GatewayPersistenceError('readonly', 'accepted admission fact checksum mismatch');
-          return commit();
-        },
-      );
+      const verifications = [callbacks.verifyJournal(record)];
+      if (record.transcriptChecksum) {
+        if (!callbacks.verifyTranscript)
+          throw new GatewayPersistenceError('readonly', 'accepted admission facts cannot be verified');
+        verifications.push(callbacks.verifyTranscript(record));
+      }
+      return Promise.all(verifications).then((results) => {
+        if (results.some((valid) => !valid))
+          throw new GatewayPersistenceError('readonly', 'accepted admission fact checksum mismatch');
+        return commit();
+      });
     }
     if (record.state === 'accepted' || record.state === 'committed' || record.state === 'terminal')
       return Promise.resolve(record);

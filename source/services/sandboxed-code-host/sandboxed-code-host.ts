@@ -77,7 +77,12 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
     let closeSent = false;
     let bodyTerminal:
       | { kind: 'complete'; output: JsonValue; voidOutput?: boolean }
-      | { kind: 'error'; error: { message?: unknown }; syntax?: boolean; detail?: 'unknown_tool' }
+      | {
+          kind: 'error';
+          error: { message?: unknown };
+          syntax?: boolean;
+          detail?: 'unknown_tool' | 'invalid_tool_output';
+        }
       | null = null;
     const admittedCalls = new Map<
       string,
@@ -115,7 +120,8 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         cancelWaiting();
         resolve(value);
       };
-      const fail = (code: HostErrorCode, message: string) => finish(failure(code, message) as HostResult);
+      const fail = (code: HostErrorCode, message: string, detail?: HostError['detail']) =>
+        finish({ ok: false, error: { code, message, ...(detail ? { detail } : {}) } });
       const markUnsettledUnknown = (reason: string) => {
         for (const [requestId, call] of admittedCalls) {
           call.handler.onAborted?.(call.prepared, call.context, reason);
@@ -348,7 +354,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         }
         if (settled) return;
         if (isCapabilityOutcome(prepared)) {
-          if (prepared.kind === 'fail') fail(prepared.code, prepared.message);
+          if (prepared.kind === 'fail') fail(prepared.code, prepared.message, prepared.detail);
           else reply(prepared.result);
           return;
         }
@@ -386,7 +392,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         try {
           const outcome = await handler.invoke(prepared, callContext);
           if (admittedCalls.delete(callContext.requestId)) {
-            if (outcome.kind === 'fail') fail(outcome.code, outcome.message);
+            if (outcome.kind === 'fail') fail(outcome.code, outcome.message, outcome.detail);
             else reply(outcome.result);
           }
         } catch (error) {

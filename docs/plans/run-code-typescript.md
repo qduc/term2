@@ -41,8 +41,9 @@ Source inspection at `e2b329cb`:
   and creates the disposable worker; `host-worker.ts` owns execution bindings
   and realm isolation. These paths do not provide semantic TypeScript checking.
 - Tool definitions in `source/tools/types.ts` expose schema objects and optional
-  `canonicalParameters`; `scriptedReturnShape` is prose, not a machine-readable
-  type contract. Do not parse it to invent types.
+  `canonicalParameters`. Script returns use the optional
+  `scriptedReturnSchema` machine contract, while `scriptedReturnShape` remains
+  migration prose for guidance only. Do not parse prose to invent types.
 - `namespaceBinding` constructs catchable Error objects inside the vm realm.
   Stage 3A's failure discriminants must be settled before declaring them to
   TypeScript callers. Host objects must not be installed in that realm.
@@ -95,9 +96,11 @@ audit. Reuse canonical schemas where faithful. A lossy conversion must disclose
 its limitation; it must not substitute an empty parameter object or claim
 refinement checks have been proved statically.
 
-Return types need a machine-readable, owner-reviewed contract distinct from
-`scriptedReturnShape` prose. Reuse existing type/schema ownership where possible;
-do not maintain a handwritten second catalog detached from executor behavior.
+Return types use the machine-readable, owner-reviewed `scriptedReturnSchema`
+contract distinct from `scriptedReturnShape` prose. Reuse existing type/schema
+ownership where possible; do not maintain a handwritten second catalog detached
+from executor behavior. A missing schema is exposed as `unknown` and remains
+usable, rather than being widened to `any`.
 Represent JSON strings as string, genuinely structured results by their actual
 shape, and uncertain results as unknown, not permissive any. An unknown fallback
 allows the call but requires narrowing before property access and must be visible
@@ -206,7 +209,9 @@ among those (folding a cancellation into `timeout` would contradict the
 termination-reason distinction settled for shell timeouts). `failureClass`
 narrows `nested-validation`: `unknown-tool`, `parameter-shape`, `nested-call`,
 `approval-denied`, `budget`, and the reserved `typescript-syntax` and
-`known-return-shape` classes that nothing emits until a checked path exists.
+`known-return-shape` is emitted when a declared `scriptedReturnSchema` rejects a
+script-visible nested result; `typescript-syntax` remains reserved for the
+future checked path.
 
 Privacy: every emitted value is a number, an enum from a closed set, or a source
 digest. Source text, arguments, failure messages, tool names, workspace paths,
@@ -223,8 +228,8 @@ Known limits. Attribution reads the namespace binding's own
 `tools.<member> failed: ` prefix, so a script that throws identical text is
 misattributed as a nested rejection; the host code and both ledgers stay exact.
 `nested-validation` covers every uncaught nested rejection, so the statically
-preventable set is `failureClass` in {`unknown-tool`, `parameter-shape`, and
-later `typescript-syntax`, `known-return-shape`}. Stage 3A's typed refusal
+preventable set is `failureClass` in {`unknown-tool`, `parameter-shape`,
+`known-return-shape`, and later `typescript-syntax`}. Stage 3A's typed refusal
 envelope is the replacement for the text match. The 100-script threshold above
 requires at least that many events across several sessions before this plan is
 reconsidered.

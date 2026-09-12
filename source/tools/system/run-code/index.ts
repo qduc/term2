@@ -27,3 +27,11 @@ export {
   type RunCodeExecutionCall,
   type RunCodeExecutionMetadata,
 } from './run-code-execution.js';
+export {
+  getScriptedReturnContract,
+  scriptedReturnContractJsonSchema,
+  validateScriptedReturn,
+  type ScriptedReturnContract,
+  type ScriptedReturnValidation,
+  type ScriptedReturnValidationFailure,
+} from '../../scripted-return-contract.js';

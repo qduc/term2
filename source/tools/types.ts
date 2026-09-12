@@ -113,10 +113,16 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
    * Shape this tool returns to a `run_code` script, when it differs from the
    * text a direct call returns.
    *
-   * Rendered in the script tool header. Without it a script must discover the
-   * shape by probing, which cost observed runs several turns each.
+   * Retained as temporary model guidance during migration. It is never parsed
+   * as a type and is not authoritative for script execution.
    */
   scriptedReturnShape?: string;
+  /**
+   * The exact value delivered to a `run_code` script after the tool's
+   * script-specific result normalization.  This is deliberately separate from
+   * `scriptedReturnShape`, which is migration-era prose for model guidance.
+   */
+  scriptedReturnSchema?: ZodTypeAny;
 
   /** End the run after execution without sending this tool result to the model. */
   terminateAfterExecution?: boolean | ((result: unknown) => boolean);
@@ -189,10 +195,12 @@ export interface AnyToolDefinition {
    * Shape this tool returns to a `run_code` script, when it differs from the
    * text a direct call returns.
    *
-   * Rendered in the script tool header. Without it a script must discover the
-   * shape by probing, which cost observed runs several turns each.
+   * Retained as temporary model guidance during migration. It is never parsed
+   * as a type and is not authoritative for script execution.
    */
   scriptedReturnShape?: string;
+  /** Exact machine-readable value delivered to a `run_code` script. */
+  scriptedReturnSchema?: ZodTypeAny;
 
   /** End the run after execution without sending this tool result to the model. */
   terminateAfterExecution?: boolean | ((result: unknown) => boolean);

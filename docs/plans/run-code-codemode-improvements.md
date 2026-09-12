@@ -2,7 +2,7 @@
 
 ## Resume here
 
-Status: Milestone 0 merged in `89e7e0ab` (2026-09-12); Milestone 1 is next.
+Status: Milestones 0–2 merged in `89e7e0ab` and `c52c67d1` (2026-09-12); Milestone 3 is in progress.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -88,11 +88,13 @@ ownership may move.
   text or message prefixes.
 - `renderToolsHeader` renders selected full signatures and compact entries;
   `tools.describe` requires the exact tool name and returns its input schema plus
-  optional `scriptedReturnShape`. There is no catalog budget, namespace-fair
+  the `scriptedReturnContract` state/schema and optional legacy
+  `scriptedReturnShape` guidance. There is no catalog budget, namespace-fair
   selection, or search protocol.
-- `scriptedReturnShape` is descriptive prose. Nested inputs have authoritative
-  schemas; nested outputs do not yet have an equivalent machine-readable
-  contract.
+- `scriptedReturnShape` remains descriptive migration prose. Tool definitions
+  now optionally expose `scriptedReturnSchema`, whose value is the exact
+  script-visible result after script-path normalization. Missing schemas are an
+  explicit unknown state; discovery does not interpret the prose.
 - Explicit `ACTION_SEMANTICS` adapters currently cover
   `configure_task_check_in` and `cancel_run`. Other calls still receive generic
   call outcomes, but their domain-level applied/not-applied semantics are not

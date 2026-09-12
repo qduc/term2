@@ -11,6 +11,7 @@ import {
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
+  getRunCodeExecutionResult,
 } from './run-code.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
@@ -29,6 +30,7 @@ import { BackgroundShellOutputStore } from '../../../services/shell/background-s
 import { BackgroundShellWatches } from '../../../services/shell/background-shell-watches.js';
 import * as shellOutput from '../../../utils/shell/shell-output.js';
 import { ExecutionContext } from '../../../services/execution-context.js';
+import { getScriptedReturnContract } from '../../scripted-return-contract.js';
 
 const workspace = process.cwd();
 const noopFormatter = (() => []) as unknown as AnyToolDefinition['formatCommandMessage'];
@@ -2076,6 +2078,72 @@ describe('scripted return contracts', () => {
 
     expect(output).toContain('"name":"inspect"');
     expect(output).toContain('"scriptedReturnShape":"{ ok: boolean, count?: number }"');
+  });
+
+  it('describes an unknown fallback without promoting legacy prose to a type', async () => {
+    const output = await run(
+      [tool({ name: 'opaque', scriptedReturnShape: '{ value: string }' })],
+      'return await tools.describe("opaque");',
+    );
+
+    expect(output).toContain('"scriptedReturnContract":{"kind":"unknown"}');
+    expect(output).toContain('"scriptedReturnShape":"{ value: string }"');
+  });
+
+  it('applies parameter coercions and transforms while preserving the precise script result', async () => {
+    const converted = tool({
+      name: 'converted',
+      parameters: z.object({ count: z.coerce.number(), label: z.string().transform((value) => value.trim()) }),
+      scriptedReturnSchema: z.string(),
+      execute: (params) => `${(params as { count: number }).count}:${(params as { label: string }).label}`,
+    });
+
+    expect(await run([converted], 'return await tools.converted({ count: "4", label: "  ready  " });')).toContain(
+      '4:ready',
+    );
+  });
+
+  it('rejects a precise contract violation before delivery and retains completed action evidence', async () => {
+    const invalid = tool({
+      name: 'configure_task_check_in',
+      parameters: z.object({ target: z.string() }),
+      scriptedReturnSchema: z.object({ ok: z.literal(true) }).strict(),
+      execute: () => JSON.stringify({ ok: true }),
+    });
+    const definition = build([invalid]);
+    const rendered = await definition.execute(
+      {
+        code: 'return await tools.configure_task_check_in({ target: "job-1" });',
+        timeout_ms: 60_000,
+        description: 'contract test',
+      },
+      undefined,
+      { toolCall: { callId: 'outer-contract' } },
+    );
+    const execution = getRunCodeExecutionResult(rendered);
+
+    expect(execution?.script).toMatchObject({ status: 'failed', diagnostic: { code: 'invalid_tool_output' } });
+    expect(execution?.calls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ diagnostic: 'invalid_tool_output' })]),
+    );
+    expect(execution?.actions).toEqual([
+      expect.objectContaining({ tool: 'configure_task_check_in', outcome: 'applied' }),
+    ]);
+    expect(String(rendered)).not.toContain('Do not repeat completed tool effects');
+  });
+
+  it('retains precise contracts across composed registries and marks other tools unknown', () => {
+    const registries = appRegistries();
+    for (const { tools } of registries) {
+      const precise = tools.filter((candidate) => getScriptedReturnContract(candidate).kind === 'precise');
+      expect(precise.length).toBeGreaterThan(0);
+      for (const candidate of precise) expect(candidate.scriptedReturnSchema).toBeDefined();
+      const configure = tools.find((candidate) => candidate.name === 'configure_task_check_in');
+      expect(configure).toBeDefined();
+      expect(getScriptedReturnContract(configure!).kind).toBe('precise');
+      const opaque = tools.find((candidate) => candidate.name === 'run_subagent');
+      if (opaque) expect(getScriptedReturnContract(opaque).kind).toBe('unknown');
+    }
   });
 
   it('declares a return shape for every tool every app registry can expose to a script', () => {

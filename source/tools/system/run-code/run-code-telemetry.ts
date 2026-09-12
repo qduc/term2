@@ -59,9 +59,10 @@ export type RunCodeCompletionOutcome =
  * approval denial, so this class is what says whether the failure was the
  * statically preventable kind the TypeScript slice targets.
  *
- * `typescript-syntax` and `known-return-shape` are reserved: they are the
- * classes the plan names for a checked script path, and nothing produces them
- * while scripts are plain JavaScript and `scriptedReturnShape` stays prose.
+ * `typescript-syntax` is reserved for the checked script path. A declared
+ * scripted return contract is already runtime-authoritative, so its violation
+ * is classified as the same known-return-shape family used by that future
+ * path.
  */
 export type RunCodeFailureClass =
   | 'unknown-tool'
@@ -191,6 +192,8 @@ const classifyDiagnostic = (diagnostic: RunCodeDiagnosticCode): RunCodeCompletio
       return { outcome: 'nested-validation', failureClass: 'budget' };
     case 'invalid_nested_output':
       return { outcome: 'return-serialization' };
+    case 'invalid_tool_output':
+      return { outcome: 'nested-validation', failureClass: 'known-return-shape' };
     case 'invalid_script_return':
       return { outcome: 'return-serialization' };
     case 'timeout':

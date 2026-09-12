@@ -24,7 +24,7 @@ export interface HostError {
   code: HostErrorCode;
   message: string;
   /** Host-owned distinction that cannot safely be recovered from prose. */
-  detail?: 'unhandled_nested_failure' | 'unknown_tool';
+  detail?: 'unhandled_nested_failure' | 'unknown_tool' | 'invalid_tool_output';
 }
 
 export type HostResult = { ok: true; output: JsonValue; voidOutput?: boolean } | { ok: false; error: HostError };
@@ -63,7 +63,7 @@ export interface CapabilityCallContext {
  */
 export type CapabilityOutcome =
   | { kind: 'result'; result: JsonValue }
-  | { kind: 'fail'; code: HostErrorCode; message: string };
+  | { kind: 'fail'; code: HostErrorCode; message: string; detail?: HostError['detail'] };
 
 export interface CapabilityLimits {
   /** Total calls one run may admit for this capability. */

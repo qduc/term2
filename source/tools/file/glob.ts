@@ -155,6 +155,12 @@ export const createFindFilesToolDefinition = (
   return {
     name: 'glob',
     scriptedReturnShape: '{ paths: string[], total: number, truncated: boolean }',
+    // Successful scripted calls return this object; validation errors retain
+    // the legacy string result, so both are part of the exact script contract.
+    scriptedReturnSchema: z.union([
+      z.object({ paths: z.array(z.string()), total: z.number(), truncated: z.boolean() }).strict(),
+      z.string(),
+    ]),
     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
     canRequireApproval: true,

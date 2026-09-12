@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isZodToolParameterSchema, type ToolRegistry } from '../../types.js';
+import { getScriptedReturnContract } from '../../scripted-return-contract.js';
 
 /** A JSON-Schema subset rich enough for the tool schemas this repo defines. */
 interface JsonSchemaNode {
@@ -34,12 +35,12 @@ export const RUN_CODE_ESSENTIAL_TOOLS = new Set([
 function renderFields(node: JsonSchemaNode, depth: number): string[] {
   const required = new Set(node.required ?? []);
   return Object.entries(node.properties ?? {}).map(([key, value]) => {
-    const rendered = renderType(value, depth);
+    const rendered = renderSchemaType(value, depth);
     return `${key}${required.has(key) ? '' : '?'}: ${rendered}`;
   });
 }
 
-function renderType(node: JsonSchemaNode | undefined, depth = 0): string {
+export function renderSchemaType(node: JsonSchemaNode | undefined, depth = 0): string {
   if (!node) return 'unknown';
   if (node.const !== undefined) return JSON.stringify(node.const);
   if (node.enum?.length) {
@@ -51,7 +52,9 @@ function renderType(node: JsonSchemaNode | undefined, depth = 0): string {
   }
   const union = node.anyOf ?? node.oneOf;
   if (union?.length) {
-    const parts = [...new Set(union.map((member) => renderType(member, depth)))].filter((part) => part !== 'unknown');
+    const parts = [...new Set(union.map((member) => renderSchemaType(member, depth)))].filter(
+      (part) => part !== 'unknown',
+    );
     return parts.length === 0 ? 'unknown' : parts.join('|');
   }
   const type = Array.isArray(node.type) ? node.type.filter((entry) => entry !== 'null')[0] : node.type;
@@ -64,17 +67,17 @@ function renderType(node: JsonSchemaNode | undefined, depth = 0): string {
     case 'integer':
       return 'number';
     case 'array':
-      return `${renderType(Array.isArray(node.items) ? node.items[0] : node.items, depth)}[]`;
+      return `${renderSchemaType(Array.isArray(node.items) ? node.items[0] : node.items, depth)}[]`;
     case 'object':
     default:
       return node.properties && depth < MAX_OBJECT_DEPTH ? `{ ${renderFields(node, depth + 1).join(', ')} }` : 'object';
   }
 }
 
-function schemaFor(parameters: unknown): JsonSchemaNode | null {
+function schemaFor(parameters: unknown, io: 'input' | 'output' = 'input'): JsonSchemaNode | null {
   if (isZodToolParameterSchema(parameters)) {
     try {
-      return z.toJSONSchema(parameters, { io: 'input' }) as JsonSchemaNode;
+      return z.toJSONSchema(parameters, { io }) as JsonSchemaNode;
     } catch {
       return null;
     }
@@ -83,6 +86,25 @@ function schemaFor(parameters: unknown): JsonSchemaNode | null {
     return parameters as JsonSchemaNode;
   }
   return null;
+}
+
+function scriptedReturnDescription(tool: ToolRegistry[number]): { value: string; legacy?: string } {
+  const contract = getScriptedReturnContract(tool);
+  if (contract.kind === 'unknown') {
+    return {
+      value: 'unknown',
+      ...(typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+        ? { legacy: tool.scriptedReturnShape }
+        : {}),
+    };
+  }
+  const schema = schemaFor(contract.schema, 'output');
+  return {
+    value: schema ? renderSchemaType(schema) : 'unknown',
+    ...(typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+      ? { legacy: tool.scriptedReturnShape }
+      : {}),
+  };
 }
 
 const oneLine = (text: string): string => {
@@ -123,26 +145,24 @@ export function renderCompactSignature(tool: {
 /** The header bullet for a fully rendered tool: signature plus one-line description and declared return shape. */
 export function renderDetailedEntry(tool: ToolRegistry[number]): string {
   const description = typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
-  // Declared return shapes only: without one, a script has to probe for the
-  // shape, which cost observed runs several turns each.
-  const returns =
-    typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
-      ? `\n    returns ${tool.scriptedReturnShape}`
-      : '';
+  const scriptedReturn = scriptedReturnDescription(tool);
+  const returns = `\n    returns ${scriptedReturn.value}${
+    scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : ''
+  }`;
   return `- ${renderCompactSignature(tool)}${description}${returns}`;
 }
 
 function renderCompactEntry(tool: ToolRegistry[number]): string {
-  return `- ${renderCompactSignature(tool)}`;
+  const returnState = getScriptedReturnContract(tool).kind === 'unknown' ? ' — returns unknown' : '';
+  return `- ${renderCompactSignature(tool)}${returnState}`;
 }
 
 /**
  * Renders the catalogue of `tools.*` members a script can call.
  *
- * The shapes here are approximate by construction: they are the structural part
- * of each Zod schema, and a schema's cross-field rules (`superRefine`) have no
- * structural form. The host's `safeParse` is the authority, so the header says
- * so rather than implying the shapes are a contract.
+ * Parameter signatures are approximate structural renderings. Script return
+ * types, when present, are rendered from the owner schema; missing contracts
+ * are explicitly shown as unknown rather than inferred from prose.
  */
 export function renderToolsHeader(registry: ToolRegistry): string {
   if (registry.length === 0) return '';

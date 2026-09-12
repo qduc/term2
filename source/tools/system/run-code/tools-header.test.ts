@@ -21,7 +21,7 @@ describe('renderToolsHeader', () => {
     expect(text).toContain('- tools.read_file({ path: string, limit?: number, raw?: boolean }) — Read a file');
   });
 
-  it('keeps essential detailed entries and compact Other-tool input signatures without purpose or returns', () => {
+  it('keeps essential detailed entries and compact Other-tool input signatures with explicit return states', () => {
     const text = header([
       tool({
         name: 'read_file',
@@ -43,14 +43,14 @@ describe('renderToolsHeader', () => {
 
     expect(text).toContain('Essential tools:');
     expect(text).toContain(
-      '- tools.read_file({ path: string, start_line?: number }) — Read a file\n    returns { content: string }',
+      '- tools.read_file({ path: string, start_line?: number }) — Read a file\n    returns unknown (guidance: { content: string })',
     );
     expect(text).toContain('Other tools:');
     const other = text.slice(text.indexOf('Other tools:'));
     expect(other).toContain('- tools.web_search({ query: string, domains?: string[], mode?: "fast"|"deep" })');
     expect(other).not.toContain('Search the web');
-    expect(other).not.toContain('returns { results: object[] }');
-    expect(other).not.toMatch(/ — /);
+    expect(other).not.toContain('returns unknown (guidance: { results: object[] })');
+    expect(other).toContain(' — returns unknown');
     expect(text).toContain('tools.describe(name)');
     const essentialIndex = text.indexOf('Essential tools:');
     const otherIndex = text.indexOf('Other tools:');
@@ -212,7 +212,7 @@ describe('renderToolsHeader scriptedReturnShape', () => {
     const text = header([tool({ name: 'read_file', scriptedReturnShape: '{ content: string, truncated: boolean }' })]);
 
     expect(text).toContain('- tools.read_file()');
-    expect(text).toContain('returns { content: string, truncated: boolean }');
+    expect(text).toContain('returns unknown (guidance: { content: string, truncated: boolean })');
   });
 
   it('omits declared return shapes from compact Other-tool listings', () => {
@@ -220,5 +220,21 @@ describe('renderToolsHeader scriptedReturnShape', () => {
 
     expect(text).toContain('- tools.session_list()');
     expect(text).not.toContain('returns { sessions: object[] }');
+  });
+
+  it('renders a precise return contract instead of interpreting legacy prose', () => {
+    const text = header([
+      tool({
+        name: 'read_file',
+        scriptedReturnShape: '{ content: string }',
+        scriptedReturnSchema: z.object({ content: z.string(), truncated: z.boolean() }).strict(),
+      }),
+    ]);
+
+    expect(text).toContain('returns { content: string, truncated: boolean } (guidance: { content: string })');
+  });
+
+  it('makes a missing return contract visible as unknown even without legacy prose', () => {
+    expect(header([tool({ name: 'opaque' })])).toContain('returns unknown');
   });
 });

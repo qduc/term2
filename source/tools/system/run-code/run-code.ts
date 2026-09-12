@@ -45,6 +45,11 @@ import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../util
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 import { saveOutputArtifact, formatFullOutputSavedNote } from '../../../utils/shell/shell-output.js';
+import {
+  getScriptedReturnContract,
+  scriptedReturnContractJsonSchema,
+  validateScriptedReturn,
+} from '../../scripted-return-contract.js';
 
 export { RUN_CODE_EXECUTION_RESULT, getRunCodeExecutionResult } from './run-code-execution.js';
 
@@ -347,6 +352,7 @@ function describeTool(tool: AnyToolDefinition): JsonValue {
     name: tool.name,
     description: tool.description,
     parameters,
+    scriptedReturnContract: scriptedReturnContractJsonSchema(getScriptedReturnContract(tool)),
     // The scripted-path return contract. Agents discover it here before
     // calling, and the tools header renders the same string for essential
     // tools, so both surfaces stay consistent.
@@ -956,6 +962,34 @@ export function createRunCodeToolDefinition(
                     prepared.tool.name,
                     calls.filter((c) => c.outcome !== 'describe').length + 1,
                   );
+                  if (!serialized.ok) {
+                    record(
+                      prepared.tool.name,
+                      'error',
+                      prepared.started,
+                      undefined,
+                      `${bridgeRunId}:${callContext.callId}`,
+                      'invalid_nested_output',
+                    );
+                    return { kind: 'result', result: serialized as JsonValue };
+                  }
+                  const contract = validateScriptedReturn(prepared.tool, serialized.result);
+                  if (!contract.ok) {
+                    record(
+                      prepared.tool.name,
+                      'error',
+                      prepared.started,
+                      undefined,
+                      `${bridgeRunId}:${callContext.callId}`,
+                      'invalid_tool_output',
+                    );
+                    return {
+                      kind: 'fail',
+                      code: 'invalid_output',
+                      detail: 'invalid_tool_output',
+                      message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}`,
+                    };
+                  }
                   record(
                     prepared.tool.name,
                     serialized.ok ? 'ok' : 'error',
@@ -964,7 +998,7 @@ export function createRunCodeToolDefinition(
                     `${bridgeRunId}:${callContext.callId}`,
                     serialized.ok ? undefined : 'invalid_nested_output',
                   );
-                  return { kind: 'result', result: serialized } as CapabilityOutcome;
+                  return { kind: 'result', result: { ok: true, result: contract.value } as JsonValue };
                 }
                 if (resolution.kind === 'failed') {
                   record(
@@ -1059,6 +1093,20 @@ export function createRunCodeToolDefinition(
               prepared.tool.name,
               calls.filter((c) => c.outcome !== 'describe').length + 1,
             );
+            if (!serialized.ok) {
+              record(prepared.tool.name, 'error', started, undefined, callId, 'invalid_nested_output');
+              return { kind: 'result', result: serialized as JsonValue };
+            }
+            const contract = validateScriptedReturn(prepared.tool, serialized.result);
+            if (!contract.ok) {
+              record(prepared.tool.name, 'error', started, undefined, callId, 'invalid_tool_output');
+              return {
+                kind: 'fail',
+                code: 'invalid_output',
+                detail: 'invalid_tool_output',
+                message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}`,
+              };
+            }
             record(
               prepared.tool.name,
               serialized.ok ? 'ok' : 'error',
@@ -1067,7 +1115,7 @@ export function createRunCodeToolDefinition(
               callId,
               serialized.ok ? undefined : 'invalid_nested_output',
             );
-            return { kind: 'result', result: serialized } as CapabilityOutcome;
+            return { kind: 'result', result: { ok: true, result: contract.value } as JsonValue };
           } catch (error) {
             record(prepared.tool.name, 'error', started, undefined, callId, 'nested_tool_failure');
             const message = error instanceof Error ? error.message : String(error);

@@ -8,6 +8,7 @@ export type RunCodeDiagnosticCode =
   | 'unknown_tool'
   | 'invalid_nested_input'
   | 'invalid_nested_output'
+  | 'invalid_tool_output'
   | 'nested_tool_failure'
   | 'approval_denied'
   | 'unhandled_nested_failure'
@@ -133,7 +134,9 @@ export function createRunCodeExecution(
   }
 
   const diagnosticCode =
-    result.error.detail === 'unknown_tool'
+    result.error.detail === 'invalid_tool_output'
+      ? 'invalid_tool_output'
+      : result.error.detail === 'unknown_tool'
       ? 'unknown_tool'
       : result.error.code === 'runtime_error'
       ? result.error.detail === 'unhandled_nested_failure'

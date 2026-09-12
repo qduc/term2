@@ -236,6 +236,7 @@ export function createApplyPatchToolDefinition(deps: {
   return {
     name: 'apply_patch',
     description: APPLY_PATCH_DESCRIPTION,
+    scriptedReturnSchema: z.string(),
     scriptedReturnShape:
       'string: one status line per patch operation, newline-joined — "Created <path>" | "Updated <path>" | "Updated <path> and moved to <to>" | "Deleted <path>" | "Error: \u2026"',
     effect: 'mutating',

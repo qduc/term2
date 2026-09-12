@@ -209,7 +209,7 @@ it.sequential('ModelSelectionMenu provider tabs include custom providers from se
   expect(output?.includes(providerId) || output?.includes('▶')).toBe(true);
 });
 
-it.sequential('ModelSelectionMenu shows scroll indicators for long lists', async () => {
+it.sequential('ModelSelectionMenu shows a scrollbar for long lists', async () => {
   const longList: ModelInfo[] = Array.from({ length: 20 }, (_, i) => ({
     id: `model-${i}`,
     name: `Model ${i}`,
@@ -226,11 +226,9 @@ it.sequential('ModelSelectionMenu shows scroll indicators for long lists', async
       maxHeight={10}
     />,
   );
-  const output = lastFrame();
-  // Should show scroll up indicator
-  expect(output?.includes('↑ 2 more')).toBe(true);
-  // Should show scroll down indicator (20 - 2 - 10 = 8 more)
-  expect(output?.includes('↓ 8 more')).toBe(true);
+  const output = lastFrame()!;
+  expect(output).not.toContain('more');
+  expect(output).toContain('┃');
 });
 
 it.sequential('ModelSelectionMenu does not show scroll indicators for short lists', async () => {

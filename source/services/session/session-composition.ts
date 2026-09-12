@@ -7,7 +7,7 @@ import {
   LocalContextCompactor,
   type LocalCompactionOutcome,
 } from '../agent-runtime/context-compaction/local-context-compactor.js';
-import { estimateContext } from '../agent-runtime/context-compaction/index.js';
+import { estimateContext, type ContextEstimate } from '../agent-runtime/context-compaction/index.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
@@ -102,6 +102,18 @@ export type ConversationSessionRetryOptions = {
   allowFreshStartRetries?: boolean;
 };
 
+/**
+ * The codex native compaction request failed upstream. Deliberately distinct
+ * from LocalCompactionOutcome's size reasons: nothing was measured locally, so
+ * no size claim may be made about the failure.
+ */
+export type NativeCompactionFailure = {
+  kind: 'failed';
+  reason: 'native_failed';
+  estimate: ContextEstimate;
+  provider: string;
+};
+
 /** @internal Full collaborator graph; used only by tests + the test helper. */
 export type SessionRuntimeInternals = {
   sessionId: string;
@@ -136,7 +148,9 @@ export type SessionRuntimeInternals = {
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
-  compactContext: (options?: { signal?: AbortSignal }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
+  compactContext: (options?: {
+    signal?: AbortSignal;
+  }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure>;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryClassifier: DefaultRetryClassifier;
@@ -299,7 +313,9 @@ export type SessionRuntime = {
   state: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
   settings: SessionRuntimeController;
-  compactContext: (options?: { signal?: AbortSignal }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
+  compactContext: (options?: {
+    signal?: AbortSignal;
+  }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
   /** Session-owned live nested approval protocol. */
@@ -926,7 +942,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const compactContext = async (options?: {
     signal?: AbortSignal;
-  }): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }> => {
+  }): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure> => {
     if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
     const snapshot = conversationStore.getProviderHistorySnapshot();
     const provider =
@@ -960,11 +976,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       const remote = await compactCodex.call(agentClient, snapshot.history, options?.signal);
       if (remote.kind !== 'compacted') {
         return remote.kind === 'failed'
-          ? {
-              kind: 'blocked',
-              reason: 'result_still_too_large',
-              estimate: before,
-            }
+          ? // A native codex failure is not a local size outcome. Report it under
+            // its own typed reason; result_still_too_large stays reserved for the
+            // local planner's genuine post-estimate check.
+            { kind: 'failed', reason: 'native_failed', estimate: before, provider: remote.provider }
           : { kind: 'not_needed', estimate: before };
       }
       if (!conversationStore.replaceHistoryAtRevision(snapshot.revision, remote.history)) {

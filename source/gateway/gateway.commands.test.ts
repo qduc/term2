@@ -446,11 +446,12 @@ describe('Gateway commands RPC route', () => {
 
   it('maps a blocked codex compaction to outcome failed with the typed reason, agreeing with the journal', async () => {
     // Regression (D3b): the route once inferred the outcome from the result text,
-    // so the blocked message "Context compaction was blocked: result_still_too_large."
-    // — text with no "compacted locally" in it — was reported as nothing_to_retry
-    // while the journal published context_compaction_failed. The outcome must come
-    // from the typed compaction result, and non-compaction text must never map to
-    // nothing_to_retry.
+    // so a failed compaction's display text — with no "compacted locally" in it —
+    // was reported as nothing_to_retry while the journal published
+    // context_compaction_failed. The outcome must come from the typed compaction
+    // result, and non-compaction text must never map to nothing_to_retry.
+    // Coordinator follow-up: a codex native failure is reported under its own
+    // typed reason (native_failed), not the fabricated result_still_too_large.
     const codexCompactClient = (): ConversationAgentClient =>
       ({
         chat: async () => '',
@@ -484,7 +485,7 @@ describe('Gateway commands RPC route', () => {
         `/private/agent/v1/sessions/${sessionId}/commands`,
       );
       expect(first.status).toBe(200);
-      expect(first.body).toEqual({ commandId: 'compact', outcome: 'failed', reason: 'result_still_too_large' });
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'failed', reason: 'native_failed' });
 
       // A replayed failed compaction stays a failure.
       const replayed = await rpc(

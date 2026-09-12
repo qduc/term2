@@ -547,6 +547,48 @@ it('compactContext reports blocked when no complete cold turn exists', async () 
   service.dispose();
 });
 
+it('compactContextDetailed reports failed/native_failed when the codex native compaction fails', async () => {
+  const events: ConversationEvent[] = [];
+  const warn = vi.spyOn(mockLogger, 'warn').mockImplementation(() => {});
+  const service = new ConversationService({
+    agentClient: partialClient({
+      getProvider: () => 'codex',
+      compactCodexSessionHistory: async () => ({ kind: 'failed', provider: 'codex' }),
+    }),
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.setEventSink((event) => {
+    events.push(event);
+  });
+
+  // The typed outcome, and the display message the CLI's /compact shows.
+  await expect(service.compactContextDetailed()).resolves.toEqual({
+    kind: 'failed',
+    message: 'Native context compaction failed.',
+    reason: 'native_failed',
+  });
+  await expect(service.compactContext()).resolves.toBe('Native context compaction failed.');
+
+  // The failure is a provider-request failure, journaled as such, and leaves a
+  // log line with the typed reason. Both invocations (typed + string) journal
+  // the same started -> failed pair.
+  expect(events.map((event) => event.type)).toEqual([
+    'context_compaction_started',
+    'context_compaction_failed',
+    'context_compaction_started',
+    'context_compaction_failed',
+  ]);
+  expect(events[1]).toMatchObject({ errorCategory: 'request', strategy: 'local' });
+  expect(events[3]).toMatchObject({ errorCategory: 'request', strategy: 'local' });
+  expect(warn).toHaveBeenCalledWith(
+    'Manual context compaction failed',
+    expect.objectContaining({ eventType: 'context_compaction.failed', reason: 'native_failed' }),
+  );
+  warn.mockRestore();
+  service.dispose();
+});
+
 it('queues a user message submitted while local compaction is running', async () => {
   let releaseSummary!: (value: string) => void;
   const chat = vi.fn(

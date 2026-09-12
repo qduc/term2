@@ -63,6 +63,7 @@ export type { CommandMessage } from '../../tools/types.js';
 export type ConversationCompactionFailureReason =
   | 'busy'
   | 'cancelled'
+  | 'native_failed'
   | 'single_turn_too_large'
   | 'result_still_too_large'
   | 'hot_tail_would_orphan_tool_result';
@@ -620,6 +621,12 @@ export class ConversationService {
           };
         }
         return failed(`Context compaction was blocked: ${outcome.reason}.`, outcome.reason);
+      }
+      if (outcome.kind === 'failed') {
+        // A codex native compaction failure is a provider-request failure, not a
+        // local validation problem, and must not borrow a size reason.
+        await journalFailure('request');
+        return failed('Native context compaction failed.', 'native_failed');
       }
       if (outcome.kind !== 'compacted') return { kind: 'nothing_to_compact', message: 'Nothing to compact.' };
       if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {

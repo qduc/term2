@@ -207,6 +207,7 @@ export class GatewayAdmissionPersistence {
     sessionId: string,
     clientRequestId: string,
     result: AdmissionResult,
+    turnId?: string,
   ): AdmissionRecord {
     const current = this.#index.admission(ownerUserId, sessionId, clientRequestId);
     if (!current) throw new GatewayPersistenceError('not_found', 'admission not found');
@@ -214,12 +215,14 @@ export class GatewayAdmissionPersistence {
       return this.#index.updateAdmission(ownerUserId, sessionId, clientRequestId, {
         state: 'rejected',
         result: result === 'accepted' ? 'failed' : result,
+        ...(turnId !== undefined ? { turnId } : {}),
       });
     }
     return this.#index.updateAdmission(ownerUserId, sessionId, clientRequestId, {
       state: 'terminal',
       result,
       phase: 'committed',
+      ...(turnId !== undefined ? { turnId } : {}),
     });
   }
 

@@ -11,6 +11,7 @@ import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
 import { validateGatewayManifest, WorkspaceAdmission } from './workspace-admission.js';
 import { SettingsService } from '../services/settings/settings-service.js';
+import { ConversationService } from '../services/conversation/conversation-service.js';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contracts.js';
@@ -508,12 +509,12 @@ describe('Gateway commands RPC route', () => {
       expect(retryResult.status).toBe(200);
       expect(retryResult.body).toMatchObject({
         commandId: 'retry-turn',
-        outcome: 'completed',
+        outcome: 'accepted',
         turnId: expect.any(String),
       });
       const retryTurnId = (retryResult.body as any).turnId;
 
-      // Check event journal for the retried turn sequence
+      // Check event journal for the retried turn sequence (including user_message_accepted from admit)
       await expect
         .poll(() => {
           const events = readFileSync(eventPath, 'utf8')
@@ -523,12 +524,166 @@ describe('Gateway commands RPC route', () => {
           const retryEvents = events.filter((e) => e.payload?.turnId === retryTurnId);
           return retryEvents.map((e) => e.type);
         })
-        .toEqual(['assistant_started', 'turn_completed']);
+        .toEqual(['user_message_accepted', 'assistant_started', 'turn_completed']);
+
+      // Check transcript contains user_message fact for retried turn
+      const transcriptPath = path.join(sessionPath, 'term2.jsonl');
+      const transcriptLines = readFileSync(transcriptPath, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      const hasRetryTranscriptFact = transcriptLines.some(
+        (l) => l.event?.type === 'user_message' && l.event?.message?.id === retryTurnId,
+      );
+      expect(hasRetryTranscriptFact).toBe(true);
 
       // Check admission index state
       const admission = persistence.index.admission('user-a', sessionId, 'retry-req-1');
       expect(admission?.state).toBe('terminal');
       expect(admission?.result).toBe('accepted');
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('deduplicates concurrent compact requests with the same clientRequestId via pre-reservation', async () => {
+    const { gateway, token, socketPath } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      let gateResolve: () => void;
+      const gate = new Promise<void>((resolve) => {
+        gateResolve = resolve;
+      });
+      let compactCallCount = 0;
+      const origCompact = ConversationService.prototype.compactContext;
+      ConversationService.prototype.compactContext = async function () {
+        compactCallCount++;
+        await gate;
+        return origCompact.apply(this);
+      };
+
+      try {
+        const req1 = rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'compact', clientRequestId: 'concurrent-compact-1' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+        const req2 = rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'compact', clientRequestId: 'concurrent-compact-1' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+
+        // Allow microtasks to execute so both requests reach #invokeCommand
+        await new Promise((r) => setTimeout(r, 50));
+
+        // compactContext should have only been invoked once while gated
+        expect(compactCallCount).toBe(1);
+
+        // Open the gate
+        gateResolve!();
+
+        const [res1, res2] = await Promise.all([req1, req2]);
+        expect(res1.status).toBe(200);
+        expect(res2.status).toBe(200);
+        expect(compactCallCount).toBe(1);
+
+        const bodies = [res1.body, res2.body] as any[];
+        const replayed = bodies.filter((b) => b.replayed === true);
+        const fresh = bodies.filter((b) => !b.replayed);
+        expect(replayed).toHaveLength(1);
+        expect(fresh).toHaveLength(1);
+        expect(replayed[0].commandId).toBe('compact');
+        expect(fresh[0].commandId).toBe('compact');
+        expect(replayed[0].outcome).toBe(fresh[0].outcome);
+      } finally {
+        ConversationService.prototype.compactContext = origCompact;
+      }
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('explicitly settles retry failures as terminal/failed rather than stranded accepted admission', async () => {
+    const { gateway, token, socketPath, persistence } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      // Submit first turn so session has history
+      const submitted = await rpc(
+        socketPath,
+        token('message_submit', sessionId),
+        { text: 'initial turn to populate history', clientRequestId: 'msg-seed' },
+        `/private/agent/v1/sessions/${sessionId}/messages`,
+      );
+      expect(submitted.status).toBe(202);
+
+      // Wait for first turn to complete
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          if (!readFileSync(eventPath, 'utf8')) return false;
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { type: string }).type);
+          return events.includes('turn_completed');
+        })
+        .toBe(true);
+
+      // Force runtime start to fail during commit
+      const origRetry = ConversationService.prototype.retryLastFailedTurn;
+      ConversationService.prototype.retryLastFailedTurn = async function () {
+        throw new Error('Simulated runtime start failure during retry');
+      };
+
+      try {
+        const retryResult = await rpc(
+          socketPath,
+          token('command_invoke', sessionId),
+          { commandId: 'retry-turn', clientRequestId: 'retry-forced-failure' },
+          `/private/agent/v1/sessions/${sessionId}/commands`,
+        );
+        expect(retryResult.status).toBeGreaterThanOrEqual(400);
+
+        // Verify admission record is settled as terminal and failed, NOT stranded as accepted
+        const admission = persistence.index.admission('user-a', sessionId, 'retry-forced-failure');
+        expect(admission).toBeDefined();
+        expect(admission?.state).toBe('terminal');
+        expect(admission?.result).toBe('failed');
+
+        // Verify journal ends with turn_failed rather than stranding assistant_started
+        await expect
+          .poll(() => {
+            const events = readFileSync(eventPath, 'utf8')
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => JSON.parse(line) as { type: string; payload: { turnId?: string } });
+            const retryEvents = events.filter((e) => e.payload?.turnId === admission?.turnId);
+            return retryEvents.map((e) => e.type);
+          })
+          .toEqual(['user_message_accepted', 'assistant_started', 'turn_failed']);
+      } finally {
+        ConversationService.prototype.retryLastFailedTurn = origRetry;
+      }
     } finally {
       await gateway.shutdown(100);
     }

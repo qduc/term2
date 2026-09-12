@@ -442,7 +442,7 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 ```json
 {
   "commandId": "compact" | "retry-tool" | "retry-turn",
-  "outcome": "completed" | "nothing_to_retry",
+  "outcome": "completed" | "accepted" | "nothing_to_retry",
   "turnId": "optional-turn-uuid",
   "tokensBefore": 1000,
   "tokensAfter": 400,
@@ -452,7 +452,8 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 
 ### Execution Semantics and Event Sequence
 1. **`compact`**:
-   - Invokes `ConversationService.compactContext()`.
+   - Idempotency is pre-reserved in the admission store and in-flight registry before executing the side effect.
+   - Invokes `ConversationService.compactContext()`. Concurrent same-`clientRequestId` requests await the in-flight compaction and receive the identical result with `replayed: true`.
    - If context was compacted, returns `outcome: 'completed'` and parses `tokensBefore` and `tokensAfter` from the compaction result if available.
    - If blocked or nothing to compact, returns `outcome: 'nothing_to_retry'`.
    - Compaction completes synchronously within the RPC; admission is immediately settled as `terminal`.
@@ -460,17 +461,29 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 2. **`retry-tool`**:
    - Inspects `session.service.peekLastToolOutput()`.
    - If no tool output exists to retry, settles admission as `terminal` and returns `{ commandId: 'retry-tool', outcome: 'nothing_to_retry' }`.
-   - If a tool output exists, generates a UUID `turnId`, prepares admission via `GatewayAdmissionPersistence`, marks admission `accepted`, appends `assistant_started` to the critical event journal, and starts the retried tool execution asynchronously via `session.service.retryLastToolOutput({ preferredMessageId: turnId })`.
-   - The browser observes `assistant_started` followed by streaming deltas and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+   - If a tool output exists, generates a UUID `turnId` and admits the turn through the same transaction as `message_submit` via `GatewayAdmissionPersistence.admit`:
+     1. Prepares the message in the runtime and persists the prepared admission in SQLite.
+     2. Appends the critical transcript fact (`user_message`) and critical journal event (`user_message_accepted`).
+     3. Appends `assistant_started` to the critical event journal before committing the runtime.
+     4. Commits the runtime turn asynchronously via `session.service.retryLastToolOutput({ preferredMessageId: turnId })`.
+     5. If runtime start fails, the transaction transitions admission to `terminal` with result `failed` and settles the event journal with `turn_failed`.
+   - Returns `{ commandId: 'retry-tool', outcome: 'accepted', turnId }`.
+   - The browser observes `user_message_accepted` followed by `assistant_started`, streaming deltas, and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
 
 3. **`retry-turn`**:
    - Inspects `session.service.exportState().history`.
    - If history is empty, settles admission as `terminal` and returns `{ commandId: 'retry-turn', outcome: 'nothing_to_retry' }`.
-   - If history exists, generates a UUID `turnId`, prepares admission via `GatewayAdmissionPersistence`, marks admission `accepted`, appends `assistant_started` to the critical event journal, and starts the turn execution asynchronously via `session.service.retryLastFailedTurn({ preferredMessageId: turnId })`.
-   - The browser observes `assistant_started` followed by streaming deltas and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+   - If history exists, generates a UUID `turnId` and admits the turn through the same transaction as `message_submit` via `GatewayAdmissionPersistence.admit`:
+     1. Prepares the message in the runtime and persists the prepared admission in SQLite.
+     2. Appends the critical transcript fact (`user_message`) and critical journal event (`user_message_accepted`).
+     3. Appends `assistant_started` to the critical event journal before committing the runtime.
+     4. Commits the runtime turn asynchronously via `session.service.retryLastFailedTurn({ preferredMessageId: turnId })`.
+     5. If runtime start fails, the transaction transitions admission to `terminal` with result `failed` and settles the event journal with `turn_failed`.
+   - Returns `{ commandId: 'retry-turn', outcome: 'accepted', turnId }`.
+   - The browser observes `user_message_accepted` followed by `assistant_started`, streaming deltas, and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
 
 ### Idempotency and Conflict Detection
-- `clientRequestId` is tracked through `GatewayAdmissionPersistence` backed by SQLite.
+- `clientRequestId` is reserved before command side effects and tracked through `GatewayAdmissionPersistence` backed by SQLite and in-memory in-flight deduplication.
 - Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
 - Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
 

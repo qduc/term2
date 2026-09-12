@@ -46,7 +46,7 @@ import {
   validatePendingInteractionDto,
   type PendingInteractionDto as InteractionDto,
 } from './interaction-protocol.js';
-import { GatewayAdmissionPersistence } from './persistence/admission-persistence.js';
+import { GatewayAdmissionPersistence, normalizedBodyHash } from './persistence/admission-persistence.js';
 import {
   GATEWAY_EVENT_HEARTBEAT_INTERVAL_MS,
   GATEWAY_EVENT_STREAM_CONTENT_TYPE,
@@ -292,6 +292,7 @@ export class Term2Gateway {
   readonly #interactionBindings = new Map<string, InteractionBinding>();
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
+  readonly #inflightCommands = new Map<string, { promise: Promise<GatewayRpcResult>; bodyHash: string }>();
   #shutdownInProgress = false;
   #shutdownPromise?: Promise<void>;
   readonly #server: GatewayServer;
@@ -1052,6 +1053,24 @@ export class Term2Gateway {
       }),
     );
 
+    const inflightKey = `${claims.sub}:${session.sessionId}:${body.clientRequestId}`;
+    const bodyHash = normalizedBodyHash(body);
+
+    const inflight = this.#inflightCommands.get(inflightKey);
+    if (inflight) {
+      if (inflight.bodyHash !== bodyHash) {
+        throw new GatewayPersistenceError('conflict', 'idempotency key has a different body');
+      }
+      const existing = await inflight.promise;
+      return {
+        ...existing,
+        body: {
+          ...(existing.body as Record<string, unknown>),
+          replayed: true,
+        },
+      };
+    }
+
     if (this.#admissions) {
       const lookup = this.#admissions.lookup(claims.sub, session.sessionId, body.clientRequestId, body);
       if (lookup.kind === 'conflict') {
@@ -1088,7 +1107,7 @@ export class Term2Gateway {
           status: 200,
           body: {
             commandId: body.commandId,
-            outcome: 'completed',
+            outcome: 'accepted',
             turnId: lookup.record.turnId,
             replayed: true,
           },
@@ -1101,160 +1120,296 @@ export class Term2Gateway {
       return publicError(503, 'persistence_unavailable', 'gateway persistence unavailable', true);
     }
 
-    if (body.commandId === 'compact') {
-      const resultText = await session.service.compactContext();
-      const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
-      const isCompacted = resultText.toLowerCase().includes('context compacted locally');
-      const outcome = isCompacted ? ('completed' as const) : ('nothing_to_retry' as const);
-      const tokensBefore = match?.[1] ? Number(match[1]) : undefined;
-      const tokensAfter = match?.[2] ? Number(match[2]) : undefined;
+    const inflightPromise = (async (): Promise<GatewayRpcResult> => {
+      try {
+        if (body.commandId === 'compact') {
+          if (this.#admissions) {
+            this.#admissions.prepare({
+              ownerUserId: claims.sub,
+              sessionId: session.sessionId,
+              clientRequestId: body.clientRequestId,
+              body,
+              turnId: 'compact:in_progress',
+            });
+            this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+              state: 'accepted',
+              result: 'accepted',
+              phase: 'committed',
+              turnId: 'compact:in_progress',
+            });
+          }
 
-      if (this.#admissions) {
-        const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
-        this.#admissions.prepare({
-          ownerUserId: claims.sub,
-          sessionId: session.sessionId,
-          clientRequestId: body.clientRequestId,
-          body,
-          turnId,
-        });
-        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
-          state: 'terminal',
-          result: 'accepted',
-          phase: 'committed',
-        });
-      }
+          let outcome: 'completed' | 'nothing_to_retry' = 'nothing_to_retry';
+          let tokensBefore: number | undefined;
+          let tokensAfter: number | undefined;
+          try {
+            const resultText = await session.service.compactContext();
+            const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
+            const isCompacted = resultText.toLowerCase().includes('context compacted locally');
+            outcome = isCompacted ? 'completed' : 'nothing_to_retry';
+            tokensBefore = match?.[1] ? Number(match[1]) : undefined;
+            tokensAfter = match?.[2] ? Number(match[2]) : undefined;
 
-      return {
-        status: 200,
-        body: {
-          commandId: 'compact',
-          outcome,
-          ...(tokensBefore !== undefined ? { tokensBefore } : {}),
-          ...(tokensAfter !== undefined ? { tokensAfter } : {}),
-        },
-      };
-    }
+            if (this.#admissions) {
+              const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId,
+              });
+            }
+          } catch (error) {
+            if (this.#admissions) {
+              try {
+                this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                  state: 'terminal',
+                  result: 'failed',
+                  phase: 'committed',
+                  turnId: 'compact:failed',
+                });
+              } catch {
+                // ignore
+              }
+            }
+            throw error;
+          }
 
-    if (body.commandId === 'retry-tool') {
-      const lastTool = session.service.peekLastToolOutput();
-      if (!lastTool) {
-        if (this.#admissions) {
-          this.#admissions.prepare({
-            ownerUserId: claims.sub,
-            sessionId: session.sessionId,
-            clientRequestId: body.clientRequestId,
-            body,
-            turnId: 'nothing_to_retry',
-          });
-          this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
-            state: 'terminal',
-            result: 'accepted',
-            phase: 'committed',
-          });
+          return {
+            status: 200,
+            body: {
+              commandId: 'compact',
+              outcome,
+              ...(tokensBefore !== undefined ? { tokensBefore } : {}),
+              ...(tokensAfter !== undefined ? { tokensAfter } : {}),
+            },
+          };
         }
-        return {
-          status: 200,
-          body: {
-            commandId: 'retry-tool',
-            outcome: 'nothing_to_retry',
-          },
-        };
-      }
 
-      const turnId = crypto.randomUUID();
-      if (this.#admissions && persisted) {
-        this.#admissions.prepare({
-          ownerUserId: claims.sub,
-          sessionId: session.sessionId,
-          clientRequestId: body.clientRequestId,
-          body,
-          turnId,
-        });
-        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
-          state: 'accepted',
-          result: 'accepted',
-          phase: 'committed',
-        });
-        await this.#enqueueEventPersistence(claims.sessionId!, async () => {
-          await persisted.persistence.critical.appendJournalCritical({
-            sessionId: claims.sessionId!,
-            type: 'assistant_started',
-            payload: { turnId },
-          });
-        });
-      }
-      void session.service.retryLastToolOutput({ preferredMessageId: turnId }).catch(() => undefined);
-      return {
-        status: 200,
-        body: {
-          commandId: 'retry-tool',
-          outcome: 'completed',
-          turnId,
-        },
-      };
-    }
+        if (body.commandId === 'retry-tool') {
+          const lastTool = session.service.peekLastToolOutput();
+          if (!lastTool) {
+            if (this.#admissions) {
+              this.#admissions.prepare({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId: 'nothing_to_retry',
+              });
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId: 'nothing_to_retry',
+              });
+            }
+            return {
+              status: 200,
+              body: {
+                commandId: 'retry-tool',
+                outcome: 'nothing_to_retry',
+              },
+            };
+          }
 
-    if (body.commandId === 'retry-turn') {
-      const state = session.service.exportState();
-      if (state.history.length === 0) {
-        if (this.#admissions) {
-          this.#admissions.prepare({
-            ownerUserId: claims.sub,
-            sessionId: session.sessionId,
-            clientRequestId: body.clientRequestId,
-            body,
-            turnId: 'nothing_to_retry',
-          });
-          this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
-            state: 'terminal',
-            result: 'accepted',
-            phase: 'committed',
-          });
+          const turnId = crypto.randomUUID();
+          if (this.#admissions && persisted) {
+            const runtime = session.createRetryRuntime('retry-tool');
+            try {
+              const result = await this.#admissions.admit({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId,
+                runtime,
+                persistence: persisted.persistence.critical,
+                term2Fact: { type: 'user_message', message: { id: turnId, sender: 'user', text: '' } },
+                acceptedEvent: {
+                  sessionId: session.sessionId,
+                  type: 'user_message_accepted',
+                  payload: { turnId, clientRequestId: body.clientRequestId, messageId: turnId },
+                },
+                beforeCommit: () =>
+                  this.#enqueueEventPersistence(session.sessionId, async () => {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'assistant_started',
+                      payload: { turnId },
+                    });
+                  }),
+              });
+
+              if (result.kind === 'rejected') {
+                return result.reason === 'queue_full'
+                  ? publicError(429, 'queue_full', 'message queue is full', true)
+                  : publicError(409, 'session_not_admitting', 'session is not admitting commands');
+              }
+
+              return {
+                status: 200,
+                body: {
+                  commandId: 'retry-tool',
+                  outcome: 'accepted',
+                  turnId: result.record.turnId,
+                  ...(result.replayed ? { replayed: true } : {}),
+                },
+              };
+            } catch (error) {
+              try {
+                await this.#enqueueEventPersistence(session.sessionId, async () => {
+                  const events = persisted.persistence.journal.events();
+                  const hasStarted = events.some((e) => e.type === 'assistant_started' && e.payload?.turnId === turnId);
+                  const hasTerminal = events.some(
+                    (e) =>
+                      (e.type === 'turn_completed' || e.type === 'turn_failed' || e.type === 'turn_aborted') &&
+                      e.payload?.turnId === turnId,
+                  );
+                  if (hasStarted && !hasTerminal) {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'turn_failed',
+                      payload: { turnId, outcome: 'failed', reason: 'runtime_error' },
+                    });
+                  }
+                });
+              } catch {
+                // ignore secondary journal error
+              }
+              return this.#mapError(error);
+            }
+          }
+
+          void session.service.retryLastToolOutput({ preferredMessageId: turnId }).catch(() => undefined);
+          return {
+            status: 200,
+            body: {
+              commandId: 'retry-tool',
+              outcome: 'accepted',
+              turnId,
+            },
+          };
         }
-        return {
-          status: 200,
-          body: {
-            commandId: 'retry-turn',
-            outcome: 'nothing_to_retry',
-          },
-        };
-      }
 
-      const turnId = crypto.randomUUID();
-      if (this.#admissions && persisted) {
-        this.#admissions.prepare({
-          ownerUserId: claims.sub,
-          sessionId: session.sessionId,
-          clientRequestId: body.clientRequestId,
-          body,
-          turnId,
-        });
-        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
-          state: 'accepted',
-          result: 'accepted',
-          phase: 'committed',
-        });
-        await this.#enqueueEventPersistence(claims.sessionId!, async () => {
-          await persisted.persistence.critical.appendJournalCritical({
-            sessionId: claims.sessionId!,
-            type: 'assistant_started',
-            payload: { turnId },
-          });
-        });
+        if (body.commandId === 'retry-turn') {
+          const state = session.service.exportState();
+          if (state.history.length === 0) {
+            if (this.#admissions) {
+              this.#admissions.prepare({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId: 'nothing_to_retry',
+              });
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId: 'nothing_to_retry',
+              });
+            }
+            return {
+              status: 200,
+              body: {
+                commandId: 'retry-turn',
+                outcome: 'nothing_to_retry',
+              },
+            };
+          }
+
+          const turnId = crypto.randomUUID();
+          if (this.#admissions && persisted) {
+            const runtime = session.createRetryRuntime('retry-turn');
+            try {
+              const result = await this.#admissions.admit({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId,
+                runtime,
+                persistence: persisted.persistence.critical,
+                term2Fact: { type: 'user_message', message: { id: turnId, sender: 'user', text: '' } },
+                acceptedEvent: {
+                  sessionId: session.sessionId,
+                  type: 'user_message_accepted',
+                  payload: { turnId, clientRequestId: body.clientRequestId, messageId: turnId },
+                },
+                beforeCommit: () =>
+                  this.#enqueueEventPersistence(session.sessionId, async () => {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'assistant_started',
+                      payload: { turnId },
+                    });
+                  }),
+              });
+
+              if (result.kind === 'rejected') {
+                return result.reason === 'queue_full'
+                  ? publicError(429, 'queue_full', 'message queue is full', true)
+                  : publicError(409, 'session_not_admitting', 'session is not admitting commands');
+              }
+
+              return {
+                status: 200,
+                body: {
+                  commandId: 'retry-turn',
+                  outcome: 'accepted',
+                  turnId: result.record.turnId,
+                  ...(result.replayed ? { replayed: true } : {}),
+                },
+              };
+            } catch (error) {
+              try {
+                await this.#enqueueEventPersistence(session.sessionId, async () => {
+                  const events = persisted.persistence.journal.events();
+                  const hasStarted = events.some((e) => e.type === 'assistant_started' && e.payload?.turnId === turnId);
+                  const hasTerminal = events.some(
+                    (e) =>
+                      (e.type === 'turn_completed' || e.type === 'turn_failed' || e.type === 'turn_aborted') &&
+                      e.payload?.turnId === turnId,
+                  );
+                  if (hasStarted && !hasTerminal) {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'turn_failed',
+                      payload: { turnId, outcome: 'failed', reason: 'runtime_error' },
+                    });
+                  }
+                });
+              } catch {
+                // ignore secondary journal error
+              }
+              return this.#mapError(error);
+            }
+          }
+
+          void session.service.retryLastFailedTurn({ preferredMessageId: turnId }).catch(() => undefined);
+          return {
+            status: 200,
+            body: {
+              commandId: 'retry-turn',
+              outcome: 'accepted',
+              turnId,
+            },
+          };
+        }
+
+        return publicError(422, 'command_not_allowed', 'command is not allowed');
+      } finally {
+        this.#inflightCommands.delete(inflightKey);
       }
-      void session.service.retryLastFailedTurn({ preferredMessageId: turnId }).catch(() => undefined);
-      return {
-        status: 200,
-        body: {
-          commandId: 'retry-turn',
-          outcome: 'completed',
-          turnId,
-        },
-      };
+    })();
+
+    this.#inflightCommands.set(inflightKey, { promise: inflightPromise, bodyHash });
+    try {
+      return await inflightPromise;
+    } catch (error) {
+      return this.#mapError(error);
     }
-
-    return publicError(422, 'command_not_allowed', 'command is not allowed');
   }
 
   async #resolveInteraction(

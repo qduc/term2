@@ -91,10 +91,17 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
 
   const streamingState = createState();
 
+  // Live-row ids are claimed synchronously, before setMessages. React runs
+  // functional updaters lazily, so an id assigned inside the updater is not
+  // yet visible to a flush in the same burst: the flush then appends a
+  // finalized copy and the late updater adds a stranded streaming row.
   const botResponseUpdater = createCoordinator((newBotText: string) => {
+    const existingId = streamingState.currentBotMessageId;
+    const messageId = existingId ?? createMessageId();
+    streamingState.currentBotMessageId = messageId;
     deps.setMessages((prev) => {
-      if (streamingState.currentBotMessageId !== null) {
-        const index = prev.findIndex((msg) => msg.id === streamingState.currentBotMessageId);
+      if (existingId !== null) {
+        const index = prev.findIndex((msg) => msg.id === messageId);
         if (index === -1) return prev;
         const current = prev[index];
         if (current.sender !== 'bot') {
@@ -105,10 +112,8 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
         return deps.trimMessages(next);
       }
 
-      const newId = createMessageId();
-      streamingState.currentBotMessageId = newId;
       const streamingMessage: BotMessage = {
-        id: newId,
+        id: messageId,
         sender: 'bot',
         status: 'streaming',
         text: newBotText,
@@ -118,9 +123,12 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
   }, 150);
 
   const reasoningUpdater = createCoordinator((newReasoningText: string) => {
+    const existingId = streamingState.currentReasoningMessageId;
+    const messageId = existingId ?? createMessageId();
+    streamingState.currentReasoningMessageId = messageId;
     deps.setMessages((prev) => {
-      if (streamingState.currentReasoningMessageId !== null) {
-        const index = prev.findIndex((msg) => msg.id === streamingState.currentReasoningMessageId);
+      if (existingId !== null) {
+        const index = prev.findIndex((msg) => msg.id === messageId);
         if (index === -1) return prev;
         const current = prev[index];
         if (current.sender !== 'reasoning') {
@@ -131,10 +139,8 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
         return deps.trimMessages(next);
       }
 
-      const newId = createMessageId();
-      streamingState.currentReasoningMessageId = newId;
       const reasoningMessage: ReasoningMessage = {
-        id: newId,
+        id: messageId,
         sender: 'reasoning',
         status: 'streaming',
         text: newReasoningText,

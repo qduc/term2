@@ -19,6 +19,7 @@ import type {
   GatewaySafeLogMetadata,
   ProviderBrokerCapability,
   SessionBinding,
+  SessionSettingsSnapshot,
 } from './contracts.js';
 import { createSafeLogMetadata, GatewayAuditLog } from './safe-log.js';
 import { AssertionVerifier } from './assertion.js';
@@ -34,6 +35,7 @@ import {
   GatewayPersistenceError,
   TERMINAL_AGENT_EVENT_TYPES,
   type AgentEventType,
+  type GatewaySessionRecord,
 } from './persistence/contracts.js';
 import {
   createSessionProjectionSource,
@@ -59,6 +61,7 @@ import {
 } from './server.js';
 import { ServerSession } from './server-session.js';
 import { createSessionSettingsSnapshot } from './launcher-seam.js';
+import { readSessionSnapshot, writeSessionSnapshot } from './persistence/session-snapshot.js';
 import type { GatewayPersistenceCoordinator, GatewayPersistedSession } from './persistence/coordinator.js';
 import { ServerSessionError } from './server-session.js';
 import { DynamicWorkspaceRegistry, DynamicWorkspaceRegistryError } from './dynamic-workspace-registry.js';
@@ -353,6 +356,8 @@ export class Term2Gateway {
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
   readonly #inflightCommands = new Map<string, { promise: Promise<GatewayRpcResult>; bodyHash: string }>();
+  // Keyed by owner and session: an in-flight revival belongs to the owner who
+  // started it, and no other caller may inherit its result.
   readonly #sessionRestores = new Map<
     string,
     Promise<{ session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null>
@@ -1056,6 +1061,9 @@ export class Term2Gateway {
     }
     if (!(session instanceof ServerSession) || !persisted)
       return publicError(409, 'session_not_admitting', 'session is not admitting messages');
+    // Owner scoping holds on every path that reaches admission, live or
+    // restored: a session owned by someone else does not exist for this caller.
+    if (session.binding.ownerUserId !== claims.sub) return publicError(404, 'not_found', 'session not found');
     const turnId = crypto.randomUUID();
     try {
       const result = await this.#admissions.admit({
@@ -2151,10 +2159,21 @@ export class Term2Gateway {
       ownedBinding: boolean;
       correlationId?: string;
       hydrate?: (session: ServerSession) => void;
+      /** Pre-resolved snapshot (restore path). When absent, the launcher's current snapshot is captured and persisted. */
+      snapshot?: SessionSettingsSnapshot;
     },
   ): Promise<{ session: ServerSession; persisted: GatewayPersistedSession | undefined }> {
     const runtimeFactory = this.#config.runtimeFactory;
     if (!runtimeFactory) throw new GatewayStartupError();
+    const authority = runtimeFactory.settingsAuthority;
+    // A restored session runs on its persisted snapshot; a fresh session
+    // captures the launcher's current one. Either way the factory receives an
+    // explicit snapshot so it can never silently re-read a changed default.
+    const runtimeSnapshot =
+      options.snapshot ??
+      (authority
+        ? createSessionSettingsSnapshot({ settings: authority, effectiveToolPolicy: { allowWrite: false } })
+        : undefined);
     let persisted: GatewayPersistedSession | undefined = this.#persisted.get(binding.sessionId);
     let openedHere = false;
     try {
@@ -2163,6 +2182,7 @@ export class Term2Gateway {
         openedHere = persisted !== undefined;
       }
       const session = await runtimeFactory.create(binding, {
+        settingsSnapshot: runtimeSnapshot,
         eventSink: (event, context) => {
           if (context.turnId) this.#lastTurnIds.set(binding.sessionId, context.turnId);
           if (event.type === 'subagent_started' && event.agentId && context.turnId)
@@ -2179,6 +2199,21 @@ export class Term2Gateway {
         },
       });
       options.hydrate?.(session);
+      if (runtimeSnapshot && !options.snapshot && persisted) {
+        // Fresh session: durably record the exact provider/model it was
+        // created on so a restart restores it verbatim. Absence of the file
+        // later falls back to the launcher snapshot, which is still validated.
+        try {
+          await writeSessionSnapshot(persisted.persistence.directory, {
+            schemaVersion: 1,
+            providerId: runtimeSnapshot.providerId,
+            modelId: runtimeSnapshot.modelId,
+            reasoningEffort: runtimeSnapshot.reasoningEffort,
+          });
+        } catch {
+          // Best effort; the fallback rule covers an unwritten snapshot.
+        }
+      }
       if (persisted) {
         this.#persisted.set(binding.sessionId, persisted);
         session.addDisposeHook(async () => {
@@ -2274,17 +2309,47 @@ export class Term2Gateway {
   ): Promise<{ session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null> {
     const existing = this.#sessions.get(sessionId);
     const existingPersisted = this.#persisted.get(sessionId);
-    if (existing instanceof ServerSession && existingPersisted)
-      return { session: existing, persisted: existingPersisted };
+    if (existing instanceof ServerSession) {
+      // Owner scoping holds on every return path, live or restored: a session
+      // owned by someone else does not exist for this caller.
+      if (existing.binding.ownerUserId !== ownerUserId) return publicError(404, 'not_found', 'session not found');
+      if (existingPersisted) return { session: existing, persisted: existingPersisted };
+    }
     if (!this.#config.runtimeFactory || !this.#config.persistence) return null;
-    const inflight = this.#sessionRestores.get(sessionId);
-    if (inflight) return inflight;
+    // A persisted session owned by another caller is a 404 for this caller,
+    // not the legacy fallback: the index is owner-scoped for a reason. This
+    // also stops a foreign caller from latching onto an in-flight revival.
+    let foreign: GatewaySessionRecord | null;
+    try {
+      foreign = this.#config.persistence.index.get(sessionId);
+    } catch {
+      foreign = null;
+    }
+    if (foreign && foreign.ownerUserId !== ownerUserId) return publicError(404, 'not_found', 'session not found');
+    const restoreKey = `${ownerUserId}\u0000${sessionId}`;
+    const guardOwner = (
+      result: { session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null,
+    ): { session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null => {
+      if (result && 'session' in result && result.session.binding.ownerUserId !== ownerUserId)
+        return publicError(404, 'not_found', 'session not found');
+      return result;
+    };
+    const inflight = this.#sessionRestores.get(restoreKey);
+    if (inflight) return inflight.then(guardOwner);
     const restore = this.#restoreRuntime(ownerUserId, sessionId, correlationId);
-    this.#sessionRestores.set(sessionId, restore);
-    void restore.then(() => {
-      if (this.#sessionRestores.get(sessionId) === restore) this.#sessionRestores.delete(sessionId);
-    });
-    return restore;
+    this.#sessionRestores.set(restoreKey, restore);
+    restore.then(
+      () => {
+        if (this.#sessionRestores.get(restoreKey) === restore) this.#sessionRestores.delete(restoreKey);
+      },
+      () => {
+        // A rejected revival must clear the single-flight entry too, or the
+        // session would stay wedged forever; everyone awaiting the shared
+        // promise already holds the rejection, so swallow it here.
+        if (this.#sessionRestores.get(restoreKey) === restore) this.#sessionRestores.delete(restoreKey);
+      },
+    );
+    return restore.then(guardOwner);
   }
 
   async #restoreRuntime(
@@ -2311,7 +2376,8 @@ export class Term2Gateway {
       // a typed admission error instead of a generic not-found.
       const binding = this.#admission.restore(sessionId, ownerUserId, record.workspaceId, grantVersion);
       const persisted = await this.#ensurePersistedSession(ownerUserId, sessionId);
-      const unavailable = await this.#sessionSnapshotUnavailable();
+      const snapshot = await this.#restoredSessionSnapshot(persisted);
+      const unavailable = await this.#sessionSnapshotUnavailable(snapshot);
       if (unavailable) return unavailable;
       if (this.#lifecycle.state !== 'running')
         return publicError(503, 'gateway_unavailable', 'gateway is not accepting sessions', true);
@@ -2324,6 +2390,7 @@ export class Term2Gateway {
         auditOperation: 'session_resume',
         ownedBinding: false,
         correlationId,
+        snapshot,
         hydrate: (session) => {
           if (directory) hydrateConversationService(session.service, directory, binding.sessionId);
           // Revival is complete: the coarse index lifecycle returns to the
@@ -2344,17 +2411,39 @@ export class Term2Gateway {
   }
 
   /**
-   * A restored session replays into the runtime the factory builds from the
-   * launcher's current settings snapshot. Refuse instead of silently
-   * substituting when that snapshot's provider or model is no longer
-   * available. Only the production stack (settings authority + model catalog)
-   * can answer this; fixture gateways skip the check.
+   * The snapshot a restored session must come back on: the per-session
+   * provider/model recorded when the session was created. Sessions created
+   * before that record existed (or whose record is unreadable) fall back to
+   * the launcher's current snapshot; the fallback is documented and is still
+   * validated below, so it is never a silent substitution of an unavailable
+   * provider or model. Only the production stack (settings authority) has a
+   * snapshot to restore against; fixture gateways compose without one.
    */
-  async #sessionSnapshotUnavailable(): Promise<GatewayRpcResult | null> {
+  async #restoredSessionSnapshot(persisted: GatewayPersistedSession): Promise<SessionSettingsSnapshot | undefined> {
+    const settings = this.#config.runtimeFactory?.settingsAuthority;
+    if (!settings) return undefined;
+    const stored = await readSessionSnapshot(persisted.persistence.directory);
+    if (!stored) return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: false } });
+    return createSessionSettingsSnapshot({
+      settings,
+      providerId: stored.providerId,
+      modelId: stored.modelId,
+      reasoningEffort: stored.reasoningEffort,
+      effectiveToolPolicy: { allowWrite: false },
+    });
+  }
+
+  /**
+   * A restored session replays into the runtime built from its snapshot.
+   * Refuse instead of silently substituting when that snapshot's provider or
+   * model is no longer available. Only the production stack (settings
+   * authority + model catalog) can answer this; fixture gateways skip the
+   * check.
+   */
+  async #sessionSnapshotUnavailable(snapshot: SessionSettingsSnapshot | undefined): Promise<GatewayRpcResult | null> {
     const settings = this.#config.runtimeFactory?.settingsAuthority;
     const catalog = this.#modelCatalog;
-    if (!settings || !catalog) return null;
-    const snapshot = createSessionSettingsSnapshot({ settings });
+    if (!settings || !catalog || !snapshot) return null;
     const providerId = String(snapshot.providerId);
     if (!getAvailableProviderIds(settings, getProviderIds()).includes(providerId))
       return publicError(409, 'provider_unavailable', 'session provider is no longer available');

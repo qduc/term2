@@ -9,21 +9,33 @@ import { mapConversationEvent } from './gateway.js';
 
 const roots: string[] = [];
 const providerId = 'm1-scripted-provider';
+let observedCredential: unknown;
+let observedAutoApprove: unknown;
+let observedSandbox: unknown;
 
 const provider: ProviderDefinition = {
   id: providerId,
   label: 'M1 scripted provider',
   fetchModels: async () => [{ id: 'm1-scripted-model' }],
-  createStreamedModel: () => ({
-    async *stream() {
-      yield { type: 'text_delta' as const, text: 'real runtime response' };
-      yield {
-        type: 'completion' as const,
-        responseId: 'm1-response',
-        output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'real runtime response' }] }],
-      };
-    },
-  }),
+  createStreamedModel: (_model, deps) => {
+    observedCredential = deps.settingsService.get('agent.openai.apiKey');
+    observedAutoApprove = deps.settingsService.get('shell.autoApproveMode');
+    observedSandbox = deps.settingsService.get('sandbox.enabled');
+    return {
+      // The factory must provide credentials to the in-process provider adapter
+      // without making host approval/sandbox posture part of the session.
+
+      stream: async function* (request: any) {
+        void request;
+        yield { type: 'text_delta' as const, text: 'real runtime response' };
+        yield {
+          type: 'completion' as const,
+          responseId: 'm1-response',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'real runtime response' }] }],
+        };
+      },
+    };
+  },
 };
 
 function tempRoot(prefix: string): string {
@@ -49,6 +61,9 @@ describe('production gateway runtime factory', () => {
     });
     settings.set('agent.provider', providerId, { persist: false });
     settings.set('agent.model', 'm1-scripted-model', { persist: false });
+    settings.set('agent.openai.apiKey', 'launcher-secret', { persist: false });
+    settings.set('shell.autoApproveMode', 'always', { persist: false });
+    settings.set('sandbox.enabled', false, { persist: false });
     const workspace = tempRoot('m1-workspace-');
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,
@@ -80,6 +95,9 @@ describe('production gateway runtime factory', () => {
     if (prepared.kind !== 'prepared') throw new Error('test setup');
     await session.commitMessage(prepared.leaseId);
     await vi.waitFor(() => expect(events, JSON.stringify(events)).toContain('final'));
+    expect(observedCredential).toBe('launcher-secret');
+    expect(observedAutoApprove).not.toBe('always');
+    expect(observedSandbox).toBe(true);
     expect(
       mapConversationEvent({ type: 'final', finalText: 'real runtime response' }, 'm1-turn', 'm1-session')?.type,
     ).toBe('turn_completed');

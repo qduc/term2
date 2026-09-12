@@ -135,11 +135,17 @@ export function createProductionRuntimeFactory(input: {
   createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
   modelCatalogLogger?: ILoggingService;
 }): RuntimeFactory {
-  const sessionSettingKeys = new Set([
-    'agent.provider',
-    'agent.model',
-    'agent.reasoningEffort',
-    'agent.maxParallelToolCalls',
+  const providerSettingKeys = new Set([
+    // Provider API keys are read in-process by the provider adapter and never
+    // enter a DTO, log record, or child-process environment.
+    'agent.openai.apiKey',
+    // OpenRouter's adapter resolves this key when constructing its model.
+    'agent.openrouter.apiKey',
+  ]);
+  const providerDynamicKeys = new Set([
+    // Runtime provider definitions are installed by the launcher and may
+    // contain provider-local credentials; they stay process-local here.
+    'providers',
   ]);
   const createSettings = (
     _defaults: SecretFreeWorkerSettings,
@@ -153,8 +159,10 @@ export function createProductionRuntimeFactory(input: {
     // keeping mutable model/session choices isolated per gateway session.
     return {
       get: ((key: string) =>
-        sessionSettingKeys.has(key) ? local.get(key as never) : authority.get(key as never)) as ISettingsService['get'],
-      getDynamic: (key: string) => (sessionSettingKeys.has(key) ? local.getDynamic(key) : authority.getDynamic(key)),
+        providerSettingKeys.has(key)
+          ? authority.get(key as never)
+          : local.get(key as never)) as ISettingsService['get'],
+      getDynamic: (key: string) => (providerDynamicKeys.has(key) ? authority.getDynamic(key) : local.getDynamic(key)),
       set: ((key: string, value: unknown, options?: { persist?: boolean }) =>
         local.set(key as never, value as never, options)) as ISettingsService['set'],
       setDynamic: (key: string, value: unknown, options?: { persist?: boolean }) =>
@@ -196,7 +204,7 @@ export function createProductionRuntimeFactory(input: {
       requestCapture,
       toolLifecycle,
       continuationProjectionMode,
-      allowBackgroundShell,
+      _allowBackgroundShell,
       sessionSettingsSnapshot,
     }) => {
       const client = new AgentClient({
@@ -217,8 +225,10 @@ export function createProductionRuntimeFactory(input: {
         sessionAccess,
         continuationProjectionMode,
         toolLifecycle,
-        allowBackgroundShell,
-        allowAskUser: false,
+        // Background shells are deferred from the gateway wire; maxShellJobs
+        // is fixed at zero by the gateway resource policy.
+        allowBackgroundShell: false,
+        allowAskUser: true,
       });
       installPlanModeInterceptor(client, { settingsService: settings });
       return client;

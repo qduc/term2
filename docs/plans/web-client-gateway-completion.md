@@ -27,6 +27,10 @@ Three rules carried into later milestones, because they were learned the hard wa
   session, restored on the validated current launcher snapshot (identity may change);
   corrupt sidecar = `500 session_snapshot_invalid`, never treated as legacy. Full rule:
   contract 13 §9.
+- Write posture is not inherited from the persisted identity snapshot: on fresh creation
+  and restart revival it is recomputed from the current launcher `--allow-write` authority
+  and the revalidated binding access. Only `read_write` plus `--allow-write` is writable;
+  a `read` grant stays read-only across restart.
 
 The web client is ChatForge at `~/chat-term2-integration/chat/` (a git repo on
 branch `integration/v1-chat`). It has a frontend and a BFF backend that calls this

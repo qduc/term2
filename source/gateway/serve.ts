@@ -29,6 +29,7 @@ import {
 import { DynamicWorkspaceRegistry } from './dynamic-workspace-registry.js';
 import { createRealWorkspaceBoundaryProbe } from './workspace-boundary-probe.js';
 import { parseServeArgs } from './serve-args.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 
 /**
@@ -56,6 +57,31 @@ export class ServeStartupError extends Error {}
  */
 export function createServeSessionLogger(context: ISessionContextService, logDir?: string): LoggingService {
   return new LoggingService({ sessionContextService: context, ...(logDir !== undefined ? { logDir } : {}) });
+}
+
+/**
+ * Session-logger wiring for the whole serve process: one LoggingService and one
+ * SessionContextService, handed to every session the runtime factory composes.
+ *
+ * One instance, not one per session: each per-session LoggingService would
+ * construct its own winston-daily-rotate-file transport against the same
+ * rotation audit file (term2-audit.json), and concurrent rotation bookkeeping
+ * on a shared audit file is not something the transport guarantees. The
+ * per-session traffic attribution is unaffected by sharing, because
+ * SessionContextService is an AsyncLocalStorage cell — sessions still run
+ * their provider traffic inside their own context, and the shared logger's
+ * provider-traffic store reads whichever context is current.
+ */
+export function createServeSessionLogWiring(logDir?: string): {
+  createSessionContext: () => SessionContextService;
+  createLogger: (sessionId: string, context: ISessionContextService) => LoggingService;
+} {
+  const context = new SessionContextService();
+  const logger = createServeSessionLogger(context, logDir);
+  return {
+    createSessionContext: () => context,
+    createLogger: () => logger,
+  };
 }
 
 /**
@@ -248,7 +274,7 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     tmpDir: ensureDir(stateDir, 'runtime-tmp'),
     sandboxAvailable: true,
     allowWrite: args.allowWrite,
-    createLogger: (_sessionId, context) => createServeSessionLogger(context),
+    ...createServeSessionLogWiring(),
   });
 
   const persistence = new GatewayPersistenceCoordinator(

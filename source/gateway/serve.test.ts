@@ -14,6 +14,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canonicalizeWorkspaceRoot,
+  createServeSessionLogWiring,
   createServeSessionLogger,
   loadDynamicWorkspaceGrants,
   prepareGatewayManifest,
@@ -211,6 +212,41 @@ describe('sandboxStartupWarning', () => {
     expect(warning).toContain('probe_failed');
     expect(warning).toContain('sandbox module threw');
     expect(warning).toContain('shell tool calls will be refused');
+  });
+});
+
+describe('createServeSessionLogWiring', () => {
+  it('hands every session the same logger instance and traffic context', async () => {
+    // Finding (F5 review round 1): one LoggingService per session means several
+    // winston-daily-rotate-file transports rotating against the same audit
+    // file, which the transport does not guarantee. serve therefore owns a
+    // single session logger and a single SessionContextService (an
+    // AsyncLocalStorage cell, safe to share across concurrent sessions) and
+    // hands the identical instances to every session composition.
+    const logDir = path.join(makeRoot(), 'logs');
+    const wiring = createServeSessionLogWiring(logDir);
+    const contextA = wiring.createSessionContext();
+    const contextB = wiring.createSessionContext();
+    const loggerA = wiring.createLogger('session-a', contextA);
+    const loggerB = wiring.createLogger('session-b', contextB);
+
+    expect(loggerB).toBe(loggerA);
+    expect(contextB).toBe(contextA);
+
+    // Settle the shared logger's rotation transport (it opens its log file
+    // asynchronously during construction) with one record before afterEach
+    // removes the tree — the same recipe the record test below uses.
+    loggerA.info('serve session logger wiring probe', { eventType: 'gateway.session_logger.probe' });
+    await expect
+      .poll(() => {
+        try {
+          const found = readdirSync(logDir).find((f) => f.startsWith('term2-') && f.endsWith('.log'));
+          return found ? readFileSync(path.join(logDir, found), 'utf8') : '';
+        } catch {
+          return '';
+        }
+      })
+      .toContain('serve session logger wiring probe');
   });
 });
 

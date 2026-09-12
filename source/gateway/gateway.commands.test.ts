@@ -515,7 +515,53 @@ describe('Gateway commands RPC route', () => {
     }
   });
 
-  it('reserves nothing_to_retry for a compaction with genuinely nothing to compact', async () => {
+  it('returns nothing_to_retry with no compaction frames when there is no complete cold turn', async () => {
+    // Mapping-table row (contract 13 §8 frame invariant): a pre-start refusal
+    // is decided before the start frame is journaled, so the command response
+    // is nothing_to_retry and the journal carries no compaction frames at all.
+    // Regression pin for the D3b class: this input used to journal
+    // started -> failed/validation while answering nothing_to_retry.
+    const { gateway, token, socketPath, persistence } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+
+      const first = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-compact-nothing' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(first.status).toBe(200);
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'nothing_to_retry' });
+
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { type: string });
+          return events.filter((event) => event.type.startsWith('context_compaction')).map((event) => event.type);
+        })
+        .toEqual([]);
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('maps an unavailable codex native compaction to failed/native_unavailable, agreeing with the journal', async () => {
+    // Mapping-table row (contract 13 §8 frame invariant): codex 'unchanged'
+    // (the model's native compactHistory hook is unavailable) is a started
+    // compaction that did not compact, so it is a failure with its own typed
+    // reason — not nothing_to_retry — and the journal carries started -> failed.
     const codexUnavailableClient = (): ConversationAgentClient =>
       ({
         chat: async () => '',
@@ -531,7 +577,7 @@ describe('Gateway commands RPC route', () => {
         },
         continueRunStream: async () => createMockStream([]),
       } as ConversationAgentClient);
-    const { gateway, token, socketPath } = setupGateway({ createAgentClient: codexUnavailableClient });
+    const { gateway, persistence, token, socketPath } = setupGateway({ createAgentClient: codexUnavailableClient });
     await gateway.start();
     try {
       const created = await rpc(
@@ -545,11 +591,23 @@ describe('Gateway commands RPC route', () => {
       const first = await rpc(
         socketPath,
         token('command_invoke', sessionId),
-        { commandId: 'compact', clientRequestId: 'req-compact-nothing' },
+        { commandId: 'compact', clientRequestId: 'req-compact-native-unavailable' },
         `/private/agent/v1/sessions/${sessionId}/commands`,
       );
       expect(first.status).toBe(200);
-      expect(first.body).toEqual({ commandId: 'compact', outcome: 'nothing_to_retry' });
+      expect(first.body).toEqual({ commandId: 'compact', outcome: 'failed', reason: 'native_unavailable' });
+
+      const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const eventPath = path.join(sessionPath, 'events.jsonl');
+      await expect
+        .poll(() => {
+          const events = readFileSync(eventPath, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as { type: string });
+          return events.filter((event) => event.type.startsWith('context_compaction')).map((event) => event.type);
+        })
+        .toEqual(['context_compaction_started', 'context_compaction_failed']);
     } finally {
       await gateway.shutdown(100);
     }

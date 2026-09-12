@@ -150,7 +150,8 @@ export type SessionRuntimeInternals = {
   breakChaining: () => void;
   compactContext: (options?: {
     signal?: AbortSignal;
-  }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure>;
+    onStarted?: () => void | Promise<void>;
+  }) => Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure>;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryClassifier: DefaultRetryClassifier;
@@ -315,7 +316,8 @@ export type SessionRuntime = {
   settings: SessionRuntimeController;
   compactContext: (options?: {
     signal?: AbortSignal;
-  }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure>;
+    onStarted?: () => void | Promise<void>;
+  }) => Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
   /** Session-owned live nested approval protocol. */
@@ -942,7 +944,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const compactContext = async (options?: {
     signal?: AbortSignal;
-  }): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' } | NativeCompactionFailure> => {
+    onStarted?: () => void | Promise<void>;
+  }): Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure> => {
     if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
     const snapshot = conversationStore.getProviderHistorySnapshot();
     const provider =
@@ -973,6 +976,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         contextWindow: catalog?.contextWindow,
         maxOutputTokens: catalog?.maxTokens,
       });
+      // Commit point for the codex branch: everything after this (the native
+      // call, history replacement) is a started compaction whose outcome must
+      // be reported with a terminal frame by the caller.
+      await options?.onStarted?.();
       const remote = await compactCodex.call(agentClient, snapshot.history, options?.signal);
       if (remote.kind !== 'compacted') {
         return remote.kind === 'failed'
@@ -1065,6 +1072,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       compactThresholdTokens: null,
       manual: true,
       signal: options?.signal,
+      onStarted: options?.onStarted,
     });
     if (outcome.kind !== 'compacted') return outcome;
 

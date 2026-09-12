@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import { createAgentStream } from '../services/agent-stream.js';
-import { RuntimeFactory, RuntimeFactoryError } from './runtime-factory.js';
+import { PRODUCTION_AUTHORITY_SETTING_KEYS, RuntimeFactory, RuntimeFactoryError } from './runtime-factory.js';
 import type { ProviderBrokerCapability, SessionBinding } from './contracts.js';
 
 const roots: string[] = [];
@@ -380,5 +380,37 @@ describe('RuntimeFactory and ServerSession', () => {
     expect(session.status).toBe('idle');
 
     await session.dispose();
+  });
+});
+
+describe('production authority settings allowlist', () => {
+  // The allowlist is the one seam between the launcher's credential owner and
+  // gateway sessions. A shell, sandbox, profile, or tool-enablement key here
+  // would let a web session read or steer host authority, so the structural
+  // guard fails the build instead of trusting review.
+  const FORBIDDEN_PREFIXES = ['shell.', 'sandbox.', 'app.', 'tools.'];
+
+  it('never routes host-authority settings from the launcher into sessions', () => {
+    for (const key of PRODUCTION_AUTHORITY_SETTING_KEYS) {
+      const offending = FORBIDDEN_PREFIXES.find((prefix) => key.startsWith(prefix));
+      expect(offending, `allowlist entry "${key}" must not start with "${offending}"`).toBeUndefined();
+    }
+  });
+
+  it('routes exactly the provider, transport, and web-search keys the launcher owns', () => {
+    expect([...PRODUCTION_AUTHORITY_SETTING_KEYS].sort()).toEqual(
+      [
+        'agent.openai.apiKey',
+        'agent.openrouter.apiKey',
+        'agent.openrouter.baseUrl',
+        'agent.openrouter.referrer',
+        'agent.openrouter.title',
+        'agent.transport',
+        'agent.codex.websocketFirstFrameTimeoutMs',
+        'agent.codex.websocketInterFrameTimeoutMs',
+        'webSearch.tavily.apiKey',
+        'webSearch.exa.apiKey',
+      ].sort(),
+    );
   });
 });

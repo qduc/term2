@@ -204,6 +204,8 @@ export type GatewayLaunchConfig = {
     maxAttempts?: number;
     /** Remove this file and restart to revoke all peers and re-bootstrap pairing. */
     trustFilePath: string;
+    /** Defaults to stdout; a daemon launcher prints the OTP to stderr instead. */
+    printOtp?: (otp: string) => void;
   };
 };
 
@@ -336,6 +338,7 @@ export class Term2Gateway {
           otpTtlMs: config.pairing!.otpTtlMs,
           maxAttempts: config.pairing!.maxAttempts,
           trustStore: trustedStore,
+          ...(config.pairing!.printOtp ? { printOtp: config.pairing!.printOtp } : {}),
         })
       : undefined;
     this.#audit = new GatewayAuditLog(config.auditWriter!);

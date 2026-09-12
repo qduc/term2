@@ -164,6 +164,7 @@ export type GatewaySafeLogMetadata = {
     | 'session_list'
     | 'model_list'
     | 'session_create'
+    | 'session_resume'
     | 'session_read'
     | 'message_submit'
     | 'command_invoke'

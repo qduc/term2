@@ -18,6 +18,8 @@ import {
   Term2Gateway,
 } from './gateway.js';
 import { RuntimeFactory } from './runtime-factory.js';
+import { createProductionRuntimeFactory } from './runtime-factory.js';
+import { SettingsService } from '../services/settings/settings-service.js';
 import { MemoryReplayLedger, SqliteReplayLedger, type ReplayLedger } from './replay-ledger.js';
 import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
@@ -1708,6 +1710,327 @@ describe('gateway startup and assertion verifier', () => {
       await gateway.shutdown(100);
       persistence.closeIndex();
     }
+  });
+
+  describe('restart-restored session continuation', () => {
+    const manifestShaOf = (manifestPath: string) =>
+      createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
+
+    const makeGateway = (root: string, runtimeFactory: RuntimeFactory, persistence: GatewayPersistenceCoordinator) =>
+      Term2Gateway.create({
+        enabled: true,
+        socketPath: path.join(root, 'gateway.sock'),
+        manifestPath: path.join(root, 'manifest.json'),
+        manifestSha256: manifestShaOf(path.join(root, 'manifest.json')),
+        replayDbPath: path.join(root, 'replay.sqlite'),
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        publicKeys: { active: publicKey },
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        workerSandboxAvailable: true,
+        workspaceBoundaryProbe: boundaryProbe,
+        allowWrite: true,
+        auditWriter: async () => undefined,
+        tmpDir: path.join(root, 'tmp'),
+        runtimeFactory,
+        persistence,
+      });
+
+    const tokenFor = (purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'active',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'user-a',
+        purpose,
+        workspaceId: 'workspace-a',
+        ...(sessionId ? { sessionId } : {}),
+      });
+
+    const scriptedFactory = (root: string, capture: { inputs: unknown[]; created: number }, finalText: string) =>
+      new RuntimeFactory({
+        tmpDir: path.join(root, 'runtime'),
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        sandboxAvailable: true,
+        createAgentClient: () => {
+          capture.created += 1;
+          return {
+            chat: async () => '',
+            abort: () => {},
+            setModel: () => {},
+            addToolInterceptor: () => () => {},
+            setSubagentEventSink: () => {},
+            setBackgroundSubagentEventSink: () => {},
+            startStream: async (userInput: unknown) => {
+              capture.inputs.push(userInput);
+              return createMockStream([
+                { type: 'text_delta', text: finalText } as never,
+                {
+                  type: 'completion',
+                  responseId: `resp-${capture.created}`,
+                  output: [{ type: 'message', content: [{ type: 'text', text: finalText }] }],
+                } as never,
+              ]);
+            },
+            continueRunStream: async () => createMockStream([]),
+          } as ConversationAgentClient;
+        },
+      });
+
+    const journalEvents = (sessionPath: string) =>
+      readFileSync(path.join(sessionPath, 'events.jsonl'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+
+    const waitForTerminal = async (sessionPath: string, turnId: string) => {
+      const deadline = Date.now() + 4_000;
+      for (;;) {
+        try {
+          const events = journalEvents(sessionPath);
+          if (events.some((event) => event.type === 'turn_completed' && event.payload.turnId === turnId)) return events;
+        } catch {
+          // The journal file appears with the first appended event.
+        }
+        if (Date.now() >= deadline) throw new Error(`turn ${turnId} did not complete`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    };
+
+    const userItemsDeep = (value: unknown): Array<Record<string, unknown>> => {
+      const found: Array<Record<string, unknown>> = [];
+      const visit = (node: unknown) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (!node || typeof node !== 'object') return;
+        const record = node as Record<string, unknown>;
+        if (record.role === 'user') found.push(record);
+        for (const child of Object.values(record)) visit(child);
+      };
+      visit(value);
+      return found;
+    };
+
+    /** Gateway 1: create a session, complete one turn, shut down cleanly. */
+    const seedRestorableSession = async (root: string) => {
+      const manifestPath = path.join(root, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'first answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      let sessionId = '';
+      try {
+        await gateway.start();
+        const created = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        sessionId = (created.body as { session: { id: string } }).session.id;
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'first question', clientRequestId: 'seed-request' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(202);
+        const turnId = (submitted.body as { turnId: string }).turnId;
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        await waitForTerminal(sessionPath!, turnId);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+      return sessionId;
+    };
+
+    it('a restart-restored session admits a new turn and replays prior history to the provider', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'second answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        const before = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(before.status).toBe(200);
+        expect((before.body as { session: { status: string } }).session.status).toBe('interrupted');
+
+        const submitted = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'second question', clientRequestId: 'request-2' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(202);
+        const turnId = (submitted.body as { turnId: string }).turnId;
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        const events = await waitForTerminal(sessionPath!, turnId);
+        expect(events.some((event) => event.type === 'user_message_accepted' && event.payload.turnId === turnId)).toBe(
+          true,
+        );
+
+        expect(capture.created).toBe(1);
+        expect(capture.inputs).toHaveLength(1);
+        const providerInput = JSON.stringify(capture.inputs[0]);
+        expect(providerInput).toContain('first question');
+        expect(providerInput).toContain('first answer');
+        expect(providerInput).toContain('second question');
+        for (const item of userItemsDeep(capture.inputs[0])) {
+          expect(String(item.content ?? item.text ?? '')).not.toBe('');
+        }
+
+        const read = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(read.status).toBe(200);
+        const projected = (
+          read.body as { session: { status: string; transcript: { messages: Array<{ role: string; text: string }> } } }
+        ).session;
+        expect(projected.status).toBe('idle');
+        expect(
+          projected.transcript.messages.some(
+            (message) => message.role === 'user' && message.text === 'second question',
+          ),
+        ).toBe(true);
+        expect(
+          projected.transcript.messages.some((message) => message.role === 'bot' && message.text === 'second answer'),
+        ).toBe(true);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses message_submit for a restored session whose grant was revoked', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      // Revoke workspace-a between the restarts; workspace-b stays.
+      const manifestPath = path.join(root, 'manifest.json');
+      const manifest = validateGatewayManifest(JSON.parse(readFileSync(manifestPath, 'utf8')));
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({ ...manifest, grants: manifest.grants.filter((grant) => grant.workspaceId !== 'workspace-a') }),
+      );
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'unused');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'should be refused', clientRequestId: 'request-revoked' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(403);
+        expect((submitted.body as { error: { code: string } }).error.code).toBe('workspace_forbidden');
+        expect(capture.created).toBe(0);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses a restored session whose snapshot provider is no longer available', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      // The operator's settings authority no longer offers the configured
+      // provider: restoring must refuse with a specific code, not substitute.
+      const settings = new SettingsService({
+        settingsDir: path.join(root, 'settings'),
+        disableFilePersistence: true,
+        disableLogging: true,
+        env: {},
+        cli: {},
+      });
+      settings.set('agent.provider', 'ghost-provider', { persist: false });
+      settings.set('agent.model', 'ghost-model', { persist: false });
+      const factory = createProductionRuntimeFactory({
+        settingsAuthority: settings,
+        tmpDir: path.join(root, 'runtime'),
+        sandboxAvailable: true,
+      });
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'after provider loss', clientRequestId: 'request-provider' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(409);
+        expect((submitted.body as { error: { code: string } }).error.code).toBe('provider_unavailable');
+        expect(factory.liveSessionCount).toBe(0);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('creates exactly one runtime when two submits race on a restored session', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'race answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        const [first, second] = await Promise.all([
+          rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'concurrent-a', clientRequestId: 'race-a' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          ),
+          rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'concurrent-b', clientRequestId: 'race-b' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          ),
+        ]);
+        expect(first.status).toBe(202);
+        expect(second.status).toBe(202);
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        await waitForTerminal(sessionPath!, (first.body as { turnId: string }).turnId);
+        await waitForTerminal(sessionPath!, (second.body as { turnId: string }).turnId);
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(1);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
   });
 
   it('emits exactly one durable queue-discard event for accepted queued work', async () => {

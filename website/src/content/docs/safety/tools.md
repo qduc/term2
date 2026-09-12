@@ -11,7 +11,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **`apply_patch`**: Applies unified patches to files with preview and self-healing syntax recovery.
 - **`search_replace`**: Performs precise contiguous block replacements within a file.
 - **`create_file`**: Creates a new file in the workspace (or overwrites an existing file if explicitly approved).
-- **`find_files`**: Finds files and directories using glob patterns (leveraging `fd` when installed).
+- **`glob`**: Finds files and directories using glob patterns (leveraging `fd` when installed).
 - **`grep`**: Performs regex or literal text searches across files (leveraging `ripgrep` when installed).
 - **`read_code_outline`**: Generates high-level symbol outlines (classes, functions, interfaces) for rapid file comprehension.
 - **`code_context_search`**: Searches code symbols and definitions across the codebase.
@@ -20,9 +20,10 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 
 - **`shell`**: Executes shell commands within the active sandbox policy. Commands that read or write outside approved boundaries prompt for explicit confirmation.
 - **Background Shell Jobs**: Long-running commands can run detached in the background:
-  - `shell_job_status`: Check running state, exit codes, and output byte counts.
-  - `shell_job_output`: Stream or fetch buffered output logs.
-  - `shell_job_kill`: Terminate background jobs gracefully or forcefully.
+  - `get_shell_job`: Check running state, exit codes, and output byte counts.
+  - `monitor_shell_job`: Stream or fetch buffered output logs.
+  - `cancel_shell_job`: Terminate background jobs gracefully or forcefully.
+  - `cancel_shell_monitor`: Stop an output watch.
 
 ## Sandboxed JavaScript Execution (`run_code`)
 
@@ -36,3 +37,8 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **`ask_user`**: Asks clarifying questions to the user with an interactive prompt and selectable choices.
 - **`ask_mentor`**: Consults the higher-tier mentor model for architectural guidance or code review.
 - **`activate_skill`**: Loads specialized instruction sets and workflows for domain-specific tasks.
+
+## Web Research
+
+- **`web_search`**: Search the web through the configured Tavily or Exa provider.
+- **`web_fetch`**: Fetch and extract content from a URL.

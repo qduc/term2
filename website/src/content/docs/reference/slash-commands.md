@@ -16,7 +16,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/mentor`** | — | Toggle collaborative Mentor mode with dual-model consultation. |
 | **`/orchestrator`** | — | Toggle prompt-guided Orchestrator mode (delegates all tool-backed work). |
 | **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `plan`, `lite`, `mentor`, `orchestrator`). |
-| **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. |
+| **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
 | **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Rewind conversation history with interactive discard inspection. |
@@ -54,7 +54,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 ### `/auto-approve [mode]`
 - **Usage**: `/auto-approve off`, `/auto-approve advisory`, `/auto-approve auto`, `/auto-approve always`
-- Sets the tool execution approval mode. Mode `always` disables sandbox prompts entirely.
+- Sets the tool execution approval mode. Mode `always` sets `sandbox.enabled = false`.
 
 ### `/rewind [last|<turn>] [edit|resend]`
 - **Usage**: `/rewind`, `/rewind 3 edit`, `/rewind last resend`

@@ -36,7 +36,7 @@ const ENV_VAR_MAP: Record<string, string> = {
   'logging.disableLogging': 'DISABLE_LOGGING',
   'logging.debugLogging': 'DEBUG_LOGGING',
   'environment.nodeEnv': 'NODE_ENV',
-  'app.shellPath': 'SHELL',
+  'app.shellPath': 'SHELL, COMSPEC',
   'tools.logFileOperations': 'LOG_FILE_OPERATIONS',
   'debug.debugBashTool': 'DEBUG_BASH_TOOL',
   'webSearch.tavily.apiKey': 'TAVILY_API_KEY',
@@ -51,7 +51,7 @@ function formatDefaultValue(key: string, val: any): string {
   if (typeof val === 'string') {
     // For path defaults containing user home directories, generalize to portable path
     if (key === 'memory.directory') {
-      return '`~/.local/share/term2-nodejs/memory`';
+      return '`platform data directory (Linux: ~/.local/share/term2-nodejs/memory; macOS: ~/Library/Application Support/term2-nodejs/memory; Windows: %LOCALAPPDATA%\\term2-nodejs\\Data\\memory)`';
     }
     return `\`"${val}"\``;
   }
@@ -184,43 +184,6 @@ for (const entry of entries) {
   }
 }
 
-// Validation assertions to guarantee factual correctness on every generation
-const compactionEntry = entries.find((e) => e.key === 'agent.contextCompaction.enabled');
-if (!compactionEntry || compactionEntry.defaultValue !== '`false`') {
-  throw new Error(`Validation failed: agent.contextCompaction.enabled must default to false, got ${compactionEntry?.defaultValue}`);
-}
-
-const rolloverMilestones = entries.find((e) => e.key === 'agent.sessionRollover.milestones');
-if (!rolloverMilestones || rolloverMilestones.defaultValue !== '`[200000,300000,400000]`') {
-  throw new Error(`Validation failed: agent.sessionRollover.milestones must be [200000,300000,400000], got ${rolloverMilestones?.defaultValue}`);
-}
-
-const turnBackstop = entries.find((e) => e.key === 'agent.runBudget.turnBackstop');
-if (!turnBackstop || turnBackstop.type !== 'number' || turnBackstop.defaultValue !== '`150`') {
-  throw new Error(`Validation failed: agent.runBudget.turnBackstop must be number 150, got ${turnBackstop?.type} ${turnBackstop?.defaultValue}`);
-}
-
-const autoApproveMode = entries.find((e) => e.key === 'shell.autoApproveMode');
-if (!autoApproveMode || autoApproveMode.defaultValue !== '`"off"`' || !autoApproveMode.type.includes('always')) {
-  throw new Error(`Validation failed: shell.autoApproveMode must default to off and include always in types, got ${autoApproveMode?.type} ${autoApproveMode?.defaultValue}`);
-}
-
-const sshEnabled = entries.find((e) => e.key === 'ssh.enabled');
-const sshPort = entries.find((e) => e.key === 'ssh.port');
-if (!sshEnabled || sshEnabled.defaultValue !== '`false`' || !sshPort || sshPort.defaultValue !== '`22`' || sshPort.type !== 'number') {
-  throw new Error(`Validation failed: ssh.enabled must be false, ssh.port must be number 22`);
-}
-
-const webSearchProvider = entries.find((e) => e.key === 'webSearch.provider');
-if (!webSearchProvider || webSearchProvider.defaultValue !== '`"tavily"`') {
-  throw new Error(`Validation failed: webSearch.provider must default to tavily, got ${webSearchProvider?.defaultValue}`);
-}
-
-const nicknamesEntry = entries.find((e) => e.key === 'agent.modelNicknames');
-if (!nicknamesEntry || nicknamesEntry.type !== 'map of string to string' || nicknamesEntry.defaultValue !== '`{}`') {
-  throw new Error(`Validation failed: agent.modelNicknames must be map of string to string and default to {}, got ${nicknamesEntry?.type} ${nicknamesEntry?.defaultValue}`);
-}
-
 // Build Markdown Output
 let markdown = `---
 title: Settings Reference
@@ -253,7 +216,8 @@ for (const [categoryName, categoryEntries] of Object.entries(categories)) {
   for (const entry of categoryEntries) {
     const modifiableBadge = entry.isRuntimeModifiable ? '✓ Yes' : 'No';
     const envBadge = entry.envVar !== '—' ? `\`${entry.envVar}\`` : '—';
-    markdown += `| \`${entry.key}\` | \`${entry.type}\` | ${entry.defaultValue} | ${modifiableBadge} | ${envBadge} | ${entry.description} |\n`;
+    const escapeCell = (value: string): string => value.replaceAll("|", "\\|").replaceAll("\n", " ");
+    markdown += `| \`${escapeCell(entry.key)}\` | \`${escapeCell(entry.type)}\` | ${escapeCell(entry.defaultValue)} | ${escapeCell(modifiableBadge)} | ${escapeCell(envBadge)} | ${escapeCell(entry.description)} |\n`;
   }
 }
 

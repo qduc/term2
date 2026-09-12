@@ -25,6 +25,7 @@ import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
 import { createGatewayEventJournal } from './persistence/event-journal.js';
 import { validateGatewayManifest, WorkspaceAdmission } from './workspace-admission.js';
+import { GatewayPersistenceError } from './persistence/contracts.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createAgentStream } from '../services/agent-stream.js';
@@ -35,6 +36,18 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 const tempRoots: string[] = [];
 // Injects sidecar write failures without touching the filesystem; the real
 // implementation stays in place for every other test.
+const hydrateControl = vi.hoisted(() => ({ failHydration: false }));
+vi.mock('./persistence/projection.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./persistence/projection.js')>();
+  return {
+    ...actual,
+    hydrateConversationService: (...args: Parameters<typeof actual.hydrateConversationService>) => {
+      if (hydrateControl.failHydration) throw new GatewayPersistenceError('corrupt', 'injected hydration failure');
+      return actual.hydrateConversationService(...args);
+    },
+  };
+});
+
 const snapshotWriteControl = vi.hoisted(() => ({ failWrites: false }));
 vi.mock('./persistence/session-snapshot.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./persistence/session-snapshot.js')>();
@@ -2409,6 +2422,65 @@ describe('gateway startup and assertion verifier', () => {
         }
       } finally {
         unregisterProvider('corrupt-provider');
+      }
+    });
+
+    it('closes the persisted handle when hydration fails and revives on a later retry', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'second answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        // Hydration throws after #ensurePersistedSession installed the
+        // handle: the restore must close and remove it, not leak it.
+        hydrateControl.failHydration = true;
+        const failed = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'doomed question', clientRequestId: 'hydrate-fail' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(failed.status).toBe(503);
+        expect((failed.body as { error: { code: string } }).error.code).toBe('persistence_unavailable');
+        // The runtime was created and disposed with the failed composition.
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(0);
+
+        // The handle is gone from the gateway: the read path reopens it and
+        // still projects the session.
+        const read = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(read.status).toBe(200);
+        expect((read.body as { session: { status: string } }).session.status).toBe('interrupted');
+
+        // A later retry reopens the handle and revives the session.
+        hydrateControl.failHydration = false;
+        const retried = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'second question', clientRequestId: 'hydrate-retry' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(retried.status).toBe(202);
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        const events = await waitForTerminal(sessionPath!, (retried.body as { turnId: string }).turnId);
+        expect(events.some((event) => event.type === 'user_message_accepted')).toBe(true);
+        expect(capture.created).toBe(2);
+        expect(factory.liveSessionCount).toBe(1);
+      } finally {
+        hydrateControl.failHydration = false;
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
       }
     });
   });

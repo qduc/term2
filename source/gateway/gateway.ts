@@ -2177,12 +2177,10 @@ export class Term2Gateway {
         ? createSessionSettingsSnapshot({ settings: authority, effectiveToolPolicy: { allowWrite: false } })
         : undefined);
     let persisted: GatewayPersistedSession | undefined = this.#persisted.get(binding.sessionId);
-    let openedHere = false;
     let createdSession: ServerSession | undefined;
     try {
       if (!persisted) {
         persisted = await this.#config.persistence?.open(binding);
-        openedHere = persisted !== undefined;
       }
       const session = await runtimeFactory.create(binding, {
         settingsSnapshot: runtimeSnapshot,
@@ -2287,7 +2285,8 @@ export class Term2Gateway {
       return { session, persisted };
     } catch (error) {
       // The runtime was created but the composition failed (snapshot
-      // durability): dispose it before the persistence it may still write to.
+      // durability, hydration, ...): dispose it before the persistence it
+      // may still write to.
       if (createdSession) {
         try {
           await createdSession.dispose();
@@ -2295,14 +2294,16 @@ export class Term2Gateway {
           // Preserve the original composition failure.
         }
       }
-      // Only unwind what this composition opened: a restored session may
-      // already hold a persistence handle shared with the read path.
-      if (openedHere) {
+      // Roll the persistence handle back whoever opened it — composition
+      // opened it, or #ensurePersistedSession installed it before the failed
+      // restore. A failed restore must not leave an open handle in #persisted;
+      // the read path and the next revival reopen on demand.
+      if (persisted) {
         try {
-          await persisted?.persistence.close();
+          await persisted.persistence.close();
           await this.#config.persistence?.close(binding.sessionId, 'interrupted');
         } catch {
-          // Preserve the composition failure; persistence keeps its evidence.
+          // Preserve the original composition failure; persistence keeps its evidence.
         }
         this.#persisted.delete(binding.sessionId);
       }
@@ -2564,6 +2565,18 @@ export class Term2Gateway {
       if (this.#config.runtimeFactory && !(await waitBounded(this.#config.runtimeFactory.shutdown(remaining()))))
         markForced();
       this.#sessions.clear();
+      // Close persistence handles that outlived their session: read-path opens
+      // and compositions that failed before installing a dispose hook would
+      // otherwise keep file descriptors and locks past shutdown.
+      for (const [sessionId, persisted] of this.#persisted) {
+        try {
+          await waitBounded(persisted.persistence.close());
+          await waitBounded(this.#config.persistence?.close(sessionId, 'interrupted') ?? Promise.resolve());
+        } catch {
+          // Shutdown proceeds; the interrupted status is recorded in the index.
+        }
+      }
+      this.#persisted.clear();
       this.#replay.close();
       // The audit record is bounded by the same deadline. A broken audit sink
       // must not keep the local owner process alive indefinitely.

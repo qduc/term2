@@ -15,6 +15,9 @@ import { ConversationService } from '../services/conversation/conversation-servi
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contracts.js';
+import { hydrateTranscript } from './persistence/projection.js';
+import { normalizedBodyHash } from './persistence/admission-persistence.js';
+import type { AdmissionRecord } from './persistence/contracts.js';
 
 const tempRoots: string[] = [];
 const makeTemp = () => {
@@ -514,7 +517,7 @@ describe('Gateway commands RPC route', () => {
       });
       const retryTurnId = (retryResult.body as any).turnId;
 
-      // Check event journal for the retried turn sequence (including user_message_accepted from admit)
+      // Check event journal for the retried turn sequence (assistant_started directly, no empty user_message_accepted)
       await expect
         .poll(() => {
           const events = readFileSync(eventPath, 'utf8')
@@ -524,9 +527,9 @@ describe('Gateway commands RPC route', () => {
           const retryEvents = events.filter((e) => e.payload?.turnId === retryTurnId);
           return retryEvents.map((e) => e.type);
         })
-        .toEqual(['user_message_accepted', 'assistant_started', 'turn_completed']);
+        .toEqual(['assistant_started', 'turn_completed']);
 
-      // Check transcript contains user_message fact for retried turn
+      // Check transcript does NOT contain user_message fact for retried turn
       const transcriptPath = path.join(sessionPath, 'term2.jsonl');
       const transcriptLines = readFileSync(transcriptPath, 'utf8')
         .split('\n')
@@ -535,7 +538,31 @@ describe('Gateway commands RPC route', () => {
       const hasRetryTranscriptFact = transcriptLines.some(
         (l) => l.event?.type === 'user_message' && l.event?.message?.id === retryTurnId,
       );
-      expect(hasRetryTranscriptFact).toBe(true);
+      expect(hasRetryTranscriptFact).toBe(false);
+
+      // Verify replay/restart: state.history has NO empty user message, only the initial question
+      const restored = hydrateTranscript(sessionPath, sessionId);
+      expect(restored).not.toBeNull();
+      const userHistory = restored!.history.filter((m) => m.role === 'user');
+      expect(userHistory).toHaveLength(1);
+      expect(userHistory[0].content).toBe('initial question');
+      expect(restored!.history.some((m) => m.role === 'user' && !m.content)).toBe(false);
+
+      // Verify projection: no empty user turn is projected
+      const read = await rpc(
+        socketPath,
+        token('session_read', sessionId),
+        null,
+        `/private/agent/v1/sessions/${sessionId}`,
+      );
+      expect(read.status).toBe(200);
+      const projectedMessages = (
+        read.body as { session: { transcript: { messages: Array<{ role: string; text: string }> } } }
+      ).session.transcript.messages;
+      const userProjected = projectedMessages.filter((m) => m.role === 'user');
+      expect(userProjected).toHaveLength(1);
+      expect(userProjected[0].text).toBe('initial question');
+      expect(projectedMessages.some((m) => m.role === 'user' && !m.text)).toBe(false);
 
       // Check admission index state
       const admission = persistence.index.admission('user-a', sessionId, 'retry-req-1');
@@ -680,10 +707,106 @@ describe('Gateway commands RPC route', () => {
             const retryEvents = events.filter((e) => e.payload?.turnId === admission?.turnId);
             return retryEvents.map((e) => e.type);
           })
-          .toEqual(['user_message_accepted', 'assistant_started', 'turn_failed']);
+          .toEqual(['assistant_started', 'turn_failed']);
       } finally {
         ConversationService.prototype.retryLastFailedTurn = origRetry;
       }
+    } finally {
+      await gateway.shutdown(100);
+    }
+  });
+
+  it('decodes persisted compact records safely on replay without casting into public outcome union', async () => {
+    const { gateway, token, socketPath, persistence } = setupGateway();
+    await gateway.start();
+    try {
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+
+      // Seed a compact:in_progress record representing an interrupted compaction after daemon restart
+      const inProgressRecord: AdmissionRecord = {
+        ownerUserId: 'user-a',
+        sessionId,
+        clientRequestId: 'req-interrupted',
+        normalizedBodyHash: normalizedBodyHash({ commandId: 'compact', clientRequestId: 'req-interrupted' }),
+        turnId: 'compact:in_progress',
+        state: 'accepted',
+        result: 'accepted',
+        phase: 'committed',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      };
+      persistence.index.insertAdmission(inProgressRecord);
+
+      // Replaying the interrupted compact command must return 500 compact_interrupted, not status 200 outcome
+      const interruptedRes = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-interrupted' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(interruptedRes.status).toBe(500);
+      expect((interruptedRes.body as any).error?.code).toBe('compact_interrupted');
+
+      // Seed a compact:failed record
+      const failedRecord: AdmissionRecord = {
+        ownerUserId: 'user-a',
+        sessionId,
+        clientRequestId: 'req-failed',
+        normalizedBodyHash: normalizedBodyHash({ commandId: 'compact', clientRequestId: 'req-failed' }),
+        turnId: 'compact:failed',
+        state: 'terminal',
+        result: 'failed',
+        phase: 'committed',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      };
+      persistence.index.insertAdmission(failedRecord);
+
+      // Replaying the failed compact command must return 500 compact_failed, not status 200 outcome
+      const failedRes = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-failed' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(failedRes.status).toBe(500);
+      expect((failedRes.body as any).error?.code).toBe('compact_failed');
+
+      // Seed a completed compact record: compact:completed:1200:450
+      const completedRecord: AdmissionRecord = {
+        ownerUserId: 'user-a',
+        sessionId,
+        clientRequestId: 'req-completed',
+        normalizedBodyHash: normalizedBodyHash({ commandId: 'compact', clientRequestId: 'req-completed' }),
+        turnId: 'compact:completed:1200:450',
+        state: 'terminal',
+        result: 'accepted',
+        phase: 'committed',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      };
+      persistence.index.insertAdmission(completedRecord);
+
+      const completedRes = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'compact', clientRequestId: 'req-completed' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(completedRes.status).toBe(200);
+      expect(completedRes.body).toMatchObject({
+        commandId: 'compact',
+        outcome: 'completed',
+        tokensBefore: 1200,
+        tokensAfter: 450,
+        replayed: true,
+      });
     } finally {
       await gateway.shutdown(100);
     }

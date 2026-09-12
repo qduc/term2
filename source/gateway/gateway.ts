@@ -1079,7 +1079,16 @@ export class Term2Gateway {
       if (lookup.kind === 'replayed') {
         if (body.commandId === 'compact') {
           const parts = lookup.record.turnId.split(':');
-          const outcome = (parts[1] as 'completed' | 'nothing_to_retry') || 'completed';
+          if (lookup.record.result === 'failed' || parts[1] === 'failed') {
+            return publicError(500, 'compact_failed', 'compaction failed', true);
+          }
+          if (parts[1] === 'in_progress') {
+            return publicError(500, 'compact_interrupted', 'compaction was interrupted', true);
+          }
+          if (parts[1] !== 'completed' && parts[1] !== 'nothing_to_retry') {
+            return publicError(500, 'compact_invalid_state', 'invalid compaction record state');
+          }
+          const outcome = parts[1];
           const tokensBefore = parts[2] ? Number(parts[2]) : undefined;
           const tokensAfter = parts[3] ? Number(parts[3]) : undefined;
           return {
@@ -1102,6 +1111,9 @@ export class Term2Gateway {
               replayed: true,
             },
           };
+        }
+        if (lookup.record.result === 'failed') {
+          return publicError(500, 'retry_failed', 'retry failed', true);
         }
         return {
           status: 200,
@@ -1225,20 +1237,11 @@ export class Term2Gateway {
                 turnId,
                 runtime,
                 persistence: persisted.persistence.critical,
-                term2Fact: { type: 'user_message', message: { id: turnId, sender: 'user', text: '' } },
                 acceptedEvent: {
                   sessionId: session.sessionId,
-                  type: 'user_message_accepted',
-                  payload: { turnId, clientRequestId: body.clientRequestId, messageId: turnId },
+                  type: 'assistant_started',
+                  payload: { turnId, clientRequestId: body.clientRequestId },
                 },
-                beforeCommit: () =>
-                  this.#enqueueEventPersistence(session.sessionId, async () => {
-                    await persisted.persistence.critical.appendJournalCritical({
-                      sessionId: session.sessionId,
-                      type: 'assistant_started',
-                      payload: { turnId },
-                    });
-                  }),
               });
 
               if (result.kind === 'rejected') {
@@ -1331,20 +1334,11 @@ export class Term2Gateway {
                 turnId,
                 runtime,
                 persistence: persisted.persistence.critical,
-                term2Fact: { type: 'user_message', message: { id: turnId, sender: 'user', text: '' } },
                 acceptedEvent: {
                   sessionId: session.sessionId,
-                  type: 'user_message_accepted',
-                  payload: { turnId, clientRequestId: body.clientRequestId, messageId: turnId },
+                  type: 'assistant_started',
+                  payload: { turnId, clientRequestId: body.clientRequestId },
                 },
-                beforeCommit: () =>
-                  this.#enqueueEventPersistence(session.sessionId, async () => {
-                    await persisted.persistence.critical.appendJournalCritical({
-                      sessionId: session.sessionId,
-                      type: 'assistant_started',
-                      payload: { turnId },
-                    });
-                  }),
               });
 
               if (result.kind === 'rejected') {

@@ -475,7 +475,7 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 ```json
 {
   "commandId": "compact" | "retry-tool" | "retry-turn",
-  "outcome": "completed" | "accepted" | "nothing_to_retry",
+  "outcome": "completed" | "not_reduced" | "accepted" | "nothing_to_retry",
   "turnId": "optional-turn-uuid",
   "tokensBefore": 1000,
   "tokensAfter": 400,
@@ -487,8 +487,10 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 1. **`compact`**:
    - Idempotency is pre-reserved in the admission store and in-flight registry before executing the side effect.
    - Invokes `ConversationService.compactContext()`. Concurrent same-`clientRequestId` requests await the in-flight compaction and receive the identical result with `replayed: true`.
-   - If context was compacted, returns `outcome: 'completed'` and parses `tokensBefore` and `tokensAfter` from the compaction result if available.
+   - `tokensBefore` and `tokensAfter` are estimated rendered **history** input tokens from the runtime's own estimator, measured on the model request before and after the compaction (the local checkpoint's bookkeeping marker and the harness prompt/tool scaffolding are excluded from both). They are estimates of the conversation-sized part of the input, not the provider-reported `usage.inputTokens` of a turn.
+   - `outcome: 'completed'` means the compaction ran and the context did not grow. When `tokensAfter >= tokensBefore` the compaction was applied but grew the context, and the outcome is `not_reduced` (added 2026-09-12; a manual compaction of a small conversation whose summary is longer than the cold turns it replaces is the common case).
    - If blocked or nothing to compact, returns `outcome: 'nothing_to_retry'`.
+   - The command runs as a journal turn: it publishes `context_compaction_started`, then `context_compaction_completed` (or `context_compaction_failed`), to the session journal with a command `turnId` in the payload, and those frames reach the event stream like any other session event. The generated `turnId` is not returned in the response.
    - Compaction completes synchronously within the RPC; admission is immediately settled as `terminal`.
 
 2. **`retry-tool`**:
@@ -503,8 +505,9 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
    - The browser observes `assistant_started`, streaming deltas, and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
 
 3. **`retry-turn`**:
-   - Inspects `session.service.exportState().history`.
-   - If history is empty, settles admission as `terminal` and returns `{ commandId: 'retry-turn', outcome: 'nothing_to_retry' }`.
+   - Inspects the canonical transcript (`session.service.exportState().history`), which is what `retryLastFailedTurn` replays: scanning back over synthetic user items (shell context, mode notices, local summaries) and non-message items, the last genuine user message must still be unanswered. A tool result or assistant output after it means the turn committed output.
+   - If no such failed turn exists — including a session whose last turn succeeded, and a session with only synthetic items — settles admission as `terminal` and returns `{ commandId: 'retry-turn', outcome: 'nothing_to_retry' }` (the pre-check replaced "history is empty" on 2026-09-12, which admitted a retry on succeeded sessions that then failed after admission).
+   - If the retry resolves with nothing to replay *after* the turn was admitted, the admission is settled `terminal`/`failed` and a `turn_failed` fact is journaled for the admitted `turnId`, so no `assistant_started` is left stranded. The HTTP response is the already-issued `200 accepted`; the failure is delivered through the event stream.
    - If history exists, generates a UUID `turnId` and admits the turn through the same transaction as `message_submit` via `GatewayAdmissionPersistence.admit`:
      1. Prepares the message in the runtime and persists the prepared admission in SQLite.
      2. Retries do not create a user message: no `term2Fact` (`user_message`) is persisted to the transcript, and no `user_message_accepted` is published to the journal. This prevents empty user turns from entering `state.history` on replay or projecting empty user message bubbles. Instead, the durable accepted journal event is `assistant_started`.
@@ -516,6 +519,6 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 ### Idempotency and Conflict Detection
 - `clientRequestId` is reserved before command side effects and tracked through `GatewayAdmissionPersistence` backed by SQLite and in-memory in-flight deduplication.
 - Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
-- Replayed compaction records are safely decoded: completed and no-op compactions return status 200 with `outcome: 'completed'` or `'nothing_to_retry'`. Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
+- Replayed compaction records are safely decoded: completed, non-reducing, and no-op compactions return status 200 with `outcome: 'completed'`, `'not_reduced'`, or `'nothing_to_retry'` (a replayed `not_reduced` carries the recorded `tokensBefore`/`tokensAfter`). Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
 - Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
 

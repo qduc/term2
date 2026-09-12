@@ -77,6 +77,7 @@ export class ServerSession {
   readonly #disposeHooks = new Set<() => void | Promise<void>>();
   #deadline: ReturnType<typeof setTimeout> | undefined;
   #lastAbortOutcome: AbortOutcome | undefined;
+  #commandTurnId: string | null = null;
 
   constructor(options: ServerSessionOptions) {
     this.id = options.binding.sessionId;
@@ -94,27 +95,49 @@ export class ServerSession {
       this.#status = 'running';
       this.#startDeadline(execution.requestId);
     });
-    this.service.setEventSink(async (event: ConversationEvent) => {
-      if (event.type === 'approval_required') this.#status = 'awaiting_interaction';
-      const discardedTurnIds = event.type === 'error' ? this.service.consumeFailureDiscardedTurnIds() : [];
-      for (const discardedTurnId of discardedTurnIds) this.#settledTurns.add(discardedTurnId);
-      const turnId = this.#activeTurnId ?? undefined;
-      if (event.type === 'final' || event.type === 'error') {
-        if (this.#activeTurnId) this.#settledTurns.add(this.#activeTurnId);
-        this.#activeTurnId = null;
-        this.#clearDeadline();
-      }
-      if (this.#status !== 'interrupted' && this.#status !== 'closed') {
-        this.#status = this.#computePublicStatus();
-      }
-      try {
-        await this.#eventSink?.(event, { turnId, discardedTurnIds });
-      } catch (error) {
-        this.#status = 'interrupted';
-        this.service.closeAdmission();
-        throw error;
-      }
-    });
+    this.service.setEventSink((event) => this.#dispatchEvent(event));
+  }
+
+  /**
+   * The single runtime event sink. `turnIdOverride` exists for a session
+   * command, whose events are raised outside any turn.
+   */
+  async #dispatchEvent(event: ConversationEvent, turnIdOverride?: string): Promise<void> {
+    if (event.type === 'approval_required') this.#status = 'awaiting_interaction';
+    const discardedTurnIds = event.type === 'error' ? this.service.consumeFailureDiscardedTurnIds() : [];
+    for (const discardedTurnId of discardedTurnIds) this.#settledTurns.add(discardedTurnId);
+    const turnId = turnIdOverride ?? this.#activeTurnId ?? this.#commandTurnId ?? undefined;
+    if (event.type === 'final' || event.type === 'error') {
+      if (this.#activeTurnId) this.#settledTurns.add(this.#activeTurnId);
+      this.#activeTurnId = null;
+      this.#clearDeadline();
+    }
+    if (this.#status !== 'interrupted' && this.#status !== 'closed') {
+      this.#status = this.#computePublicStatus();
+    }
+    try {
+      await this.#eventSink?.(event, { turnId, discardedTurnIds });
+    } catch (error) {
+      this.#status = 'interrupted';
+      this.service.closeAdmission();
+      throw error;
+    }
+  }
+
+  /**
+   * Attribute the events raised by `run` to `turnId`. Compact is the only
+   * command that publishes conversation events, and it runs outside a turn, so
+   * without this the gateway sees no turn and drops `context_compaction_*`
+   * before it reaches the journal.
+   */
+  async withCommandTurn<T>(turnId: string, run: () => Promise<T>): Promise<T> {
+    const previous = this.#commandTurnId;
+    this.#commandTurnId = turnId;
+    try {
+      return await run();
+    } finally {
+      this.#commandTurnId = previous;
+    }
   }
 
   get sessionId(): string {
@@ -276,10 +299,22 @@ export class ServerSession {
 
             retryPromise.then(
               (terminal) => {
-                if (terminal === null && !admitted) {
+                if (terminal !== null) return;
+                if (!admitted) {
                   admitted = true;
                   reject(new ServerSessionError('wrong_turn'));
+                  return;
                 }
+                // The retry reported nothing to replay after the turn was
+                // already admitted, so the durable assistant_started would
+                // strand. Settle it through the journal: the gateway maps the
+                // error event to turn_failed and moves the admission to
+                // terminal.
+                this.#settledTurns.add(turnId);
+                void this.#dispatchEvent(
+                  { type: 'error', message: 'There is no failed turn to retry.', kind: 'runtime_error' },
+                  turnId,
+                ).catch(() => undefined);
               },
               (error) => {
                 if (!admitted) {
@@ -296,7 +331,7 @@ export class ServerSession {
           }
         });
 
-        if (!this.#activeTurnId) {
+        if (!this.#activeTurnId && !this.#settledTurns.has(turnId)) {
           this.#activeTurnId = turnId;
           this.#status = 'running';
           this.#startDeadline(turnId);

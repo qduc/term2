@@ -2,7 +2,7 @@
 
 ## Resume here
 
-Status: proposed 2026-09-12. No milestone in this plan is implemented.
+Status: Milestone 0 merged in `89e7e0ab` (2026-09-12); Milestone 1 is next.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -10,11 +10,10 @@ reverse-engineered `CodeMode Specification.md` for
 not an authoritative contract for Term2 or a source that overrides the live
 code.
 
-Start with Milestone 0. In particular, do not treat unfinished-call draining as
-a confirmed defect until the public-boundary tests described there demonstrate
-the current behavior. Source inspection suggests that `workflow.complete` can
-settle `SandboxedCodeHostImpl.run` while capability calls remain in flight, but
-that premise needs an executable pin before production behavior changes.
+Milestone 0 confirmed the unfinished-call settlement defect through the public
+`run_code` boundary. Start with Milestone 1 and turn the eight expected-failure
+contract tests in `run-code.test.ts` green; do not weaken their assertions to
+match the current early-settlement behavior.
 
 Before touching this area, also read:
 
@@ -159,6 +158,82 @@ undesired current behavior must be red before production changes.
 
 The current behavior matrix and the intended contract are test-pinned, and any
 guard change has a reviewed `guard-design` contract before implementation.
+
+### Milestone 0 evidence (merged in `89e7e0ab`)
+
+The `admitted nested-call settlement` block in
+`source/tools/system/run-code/run-code.test.ts` exercises the public tool
+definition with controlled capabilities. Eight `it.fails` cases preserve the
+intended assertions without making the branch permanently red; Milestone 1 must
+remove `.fails` rather than rewrite the assertions.
+
+| Scenario | Observed before Milestone 1 |
+| --- | --- |
+| Unawaited successful call | The outer invocation returns before the capability is released, and the call is absent from the final call summary. |
+| Unawaited rejected call | The outer invocation reports script success; the later nested failure and call are absent. |
+| Script throw with a pending call | The script error returns before the capability settles, and the admitted call is absent. |
+| Slow successful `Promise.race` loser | The race winner completes the outer invocation; the loser is not drained into final evidence. |
+| Slow mutating `Promise.race` loser | The action receipt remains `unknown` and the call is absent when the outer invocation returns. |
+| Parent cancellation with a call in flight | Cancellation aborts the run and preserves an `unknown` action receipt, but the admitted call is absent from the call ledger. |
+| Configured timeout with a call in flight | Timeout aborts the run and preserves an `unknown` action receipt, but the admitted call is absent from the call ledger. |
+| Unawaited interactive approval wait | Once the script's separately awaited barrier completes, the outer invocation returns and aborts the pending approval instead of keeping it attached. |
+
+Red/characterization proof:
+
+```text
+pnpm test source/tools/system/run-code/run-code.test.ts \
+  source/services/sandboxed-code-host/sandboxed-code-host.test.ts \
+  source/services/sandboxed-code-host/host-worker.test.ts
+PASS: 138 tests; 8 expected failures (the settlement contract pins)
+
+pnpm test:changed
+PASS: 103 tests; 8 expected failures
+
+pnpm typecheck
+PASS
+```
+
+### Guard-design contract for Milestone 1
+
+```text
+Harm prevented: an invocation reporting terminal success or failure while an
+  admitted nested call can still settle, mutate state, or disappear from final
+  evidence.
+Scope and execution paths: normal completion and script failure in the shared
+  SandboxedCodeHost capability lifecycle; timeout, deadline, parent cancellation,
+  nested approval, serial lanes, and parallel-safe lanes retain their existing
+  execution paths.
+Guard class: lifecycle settlement barrier with containment-budget interaction.
+Enforcement owner: SandboxedCodeHostImpl.run and the worker protocol it owns.
+Recovery owner: SandboxedCodeHostImpl.run for abort/terminal settlement; each
+  capability adapter remains the owner of its call and action evidence.
+Measured signal and observation boundary: worker-reported script-body terminal
+  state plus the host's direct count of admitted calls that lack terminal
+  outcomes.
+Direct evidence or proxy: both signals are direct lifecycle evidence. Elapsed
+  time remains only the existing containment proxy.
+Legitimate work that can produce the same signal: slow successful tools,
+  Promise.race losers, serial-lane waiters, and interactive approval waits.
+Configuration sources and precedence: unchanged invocation timeout and parent
+  signal, with the existing host long-stop deadline; no new setting or override.
+Effective default and clamping: unchanged.
+Action and why the signal justifies it: close admission when the script body
+  settles; on ordinary script success or failure, delay terminal rendering until
+  every admitted call settles. Timeout, deadline, and cancellation abort instead
+  of extending the drain.
+Partial-work settlement: every admitted call receives a stable terminal or
+  unknown record; host-observed action receipts remain authoritative.
+Retry, fallback, and provider-continuity semantics: unchanged; an unobserved
+  nested rejection becomes unhandled_nested_failure and is not replayed
+  automatically.
+Observability fields: existing host error code, call identities/outcomes, action
+  receipts, and completion telemetry; Milestone 2 owns the fuller structured
+  execution outcome.
+Persisted-setting migration, if any: none.
+Rollback boundary: the host/worker settlement-barrier change and the conversion
+  of the eight expected-failure pins to ordinary passing tests.
+Ledger row: confirmed defect — admitted nested-call early settlement.
+```
 
 ## Milestone 1 — Make admitted-call settlement a host invariant
 

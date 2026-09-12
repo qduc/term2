@@ -85,6 +85,54 @@ Open work, in order:
 
 ## Guard classes
 
+### Admitted nested-call settlement barrier
+
+Harm prevented: `run_code` or another shared-host caller reporting a terminal
+result while an admitted capability call can still settle, mutate state, or
+disappear from final evidence.
+
+Scope and execution paths: normal script success/failure in
+`SandboxedCodeHostImpl.run`, including serial/default lanes and nested approval;
+timeout, deadline, and parent cancellation retain their existing abort paths.
+
+Guard class: lifecycle settlement barrier with containment-budget interaction.
+Enforcement owner: `SandboxedCodeHostImpl.run` and its worker protocol.
+Recovery owner: the host for abort and terminal settlement; capability adapters
+remain responsible for call/action evidence.
+
+Measured signal and observation boundary: the worker's script-body terminal
+message and the host's direct admitted-but-unsettled call count. These are direct
+lifecycle signals; elapsed time remains the existing containment proxy.
+
+Legitimate work that can produce the same signal: slow successful calls,
+`Promise.race` losers, serial-lane waiters, and interactive approval waits.
+
+Configuration sources, precedence, defaults, and clamping: unchanged invocation
+timeout, parent signal, and host long-stop deadline. No setting or persisted value
+changes.
+
+Action and justification: close admission when the script body settles. Drain
+already admitted calls before ordinary terminal rendering; timeout, deadline, or
+parent cancellation aborts without extending either clock. Every admitted call
+must end with a terminal or honest `unknown` record.
+
+Partial-work settlement: host-observed action receipts remain authoritative. An
+unobserved rejected call changes otherwise-successful script execution to
+`unhandled_nested_failure`; no automatic replay is added.
+
+Retry, fallback, provider continuity, and migration: unchanged; no migration.
+
+Observability: stable call identities/outcomes, action receipts, host error code,
+and existing privacy-safe completion telemetry. The structured execution outcome
+remains owned by Milestone 2 of
+[`run-code-codemode-improvements.md`](./run-code-codemode-improvements.md).
+
+Rollback boundary: the host/worker settlement barrier plus conversion of the
+eight public-boundary expected-failure pins to ordinary passing tests.
+
+Ledger row: **confirmed defect** — public-boundary evidence merged in `89e7e0ab`;
+production repair is Milestone 1 of the owner plan.
+
 ### Non-interactive background-work drain bound
 
 Harm prevented: a one-shot non-interactive process exiting successfully while

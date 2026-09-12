@@ -29,6 +29,7 @@ import {
 import { DynamicWorkspaceRegistry } from './dynamic-workspace-registry.js';
 import { createRealWorkspaceBoundaryProbe } from './workspace-boundary-probe.js';
 import { parseServeArgs } from './serve-args.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 
 /**
  * `term2 serve` entry point: compose the real settings authority, the
@@ -44,6 +45,18 @@ import { parseServeArgs } from './serve-args.js';
 
 /** A launcher precondition failed; runServe turns this into a stderr message and exit 1. */
 export class ServeStartupError extends Error {}
+
+/**
+ * Per-session logger for gateway sessions, pointed at term2's standard log
+ * destination — the same XDG log directory the CLI writes, so gateway session
+ * diagnostics (e.g. a failed compaction's typed reason or the codex native
+ * compaction error) are visible next to CLI session logs. Console output stays
+ * suppressed (the LoggingService default) so serve's stdio contract is intact,
+ * and record contents follow the app log's sanitization rules.
+ */
+export function createServeSessionLogger(context: ISessionContextService, logDir?: string): LoggingService {
+  return new LoggingService({ sessionContextService: context, ...(logDir !== undefined ? { logDir } : {}) });
+}
 
 /**
  * Derive the gateway manifest for a state dir. A state dir with no manifest
@@ -235,6 +248,7 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     tmpDir: ensureDir(stateDir, 'runtime-tmp'),
     sandboxAvailable: true,
     allowWrite: args.allowWrite,
+    createLogger: (_sessionId, context) => createServeSessionLogger(context),
   });
 
   const persistence = new GatewayPersistenceCoordinator(

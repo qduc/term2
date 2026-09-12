@@ -57,6 +57,26 @@ import type { SessionRolloverEvent } from '../logging/conversation-log-events.js
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
 
+/** Bounded failure reasons for a manual compaction that did not compact. Derived from the
+ * typed compaction outcome (LocalCompactionOutcome 'blocked' reasons plus the runtime's
+ * 'busy' pre-condition), never from result text. */
+export type ConversationCompactionFailureReason =
+  | 'busy'
+  | 'cancelled'
+  | 'single_turn_too_large'
+  | 'result_still_too_large'
+  | 'hot_tail_would_orphan_tool_result';
+
+/**
+ * Typed result of a manual context compaction. Consumers that must agree with the
+ * journaled compaction events (the gateway command route) consume this instead of
+ * inferring an outcome from the display message.
+ */
+export type ConversationCompactionOutcome =
+  | { kind: 'compacted'; message: string; tokensBefore?: number; tokensAfter?: number }
+  | { kind: 'nothing_to_compact'; message: string }
+  | { kind: 'failed'; message: string; reason: ConversationCompactionFailureReason };
+
 /**
  * Backward-compatible facade for the CLI.
  *
@@ -540,8 +560,13 @@ export class ConversationService {
   }
 
   async compactContext(): Promise<string> {
+    return (await this.compactContextDetailed()).message;
+  }
+
+  /** Typed manual compaction; compactContext() projects this to its display message. */
+  async compactContextDetailed(): Promise<ConversationCompactionOutcome> {
     const startedAt = Date.now();
-    const fail = async (errorCategory: 'validation' | 'request', message: string): Promise<string> => {
+    const journalFailure = async (errorCategory: 'validation' | 'request'): Promise<void> => {
       await this.#eventSink?.({
         type: 'context_compaction_failed',
         provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
@@ -550,7 +575,16 @@ export class ConversationService {
         durationMs: Date.now() - startedAt,
         strategy: 'local',
       });
-      return message;
+    };
+    const failed = (message: string, reason: ConversationCompactionFailureReason): ConversationCompactionOutcome => {
+      // A compaction that did not compact must be visible in the session log with
+      // its typed reason; the journaled event alone carries no cause.
+      this.#deps.logger.warn('Manual context compaction failed', {
+        eventType: 'context_compaction.failed',
+        sessionId: this.sessionId,
+        reason,
+      });
+      return { kind: 'failed', message, reason };
     };
     if (!this.#adapter.holdForegroundQueue()) {
       await this.#eventSink?.({
@@ -559,7 +593,8 @@ export class ConversationService {
         sessionId: this.sessionId,
         strategy: 'local',
       });
-      return fail('validation', 'Context compaction is available only while the conversation is idle.');
+      await journalFailure('validation');
+      return failed('Context compaction is available only while the conversation is idle.', 'busy');
     }
     const abort = new AbortController();
     this.#adapter.attachCompactionAbort(abort);
@@ -572,17 +607,21 @@ export class ConversationService {
     try {
       const outcome = await this.#runtime.compactContext({ signal: abort.signal });
       if (outcome.kind === 'busy') {
-        return fail('validation', 'Context compaction is available only while the conversation is idle.');
+        await journalFailure('validation');
+        return failed('Context compaction is available only while the conversation is idle.', 'busy');
       }
       if (outcome.kind === 'stale') throw new Error('Conversation changed while context compaction was running');
       if (outcome.kind === 'blocked') {
-        const message =
-          outcome.reason === 'no_complete_cold_turn'
-            ? 'Nothing to compact: at least one complete cold turn is required.'
-            : `Context compaction was blocked: ${outcome.reason}.`;
-        return fail('validation', message);
+        await journalFailure('validation');
+        if (outcome.reason === 'no_complete_cold_turn') {
+          return {
+            kind: 'nothing_to_compact',
+            message: 'Nothing to compact: at least one complete cold turn is required.',
+          };
+        }
+        return failed(`Context compaction was blocked: ${outcome.reason}.`, outcome.reason);
       }
-      if (outcome.kind !== 'compacted') return 'Nothing to compact.';
+      if (outcome.kind !== 'compacted') return { kind: 'nothing_to_compact', message: 'Nothing to compact.' };
       if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
         await this.#eventSink?.({
           type: 'usage_update',
@@ -603,21 +642,30 @@ export class ConversationService {
         durationMs: Date.now() - startedAt,
         strategy: 'local',
       });
-      return `Context compacted locally (${outcome.checkpoint.contextSummary.estimatedTokensBefore ?? '?'} → ${
-        outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
-      } estimated tokens).`;
+      return {
+        kind: 'compacted',
+        message: `Context compacted locally (${outcome.checkpoint.contextSummary.estimatedTokensBefore ?? '?'} → ${
+          outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
+        } estimated tokens).`,
+        ...(outcome.checkpoint.contextSummary.estimatedTokensBefore !== undefined
+          ? { tokensBefore: outcome.checkpoint.contextSummary.estimatedTokensBefore }
+          : {}),
+        ...(outcome.checkpoint.contextSummary.estimatedTokensAfter !== undefined
+          ? { tokensAfter: outcome.checkpoint.contextSummary.estimatedTokensAfter }
+          : {}),
+      };
     } catch (error) {
       if (abort.signal.aborted || isClassifiedCancellation(error)) {
-        return fail('request', 'Context compaction cancelled.');
+        await journalFailure('request');
+        return failed('Context compaction cancelled.', 'cancelled');
       }
-      await fail('request', 'Context compaction failed.');
+      await journalFailure('request');
       throw error;
     } finally {
       this.#adapter.detachCompactionAbort(abort);
       this.#adapter.releaseForegroundQueue({ pauseIfQueued: abort.signal.aborted });
     }
   }
-
   /** Resume foreground messages retained after an execution failure or abort. */
   resumeQueue(): Promise<void> {
     return this.#adapter.resumeQueue();

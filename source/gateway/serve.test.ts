@@ -14,12 +14,14 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   canonicalizeWorkspaceRoot,
+  createServeSessionLogger,
   loadDynamicWorkspaceGrants,
   prepareGatewayManifest,
   saveDynamicWorkspaceGrants,
   sandboxStartupWarning,
   ServeStartupError,
 } from './serve.js';
+import { SessionContextService } from '../services/session/session-context-service.js';
 import type { WorkspaceGrant } from './contracts.js';
 
 const roots: string[] = [];
@@ -209,6 +211,31 @@ describe('sandboxStartupWarning', () => {
     expect(warning).toContain('probe_failed');
     expect(warning).toContain('sandbox module threw');
     expect(warning).toContain('shell tool calls will be refused');
+  });
+});
+
+describe('createServeSessionLogger', () => {
+  it('writes session log records into the configured log directory', async () => {
+    // The serve wiring points per-session loggers at term2's standard log
+    // destination; the directory itself is injectable so the test proves the
+    // records actually land there instead of being disabled like the previous
+    // gateway default.
+    const logDir = path.join(makeRoot(), 'logs');
+    const logger = createServeSessionLogger(new SessionContextService(), logDir);
+    logger.info('session logger wiring probe', { eventType: 'gateway.session_logger.probe' });
+
+    // The transport opens lazily on the first record, so poll until the daily
+    // file exists and carries the record.
+    await expect
+      .poll(() => {
+        try {
+          const found = readdirSync(logDir).find((f) => f.startsWith('term2-') && f.endsWith('.log'));
+          return found ? readFileSync(path.join(logDir, found), 'utf8') : '';
+        } catch {
+          return '';
+        }
+      })
+      .toContain('session logger wiring probe');
   });
 });
 

@@ -24,6 +24,9 @@ import type { SessionAccessState } from '../services/session/session-access-stat
 import type { ProviderContinuity } from '../services/provider-continuity.js';
 import type { OpenAICandidateObserver } from '../services/openai-candidate-observer.js';
 import type { ToolExecutionLifecyclePort } from '../tools/types.js';
+import { AgentClient } from '../lib/agent-client.js';
+import { installPlanModeInterceptor } from '../services/plan-mode-interceptor.js';
+import type { ModelSettingsReasoningEffort } from '../services/models/reasoning-effort.js';
 
 export type RuntimeResourcePolicy = Readonly<{
   maxLiveSessions: number;
@@ -82,6 +85,7 @@ export type GatewayAgentClientFactory = (input: {
   providerContinuity: ProviderContinuity;
   requestCapture: OpenAICandidateObserver;
   toolLifecycle?: ToolExecutionLifecyclePort;
+  continuationProjectionMode: import('../lib/continuation-projection-mode.js').ContinuationProjectionMode;
   env: Readonly<Record<string, string>>;
   spawnOptions: GatewaySessionComposition['spawnOptions'];
   policy: RuntimeResourcePolicy;
@@ -101,7 +105,7 @@ export type RuntimeFactoryOptions = {
   createAgentClient: GatewayAgentClientFactory;
   createLogger?: (sessionId: string, context: ISessionContextService) => ILoggingService;
   createSettings?: (
-    defaults: SecretFreeWorkerSettings,
+    _defaults: SecretFreeWorkerSettings,
     tmpDir: string,
     snapshot: SessionSettingsSnapshot,
   ) => ISettingsService;
@@ -115,6 +119,112 @@ export type RuntimeFactoryOptions = {
   /** Test seam; production uses the adapter's conservative bound. */
   activeCancelTimeoutMs?: number;
 };
+
+/**
+ * Build the production gateway runtime around the launcher's settings owner.
+ * The owner is deliberately used as a credential source only; each session
+ * gets its own settings overlay and its own AgentClient graph.
+ */
+export function createProductionRuntimeFactory(input: {
+  settingsAuthority: ISettingsService;
+  tmpDir: string;
+  sandboxAvailable: true;
+  policy?: Partial<RuntimeResourcePolicy>;
+  providerProbe?: WorkerBoundaryProbe;
+  createLogger?: RuntimeFactoryOptions['createLogger'];
+  createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
+  modelCatalogLogger?: ILoggingService;
+}): RuntimeFactory {
+  const sessionSettingKeys = new Set([
+    'agent.provider',
+    'agent.model',
+    'agent.reasoningEffort',
+    'agent.maxParallelToolCalls',
+  ]);
+  const createSettings = (
+    _defaults: SecretFreeWorkerSettings,
+    sessionDir: string,
+    snapshot: SessionSettingsSnapshot,
+  ) => {
+    const local = createDefaultSettings(_defaults, sessionDir, input.policy?.maxParallelToolCalls ?? 1, snapshot);
+    const authority = input.settingsAuthority;
+    // SettingsService intentionally has no public clone operation. This
+    // narrow overlay preserves launcher-owned credentials and defaults while
+    // keeping mutable model/session choices isolated per gateway session.
+    return {
+      get: ((key: string) =>
+        sessionSettingKeys.has(key) ? local.get(key as never) : authority.get(key as never)) as ISettingsService['get'],
+      getDynamic: (key: string) => (sessionSettingKeys.has(key) ? local.getDynamic(key) : authority.getDynamic(key)),
+      set: ((key: string, value: unknown, options?: { persist?: boolean }) =>
+        local.set(key as never, value as never, options)) as ISettingsService['set'],
+      setDynamic: (key: string, value: unknown, options?: { persist?: boolean }) =>
+        local.setDynamic(key, value, options),
+      setPersistent: ((key: string, value: unknown) =>
+        local.setPersistent(key as never, value as never)) as ISettingsService['setPersistent'],
+      setPersistentDynamic: (key: string, value: unknown) => local.setPersistentDynamic(key, value),
+      onChange: (listener: (key?: string) => void) => {
+        const localUnsubscribe = local.onChange?.(listener);
+        const authorityUnsubscribe = authority.onChange?.(listener);
+        return () => {
+          localUnsubscribe?.();
+          authorityUnsubscribe?.();
+        };
+      },
+    } satisfies ISettingsService;
+  };
+
+  return new RuntimeFactory({
+    tmpDir: input.tmpDir,
+    policy: input.policy,
+    providerProbe: input.providerProbe,
+    sandboxAvailable: input.sandboxAvailable,
+    settingsAuthority: input.settingsAuthority,
+    modelCatalogLogger: input.modelCatalogLogger,
+    createLogger: input.createLogger,
+    createSessionContext: input.createSessionContext,
+    createSettingsSnapshot: (_binding) => createSessionSettingsSnapshot({ settings: input.settingsAuthority }),
+    createSettings,
+    createAgentClient: ({
+      settings,
+      logger,
+      sessionContextService,
+      executionContext,
+      skillsService,
+      toolOwnership,
+      postExecutePauseCapability,
+      sessionAccess,
+      requestCapture,
+      toolLifecycle,
+      continuationProjectionMode,
+      allowBackgroundShell,
+      sessionSettingsSnapshot,
+    }) => {
+      const client = new AgentClient({
+        model: sessionSettingsSnapshot.modelId,
+        reasoningEffort: sessionSettingsSnapshot.reasoningEffort as ModelSettingsReasoningEffort,
+        maxTurns: settings.get('agent.maxTurns'),
+        retryAttempts: settings.get('agent.retryAttempts'),
+        deps: {
+          logger,
+          settings,
+          executionContext,
+          sessionContextService,
+          skillsService,
+          requestCapture,
+        },
+        toolOwnership,
+        postExecutePauseCapability,
+        sessionAccess,
+        continuationProjectionMode,
+        toolLifecycle,
+        allowBackgroundShell,
+        allowAskUser: false,
+      });
+      installPlanModeInterceptor(client, { settingsService: settings });
+      return client;
+    },
+  });
+}
 
 export function resolveRuntimeResourcePolicy(input?: Partial<RuntimeResourcePolicy>): RuntimeResourcePolicy {
   const merged = { ...DEFAULT_RUNTIME_RESOURCE_POLICY, ...(input ?? {}) };
@@ -290,7 +400,7 @@ export class RuntimeFactory {
         toolOwnership,
         postExecutePauseCapability,
         access,
-        _continuationProjectionMode,
+        continuationProjectionMode,
         providerContinuity,
         requestCapture,
         toolLifecycle,
@@ -312,6 +422,7 @@ export class RuntimeFactory {
           providerContinuity,
           requestCapture,
           toolLifecycle,
+          continuationProjectionMode,
           env: composition.env,
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,

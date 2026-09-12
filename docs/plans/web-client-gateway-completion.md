@@ -2,7 +2,17 @@
 
 ## Resume here
 
-**Status: execution started 2026-09-12 against `3be668e1`. No milestone merged yet.**
+**Status (2026-09-12): M0 merged `38d7cd7d`, M1 merged `8351e165`, M2 merged `73a9e3ab`. M4/M4c, M5b, and M5c are open.**
+
+Two rules carried into later milestones, because they were learned the hard way:
+- `createProductionRuntimeFactory` gives each session isolated settings and reads from
+  the launcher only an exact allowlist whose entries must start with `agent.` or
+  `webSearch.` (`runtime-factory.test.ts` enforces this). The first M1 draft passed every
+  non-session key through from the host, so a host running `shell.autoApproveMode:
+  always` would have auto-approved every browser-driven tool call.
+- A turn the gateway starts on its own (a retry command, for example) must not write a
+  synthetic `user_message` fact. `conversation-replay.ts` turns every `user_message`
+  into provider history, so an empty one corrupts the model's context after a restart.
 
 The web client is ChatForge at `~/chat-term2-integration/chat/` (a git repo on
 branch `integration/v1-chat`). It has a frontend and a BFF backend that calls this

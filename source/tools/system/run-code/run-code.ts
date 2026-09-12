@@ -45,6 +45,7 @@ import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../util
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 import { saveOutputArtifact, formatFullOutputSavedNote } from '../../../utils/shell/shell-output.js';
+import { createRunCodeRuntime } from './run-code-runtime.js';
 import {
   getScriptedReturnContract,
   scriptedReturnContractJsonSchema,
@@ -185,7 +186,7 @@ export interface RunCodeActionReceipt {
  * outcome adapter. Not a naming convention, not a script declaration, and not
  * the generic `effect` flag (a stall-detection marker, not an action contract).
  */
-const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
+export const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
   configure_task_check_in: (raw) => {
     const parsed = parseActionPayload(raw);
     if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
@@ -220,7 +221,7 @@ const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActio
   },
 };
 
-const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
+export const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
 
 const parseActionPayload = (raw: unknown): unknown => {
   if (typeof raw !== 'string') return raw;
@@ -233,7 +234,7 @@ const parseActionPayload = (raw: unknown): unknown => {
 
 const MAX_RECEIPT_REASON_CHARS = 280;
 
-const clipReason = (reason: string): string =>
+export const clipReason = (reason: string): string =>
   reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
@@ -334,7 +335,7 @@ function unknownToolMessage(name: string, registry: ToolRegistry): string {
   return `Unknown tool "${name}". Available: ${registry.map((entry) => entry.name).join(', ')}`;
 }
 
-function describeTool(tool: AnyToolDefinition): JsonValue {
+export function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
   const targetSchema = tool.canonicalParameters ?? tool.parameters;
   if (isZodToolParameterSchema(targetSchema)) {
@@ -468,7 +469,7 @@ function mediaBytes(value: RunCodeContentPart): number {
  * budget. The reference is deliberately scoped to one execute call: a token
  * from another run is just an ordinary object and cannot recover its bytes.
  */
-function createMediaReferenceStore() {
+export function createMediaReferenceStore() {
   const attachments = new Map<string, RunCodeContentPart>();
   const byValue = new WeakMap<object, string | null>();
   let totalBytes = 0;
@@ -528,7 +529,7 @@ function containsMediaContent(value: unknown, ancestors = new Set<object>()): bo
   return found;
 }
 
-const serializeResult = async (
+export const serializeResult = async (
   result: unknown,
   limit: number,
   toolName: string,
@@ -609,7 +610,7 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
 
 type NestedCallOutcome = 'success' | 'failure' | 'denied-by-approval';
 
-function getConversationSessionId(context: unknown): string | undefined {
+export function getConversationSessionId(context: unknown): string | undefined {
   if (!context || typeof context !== 'object') return undefined;
   const runContext = (context as { context?: unknown }).context;
   if (!runContext || typeof runContext !== 'object') return undefined;
@@ -617,7 +618,7 @@ function getConversationSessionId(context: unknown): string | undefined {
   return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
 }
 
-function writeNestedCallRecord(tool: string, sessionId: string | undefined, outcome: NestedCallOutcome): void {
+export function writeNestedCallRecord(tool: string, sessionId: string | undefined, outcome: NestedCallOutcome): void {
   const logPath = process.env.TERM2_NESTED_CALL_LOG;
   if (!logPath || !sessionId) return;
   try {
@@ -652,13 +653,25 @@ export function createRunCodeToolDefinition(
   let nestedApprovalOwner = options.nestedApprovalOwner;
   const exposedTools = (): ToolRegistry =>
     (options.getToolRegistry?.() ?? boundRegistry ?? []).filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
+  const createRuntime = (registry: ToolRegistry) =>
+    createRunCodeRuntime({
+      registry,
+      graphIdentity: boundRegistry ?? registry,
+      loggingService,
+      approvalPolicyRegistry: approvalRegistry,
+      getCwd,
+      executionContext: options.executionContext,
+      nestedApprovalOwner,
+      sessionAccess: options.sessionAccess,
+      nestedCompatibility: options.nestedCompatibility,
+    });
 
   const definition: SchemaToolDefinition<typeof runCodeParametersSchema> = {
     name: TOOL_NAME_RUN_CODE,
     // Read late, after bindRunCodeRegistry, so the model is told which tools
     // the script can actually reach rather than a guess made before wrapping.
     get description() {
-      const header = renderToolsHeader(exposedTools());
+      const header = renderToolsHeader(createRuntime(exposedTools()).discovery());
       return header ? `${RUN_CODE_DESCRIPTION}\n\n${header}` : RUN_CODE_DESCRIPTION;
     },
     parameters: runCodeParametersSchema,
@@ -669,6 +682,26 @@ export function createRunCodeToolDefinition(
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
       const registry = exposedTools();
+      // The runtime is the single owner of the nested-call lifecycle. The
+      // definition remains responsible for model parameters and presentation;
+      // in particular, it must not expose a partially wrapped registry.
+      {
+        const runtime = createRuntime(registry);
+        const runtimeResult = await runtime.execute({
+          code,
+          timeout,
+          description,
+          context,
+          signal: callerSignal,
+        });
+        const runtimeRendered = await renderResult(runtimeResult.execution, runtimeResult.output, include_console);
+        const runtimeTransportCall =
+          details && typeof details === 'object' && 'toolCall' in details && typeof details.toolCall === 'object';
+        return runtimeTransportCall
+          ? attachRunCodeExecution(runtimeRendered, runtimeResult.execution)
+          : runtimeRendered;
+      }
+
       const bridgeRunId = createBridgeRunId();
       const startedAt = Date.now();
       const calls: RunCodeCallRecord[] = [];
@@ -1172,9 +1205,13 @@ export function createRunCodeToolDefinition(
         pendingReceiptByCallId.delete(callId);
       }
 
+      const oldSuccessfulResult = result as Extract<
+        import('../../../services/sandboxed-code-host/host-types.js').HostResult,
+        { ok: true }
+      >;
       const resolvedResult =
-        result.ok && !result.voidOutput
-          ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
+        result.ok && !oldSuccessfulResult.voidOutput
+          ? { ...oldSuccessfulResult, output: mediaReferences.resolve(oldSuccessfulResult.output) as JsonValue }
           : result;
       const attachments: RunCodeAttachment[] = [];
       const execution = createRunCodeExecution(resolvedResult, calls, receipts, consoleValues, attachments);
@@ -1192,7 +1229,10 @@ export function createRunCodeToolDefinition(
       });
       const rendered = await renderResult(execution, output, include_console);
       const transportCall =
-        details && typeof details === 'object' && 'toolCall' in details && typeof details.toolCall === 'object';
+        details &&
+        typeof details === 'object' &&
+        'toolCall' in (details as object) &&
+        typeof (details as { toolCall?: unknown }).toolCall === 'object';
       return transportCall ? attachRunCodeExecution(rendered, execution) : rendered;
     },
     formatCommandMessage: formatRunCodeCommandMessage,
@@ -1226,7 +1266,7 @@ type BoundAuthority = { kind: 'bound'; physicalRoot: string; params: unknown } |
 
 type PathSemantics = 'referent' | 'unlink-source';
 
-async function bindPreparedAuthority(
+export async function bindPreparedAuthority(
   toolName: string,
   params: unknown,
   cwd: string,
@@ -1308,13 +1348,13 @@ function fingerprint(value: unknown): string {
   }
 }
 
-function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
+export function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
   return context && typeof context === 'object'
     ? { ...(context as Record<string, unknown>), signal, ...extra }
     : { signal, ...extra };
 }
 
-function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
+export function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
   if (!callerSignal || callerSignal === hostSignal) return callerSignal ?? hostSignal;
 
   const controller = new AbortController();
@@ -1333,7 +1373,7 @@ function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: Ab
   return controller.signal;
 }
 
-async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
+export async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
   const declared = tool.parallelSafe;
   if (declared === undefined || declared === false) return false;
   if (declared === true) return true;

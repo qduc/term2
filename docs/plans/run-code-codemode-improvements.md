@@ -3,8 +3,10 @@
 ## Resume here
 
 Status: Milestones 0–3 are implemented through `c2f65197` (2026-09-12).
-Milestone 4 closed with no catalog change after measurement; Milestone 5 is
-implemented in this change; Milestone 6 remains open.
+Milestone 4 closed with no catalog change after measurement; Milestone 5 and
+Milestone 6 are implemented in this change (2026-09-12). The program exit
+criteria are satisfied; use the merge commit recorded below when this change
+lands.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -537,6 +539,45 @@ not split `run-code.ts` into pass-through wrappers merely to reduce file size.
   draining, normalization, and receipt finalization.
 - `run_agent_workflow` behavior is unchanged unless a shared-host invariant is
   deliberately migrated with its own tests.
+
+### M6 decision and evidence (2026-09-12)
+
+The deletion test found a real product/runtime seam. Removing the runtime
+object would put the admission ledger, approval/authority checks, nested-call
+settlement, action-receipt finalization, attachment-reference lifetime, result
+normalization, and completion telemetry sequencing back into
+`createRunCodeToolDefinition`. Those are lifecycle invariants, not pass-through
+calls, and they would be duplicated or reordered by the next caller. The
+runtime therefore earns its seam and is implemented by
+`createRunCodeRuntime` in `source/tools/system/run-code/run-code-runtime.ts`.
+
+The definition retains the model-facing schema, late final wrapped-registry
+binding, session-owned nested approval wiring, command formatting, and
+terminal rendering. The runtime snapshots the already filtered registry for a
+single invocation while retaining the complete wrapped graph identity for
+approval revalidation. `SandboxedCodeHost` remains product-neutral, and the
+workflow evaluator continues to use the host directly; the focused host and
+workflow compatibility tests cover that unchanged path.
+
+The runtime's `execute` interface is deliberately one operation: callers do
+not manually sequence capability admission, host draining, ledger
+normalization, attachment resolution, receipt finalization, or completion
+telemetry. Discovery is a separate read-only operation over that same
+snapshot. No session or UI object is passed into `SandboxedCodeHost`.
+
+### M6 validation and exit receipt
+
+Focused run_code, host, worker, tools-header, telemetry, physical-binding,
+action-receipt, and scripted-e2e tests pass (246 tests), as do the focused
+workflow compatibility tests (28 tests), `pnpm typecheck`, formatting, and
+`pnpm test:provider-black-box` (177 passed, 1 skipped). `pnpm test:related` and
+`pnpm test:changed` both select the same pre-existing
+`scripts/nested-approval/scripted-adapter.acceptance.test.ts` failure: its
+`seen` approval snapshots are empty even when the legacy run_code path is
+selected, so the failure is not introduced by this runtime extraction. The
+failure remains an explicit handoff issue rather than being relabeled as a
+passing program gate. The merge commit is recorded here when this change
+lands.
 
 ## Deferred follow-ups
 

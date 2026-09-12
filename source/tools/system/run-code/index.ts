@@ -28,6 +28,12 @@ export {
   type RunCodeExecutionMetadata,
 } from './run-code-execution.js';
 export {
+  createRunCodeRuntime,
+  type RunCodeRuntimeInput,
+  type RunCodeRuntimeOptions,
+  type RunCodeRuntimeResult,
+} from './run-code-runtime.js';
+export {
   getScriptedReturnContract,
   scriptedReturnContractJsonSchema,
   validateScriptedReturn,

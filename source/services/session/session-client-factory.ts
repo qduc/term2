@@ -103,7 +103,7 @@ export function createOwnedSessionClientFactory(
     allowAskUser?: boolean,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
-  defaults?: { allowBackgroundShell?: boolean; allowAskUser?: boolean },
+  defaults?: { allowBackgroundShell?: boolean; allowAskUser?: boolean; allowEdit?: boolean },
 ): SessionClientFactory {
   return {
     create(sessionId, options) {
@@ -111,7 +111,7 @@ export function createOwnedSessionClientFactory(
       const continuationProjectionMode: ContinuationProjectionMode =
         settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
-      const access = new SessionAccessState(settings);
+      const access = new SessionAccessState(settings, { allowEdit: defaults?.allowEdit });
       const postExecutePending = new PostExecutePendingRegistry({
         sessionId: sessionIdentity,
         epoch: crypto.randomUUID(),

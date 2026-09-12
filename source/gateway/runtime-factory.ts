@@ -113,6 +113,7 @@ export type GatewayAgentClientFactory = (input: {
   toolOwnership: ToolOwnershipRegistry;
   postExecutePauseCapability: PostExecutePauseCapability;
   sessionAccess: SessionAccessState;
+  readOnly: boolean;
   providerContinuity: ProviderContinuity;
   requestCapture: OpenAICandidateObserver;
   toolLifecycle?: ToolExecutionLifecyclePort;
@@ -133,6 +134,7 @@ export type RuntimeFactoryOptions = {
   providerProbe?: WorkerBoundaryProbe;
   tmpDir: string;
   sandboxAvailable: true;
+  allowWrite?: boolean;
   createAgentClient: GatewayAgentClientFactory;
   createLogger?: (sessionId: string, context: ISessionContextService) => ILoggingService;
   createSettings?: (
@@ -144,6 +146,8 @@ export type RuntimeFactoryOptions = {
   settingsAuthority?: ISettingsService;
   createSettingsSnapshot?: (binding: SessionBinding) => SessionSettingsSnapshot;
   modelCatalogLogger?: ILoggingService;
+  /** Test seam for asserting the composed session access posture. */
+  onAgentClientDeps?: (input: { readOnly: boolean; sessionAccess: SessionAccessState }) => void;
   createSessionContext?: () => ISessionContextService;
   createSkills?: (logger: ILoggingService, canonicalRoot: string) => SkillsService;
   onResourceReleased?: (sessionId: string) => void;
@@ -160,11 +164,13 @@ export function createProductionRuntimeFactory(input: {
   settingsAuthority: ISettingsService;
   tmpDir: string;
   sandboxAvailable: true;
+  allowWrite?: boolean;
   policy?: Partial<RuntimeResourcePolicy>;
   providerProbe?: WorkerBoundaryProbe;
   createLogger?: RuntimeFactoryOptions['createLogger'];
   createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
   modelCatalogLogger?: ILoggingService;
+  onAgentClientDeps?: RuntimeFactoryOptions['onAgentClientDeps'];
 }): RuntimeFactory {
   const providerSettingKeys = new Set(PRODUCTION_AUTHORITY_SETTING_KEYS);
   const providerDynamicKeys = new Set([
@@ -215,7 +221,14 @@ export function createProductionRuntimeFactory(input: {
     modelCatalogLogger: input.modelCatalogLogger,
     createLogger: input.createLogger,
     createSessionContext: input.createSessionContext,
-    createSettingsSnapshot: (_binding) => createSessionSettingsSnapshot({ settings: input.settingsAuthority }),
+    onAgentClientDeps: input.onAgentClientDeps,
+    createSettingsSnapshot: (binding) =>
+      createSessionSettingsSnapshot({
+        settings: input.settingsAuthority,
+        effectiveToolPolicy: {
+          allowWrite: input.allowWrite === true && binding.access === 'read_write',
+        },
+      }),
     createSettings,
     createAgentClient: ({
       settings,
@@ -230,6 +243,7 @@ export function createProductionRuntimeFactory(input: {
       toolLifecycle,
       continuationProjectionMode,
       sessionSettingsSnapshot,
+      readOnly,
     }) => {
       const client = new AgentClient({
         model: sessionSettingsSnapshot.modelId,
@@ -243,6 +257,7 @@ export function createProductionRuntimeFactory(input: {
           sessionContextService,
           skillsService,
           requestCapture,
+          readOnly,
         },
         toolOwnership,
         postExecutePauseCapability,
@@ -354,6 +369,9 @@ export class RuntimeFactory {
   get settingsAuthority(): ISettingsService | undefined {
     return this.#options.settingsAuthority;
   }
+  get allowWriteEnabled(): boolean {
+    return this.#options.allowWrite === true;
+  }
   get modelCatalogLogger(): ILoggingService | undefined {
     return this.#options.modelCatalogLogger;
   }
@@ -443,8 +461,12 @@ export class RuntimeFactory {
         providerContinuity,
         requestCapture,
         toolLifecycle,
-      ) =>
-        this.#options.createAgentClient({
+      ) => {
+        this.#options.onAgentClientDeps?.({
+          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          sessionAccess: access,
+        });
+        return this.#options.createAgentClient({
           sessionId,
           binding,
           settings,
@@ -466,11 +488,16 @@ export class RuntimeFactory {
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,
           gatewayMode: true,
+          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
-        }),
+        });
+      },
       undefined,
-      { allowBackgroundShell: this.#policy.maxShellJobs > 0 },
+      {
+        allowBackgroundShell: this.#policy.maxShellJobs > 0,
+        allowEdit: binding.access === 'read_write' && sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite === true,
+      },
     );
     let service: ConversationService | undefined;
     try {

@@ -64,10 +64,11 @@ const mockLoggingService: ILoggingService = {
 
 type RawCreateFileParams = Omit<CreateFileToolParams, 'overwrite'> & { overwrite?: boolean };
 
-function createTool(settingsService = createMockSettingsService()) {
+function createTool(settingsService = createMockSettingsService(), sessionAccess?: SessionAccessState) {
   const tool = createCreateFileToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
+    sessionAccess,
   });
   const withDefaultOverwrite = (params: RawCreateFileParams): CreateFileToolParams => ({
     ...params,
@@ -80,6 +81,17 @@ function createTool(settingsService = createMockSettingsService()) {
     execute: (params: RawCreateFileParams) => tool.execute(withDefaultOverwrite(params)),
   };
 }
+
+it.sequential('read-only session refuses an in-workspace creation without approval', async () => {
+  await withTempDir(async (dir) => {
+    const access = new SessionAccessState(createMockSettingsService(), { allowEdit: false });
+    const tool = createTool(createMockSettingsService(), access);
+    const params = { path: 'blocked.txt', content: 'blocked' };
+    expect(await tool.needsApproval(params)).toBe(false);
+    expect(String(await tool.execute(params))).toContain('unavailable in a read-only session');
+    await expect(fs.access(path.join(dir, 'blocked.txt'))).rejects.toThrow();
+  });
+});
 
 function createRemoteTool(remoteDir: string, files: Map<string, string>) {
   const sshService: ISSHService = {

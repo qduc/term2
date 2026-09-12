@@ -50,6 +50,7 @@ export class SubagentManager {
     toolOwnership: ToolOwnershipRegistry;
     nestedCompatibility?: NestedToolCompatibilityState;
     backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
+    readOnly?: boolean;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;

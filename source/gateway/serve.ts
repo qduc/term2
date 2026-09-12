@@ -234,6 +234,7 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     settingsAuthority,
     tmpDir: ensureDir(stateDir, 'runtime-tmp'),
     sandboxAvailable: true,
+    allowWrite: args.allowWrite,
   });
 
   const persistence = new GatewayPersistenceCoordinator(

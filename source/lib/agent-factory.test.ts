@@ -102,6 +102,7 @@ const createDeps = (
       getAskUserAnswer: overrides.getAskUserAnswer ?? (() => undefined),
       checkToolInterceptors: overrides.checkToolInterceptors ?? (async () => null),
       postExecutePauseCapability: overrides.postExecutePauseCapability,
+      readOnly: overrides.readOnly,
       backgroundShellRegistry: overrides.backgroundShellRegistry,
       allowBackgroundShell: overrides.allowBackgroundShell,
     },
@@ -121,6 +122,49 @@ const createToolDefinition = (
   execute: async ({ value }) => `original:${value}`,
   formatCommandMessage: () => [],
   ...overrides,
+});
+
+it('rejects mutating tools at execution in a read-only gateway graph', async () => {
+  const { deps } = createDeps({ readOnly: true });
+  const mutating: AnyToolDefinition = {
+    name: 'apply_patch',
+    description: 'edit',
+    parameters: z.object({ value: z.string() }),
+    effect: 'mutating',
+    canRequireApproval: true,
+    needsApproval: () => false,
+    execute: async () => 'wrote a file',
+    formatCommandMessage: () => [],
+  } as AnyToolDefinition;
+
+  const [tool] = buildAgentTools({
+    toolDefinitions: [mutating],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+
+  await expect(tool.execute({ value: 'x' })).resolves.toContain('unavailable in a read-only gateway session');
+});
+
+it('omits file-mutating tools from a read-only model surface but preserves CLI behavior', () => {
+  const readOnly = createDeps({ readOnly: true });
+  const readOnlyDefinition = getAgentDefinition(
+    { settingsService: readOnly.deps.settings, loggingService: readOnly.deps.logger, readOnly: true },
+    'gpt-4o',
+  );
+  expect(readOnlyDefinition.tools.map((tool) => tool.name)).not.toEqual(
+    expect.arrayContaining(['apply_patch', 'create_file', 'search_replace']),
+  );
+
+  const cli = createDeps();
+  const cliDefinition = getAgentDefinition(
+    { settingsService: cli.deps.settings, loggingService: cli.deps.logger },
+    'gpt-4o',
+  );
+  expect(cliDefinition.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['create_file', 'search_replace']),
+  );
 });
 
 const buildTestTool = (definition: ToolDefinition<typeof postExecuteTestParameters>, deps: AgentFactoryDeps) =>

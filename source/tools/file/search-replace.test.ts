@@ -11,6 +11,7 @@ import {
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 
 type PlainResultItem = {
   success: boolean;
@@ -72,10 +73,12 @@ type RawSearchReplaceParams = Omit<SearchReplaceToolParams, 'replacements'> & {
 function createTool(
   settingsService = createMockSettingsService(),
   editHealing?: typeof import('./edit-healing.js').healSearchReplaceParams,
+  sessionAccess?: SessionAccessState,
 ) {
   const tool = createSearchReplaceToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
+    sessionAccess,
     ...(editHealing ? { editHealing } : {}),
   });
   const withDefaultMatchAll = (params: RawSearchReplaceParams): SearchReplaceToolParams => ({
@@ -92,6 +95,19 @@ function createTool(
     execute: (params: RawSearchReplaceParams) => tool.execute(withDefaultMatchAll(params)),
   };
 }
+
+it.sequential('read-only session refuses an external replacement without approval', async () => {
+  await withTempDir(async (dir) => {
+    const access = new SessionAccessState(createMockSettingsService(), { allowEdit: false });
+    const tool = createTool(createMockSettingsService(), undefined, access);
+    const params = {
+      path: '/tmp/f1-read-only-search-replace-blocked.txt',
+      replacements: [{ search_content: 'old', replace_content: 'new' }],
+    };
+    expect(await tool.needsApproval(params)).toBe(false);
+    expect(String(await tool.execute(params))).toContain('unavailable in a read-only session');
+  });
+});
 
 it.sequential('needsApproval auto-approves creation when search_content is empty and file is missing', async () => {
   await withTempDir(async () => {

@@ -237,6 +237,7 @@ export const getAgentDefinition = (
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
+    readOnly?: boolean;
     /** Root-session-only capability. Nested/subagent factories do not receive it. */
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
     /** Root-session-only output store + watch layer for background jobs. */
@@ -274,6 +275,7 @@ export const getAgentDefinition = (
     agentRuntime,
     postExecuteDeniedRead = false,
     sessionAccess,
+    readOnly = false,
     backgroundShellRegistry,
     backgroundShellOutput,
     shellChildRegistry,
@@ -349,7 +351,7 @@ export const getAgentDefinition = (
   }
   const hasCapability = (capability: string): boolean => effectiveCapabilities.has(capability);
   const filesystemReadEnabled = hasCapability('filesystem-read-workspace') || hasCapability('filesystem-read-external');
-  const filesystemWriteEnabled = hasCapability('filesystem-write');
+  const filesystemWriteEnabled = !readOnly && hasCapability('filesystem-write');
   const backgroundTasksEnabled = hasCapability('background-tasks');
   const isContextSourceEnabled = (source: string): boolean =>
     profile.context.sources.some((item) => item.source === source && item.enabled);
@@ -428,6 +430,7 @@ export const getAgentDefinition = (
     backgroundShellWatches: rootBackgroundShellOutput?.watches,
     configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
+    readOnly,
   });
   const tools: AnyToolDefinition[] = [];
   if (hasCapability('shell')) tools.push(shellTool);
@@ -464,7 +467,12 @@ export const getAgentDefinition = (
 
   // Worktree switching re-roots the local filesystem; in remote mode the remote
   // directory owns the execution root, so the tools have nothing to lease.
-  if ((filesystemReadEnabled || filesystemWriteEnabled) && executionContext && !executionContext.isRemote()) {
+  if (
+    !readOnly &&
+    (filesystemReadEnabled || filesystemWriteEnabled) &&
+    executionContext &&
+    !executionContext.isRemote()
+  ) {
     const worktreeTools = createWorktreeToolDefinitions({
       executionContext,
       getRunningJobs: () =>

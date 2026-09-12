@@ -294,6 +294,7 @@ export function createSearchReplaceToolDefinition(deps: {
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
+      if (sessionAccess?.isReadOnly) return false;
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         loggingService.security('search_replace needsApproval: auto-approved in YOLO mode', {
           operationCount: getSearchReplaceOperations(params).length,
@@ -407,6 +408,7 @@ export function createSearchReplaceToolDefinition(deps: {
       }
     },
     execute: async (params) => {
+      if (sessionAccess?.isReadOnly) return 'Error: search_replace is unavailable in a read-only session.';
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();

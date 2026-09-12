@@ -629,6 +629,8 @@ export class AgentClient {
       sessionBrowser?: import('../services/conversation/session-browser.js').SessionBrowser;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
+      /** Explicit gateway read-only posture; omitted for CLI sessions. */
+      readOnly?: boolean;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
@@ -678,6 +680,7 @@ export class AgentClient {
         skillsService: deps.skillsService,
         postExecutePauseCapability,
         sessionAccess,
+        readOnly: deps.readOnly,
         backgroundShellRegistry: this.#backgroundShellRegistry,
         backgroundShellOutput: this.#backgroundShellOutput,
         shellChildRegistry: this.#shellChildRegistry,
@@ -732,6 +735,7 @@ export class AgentClient {
         settings: deps.settings,
         executionContext: deps.executionContext,
         sessionContextService: this.#sessionContextService,
+        readOnly: deps.readOnly,
         chat: (message, options) => this.chat(message, options),
         // Factory lives here (not in SubagentBridge) so each subagent gets a
         // lightweight transient client that shares logger/settings/executionContext
@@ -764,6 +768,7 @@ export class AgentClient {
               executionContext: deps.executionContext,
               sessionContextService: this.#sessionContextService,
               skillsService: deps.skillsService,
+              readOnly: deps.readOnly,
             },
             agentOverride: agent,
             providerOverride: provider,

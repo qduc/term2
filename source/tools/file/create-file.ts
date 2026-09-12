@@ -113,6 +113,7 @@ export function createCreateFileToolDefinition(deps: {
     canRequireApproval: true,
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
+      if (sessionAccess?.isReadOnly) return false;
       if (settingsService.get('shell.autoApproveMode') === 'always') {
         loggingService.security('create_file needsApproval: auto-approved in YOLO mode', {
           path: params.path,
@@ -149,6 +150,7 @@ export function createCreateFileToolDefinition(deps: {
       }
     },
     execute: async (params) => {
+      if (sessionAccess?.isReadOnly) return 'Error: create_file is unavailable in a read-only session.';
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       try {
         const { path: filePath, content, overwrite = false } = params;

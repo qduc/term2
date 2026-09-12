@@ -710,6 +710,8 @@ export function createShellToolDefinition(deps: {
   shellChildRegistry?: ShellChildRegistry;
   /** Gateway-only: reject any spawn that omits the sanitized env. */
   gatewayMode?: boolean;
+  /** Explicit gateway posture; read-only sessions cannot write workspace files via shell. */
+  readOnly?: boolean;
 }): ShellToolDefinition {
   const {
     loggingService,
@@ -729,6 +731,7 @@ export function createShellToolDefinition(deps: {
     configureCheckIn,
     shellChildRegistry,
     gatewayMode = false,
+    readOnly = false,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -1025,6 +1028,7 @@ export function createShellToolDefinition(deps: {
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 tmpDir: SANDBOX_TEMP_DIR,
+                allowWrite: readOnly ? false : undefined,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
                 dockerSocketPath: dockerHostControl?.socketPath,

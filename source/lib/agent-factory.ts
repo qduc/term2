@@ -66,6 +66,8 @@ export interface AgentFactoryDeps {
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   /** Handle-owned state for root read and Docker capabilities. */
   sessionAccess?: SessionAccessState;
+  /** Explicit gateway read-only posture; absent preserves CLI behavior. */
+  readOnly?: boolean;
   /** Root-session-owned background shell capability. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer for background jobs. */
@@ -89,6 +91,8 @@ export interface AgentBuildResult {
   agent: ApplicationAgent;
   resolvedModel: string;
 }
+
+const READ_ONLY_FILE_MUTATING_TOOLS = new Set(['apply_patch', 'create_file', 'search_replace']);
 
 type ProviderCapabilities = {
   supportsConversationChaining: boolean;
@@ -171,6 +175,9 @@ export function buildAgentTools({
         }),
         execute: async (params, _context: unknown, details: unknown) => {
           const normalizedParams = normalizeToolParameters(params, definition.parameters);
+          if (deps.readOnly && READ_ONLY_FILE_MUTATING_TOOLS.has(definition.name)) {
+            return 'Error: file-mutating tool ' + definition.name + ' is unavailable in a read-only gateway session.';
+          }
           const maxOutputLengthValue = deps.settings.get('shell.maxOutputChars');
           const toolCallId = getToolCallId(details);
           // Check if this execution should be intercepted
@@ -468,6 +475,7 @@ export function buildAgent(
       agentRuntime: deps.getAgentRuntime?.() ?? null,
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
       sessionAccess: deps.sessionAccess,
+      readOnly: deps.readOnly,
       backgroundShellRegistry: deps.backgroundShellRegistry,
       backgroundShellOutput: deps.backgroundShellOutput,
       shellChildRegistry: deps.shellChildRegistry,

@@ -544,8 +544,13 @@ Rules, and why they are shaped this way:
   catalog: gone provider → `409 provider_unavailable`; gone model →
   `409 model_unavailable`; catalog unreachable → `503
   model_catalog_unavailable` (`retryable: true`). The restored runtime is
-  built from the persisted snapshot via the `RuntimeFactory.create`
-  `settingsSnapshot` override — never by re-reading current launcher settings.
+  built from the persisted provider/model snapshot via the
+  `RuntimeFactory.create` `settingsSnapshot` override. Its write posture is
+  recomputed on fresh creation and revival from the current launcher
+  `--allow-write` authority and revalidated binding access: `read_write` is
+  writable only when both are true. A `read` binding therefore remains
+  read-only across restart, while a `read_write` binding on an allow-write
+  launcher remains write-capable.
 - **Absent vs corrupt (the legacy-record rule).** A session created before the
   sidecar existed has *no* record: restore falls back to the launcher's
   current snapshot, which is validated like any other, so the fallback can

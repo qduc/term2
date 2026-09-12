@@ -16,7 +16,11 @@ export class SessionAccessState {
   readonly #dockerRoots = new Set<string>();
   readonly #dockerDenials = new Set<string>();
 
-  constructor(private readonly settings: ISettingsService) {}
+  constructor(private readonly settings: ISettingsService, private readonly options: { allowEdit?: boolean } = {}) {}
+
+  get isReadOnly(): boolean {
+    return this.options.allowEdit === false;
+  }
 
   recordCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
     this.#createdFiles.add(path.resolve(baseDir, file));
@@ -52,6 +56,7 @@ export class SessionAccessState {
   }
 
   allowsEdit(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
+    if (this.options.allowEdit === false) return false;
     const target = path.resolve(baseDir, targetPath);
     return (
       this.#editFiles.has(target) ||

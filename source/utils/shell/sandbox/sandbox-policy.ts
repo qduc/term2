@@ -34,6 +34,8 @@ export interface ShellSandboxRunner {
 }
 
 export interface CreateSandboxRuntimeConfigOptions {
+  /** When false, only the sandbox temp directory is writable. */
+  allowWrite?: boolean;
   readPolicy?: SandboxReadPolicy;
   allowReadExtra?: string[];
   allowNetworking?: boolean;
@@ -526,7 +528,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
       ? dockerSocketReadException
       : undefined;
 
-  const rawAllowWrite = [workspaceRoot, tmpDir];
+  const rawAllowWrite = options.allowWrite === false ? [tmpDir] : [workspaceRoot, tmpDir];
   const protectedFiltered = rawAllowWrite.filter((p) => isPathProtected(p, home));
   const allowWrite = rawAllowWrite.filter((p) => !isPathProtected(p, home));
   if (protectedFiltered.length > 0) {

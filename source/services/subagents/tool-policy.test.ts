@@ -15,6 +15,7 @@ import type { SubagentDefinition } from './types.js';
 import {
   createMockLogger,
   createMockSettings,
+  createMockExecutionContext,
   createSessionContextService,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
@@ -615,6 +616,50 @@ describe('foreground nested worker shell auto-approval', () => {
         sandbox: 'unsandboxed',
       }),
     ).resolves.toContain('unsandboxed shell execution is not available to subagents');
+  });
+});
+
+describe('read-only worker shell construction', () => {
+  it('keeps a write-capable worker shell read-only', async () => {
+    const cwd = fs.mkdtempSync(path.join('/tmp', 'subagent-read-only-shell-'));
+    try {
+      const settings = createMockSettings({ 'sandbox.enabled': true });
+      const sandboxConfig = vi.fn();
+      const policy = new SubagentToolPolicy({
+        settings,
+        logger: createMockLogger(),
+        sessionContextService: createSessionContextService(),
+      });
+      const tools = new SubagentToolFactory({
+        settings,
+        logger: createMockLogger(),
+        executionContext: createMockExecutionContext(cwd),
+        toolPolicy: policy,
+        readOnly: true,
+        shellSandboxRunner: {
+          availability: async () => ({ type: 'available' as const }),
+          wrap: async (_command, options) => {
+            sandboxConfig(options.config);
+            return { command: 'false' };
+          },
+          annotateFailure: (command, stderr) => command + stderr,
+        },
+      }).buildToolDefinitions(createDefinition({ role: 'worker', canRunShell: true }), [], '', false, false);
+      const shell = tools.find((tool) => tool.name === 'shell');
+
+      expect(shell).toBeDefined();
+      expect(tools.map((tool) => tool.name)).not.toEqual(
+        expect.arrayContaining(['apply_patch', 'create_file', 'search_replace']),
+      );
+      await expect(shell!.execute({ command: 'pwd' })).resolves.toMatch(/failed|blocked|read-only/i);
+      expect(fs.existsSync(path.join(cwd, 'blocked.txt'))).toBe(false);
+      expect(sandboxConfig).toHaveBeenCalled();
+      expect(sandboxConfig.mock.calls[0][0]?.filesystem?.allowWrite ?? []).not.toEqual(
+        expect.arrayContaining([expect.stringContaining(cwd)]),
+      );
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 

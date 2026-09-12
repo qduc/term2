@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { connect } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionVerifier, createGatewayAssertion, GatewayAssertionError } from './assertion.js';
 import {
   classifyInteractionResolution,
@@ -19,11 +19,15 @@ import {
   Term2Gateway,
 } from './gateway.js';
 import { RuntimeFactory } from './runtime-factory.js';
+import { createProductionRuntimeFactory } from './runtime-factory.js';
+import { SettingsService } from '../services/settings/settings-service.js';
 import { MemoryReplayLedger, SqliteReplayLedger, type ReplayLedger } from './replay-ledger.js';
 import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
 import { createGatewayEventJournal } from './persistence/event-journal.js';
 import { validateGatewayManifest, WorkspaceAdmission } from './workspace-admission.js';
+import { GatewayPersistenceError } from './persistence/contracts.js';
+import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createAgentStream } from '../services/agent-stream.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
@@ -31,6 +35,32 @@ import type { GatewayAssertionClaims, GatewaySafeLogMetadata, ProviderBrokerCapa
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 const tempRoots: string[] = [];
+// Injects sidecar write failures without touching the filesystem; the real
+// implementation stays in place for every other test.
+const hydrateControl = vi.hoisted(() => ({ failHydration: false }));
+vi.mock('./persistence/projection.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./persistence/projection.js')>();
+  return {
+    ...actual,
+    hydrateConversationService: (...args: Parameters<typeof actual.hydrateConversationService>) => {
+      if (hydrateControl.failHydration) throw new GatewayPersistenceError('corrupt', 'injected hydration failure');
+      return actual.hydrateConversationService(...args);
+    },
+  };
+});
+
+const snapshotWriteControl = vi.hoisted(() => ({ failWrites: false }));
+vi.mock('./persistence/session-snapshot.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./persistence/session-snapshot.js')>();
+  return {
+    ...actual,
+    writeSessionSnapshot: async (...args: Parameters<typeof actual.writeSessionSnapshot>) => {
+      if (snapshotWriteControl.failWrites) throw new Error('injected snapshot write failure');
+      return actual.writeSessionSnapshot(...args);
+    },
+  };
+});
+
 const makeTemp = () => {
   const root = mkdtempSync(path.join(tmpdir(), 'term2-gateway-'));
   tempRoots.push(root);
@@ -1709,6 +1739,751 @@ describe('gateway startup and assertion verifier', () => {
       await gateway.shutdown(100);
       persistence.closeIndex();
     }
+  });
+
+  describe('restart-restored session continuation', () => {
+    const manifestShaOf = (manifestPath: string) =>
+      createHash('sha256').update(readFileSync(manifestPath)).digest('hex');
+
+    const makeGateway = (root: string, runtimeFactory: RuntimeFactory, persistence: GatewayPersistenceCoordinator) =>
+      Term2Gateway.create({
+        enabled: true,
+        socketPath: path.join(root, 'gateway.sock'),
+        manifestPath: path.join(root, 'manifest.json'),
+        manifestSha256: manifestShaOf(path.join(root, 'manifest.json')),
+        replayDbPath: path.join(root, 'replay.sqlite'),
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        publicKeys: { active: publicKey },
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        workerSandboxAvailable: true,
+        workspaceBoundaryProbe: boundaryProbe,
+        allowWrite: true,
+        auditWriter: async () => undefined,
+        tmpDir: path.join(root, 'tmp'),
+        runtimeFactory,
+        persistence,
+      });
+
+    const tokenFor = (purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'active',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'user-a',
+        purpose,
+        workspaceId: 'workspace-a',
+        ...(sessionId ? { sessionId } : {}),
+      });
+
+    const scriptedFactory = (
+      root: string,
+      capture: { inputs: unknown[]; created: number; snapshots?: unknown[] },
+      finalText: string,
+      options?: { settingsAuthority?: SettingsService },
+    ) =>
+      new RuntimeFactory({
+        tmpDir: path.join(root, 'runtime'),
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        sandboxAvailable: true,
+        settingsAuthority: options?.settingsAuthority,
+        createAgentClient: (input) => {
+          capture.created += 1;
+          capture.snapshots?.push(input.sessionSettingsSnapshot);
+          return {
+            chat: async () => '',
+            abort: () => {},
+            setModel: () => {},
+            addToolInterceptor: () => () => {},
+            setSubagentEventSink: () => {},
+            setBackgroundSubagentEventSink: () => {},
+            startStream: async (userInput: unknown) => {
+              capture.inputs.push(userInput);
+              return createMockStream([
+                { type: 'text_delta', text: finalText } as never,
+                {
+                  type: 'completion',
+                  responseId: `resp-${capture.created}`,
+                  output: [{ type: 'message', content: [{ type: 'text', text: finalText }] }],
+                } as never,
+              ]);
+            },
+            continueRunStream: async () => createMockStream([]),
+          } as ConversationAgentClient;
+        },
+      });
+
+    const journalEvents = (sessionPath: string) =>
+      readFileSync(path.join(sessionPath, 'events.jsonl'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+
+    const waitForTerminal = async (sessionPath: string, turnId: string) => {
+      const deadline = Date.now() + 4_000;
+      for (;;) {
+        try {
+          const events = journalEvents(sessionPath);
+          if (events.some((event) => event.type === 'turn_completed' && event.payload.turnId === turnId)) return events;
+        } catch {
+          // The journal file appears with the first appended event.
+        }
+        if (Date.now() >= deadline) throw new Error(`turn ${turnId} did not complete`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    };
+
+    const userItemsDeep = (value: unknown): Array<Record<string, unknown>> => {
+      const found: Array<Record<string, unknown>> = [];
+      const visit = (node: unknown) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (!node || typeof node !== 'object') return;
+        const record = node as Record<string, unknown>;
+        if (record.role === 'user') found.push(record);
+        for (const child of Object.values(record)) visit(child);
+      };
+      visit(value);
+      return found;
+    };
+
+    const tokenForAs = (subject: string, purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'active',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject,
+        purpose,
+        workspaceId: 'workspace-a',
+        ...(sessionId ? { sessionId } : {}),
+      });
+
+    const authoritySettings = (root: string, providerId: string, modelId: string) => {
+      const settings = new SettingsService({
+        settingsDir: path.join(root, 'authority-settings'),
+        disableFilePersistence: true,
+        disableLogging: true,
+        env: {},
+        cli: {},
+      });
+      settings.set('agent.provider', providerId, { persist: false });
+      settings.set('agent.model', modelId, { persist: false });
+      return settings;
+    };
+
+    /** Gateway 1: create a session, complete one turn, shut down cleanly. */
+    const seedRestorableSession = async (root: string, seedFactory?: RuntimeFactory) => {
+      const manifestPath = path.join(root, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = seedFactory ?? scriptedFactory(root, capture, 'first answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      let sessionId = '';
+      try {
+        await gateway.start();
+        const created = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        sessionId = (created.body as { session: { id: string } }).session.id;
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'first question', clientRequestId: 'seed-request' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(202);
+        const turnId = (submitted.body as { turnId: string }).turnId;
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        await waitForTerminal(sessionPath!, turnId);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+      return sessionId;
+    };
+
+    it('a restart-restored session admits a new turn and replays prior history to the provider', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'second answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        const before = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(before.status).toBe(200);
+        expect((before.body as { session: { status: string } }).session.status).toBe('interrupted');
+
+        const submitted = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'second question', clientRequestId: 'request-2' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(202);
+        const turnId = (submitted.body as { turnId: string }).turnId;
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        const events = await waitForTerminal(sessionPath!, turnId);
+        expect(events.some((event) => event.type === 'user_message_accepted' && event.payload.turnId === turnId)).toBe(
+          true,
+        );
+
+        expect(capture.created).toBe(1);
+        expect(capture.inputs).toHaveLength(1);
+        const providerInput = JSON.stringify(capture.inputs[0]);
+        expect(providerInput).toContain('first question');
+        expect(providerInput).toContain('first answer');
+        expect(providerInput).toContain('second question');
+        for (const item of userItemsDeep(capture.inputs[0])) {
+          expect(String(item.content ?? item.text ?? '')).not.toBe('');
+        }
+
+        const read = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(read.status).toBe(200);
+        const projected = (
+          read.body as { session: { status: string; transcript: { messages: Array<{ role: string; text: string }> } } }
+        ).session;
+        expect(projected.status).toBe('idle');
+        expect(
+          projected.transcript.messages.some(
+            (message) => message.role === 'user' && message.text === 'second question',
+          ),
+        ).toBe(true);
+        expect(
+          projected.transcript.messages.some((message) => message.role === 'bot' && message.text === 'second answer'),
+        ).toBe(true);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses message_submit for a restored session whose grant was revoked', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      // Revoke workspace-a between the restarts; workspace-b stays.
+      const manifestPath = path.join(root, 'manifest.json');
+      const manifest = validateGatewayManifest(JSON.parse(readFileSync(manifestPath, 'utf8')));
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({ ...manifest, grants: manifest.grants.filter((grant) => grant.workspaceId !== 'workspace-a') }),
+      );
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'unused');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'should be refused', clientRequestId: 'request-revoked' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(403);
+        expect((submitted.body as { error: { code: string } }).error.code).toBe('workspace_forbidden');
+        expect(capture.created).toBe(0);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses a restored session whose snapshot provider is no longer available', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      // The operator's settings authority no longer offers the configured
+      // provider: restoring must refuse with a specific code, not substitute.
+      const settings = new SettingsService({
+        settingsDir: path.join(root, 'settings'),
+        disableFilePersistence: true,
+        disableLogging: true,
+        env: {},
+        cli: {},
+      });
+      settings.set('agent.provider', 'ghost-provider', { persist: false });
+      settings.set('agent.model', 'ghost-model', { persist: false });
+      const factory = createProductionRuntimeFactory({
+        settingsAuthority: settings,
+        tmpDir: path.join(root, 'runtime'),
+        sandboxAvailable: true,
+      });
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const submitted = await rpc(
+          path.join(root, 'gateway.sock'),
+          tokenFor('message_submit', sessionId),
+          { text: 'after provider loss', clientRequestId: 'request-provider' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(submitted.status).toBe(409);
+        expect((submitted.body as { error: { code: string } }).error.code).toBe('provider_unavailable');
+        expect(factory.liveSessionCount).toBe(0);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('creates exactly one runtime when two submits race on a restored session', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'race answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        const [first, second] = await Promise.all([
+          rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'concurrent-a', clientRequestId: 'race-a' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          ),
+          rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'concurrent-b', clientRequestId: 'race-b' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          ),
+        ]);
+        expect(first.status).toBe(202);
+        expect(second.status).toBe(202);
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        await waitForTerminal(sessionPath!, (first.body as { turnId: string }).turnId);
+        await waitForTerminal(sessionPath!, (second.body as { turnId: string }).turnId);
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(1);
+      } finally {
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('a restored session stays on its persisted provider/model when the launcher default changed', async () => {
+      const root = makeTemp();
+      registerProvider({
+        id: 'snapshot-provider-a',
+        label: 'Snapshot provider A',
+        fetchModels: async () => [{ id: 'model-a1', name: 'Model A1', default_reasoning_level: 'medium' }],
+      });
+      registerProvider({
+        id: 'snapshot-provider-b',
+        label: 'Snapshot provider B',
+        fetchModels: async () => [{ id: 'model-b1', name: 'Model B1', default_reasoning_level: 'medium' }],
+      });
+      try {
+        const settings = authoritySettings(root, 'snapshot-provider-a', 'model-a1');
+        const sessionId = await seedRestorableSession(
+          root,
+          scriptedFactory(root, { inputs: [], created: 0 }, 'first answer', { settingsAuthority: settings }),
+        );
+
+        // The fresh session durably recorded the exact provider/model it was created on.
+        const snapshotPath = path.join(
+          createGatewayStorageLayout(path.join(root, 'data')).sessionPath('user-a', 'workspace-a', sessionId),
+          'session-snapshot.json',
+        );
+        expect(JSON.parse(readFileSync(snapshotPath, 'utf8'))).toMatchObject({
+          schemaVersion: 1,
+          providerId: 'snapshot-provider-a',
+          modelId: 'model-a1',
+        });
+
+        // The launcher default moves to an also-available provider/model B.
+        settings.set('agent.provider', 'snapshot-provider-b', { persist: false });
+        settings.set('agent.model', 'model-b1', { persist: false });
+
+        const capture = { inputs: [] as unknown[], created: 0, snapshots: [] as unknown[] };
+        const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const submitted = await rpc(
+            path.join(root, 'gateway.sock'),
+            tokenFor('message_submit', sessionId),
+            { text: 'second question', clientRequestId: 'snapshot-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(submitted.status).toBe(202);
+          const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+          await waitForTerminal(sessionPath!, (submitted.body as { turnId: string }).turnId);
+          expect(capture.created).toBe(1);
+          // The restored runtime was built from the persisted snapshot, not the new default.
+          expect(capture.snapshots[0]).toMatchObject({
+            providerId: 'snapshot-provider-a',
+            modelId: 'model-a1',
+          });
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('snapshot-provider-a');
+        unregisterProvider('snapshot-provider-b');
+      }
+    });
+
+    it('refuses a restored session whose persisted provider disappeared from the registry', async () => {
+      const root = makeTemp();
+      registerProvider({
+        id: 'vanish-provider',
+        label: 'Vanish provider',
+        fetchModels: async () => [{ id: 'vanish-model', name: 'Vanish model', default_reasoning_level: 'medium' }],
+      });
+      try {
+        const settings = authoritySettings(root, 'vanish-provider', 'vanish-model');
+        const sessionId = await seedRestorableSession(
+          root,
+          scriptedFactory(root, { inputs: [], created: 0 }, 'first answer', { settingsAuthority: settings }),
+        );
+
+        // The persisted provider is gone; a different one took its place.
+        unregisterProvider('vanish-provider');
+        registerProvider({
+          id: 'replacement-provider',
+          label: 'Replacement provider',
+          fetchModels: async () => [
+            { id: 'replacement-model', name: 'Replacement model', default_reasoning_level: 'medium' },
+          ],
+        });
+        settings.set('agent.provider', 'replacement-provider', { persist: false });
+        settings.set('agent.model', 'replacement-model', { persist: false });
+
+        const capture = { inputs: [] as unknown[], created: 0 };
+        const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const submitted = await rpc(
+            path.join(root, 'gateway.sock'),
+            tokenFor('message_submit', sessionId),
+            { text: 'after provider loss', clientRequestId: 'vanish-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(submitted.status).toBe(409);
+          expect((submitted.body as { error: { code: string } }).error.code).toBe('provider_unavailable');
+          expect(capture.created).toBe(0);
+          expect(factory.liveSessionCount).toBe(0);
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('vanish-provider');
+        unregisterProvider('replacement-provider');
+      }
+    });
+
+    it('rejects a different-owner submit during a revival and against a live session', async () => {
+      const root = makeTemp();
+      let releaseCatalog: (() => void) | undefined;
+      let signalEntered: (() => void) | undefined;
+      const catalogEntered = new Promise<void>((resolve) => {
+        signalEntered = resolve;
+      });
+      registerProvider({
+        id: 'race-provider',
+        label: 'Race provider',
+        fetchModels: async () => {
+          signalEntered?.();
+          await new Promise<void>((resolve) => {
+            releaseCatalog = resolve;
+          });
+          return [{ id: 'race-model', name: 'Race model', default_reasoning_level: 'medium' }];
+        },
+      });
+      try {
+        const sessionId = await seedRestorableSession(root);
+        const settings = authoritySettings(root, 'race-provider', 'race-model');
+        const capture = { inputs: [] as unknown[], created: 0 };
+        const factory = scriptedFactory(root, capture, 'race answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const socketPath = path.join(root, 'gateway.sock');
+          // Owner A's submit starts the revival and parks in the catalog check.
+          const ownerSubmit = rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'owner question', clientRequestId: 'owner-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          await catalogEntered;
+          // Owner B's valid assertion for the same session must not inherit
+          // the in-flight revival: the session is a 404 for this owner.
+          const foreignInflight = await rpc(
+            socketPath,
+            tokenForAs('user-b', 'message_submit', sessionId),
+            { text: 'foreign question', clientRequestId: 'foreign-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(foreignInflight.status).toBe(404);
+          expect((foreignInflight.body as { error: { code: string } }).error.code).toBe('not_found');
+
+          releaseCatalog?.();
+          const ownerResult = await ownerSubmit;
+          expect(ownerResult.status).toBe(202);
+          const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+          await waitForTerminal(sessionPath!, (ownerResult.body as { turnId: string }).turnId);
+          expect(capture.created).toBe(1);
+
+          // Once live, the session still admits only its owner.
+          const foreignLive = await rpc(
+            socketPath,
+            tokenForAs('user-b', 'message_submit', sessionId),
+            { text: 'foreign question 2', clientRequestId: 'foreign-request-2' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(foreignLive.status).toBe(404);
+          expect((foreignLive.body as { error: { code: string } }).error.code).toBe('not_found');
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('race-provider');
+      }
+    });
+
+    it('allows a revival to be retried after a failed one', async () => {
+      const root = makeTemp();
+      registerProvider({
+        id: 'retry-provider',
+        label: 'Retry provider',
+        fetchModels: async () => [{ id: 'other-model', name: 'Other model', default_reasoning_level: 'medium' }],
+      });
+      try {
+        const sessionId = await seedRestorableSession(root);
+        const settings = authoritySettings(root, 'retry-provider', 'missing-model');
+        const capture = { inputs: [] as unknown[], created: 0 };
+        const factory = scriptedFactory(root, capture, 'retry answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const socketPath = path.join(root, 'gateway.sock');
+          const failed = await rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'first try', clientRequestId: 'retry-1' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(failed.status).toBe(409);
+          expect((failed.body as { error: { code: string } }).error.code).toBe('model_unavailable');
+          expect(capture.created).toBe(0);
+
+          // The failed revival must not wedge the session: after the operator
+          // fixes the model, the same session revives on the next submit.
+          settings.set('agent.model', 'other-model', { persist: false });
+          const retried = await rpc(
+            socketPath,
+            tokenFor('message_submit', sessionId),
+            { text: 'second try', clientRequestId: 'retry-2' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(retried.status).toBe(202);
+          const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+          await waitForTerminal(sessionPath!, (retried.body as { turnId: string }).turnId);
+          expect(capture.created).toBe(1);
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('retry-provider');
+      }
+    });
+
+    it('refuses session_create when the provider/model snapshot cannot be persisted', async () => {
+      const root = makeTemp();
+      const manifestPath = path.join(root, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+      const settings = authoritySettings(root, 'unwritable-provider', 'unwritable-model');
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'answer', { settingsAuthority: settings });
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      try {
+        await gateway.start();
+        const socketPath = path.join(root, 'gateway.sock');
+        snapshotWriteControl.failWrites = true;
+        const created = await rpc(
+          socketPath,
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        // Creation durability: no session is exposed unless its snapshot is
+        // durably written; the runtime is disposed and the admission rolled back.
+        expect(created.status).toBe(503);
+        expect((created.body as { error: { code: string } }).error.code).toBe('snapshot_unwritable');
+        // The runtime was created and then disposed with the rolled-back composition.
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(0);
+
+        // The gateway stays healthy once the failure clears.
+        snapshotWriteControl.failWrites = false;
+        const retried = await rpc(
+          socketPath,
+          tokenFor('session_create'),
+          { workspaceId: 'workspace-a' },
+          '/private/agent/v1/sessions',
+        );
+        expect(retried.status).toBe(201);
+        expect((retried.body as { session: { id: string } }).session.id).toBeTruthy();
+      } finally {
+        snapshotWriteControl.failWrites = false;
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
+
+    it('refuses a restored session whose snapshot sidecar is corrupt', async () => {
+      const root = makeTemp();
+      registerProvider({
+        id: 'corrupt-provider',
+        label: 'Corrupt provider',
+        fetchModels: async () => [{ id: 'corrupt-model', name: 'Corrupt model', default_reasoning_level: 'medium' }],
+      });
+      try {
+        const settings = authoritySettings(root, 'corrupt-provider', 'corrupt-model');
+        const sessionId = await seedRestorableSession(
+          root,
+          scriptedFactory(root, { inputs: [], created: 0 }, 'first answer', { settingsAuthority: settings }),
+        );
+        // The provider and model are still available, so only the malformed
+        // record can explain a refusal: corruption is never read as legacy.
+        const snapshotPath = path.join(
+          createGatewayStorageLayout(path.join(root, 'data')).sessionPath('user-a', 'workspace-a', sessionId),
+          'session-snapshot.json',
+        );
+        writeFileSync(snapshotPath, '{not json');
+        const capture = { inputs: [] as unknown[], created: 0 };
+        const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
+        const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+        const gateway = makeGateway(root, factory, persistence);
+        try {
+          await gateway.start();
+          const submitted = await rpc(
+            path.join(root, 'gateway.sock'),
+            tokenFor('message_submit', sessionId),
+            { text: 'after corruption', clientRequestId: 'corrupt-request' },
+            `/private/agent/v1/sessions/${sessionId}/messages`,
+          );
+          expect(submitted.status).toBe(500);
+          expect((submitted.body as { error: { code: string } }).error.code).toBe('session_snapshot_invalid');
+          expect(capture.created).toBe(0);
+          expect(factory.liveSessionCount).toBe(0);
+        } finally {
+          await gateway.shutdown(100);
+          persistence.closeIndex();
+          await factory.shutdown();
+        }
+      } finally {
+        unregisterProvider('corrupt-provider');
+      }
+    });
+
+    it('closes the persisted handle when hydration fails and revives on a later retry', async () => {
+      const root = makeTemp();
+      const sessionId = await seedRestorableSession(root);
+
+      const capture = { inputs: [] as unknown[], created: 0 };
+      const factory = scriptedFactory(root, capture, 'second answer');
+      const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+      const gateway = makeGateway(root, factory, persistence);
+      const socketPath = path.join(root, 'gateway.sock');
+      try {
+        await gateway.start();
+        // Hydration throws after #ensurePersistedSession installed the
+        // handle: the restore must close and remove it, not leak it.
+        hydrateControl.failHydration = true;
+        const failed = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'doomed question', clientRequestId: 'hydrate-fail' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(failed.status).toBe(503);
+        expect((failed.body as { error: { code: string } }).error.code).toBe('persistence_unavailable');
+        // The runtime was created and disposed with the failed composition.
+        expect(capture.created).toBe(1);
+        expect(factory.liveSessionCount).toBe(0);
+
+        // The handle is gone from the gateway: the read path reopens it and
+        // still projects the session.
+        const read = await rpc(
+          socketPath,
+          tokenFor('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(read.status).toBe(200);
+        expect((read.body as { session: { status: string } }).session.status).toBe('interrupted');
+
+        // A later retry reopens the handle and revives the session.
+        hydrateControl.failHydration = false;
+        const retried = await rpc(
+          socketPath,
+          tokenFor('message_submit', sessionId),
+          { text: 'second question', clientRequestId: 'hydrate-retry' },
+          `/private/agent/v1/sessions/${sessionId}/messages`,
+        );
+        expect(retried.status).toBe(202);
+        const sessionPath = persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+        const events = await waitForTerminal(sessionPath!, (retried.body as { turnId: string }).turnId);
+        expect(events.some((event) => event.type === 'user_message_accepted')).toBe(true);
+        expect(capture.created).toBe(2);
+        expect(factory.liveSessionCount).toBe(1);
+      } finally {
+        hydrateControl.failHydration = false;
+        await gateway.shutdown(100);
+        persistence.closeIndex();
+        await factory.shutdown();
+      }
+    });
   });
 
   it('emits exactly one durable queue-discard event for accepted queued work', async () => {

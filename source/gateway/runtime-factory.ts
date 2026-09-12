@@ -363,7 +363,11 @@ export class RuntimeFactory {
 
   async create(
     binding: SessionBinding,
-    options?: { eventSink?: ServerSessionOptions['eventSink'] },
+    options?: {
+      eventSink?: ServerSessionOptions['eventSink'];
+      /** Overrides the factory's snapshot chain; the gateway supplies the persisted per-session snapshot when reviving. */
+      settingsSnapshot?: SessionSettingsSnapshot;
+    },
   ): Promise<ServerSession> {
     assertBinding(binding);
     if (this.#closed) throw new RuntimeFactoryError('closed');
@@ -377,6 +381,7 @@ export class RuntimeFactory {
 
     let composition: ReturnType<typeof composeGatewaySession>;
     const sessionSettingsSnapshot =
+      options?.settingsSnapshot ??
       this.#options.createSettingsSnapshot?.(binding) ??
       (this.#options.settingsAuthority
         ? createSessionSettingsSnapshot({

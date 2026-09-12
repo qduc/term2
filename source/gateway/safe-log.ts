@@ -18,6 +18,7 @@ const OPERATIONS = new Set<GatewaySafeLogMetadata['operation']>([
   'session_list',
   'model_list',
   'session_create',
+  'session_resume',
   'session_read',
   'message_submit',
   'interaction_resolve',

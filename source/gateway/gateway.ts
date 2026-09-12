@@ -19,12 +19,13 @@ import type {
   GatewaySafeLogMetadata,
   ProviderBrokerCapability,
   SessionBinding,
+  SessionSettingsSnapshot,
 } from './contracts.js';
 import { createSafeLogMetadata, GatewayAuditLog } from './safe-log.js';
 import { AssertionVerifier } from './assertion.js';
 import { SqliteReplayLedger } from './replay-ledger.js';
 import { GatewayServer } from './server.js';
-import type { RuntimeFactory } from './runtime-factory.js';
+import { RuntimeFactoryError, type RuntimeFactory } from './runtime-factory.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { normalizeRunItem } from '../services/conversation/run-item-normalizer.js';
@@ -34,9 +35,11 @@ import {
   GatewayPersistenceError,
   TERMINAL_AGENT_EVENT_TYPES,
   type AgentEventType,
+  type GatewaySessionRecord,
 } from './persistence/contracts.js';
 import {
   createSessionProjectionSource,
+  hydrateConversationService,
   type PendingInteractionDto,
   type ProjectionCommand,
   type SessionProjectionSource,
@@ -57,6 +60,8 @@ import {
   type GatewayTlsOptions,
 } from './server.js';
 import { ServerSession } from './server-session.js';
+import { createSessionSettingsSnapshot } from './launcher-seam.js';
+import { readSessionSnapshot, writeSessionSnapshot } from './persistence/session-snapshot.js';
 import type { GatewayPersistenceCoordinator, GatewayPersistedSession } from './persistence/coordinator.js';
 import { ServerSessionError } from './server-session.js';
 import { DynamicWorkspaceRegistry, DynamicWorkspaceRegistryError } from './dynamic-workspace-registry.js';
@@ -351,6 +356,12 @@ export class Term2Gateway {
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
   readonly #inflightCommands = new Map<string, { promise: Promise<GatewayRpcResult>; bodyHash: string }>();
+  // Keyed by owner and session: an in-flight revival belongs to the owner who
+  // started it, and no other caller may inherit its result.
+  readonly #sessionRestores = new Map<
+    string,
+    Promise<{ session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null>
+  >();
   #shutdownInProgress = false;
   #shutdownPromise?: Promise<void>;
   readonly #server: GatewayServer;
@@ -1036,10 +1047,23 @@ export class Term2Gateway {
     if (!this.#admissions || !this.#config.persistence)
       return publicError(503, 'persistence_unavailable', 'gateway persistence unavailable', true);
     if (!isMessageBody(body)) return publicError(400, 'validation_error', 'message request is invalid');
-    const session = this.#sessions.get(claims.sessionId!);
-    const persisted = this.#persisted.get(claims.sessionId!);
+    let session = this.#sessions.get(claims.sessionId!);
+    let persisted = this.#persisted.get(claims.sessionId!);
+    if (!(session instanceof ServerSession) || !persisted) {
+      // A session from a previous gateway process has no live runtime; revive
+      // it through the same factory path a fresh session uses.
+      const restored = await this.#ensureLiveRuntime(claims.sub, claims.sessionId!);
+      if (restored && 'body' in restored) return restored;
+      if (restored) {
+        session = restored.session;
+        persisted = restored.persisted;
+      }
+    }
     if (!(session instanceof ServerSession) || !persisted)
       return publicError(409, 'session_not_admitting', 'session is not admitting messages');
+    // Owner scoping holds on every path that reaches admission, live or
+    // restored: a session owned by someone else does not exist for this caller.
+    if (session.binding.ownerUserId !== claims.sub) return publicError(404, 'not_found', 'session not found');
     const turnId = crypto.randomUUID();
     try {
       const result = await this.#admissions.admit({
@@ -1149,7 +1173,14 @@ export class Term2Gateway {
     correlationId?: string,
   ): Promise<GatewayRpcResult> {
     if (!isCommandBody(body)) return publicError(400, 'validation_error', 'command request is invalid');
-    const session = this.#sessions.get(claims.sessionId!);
+    let session = this.#sessions.get(claims.sessionId!);
+    if (!session || session.binding.ownerUserId !== claims.sub) {
+      // A restored session has no live runtime; commands revive it the same
+      // way message_submit does. Sessions unknown to this owner keep the 404.
+      const restored = await this.#ensureLiveRuntime(claims.sub, claims.sessionId!);
+      if (restored && 'body' in restored) return restored;
+      if (restored) session = restored.session;
+    }
     if (!session || session.binding.ownerUserId !== claims.sub) {
       return publicError(404, 'not_found', 'session not found');
     }
@@ -2030,6 +2061,8 @@ export class Term2Gateway {
       return publicError(403, 'workspace_forbidden', 'workspace access denied');
     }
     if (error instanceof GatewayPersistenceError) {
+      if (error.code === 'snapshot_unwritable')
+        return publicError(503, 'snapshot_unwritable', 'session snapshot could not be persisted', true);
       if (error.code === 'not_found' || error.code === 'owner_mismatch')
         return publicError(404, 'not_found', 'session not found');
       if (error.code === 'cursor_invalid') return publicError(400, 'invalid_cursor', 'cursor is invalid');
@@ -2040,6 +2073,15 @@ export class Term2Gateway {
     if (error instanceof ServerSessionError) {
       if (error.code === 'stale_interaction') return publicError(409, 'stale_interaction', 'interaction is stale');
       return publicError(409, 'session_not_admitting', 'session is not admitting');
+    }
+    if (error instanceof RuntimeFactoryError) {
+      if (error.code === 'resource_limit')
+        return publicError(429, 'resource_exhausted', 'session resource limit reached', true);
+      if (error.code === 'provider_unavailable')
+        return publicError(409, 'provider_unavailable', 'session provider is unavailable');
+      if (error.code === 'invalid_binding')
+        return publicError(409, 'session_not_admitting', 'session is not admitting');
+      return publicError(503, 'gateway_unavailable', 'gateway unavailable', true);
     }
     return publicError(503, 'gateway_unavailable', 'gateway unavailable', true);
   }
@@ -2094,102 +2136,361 @@ export class Term2Gateway {
     if (!this.#config.enabled) throw new GatewayStartupError();
     const binding = this.#admission.admit(claims);
     if (this.#config.runtimeFactory) {
-      let persisted: GatewayPersistedSession | undefined;
-      try {
+      const { session } = await this.#composeRuntimeBackedSession(binding, {
+        auditOperation: 'session_create',
+        ownedBinding: true,
+        correlationId,
+      });
+      return session;
+    }
+    return this.#composeLegacyFixtureSession(claims, options, binding);
+  }
+
+  /**
+   * Compose a live runtime-backed session through the RuntimeFactory: open (or
+   * reuse) the persistence handle, create the runtime, then attach the shared
+   * gateway wiring (dispose hooks, lifecycle registration, event and
+   * background-subagent sinks). Fresh sessions and restart-restored sessions
+   * take the same path; a restored session additionally hydrates its history
+   * from the persisted transcript before the runtime becomes reachable.
+   */
+  async #composeRuntimeBackedSession(
+    binding: SessionBinding,
+    options: {
+      auditOperation: 'session_create' | 'session_resume';
+      ownedBinding: boolean;
+      correlationId?: string;
+      hydrate?: (session: ServerSession) => void;
+      /** Pre-resolved snapshot (restore path). When absent, the launcher's current snapshot is captured and persisted. */
+      snapshot?: SessionSettingsSnapshot;
+    },
+  ): Promise<{ session: ServerSession; persisted: GatewayPersistedSession | undefined }> {
+    const runtimeFactory = this.#config.runtimeFactory;
+    if (!runtimeFactory) throw new GatewayStartupError();
+    const authority = runtimeFactory.settingsAuthority;
+    // A restored session runs on its persisted snapshot; a fresh session
+    // captures the launcher's current one. Either way the factory receives an
+    // explicit snapshot so it can never silently re-read a changed default.
+    const runtimeSnapshot =
+      options.snapshot ??
+      (authority
+        ? createSessionSettingsSnapshot({ settings: authority, effectiveToolPolicy: { allowWrite: false } })
+        : undefined);
+    let persisted: GatewayPersistedSession | undefined = this.#persisted.get(binding.sessionId);
+    let createdSession: ServerSession | undefined;
+    try {
+      if (!persisted) {
         persisted = await this.#config.persistence?.open(binding);
-        const session = await this.#config.runtimeFactory.create(binding, {
-          eventSink: (event, context) => {
-            if (context.turnId) this.#lastTurnIds.set(binding.sessionId, context.turnId);
-            if (event.type === 'subagent_started' && event.agentId && context.turnId)
-              this.#childTurnIds.set(event.agentId, context.turnId);
-            if (event.type === 'subagent_approval_required') this.#childRoles.set(event.agentId, event.role);
-            const persistence = this.#persistConversationEvent(binding.sessionId, event, context);
-            if (isCriticalRuntimeEvent(event)) return persistence;
-            // Streaming deltas remain observationally non-blocking, but their
-            // persistence failure must be consumed so it cannot become an
-            // unhandled rejection. A later critical event observes the
-            // journal's failure latch and is awaited by the runtime.
-            void persistence.catch(() => undefined);
-            return undefined;
-          },
-        });
-        if (persisted) {
-          this.#persisted.set(binding.sessionId, persisted);
-          session.addDisposeHook(async () => {
-            await persisted!.persistence.close();
-            this.#persisted.delete(binding.sessionId);
-            this.#interactionBindings.delete(binding.sessionId);
-            this.#lastTurnIds.delete(binding.sessionId);
-            await this.#config.persistence?.close(
-              binding.sessionId,
-              this.#shutdownInProgress ? 'interrupted' : 'closed',
-            );
+      }
+      const session = await runtimeFactory.create(binding, {
+        settingsSnapshot: runtimeSnapshot,
+        eventSink: (event, context) => {
+          if (context.turnId) this.#lastTurnIds.set(binding.sessionId, context.turnId);
+          if (event.type === 'subagent_started' && event.agentId && context.turnId)
+            this.#childTurnIds.set(event.agentId, context.turnId);
+          if (event.type === 'subagent_approval_required') this.#childRoles.set(event.agentId, event.role);
+          const persistence = this.#persistConversationEvent(binding.sessionId, event, context);
+          if (isCriticalRuntimeEvent(event)) return persistence;
+          // Streaming deltas remain observationally non-blocking, but their
+          // persistence failure must be consumed so it cannot become an
+          // unhandled rejection. A later critical event observes the
+          // journal's failure latch and is awaited by the runtime.
+          void persistence.catch(() => undefined);
+          return undefined;
+        },
+      });
+      createdSession = session;
+      options.hydrate?.(session);
+      if (runtimeSnapshot && !options.snapshot && persisted) {
+        // Session-creation durability: a session must not become reachable
+        // unless its provider/model identity is durably recorded, or a restart
+        // could silently substitute the launcher's current default. Failure
+        // rolls the whole composition back in the catch below.
+        try {
+          await writeSessionSnapshot(persisted.persistence.directory, {
+            schemaVersion: 1,
+            providerId: runtimeSnapshot.providerId,
+            modelId: runtimeSnapshot.modelId,
+            reasoningEffort: runtimeSnapshot.reasoningEffort,
           });
+        } catch {
+          throw new GatewayPersistenceError(
+            'snapshot_unwritable',
+            'session provider/model snapshot could not be persisted',
+          );
         }
-        const release = this.#lifecycle.registerWorker({ close: () => session.dispose() });
-        session.addDisposeHook(() => {
-          release();
-          this.#admission.remove(binding.sessionId);
-          this.#sessions.delete(binding.sessionId);
+      }
+      if (persisted) {
+        this.#persisted.set(binding.sessionId, persisted);
+        session.addDisposeHook(async () => {
+          await persisted!.persistence.close();
           this.#persisted.delete(binding.sessionId);
           this.#interactionBindings.delete(binding.sessionId);
+          this.#lastTurnIds.delete(binding.sessionId);
+          await this.#config.persistence?.close(binding.sessionId, this.#shutdownInProgress ? 'interrupted' : 'closed');
         });
-        this.#sessions.set(binding.sessionId, session);
-        session.service.setBackgroundSubagentEventSink((event) => {
-          const agentId =
-            event.type === 'subagent_question'
-              ? event.runId
-              : event.type === 'subagent_completed'
-              ? event.result.agentId
-              : (event as { agentId?: string }).agentId;
-          if (event.type === 'subagent_started' && event.agentId && session.activeTurnId) {
-            this.#childTurnIds.set(event.agentId, session.activeTurnId);
-            this.#childRoles.set(event.agentId, event.role);
-          }
-          const turnId = agentId
-            ? this.#childTurnIds.get(agentId) ?? session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId)
-            : session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId);
-          if (turnId) void this.#persistConversationEvent(binding.sessionId, event, { turnId, discardedTurnIds: [] });
-        });
-        session.service.backgroundSubagentApprovals.subscribe(() => {
-          const current = session.service.backgroundSubagentApprovals.getSnapshot().current;
-          if (!current) return;
-          const turnId = this.#childTurnIds.get(current.runId);
-          if (!turnId) return;
-          void this.#persistConversationEvent(
-            binding.sessionId,
-            {
-              type: 'subagent_approval_required',
-              agentId: current.runId,
-              role: this.#childRoles.get(current.runId) ?? 'subagent',
-            },
-            { turnId, discardedTurnIds: [] },
-          );
-        });
-        await this.#audit.write(
-          createSafeLogMetadata({
-            operation: 'session_create',
-            outcome: 'allowed',
-            reasonCode: 'accepted',
-            sessionId: binding.sessionId,
-            workspaceId: binding.workspaceId,
-            grantVersion: binding.grantVersion,
-            access: binding.access,
-            ...(correlationId ? { correlationId } : {}),
-          }),
+      }
+      const release = this.#lifecycle.registerWorker({ close: () => session.dispose() });
+      session.addDisposeHook(() => {
+        release();
+        this.#admission.remove(binding.sessionId);
+        this.#sessions.delete(binding.sessionId);
+        this.#persisted.delete(binding.sessionId);
+        this.#interactionBindings.delete(binding.sessionId);
+      });
+      this.#sessions.set(binding.sessionId, session);
+      session.service.setBackgroundSubagentEventSink((event) => {
+        const agentId =
+          event.type === 'subagent_question'
+            ? event.runId
+            : event.type === 'subagent_completed'
+            ? event.result.agentId
+            : (event as { agentId?: string }).agentId;
+        if (event.type === 'subagent_started' && event.agentId && session.activeTurnId) {
+          this.#childTurnIds.set(event.agentId, session.activeTurnId);
+          this.#childRoles.set(event.agentId, event.role);
+        }
+        const turnId = agentId
+          ? this.#childTurnIds.get(agentId) ?? session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId)
+          : session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId);
+        if (turnId) void this.#persistConversationEvent(binding.sessionId, event, { turnId, discardedTurnIds: [] });
+      });
+      session.service.backgroundSubagentApprovals.subscribe(() => {
+        const current = session.service.backgroundSubagentApprovals.getSnapshot().current;
+        if (!current) return;
+        const turnId = this.#childTurnIds.get(current.runId);
+        if (!turnId) return;
+        void this.#persistConversationEvent(
+          binding.sessionId,
+          {
+            type: 'subagent_approval_required',
+            agentId: current.runId,
+            role: this.#childRoles.get(current.runId) ?? 'subagent',
+          },
+          { turnId, discardedTurnIds: [] },
         );
-        return session;
-      } catch (error) {
+      });
+      await this.#audit.write(
+        createSafeLogMetadata({
+          operation: options.auditOperation,
+          outcome: 'allowed',
+          reasonCode: 'accepted',
+          sessionId: binding.sessionId,
+          workspaceId: binding.workspaceId,
+          grantVersion: binding.grantVersion,
+          access: binding.access,
+          ...(options.correlationId ? { correlationId: options.correlationId } : {}),
+        }),
+      );
+      return { session, persisted };
+    } catch (error) {
+      // The runtime was created but the composition failed (snapshot
+      // durability, hydration, ...): dispose it before the persistence it
+      // may still write to.
+      if (createdSession) {
         try {
-          await persisted?.persistence.close();
+          await createdSession.dispose();
+        } catch {
+          // Preserve the original composition failure.
+        }
+      }
+      // Roll the persistence handle back whoever opened it — composition
+      // opened it, or #ensurePersistedSession installed it before the failed
+      // restore. A failed restore must not leave an open handle in #persisted;
+      // the read path and the next revival reopen on demand.
+      if (persisted) {
+        try {
+          await persisted.persistence.close();
           await this.#config.persistence?.close(binding.sessionId, 'interrupted');
         } catch {
-          // Preserve the admission failure; persistence keeps its evidence.
+          // Preserve the original composition failure; persistence keeps its evidence.
         }
-        this.#admission.remove(binding.sessionId);
+        this.#persisted.delete(binding.sessionId);
+      }
+      if (options.ownedBinding) this.#admission.remove(binding.sessionId);
+      throw error;
+    }
+  }
+
+  /**
+   * Lazily revive a persisted session whose runtime died with a previous
+   * gateway process. Returns the live runtime, a specific gateway error for a
+   * refused revival (revoked grant, unavailable provider or model, resource
+   * limits), or null when there is nothing this gateway can restore — callers
+   * keep their legacy not-found/not-admitting behavior for null. Concurrent
+   * first revivals of one session share a single creation promise.
+   */
+  async #ensureLiveRuntime(
+    ownerUserId: string,
+    sessionId: string,
+    correlationId?: string,
+  ): Promise<{ session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null> {
+    const existing = this.#sessions.get(sessionId);
+    const existingPersisted = this.#persisted.get(sessionId);
+    if (existing instanceof ServerSession) {
+      // Owner scoping holds on every return path, live or restored: a session
+      // owned by someone else does not exist for this caller.
+      if (existing.binding.ownerUserId !== ownerUserId) return publicError(404, 'not_found', 'session not found');
+      if (existingPersisted) return { session: existing, persisted: existingPersisted };
+    }
+    if (!this.#config.runtimeFactory || !this.#config.persistence) return null;
+    // A persisted session owned by another caller is a 404 for this caller,
+    // not the legacy fallback: the index is owner-scoped for a reason. This
+    // also stops a foreign caller from latching onto an in-flight revival.
+    let foreign: GatewaySessionRecord | null;
+    try {
+      foreign = this.#config.persistence.index.get(sessionId);
+    } catch {
+      foreign = null;
+    }
+    if (foreign && foreign.ownerUserId !== ownerUserId) return publicError(404, 'not_found', 'session not found');
+    const restoreKey = `${ownerUserId}\u0000${sessionId}`;
+    const guardOwner = (
+      result: { session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null,
+    ): { session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null => {
+      if (result && 'session' in result && result.session.binding.ownerUserId !== ownerUserId)
+        return publicError(404, 'not_found', 'session not found');
+      return result;
+    };
+    const inflight = this.#sessionRestores.get(restoreKey);
+    if (inflight) return inflight.then(guardOwner);
+    const restore = this.#restoreRuntime(ownerUserId, sessionId, correlationId);
+    this.#sessionRestores.set(restoreKey, restore);
+    restore.then(
+      () => {
+        if (this.#sessionRestores.get(restoreKey) === restore) this.#sessionRestores.delete(restoreKey);
+      },
+      () => {
+        // A rejected revival must clear the single-flight entry too, or the
+        // session would stay wedged forever; everyone awaiting the shared
+        // promise already holds the rejection, so swallow it here.
+        if (this.#sessionRestores.get(restoreKey) === restore) this.#sessionRestores.delete(restoreKey);
+      },
+    );
+    return restore.then(guardOwner);
+  }
+
+  async #restoreRuntime(
+    ownerUserId: string,
+    sessionId: string,
+    correlationId?: string,
+  ): Promise<{ session: ServerSession; persisted: GatewayPersistedSession } | GatewayRpcResult | null> {
+    try {
+      const index = this.#config.persistence!.index;
+      let record: ReturnType<typeof index.getForOwner>;
+      try {
+        record = index.getForOwner(ownerUserId, sessionId);
+      } catch (error) {
+        if (error instanceof GatewayPersistenceError && error.code === 'not_found') return null;
         throw error;
       }
+      if (record.status === 'closed') return null;
+      const grantVersion = Number(record.grantVersion);
+      if (!Number.isSafeInteger(grantVersion))
+        throw new GatewayPersistenceError('readonly', 'session grant version is invalid');
+      // The admission layer is the grant authority: manifest and restored
+      // dynamic grants, enabled state, and the workspace boundary probe all
+      // revalidate before any runtime exists. A revoked grant fails here with
+      // a typed admission error instead of a generic not-found.
+      const binding = this.#admission.restore(sessionId, ownerUserId, record.workspaceId, grantVersion);
+      const persisted = await this.#ensurePersistedSession(ownerUserId, sessionId);
+      const snapshot = await this.#restoredSessionSnapshot(persisted);
+      if (snapshot && 'body' in snapshot) return snapshot;
+      const unavailable = await this.#sessionSnapshotUnavailable(snapshot);
+      if (unavailable) return unavailable;
+      if (this.#lifecycle.state !== 'running')
+        return publicError(503, 'gateway_unavailable', 'gateway is not accepting sessions', true);
+      const directory = this.#config.persistence?.layout.existingSessionPath(
+        binding.ownerUserId,
+        binding.workspaceId,
+        binding.sessionId,
+      );
+      const composed = await this.#composeRuntimeBackedSession(binding, {
+        auditOperation: 'session_resume',
+        ownedBinding: false,
+        correlationId,
+        snapshot,
+        hydrate: (session) => {
+          if (directory) hydrateConversationService(session.service, directory, binding.sessionId);
+          // Revival is complete: the coarse index lifecycle returns to the
+          // resting state a fresh session holds; live turn state stays in the
+          // ServerSession. The interrupted turn stays interrupted in the
+          // journal; the next turn is a normal turn.
+          this.#config.persistence?.index.update(binding.sessionId, {
+            status: 'idle',
+            interruptedAt: null,
+            recoveryWarning: null,
+          });
+        },
+      });
+      return { session: composed.session, persisted };
+    } catch (error) {
+      return this.#mapError(error);
     }
+  }
+
+  /**
+   * The snapshot a restored session must come back on: the per-session
+   * provider/model recorded when the session was created. Sessions created
+   * before that record existed (or whose record is unreadable) fall back to
+   * the launcher's current snapshot; the fallback is documented and is still
+   * validated below, so it is never a silent substitution of an unavailable
+   * provider or model. Only the production stack (settings authority) has a
+   * snapshot to restore against; fixture gateways compose without one.
+   */
+  async #restoredSessionSnapshot(
+    persisted: GatewayPersistedSession,
+  ): Promise<SessionSettingsSnapshot | undefined | GatewayRpcResult> {
+    const settings = this.#config.runtimeFactory?.settingsAuthority;
+    if (!settings) return undefined;
+    const stored = await readSessionSnapshot(persisted.persistence.directory);
+    // Absent is the documented pre-change compatibility state; a record that
+    // exists but cannot be trusted is corruption and is refused — falling
+    // back would silently change the session's provider/model identity.
+    if (stored.state === 'corrupt')
+      return publicError(500, 'session_snapshot_invalid', 'persisted session snapshot is unreadable or malformed');
+    if (stored.state === 'absent')
+      return createSessionSettingsSnapshot({ settings, effectiveToolPolicy: { allowWrite: false } });
+    return createSessionSettingsSnapshot({
+      settings,
+      providerId: stored.snapshot.providerId,
+      modelId: stored.snapshot.modelId,
+      reasoningEffort: stored.snapshot.reasoningEffort,
+      effectiveToolPolicy: { allowWrite: false },
+    });
+  }
+  /**
+   * A restored session replays into the runtime built from its snapshot.
+   * Refuse instead of silently substituting when that snapshot's provider or
+   * model is no longer available. Only the production stack (settings
+   * authority + model catalog) can answer this; fixture gateways skip the
+   * check.
+   */
+  async #sessionSnapshotUnavailable(snapshot: SessionSettingsSnapshot | undefined): Promise<GatewayRpcResult | null> {
+    const settings = this.#config.runtimeFactory?.settingsAuthority;
+    const catalog = this.#modelCatalog;
+    if (!settings || !catalog || !snapshot) return null;
+    const providerId = String(snapshot.providerId);
+    if (!getAvailableProviderIds(settings, getProviderIds()).includes(providerId))
+      return publicError(409, 'provider_unavailable', 'session provider is no longer available');
+    let models;
+    try {
+      ({ models } = await catalog.load(providerId));
+    } catch {
+      return publicError(503, 'model_catalog_unavailable', 'model catalog unavailable', true);
+    }
+    if (!models.some((model) => model.id === snapshot.modelId))
+      return publicError(409, 'model_unavailable', 'session model is no longer available');
+    return null;
+  }
+
+  /** Legacy fixture composition without the production runtime factory. */
+  async #composeLegacyFixtureSession(
+    _claims: GatewayAssertionClaims,
+    options: Omit<GatewaySessionCompositionOptions, 'binding' | 'providerBroker' | 'providerProbe'> | undefined,
+    binding: SessionBinding,
+    correlationId?: string,
+  ): Promise<ReturnType<typeof composeGatewaySession>> {
     const providerProbe = this.#config.providerProbe;
     if (!providerProbe) throw new GatewayStartupError();
     const providerBroker = assertProviderBrokerReady(this.#config.providerBroker, providerProbe);
@@ -2264,6 +2565,18 @@ export class Term2Gateway {
       if (this.#config.runtimeFactory && !(await waitBounded(this.#config.runtimeFactory.shutdown(remaining()))))
         markForced();
       this.#sessions.clear();
+      // Close persistence handles that outlived their session: read-path opens
+      // and compositions that failed before installing a dispose hook would
+      // otherwise keep file descriptors and locks past shutdown.
+      for (const [sessionId, persisted] of this.#persisted) {
+        try {
+          await waitBounded(persisted.persistence.close());
+          await waitBounded(this.#config.persistence?.close(sessionId, 'interrupted') ?? Promise.resolve());
+        } catch {
+          // Shutdown proceeds; the interrupted status is recorded in the index.
+        }
+      }
+      this.#persisted.clear();
       this.#replay.close();
       // The audit record is bounded by the same deadline. A broken audit sink
       // must not keep the local owner process alive indefinitely, and a
@@ -2979,9 +3292,17 @@ function hasTerminalTurnEvent(
 
 function terminalTranscriptFact(event: ConversationEvent, turnId: string): LogEvent | null {
   if (event.type === 'final') {
+    const finalText = boundedText(event.finalText, 16_384);
     const items = event.turnItems ? [...event.turnItems] : [];
-    if (!items.some((item) => item.type === 'assistant_text')) {
-      items.push({ type: 'assistant_text', text: boundedText(event.finalText, 16_384) });
+    const existingText = items.findIndex((item) => item.type === 'assistant_text');
+    if (existingText >= 0) {
+      // Derived turn items may carry an empty assistant_text entry when the
+      // stream produced no text parts; the terminal finalText is the
+      // authoritative text for the persisted turn.
+      const existing = items[existingText] as { type: 'assistant_text'; text?: string };
+      if (!existing.text && finalText) items[existingText] = { ...existing, text: finalText };
+    } else if (finalText) {
+      items.push({ type: 'assistant_text', text: finalText });
     }
     return { type: 'assistant_turn', turnId, turn: { items } };
   }

@@ -2,7 +2,12 @@
 
 ## Resume here
 
-**Status (2026-09-12): every implementation milestone is merged. term2 main: M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`. ChatForge `integration/v1-chat`: M5c `2caf86c`, M4c `507b1cb`. Only the live E2E run is open.**
+**Status (2026-09-12): complete. Live E2E passed after the fix wave.** term2 main: M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`, F2 `45373d68`, F3 `1622c851`, F4 `33854fc3`, F1 `a99eafaa`, F5 `afde86c6`. ChatForge `integration/v1-chat`: M5c `2caf86c`, M4c `507b1cb`, F5c `ae398a4`. The first live run found D1 (read-only grants writable through `run_code`), D2–D4 and D3b; the fix wave F1–F5 and F5c closed them, and the final live run passed D1–D4 and the F4/F5 checks.
+
+**Open follow-ups (not started):**
+- **Codex manual compaction fails on multi-turn sessions.** The final live run got `native_failed` on 3 of 3 three-turn sessions, and success only on a one-turn session. It is reported truthfully, but the native call itself is failing. The CLI's `/compact` shares this path.
+- **Pre-start refusal is unreachable on codex.** The `no_complete_cold_turn` guard lives in the local planner, which codex compaction never reaches.
+- **The live E2E harness is unmerged.** `scripts/e2e/chatforge-live.mjs` is on branch `wg-e2e` (tip `ca2fc243`) and has not been reviewed.
 
 Three rules carried into later milestones, because they were learned the hard way:
 - `createProductionRuntimeFactory` gives each session isolated settings and reads from

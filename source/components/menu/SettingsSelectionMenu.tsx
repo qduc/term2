@@ -84,7 +84,9 @@ const SettingsSelectionMenu: FC<Props> = ({
         renderItem={(item, actualIndex, isSelected) => {
           const category = getSettingCategory(item.key);
           const prevCategory = actualIndex > 0 ? getSettingCategory(items[actualIndex - 1]!.key) : null;
-          const showHeader = actualIndex === scrollOffset || category.id !== prevCategory?.id;
+          // A filter query searches all sections and ranks by relevance, so the
+          // category boundaries carry no meaning there — render a flat list.
+          const showHeader = !isSearchingAll && (actualIndex === scrollOffset || category.id !== prevCategory?.id);
 
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
           const paddedKey =

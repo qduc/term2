@@ -73,6 +73,33 @@ it.sequential('SettingsSelectionMenu shows category headers', async () => {
   expect(output.includes('Model & Reasoning')).toBe(true);
 });
 
+it.sequential('SettingsSelectionMenu hides category headers while searching all sections', async () => {
+  // Distinct tab labels so the header labels (derived from the real category
+  // config) cannot be confused with the tab bar text in the rendered frame.
+  const tabs = {
+    activeCategoryId: 'model',
+    categories: [
+      { id: 'model', label: 'TabA' },
+      { id: 'shell', label: 'TabB' },
+    ],
+  };
+  const { lastFrame } = await renderInAct(
+    <SettingsSelectionMenu
+      items={items}
+      selectedIndex={0}
+      query="ag"
+      isSearchingAll={true}
+      activeCategoryId={tabs.activeCategoryId}
+      categories={tabs.categories}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output.includes('agent.model')).toBe(true);
+  expect(output.includes('shell.timeout')).toBe(true);
+  expect(output.includes('Model & Reasoning')).toBe(false);
+  expect(output.includes('Shell Execution')).toBe(false);
+});
+
 it.sequential('SettingsSelectionMenu marks the selected item', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsSelectionMenu

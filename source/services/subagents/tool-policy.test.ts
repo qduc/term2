@@ -629,17 +629,19 @@ describe('read-only worker shell construction', () => {
         logger: createMockLogger(),
         sessionContextService: createSessionContextService(),
       });
-      const shell = new SubagentToolFactory({
+      const tools = new SubagentToolFactory({
         settings,
         logger: createMockLogger(),
         executionContext: createMockExecutionContext(cwd),
         toolPolicy: policy,
         readOnly: true,
-      })
-        .buildToolDefinitions(createDefinition({ role: 'worker', canRunShell: true }), [], '', false, false)
-        .find((tool) => tool.name === 'shell');
+      }).buildToolDefinitions(createDefinition({ role: 'worker', canRunShell: true }), [], '', false, false);
+      const shell = tools.find((tool) => tool.name === 'shell');
 
       expect(shell).toBeDefined();
+      expect(tools.map((tool) => tool.name)).not.toEqual(
+        expect.arrayContaining(['apply_patch', 'create_file', 'search_replace']),
+      );
       await expect(shell!.execute({ command: 'printf blocked > blocked.txt' })).resolves.toMatch(/read-only|blocked/i);
       expect(fs.existsSync(path.join(cwd, 'blocked.txt'))).toBe(false);
     } finally {

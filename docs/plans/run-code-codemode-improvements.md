@@ -2,11 +2,11 @@
 
 ## Resume here
 
-Status: complete through Milestone 6 (2026-09-12). Milestones 0–3 are
-implemented through `c2f65197`; Milestone 4 closed with no catalog change after
-measurement; Milestone 5 landed in `ff3616fd`; and the Milestone 6 extraction
-and dead-path cleanup landed in `9d2ce6c6` and `034bb633`. The program exit
-criteria are satisfied.
+Status: complete through Milestone 6 and merged to `main` in `5b795496`
+(2026-09-12). Milestones 0–3 are implemented through `c2f65197`; Milestone 4
+closed with no catalog change after measurement; Milestone 5 landed in
+`ff3616fd`; and the Milestone 6 extraction and dead-path cleanup landed in
+`9d2ce6c6` and `034bb633`. The program exit criteria are satisfied.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for

@@ -2,9 +2,9 @@
 
 ## Resume here
 
-**Status (2026-09-12): M0 merged `38d7cd7d`, M1 merged `8351e165`, M2 merged `73a9e3ab`. M4/M4c, M5b, and M5c are open.**
+**Status (2026-09-12): every implementation milestone is merged. term2 main: M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`. ChatForge `integration/v1-chat`: M5c `2caf86c`, M4c `507b1cb`. Only the live E2E run is open.**
 
-Two rules carried into later milestones, because they were learned the hard way:
+Three rules carried into later milestones, because they were learned the hard way:
 - `createProductionRuntimeFactory` gives each session isolated settings and reads from
   the launcher only an exact allowlist whose entries must start with `agent.` or
   `webSearch.` (`runtime-factory.test.ts` enforces this). The first M1 draft passed every
@@ -13,6 +13,12 @@ Two rules carried into later milestones, because they were learned the hard way:
 - A turn the gateway starts on its own (a retry command, for example) must not write a
   synthetic `user_message` fact. `conversation-replay.ts` turns every `user_message`
   into provider history, so an empty one corrupts the model's context after a restart.
+- Restart recovery of a *child* (subagent) interaction settles the child with
+  `subagent_interrupted` and never appends `turn_failed` to the originating turn. That
+  turn has usually already completed, and a second terminal event flips it to failed in
+  both the gateway projection and ChatForge. Child approvals currently work only
+  through the foreground-lease path; async subagents can only ask questions
+  (contract 13 §7).
 
 The web client is ChatForge at `~/chat-term2-integration/chat/` (a git repo on
 branch `integration/v1-chat`). It has a frontend and a BFF backend that calls this

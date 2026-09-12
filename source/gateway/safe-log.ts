@@ -27,7 +27,14 @@ const OPERATIONS = new Set<GatewaySafeLogMetadata['operation']>([
   'shutdown',
 ]);
 const OUTCOMES = new Set<GatewaySafeLogMetadata['outcome']>(['allowed', 'denied', 'failed', 'interrupted']);
-const REASONS = new Set([
+
+/**
+ * Single source of truth for the audit `reasonCode` allowlist. The tuple
+ * derives the `SafeLogReason` union, and `createSafeLogMetadata` accepts only
+ * that union, so a code missing from this list is a `tsc` error rather than an
+ * audit-time `GatewayLogError`.
+ */
+const SAFE_LOG_REASONS = [
   'disabled',
   'invalid_assertion',
   'replay',
@@ -37,6 +44,7 @@ const REASONS = new Set([
   'model_unavailable',
   'provider_unavailable',
   'shutdown',
+  'forced_shutdown',
   'startup_failed',
   'accepted',
   'completed',
@@ -48,7 +56,11 @@ const REASONS = new Set([
   'settings_conflict',
   'settings_not_allowed',
   'not_persisted',
-]);
+] as const;
+
+export type SafeLogReason = (typeof SAFE_LOG_REASONS)[number];
+
+const REASONS = new Set<string>(SAFE_LOG_REASONS);
 const ALLOWED_KEYS = new Set([
   'schemaVersion',
   'sessionId',
@@ -76,8 +88,9 @@ export function principalRef(ownerUserId: string, key: string | Buffer): string 
 }
 
 export function createSafeLogMetadata(
-  input: Omit<GatewaySafeLogMetadata, 'schemaVersion' | 'correlationId'> & {
+  input: Omit<GatewaySafeLogMetadata, 'schemaVersion' | 'correlationId' | 'reasonCode'> & {
     correlationId?: string;
+    reasonCode?: SafeLogReason;
   },
 ): GatewaySafeLogMetadata {
   const value = { schemaVersion: 1, correlationId: input.correlationId ?? randomUUID(), ...input } as Record<

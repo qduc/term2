@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { request as httpRequest } from 'node:http';
+import { connect } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AssertionVerifier, createGatewayAssertion, GatewayAssertionError } from './assertion.js';
 import {
@@ -26,7 +27,7 @@ import { validateGatewayManifest, WorkspaceAdmission } from './workspace-admissi
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createAgentStream } from '../services/agent-stream.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
-import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contracts.js';
+import type { GatewayAssertionClaims, GatewaySafeLogMetadata, ProviderBrokerCapability } from './contracts.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 const tempRoots: string[] = [];
@@ -1973,6 +1974,78 @@ describe('gateway startup and assertion verifier', () => {
       new GatewayAssertionError('unknown_key'),
     );
     expect(secondPublicKey).toContain('BEGIN PUBLIC KEY');
+  });
+
+  it('resolves a shutdown forced past its deadline and audits it as forced_shutdown', async () => {
+    const root = makeTemp();
+    const manifestPath = path.join(root, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+    const auditRecords: GatewaySafeLogMetadata[] = [];
+    const gateway = Term2Gateway.create({
+      enabled: true,
+      socketPath: path.join(root, 'gateway.sock'),
+      manifestPath,
+      manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+      replayDbPath: path.join(root, 'replay.sqlite'),
+      issuer: 'chatforge-bff',
+      audience: 'term2-gateway',
+      publicKeys: { active: publicKey },
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      workerSandboxAvailable: true,
+      workspaceBoundaryProbe: boundaryProbe,
+      allowWrite: true,
+      auditWriter: async (record) => {
+        if (record.operation === 'shutdown') auditRecords.push(record);
+      },
+      tmpDir: path.join(root, 'tmp'),
+    });
+    await gateway.start();
+    // A held connection keeps server.close() pending, so the 1ms grace expires
+    // and the audit record describes a forced completion.
+    const held = connect({ path: path.join(root, 'gateway.sock') });
+    await new Promise<void>((resolve, reject) => {
+      held.once('connect', () => resolve());
+      held.once('error', reject);
+    });
+    try {
+      await expect(gateway.shutdown(1)).resolves.toBeUndefined();
+      expect(auditRecords).toHaveLength(1);
+      expect(auditRecords[0]).toMatchObject({
+        operation: 'shutdown',
+        outcome: 'interrupted',
+        reasonCode: 'forced_shutdown',
+      });
+    } finally {
+      held.destroy();
+    }
+  });
+
+  it('resolves shutdown when the audit sink fails', async () => {
+    const root = makeTemp();
+    const manifestPath = path.join(root, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+    const gateway = Term2Gateway.create({
+      enabled: true,
+      socketPath: path.join(root, 'gateway.sock'),
+      manifestPath,
+      manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+      replayDbPath: path.join(root, 'replay.sqlite'),
+      issuer: 'chatforge-bff',
+      audience: 'term2-gateway',
+      publicKeys: { active: publicKey },
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      workerSandboxAvailable: true,
+      workspaceBoundaryProbe: boundaryProbe,
+      allowWrite: true,
+      auditWriter: (record) => {
+        if (record.operation === 'shutdown') throw new Error('audit sink unavailable');
+        return Promise.resolve();
+      },
+      tmpDir: path.join(root, 'tmp'),
+    });
+    await expect(gateway.shutdown(100)).resolves.toBeUndefined();
   });
 
   it('replay survives a gateway restart through the SQLite ledger', () => {

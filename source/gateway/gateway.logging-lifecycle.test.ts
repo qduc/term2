@@ -22,6 +22,19 @@ describe('gateway-safe logging and lifecycle', () => {
     ).toThrowError(new GatewayLogError());
   });
 
+  it('derives the reason-code allowlist into a compile-time contract', () => {
+    expect(
+      createSafeLogMetadata({
+        operation: 'shutdown',
+        outcome: 'interrupted',
+        reasonCode: 'forced_shutdown',
+      }).reasonCode,
+    ).toBe('forced_shutdown');
+    // @ts-expect-error reasonCode is SafeLogReason: unlisted codes must fail tsc, not only the runtime allowlist
+    const unlisted: Parameters<typeof createSafeLogMetadata>[0]['reasonCode'] = 'not_a_known_reason';
+    expect(unlisted).toBe('not_a_known_reason');
+  });
+
   it('drains workers, rejects new workers, and cleans every handle once', async () => {
     const lifecycle = new GatewayLifecycle();
     let closes = 0;

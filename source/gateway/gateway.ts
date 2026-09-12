@@ -2266,16 +2266,24 @@ export class Term2Gateway {
       this.#sessions.clear();
       this.#replay.close();
       // The audit record is bounded by the same deadline. A broken audit sink
-      // must not keep the local owner process alive indefinitely.
-      await waitBounded(
-        this.#audit.write(
-          createSafeLogMetadata({
-            operation: 'shutdown',
-            outcome: forced ? 'interrupted' : 'allowed',
-            reasonCode: forced ? 'forced_shutdown' : 'shutdown',
-          }),
-        ),
-      );
+      // must not keep the local owner process alive indefinitely, and a
+      // rejected or unbuildable record must not turn a finished shutdown into
+      // a rejection for the caller: the audit is best-effort here.
+      try {
+        await waitBounded(
+          this.#audit.write(
+            createSafeLogMetadata({
+              operation: 'shutdown',
+              outcome: forced ? 'interrupted' : 'allowed',
+              reasonCode: forced ? 'forced_shutdown' : 'shutdown',
+            }),
+          ),
+        );
+      } catch (error) {
+        console.error(
+          `term2 gateway: shutdown audit failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     })();
     return this.#shutdownPromise;
   }

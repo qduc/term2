@@ -867,7 +867,7 @@ it.sequential('settings-backed model selection restores settings menu after subm
   unregisterProvider(mockProviderId);
 });
 
-const assertSettingsModelTriggerOpensModelMenu = async (
+const assertSettingsTierTriggerOpensPoolEditor = async (
   settingKey: 'agent.smartModel' | 'agent.balancedModel' | 'agent.cheapModel' | 'agent.choreModel',
 ) => {
   clearModelCache();
@@ -905,30 +905,33 @@ const assertSettingsModelTriggerOpensModelMenu = async (
     );
 
     await writeInput(stdin, `${SETTINGS_TRIGGER}${settingKey} `);
-    const frame = await waitFor(lastFrame, (f) => f.includes('gpt-test'), { timeoutMs: 3000 });
+    // Tier model settings are pools: they open the pool editor, not the
+    // single-model menu.
+    const frame = await waitFor(lastFrame, (f) => f.includes('Mode:subagent_pool_selection'), {
+      timeoutMs: 3000,
+    });
 
-    expect(frame).toContain('Mode:model_selection');
-    expect(frame).toContain('gpt-test');
+    expect(frame).toContain('Mode:subagent_pool_selection');
   } finally {
     clearModelCache();
     unregisterProvider(mockProviderId);
   }
 };
 
-it.sequential('smartModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.smartModel');
+it.sequential('smartModel setting opens the tier pool editor', async () => {
+  await assertSettingsTierTriggerOpensPoolEditor('agent.smartModel');
 });
 
-it.sequential('balancedModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.balancedModel');
+it.sequential('balancedModel setting opens the tier pool editor', async () => {
+  await assertSettingsTierTriggerOpensPoolEditor('agent.balancedModel');
 });
 
-it.sequential('cheapModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.cheapModel');
+it.sequential('cheapModel setting opens the tier pool editor', async () => {
+  await assertSettingsTierTriggerOpensPoolEditor('agent.cheapModel');
 });
 
-it.sequential('choreModel setting opens the model selection menu', async () => {
-  await assertSettingsModelTriggerOpensModelMenu('agent.choreModel');
+it.sequential('choreModel setting opens the tier pool editor', async () => {
+  await assertSettingsTierTriggerOpensPoolEditor('agent.choreModel');
 });
 
 it.sequential('command-backed model selection still submits after selection', async () => {

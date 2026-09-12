@@ -15,7 +15,7 @@ import {
 } from '../../prompts/shell-auto-approval.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
-import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../utils/shell/sandbox/denied-read-detector.js';
 
@@ -445,7 +445,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   if (mode === 'off') return out;
 
   const choreModel = resolveAncillaryModelTier('chore', settingsService);
-  const autoApproveModel = settingsService.get('agent.choreModel') ?? choreModel.model;
+  const autoApproveModel = getTierModelPool('chore', settingsService)[0] ?? choreModel.model;
   const autoApproveProvider = settingsService.get('agent.choreProvider') ?? choreModel.provider;
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];

@@ -37,6 +37,11 @@ const MIGRATIONS: Migration[] = [
   { target: 'agent.choreProvider', legacy: ['agent.autoApproveProvider', 'tools.editHealingProvider'] },
 ];
 
+// Tier model settings are model pools; a migrated legacy string value
+// normalizes to a single-entry pool so runtime reads see one consistent shape
+// (migration output is not re-parsed through the schema).
+const TIER_MODEL_TARGETS = new Set(['agent.smartModel', 'agent.balancedModel', 'agent.cheapModel', 'agent.choreModel']);
+
 function getOwnValue(object: unknown, path: string): { found: boolean; value?: unknown } {
   let current = object;
   for (const segment of path.split('.')) {
@@ -76,7 +81,11 @@ export function migrateLegacyAncillarySettings(
       .find((candidate) => candidate.found && candidate.value !== undefined && candidate.value !== null);
     if (!legacyValue) continue;
 
-    setValue(migratedConfig, migration.target, legacyValue.value);
+    const value =
+      TIER_MODEL_TARGETS.has(migration.target) && !Array.isArray(legacyValue.value)
+        ? [legacyValue.value]
+        : legacyValue.value;
+    setValue(migratedConfig, migration.target, value);
     migrated = true;
   }
 

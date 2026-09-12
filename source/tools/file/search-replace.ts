@@ -16,7 +16,7 @@ import {
 } from '../format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../../services/execution-context.js';
-import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
+import { getTierModelPool, resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
 import { getApprovalPresentationCapability } from '../tool-capabilities.js';
 import { withFileLock } from './file-locks.js';
 import {
@@ -467,7 +467,7 @@ export function createSearchReplaceToolDefinition(deps: {
           if (enableEditHealing) {
             healingAttempted = true;
             const choreModel = resolveAncillaryModelTier('chore', settingsService);
-            const healingModel = settingsService.get('agent.choreModel') ?? choreModel.model;
+            const healingModel = getTierModelPool('chore', settingsService)[0] ?? choreModel.model;
             const healingResult = await editHealing(
               operation,
               content,

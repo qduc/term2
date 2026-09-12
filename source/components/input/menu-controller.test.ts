@@ -115,6 +115,7 @@ describe('MenuControllerImpl', () => {
                 kind: 'subagent_pool',
                 settingKey: 'agent.mentorPool',
                 roleLabel: 'Mentor',
+                entryShape: 'entries',
                 origin: {
                   type: 'settings-list',
                   operation: 'set',

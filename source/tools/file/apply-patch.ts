@@ -25,7 +25,7 @@ import {
   truncateToUtf8Bytes,
 } from '../../utils/output/bound-tool-result.js';
 import { healPatchOperation } from './patch-healing.js';
-import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
+import { getTierModelPool, resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
 import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 
 /**
@@ -529,7 +529,7 @@ export function createApplyPatchToolDefinition(deps: {
 
                   try {
                     const choreModel = resolveAncillaryModelTier('chore', settingsService);
-                    const healingModel = settingsService.get('agent.choreModel') ?? choreModel.model;
+                    const healingModel = getTierModelPool('chore', settingsService)[0] ?? choreModel.model;
                     const providerId = settingsService.get('agent.choreProvider') ?? choreModel.provider;
 
                     const healingResult = await patchHealing(

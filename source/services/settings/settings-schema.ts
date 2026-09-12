@@ -7,10 +7,9 @@ import {
   resolveProviderName,
 } from './custom-provider-normalization.js';
 
-// Shared shape for round-robin/fan-out model pools (mentor pool, per-role
-// subagent pools). One entry overrides the role's configured model;
-// `provider`/`reasoningEffort` fall back to the role's configuration when
-// omitted.
+// Shared shape for the fan-out mentor model pool. One entry overrides the
+// role's configured model; `provider`/`reasoningEffort` fall back to the
+// role's configuration when omitted.
 const SubagentPoolEntrySchema = z.object({
   model: z.string().min(1),
   provider: z.string().min(1).optional(),
@@ -19,6 +18,18 @@ const SubagentPoolEntrySchema = z.object({
 const MAX_SUBAGENT_POOL_ENTRIES = 8;
 const subagentPoolSchema = (description: string) =>
   z.array(SubagentPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).default([]).describe(description);
+
+// Tier model settings are model pools: a list of model ids round-robined for
+// subagent spawns (see SubagentRolePoolSelector) and read first-entry for
+// other ancillary consumers. A bare string from older configs (or the legacy
+// migration) normalizes to a single-entry pool.
+const tierModelPoolSchema = (description: string) =>
+  z
+    .preprocess((value) => {
+      if (value === undefined || value === null || value === '') return undefined;
+      return Array.isArray(value) ? value : [value];
+    }, z.array(z.string().min(1)).max(MAX_SUBAGENT_POOL_ENTRIES).optional())
+    .describe(description);
 
 // Define schemas for validation
 export const AgentSettingsSchema = z.object({
@@ -33,11 +44,9 @@ export const AgentSettingsSchema = z.object({
     .min(1)
     .optional()
     .describe('Model for higher-tier workflow agents. Falls back to agent.model when unset.'),
-  smartModel: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Model for smart ancillary tasks. Falls back to agent.model when unset.'),
+  smartModel: tierModelPoolSchema(
+    'Models for smart ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+  ),
   smartProvider: z
     .string()
     .min(1)
@@ -47,11 +56,9 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort for smart ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
-  balancedModel: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Model for balanced ancillary tasks. Falls back to agent.model when unset.'),
+  balancedModel: tierModelPoolSchema(
+    'Models for balanced ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+  ),
   balancedProvider: z
     .string()
     .min(1)
@@ -61,11 +68,9 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort for balanced ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
-  cheapModel: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Model for cheap ancillary tasks. Falls back to agent.model when unset.'),
+  cheapModel: tierModelPoolSchema(
+    'Models for cheap ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+  ),
   cheapProvider: z
     .string()
     .min(1)
@@ -75,11 +80,9 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort for cheap ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
-  choreModel: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Model for chore ancillary tasks. Falls back to agent.model when unset.'),
+  choreModel: tierModelPoolSchema(
+    'Models for chore ancillary tasks (auto-approval reviews, edit healing). Falls back to agent.model when unset.',
+  ),
   choreProvider: z
     .string()
     .min(1)
@@ -266,9 +269,6 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentExplorerPool: subagentPoolSchema(
-    'Models used round-robin for the explorer subagent, one per spawn (overrides agent.subagentExplorerModel/Provider/ReasoningEffort for that spawn).',
-  ),
   subagentWorkerModel: z
     .string()
     .min(1)
@@ -283,9 +283,6 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentWorkerPool: subagentPoolSchema(
-    'Models used round-robin for the worker subagent, one per spawn (overrides agent.subagentWorkerModel/Provider/ReasoningEffort for that spawn).',
-  ),
   subagentResearcherModel: z
     .string()
     .min(1)
@@ -320,9 +317,6 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentLibrarianPool: subagentPoolSchema(
-    'Models used round-robin for the librarian subagent, one per spawn (overrides agent.subagentLibrarianModel/Provider/ReasoningEffort for that spawn).',
-  ),
 });
 
 export const ShellSettingsSchema = z.object({
@@ -728,16 +722,16 @@ export interface SettingsWithSources {
     model: SettingWithSource<string>;
     efficientModel: SettingWithSource<string | undefined>;
     capableModel: SettingWithSource<string | undefined>;
-    smartModel: SettingWithSource<string | undefined>;
+    smartModel: SettingWithSource<string[] | undefined>;
     smartProvider: SettingWithSource<string | undefined>;
     smartReasoningEffort: SettingWithSource<string | undefined>;
-    balancedModel: SettingWithSource<string | undefined>;
+    balancedModel: SettingWithSource<string[] | undefined>;
     balancedProvider: SettingWithSource<string | undefined>;
     balancedReasoningEffort: SettingWithSource<string | undefined>;
-    cheapModel: SettingWithSource<string | undefined>;
+    cheapModel: SettingWithSource<string[] | undefined>;
     cheapProvider: SettingWithSource<string | undefined>;
     cheapReasoningEffort: SettingWithSource<string | undefined>;
-    choreModel: SettingWithSource<string | undefined>;
+    choreModel: SettingWithSource<string[] | undefined>;
     choreProvider: SettingWithSource<string | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
@@ -798,18 +792,15 @@ export interface SettingsWithSources {
     subagentExplorerModel: SettingWithSource<string | undefined>;
     subagentExplorerProvider: SettingWithSource<string | undefined>;
     subagentExplorerReasoningEffort: SettingWithSource<string | undefined>;
-    subagentExplorerPool: SettingWithSource<{ model: string; provider?: string; reasoningEffort?: string }[]>;
     subagentWorkerModel: SettingWithSource<string | undefined>;
     subagentWorkerProvider: SettingWithSource<string | undefined>;
     subagentWorkerReasoningEffort: SettingWithSource<string | undefined>;
-    subagentWorkerPool: SettingWithSource<{ model: string; provider?: string; reasoningEffort?: string }[]>;
     subagentResearcherModel: SettingWithSource<string | undefined>;
     subagentResearcherProvider: SettingWithSource<string | undefined>;
     subagentResearcherReasoningEffort: SettingWithSource<string | undefined>;
     subagentLibrarianModel: SettingWithSource<string | undefined>;
     subagentLibrarianProvider: SettingWithSource<string | undefined>;
     subagentLibrarianReasoningEffort: SettingWithSource<string | undefined>;
-    subagentLibrarianPool: SettingWithSource<{ model: string; provider?: string; reasoningEffort?: string }[]>;
   };
   shell: {
     timeout: SettingWithSource<number>;
@@ -993,18 +984,15 @@ export const SETTING_KEYS = {
   AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
   AGENT_SUBAGENT_EXPLORER_PROVIDER: 'agent.subagentExplorerProvider',
   AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
-  AGENT_SUBAGENT_EXPLORER_POOL: 'agent.subagentExplorerPool',
   AGENT_SUBAGENT_WORKER_MODEL: 'agent.subagentWorkerModel',
   AGENT_SUBAGENT_WORKER_PROVIDER: 'agent.subagentWorkerProvider',
   AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
-  AGENT_SUBAGENT_WORKER_POOL: 'agent.subagentWorkerPool',
   AGENT_SUBAGENT_RESEARCHER_MODEL: 'agent.subagentResearcherModel',
   AGENT_SUBAGENT_RESEARCHER_PROVIDER: 'agent.subagentResearcherProvider',
   AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT: 'agent.subagentResearcherReasoningEffort',
   AGENT_SUBAGENT_LIBRARIAN_MODEL: 'agent.subagentLibrarianModel',
   AGENT_SUBAGENT_LIBRARIAN_PROVIDER: 'agent.subagentLibrarianProvider',
   AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
-  AGENT_SUBAGENT_LIBRARIAN_POOL: 'agent.subagentLibrarianPool',
   SUBAGENT_ASYNC_SESSION_TTL_MS: 'subagent.asyncSessionTtlMs',
   SUBAGENT_ASYNC_MESSAGE_CAP: 'subagent.asyncMessageCap',
   UI_HISTORY_SIZE: 'ui.historySize',
@@ -1152,18 +1140,15 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_POOL,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_WORKER_POOL,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_POOL,
   SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
   SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
@@ -1285,18 +1270,15 @@ export const DEFAULT_SETTINGS: SettingsData = {
     subagentExplorerModel: undefined,
     subagentExplorerProvider: undefined,
     subagentExplorerReasoningEffort: undefined,
-    subagentExplorerPool: [],
     subagentWorkerModel: undefined,
     subagentWorkerProvider: undefined,
     subagentWorkerReasoningEffort: undefined,
-    subagentWorkerPool: [],
     subagentResearcherModel: undefined,
     subagentResearcherProvider: undefined,
     subagentResearcherReasoningEffort: undefined,
     subagentLibrarianModel: undefined,
     subagentLibrarianProvider: undefined,
     subagentLibrarianReasoningEffort: undefined,
-    subagentLibrarianPool: [],
   },
   shell: {
     timeout: 120000,

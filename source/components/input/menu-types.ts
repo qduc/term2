@@ -83,6 +83,8 @@ export type MenuFrame =
       kind: 'subagent_pool';
       settingKey: string;
       roleLabel: string;
+      /** 'models' pools hold plain model-id strings (tiers); 'entries' pools hold {model, provider, reasoningEffort}. */
+      entryShape: 'entries' | 'models';
       binding: TextBinding;
       origin: SettingsOrigin;
     }

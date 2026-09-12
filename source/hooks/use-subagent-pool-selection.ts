@@ -70,7 +70,19 @@ const noOpLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-const cloneEntries = (value: unknown, roleLabel: string): SubagentPoolEntry[] => {
+// Tier model pools persist plain model-id strings (a bare string normalizes
+// to a single-entry pool); the editor surfaces them as {model} entries.
+const tierPoolSchema = z.preprocess(
+  (value) =>
+    value === undefined || value === null || value === '' ? undefined : Array.isArray(value) ? value : [value],
+  z.array(z.string().min(1)).max(MAX_SUBAGENT_POOL_ENTRIES),
+);
+
+const cloneEntries = (value: unknown, roleLabel: string, entryShape: 'entries' | 'models'): SubagentPoolEntry[] => {
+  if (entryShape === 'models') {
+    const parsed = tierPoolSchema.safeParse(value);
+    return parsed.success ? parsed.data.map((model) => ({ model })) : [];
+  }
   const parsed = subagentPoolSchema(roleLabel).safeParse(value);
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
 };
@@ -189,8 +201,10 @@ export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]
 export type SubagentPoolSelectionConfig = {
   /** Setting key the pool is persisted under (e.g. `agent.mentorPool`). */
   settingKey: string;
-  /** Human label used in editor copy ("Mentor", "Explorer", ...). */
+  /** Human label used in editor copy ("Mentor", "Smart", ...). */
   roleLabel: string;
+  /** 'models' pools hold plain model-id strings (tiers); 'entries' pools hold rich entries (mentor). */
+  entryShape: 'entries' | 'models';
   /** Setting key the "inherit provider" fallback reads from, when one exists. */
   fallbackProviderKey?: string;
 };
@@ -201,7 +215,7 @@ export function useSubagentPoolSelection(
   loggingService: ILoggingService | undefined,
   config: SubagentPoolSelectionConfig,
 ) {
-  const { settingKey, roleLabel } = config;
+  const { settingKey, roleLabel, entryShape } = config;
   const fallbackProviderKey = config.fallbackProviderKey ?? getSubagentPoolFallbackProviderKey(settingKey);
   const { input, setInput, replaceInput } = useInputContext();
   const [phase, setPhase] = useState<SubagentPoolPhase>('list');
@@ -332,7 +346,7 @@ export function useSubagentPoolSelection(
   useEffect(() => {
     if (!active) return;
     const currentSettingsService = settingsServiceRef.current;
-    const loaded = cloneEntries(currentSettingsService.get(settingKey as any), roleLabel);
+    const loaded = cloneEntries(currentSettingsService.get(settingKey as any), roleLabel, entryShape);
     setEntries(loaded);
     setProviderItems(loadProviderItems(currentSettingsService));
     setPhase('list');
@@ -343,7 +357,7 @@ export function useSubagentPoolSelection(
     setDiscardFromPhase(null);
     setErrorMessage(null);
     setFieldErrors({});
-  }, [active, roleLabel, settingKey]);
+  }, [active, entryShape, roleLabel, settingKey]);
 
   useEffect(() => {
     if (!active || phase !== 'edit_model' || providerIds.length === 0) return;
@@ -431,10 +445,10 @@ export function useSubagentPoolSelection(
       setDraftModified(false);
       setErrorMessage(null);
       setFieldErrors({});
-      // New entries jump straight into the model menu (with provider tabs) so
-      // the user picks model + provider in one step instead of a separate
-      // provider field first.
-      if (entry === null) {
+      // Model-only pools (tiers) always edit through the model menu; rich
+      // pools jump there for new entries so the user picks model + provider
+      // in one step instead of a separate provider field first.
+      if (entry === null || entryShape === 'models') {
         setBrowsingProvider(resolveBrowseProvider(undefined));
         setPhase('edit_model');
         replaceInput('');
@@ -444,7 +458,7 @@ export function useSubagentPoolSelection(
         setInput('');
       }
     },
-    [replaceInput, resolveBrowseProvider, setInput],
+    [entryShape, replaceInput, resolveBrowseProvider, setInput],
   );
 
   const saveDraft = useCallback(() => {
@@ -602,6 +616,26 @@ export function useSubagentPoolSelection(
         setErrorMessage('Fix the highlighted fields before saving.');
         return false;
       }
+      if (entryShape === 'models') {
+        // Model-only pools commit immediately: there is no provider or
+        // reasoning field to review afterwards — the tier's own provider
+        // and reasoning settings apply.
+        const next: SubagentPoolEntry = { model };
+        setEntries((current) => {
+          if (draft._isNew || editingIndex === null) return [...current, next];
+          return current.map((entry, index) => (index === editingIndex ? next : entry));
+        });
+        setDraft(null);
+        setEditingIndex(null);
+        setDraftModified(true);
+        setFieldErrors({});
+        setErrorMessage(null);
+        setBrowsingProvider(null);
+        setPhase('list');
+        selection.setSelectedIndex(0);
+        setInput('');
+        return true;
+      }
       // Pin the provider belonging to the selected unified row.
       setDraft(applySubagentPoolModelPick(draft, model, provider));
       setDraftModified(true);
@@ -613,7 +647,7 @@ export function useSubagentPoolSelection(
       setInput('');
       return true;
     },
-    [draft, phase, setInput, selection.setSelectedIndex],
+    [draft, editingIndex, entryShape, phase, setInput, selection.setSelectedIndex],
   );
 
   const selectModel = useCallback(
@@ -737,7 +771,10 @@ export function useSubagentPoolSelection(
 
   const saveIntent = useCallback(
     (frameId: string): MenuEffect | null => {
-      const result = subagentPoolSchema(roleLabel).safeParse(entries);
+      // Tier model pools persist plain model-id strings.
+      const value = entryShape === 'models' ? entries.map((entry) => entry.model) : entries;
+      const result =
+        entryShape === 'models' ? tierPoolSchema.safeParse(value) : subagentPoolSchema(roleLabel).safeParse(entries);
       if (!result.success) {
         setErrorMessage(result.error.issues[0]?.message ?? `Invalid ${roleLabel.toLowerCase()} pool`);
         return null;
@@ -750,12 +787,12 @@ export function useSubagentPoolSelection(
           sourceFrameId: frameId,
           intent: {
             type: 'apply-settings',
-            changes: [{ key: settingKey, value: result.data, persistence }],
+            changes: [{ key: settingKey, value, persistence }],
           },
         },
       };
     },
-    [entries, roleLabel, settingKey, settingsService],
+    [entries, entryShape, roleLabel, settingKey, settingsService],
   );
 
   return {

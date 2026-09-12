@@ -3,7 +3,7 @@ import { findPathTrigger } from './input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { SKILLS_TRIGGER, RESUME_TRIGGER, PROFILE_TRIGGER } from './input/triggers.js';
-import { MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
+import { MODEL_SETTING_CONFIGS, MODEL_SETTING_TRIGGERS } from '../utils/ai/model-settings.js';
 
 const commandMetadata: SlashCommand[] = [
   {
@@ -59,10 +59,23 @@ it('determineActiveMenu - model triggers (priority 0)', () => {
       cursor: '/model gpt'.length,
       expected: { type: 'model', startIndex: '/model '.length, origin: 'direct-trigger' },
     },
-    ...MODEL_SETTING_CONFIGS.map(({ trigger }) => ({
+    ...MODEL_SETTING_TRIGGERS.map((trigger) => ({
       input: `${trigger}model`,
       cursor: `${trigger}model`.length,
       expected: { type: 'model' as const, startIndex: trigger.length, origin: 'settings-backed' as const },
+    })),
+    // Tier model pools no longer open the single-model menu; they fall
+    // through to the settings-value flow (the pool editor rule picks them up
+    // at a higher menu priority).
+    ...MODEL_SETTING_CONFIGS.filter((config) => config.pool).map(({ trigger, modelKey }) => ({
+      input: `${trigger}model`,
+      cursor: `${trigger}model`.length,
+      expected: {
+        type: 'settings_value' as const,
+        key: modelKey,
+        startIndex: trigger.length,
+        origin: 'settings-list' as const,
+      },
     })),
   ];
 

@@ -5,6 +5,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.js';
 import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
+import { getTierModelPool } from '../agent-runtime/model-resolver.js';
 
 export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 
@@ -73,7 +74,7 @@ export class NonInteractiveApprovalPolicy {
 
     const autoApproveModel =
       this.deps.settingsService && this.deps.agentClient
-        ? this.deps.settingsService.get('agent.choreModel')
+        ? getTierModelPool('chore', this.deps.settingsService)[0]
         : undefined;
     if (!autoApproveModel) {
       return {

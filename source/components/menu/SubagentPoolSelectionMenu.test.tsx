@@ -18,6 +18,7 @@ const renderMenu = (
       fieldErrors={{}}
       roleLabel="Mentor"
       poolKind="fanout"
+      entryShape="entries"
       {...overrides}
     />,
   );
@@ -76,6 +77,7 @@ it('keeps model editing guidance visible for both empty and existing values', ()
       fieldErrors={{}}
       roleLabel="Mentor"
       poolKind="fanout"
+      entryShape="entries"
     />,
   );
   expect(empty.lastFrame()).toContain('Type the model ID below and press Enter');
@@ -94,6 +96,7 @@ it('labels a new draft as an add flow instead of an edit flow', () => {
       fieldErrors={{}}
       roleLabel="Mentor"
       poolKind="fanout"
+      entryShape="entries"
     />,
   );
 

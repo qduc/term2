@@ -42,7 +42,10 @@ const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => (
 const Banner: FC<BannerProps> = ({ settingsService }) => {
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
   const model = useSetting(settingsService, 'agent.model');
-  const smartModel = useSetting(settingsService, 'agent.smartModel');
+  const smartPool = useSetting(settingsService, 'agent.smartModel');
+  // Display uses the pool's first entry; the pool cursor only advances per
+  // subagent spawn.
+  const smartModel = Array.isArray(smartPool) ? smartPool[0] : smartPool;
   const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
   const mentorModel = smartModel ?? legacyMentorModel;
   const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';

@@ -929,7 +929,8 @@ it('with autoApprove=true: exits without continuing when configured YELLOW histo
       if (key === 'agent.choreModel') return 'gpt-4o-mini';
       return undefined;
     },
-    getDynamic() {
+    getDynamic(key: string) {
+      if (key === 'agent.choreModel') return ['gpt-4o-mini'];
       return undefined;
     },
   };

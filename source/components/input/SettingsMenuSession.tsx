@@ -3,7 +3,11 @@ import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import { getModelSettingConfig } from '../../utils/ai/model-settings.js';
 import { buildSettingValueSuggestions, isSecretSetting, isStringSetting } from '../../utils/value-suggestions.js';
 import { SETTINGS_RESET_TRIGGER } from './triggers.js';
-import { SUBAGENT_POOL_SETTING_KEYS, getSubagentPoolRoleLabel } from '../../services/subagents/subagent-pool-config.js';
+import {
+  SUBAGENT_POOL_SETTING_KEYS,
+  getSubagentPoolEntryShape,
+  getSubagentPoolRoleLabel,
+} from '../../services/subagents/subagent-pool-config.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { EditorSnapshot, MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
@@ -67,6 +71,7 @@ const pushChildEffect = (
         kind: 'subagent_pool' as const,
         settingKey: key,
         roleLabel: getSubagentPoolRoleLabel(key),
+        entryShape: getSubagentPoolEntryShape(key),
         origin: { type: 'settings-list' as const, operation: 'set' as const, back },
         binding: {
           trigger,

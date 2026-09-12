@@ -25,6 +25,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
   const pool = useSubagentPoolSelection(settingsService, active, loggingService, {
     settingKey: frame.settingKey,
     roleLabel: frame.roleLabel,
+    entryShape: frame.entryShape,
     fallbackProviderKey: getSubagentPoolFallbackProviderKey(frame.settingKey),
   });
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -143,6 +144,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
       fieldErrors={pool.fieldErrors}
       roleLabel={frame.roleLabel}
       poolKind={poolKind}
+      entryShape={frame.entryShape}
     />
   );
 }

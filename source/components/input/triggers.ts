@@ -2,7 +2,11 @@ import type { SlashCommand } from '../../slash-commands.js';
 import { TriggerRuleRegistry } from './menu-controller.js';
 import { determineActiveMenu } from './determine-active-menu.js';
 import { getModelSettingConfigForInput } from '../../utils/ai/model-settings.js';
-import { SUBAGENT_POOL_SETTING_KEYS, getSubagentPoolRoleLabel } from '../../services/subagents/subagent-pool-config.js';
+import {
+  SUBAGENT_POOL_SETTING_KEYS,
+  getSubagentPoolEntryShape,
+  getSubagentPoolRoleLabel,
+} from '../../services/subagents/subagent-pool-config.js';
 
 export const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
@@ -185,6 +189,7 @@ export function createDefaultTriggerRegistry(
           kind: 'subagent_pool' as const,
           settingKey: active.key,
           roleLabel: getSubagentPoolRoleLabel(active.key),
+          entryShape: getSubagentPoolEntryShape(active.key),
           origin: {
             type: 'settings-list' as const,
             operation: 'set' as const,

@@ -15,6 +15,7 @@ import { ToolOwnershipRegistry } from '../../source/services/approval/tool-owner
 import { createCreateFileToolDefinition } from '../../source/tools/file/create-file.js';
 import { bindRunCodeRegistry, createRunCodeToolDefinition } from '../../source/tools/system/run-code/run-code.js';
 import type { ToolRegistry } from '../../source/tools/types.js';
+import { resolveOutsideSandboxTempRoot } from '../../source/test-helpers/outside-sandbox-temp-dir.js';
 import { createScriptedNestedApprovalAdapter } from './scripted-decision-adapter.js';
 
 const logger = {
@@ -53,8 +54,11 @@ describe('scripted nested approval acceptance entry point', () => {
   it('drives one real session turn through the outer run_code call and settles one terminal', async () => {
     const providerId = 'm2b-scripted-acceptance-provider';
     const workspace = mkdtempSync(join(tmpdir(), 'term2-nested-approval-workspace-'));
-    const approvedDir = mkdtempSync(join(tmpdir(), 'term2-nested-approval-approved-'));
-    const deniedDir = mkdtempSync(join(tmpdir(), 'term2-nested-approval-denied-'));
+    // The approved and denied dirs must sit outside SANDBOX_TEMP_DIR: writes to
+    // the sandbox temp dir are auto-approved, which would skip the two scripted
+    // nested approval decisions this test drives.
+    const approvedDir = mkdtempSync(join(resolveOutsideSandboxTempRoot(), 'term2-nested-approval-approved-'));
+    const deniedDir = mkdtempSync(join(resolveOutsideSandboxTempRoot(), 'term2-nested-approval-denied-'));
     const logPath = join(workspace, 'nested-calls.jsonl');
     const settings = createMockSettingsService({
       'shell.autoApproveMode': 'off',

@@ -5,6 +5,7 @@ import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { resolveOutsideSandboxTempRoot } from '../../test-helpers/outside-sandbox-temp-dir.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
@@ -40,6 +41,24 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-'));
 
   // Mock process.cwd
+  process.cwd = () => tempDir;
+
+  try {
+    await run(tempDir);
+  } finally {
+    process.cwd = originalCwd;
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+// Helper to create a temp dir outside SANDBOX_TEMP_DIR and change cwd to it.
+// A `../` sibling of a workspace created under os.tmpdir() is still inside the
+// allow-listed sandbox temp dir whenever TMPDIR is that dir, which would mask
+// the boundary check these tests exercise.
+async function withOutsideSandboxTempWorkspace(run: (dir: string) => Promise<void>) {
+  const originalCwd = process.cwd;
+  const tempDir = await fs.mkdtemp(path.join(resolveOutsideSandboxTempRoot(), 'term2-apply-patch-outside-workspace-'));
+
   process.cwd = () => tempDir;
 
   try {
@@ -328,7 +347,7 @@ it.sequential('needsApproval: rejects a non-envelope patch without running valid
 // });
 
 it.sequential('needsApproval: requires approval for outside workspace', async () => {
-  await withTempDir(async () => {
+  await withOutsideSandboxTempWorkspace(async () => {
     const tool = createTool();
     const result = await tool.needsApproval({
       patch: ['*** Begin Patch', '*** Add File: ../outside.txt', '+content', '*** End Patch'].join('\n'),
@@ -360,7 +379,7 @@ it.sequential('needsApproval: auto-approves for create/update inside cwd', async
 
 it.sequential('needsApproval: requires approval for a symlink target outside the workspace', async () => {
   await withTempDir(async (workspaceDir) => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-apply-patch-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(resolveOutsideSandboxTempRoot(), 'term2-apply-patch-outside-'));
     try {
       const outsidePath = path.join(outsideDir, 'target.txt');
       await fs.writeFile(outsidePath, 'outside content\n');

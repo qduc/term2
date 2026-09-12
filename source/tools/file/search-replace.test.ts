@@ -10,6 +10,7 @@ import {
 } from './search-replace.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { resolveOutsideSandboxTempRoot } from '../../test-helpers/outside-sandbox-temp-dir.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
 
@@ -151,7 +152,7 @@ it.sequential('needsApproval auto-approves a unique exact match', async () => {
 
 it.sequential('needsApproval requires approval for a symlink target outside the workspace', async () => {
   await withTempDir(async (workspaceDir) => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(resolveOutsideSandboxTempRoot(), 'term2-search-replace-outside-'));
     try {
       const outsidePath = path.join(outsideDir, 'target.txt');
       await fs.writeFile(outsidePath, 'hello outside');
@@ -846,7 +847,7 @@ it.sequential(
 
 it.sequential('needsApproval requires approval for anchor recovery outside the workspace', async () => {
   await withTempDir(async () => {
-    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
+    const outsideDir = await fs.mkdtemp(path.join(resolveOutsideSandboxTempRoot(), 'term2-search-replace-outside-'));
     const filePath = path.join(outsideDir, 'anchor-context.ts');
     try {
       await fs.writeFile(

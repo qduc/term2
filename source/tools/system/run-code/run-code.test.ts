@@ -2274,6 +2274,24 @@ describe('run_code M5: persisted command-message telemetry', () => {
     }
   });
 
+  it('uses persisted typed execution semantics instead of diagnostic wording', () => {
+    const item = {
+      type: 'tool_result',
+      callId: 'call_m2_semantics',
+      toolName: TOOL_NAME_RUN_CODE,
+      status: 'completed',
+      output: 'A revised human-readable diagnostic',
+      runCodeExecution: { success: false, diagnosticCode: 'runtime' },
+    };
+    const messages = formatRunCodeCommandMessage(item as never, 0, new Map());
+
+    expect(messages[0]?.success).toBe(false);
+    expect(
+      formatRunCodeCommandMessage({ ...item, output: 'A successful-looking diagnostic' } as never, 0, new Map())[0]
+        ?.success,
+    ).toBe(false);
+  });
+
   it('structured tool results maintain object type within transport budget, and reject oversized delivery without field shrinking', async () => {
     const limit = RUN_CODE_LIMITS.maxResultChars;
     const schema = z.object({ delta: z.number() });

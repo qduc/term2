@@ -29,6 +29,7 @@ export interface ToolResult {
   status: 'completed' | 'failed' | 'aborted';
   output: unknown;
   providerItem?: Record<string, unknown>;
+  runCodeExecution?: { readonly success: boolean; readonly diagnosticCode?: string };
 }
 
 /**

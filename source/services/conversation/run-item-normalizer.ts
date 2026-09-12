@@ -211,6 +211,9 @@ const pushToolResultItem = (target: Item[], item: unknown): void => {
     status: typeof raw.is_error === 'boolean' && raw.is_error ? 'failed' : 'completed',
     output: raw.output ?? asRecord(item)?.output,
     providerItem: clone(providerItem),
+    ...(raw.runCodeExecution ?? outer?.runCodeExecution
+      ? { runCodeExecution: (raw.runCodeExecution ?? outer?.runCodeExecution) as ToolResult['runCodeExecution'] }
+      : {}),
   };
   target.push(toolResultItem);
 };

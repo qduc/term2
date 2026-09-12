@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { HostErrorCode, HostResult } from '../../../services/sandboxed-code-host/host-types.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { RunCodeActionReceipt, RunCodeCallRecord } from './run-code.js';
+import { createRunCodeExecution, type RunCodeExecution } from './run-code-execution.js';
 import {
   RUN_CODE_COMPLETION_EVENT,
   RUN_CODE_COMPLETION_MESSAGE,
@@ -12,17 +13,51 @@ import {
 const failed = (code: HostErrorCode, message: string): HostResult => ({ ok: false, error: { code, message } });
 const succeeded: HostResult = { ok: true, output: { done: true } };
 
-const input = (overrides: Record<string, unknown> = {}) => ({
-  code: 'return 1;',
-  result: succeeded,
-  durationMs: 12,
-  timeoutMs: 60_000,
-  calls: [] as RunCodeCallRecord[],
-  receipts: [] as RunCodeActionReceipt[],
-  sessionId: 'session-1',
-  runId: 'run_code_bridge_1',
-  ...overrides,
-});
+const input = (overrides: Record<string, unknown> = {}) => {
+  const calls = (overrides.calls as RunCodeCallRecord[] | undefined) ?? [];
+  const receipts = (overrides.receipts as RunCodeActionReceipt[] | undefined) ?? [];
+  const result = (overrides.result as HostResult | undefined) ?? succeeded;
+  const execution =
+    (overrides.execution as RunCodeExecution | undefined) ?? createRunCodeExecution(result, calls, receipts, []);
+  return {
+    code: 'return 1;',
+    durationMs: 12,
+    timeoutMs: 60_000,
+    calls,
+    receipts,
+    sessionId: 'session-1',
+    runId: 'run_code_bridge_1',
+    ...overrides,
+    execution,
+  };
+};
+
+const executionForCase = (result: HostResult, failureClass?: string): RunCodeExecution => {
+  const diagnostic =
+    failureClass === 'unknown-tool'
+      ? 'unknown_tool'
+      : failureClass === 'parameter-shape'
+      ? 'invalid_nested_input'
+      : failureClass === 'budget'
+      ? 'call_budget'
+      : failureClass === 'approval-denied'
+      ? 'approval_denied'
+      : failureClass === 'nested-call'
+      ? 'nested_tool_failure'
+      : undefined;
+  if (!diagnostic) return createRunCodeExecution(result, [], [], []);
+  return {
+    script: {
+      status: 'failed',
+      diagnostic: { code: diagnostic, message: result.ok ? 'failed' : result.error.message },
+    },
+    calls: [],
+    actions: [],
+    console: [],
+    attachments: [],
+    hostErrorCode: result.ok ? undefined : result.error.code,
+  };
+};
 
 const call = (outcome: RunCodeCallRecord['outcome']): RunCodeCallRecord => ({
   tool: 'inspect',
@@ -183,7 +218,7 @@ describe('run_code completion telemetry', () => {
   ];
 
   it.each(cases)('classifies $name', ({ result, outcome, failureClass, code }) => {
-    const meta = buildRunCodeCompletionMeta(input({ result }));
+    const meta = buildRunCodeCompletionMeta(input({ execution: executionForCase(result, failureClass) }));
 
     expect(meta.outcome).toBe(outcome);
     expect(meta.failureClass).toBe(failureClass);
@@ -195,11 +230,26 @@ describe('run_code completion telemetry', () => {
     const emptyMember = 'tools. failed: boom';
     const emptyDetail = 'tools.search failed: ';
 
-    expect(buildRunCodeCompletionMeta(input({ result: failed('runtime_error', resembles) })).outcome).toBe('runtime');
-    expect(buildRunCodeCompletionMeta(input({ result: failed('runtime_error', emptyMember) })).outcome).toBe('runtime');
-    expect(buildRunCodeCompletionMeta(input({ result: failed('runtime_error', emptyDetail) })).failureClass).toBe(
-      'nested-call',
-    );
+    expect(
+      buildRunCodeCompletionMeta(input({ execution: executionForCase(failed('runtime_error', resembles)) })).outcome,
+    ).toBe('runtime');
+    expect(
+      buildRunCodeCompletionMeta(input({ execution: executionForCase(failed('runtime_error', emptyMember)) })).outcome,
+    ).toBe('runtime');
+    expect(
+      buildRunCodeCompletionMeta(
+        input({
+          execution: {
+            script: { status: 'failed', diagnostic: { code: 'nested_tool_failure', message: emptyDetail } },
+            calls: [],
+            actions: [],
+            console: [],
+            attachments: [],
+            hostErrorCode: 'runtime_error',
+          },
+        }),
+      ).failureClass,
+    ).toBe('nested-call');
   });
 
   it('emits numbers, closed-set enums, and a digest but never the source or its text', () => {
@@ -207,11 +257,13 @@ describe('run_code completion telemetry', () => {
     const meta = buildRunCodeCompletionMeta(
       input({
         code,
-        result: failed(
-          'runtime_error',
-          'tools.read_file failed: Invalid parameters for "read_file": path: /srv/private/secret-notes.md is not readable',
+        execution: executionForCase(
+          failed(
+            'runtime_error',
+            'tools.read_file failed: Invalid parameters for "read_file": path: /srv/private/secret-notes.md is not readable',
+          ),
+          'parameter-shape',
         ),
-        calls: [call('invalid_params')],
       }),
     );
 
@@ -265,5 +317,48 @@ describe('run_code completion telemetry', () => {
       },
     } as unknown as ILoggingService;
     expect(() => emitRunCodeCompletionTelemetry(throwing, input())).not.toThrow();
+  });
+
+  it('classifies the same diagnostic code identically when its wording changes', () => {
+    const execution = (message: string): RunCodeExecution => ({
+      script: { status: 'failed', diagnostic: { code: 'unknown_tool', message } },
+      calls: [],
+      actions: [],
+      console: [],
+      attachments: [],
+    });
+    const first = buildRunCodeCompletionMeta(input({ execution: execution('first wording') }));
+    const second = buildRunCodeCompletionMeta(input({ execution: execution('a different private detail') }));
+
+    expect(second.outcome).toBe(first.outcome);
+    expect(second.diagnosticCode).toBe(first.diagnosticCode);
+    expect(second.failureClass).toBe(first.failureClass);
+    expect(JSON.stringify(second)).not.toContain('private detail');
+  });
+
+  it.each([
+    'syntax',
+    'runtime',
+    'unknown_tool',
+    'invalid_nested_input',
+    'invalid_nested_output',
+    'nested_tool_failure',
+    'unhandled_nested_failure',
+    'call_budget',
+    'invalid_script_return',
+    'timeout',
+    'deadline',
+    'cancellation',
+    'oversized_code',
+    'sandbox_unavailable',
+  ] as const)('keeps %s as a stable diagnostic discriminant', (code) => {
+    const execution = createRunCodeExecution(
+      { ok: false, error: { code: code === 'syntax' ? 'syntax_error' : 'runtime_error', message: 'wording' } },
+      [{ tool: 'x', outcome: 'error', durationMs: 1, diagnostic: code }],
+      [],
+      [],
+    );
+    expect(execution.script.status).toBe('failed');
+    if (execution.script.status === 'failed') expect(execution.script.diagnostic.code).toBe(code);
   });
 });

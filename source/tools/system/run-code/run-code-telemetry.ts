@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { ILoggingService, LogMetadataContract } from '../../../services/service-interfaces.js';
-import type { HostErrorCode, HostResult } from '../../../services/sandboxed-code-host/host-types.js';
+import type { HostErrorCode } from '../../../services/sandboxed-code-host/host-types.js';
 import type { RunCodeActionReceipt, RunCodeCallRecord } from './run-code.js';
+import type { RunCodeDiagnosticCode, RunCodeExecution } from './run-code-execution.js';
 
 /**
  * Structured completion telemetry for one `run_code` invocation.
@@ -23,8 +24,8 @@ import type { RunCodeActionReceipt, RunCodeCallRecord } from './run-code.js';
  * a source digest. The script source, its arguments, the failure messages, tool
  * names, workspace paths, and the model-authored `description` are deliberately
  * never emitted — nested failure text routinely carries paths and arguments, and
- * an unknown member name is arbitrary model-authored text. Failure attribution
- * reads those messages in-process and emits only a class.
+ * an unknown member name is arbitrary model-authored text. The execution
+ * contract supplies the closed diagnostic code before this layer is reached.
  */
 export const RUN_CODE_COMPLETION_EVENT = 'tool.run_code.completion';
 export const RUN_CODE_COMPLETION_MESSAGE = 'run_code completed';
@@ -32,8 +33,8 @@ export const RUN_CODE_COMPLETION_MESSAGE = 'run_code completed';
 /**
  * How the invocation ended.
  *
- * The first six are the categories the plan requires. The remaining four are
- * host outcomes that had no honest home among them: folding a cancellation into
+ * These are the categories the plan requires plus host outcomes that had no
+ * honest home among them: folding a cancellation into
  * `timeout` would contradict the termination-reason distinction established for
  * shell timeouts, and a rejected source or unavailable sandbox is not a script
  * failure at all. `host-error` is unreachable while every `HostErrorCode` is
@@ -94,7 +95,8 @@ export interface RunCodeEffectReceiptCounts {
 
 export interface RunCodeCompletionInput {
   code: string;
-  result: HostResult;
+  /** The single structured outcome is the production contract. */
+  execution: RunCodeExecution;
   durationMs: number;
   timeoutMs: number;
   calls: readonly RunCodeCallRecord[];
@@ -163,81 +165,44 @@ const summarizeEffectReceipts = (receipts: readonly RunCodeActionReceipt[]): Run
   return counts;
 };
 
-/**
- * The namespace binding prefixes a refused nested call with `tools.<member>
- * failed: ` and the capability's own message after it (host-worker.ts, pinned by
- * sandboxed-code-host.test.ts). That prefix is the only host-side signal that
- * separates a failure the script caused from one a nested call rejected, until
- * Stage 3A gives the refusal a typed envelope.
- */
-const FAILED_CALL_MARKER = ' failed: ';
-const NAMESPACE_PREFIX = 'tools.';
-const UNKNOWN_TOOL_PREFIX = 'Unknown tool "';
-const INVALID_PARAMS_PREFIX = 'Invalid parameters for "';
-
-const nestedRejectionDetail = (message: string): string | null => {
-  if (!message.startsWith(NAMESPACE_PREFIX)) return null;
-  const marker = message.indexOf(FAILED_CALL_MARKER);
-  if (marker <= NAMESPACE_PREFIX.length) return null;
-  return message.slice(marker + FAILED_CALL_MARKER.length);
-};
-
-/**
- * Attribution is message-based, so a script that throws the same text itself is
- * misattributed as a nested rejection. That approximation is bounded to the
- * failure class: the host code, the ledgers, and the counts stay exact.
- */
-const classifyNestedFailure = (message: string): RunCodeFailureClass => {
-  if (message.startsWith(UNKNOWN_TOOL_PREFIX)) return 'unknown-tool';
-  const detail = nestedRejectionDetail(message);
-  if (detail === null) return 'nested-call';
-  if (detail.startsWith(UNKNOWN_TOOL_PREFIX)) return 'unknown-tool';
-  if (detail.startsWith(INVALID_PARAMS_PREFIX)) return 'parameter-shape';
-  return 'nested-call';
-};
-
-const isNestedRejection = (message: string): boolean =>
-  message.startsWith(UNKNOWN_TOOL_PREFIX) || nestedRejectionDetail(message) !== null;
-
-const assertNeverHostCode = (code: never): never => {
-  throw new Error('Unhandled host error code: ' + String(code));
-};
-
 interface RunCodeCompletionClassification {
   outcome: RunCodeCompletionOutcome;
   hostErrorCode?: HostErrorCode;
   failureClass?: RunCodeFailureClass;
 }
 
-const classifyRunCodeCompletion = (result: HostResult): RunCodeCompletionClassification => {
-  if (result.ok) return { outcome: 'success' };
-  const { code, message } = result.error;
-  switch (code) {
-    case 'syntax_error':
-      return { outcome: 'parse', hostErrorCode: code };
-    case 'runtime_error':
-      return isNestedRejection(message)
-        ? { outcome: 'nested-validation', hostErrorCode: code, failureClass: classifyNestedFailure(message) }
-        : { outcome: 'runtime', hostErrorCode: code };
-    case 'invalid_output':
-      return { outcome: 'return-serialization', hostErrorCode: code };
+const classifyDiagnostic = (diagnostic: RunCodeDiagnosticCode): RunCodeCompletionClassification => {
+  switch (diagnostic) {
+    case 'syntax':
+      return { outcome: 'parse', failureClass: undefined };
+    case 'runtime':
+      return { outcome: 'runtime' };
+    case 'invalid_nested_input':
+      return { outcome: 'nested-validation', failureClass: 'parameter-shape' };
+    case 'unknown_tool':
+      return { outcome: 'nested-validation', failureClass: 'unknown-tool' };
+    case 'nested_tool_failure':
+      return { outcome: 'nested-validation', failureClass: 'nested-call' };
+    case 'approval_denied':
+      return { outcome: 'nested-validation', failureClass: 'approval-denied' };
+    case 'unhandled_nested_failure':
+      return { outcome: 'nested-validation', failureClass: 'nested-call' };
+    case 'call_budget':
+      return { outcome: 'nested-validation', failureClass: 'budget' };
+    case 'invalid_nested_output':
+      return { outcome: 'return-serialization' };
+    case 'invalid_script_return':
+      return { outcome: 'return-serialization' };
     case 'timeout':
+      return { outcome: 'timeout' };
     case 'deadline':
-      return { outcome: 'timeout', hostErrorCode: code };
-    case 'cancelled':
-      return { outcome: 'cancelled', hostErrorCode: code };
-    case 'code_too_large':
-      return { outcome: 'input-rejected', hostErrorCode: code };
+      return { outcome: 'timeout' };
+    case 'cancellation':
+      return { outcome: 'cancelled' };
+    case 'oversized_code':
+      return { outcome: 'input-rejected' };
     case 'sandbox_unavailable':
-      return { outcome: 'host-unavailable', hostErrorCode: code };
-    case 'limit_exceeded':
-      return { outcome: 'nested-validation', hostErrorCode: code, failureClass: 'budget' };
-    case 'approval_required':
-      return { outcome: 'nested-validation', hostErrorCode: code, failureClass: 'approval-denied' };
-    default:
-      // Exhaustive over HostErrorCode: a new code fails to compile here rather
-      // than reaching a silent fallback.
-      return assertNeverHostCode(code);
+      return { outcome: 'host-unavailable' };
   }
 };
 
@@ -246,7 +211,16 @@ const classifyRunCodeCompletion = (result: HostResult): RunCodeCompletionClassif
  * caller in production.
  */
 export const buildRunCodeCompletionMeta = (input: RunCodeCompletionInput): LogMetadataContract => {
-  const classification = classifyRunCodeCompletion(input.result);
+  const classification: RunCodeCompletionClassification & { diagnosticCode?: RunCodeDiagnosticCode } =
+    input.execution.script.status === 'succeeded'
+      ? { outcome: 'success' as const }
+      : {
+          ...classifyDiagnostic(input.execution.script.diagnostic.code),
+          diagnosticCode: input.execution.script.diagnostic.code,
+          hostErrorCode: input.execution.hostErrorCode,
+        };
+  const calls = input.execution.calls;
+  const receipts = input.execution.actions;
   return {
     eventType: RUN_CODE_COMPLETION_EVENT,
     // Not imported from run-code.ts: that module imports this one.
@@ -256,13 +230,16 @@ export const buildRunCodeCompletionMeta = (input: RunCodeCompletionInput): LogMe
     outcome: classification.outcome,
     ...(classification.hostErrorCode ? { hostErrorCode: classification.hostErrorCode } : {}),
     ...(classification.failureClass ? { failureClass: classification.failureClass } : {}),
+    ...('diagnosticCode' in classification && classification.diagnosticCode
+      ? { diagnosticCode: classification.diagnosticCode }
+      : {}),
     durationMs: Math.max(0, Math.round(input.durationMs)),
     timeoutMs: input.timeoutMs,
     sourceBytes: Buffer.byteLength(input.code, 'utf8'),
     sourceLines: input.code.length === 0 ? 0 : input.code.split('\n').length,
     sourceDigest: digestSource(input.code),
-    nested: summarizeNestedCalls(input.calls),
-    effectReceipts: summarizeEffectReceipts(input.receipts),
+    nested: summarizeNestedCalls(calls),
+    effectReceipts: summarizeEffectReceipts(receipts),
   };
 };
 

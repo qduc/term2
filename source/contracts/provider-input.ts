@@ -28,6 +28,8 @@ export interface ProviderInputItem {
   name?: unknown;
   arguments?: unknown;
   output?: unknown;
+  /** Application-owned metadata, never serialized into provider tool output. */
+  runCodeExecution?: unknown;
   content?: unknown;
   providerData?: Record<string, unknown>;
   /**

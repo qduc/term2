@@ -77,7 +77,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
     let closeSent = false;
     let bodyTerminal:
       | { kind: 'complete'; output: JsonValue; voidOutput?: boolean }
-      | { kind: 'error'; error: { message?: unknown }; syntax?: boolean }
+      | { kind: 'error'; error: { message?: unknown }; syntax?: boolean; detail?: 'unknown_tool' }
       | null = null;
     const admittedCalls = new Map<
       string,
@@ -225,7 +225,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         }
         if (message?.type === 'workflow.body-error') {
           admissionClosed = true;
-          bodyTerminal = { kind: 'error', error: message.error, syntax: message.syntax };
+          bodyTerminal = { kind: 'error', error: message.error, syntax: message.syntax, detail: message.detail };
           maybeCloseWorker();
           return;
         }
@@ -245,13 +245,28 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           }
           if (bodyTerminal.kind === 'error') {
             const errorMessage = safeMessage(bodyTerminal.error?.message ?? `${subject} failed`);
-            fail(
-              bodyTerminal.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
-              errorMessage,
-            );
+            finish({
+              ok: false,
+              error: {
+                code: bodyTerminal.syntax
+                  ? 'syntax_error'
+                  : /timed out/i.test(errorMessage)
+                  ? 'timeout'
+                  : 'runtime_error',
+                message: errorMessage,
+                ...(bodyTerminal.detail ? { detail: bodyTerminal.detail } : {}),
+              },
+            });
           } else if (unhandled.length > 0) {
             const details = unhandled.map((entry: any) => `${entry.requestId}: ${entry.message}`).join('; ');
-            fail('runtime_error', `unhandled_nested_failure: ${details}`);
+            finish({
+              ok: false,
+              error: {
+                code: 'runtime_error',
+                message: `unhandled_nested_failure: ${details}`,
+                detail: 'unhandled_nested_failure',
+              },
+            });
           } else if (!isJsonValue(bodyTerminal.output)) {
             fail('invalid_output', `${subject} return value is not JSON-safe`);
           } else if (bytes(bodyTerminal.output) > limits.maxOutputBytes) {
@@ -299,10 +314,14 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         if (message?.type === 'workflow.error') {
           admissionClosed = true;
           const errorMessage = safeMessage(message.error?.message ?? `${subject} failed`);
-          fail(
-            message.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
-            errorMessage,
-          );
+          finish({
+            ok: false,
+            error: {
+              code: message.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
+              message: errorMessage,
+              ...(message.detail === 'unknown_tool' ? { detail: 'unknown_tool' } : {}),
+            },
+          });
           return;
         }
         if (typeof message?.type !== 'string' || !message.type.endsWith('.run')) return;

@@ -280,7 +280,9 @@ function installContextBindings() {
       get(target, prop) {
         if (prop in target) return target[prop];
         if (typeof prop === 'string') {
-          throw new Error('Unknown tool "' + prop + '". Available: ' + members.join(', '));
+           const unknown = new Error('Unknown tool "' + prop + '". Available: ' + members.join(', '));
+           unknown.code = 'unknown_tool';
+           throw unknown;
         }
         return undefined;
       },
@@ -401,7 +403,11 @@ parentPort.on('message', (message) => {
       if (at) reported.message = reported.message + at;
     }
     admissionClosed = true;
-    send('workflow.body-error', { error: reported, syntax: err instanceof SyntaxError });
+     send('workflow.body-error', {
+       error: reported,
+       syntax: err instanceof SyntaxError,
+       ...(err && err.code === 'unknown_tool' ? { detail: 'unknown_tool' } : {}),
+     });
   }
 })();
 `;

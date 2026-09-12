@@ -23,6 +23,8 @@ export type HostErrorCode =
 export interface HostError {
   code: HostErrorCode;
   message: string;
+  /** Host-owned distinction that cannot safely be recovered from prose. */
+  detail?: 'unhandled_nested_failure' | 'unknown_tool';
 }
 
 export type HostResult = { ok: true; output: JsonValue; voidOutput?: boolean } | { ok: false; error: HostError };

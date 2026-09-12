@@ -27,6 +27,7 @@ import type {
   ToolExecutionLifecyclePort,
   ToolRegistry,
 } from '../../tools/types.js';
+import { getRunCodeExecutionResult, runCodeExecutionMetadata } from '../../tools/system/run-code/run-code-execution.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { Term2HookScope } from '../hooks/hook-contracts.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
@@ -1664,23 +1665,27 @@ export class ApplicationRunLoop {
     entry: ToolPlanEntry,
     result: unknown,
   ): void {
+    const runCodeExecution = getRunCodeExecutionResult(result);
+    const visibleResult = runCodeExecution ? (Array.isArray(result) ? result : String(result)) : result;
     const modelOutput: string | readonly StreamedModelToolResultPart[] =
-      typeof result === 'string'
-        ? result
-        : isToolResultContentParts(result)
-        ? result
-        : JSON.stringify(result) ?? String(result ?? '');
+      typeof visibleResult === 'string'
+        ? visibleResult
+        : isToolResultContentParts(visibleResult)
+        ? visibleResult
+        : JSON.stringify(visibleResult) ?? String(visibleResult ?? '');
     const resultItem: ProviderInputItem = {
       type: entry.event.toolType === 'custom' ? 'custom_tool_call_output' : 'function_call_result',
       callId: entry.event.id,
       name: entry.event.name,
       output: modelOutput,
+      ...(runCodeExecution ? { runCodeExecution: runCodeExecutionMetadata(runCodeExecution) } : {}),
     };
     state.history.push(resultItem);
     state.input.push({
       type: 'tool_result',
       id: entry.event.id,
       output: modelOutput,
+      ...(runCodeExecution ? { runCodeExecution: runCodeExecutionMetadata(runCodeExecution) } : {}),
       ...(entry.event.toolType ? { toolType: entry.event.toolType } : {}),
     });
     outputPush(stream, queue, { type: 'item', item: resultItem });

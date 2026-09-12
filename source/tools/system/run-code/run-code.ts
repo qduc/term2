@@ -33,10 +33,20 @@ import {
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
 import { emitRunCodeCompletionTelemetry } from './run-code-telemetry.js';
+import {
+  createRunCodeExecution,
+  getRunCodeExecutionResult,
+  RUN_CODE_EXECUTION_RESULT,
+  type RunCodeAttachment,
+  type RunCodeDiagnosticCode,
+  type RunCodeExecution,
+} from './run-code-execution.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 import { saveOutputArtifact, formatFullOutputSavedNote } from '../../../utils/shell/shell-output.js';
+
+export { RUN_CODE_EXECUTION_RESULT, getRunCodeExecutionResult } from './run-code-execution.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
@@ -240,6 +250,26 @@ export interface RunCodeCallRecord {
     | 'unknown';
   durationMs: number;
   directlyCallable?: boolean;
+  /** Host evidence used by the structured invocation outcome. */
+  diagnostic?: RunCodeDiagnosticCode;
+}
+
+export type RunCodeExecutionResult =
+  | (string & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution })
+  | (Array<RunCodeContentPart> & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution });
+
+function attachRunCodeExecution(
+  value: string | readonly RunCodeContentPart[],
+  execution: RunCodeExecution,
+): RunCodeExecutionResult {
+  if (Array.isArray(value)) {
+    const result = [...value] as RunCodeExecutionResult;
+    Object.defineProperty(result, RUN_CODE_EXECUTION_RESULT, { value: execution });
+    return result;
+  }
+  const result = new String(value) as RunCodeExecutionResult;
+  Object.defineProperty(result, RUN_CODE_EXECUTION_RESULT, { value: execution });
+  return result;
 }
 
 export interface CreateRunCodeToolOptions {
@@ -369,34 +399,17 @@ const clip = async (
   return `${prefix}${marker}${action}`;
 };
 
-const FAILURE_PREFIXES = [
-  'Error:',
-  'Script failed',
-  'Script timed out',
-  'Script was cancelled',
-  'Script exceeded its deadline',
-];
-
-/**
- * Whether a rendered run_code result reads as unsuccessful. Script-level
- * failures start with a known prefix; a script can also complete at the JS
- * level while its nested result is an error string (status-string tools such as
- * apply_patch), which the renderer places under a `Result:` heading. Lifecycle
- * status stays 'completed' in both cases — this is the call-level success bit,
- * kept separate from script success (visible in the text) and task success
- * (conversation-level).
- */
-const isUnsuccessfulRunCodeOutput = (output: string): boolean => {
-  if (FAILURE_PREFIXES.some((prefix) => output.startsWith(prefix))) return true;
-  if (output.startsWith('Result:')) {
-    // The renderer joins the rendered value and the trailing tool-call summary
-    // with a blank line. Evaluate only the value block, using the shared
-    // success heuristic: an 'Error:' text prefix or a JSON value carrying an
-    // 'error' key (string or structured envelope) both read as unsuccessful.
-    const valueBlock = output.slice('Result:'.length).trimStart().split('\n\n')[0];
-    return !isSuccessOutput(valueBlock);
+/** Compatibility-only reader for old persisted messages. New executions carry
+ * a typed marker and never use rendered text for their success bit. */
+const legacyRunCodeSuccess = (output: string): boolean => {
+  if (/^(?:Error:|Script failed|Script timed out|Script was cancelled|Script exceeded its deadline)/.test(output)) {
+    return false;
   }
-  return false;
+  if (output.startsWith('Result:')) {
+    const valueBlock = output.slice('Result:'.length).trimStart().split('\n\n')[0];
+    return isSuccessOutput(valueBlock);
+  }
+  return true;
 };
 
 /**
@@ -515,6 +528,10 @@ const serializeResult = async (
   toolName: string,
   callsCompleted: number,
 ): Promise<{ ok: true; result: JsonValue } | { ok: false; error: string }> => {
+  const execution = getRunCodeExecutionResult(result);
+  // A root tool call carries the semantic marker beside its rendered value.
+  // Nested calls must cross the VM as the ordinary model-visible value.
+  if (execution && result instanceof String) result = String(result);
   if (typeof result === 'string') return { ok: true, result: truncate(result, limit) };
   try {
     const encoded = JSON.stringify(result);
@@ -571,12 +588,13 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
   const description = typeof args?.description === 'string' ? args.description : undefined;
   const code = typeof args?.code === 'string' ? args.code : '';
   const output = getOutputText(item) || 'No output';
+  const semantic = (item as import('../../format-helpers.js').ToolResultItem).runCodeExecution;
 
   return [
     createBaseMessage(item, index, 0, false, {
       command: description ? `run_code — ${description}` : 'run_code',
       output,
-      success: !isUnsuccessfulRunCodeOutput(output),
+      success: semantic ? semantic.success : legacyRunCodeSuccess(output),
       toolName: TOOL_NAME_RUN_CODE,
       toolArgs: { ...args, code },
     }),
@@ -640,7 +658,7 @@ export function createRunCodeToolDefinition(
     parameters: runCodeParametersSchema,
     effect: 'mutating',
     needsApproval: () => false,
-    execute: async (params, context) => {
+    execute: async (params, context, details) => {
       const { code, timeout_ms, description, include_console = false } = params;
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
@@ -656,6 +674,7 @@ export function createRunCodeToolDefinition(
       const abortedCallIds = new Set<string>();
       let rejectedSeq = 0;
       const output: string[] = [];
+      const consoleValues: JsonValue[][] = [];
       const sessionId = getConversationSessionId(context);
       const mediaReferences = createMediaReferenceStore();
 
@@ -665,6 +684,7 @@ export function createRunCodeToolDefinition(
         started: number,
         directlyCallable?: boolean,
         callId?: string,
+        diagnostic?: RunCodeDiagnosticCode,
       ) => {
         calls.push({
           tool,
@@ -672,6 +692,7 @@ export function createRunCodeToolDefinition(
           durationMs: Date.now() - started,
           directlyCallable,
           ...(callId ? { callId } : {}),
+          ...(diagnostic ? { diagnostic } : {}),
         });
         if (outcome === 'describe') return;
         writeNestedCallRecord(
@@ -727,6 +748,7 @@ export function createRunCodeToolDefinition(
           // The host supplies the exact prepared call that was rejected.
           // Preparation is async and concurrent, so a local FIFO would be
           // unable to attribute a budget rejection safely.
+          record(rejected.tool.name, 'unknown', rejected.started, undefined, undefined, 'call_budget');
           if (isActionTool(rejected.tool.name)) {
             rejectedSeq += 1;
             recordReceipt(
@@ -773,7 +795,7 @@ export function createRunCodeToolDefinition(
             };
           }
           if (!tool) {
-            record(name || '(unnamed)', 'unknown_tool', started);
+            record(name || '(unnamed)', 'unknown_tool', started, undefined, undefined, 'unknown_tool');
             if (isActionTool(name)) {
               rejectedSeq += 1;
               recordReceipt(
@@ -796,7 +818,7 @@ export function createRunCodeToolDefinition(
           if (isZodToolParameterSchema(targetSchema)) {
             const parsed = targetSchema.safeParse(normalized);
             if (!parsed.success) {
-              record(name, 'invalid_params', started);
+              record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
               const issues = parsed.error.issues
                 .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
                 .join('; ');
@@ -919,7 +941,6 @@ export function createRunCodeToolDefinition(
                     prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
                 });
                 if (resolution.kind === 'approved') {
-                  record(prepared.tool.name, 'ok', prepared.started, undefined, `${bridgeRunId}:${callContext.callId}`);
                   if (isActionTool(prepared.tool.name)) {
                     const semantic = ACTION_SEMANTICS[prepared.tool.name](resolution.result);
                     recordReceipt(
@@ -933,12 +954,17 @@ export function createRunCodeToolDefinition(
                     mediaReferences.capture(resolution.result),
                     RUN_CODE_LIMITS.maxResultChars,
                     prepared.tool.name,
-                    calls.filter((c) => c.outcome !== 'describe').length,
+                    calls.filter((c) => c.outcome !== 'describe').length + 1,
                   );
-                  return {
-                    kind: 'result',
-                    result: serialized as JsonValue,
-                  };
+                  record(
+                    prepared.tool.name,
+                    serialized.ok ? 'ok' : 'error',
+                    prepared.started,
+                    undefined,
+                    `${bridgeRunId}:${callContext.callId}`,
+                    serialized.ok ? undefined : 'invalid_nested_output',
+                  );
+                  return { kind: 'result', result: serialized } as CapabilityOutcome;
                 }
                 if (resolution.kind === 'failed') {
                   record(
@@ -947,6 +973,7 @@ export function createRunCodeToolDefinition(
                     prepared.started,
                     undefined,
                     `${bridgeRunId}:${callContext.callId}`,
+                    'nested_tool_failure',
                   );
                   const message =
                     resolution.error instanceof Error ? resolution.error.message : String(resolution.error);
@@ -1022,7 +1049,6 @@ export function createRunCodeToolDefinition(
               scripted: true,
             });
             const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
-            record(prepared.tool.name, 'ok', started, undefined, callId);
             if (isActionTool(prepared.tool.name)) {
               const semantic = ACTION_SEMANTICS[prepared.tool.name](result);
               recordReceipt(callId, prepared.tool.name, semantic.outcome, semantic.reason);
@@ -1031,14 +1057,19 @@ export function createRunCodeToolDefinition(
               mediaReferences.capture(result),
               RUN_CODE_LIMITS.maxResultChars,
               prepared.tool.name,
-              calls.filter((c) => c.outcome !== 'describe').length,
+              calls.filter((c) => c.outcome !== 'describe').length + 1,
             );
-            return {
-              kind: 'result',
-              result: serialized as JsonValue,
-            };
+            record(
+              prepared.tool.name,
+              serialized.ok ? 'ok' : 'error',
+              started,
+              undefined,
+              callId,
+              serialized.ok ? undefined : 'invalid_nested_output',
+            );
+            return { kind: 'result', result: serialized } as CapabilityOutcome;
           } catch (error) {
-            record(prepared.tool.name, 'error', started, undefined, callId);
+            record(prepared.tool.name, 'error', started, undefined, callId, 'nested_tool_failure');
             const message = error instanceof Error ? error.message : String(error);
             if (isActionTool(prepared.tool.name)) {
               recordReceipt(callId, prepared.tool.name, 'failed', message);
@@ -1067,7 +1098,10 @@ export function createRunCodeToolDefinition(
         subject: 'Script',
         allowVoidOutput: true,
         signal: callerSignal,
-        onConsole: (values) => output.push(renderConsoleValues(values)),
+        onConsole: (values) => {
+          consoleValues.push(values);
+          output.push(renderConsoleValues(values));
+        },
       });
 
       const describeCalls = calls.filter((call) => call.outcome === 'describe');
@@ -1090,11 +1124,17 @@ export function createRunCodeToolDefinition(
         pendingReceiptByCallId.delete(callId);
       }
 
+      const resolvedResult =
+        result.ok && !result.voidOutput
+          ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
+          : result;
+      const attachments: RunCodeAttachment[] = [];
+      const execution = createRunCodeExecution(resolvedResult, calls, receipts, consoleValues, attachments);
       // Emitted before rendering: a script whose result cannot be rendered has
       // still produced an outcome worth counting.
       emitRunCodeCompletionTelemetry(loggingService, {
         code,
-        result,
+        execution,
         durationMs: Date.now() - startedAt,
         timeoutMs: timeout,
         sessionId,
@@ -1102,12 +1142,10 @@ export function createRunCodeToolDefinition(
         calls,
         receipts,
       });
-
-      const resolvedResult =
-        result.ok && !result.voidOutput
-          ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
-          : result;
-      return renderResult(resolvedResult, output, calls, receipts, include_console);
+      const rendered = await renderResult(execution, output, include_console);
+      const transportCall =
+        details && typeof details === 'object' && 'toolCall' in details && typeof details.toolCall === 'object';
+      return transportCall ? attachRunCodeExecution(rendered, execution) : rendered;
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
@@ -1293,34 +1331,36 @@ const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[], include
 };
 
 function renderResult(
-  result: { ok: boolean; output?: JsonValue; voidOutput?: boolean; error?: { code: string; message: string } },
+  execution: RunCodeExecution,
   output: readonly string[],
-  calls: readonly RunCodeCallRecord[],
-  receipts: readonly RunCodeActionReceipt[],
   includeConsole: boolean,
 ): Promise<string | readonly RunCodeContentPart[]> {
   const sections: string[] = [];
-  const media: RunCodeContentPart[] = [];
-  if (!result.ok && result.error) {
+  const media = execution.attachments as RunCodeContentPart[];
+  const calls = execution.calls;
+  const receipts = execution.actions;
+  if (execution.script.status === 'failed') {
+    const { code, message } = execution.script.diagnostic;
     sections.push(
-      result.error.code === 'timeout'
-        ? `Script timed out. ${result.error.message}`
-        : result.error.code === 'deadline'
-        ? `Script exceeded its deadline. ${result.error.message}`
-        : result.error.code === 'cancelled'
-        ? `Script was cancelled. ${result.error.message}`
-        : `Script failed: ${result.error.message}`,
+      code === 'timeout'
+        ? `Script timed out. ${message}`
+        : code === 'deadline'
+        ? `Script exceeded its deadline. ${message}`
+        : code === 'cancellation'
+        ? `Script was cancelled. ${message}`
+        : `Script failed: ${message}`,
     );
-  } else if (result.voidOutput === true) {
+  } else if (execution.script.voidOutput) {
     sections.push('Script returned no result. Return a value from the script to send it to the model.');
   } else {
-    const stripped = containsMediaContent(result.output) ? stripMediaContent(result.output, media) : result.output;
+    const value = execution.script.value;
+    const stripped = containsMediaContent(value) ? stripMediaContent(value, media) : value;
     // A top-level content-part array already has a useful text projection;
     // wrappers (Promise.all, object fields, etc.) retain their shape in JSON,
     // with media replaced by markers so base64 never leaks into text.
     const rendered =
-      media.length > 0 && isContentPartArray(result.output)
-        ? result.output
+      media.length > 0 && isContentPartArray(value)
+        ? value
             .filter((part) => part.type === 'text' && typeof part.text === 'string')
             .map((part) => part.text)
             .join('\n')
@@ -1331,7 +1371,8 @@ function renderResult(
   }
 
   const printed = output.join('\n').trim();
-  if (printed && (!result.ok || includeConsole)) sections.push(`Console trace (debug):\n${printed}`);
+  if (printed && (execution.script.status === 'failed' || includeConsole))
+    sections.push(`Console trace (debug):\n${printed}`);
 
   const refused = calls.filter((call) => call.outcome === 'approval_required');
   const directlyRefused = refused.filter((call) => call.directlyCallable === true);

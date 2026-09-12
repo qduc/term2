@@ -14,3 +14,16 @@ export {
   type RunCodeCallRecord,
   type RunCodeParams,
 } from './run-code.js';
+export {
+  createRunCodeExecution,
+  RUN_CODE_EXECUTION_RESULT,
+  getRunCodeExecutionResult,
+  runCodeExecutionMetadata,
+  type RunCodeAttachment,
+  type RunCodeDiagnostic,
+  type RunCodeDiagnosticCode,
+  type RunCodeExecution,
+  type RunCodeExecutionAction,
+  type RunCodeExecutionCall,
+  type RunCodeExecutionMetadata,
+} from './run-code-execution.js';

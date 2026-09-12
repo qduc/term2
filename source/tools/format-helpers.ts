@@ -49,6 +49,8 @@ export interface ToolResultItem {
   operation?: { type?: string; path?: string; diff?: string; [key: string]: unknown };
   /** Tool output container (on function_call_output items). */
   output?: unknown;
+  /** Internal semantic metadata retained beside model-visible output. */
+  runCodeExecution?: { readonly success: boolean; readonly diagnosticCode?: string };
 }
 
 /**

@@ -409,3 +409,80 @@ confirmed by following both sides of the same value (`usage_update` from
 ```sh
 git diff --stat   # docs/contracts/13-gateway-web-wire.md only
 ```
+
+## 8. M5b additions: Session Commands RPC
+
+### Route and Authorization
+- **Method & Path**: `POST /private/agent/v1/sessions/:id/commands`
+- **Assertion Purpose**: `command_invoke` (session-scoped assertion requiring `sessionId: :id` matching the route parameter; mismatch yields `400 protocol_conflict`).
+- **Owner Guard**: `claims.sub` must match `session.binding.ownerUserId`. Unknown sessions or sessions owned by another user return `404 not_found`.
+- **Busy Guard**: If the session is currently in `running` or `awaiting_interaction` state, the invocation is rejected with `409 session_busy`.
+- **Audit Logging**: Every permitted command invocation writes a structured audit log entry with `operation: 'command_invoke'`, `outcome: 'allowed'`, and `reasonCode: 'accepted'`.
+
+### Request DTO
+The request body is strictly validated to contain exactly two properties:
+```json
+{
+  "commandId": "compact" | "retry-tool" | "retry-turn",
+  "clientRequestId": "<opaque-id-1-256-chars>"
+}
+```
+Any additional properties, empty values, or missing properties return `400 validation_error`.
+
+### Command Allowlist
+Commands are validated against an exact-match allowlist (no prefix matching):
+- `compact`
+- `retry-tool`
+- `retry-turn`
+
+Any unlisted command name (e.g. `clear`, `auto-approve`, `sandbox`, `model`, prefix variants like `comp` or `retry`) is rejected with `422 command_not_allowed`.
+
+### Response DTO
+All successful executions (including `nothing_to_retry` outcomes and replayed requests) return HTTP status `200`:
+```json
+{
+  "commandId": "compact" | "retry-tool" | "retry-turn",
+  "outcome": "completed" | "accepted" | "nothing_to_retry",
+  "turnId": "optional-turn-uuid",
+  "tokensBefore": 1000,
+  "tokensAfter": 400,
+  "replayed": true
+}
+```
+
+### Execution Semantics and Event Sequence
+1. **`compact`**:
+   - Idempotency is pre-reserved in the admission store and in-flight registry before executing the side effect.
+   - Invokes `ConversationService.compactContext()`. Concurrent same-`clientRequestId` requests await the in-flight compaction and receive the identical result with `replayed: true`.
+   - If context was compacted, returns `outcome: 'completed'` and parses `tokensBefore` and `tokensAfter` from the compaction result if available.
+   - If blocked or nothing to compact, returns `outcome: 'nothing_to_retry'`.
+   - Compaction completes synchronously within the RPC; admission is immediately settled as `terminal`.
+
+2. **`retry-tool`**:
+   - Inspects `session.service.peekLastToolOutput()`.
+   - If no tool output exists to retry, settles admission as `terminal` and returns `{ commandId: 'retry-tool', outcome: 'nothing_to_retry' }`.
+   - If a tool output exists, generates a UUID `turnId` and admits the turn through the same transaction as `message_submit` via `GatewayAdmissionPersistence.admit`:
+     1. Prepares the message in the runtime and persists the prepared admission in SQLite.
+     2. Retries do not create a user message: no `term2Fact` (`user_message`) is persisted to the transcript, and no `user_message_accepted` is published to the journal. This prevents empty user turns from entering `state.history` on replay or projecting empty user message bubbles. Instead, the durable accepted journal event is `assistant_started`.
+     3. Commits the runtime turn asynchronously via `session.service.retryLastToolOutput({ preferredMessageId: turnId })`.
+     4. If runtime start fails, the transaction transitions admission to `terminal` with result `failed` and settles the event journal with `turn_failed`.
+   - Returns `{ commandId: 'retry-tool', outcome: 'accepted', turnId }`.
+   - The browser observes `assistant_started`, streaming deltas, and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+
+3. **`retry-turn`**:
+   - Inspects `session.service.exportState().history`.
+   - If history is empty, settles admission as `terminal` and returns `{ commandId: 'retry-turn', outcome: 'nothing_to_retry' }`.
+   - If history exists, generates a UUID `turnId` and admits the turn through the same transaction as `message_submit` via `GatewayAdmissionPersistence.admit`:
+     1. Prepares the message in the runtime and persists the prepared admission in SQLite.
+     2. Retries do not create a user message: no `term2Fact` (`user_message`) is persisted to the transcript, and no `user_message_accepted` is published to the journal. This prevents empty user turns from entering `state.history` on replay or projecting empty user message bubbles. Instead, the durable accepted journal event is `assistant_started`.
+     3. Commits the runtime turn asynchronously via `session.service.retryLastFailedTurn({ preferredMessageId: turnId })`.
+     4. If runtime start fails, the transaction transitions admission to `terminal` with result `failed` and settles the event journal with `turn_failed`.
+   - Returns `{ commandId: 'retry-turn', outcome: 'accepted', turnId }`.
+   - The browser observes `assistant_started`, streaming deltas, and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+
+### Idempotency and Conflict Detection
+- `clientRequestId` is reserved before command side effects and tracked through `GatewayAdmissionPersistence` backed by SQLite and in-memory in-flight deduplication.
+- Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
+- Replayed compaction records are safely decoded: completed and no-op compactions return status 200 with `outcome: 'completed'` or `'nothing_to_retry'`. Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
+- Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
+

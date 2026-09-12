@@ -429,7 +429,9 @@ export class GatewaySessionIndex {
     ownerUserId: string,
     sessionId: string,
     clientRequestId: string,
-    patch: Partial<Pick<AdmissionRecord, 'state' | 'result' | 'phase' | 'transcriptChecksum' | 'journalChecksum'>>,
+    patch: Partial<
+      Pick<AdmissionRecord, 'state' | 'result' | 'phase' | 'transcriptChecksum' | 'journalChecksum' | 'turnId'>
+    >,
   ): AdmissionRecord {
     this.assertHealthy();
     const current = this.admission(ownerUserId, sessionId, clientRequestId);
@@ -437,7 +439,7 @@ export class GatewaySessionIndex {
     return this.#transaction(() => {
       this.#db
         .prepare(
-          'UPDATE gateway_admissions SET state=?, result=?, phase=?, transcript_checksum=?, journal_checksum=? WHERE owner_user_id=? AND session_id=? AND client_request_id=?',
+          'UPDATE gateway_admissions SET state=?, result=?, phase=?, transcript_checksum=?, journal_checksum=?, turn_id=? WHERE owner_user_id=? AND session_id=? AND client_request_id=?',
         )
         .run(
           patch.state ?? current.state,
@@ -445,6 +447,7 @@ export class GatewaySessionIndex {
           patch.phase ?? current.phase ?? null,
           patch.transcriptChecksum ?? current.transcriptChecksum ?? null,
           patch.journalChecksum ?? current.journalChecksum ?? null,
+          patch.turnId ?? current.turnId ?? null,
           ownerUserId,
           sessionId,
           clientRequestId,

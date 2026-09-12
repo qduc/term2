@@ -46,7 +46,7 @@ import {
   validatePendingInteractionDto,
   type PendingInteractionDto as InteractionDto,
 } from './interaction-protocol.js';
-import { GatewayAdmissionPersistence } from './persistence/admission-persistence.js';
+import { GatewayAdmissionPersistence, normalizedBodyHash } from './persistence/admission-persistence.js';
 import {
   GATEWAY_EVENT_HEARTBEAT_INTERVAL_MS,
   GATEWAY_EVENT_STREAM_CONTENT_TYPE,
@@ -294,6 +294,7 @@ export class Term2Gateway {
   readonly #interactionBindings = new Map<string, InteractionBinding>();
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
+  readonly #inflightCommands = new Map<string, { promise: Promise<GatewayRpcResult>; bodyHash: string }>();
   #shutdownInProgress = false;
   #shutdownPromise?: Promise<void>;
   readonly #server: GatewayServer;
@@ -481,6 +482,8 @@ export class Term2Gateway {
       }
       if (claims.purpose === 'message_submit') return await this.#submitMessage(claims, input.body);
       if (claims.purpose === 'abort') return await this.#abortSession(claims, input.body);
+      if (claims.purpose === 'command_invoke')
+        return await this.#invokeCommand(claims, input.body, input.correlationId);
       if (claims.purpose === 'interaction_resolve')
         return await this.#resolveInteraction(claims, route.interactionId!, input.body);
       if (claims.purpose === 'events_connect') return await this.#eventsResponse(claims, url, input.request);
@@ -1018,6 +1021,392 @@ export class Term2Gateway {
         body: { sessionId: claims.sessionId, turnId: body.turnId, accepted: false, alreadySettled: true },
       };
     return publicError(409, 'session_not_admitting', 'session is interrupted');
+  }
+
+  async #invokeCommand(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isCommandBody(body)) return publicError(400, 'validation_error', 'command request is invalid');
+    const session = this.#sessions.get(claims.sessionId!);
+    if (!session || session.binding.ownerUserId !== claims.sub) {
+      return publicError(404, 'not_found', 'session not found');
+    }
+    if (!(session instanceof ServerSession)) {
+      return publicError(409, 'session_not_admitting', 'session is not admitting commands');
+    }
+    if (session.status === 'running' || session.status === 'awaiting_interaction') {
+      return publicError(409, 'session_busy', 'session is busy');
+    }
+    if (!COMMAND_ALLOWLIST.has(body.commandId)) {
+      return publicError(422, 'command_not_allowed', 'command is not allowed');
+    }
+
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'command_invoke',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        sessionId: session.sessionId,
+        workspaceId: session.binding.workspaceId,
+        grantVersion: session.binding.grantVersion,
+        access: session.binding.access,
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+
+    const inflightKey = `${claims.sub}:${session.sessionId}:${body.clientRequestId}`;
+    const bodyHash = normalizedBodyHash(body);
+
+    const inflight = this.#inflightCommands.get(inflightKey);
+    if (inflight) {
+      if (inflight.bodyHash !== bodyHash) {
+        throw new GatewayPersistenceError('conflict', 'idempotency key has a different body');
+      }
+      const existing = await inflight.promise;
+      return {
+        ...existing,
+        body: {
+          ...(existing.body as Record<string, unknown>),
+          replayed: true,
+        },
+      };
+    }
+
+    if (this.#admissions) {
+      const lookup = this.#admissions.lookup(claims.sub, session.sessionId, body.clientRequestId, body);
+      if (lookup.kind === 'conflict') {
+        throw new GatewayPersistenceError('conflict', 'idempotency key has a different body');
+      }
+      if (lookup.kind === 'replayed') {
+        if (body.commandId === 'compact') {
+          const parts = lookup.record.turnId.split(':');
+          if (lookup.record.result === 'failed' || parts[1] === 'failed') {
+            return publicError(409, 'compact_failed', 'compaction failed', false);
+          }
+          if (parts[1] === 'in_progress') {
+            return publicError(409, 'compact_interrupted', 'compaction was interrupted', false);
+          }
+          if (parts[1] !== 'completed' && parts[1] !== 'nothing_to_retry') {
+            return publicError(500, 'compact_invalid_state', 'invalid compaction record state', false);
+          }
+          const outcome = parts[1];
+          const tokensBefore = parts[2] ? Number(parts[2]) : undefined;
+          const tokensAfter = parts[3] ? Number(parts[3]) : undefined;
+          return {
+            status: 200,
+            body: {
+              commandId: body.commandId,
+              outcome,
+              ...(tokensBefore !== undefined && !Number.isNaN(tokensBefore) ? { tokensBefore } : {}),
+              ...(tokensAfter !== undefined && !Number.isNaN(tokensAfter) ? { tokensAfter } : {}),
+              replayed: true,
+            },
+          };
+        }
+        if (lookup.record.turnId === 'nothing_to_retry') {
+          return {
+            status: 200,
+            body: {
+              commandId: body.commandId,
+              outcome: 'nothing_to_retry',
+              replayed: true,
+            },
+          };
+        }
+        if (lookup.record.result === 'failed') {
+          return publicError(409, 'retry_failed', 'retry failed', false);
+        }
+        return {
+          status: 200,
+          body: {
+            commandId: body.commandId,
+            outcome: 'accepted',
+            turnId: lookup.record.turnId,
+            replayed: true,
+          },
+        };
+      }
+    }
+
+    const persisted = this.#persisted.get(claims.sessionId!);
+    if (this.#config.persistence && !persisted) {
+      return publicError(503, 'persistence_unavailable', 'gateway persistence unavailable', true);
+    }
+
+    const inflightPromise = (async (): Promise<GatewayRpcResult> => {
+      try {
+        if (body.commandId === 'compact') {
+          if (this.#admissions) {
+            this.#admissions.prepare({
+              ownerUserId: claims.sub,
+              sessionId: session.sessionId,
+              clientRequestId: body.clientRequestId,
+              body,
+              turnId: 'compact:in_progress',
+            });
+            this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+              state: 'accepted',
+              result: 'accepted',
+              phase: 'committed',
+              turnId: 'compact:in_progress',
+            });
+          }
+
+          let outcome: 'completed' | 'nothing_to_retry' = 'nothing_to_retry';
+          let tokensBefore: number | undefined;
+          let tokensAfter: number | undefined;
+          try {
+            const resultText = await session.service.compactContext();
+            const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
+            const isCompacted = resultText.toLowerCase().includes('context compacted locally');
+            outcome = isCompacted ? 'completed' : 'nothing_to_retry';
+            tokensBefore = match?.[1] ? Number(match[1]) : undefined;
+            tokensAfter = match?.[2] ? Number(match[2]) : undefined;
+
+            if (this.#admissions) {
+              const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId,
+              });
+            }
+          } catch (error) {
+            if (this.#admissions) {
+              try {
+                this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                  state: 'terminal',
+                  result: 'failed',
+                  phase: 'committed',
+                  turnId: 'compact:failed',
+                });
+              } catch {
+                // ignore
+              }
+            }
+            throw error;
+          }
+
+          return {
+            status: 200,
+            body: {
+              commandId: 'compact',
+              outcome,
+              ...(tokensBefore !== undefined ? { tokensBefore } : {}),
+              ...(tokensAfter !== undefined ? { tokensAfter } : {}),
+            },
+          };
+        }
+
+        if (body.commandId === 'retry-tool') {
+          const lastTool = session.service.peekLastToolOutput();
+          if (!lastTool) {
+            if (this.#admissions) {
+              this.#admissions.prepare({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId: 'nothing_to_retry',
+              });
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId: 'nothing_to_retry',
+              });
+            }
+            return {
+              status: 200,
+              body: {
+                commandId: 'retry-tool',
+                outcome: 'nothing_to_retry',
+              },
+            };
+          }
+
+          const turnId = crypto.randomUUID();
+          if (this.#admissions && persisted) {
+            const runtime = session.createRetryRuntime('retry-tool');
+            try {
+              const result = await this.#admissions.admit({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId,
+                runtime,
+                persistence: persisted.persistence.critical,
+                acceptedEvent: {
+                  sessionId: session.sessionId,
+                  type: 'assistant_started',
+                  payload: { turnId, clientRequestId: body.clientRequestId },
+                },
+              });
+
+              if (result.kind === 'rejected') {
+                return result.reason === 'queue_full'
+                  ? publicError(429, 'queue_full', 'message queue is full', true)
+                  : publicError(409, 'session_not_admitting', 'session is not admitting commands');
+              }
+
+              return {
+                status: 200,
+                body: {
+                  commandId: 'retry-tool',
+                  outcome: 'accepted',
+                  turnId: result.record.turnId,
+                  ...(result.replayed ? { replayed: true } : {}),
+                },
+              };
+            } catch (error) {
+              try {
+                await this.#enqueueEventPersistence(session.sessionId, async () => {
+                  const events = persisted.persistence.journal.events();
+                  const hasStarted = events.some((e) => e.type === 'assistant_started' && e.payload?.turnId === turnId);
+                  const hasTerminal = events.some(
+                    (e) =>
+                      (e.type === 'turn_completed' || e.type === 'turn_failed' || e.type === 'turn_aborted') &&
+                      e.payload?.turnId === turnId,
+                  );
+                  if (hasStarted && !hasTerminal) {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'turn_failed',
+                      payload: { turnId, outcome: 'failed', reason: 'runtime_error' },
+                    });
+                  }
+                });
+              } catch {
+                // ignore secondary journal error
+              }
+              return this.#mapError(error);
+            }
+          }
+
+          void session.service.retryLastToolOutput({ preferredMessageId: turnId }).catch(() => undefined);
+          return {
+            status: 200,
+            body: {
+              commandId: 'retry-tool',
+              outcome: 'accepted',
+              turnId,
+            },
+          };
+        }
+
+        if (body.commandId === 'retry-turn') {
+          const state = session.service.exportState();
+          if (state.history.length === 0) {
+            if (this.#admissions) {
+              this.#admissions.prepare({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId: 'nothing_to_retry',
+              });
+              this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+                state: 'terminal',
+                result: 'accepted',
+                phase: 'committed',
+                turnId: 'nothing_to_retry',
+              });
+            }
+            return {
+              status: 200,
+              body: {
+                commandId: 'retry-turn',
+                outcome: 'nothing_to_retry',
+              },
+            };
+          }
+
+          const turnId = crypto.randomUUID();
+          if (this.#admissions && persisted) {
+            const runtime = session.createRetryRuntime('retry-turn');
+            try {
+              const result = await this.#admissions.admit({
+                ownerUserId: claims.sub,
+                sessionId: session.sessionId,
+                clientRequestId: body.clientRequestId,
+                body,
+                turnId,
+                runtime,
+                persistence: persisted.persistence.critical,
+                acceptedEvent: {
+                  sessionId: session.sessionId,
+                  type: 'assistant_started',
+                  payload: { turnId, clientRequestId: body.clientRequestId },
+                },
+              });
+
+              if (result.kind === 'rejected') {
+                return result.reason === 'queue_full'
+                  ? publicError(429, 'queue_full', 'message queue is full', true)
+                  : publicError(409, 'session_not_admitting', 'session is not admitting commands');
+              }
+
+              return {
+                status: 200,
+                body: {
+                  commandId: 'retry-turn',
+                  outcome: 'accepted',
+                  turnId: result.record.turnId,
+                  ...(result.replayed ? { replayed: true } : {}),
+                },
+              };
+            } catch (error) {
+              try {
+                await this.#enqueueEventPersistence(session.sessionId, async () => {
+                  const events = persisted.persistence.journal.events();
+                  const hasStarted = events.some((e) => e.type === 'assistant_started' && e.payload?.turnId === turnId);
+                  const hasTerminal = events.some(
+                    (e) =>
+                      (e.type === 'turn_completed' || e.type === 'turn_failed' || e.type === 'turn_aborted') &&
+                      e.payload?.turnId === turnId,
+                  );
+                  if (hasStarted && !hasTerminal) {
+                    await persisted.persistence.critical.appendJournalCritical({
+                      sessionId: session.sessionId,
+                      type: 'turn_failed',
+                      payload: { turnId, outcome: 'failed', reason: 'runtime_error' },
+                    });
+                  }
+                });
+              } catch {
+                // ignore secondary journal error
+              }
+              return this.#mapError(error);
+            }
+          }
+
+          void session.service.retryLastFailedTurn({ preferredMessageId: turnId }).catch(() => undefined);
+          return {
+            status: 200,
+            body: {
+              commandId: 'retry-turn',
+              outcome: 'accepted',
+              turnId,
+            },
+          };
+        }
+
+        return publicError(422, 'command_not_allowed', 'command is not allowed');
+      } finally {
+        this.#inflightCommands.delete(inflightKey);
+      }
+    })();
+
+    this.#inflightCommands.set(inflightKey, { promise: inflightPromise, bodyHash });
+    try {
+      return await inflightPromise;
+    } catch (error) {
+      return this.#mapError(error);
+    }
   }
 
   async #resolveInteraction(
@@ -1692,7 +2081,7 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;
@@ -1701,6 +2090,7 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   if (method === 'POST' && match[2] === 'abort') return { purpose: 'abort', sessionId };
   if (method === 'GET' && match[2] === 'events') return { purpose: 'events_connect', sessionId };
   if (method === 'POST' && match[2] === 'config') return { purpose: 'session_update', sessionId };
+  if (method === 'POST' && match[2] === 'commands') return { purpose: 'command_invoke', sessionId };
   if (method === 'POST' && match[2]?.startsWith('interactions/'))
     return { purpose: 'interaction_resolve', sessionId, interactionId: match[3] };
   return null;
@@ -1933,6 +2323,20 @@ function isTurnBody(body: unknown): body is { turnId: string } {
     !Array.isArray(body) &&
     Object.keys(body as Record<string, unknown>).length === 1 &&
     isOpaqueId((body as Record<string, unknown>).turnId)
+  );
+}
+
+const COMMAND_ALLOWLIST = new Set(['compact', 'retry-tool', 'retry-turn']);
+
+function isCommandBody(body: unknown): body is { commandId: string; clientRequestId: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return (
+    Object.keys(value).length === 2 &&
+    typeof value.commandId === 'string' &&
+    value.commandId.length > 0 &&
+    value.commandId.length <= 256 &&
+    isOpaqueId(value.clientRequestId)
   );
 }
 

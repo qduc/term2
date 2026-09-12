@@ -8,6 +8,7 @@ import type { UserTurn } from '../types/user-turn.js';
 import type { GatewaySessionComposition, SecretFreeWorkerSettings, SessionBinding } from './contracts.js';
 import type { RuntimeResourcePolicy } from './runtime-factory.js';
 import type { PreparedMessageResult, PreparedMessageIds } from '../services/conversation/conversation-adapter.js';
+import type { GatewayMessageAdmissionRuntime } from './persistence/admission-persistence.js';
 
 export type ServerSessionStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
 
@@ -217,6 +218,94 @@ export class ServerSession {
     await this.service.cancelPreparedMessage(leaseId);
     this.#preparedTurns.delete(leaseId);
     this.#cancelledLeases.add(leaseId);
+  }
+
+  createRetryRuntime(command: 'retry-tool' | 'retry-turn'): GatewayMessageAdmissionRuntime {
+    return {
+      prepareMessage: async (_input: unknown, ids: PreparedMessageIds): Promise<PreparedMessageResult> => {
+        if (this.#status === 'closed' || this.#status === 'interrupted') {
+          return { kind: 'rejected', reason: 'closed' };
+        }
+        if (this.#status === 'running' || this.#status === 'awaiting_interaction') {
+          return { kind: 'rejected', reason: 'busy' };
+        }
+        const result = await this.service.prepareMessage('', ids);
+        if (result.kind === 'prepared') {
+          this.#preparedTurns.set(result.leaseId, result.turnId);
+        }
+        return result;
+      },
+      commitMessage: async (leaseId: string): Promise<void> => {
+        this.assertOpen();
+        const turnId = this.#preparedTurns.get(leaseId);
+        if (!turnId) throw new ServerSessionError('wrong_turn');
+        const resetBudget = (this.#composition.providerBroker as { resetRequestBudget?: () => void })
+          .resetRequestBudget;
+        resetBudget?.();
+
+        try {
+          await this.service.cancelPreparedMessage(leaseId);
+        } catch {
+          // ignore cleanup errors
+        }
+        this.#preparedTurns.delete(leaseId);
+
+        await new Promise<void>((resolve, reject) => {
+          let admitted = false;
+          const onAdmission = (error?: unknown) => {
+            if (admitted) return;
+            admitted = true;
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          };
+
+          try {
+            const retryPromise =
+              command === 'retry-tool'
+                ? this.service.retryLastToolOutput({
+                    preferredMessageId: turnId,
+                    onAdmission,
+                  })
+                : this.service.retryLastFailedTurn({
+                    preferredMessageId: turnId,
+                    onAdmission,
+                  });
+
+            retryPromise.then(
+              (terminal) => {
+                if (terminal === null && !admitted) {
+                  admitted = true;
+                  reject(new ServerSessionError('wrong_turn'));
+                }
+              },
+              (error) => {
+                if (!admitted) {
+                  admitted = true;
+                  reject(error);
+                }
+              },
+            );
+          } catch (error) {
+            if (!admitted) {
+              admitted = true;
+              reject(error);
+            }
+          }
+        });
+
+        if (!this.#activeTurnId) {
+          this.#activeTurnId = turnId;
+          this.#status = 'running';
+          this.#startDeadline(turnId);
+        }
+      },
+      cancelPreparedMessage: async (leaseId: string): Promise<void> => {
+        await this.cancelPreparedMessage(leaseId);
+      },
+    };
   }
 
   resolvePendingInteraction(request: ResolvePendingInteractionRequest): PendingInteractionResolution {

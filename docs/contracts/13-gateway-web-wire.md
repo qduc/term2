@@ -428,4 +428,12 @@ to bounded reason codes and optionally carries bounded finalText. Child
 approval/question payloads use the existing PendingInteractionDto and
 interaction checkpoint/resolve seam; async child events retain their
 originating turnId when the root turn is no longer active.
+
+Child approval frames are emitted from the session-owned FIFO approval
+controller after its foreground lease publishes a pause, and the existing
+interaction resolve route calls that controller rather than the root approval
+state. Child questions use the async registry mailbox through the same route.
+Pending child checkpoints are recovered as non-resolvable
+interaction_recovered after restart; the gateway never fabricates a continuation
+for a lease that lived in the previous process.
 ```

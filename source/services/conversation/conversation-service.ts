@@ -23,6 +23,7 @@ import type {
   QueuedTurnStartObserver,
   SubmissionMutation,
 } from './conversation-adapter.js';
+import type { ConversationEvent } from './conversation-events.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../../core/index.js';
@@ -211,6 +212,14 @@ export class ConversationService {
 
   get backgroundSubagentApprovals(): BackgroundSubagentApprovalChannel {
     return this.#runtime.backgroundSubagentApprovals;
+  }
+
+  setBackgroundSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+    this.#clientHandle.agentClient.setBackgroundSubagentEventSink?.(sink);
+  }
+
+  answerBackgroundSubagentQuestion(runId: string, messageId: string, answer: string): boolean {
+    return this.#clientHandle.agentClient.answerBackgroundSubagentQuestion?.(runId, messageId, answer) === true;
   }
 
   get sessionId(): string {

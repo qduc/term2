@@ -97,6 +97,53 @@ describe('M4 conversation event projections', () => {
     expect(unknown).toMatchObject({ type: 'turn_failed', payload: { reason: 'runtime_error' } });
     expect(unknown?.payload.stack).toBeUndefined();
   });
+
+  it('publishes child approval and question interaction DTOs', () => {
+    const interaction = {
+      version: 1 as const,
+      interactionId: 'child-interaction',
+      kind: 'ask_user' as const,
+      variant: 'ask_user' as const,
+      descriptor: { agentName: 'worker', toolName: 'ask_user', argumentsText: '{}' },
+      choices: [{ id: 'custom', label: 'Answer' }],
+      revision: 1,
+    };
+    const binding = {
+      publicInteractionId: interaction.interactionId,
+      expectedInteractionId: 0,
+      continuationGeneration: 'generation',
+      revision: 1,
+      turnId: 'turn-1',
+      variant: 'ask_user',
+      dto: interaction,
+      owner: 'background_question' as const,
+      childRunId: 'run-1',
+      childMessageId: 'question-1',
+    };
+    expect(
+      mapConversationEvent(
+        {
+          type: 'subagent_question',
+          async: true,
+          messageId: 'question-1',
+          runId: 'run-1',
+          role: 'worker',
+          question: 'Which?',
+        },
+        'turn-1',
+        'session-1',
+        binding as any,
+      )?.payload,
+    ).toMatchObject({ interaction });
+    expect(
+      mapConversationEvent(
+        { type: 'subagent_approval_required', agentId: 'run-1', role: 'worker' },
+        'turn-1',
+        'session-1',
+        { ...binding, owner: 'background_approval' } as any,
+      )?.payload,
+    ).toMatchObject({ interaction });
+  });
 });
 
 describe('M4 public event allowlist', () => {
@@ -108,10 +155,8 @@ describe('M4 public event allowlist', () => {
       'subagent_tool_started',
       'subagent_text_turn',
       'subagent_command_message',
-      'subagent_approval_required',
       'subagent_completed',
       'subagent_interrupted',
-      'subagent_question',
       'context_compaction_started',
       'context_compaction_completed',
       'context_compaction_failed',
@@ -124,6 +169,29 @@ describe('M4 public event allowlist', () => {
           type: type as any,
           occurredAt: new Date().toISOString(),
           payload: { turnId: 'turn-1' },
+        } as any),
+      ).toBe(true);
+    }
+    for (const type of ['subagent_approval_required', 'subagent_question']) {
+      expect(
+        isPublicEventEnvelope({
+          schemaVersion: 1,
+          id: 1,
+          sessionId: 'session-1',
+          type: type as any,
+          occurredAt: new Date().toISOString(),
+          payload: {
+            turnId: 'turn-1',
+            interaction: {
+              version: 1,
+              interactionId: 'interaction-1',
+              kind: 'tool_approval',
+              variant: 'ordinary_tool',
+              descriptor: { agentName: 'worker', toolName: 'read_file', argumentsText: '{}' },
+              choices: [{ id: 'reject', label: 'Reject' }],
+              revision: 1,
+            },
+          },
         } as any),
       ).toBe(true);
     }

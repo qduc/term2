@@ -51,6 +51,47 @@ it('mints streaming message ids from the shared caller sequence when provided', 
   expect(capturedMessages).toEqual([{ id: 'shared-0', sender: 'bot', status: 'streaming', text: 'streamed text' }]);
 });
 
+it('leaves one finalized bot row when text is flushed before React runs the queued updater', () => {
+  // React evaluates functional updaters lazily. The leading-edge throttle
+  // queues the first delta's "create streaming row" updater; a tool call in
+  // the same burst then flushes the text before that updater has run. If the
+  // live row's id is only assigned inside the updater, the flush sees no live
+  // row and appends a finalized copy, and the late updater adds a stranded
+  // streaming row holding the first chunk ("Type" above "Typecheck is ...").
+  let counter = 0;
+  const queued: Array<(prev: any[]) => any[]> = [];
+  const session = createStreamingSession(
+    {
+      appendMessages: (messages) => queued.push((prev) => [...prev, ...messages]),
+      setMessages: (updater) => queued.push(updater),
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: () => {},
+      reasoningThrottleMs: 200,
+      createMessageId: () => 'id-' + counter++,
+    },
+    'deferred-updater',
+  );
+
+  session.applyConversationEvent({ type: 'text_delta', delta: 'Type' });
+  session.applyConversationEvent({ type: 'text_delta', delta: 'check is fully clean.' });
+  session.applyConversationEvent({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: {} });
+
+  const messages = queued.reduce<any[]>((prev, updater) => updater(prev), []);
+  const botRows = messages.filter((message) => message.sender === 'bot');
+  expect(botRows).toEqual([expect.objectContaining({ status: 'finalized', text: 'Typecheck is fully clean.' })]);
+});
+
 it('createStreamingSession wires state and logs final usage', () => {
   const calls: {
     eventHandlerEvents: any[];

@@ -1,55 +1,12 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import type { GatewaySafeLogMetadata } from './contracts.js';
+import { SAFE_LOG_OPERATIONS, SAFE_LOG_REASONS, type GatewaySafeLogMetadata } from './contracts.js';
 
-const OPERATIONS = new Set<GatewaySafeLogMetadata['operation']>([
-  'startup',
-  'workspace_list',
-  'workspace_candidate_validate',
-  'workspace_candidate_browse',
-  'workspace_candidate_select',
-  'settings_read',
-  'settings_write',
-  'credential_write',
-  'credential_delete',
-  'oauth_login',
-  'oauth_select',
-  'oauth_delete',
-  'session_update',
-  'session_list',
-  'model_list',
-  'session_create',
-  'session_resume',
-  'session_read',
-  'message_submit',
-  'interaction_resolve',
-  'abort',
-  'command_invoke',
-  'events_connect',
-  'shutdown',
-]);
+// The allowlists live in contracts.ts as const tuples so the union type and the
+// runtime set cannot drift: both derive from the same declaration.
+const OPERATIONS = new Set<string>(SAFE_LOG_OPERATIONS);
 const OUTCOMES = new Set<GatewaySafeLogMetadata['outcome']>(['allowed', 'denied', 'failed', 'interrupted']);
-const REASONS = new Set([
-  'disabled',
-  'invalid_assertion',
-  'replay',
-  'owner_mismatch',
-  'workspace_not_found',
-  'workspace_escape',
-  'model_unavailable',
-  'provider_unavailable',
-  'shutdown',
-  'startup_failed',
-  'accepted',
-  'completed',
-  'workspace_root_unavailable',
-  'workspace_root_not_canonical',
-  'workspace_path_escape',
-  'workspace_not_readable',
-  'candidate_registry_full',
-  'settings_conflict',
-  'settings_not_allowed',
-  'not_persisted',
-]);
+
+const REASONS = new Set<string>(SAFE_LOG_REASONS);
 const ALLOWED_KEYS = new Set([
   'schemaVersion',
   'sessionId',

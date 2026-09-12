@@ -2,7 +2,8 @@
 
 ## Resume here
 
-Status: Milestones 0–2 merged in `89e7e0ab` and `c52c67d1` (2026-09-12); Milestone 3 is in progress.
+Status: Milestones 0–3 are implemented through `c2f65197` (2026-09-12).
+Milestone 4 closed with no catalog change after measurement; Milestone 5 is next.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -11,9 +12,10 @@ not an authoritative contract for Term2 or a source that overrides the live
 code.
 
 Milestone 0 confirmed the unfinished-call settlement defect through the public
-`run_code` boundary. Start with Milestone 1 and turn the eight expected-failure
-contract tests in `run-code.test.ts` green; do not weaken their assertions to
-match the current early-settlement behavior.
+`run_code` boundary; Milestones 1–3 repaired it and established structured
+execution and scripted-output contracts. Start with Milestone 5. Milestone 4's
+measurement did not justify catalog search; keep `tools.describe` unless a new
+consumer or fresh usage evidence crosses that recorded gate.
 
 Before touching this area, also read:
 
@@ -378,6 +380,56 @@ namespace/name handling must be explicit before nested namespaces ship.
 - Search results correspond exactly to members callable in that invocation.
 - Hidden or prohibited tools do not leak through catalog or search.
 - Approval and physical-path authority are still evaluated only at dispatch.
+
+### Measurement result and disposition (2026-09-12)
+
+The current bound built-in profile registries were measured by constructing each
+profile through `getAgentDefinition`, binding its final registry with
+`bindRunCodeRegistry`, and reading the resulting `run_code` description. The
+token estimate is the explicit coarse convention `ceil(characters / 4)`, not a
+provider tokenizer measurement.
+
+| Built-in profile | Scriptable tools in measured fixture | Description characters | Estimated tokens |
+| --- | ---: | ---: | ---: |
+| standard | 14 | 5,725 | 1,432 |
+| lite | 14 | 5,725 | 1,432 |
+| plan | 14 | 5,725 | 1,432 |
+| mentor | 14 | 5,725 | 1,432 |
+| orchestrator | 18 | 6,008 | 1,502 |
+
+The fixture enabled the built-in profile and its required orchestrator controls,
+but omitted optional session-browser, skills, and background-shell adapters. A
+separate observed production invocation on 2026-09-06 exposed 27 scriptable
+tools; its exact list is preserved in
+`docs/reports/script-failure-canonical-evidence-2026-09-07.md`.
+
+Existing natural groups are filesystem, code-context, web, memory, sessions,
+skills, background shell, user interaction, mentor, subagents, workflow, and
+shell. They are registry-construction groups, not callable nested namespaces.
+
+Usage evidence remains low:
+
+- `docs/plans/run-code-authoring-friction.md` measured `tools.describe` in 8
+  of 260 scripts (3.08%).
+- The canonical 2026-09-06 07:43:49 through 2026-09-07 07:43:49 UTC+7 window in
+  `docs/reports/run-code-error-attribution-2026-09-07.md` contained 813
+  completed `run_code` records. The recovered failure ledger contains three
+  unknown/wrong-tool-name records (0.37% of completions): one unavailable
+  `apply_patch` lookup and two `search_replace` calls.
+- No checked-in telemetry identifies turns spent discovering non-essential
+  tools. The available 12-run field test is qualitative and found no validation
+  errors attributable to discovery.
+- No concrete MCP or OpenAPI registry consumer, planned tool count, or catalog
+  growth projection exists. The repository references are comparative or
+  explicitly deferred.
+
+**Disposition:** keep the current complete header plus exact `tools.describe`;
+do not add catalog budgeting, namespace-fair selection, search, or pagination.
+A roughly 1.4–1.5k-token measured header, 3.08% describe usage, 0.37% recovered
+unknown-name incidence, and no planned growth consumer do not demonstrate the
+material discovery problem required by this milestone. Reopen Milestone 4 only
+for a concrete large registry consumer or fresh normalized telemetry showing
+material discovery failures or turn cost.
 
 ## Milestone 5 — Harden and document the confinement boundary
 

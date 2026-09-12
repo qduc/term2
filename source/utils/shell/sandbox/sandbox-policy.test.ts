@@ -5,6 +5,13 @@ import path from 'node:path';
 import { createSandboxRuntimeConfig, isPathProtected } from './sandbox-policy.js';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 
+it('does not grant the workspace write path for a read-only session', () => {
+  const config = createSandboxRuntimeConfig({ cwd: process.cwd(), allowWrite: false });
+
+  expect(config.filesystem.allowWrite).not.toContain(fs.realpathSync(process.cwd()));
+  expect(config.filesystem.allowWrite).toContain(SANDBOX_TEMP_DIR);
+});
+
 it('createSandboxRuntimeConfig allows writing to the shared sandbox temp dir', () => {
   const config = createSandboxRuntimeConfig();
 

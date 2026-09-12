@@ -52,3 +52,15 @@ it('tracks, checks, removes, and clears session-created files', () => {
   access.clearTransient();
   expect(access.isCreatedInSession('another.txt', '/test/workspace')).toBe(false);
 });
+
+it('denies every edit path when the session is explicitly read-only', () => {
+  const settings = createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] });
+  const access = new SessionAccessState(settings, { allowEdit: false });
+
+  access.allowEditFile('/workspace/allowed.txt');
+  access.allowEditFolder('/workspace/allowed');
+
+  expect(access.allowsEdit('/workspace/allowed.txt', '/')).toBe(false);
+  expect(access.allowsEdit('/workspace/allowed/nested.txt', '/')).toBe(false);
+  expect(access.allowsEdit('/workspace/other.txt', '/')).toBe(false);
+});

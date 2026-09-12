@@ -113,6 +113,7 @@ export type GatewayAgentClientFactory = (input: {
   toolOwnership: ToolOwnershipRegistry;
   postExecutePauseCapability: PostExecutePauseCapability;
   sessionAccess: SessionAccessState;
+  readOnly: boolean;
   providerContinuity: ProviderContinuity;
   requestCapture: OpenAICandidateObserver;
   toolLifecycle?: ToolExecutionLifecyclePort;
@@ -133,6 +134,7 @@ export type RuntimeFactoryOptions = {
   providerProbe?: WorkerBoundaryProbe;
   tmpDir: string;
   sandboxAvailable: true;
+  allowWrite?: boolean;
   createAgentClient: GatewayAgentClientFactory;
   createLogger?: (sessionId: string, context: ISessionContextService) => ILoggingService;
   createSettings?: (
@@ -160,6 +162,7 @@ export function createProductionRuntimeFactory(input: {
   settingsAuthority: ISettingsService;
   tmpDir: string;
   sandboxAvailable: true;
+  allowWrite?: boolean;
   policy?: Partial<RuntimeResourcePolicy>;
   providerProbe?: WorkerBoundaryProbe;
   createLogger?: RuntimeFactoryOptions['createLogger'];
@@ -215,7 +218,13 @@ export function createProductionRuntimeFactory(input: {
     modelCatalogLogger: input.modelCatalogLogger,
     createLogger: input.createLogger,
     createSessionContext: input.createSessionContext,
-    createSettingsSnapshot: (_binding) => createSessionSettingsSnapshot({ settings: input.settingsAuthority }),
+    createSettingsSnapshot: (binding) =>
+      createSessionSettingsSnapshot({
+        settings: input.settingsAuthority,
+        effectiveToolPolicy: {
+          allowWrite: input.allowWrite === true && binding.access === 'read_write',
+        },
+      }),
     createSettings,
     createAgentClient: ({
       settings,
@@ -463,9 +472,13 @@ export class RuntimeFactory {
           gatewayMode: true,
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
+          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
         }),
       undefined,
-      { allowBackgroundShell: this.#policy.maxShellJobs > 0 },
+      {
+        allowBackgroundShell: this.#policy.maxShellJobs > 0,
+        allowEdit: binding.access === 'read_write' && sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite === true,
+      },
     );
     let service: ConversationService | undefined;
     try {

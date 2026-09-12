@@ -1,7 +1,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { dirname } from 'node:path';
-import { chmod, mkdir, unlink } from 'node:fs/promises';
+import { chmod, lstat, mkdir, unlink } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import type { AssertionVerifier } from './assertion.js';
 import type { GatewayAssertionClaims } from './contracts.js';
@@ -111,7 +111,16 @@ export class GatewayServer {
     if (this.#server) return;
     if (this.#socketPath) {
       await mkdir(dirname(this.#socketPath), { recursive: true });
-      await unlink(this.#socketPath).catch(() => undefined);
+      // A stale socket from a crashed peer is removed; anything else at the
+      // path is operator data and must not be unlinked silently.
+      const stale = await lstat(this.#socketPath).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (stale) {
+        if (!stale.isSocket()) throw new Error(`gateway socket path ${this.#socketPath} exists and is not a socket`);
+        await unlink(this.#socketPath);
+      }
       this.#server = createServer((request, response) => void this.#handle(request, response));
     } else {
       const tls = this.#tls!;

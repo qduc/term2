@@ -54,6 +54,37 @@ export const DEFAULT_RUNTIME_RESOURCE_POLICY: RuntimeResourcePolicy = Object.fre
   maxLiveSessionsPerOwner: 4,
 });
 
+/**
+ * Settings the production factory reads from the launcher's authority on
+ * behalf of every session. Every entry needs a reason, and every entry must
+ * stay a provider/transport/web-search input: the structural test in
+ * `runtime-factory.test.ts` fails if an entry grants shell, sandbox,
+ * profile, or tool-enablement authority to a session.
+ */
+export const PRODUCTION_AUTHORITY_SETTING_KEYS: readonly string[] = [
+  // Provider API keys are read in-process by the provider adapter and never
+  // enter a DTO, log record, or child-process environment.
+  'agent.openai.apiKey',
+  // OpenRouter's adapter resolves this key when constructing its model.
+  'agent.openrouter.apiKey',
+  // OpenRouter adapter's API endpoint override for gateways and mirrors.
+  'agent.openrouter.baseUrl',
+  // OpenRouter attribution header (HTTP-Referer) the adapter sends.
+  'agent.openrouter.referrer',
+  // OpenRouter attribution header (X-Title) the adapter sends.
+  'agent.openrouter.title',
+  // Selects which Codex transport (websocket vs HTTP) the adapter opens.
+  'agent.transport',
+  // Bounds the Codex websocket's first-frame wait inside the adapter.
+  'agent.codex.websocketFirstFrameTimeoutMs',
+  // Bounds the Codex websocket's inter-frame idle wait inside the adapter.
+  'agent.codex.websocketInterFrameTimeoutMs',
+  // The web-search tool reads this key when it executes in-process.
+  'webSearch.tavily.apiKey',
+  // The web-search tool reads this key when it executes in-process.
+  'webSearch.exa.apiKey',
+];
+
 export class RuntimeFactoryError extends Error {
   readonly code:
     | 'invalid_binding'
@@ -135,13 +166,7 @@ export function createProductionRuntimeFactory(input: {
   createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
   modelCatalogLogger?: ILoggingService;
 }): RuntimeFactory {
-  const providerSettingKeys = new Set([
-    // Provider API keys are read in-process by the provider adapter and never
-    // enter a DTO, log record, or child-process environment.
-    'agent.openai.apiKey',
-    // OpenRouter's adapter resolves this key when constructing its model.
-    'agent.openrouter.apiKey',
-  ]);
+  const providerSettingKeys = new Set(PRODUCTION_AUTHORITY_SETTING_KEYS);
   const providerDynamicKeys = new Set([
     // Runtime provider definitions are installed by the launcher and may
     // contain provider-local credentials; they stay process-local here.

@@ -433,10 +433,14 @@ Child approval frames are emitted from the session-owned FIFO approval
 controller after its foreground lease publishes a pause, and the existing
 interaction resolve route calls that controller rather than the root approval
 state. Child questions use the async registry mailbox through the same route.
+At present, child approvals are available only through the adopted foreground
+subagent lease path; native async children do not publish approval pauses.
+Async children use subagent_question and the mailbox answer route instead.
 Pending child checkpoints are recovered as interaction_recovered, then
-explicitly settled as cancelled and followed by turn_failed with the bounded
-runtime_error reason. The gateway never fabricates a continuation for a lease
-that lived in the previous process.
+explicitly settled as cancelled and followed by subagent_interrupted for the
+child. The gateway never fabricates a continuation for a lease that lived in
+the previous process, and never appends a terminal failure to the originating
+root turn.
 ```
 
 ## 8. M5b additions: Session Commands RPC

@@ -11,6 +11,7 @@ export type InteractionCheckpoint = {
   readonly revision: number;
   readonly generation: string;
   readonly settleOnRecovery?: 'child_interrupted';
+  readonly child?: { readonly agentId: string; readonly role: string };
 };
 
 export class InteractionCheckpointStore {
@@ -98,8 +99,13 @@ export class InteractionCheckpointStore {
       await journal.append(
         {
           sessionId: journal.sessionId,
-          type: 'turn_failed',
-          payload: { turnId: checkpoint.turnId, outcome: 'failed', reason: 'runtime_error' },
+          type: 'subagent_interrupted',
+          payload: {
+            turnId: checkpoint.turnId,
+            agentId: checkpoint.child?.agentId ?? checkpoint.interaction.descriptor.agentName,
+            role: checkpoint.child?.role ?? checkpoint.interaction.descriptor.agentName,
+            finalText: 'Child interaction interrupted by daemon restart.',
+          },
         },
         { durability: 'critical' },
       );

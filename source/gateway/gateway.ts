@@ -326,6 +326,7 @@ export class Term2Gateway {
   readonly #interactionBindings = new Map<string, InteractionBinding>();
   readonly #childTurnIds = new Map<string, string>();
   readonly #childRoles = new Map<string, string>();
+  readonly #lastTurnIds = new Map<string, string>();
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
   readonly #inflightCommands = new Map<string, { promise: Promise<GatewayRpcResult>; bodyHash: string }>();
@@ -916,6 +917,8 @@ export class Term2Gateway {
         variant: dto.variant,
         dto,
         owner: 'background_approval',
+        childRunId: event.agentId,
+        childRole: event.role,
         backgroundEntry: entry,
         backgroundRevision: snapshot.revision,
       };
@@ -941,6 +944,7 @@ export class Term2Gateway {
       owner: 'background_question',
       childRunId: event.runId,
       childMessageId: event.messageId,
+      childRole: event.role,
     };
     this.#interactionBindings.set(sessionId, binding);
     return binding;
@@ -1548,10 +1552,11 @@ export class Term2Gateway {
         accepted = session.service.answerBackgroundSubagentQuestion(
           binding.childRunId,
           binding.childMessageId,
-          decision.answer,
+          decision.approvalAnswer ?? decision.answer,
         );
       }
       if (!accepted) return publicError(409, 'stale_interaction', 'interaction is stale');
+      this.#countInteraction('interaction_resolved');
       await this.#enqueueEventPersistence(claims.sessionId!, async () => {
         const persisted = this.#persisted.get(claims.sessionId!);
         if (!persisted) throw new GatewayPersistenceError('not_found', 'session persistence is unavailable');
@@ -1563,7 +1568,7 @@ export class Term2Gateway {
             payload: {
               turnId: binding.turnId,
               interactionId,
-              outcome: decision.approvalAnswer ? 'approved' : 'continued',
+              outcome: decision.outcome,
               variant: binding.variant,
             },
           },
@@ -1911,6 +1916,9 @@ export class Term2Gateway {
           revision: childBinding.revision,
           generation: childBinding.continuationGeneration,
           settleOnRecovery: 'child_interrupted',
+          ...(childBinding.childRunId
+            ? { child: { agentId: childBinding.childRunId, role: childBinding.childRole ?? 'subagent' } }
+            : {}),
         });
       }
       // An ask_user answer can advance the live binding before the original
@@ -2063,6 +2071,7 @@ export class Term2Gateway {
         persisted = await this.#config.persistence?.open(binding);
         const session = await this.#config.runtimeFactory.create(binding, {
           eventSink: (event, context) => {
+            if (context.turnId) this.#lastTurnIds.set(binding.sessionId, context.turnId);
             if (event.type === 'subagent_started' && event.agentId && context.turnId)
               this.#childTurnIds.set(event.agentId, context.turnId);
             if (event.type === 'subagent_approval_required') this.#childRoles.set(event.agentId, event.role);
@@ -2082,6 +2091,7 @@ export class Term2Gateway {
             await persisted!.persistence.close();
             this.#persisted.delete(binding.sessionId);
             this.#interactionBindings.delete(binding.sessionId);
+            this.#lastTurnIds.delete(binding.sessionId);
             await this.#config.persistence?.close(
               binding.sessionId,
               this.#shutdownInProgress ? 'interrupted' : 'closed',
@@ -2108,7 +2118,9 @@ export class Term2Gateway {
             this.#childTurnIds.set(event.agentId, session.activeTurnId);
             this.#childRoles.set(event.agentId, event.role);
           }
-          const turnId = agentId ? this.#childTurnIds.get(agentId) : undefined;
+          const turnId = agentId
+            ? this.#childTurnIds.get(agentId) ?? session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId)
+            : session.activeTurnId ?? this.#lastTurnIds.get(binding.sessionId);
           if (turnId) void this.#persistConversationEvent(binding.sessionId, event, { turnId, discardedTurnIds: [] });
         });
         session.service.backgroundSubagentApprovals.subscribe(() => {
@@ -2252,6 +2264,7 @@ type InteractionBinding = {
   owner: 'root' | 'background_approval' | 'background_question';
   childRunId?: string;
   childMessageId?: string;
+  childRole?: string;
   backgroundEntry?: { runId: string; generation: number; toolCallId: string; toolName: string; argumentsText: string };
   backgroundRevision?: number;
 };
@@ -2994,7 +3007,7 @@ export function mapConversationEvent(
     case 'usage_update': {
       const inputTokens = safeCounter(event.usage.prompt_tokens);
       const outputTokens = safeCounter(event.usage.completion_tokens);
-      const totalTokens = safeCounter(event.usage.total_tokens) ?? inputTokens + outputTokens;
+      const totalTokens = safeCounter(event.usage.total_tokens) || inputTokens + outputTokens;
       return {
         ...base,
         type: 'usage_update',

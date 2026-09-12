@@ -72,6 +72,10 @@ describe('M4 conversation event projections', () => {
   });
 
   it('projects usage, retry, subagent progress, and compaction', () => {
+    expect(map({ type: 'usage_update', usage: { prompt_tokens: 2, completion_tokens: 3 } })).toMatchObject({
+      type: 'usage_update',
+      payload: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
+    });
     expect(
       map({ type: 'usage_update', usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 } }),
     ).toMatchObject({ type: 'usage_update', payload: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } });
@@ -407,6 +411,124 @@ async function rpc(
   });
 }
 
+async function createChildInteractionGateway(root: string, mode: 'approval' | 'question') {
+  const manifestPath = path.join(root, 'manifest.json');
+  writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+  const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+  let backgroundSink: ((event: ConversationEvent) => void) | null = null;
+  let startCalls = 0;
+  let approvalPauseSink: ((pause: any) => void) | null = null;
+  const resumed: { value: boolean } = { value: false };
+  const answers: string[] = [];
+  const runtimeFactory = new RuntimeFactory({
+    tmpDir: path.join(root, 'runtime'),
+    providerBroker: broker,
+    providerProbe: { available: true, secretFree: true },
+    sandboxAvailable: true,
+    createAgentClient: () =>
+      ({
+        chat: async () => '',
+        abort: () => {},
+        setModel: () => {},
+        addToolInterceptor: () => () => {},
+        setSubagentEventSink: () => {},
+        setBackgroundSubagentEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
+          backgroundSink = sink;
+        },
+        setBackgroundSubagentApprovalPauseSink: (sink: ((pause: any) => void) | null) => {
+          approvalPauseSink = sink;
+        },
+        answerBackgroundSubagentQuestion: (_runId: string, _messageId: string, answer: string) => {
+          answers.push(answer);
+          return true;
+        },
+        startStream: async () => {
+          startCalls += 1;
+          const emitChildStart = () => {
+            backgroundSink?.({
+              type: 'subagent_started',
+              agentId: 'child-run',
+              role: 'worker',
+              task: 'child',
+              async: true,
+            });
+          };
+          const emitChildInteraction = () => {
+            if (mode === 'approval') {
+              approvalPauseSink?.({
+                runId: 'child-run',
+                generation: 1,
+                role: 'worker',
+                interruption: { name: 'shell', callId: 'child-call', arguments: { command: 'echo child' } },
+                apply: (callback: (application: unknown) => boolean) => {
+                  const accepted = callback({ runId: 'child-run', generation: 1, handle: {}, interruption: {} });
+                  resumed.value = accepted;
+                  return accepted;
+                },
+              });
+              backgroundSink?.({ type: 'subagent_approval_required', agentId: 'child-run', role: 'worker' });
+            } else {
+              backgroundSink?.({
+                type: 'subagent_question',
+                async: true,
+                messageId: 'child-question',
+                runId: 'child-run',
+                role: 'worker',
+                question: 'What should the child do?',
+              });
+            }
+          };
+          return createAgentStream({
+            async *[Symbol.asyncIterator]() {
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              emitChildStart();
+              yield { type: 'final' as const, finalText: 'root complete' } as never;
+              setTimeout(emitChildInteraction, 100);
+            },
+            completed: Promise.resolve(),
+            history: [],
+            newItems: [],
+            output: [],
+            lastResponseId: null,
+          });
+        },
+        continueRunStream: async () => createMockStream([]),
+      } as ConversationAgentClient),
+  });
+  const gateway = Term2Gateway.create({
+    enabled: true,
+    socketPath: path.join(root, 'gateway.sock'),
+    manifestPath,
+    manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+    replayDbPath: path.join(root, 'replay.sqlite'),
+    issuer: 'chatforge-bff',
+    audience: 'term2-gateway',
+    publicKeys: { active: publicKey },
+    providerBroker: broker,
+    providerProbe: { available: true, secretFree: true },
+    workerSandboxAvailable: true,
+    workspaceBoundaryProbe: boundaryProbe,
+    allowWrite: true,
+    auditWriter: async () => undefined,
+    tmpDir: path.join(root, 'tmp'),
+    runtimeFactory,
+    persistence,
+  });
+  return {
+    gateway,
+    persistence,
+    runtimeFactory,
+    resumed,
+    answers,
+    get startCalls() {
+      return startCalls;
+    },
+    get sinkInstalled() {
+      return backgroundSink !== null;
+    },
+  };
+}
+
 function makeVerifier(ledger: ReplayLedger = new MemoryReplayLedger(), clock = () => 1_000) {
   return {
     verifier: new AssertionVerifier({
@@ -445,6 +567,138 @@ async function connectEvents(
 
 afterEach(() => {
   for (const root of tempRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe('M4 child interaction gateway routes', () => {
+  const sessionToken = (purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+    createGatewayAssertion({
+      privateKey,
+      kid: 'active',
+      issuer: 'chatforge-bff',
+      audience: 'term2-gateway',
+      subject: 'user-a',
+      purpose,
+      workspaceId: 'workspace-a',
+      ...(sessionId ? { sessionId } : {}),
+    });
+
+  async function waitForInteraction(
+    socketPath: string,
+    sessionId: string,
+    tokenForRead: () => string,
+    debug?: () => string,
+  ) {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const read = await rpc(socketPath, tokenForRead(), null, '/private/agent/v1/sessions/' + sessionId);
+      const session = (read.body as { session?: { interaction?: { interaction?: Record<string, any> } } }).session;
+      if (!session) throw new Error('session read failed: ' + JSON.stringify(read));
+      const interaction = session.interaction?.interaction;
+      if (interaction) return interaction;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error('child interaction was not published: ' + (debug?.() ?? 'no journal'));
+  }
+
+  it('publishes and resolves a child approval through the interaction route', async () => {
+    const root = makeTemp();
+    const fixture = await createChildInteractionGateway(root, 'approval');
+    try {
+      await fixture.gateway.start();
+      const socketPath = path.join(root, 'gateway.sock');
+      const created = await rpc(
+        socketPath,
+        sessionToken('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const submitted = await rpc(
+        socketPath,
+        sessionToken('message_submit', sessionId),
+        { text: 'start child', clientRequestId: 'child-approval' },
+        '/private/agent/v1/sessions/' + sessionId + '/messages',
+      );
+      expect(submitted.status).toBe(202);
+      expect(fixture.startCalls).toBe(1);
+      expect(fixture.sinkInstalled).toBe(true);
+      const interaction = await waitForInteraction(
+        socketPath,
+        sessionId,
+        () => sessionToken('session_read', sessionId),
+        () => {
+          const directory = fixture.persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+          return directory ? readFileSync(path.join(directory, 'events.jsonl'), 'utf8') : 'missing directory';
+        },
+      );
+      expect(interaction).toMatchObject({ kind: 'tool_approval', revision: 1 });
+      const resolved = await rpc(
+        socketPath,
+        sessionToken('interaction_resolve', sessionId),
+        { revision: 1, answer: 'approve' },
+        '/private/agent/v1/sessions/' + sessionId + '/interactions/' + interaction.interactionId,
+      );
+      expect(resolved.status).toBe(202);
+      expect(fixture.resumed.value).toBe(true);
+      expect(fixture.gateway.interactionMetrics.interaction_resolved).toBe(1);
+      const directory = fixture.persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId)!;
+      const events = readFileSync(path.join(directory, 'events.jsonl'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { type: string; payload: Record<string, unknown> });
+      expect(events.find((event) => event.type === 'interaction_resolved')?.payload.outcome).toBe('approved');
+    } finally {
+      await fixture.gateway.shutdown(100);
+      fixture.persistence.closeIndex();
+      await fixture.runtimeFactory.shutdown();
+    }
+  });
+
+  it('answers a settled-origin child question through the interaction route', async () => {
+    const root = makeTemp();
+    const fixture = await createChildInteractionGateway(root, 'question');
+    try {
+      await fixture.gateway.start();
+      const socketPath = path.join(root, 'gateway.sock');
+      const created = await rpc(
+        socketPath,
+        sessionToken('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const submitted = await rpc(
+        socketPath,
+        sessionToken('message_submit', sessionId),
+        { text: 'ask child', clientRequestId: 'child-question' },
+        '/private/agent/v1/sessions/' + sessionId + '/messages',
+      );
+      expect(submitted.status).toBe(202);
+      expect(fixture.startCalls).toBe(1);
+      expect(fixture.sinkInstalled).toBe(true);
+      const interaction = await waitForInteraction(
+        socketPath,
+        sessionId,
+        () => sessionToken('session_read', sessionId),
+        () => {
+          const directory = fixture.persistence.layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+          return directory ? readFileSync(path.join(directory, 'events.jsonl'), 'utf8') : 'missing directory';
+        },
+      );
+      expect(interaction).toMatchObject({ kind: 'ask_user', revision: 1 });
+      const resolved = await rpc(
+        socketPath,
+        sessionToken('interaction_resolve', sessionId),
+        { revision: 1, answer: 'custom', approvalAnswer: 'Use the safe path' },
+        '/private/agent/v1/sessions/' + sessionId + '/interactions/' + interaction.interactionId,
+      );
+      expect(resolved.status).toBe(202);
+      expect(fixture.answers).toEqual(['Use the safe path']);
+    } finally {
+      await fixture.gateway.shutdown(100);
+      fixture.persistence.closeIndex();
+      await fixture.runtimeFactory.shutdown();
+    }
+  });
 });
 
 describe('gateway startup and assertion verifier', () => {

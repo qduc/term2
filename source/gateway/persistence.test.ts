@@ -217,7 +217,8 @@ describe('SessionPersistenceHandle and critical persistence', () => {
 
   it('recovers a pending interaction as non-resolvable exactly once', async () => {
     const layout = createGatewayStorageLayout(root());
-    const directory = path.join(layout.sessionsPath, 'journal');
+    const directory = layout.sessionPath('owner-a', 'workspace-a', 'session-completed-child');
+    mkdirSync(directory, { recursive: true });
     const journal = createGatewayEventJournal({ sessionId: 'session-a', directory });
     const checkpoint = new InteractionCheckpointStore(directory);
     checkpoint.save({
@@ -243,7 +244,7 @@ describe('SessionPersistenceHandle and critical persistence', () => {
     journal.close();
   });
 
-  it('settles a recovered child interaction and marks its turn failed', async () => {
+  it('settles a recovered child interaction as interrupted without failing its origin turn', async () => {
     const layout = createGatewayStorageLayout(root());
     const directory = path.join(layout.sessionsPath, 'journal');
     const journal = createGatewayEventJournal({ sessionId: 'session-child', directory });
@@ -262,6 +263,7 @@ describe('SessionPersistenceHandle and critical persistence', () => {
       revision: 1,
       generation: 'child-generation',
       settleOnRecovery: 'child_interrupted',
+      child: { agentId: 'child-run-a', role: 'worker' },
     });
 
     await checkpoint.recover(journal);
@@ -269,7 +271,7 @@ describe('SessionPersistenceHandle and critical persistence', () => {
     expect(journal.events().map((event) => event.type)).toEqual([
       'interaction_recovered',
       'interaction_resolved',
-      'turn_failed',
+      'subagent_interrupted',
     ]);
     expect(journal.events()[1]?.payload).toMatchObject({
       turnId: 'child-turn-a',
@@ -278,11 +280,77 @@ describe('SessionPersistenceHandle and critical persistence', () => {
     });
     expect(journal.events()[2]?.payload).toEqual({
       turnId: 'child-turn-a',
-      outcome: 'failed',
-      reason: 'runtime_error',
+      agentId: 'child-run-a',
+      role: 'worker',
+      finalText: 'Child interaction interrupted by daemon restart.',
     });
     expect(checkpoint.current).toBeNull();
     journal.close();
+  });
+
+  it('does not change a completed originating turn when recovering a child interaction', async () => {
+    const layout = createGatewayStorageLayout(root());
+    const directory = layout.sessionPath('owner-a', 'workspace-a', 'session-completed-child');
+    mkdirSync(directory, { recursive: true });
+    const journal = createGatewayEventJournal({ sessionId: 'session-completed-child', directory });
+    const index = new GatewaySessionIndex(layout);
+    const now = new Date().toISOString();
+    index.create({
+      id: 'session-completed-child',
+      ownerUserId: 'owner-a',
+      workspaceId: 'workspace-a',
+      grantVersion: '1',
+      bindingFingerprint: 'fingerprint-a',
+      status: 'interrupted',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await journal.append(
+      {
+        sessionId: journal.sessionId,
+        type: 'tool_started',
+        payload: { turnId: 'root-turn', callId: 'call-1', toolName: 'read_file' },
+      },
+      { durability: 'critical' },
+    );
+    await journal.append(
+      { sessionId: journal.sessionId, type: 'turn_completed', payload: { turnId: 'root-turn' } },
+      { durability: 'critical' },
+    );
+    const checkpoint = new InteractionCheckpointStore(directory);
+    checkpoint.save({
+      turnId: 'root-turn',
+      interaction: {
+        version: 1,
+        interactionId: 'late-child-interaction',
+        kind: 'tool_approval',
+        variant: 'ordinary_tool',
+        descriptor: { agentName: 'worker', toolName: 'read_file', argumentsText: '{}' },
+        choices: [{ id: 'approve', label: 'Allow' }],
+        revision: 1,
+      },
+      revision: 1,
+      generation: 'late-child-generation',
+      settleOnRecovery: 'child_interrupted',
+      child: { agentId: 'child-run-late', role: 'worker' },
+    });
+
+    await checkpoint.recover(journal);
+
+    const source = await createSessionProjectionSource({
+      index,
+      layout,
+      ownerUserId: 'owner-a',
+      sessionId: 'session-completed-child',
+      journal,
+    });
+    expect(journal.events().some((event) => event.type === 'turn_failed')).toBe(false);
+    expect(journal.events().find((event) => event.type === 'turn_completed')?.payload).toEqual({ turnId: 'root-turn' });
+    expect(source.journalCommands.get('root-turn')).toEqual([
+      { callId: 'call-1', toolName: 'read_file', status: 'completed' },
+    ]);
+    journal.close();
+    index.close();
   });
 
   it('does not overlay recovery after a resolved interaction when turn_failed was not appended', async () => {

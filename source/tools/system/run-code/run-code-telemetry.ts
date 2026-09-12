@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ILoggingService, LogMetadataContract } from '../../../services/service-interfaces.js';
 import type { HostErrorCode } from '../../../services/sandboxed-code-host/host-types.js';
-import type { RunCodeActionReceipt, RunCodeCallRecord } from './run-code.js';
+import type { RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
 import type { RunCodeDiagnosticCode, RunCodeExecution } from './run-code-execution.js';
 
 /**

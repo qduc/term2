@@ -1,3 +1,7 @@
+import { appendFileSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { ExecutionContext } from '../../../services/execution-context.js';
 import { SandboxedCodeHostImpl } from '../../../services/sandboxed-code-host/sandboxed-code-host.js';
 import type {
@@ -14,28 +18,388 @@ import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
 import { isZodToolParameterSchema, type AnyToolDefinition, type ToolRegistry } from '../../types.js';
 import { renderCompactSignature } from './tools-header.js';
-import { validateScriptedReturn } from '../../scripted-return-contract.js';
 import {
-  ACTION_SEMANTICS,
-  bindPreparedAuthority,
-  clipReason,
-  createMediaReferenceStore,
-  describeTool,
-  getConversationSessionId,
-  isActionTool,
-  isDirectlyCallable,
-  isParallelSafe,
-  mergeAbortSignals,
-  RUN_CODE_PROHIBITED_TOOLS,
-  serializeResult,
-  withAbortSignal,
-  writeNestedCallRecord,
-  type RunCodeActionOutcome,
-  type RunCodeActionReceipt,
-  type RunCodeCallRecord,
-  RUN_CODE_LIMITS,
-  TOOL_NAME_DESCRIBE,
-} from './run-code.js';
+  getScriptedReturnContract,
+  scriptedReturnContractJsonSchema,
+  validateScriptedReturn,
+} from '../../scripted-return-contract.js';
+import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
+import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
+import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
+import { saveOutputArtifact } from '../../../utils/shell/shell-output.js';
+import { getRunCodeExecutionResult } from './run-code-execution.js';
+import type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
+
+export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
+
+export const TOOL_NAME_RUN_CODE = 'run_code';
+export const TOOL_NAME_DESCRIBE = 'describe';
+
+/** Limits governing one script invocation. */
+export const RUN_CODE_LIMITS = {
+  maxCalls: 200,
+  maxConcurrency: 8,
+  maxResultChars: 100_000,
+  maxMediaBytes: 8 * 1024 * 1024,
+  maxMediaTotalBytes: 32 * 1024 * 1024,
+  maxMediaAttachments: 32,
+  maxCodeBytes: 65_536,
+  maxOutputBytes: 262_144,
+  maxConsoleBytes: 262_144,
+} as const;
+
+/** Tools that are structurally unavailable from a script. */
+export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
+  ...WORKFLOW_PROHIBITED_TOOLS,
+  TOOL_NAME_RUN_CODE,
+  'ask_mentor',
+  'session_rollover',
+  'shell',
+  'bash',
+  'enter_worktree',
+  'exit_worktree',
+]);
+
+/** Static semantic adapters for action tools whose result contract is known. */
+export const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {
+  configure_task_check_in: (raw) => {
+    const parsed = parseActionPayload(raw);
+    if (!isRecord(parsed) || typeof parsed.ok !== 'boolean')
+      return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+    if (parsed.ok === true) return { outcome: 'applied' };
+    return {
+      outcome: 'not_applied',
+      reason: typeof parsed.error === 'string' && parsed.error ? parsed.error : 'action reported ok:false',
+    };
+  },
+  cancel_run: (raw) => {
+    const parsed = parseActionPayload(raw);
+    if (!isRecord(parsed) || typeof parsed.ok !== 'boolean')
+      return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+    if (
+      parsed.ok === true &&
+      typeof parsed.runId === 'string' &&
+      parsed.runId.length > 0 &&
+      parsed.status === 'cancelling'
+    ) {
+      return { outcome: 'applied', reason: 'cancellation requested and accepted; settlement is reported separately' };
+    }
+    if (
+      parsed.ok === false &&
+      parsed.code === 'not_active' &&
+      typeof parsed.target === 'string' &&
+      parsed.target.length > 0
+    ) {
+      return { outcome: 'not_applied', reason: `not_active (target: ${parsed.target})` };
+    }
+    return { outcome: 'unknown', reason: 'unrecognized action result shape' };
+  },
+};
+
+export const isActionTool = (name: string): boolean => ACTION_SEMANTICS[name] !== undefined;
+
+const parseActionPayload = (raw: unknown): unknown => {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const MAX_RECEIPT_REASON_CHARS = 280;
+export const clipReason = (reason: string): string =>
+  reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
+
+export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boolean {
+  return RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
+}
+
+export function describeTool(tool: AnyToolDefinition): JsonValue {
+  let parameters: JsonValue;
+  const targetSchema = tool.canonicalParameters ?? tool.parameters;
+  if (isZodToolParameterSchema(targetSchema)) {
+    try {
+      parameters = z.toJSONSchema(targetSchema, { io: 'input' }) as JsonValue;
+    } catch {
+      parameters = { unconvertible: true };
+    }
+  } else if (targetSchema && typeof targetSchema === 'object') {
+    parameters = targetSchema as JsonValue;
+  } else {
+    parameters = { unconvertible: true };
+  }
+  return {
+    name: tool.name,
+    description: tool.description,
+    parameters,
+    scriptedReturnContract: scriptedReturnContractJsonSchema(getScriptedReturnContract(tool)),
+    ...(typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+      ? { scriptedReturnShape: tool.scriptedReturnShape }
+      : {}),
+  } as JsonValue;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+type RunCodeContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; image: unknown; detail?: unknown }
+  | { type: 'file'; file: unknown };
+
+const isMediaContentPart = (value: unknown): value is RunCodeContentPart =>
+  isRecord(value) && ((value.type === 'image' && 'image' in value) || (value.type === 'file' && 'file' in value));
+
+const mediaBytes = (value: RunCodeContentPart): number => {
+  const payload = value.type === 'image' ? value.image : value.type === 'file' ? value.file : undefined;
+  if (isRecord(payload) && typeof payload.data === 'string') {
+    try {
+      return Buffer.from(payload.data, 'base64').byteLength;
+    } catch {
+      return Buffer.byteLength(payload.data, 'utf8');
+    }
+  }
+  try {
+    return Buffer.byteLength(JSON.stringify(payload) ?? '', 'utf8');
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+};
+
+const MEDIA_REFERENCE_KEY = '__term2_run_code_media_reference__';
+type MediaReference = { [MEDIA_REFERENCE_KEY]: string };
+const isMediaReference = (value: unknown): value is MediaReference =>
+  isRecord(value) && typeof value[MEDIA_REFERENCE_KEY] === 'string' && Object.keys(value).length === 1;
+
+export function createMediaReferenceStore() {
+  const attachments = new Map<string, RunCodeContentPart>();
+  const byValue = new WeakMap<object, string | null>();
+  let totalBytes = 0;
+  const capture = (value: unknown): unknown => {
+    if (isMediaContentPart(value)) {
+      const existing = byValue.get(value);
+      if (existing !== undefined) return existing ? { [MEDIA_REFERENCE_KEY]: existing } : '[media content omitted]';
+      const size = mediaBytes(value);
+      if (
+        !Number.isFinite(size) ||
+        size > RUN_CODE_LIMITS.maxMediaBytes ||
+        attachments.size >= RUN_CODE_LIMITS.maxMediaAttachments ||
+        totalBytes + size > RUN_CODE_LIMITS.maxMediaTotalBytes
+      ) {
+        byValue.set(value, null);
+        return `[media content omitted: attachment exceeds the ${RUN_CODE_LIMITS.maxMediaBytes}-byte per-image or ${RUN_CODE_LIMITS.maxMediaTotalBytes}-byte per-run limit]`;
+      }
+      const token = `run_code_media_${randomUUID()}`;
+      byValue.set(value, token);
+      attachments.set(token, value);
+      totalBytes += size;
+      return { [MEDIA_REFERENCE_KEY]: token } satisfies MediaReference;
+    }
+    if (Array.isArray(value)) return value.map(capture);
+    if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, capture(entry)]));
+    return value;
+  };
+  const resolve = (value: unknown): unknown => {
+    if (isMediaReference(value)) return attachments.get(value[MEDIA_REFERENCE_KEY]) ?? value;
+    if (Array.isArray(value)) return value.map(resolve);
+    if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolve(entry)]));
+    return value;
+  };
+  return { capture, resolve };
+}
+
+const containsMediaContent = (value: unknown, ancestors = new Set<object>()): boolean => {
+  if (isMediaContentPart(value)) return true;
+  if (!isRecord(value) && !Array.isArray(value)) return false;
+  if (ancestors.has(value)) return false;
+  ancestors.add(value);
+  const found = Array.isArray(value)
+    ? value.some((entry) => containsMediaContent(entry, ancestors))
+    : Object.values(value).some((entry) => containsMediaContent(entry, ancestors));
+  ancestors.delete(value);
+  return found;
+};
+
+const truncate = (text: string, limit: number): string => {
+  if (text.length <= limit) return text;
+  let prefix = text.slice(0, limit);
+  if (/[\uD800-\uDBFF]$/.test(prefix)) prefix = prefix.slice(0, -1);
+  return `${prefix}\n[truncated: result exceeded ${limit} characters]`;
+};
+
+export const serializeResult = async (
+  result: unknown,
+  limit: number,
+  toolName: string,
+  callsCompleted: number,
+): Promise<{ ok: true; result: JsonValue } | { ok: false; error: string }> => {
+  const execution = getRunCodeExecutionResult(result);
+  if (execution && result instanceof String) result = String(result);
+  if (typeof result === 'string') return { ok: true, result: truncate(result, limit) };
+  try {
+    const encoded = JSON.stringify(result);
+    if (encoded === undefined) return { ok: true, result: null };
+    if (encoded.length <= limit) return { ok: true, result: result as JsonValue };
+    if (containsMediaContent(result))
+      return { ok: true, result: `[truncated: media result exceeded ${limit} characters; media content omitted]` };
+    let retrieval = '';
+    try {
+      const artifactPath = await saveOutputArtifact(encoded, { filenamePrefix: 'tool-overflow' });
+      retrieval = `Full output saved to: ${artifactPath}. `;
+    } catch {
+      retrieval = 'Full output could not be saved; the omitted result is unavailable. ';
+    }
+    const callUnit = callsCompleted === 1 ? 'call' : 'calls';
+    return {
+      ok: false,
+      error: `Tool "${toolName}" result exceeded ${limit} characters and could not be delivered to script. ${retrieval}${callsCompleted} nested tool ${callUnit} completed — inspect state before retrying; tool effects have already completed.`,
+    };
+  } catch {
+    return { ok: true, result: truncate(String(result), limit) };
+  }
+};
+
+export function getConversationSessionId(context: unknown): string | undefined {
+  if (!context || typeof context !== 'object') return undefined;
+  const runContext = (context as { context?: unknown }).context;
+  if (!runContext || typeof runContext !== 'object') return undefined;
+  const sessionId = (runContext as { sessionId?: unknown }).sessionId;
+  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+
+export function writeNestedCallRecord(
+  tool: string,
+  sessionId: string | undefined,
+  outcome: 'success' | 'failure' | 'denied-by-approval',
+): void {
+  const logPath = process.env.TERM2_NESTED_CALL_LOG;
+  if (!logPath || !sessionId) return;
+  try {
+    appendFileSync(
+      logPath,
+      `${JSON.stringify({ tool, sessionId, timestamp: new Date().toISOString(), outcome })}\n`,
+      'utf8',
+    );
+  } catch {
+    // Experiment-only logging must never affect tool execution.
+  }
+}
+
+const PATH_TOOLS = new Set([
+  'read_file',
+  'create_file',
+  'search_replace',
+  'apply_patch',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+]);
+type BoundAuthority = { kind: 'bound'; physicalRoot: string; params: unknown } | { kind: 'denied'; message: string };
+type PathSemantics = 'referent' | 'unlink-source';
+
+export async function bindPreparedAuthority(
+  toolName: string,
+  params: unknown,
+  cwd: string,
+  executionContext?: ExecutionContext,
+): Promise<BoundAuthority> {
+  const isRemote = executionContext?.isRemote() ?? false;
+  if (isRemote && PATH_TOOLS.has(toolName))
+    return { kind: 'denied', message: 'Cannot establish remote physical path authority for a nested tool call.' };
+  try {
+    const physicalRoot = isRemote ? cwd : await requirePhysicalPath(cwd, cwd);
+    return { kind: 'bound', physicalRoot, params: await bindPreparedArguments(toolName, params, cwd) };
+  } catch (error) {
+    return {
+      kind: 'denied',
+      message: `Cannot establish physical path authority: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function requirePhysicalPath(value: string, cwd: string, semantics: PathSemantics = 'referent'): Promise<string> {
+  const physicalPath = await resolveWorkspacePathPhysically(value, cwd);
+  if (physicalPath === undefined) throw new Error(`Unresolved path: ${value}`);
+  if (semantics === 'unlink-source') {
+    const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+    const stats = await lstat(lexicalPath);
+    if (stats.isSymbolicLink()) throw new Error(`Symlink unlink source is unsupported: ${value}`);
+  }
+  return physicalPath;
+}
+
+async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
+  if (!params || typeof params !== 'object' || Array.isArray(params) || !PATH_TOOLS.has(toolName)) return params;
+  const record = params as Record<string, unknown>;
+  const bindPath = async (value: unknown, semantics: PathSemantics = 'referent'): Promise<unknown> =>
+    typeof value === 'string' ? requirePhysicalPath(value, cwd, semantics) : value;
+  if (toolName === 'apply_patch' && typeof record.patch === 'string')
+    return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
+  return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;
+}
+
+async function bindPatchPaths(
+  patch: string,
+  bindPath: (value: unknown, semantics: PathSemantics) => Promise<unknown>,
+): Promise<string> {
+  let parsed;
+  try {
+    parsed = parseUpstreamApplyPatch(patch);
+  } catch {
+    return patch;
+  }
+  const targets = parsed.operations.flatMap((operation) => {
+    const moveTo = 'moveTo' in operation ? operation.moveTo : undefined;
+    const semantics: PathSemantics = operation.type === 'delete_file' || moveTo ? 'unlink-source' : 'referent';
+    return [{ path: operation.path, semantics }, ...(moveTo ? [{ path: moveTo, semantics: 'referent' as const }] : [])];
+  });
+  let targetIndex = 0;
+  const lines = patch.replace(/\r\n?/g, '\n').split('\n');
+  const prefixes = ['*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '];
+  for (let index = 0; index < lines.length; index += 1) {
+    const prefix = prefixes.find((candidate) => lines[index].startsWith(candidate));
+    if (!prefix) continue;
+    const target = targets[targetIndex++];
+    const bound = await bindPath(target.path, target.semantics);
+    lines[index] = prefix + String(bound);
+  }
+  return lines.join('\n');
+}
+
+export function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
+  return context && typeof context === 'object'
+    ? { ...(context as Record<string, unknown>), signal, ...extra }
+    : { signal, ...extra };
+}
+
+export function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
+  if (!callerSignal || callerSignal === hostSignal) return callerSignal ?? hostSignal;
+  const controller = new AbortController();
+  const abort = () => {
+    callerSignal.removeEventListener('abort', abort);
+    hostSignal.removeEventListener('abort', abort);
+    controller.abort();
+  };
+  if (callerSignal.aborted || hostSignal.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  callerSignal.addEventListener('abort', abort, { once: true });
+  hostSignal.addEventListener('abort', abort, { once: true });
+  return controller.signal;
+}
+
+export async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
+  const declared = tool.parallelSafe;
+  if (declared === undefined || declared === false) return false;
+  if (declared === true) return true;
+  try {
+    return (await (declared as (p: unknown, c?: unknown) => boolean | Promise<boolean>)(params, context)) === true;
+  } catch {
+    return false;
+  }
+}
 import {
   createRunCodeExecution,
   type RunCodeAttachment,

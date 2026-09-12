@@ -572,8 +572,8 @@ workflow compatibility tests (28 tests), `pnpm typecheck`, formatting, and
 `pnpm test:provider-black-box` (177 passed, 1 skipped). `pnpm test:related` and
 `pnpm test:changed` both select the same pre-existing
 `scripts/nested-approval/scripted-adapter.acceptance.test.ts` failure: its
-`seen` approval snapshots are empty even when the legacy run_code path is
-selected, so the failure is not introduced by this runtime extraction. The
+`seen` approval snapshots are empty despite the outer run_code turn
+completing, so the failure is not introduced by this runtime extraction. The
 failure remains an explicit handoff issue rather than being relabeled as a
 passing program gate. Implementation commit: `9d2ce6c6` (2026-09-12).
 

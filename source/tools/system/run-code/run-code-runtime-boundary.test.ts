@@ -11,4 +11,13 @@ describe('run_code product/runtime dependency boundary', () => {
     expect(source('run-code-runtime-contract.ts')).not.toMatch(/run-code\.js/);
     expect(source('run-code-runtime-contract.ts')).not.toMatch(/run-code-runtime\.js/);
   });
+
+  it('keeps the outer definition free of the removed inline lifecycle', () => {
+    const runCode = source('run-code.ts');
+
+    expect(runCode).not.toContain('__term2_legacy_run_code_path__');
+    expect(runCode).not.toMatch(/SandboxedCodeHostImpl|CapabilityHandler|pendingReceiptByCallId/);
+    expect(runCode).not.toMatch(/createRunCodeExecution|emitRunCodeCompletionTelemetry|normalizeToolParameters/);
+    expect(runCode).not.toMatch(/nestedApprovalOwner\.request|approvalRegistry\.evaluate/);
+  });
 });

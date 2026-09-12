@@ -203,7 +203,17 @@ describe('production gateway runtime factory', () => {
       sandboxAvailable: true,
       allowWrite: true,
     });
-    const run = async (sessionId: string, access: 'read' | 'read_write') => {
+    const run = async (
+      sessionId: string,
+      access: 'read' | 'read_write',
+      settingsSnapshot?: {
+        providerId: string;
+        modelId: string;
+        reasoningEffort: string;
+        mode: string;
+        effectiveToolPolicy: Record<string, boolean>;
+      },
+    ) => {
       settings.set('agent.model', 'm1-scripted-model-' + access, { persist: false });
       const session = await factory.create(
         {
@@ -218,9 +228,12 @@ describe('production gateway runtime factory', () => {
           eventSink: (event) => {
             observedAttemptInputs.push({ event });
           },
+          ...(settingsSnapshot ? { settingsSnapshot } : {}),
         },
       );
-      expect(session.resources.settings.toolPolicy?.allowWrite).toBe(access === 'read_write');
+      expect(session.resources.settings.toolPolicy?.allowWrite).toBe(
+        settingsSnapshot?.effectiveToolPolicy.allowWrite ?? access === 'read_write',
+      );
       const prepared = await session.prepareMessage('inspect tools', { turnId: sessionId, clientRequestId: sessionId });
       if (prepared.kind !== 'prepared') throw new Error('test setup');
       await session.commitMessage(prepared.leaseId);
@@ -238,6 +251,16 @@ describe('production gateway runtime factory', () => {
     const readWriteTools = await run('f1-write', 'read_write');
     expect(readWriteTools).toEqual(expect.arrayContaining(['run_code']));
     expect(observedRunCodeDescription).toContain('tools.create_file');
+    const revivedReadOnlyTools = await run('f1-revived-read-only', 'read_write', {
+      providerId,
+      modelId: 'm1-scripted-model',
+      reasoningEffort: 'default',
+      mode: 'standard',
+      effectiveToolPolicy: { allowWrite: false },
+    });
+    expect(revivedReadOnlyTools).not.toEqual(
+      expect.arrayContaining(['apply_patch', 'create_file', 'search_replace', 'enter_worktree']),
+    );
     await factory.shutdown();
   });
 

@@ -44,6 +44,7 @@ import type { ISubagentClient } from './subagent-client-types.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import type { ShellSandboxRunner } from '../../utils/shell/sandbox/sandbox-policy.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
@@ -1034,6 +1035,7 @@ export class SubagentToolFactory {
   #memoryCapabilities: MemoryCapabilityBuilder;
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
+  #shellSandboxRunner?: ShellSandboxRunner;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -1043,6 +1045,7 @@ export class SubagentToolFactory {
     skillsService?: SkillsService;
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
+    shellSandboxRunner?: ShellSandboxRunner;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;
@@ -1051,6 +1054,7 @@ export class SubagentToolFactory {
     this.#skillsService = deps.skillsService;
     this.#nestedCompatibility = deps.nestedCompatibility;
     this.#readOnly = deps.readOnly ?? false;
+    this.#shellSandboxRunner = deps.shellSandboxRunner;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
@@ -1179,6 +1183,7 @@ export class SubagentToolFactory {
           searchViaShell,
           readOnly: this.#readOnly,
           nestedCompatibility: this.#nestedCompatibility,
+          ...(this.#shellSandboxRunner ? { shellSandboxRunner: this.#shellSandboxRunner } : {}),
         }),
         fsReadScope,
       );

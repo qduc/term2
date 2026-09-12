@@ -146,6 +146,8 @@ export type RuntimeFactoryOptions = {
   settingsAuthority?: ISettingsService;
   createSettingsSnapshot?: (binding: SessionBinding) => SessionSettingsSnapshot;
   modelCatalogLogger?: ILoggingService;
+  /** Test seam for asserting the composed session access posture. */
+  onAgentClientDeps?: (input: { readOnly: boolean; sessionAccess: SessionAccessState }) => void;
   createSessionContext?: () => ISessionContextService;
   createSkills?: (logger: ILoggingService, canonicalRoot: string) => SkillsService;
   onResourceReleased?: (sessionId: string) => void;
@@ -168,6 +170,7 @@ export function createProductionRuntimeFactory(input: {
   createLogger?: RuntimeFactoryOptions['createLogger'];
   createSessionContext?: RuntimeFactoryOptions['createSessionContext'];
   modelCatalogLogger?: ILoggingService;
+  onAgentClientDeps?: RuntimeFactoryOptions['onAgentClientDeps'];
 }): RuntimeFactory {
   const providerSettingKeys = new Set(PRODUCTION_AUTHORITY_SETTING_KEYS);
   const providerDynamicKeys = new Set([
@@ -218,6 +221,7 @@ export function createProductionRuntimeFactory(input: {
     modelCatalogLogger: input.modelCatalogLogger,
     createLogger: input.createLogger,
     createSessionContext: input.createSessionContext,
+    onAgentClientDeps: input.onAgentClientDeps,
     createSettingsSnapshot: (binding) =>
       createSessionSettingsSnapshot({
         settings: input.settingsAuthority,
@@ -449,8 +453,12 @@ export class RuntimeFactory {
         providerContinuity,
         requestCapture,
         toolLifecycle,
-      ) =>
-        this.#options.createAgentClient({
+      ) => {
+        this.#options.onAgentClientDeps?.({
+          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          sessionAccess: access,
+        });
+        return this.#options.createAgentClient({
           sessionId,
           binding,
           settings,
@@ -475,7 +483,8 @@ export class RuntimeFactory {
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
           readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
-        }),
+        });
+      },
       undefined,
       {
         allowBackgroundShell: this.#policy.maxShellJobs > 0,

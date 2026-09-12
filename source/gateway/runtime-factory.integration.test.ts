@@ -6,6 +6,7 @@ import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import type { ProviderDefinition } from '../providers/registry.js';
 import { createProductionRuntimeFactory } from './runtime-factory.js';
 import { mapConversationEvent } from './gateway.js';
+import * as sandboxRunnerModule from '../utils/shell/sandbox/shell-sandbox-runner.js';
 
 const roots: string[] = [];
 const providerId = 'm1-scripted-provider';
@@ -14,7 +15,7 @@ let observedAutoApprove: unknown;
 let observedSandbox: unknown;
 let observedTools: string[] = [];
 let observedRunCodeDescription = '';
-let attemptMode: 'direct' | 'nested' | 'subagent' | null = null;
+let attemptMode: 'direct' | 'nested' | 'subagent' | 'shell' | null = null;
 let attemptAllowWrite = false;
 let attemptStep = 0;
 let observedAttemptInputs: any[] = [];
@@ -71,6 +72,15 @@ const provider: ProviderDefinition = {
                 role: 'worker',
                 task: 'create a file named subagent.txt with content blocked',
               }),
+            };
+            return;
+          }
+          if (attemptMode === 'shell' && step === 0) {
+            yield {
+              type: 'tool_call' as const,
+              id: 'f1-shell',
+              name: 'shell',
+              arguments: JSON.stringify({ command: 'printf blocked > shell.txt' }),
             };
             return;
           }
@@ -221,7 +231,9 @@ describe('production gateway runtime factory', () => {
     };
 
     const readOnlyTools = await run('f1-read', 'read');
-    expect(readOnlyTools).not.toEqual(expect.arrayContaining(['apply_patch', 'create_file', 'search_replace']));
+    expect(readOnlyTools).not.toEqual(
+      expect.arrayContaining(['apply_patch', 'create_file', 'search_replace', 'enter_worktree']),
+    );
     expect(observedRunCodeDescription).not.toContain('tools.apply_patch');
     const readWriteTools = await run('f1-write', 'read_write');
     expect(readWriteTools).toEqual(expect.arrayContaining(['run_code']));
@@ -240,14 +252,22 @@ describe('production gateway runtime factory', () => {
     });
     settings.set('agent.provider', providerId, { persist: false });
     const workspace = tempRoot('f1-attempt-workspace-');
+    let composedReadOnly: boolean | undefined;
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,
       tmpDir: tempRoot('f1-attempt-data-'),
       sandboxAvailable: true,
       allowWrite: true,
+      onAgentClientDeps: ({ readOnly, sessionAccess }) => {
+        composedReadOnly = readOnly && sessionAccess.isReadOnly;
+      },
     });
 
-    const attempt = async (mode: 'direct' | 'nested' | 'subagent', fileName: string, access: 'read' | 'read_write') => {
+    const attempt = async (
+      mode: 'direct' | 'nested' | 'subagent' | 'shell',
+      fileName: string,
+      access: 'read' | 'read_write',
+    ) => {
       attemptMode = mode;
       attemptAllowWrite = access === 'read_write';
       attemptStep = 0;
@@ -276,6 +296,9 @@ describe('production gateway runtime factory', () => {
       });
       if (prepared.kind !== 'prepared') throw new Error('test setup');
       await session.commitMessage(prepared.leaseId);
+      if (access === 'read') {
+        expect(composedReadOnly, mode + '/' + access).toBe(true);
+      }
       await vi.waitFor(() => expect(observedAttemptInputs.length).toBeGreaterThanOrEqual(1));
       if (mode === 'subagent') {
         await vi.waitFor(() => expect(observedAttemptInputs.length).toBeGreaterThanOrEqual(2));
@@ -285,17 +308,47 @@ describe('production gateway runtime factory', () => {
         expect(workerToolNames.includes('apply_patch'), mode + '/' + access).toBe(access === 'read_write');
       }
       await vi.waitFor(() => expect(session.status).toBe('idle'));
+      const attemptedToolName =
+        mode === 'nested'
+          ? 'run_code'
+          : mode === 'subagent'
+          ? 'apply_patch'
+          : mode === 'direct'
+          ? 'apply_patch'
+          : 'shell';
+      const resultEvents = observedAttemptEvents.filter(
+        (event) =>
+          (event.type === 'command_message' || event.type === 'subagent_command_message') &&
+          event.message?.toolName === attemptedToolName,
+      );
       await session.dispose();
       expect(existsSync(path.join(workspace, fileName)), mode + '/' + access).toBe(access === 'read_write');
       if (access === 'read') {
+        expect(resultEvents, mode + '/' + access + ': ' + JSON.stringify(observedAttemptEvents)).not.toHaveLength(0);
         expect(observedAttemptEvents.some((event) => event.type.includes('approval_required'))).toBe(false);
-        expect(JSON.stringify(observedAttemptEvents), mode + '/' + access).toMatch(/Error|failed|Unknown tool/);
+        expect(resultEvents.map((event) => event.message?.failureReason ?? event.message?.output).join('\n')).toMatch(
+          /Error|failed|Unknown tool|read-only/i,
+        );
       }
     };
 
     await attempt('direct', 'direct.txt', 'read');
     await attempt('nested', 'nested.txt', 'read');
     await attempt('subagent', 'subagent.txt', 'read');
+    const sandboxConfig = vi.fn();
+    const realRunner = sandboxRunnerModule.getDefaultShellSandboxRunner();
+    const runnerSpy = vi.spyOn(sandboxRunnerModule, 'getDefaultShellSandboxRunner').mockReturnValue({
+      ...realRunner,
+      availability: async () => ({ type: 'available' as const }),
+      wrap: async (_command, options) => {
+        sandboxConfig(options.config);
+        return { command: 'false' };
+      },
+    });
+    await attempt('shell', 'shell.txt', 'read');
+    expect(sandboxConfig).toHaveBeenCalled();
+    expect(sandboxConfig.mock.calls[0][0]?.filesystem?.allowWrite ?? []).not.toContain(workspace);
+    runnerSpy.mockRestore();
     await attempt('nested', 'write.txt', 'read_write');
     attemptMode = null;
     await factory.shutdown();

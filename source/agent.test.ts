@@ -91,6 +91,19 @@ function getToolNames(settings: Record<string, any> = {}, dependencies: Record<s
   }).tools.map((tool) => tool.name);
 }
 
+it('omits worktree switching from a read-only local agent surface', () => {
+  const executionContext = new ExecutionContext();
+  executionContext.enterWorkspace('/tmp/agent-read-only-workspace');
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    executionContext,
+    readOnly: true,
+  });
+
+  expect(definition.tools.map((tool) => tool.name)).not.toContain('enter_worktree');
+});
+
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
   const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');

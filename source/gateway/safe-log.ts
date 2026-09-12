@@ -22,6 +22,7 @@ const OPERATIONS = new Set<GatewaySafeLogMetadata['operation']>([
   'message_submit',
   'interaction_resolve',
   'abort',
+  'command_invoke',
   'events_connect',
   'shutdown',
 ]);

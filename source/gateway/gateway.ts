@@ -478,6 +478,8 @@ export class Term2Gateway {
       }
       if (claims.purpose === 'message_submit') return await this.#submitMessage(claims, input.body);
       if (claims.purpose === 'abort') return await this.#abortSession(claims, input.body);
+      if (claims.purpose === 'command_invoke')
+        return await this.#invokeCommand(claims, input.body, input.correlationId);
       if (claims.purpose === 'interaction_resolve')
         return await this.#resolveInteraction(claims, route.interactionId!, input.body);
       if (claims.purpose === 'events_connect') return await this.#eventsResponse(claims, url, input.request);
@@ -1015,6 +1017,244 @@ export class Term2Gateway {
         body: { sessionId: claims.sessionId, turnId: body.turnId, accepted: false, alreadySettled: true },
       };
     return publicError(409, 'session_not_admitting', 'session is interrupted');
+  }
+
+  async #invokeCommand(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isCommandBody(body)) return publicError(400, 'validation_error', 'command request is invalid');
+    const session = this.#sessions.get(claims.sessionId!);
+    if (!session || session.binding.ownerUserId !== claims.sub) {
+      return publicError(404, 'not_found', 'session not found');
+    }
+    if (!(session instanceof ServerSession)) {
+      return publicError(409, 'session_not_admitting', 'session is not admitting commands');
+    }
+    if (session.status === 'running' || session.status === 'awaiting_interaction') {
+      return publicError(409, 'session_busy', 'session is busy');
+    }
+    if (!COMMAND_ALLOWLIST.has(body.commandId)) {
+      return publicError(422, 'command_not_allowed', 'command is not allowed');
+    }
+
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'command_invoke',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        sessionId: session.sessionId,
+        workspaceId: session.binding.workspaceId,
+        grantVersion: session.binding.grantVersion,
+        access: session.binding.access,
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+
+    if (this.#admissions) {
+      const lookup = this.#admissions.lookup(claims.sub, session.sessionId, body.clientRequestId, body);
+      if (lookup.kind === 'conflict') {
+        throw new GatewayPersistenceError('conflict', 'idempotency key has a different body');
+      }
+      if (lookup.kind === 'replayed') {
+        if (body.commandId === 'compact') {
+          const parts = lookup.record.turnId.split(':');
+          const outcome = (parts[1] as 'completed' | 'nothing_to_retry') || 'completed';
+          const tokensBefore = parts[2] ? Number(parts[2]) : undefined;
+          const tokensAfter = parts[3] ? Number(parts[3]) : undefined;
+          return {
+            status: 200,
+            body: {
+              commandId: body.commandId,
+              outcome,
+              ...(tokensBefore !== undefined && !Number.isNaN(tokensBefore) ? { tokensBefore } : {}),
+              ...(tokensAfter !== undefined && !Number.isNaN(tokensAfter) ? { tokensAfter } : {}),
+              replayed: true,
+            },
+          };
+        }
+        if (lookup.record.turnId === 'nothing_to_retry') {
+          return {
+            status: 200,
+            body: {
+              commandId: body.commandId,
+              outcome: 'nothing_to_retry',
+              replayed: true,
+            },
+          };
+        }
+        return {
+          status: 200,
+          body: {
+            commandId: body.commandId,
+            outcome: 'completed',
+            turnId: lookup.record.turnId,
+            replayed: true,
+          },
+        };
+      }
+    }
+
+    const persisted = this.#persisted.get(claims.sessionId!);
+    if (this.#config.persistence && !persisted) {
+      return publicError(503, 'persistence_unavailable', 'gateway persistence unavailable', true);
+    }
+
+    if (body.commandId === 'compact') {
+      const resultText = await session.service.compactContext();
+      const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
+      const isCompacted = resultText.toLowerCase().includes('context compacted locally');
+      const outcome = isCompacted ? ('completed' as const) : ('nothing_to_retry' as const);
+      const tokensBefore = match?.[1] ? Number(match[1]) : undefined;
+      const tokensAfter = match?.[2] ? Number(match[2]) : undefined;
+
+      if (this.#admissions) {
+        const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
+        this.#admissions.prepare({
+          ownerUserId: claims.sub,
+          sessionId: session.sessionId,
+          clientRequestId: body.clientRequestId,
+          body,
+          turnId,
+        });
+        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+          state: 'terminal',
+          result: 'accepted',
+          phase: 'committed',
+        });
+      }
+
+      return {
+        status: 200,
+        body: {
+          commandId: 'compact',
+          outcome,
+          ...(tokensBefore !== undefined ? { tokensBefore } : {}),
+          ...(tokensAfter !== undefined ? { tokensAfter } : {}),
+        },
+      };
+    }
+
+    if (body.commandId === 'retry-tool') {
+      const lastTool = session.service.peekLastToolOutput();
+      if (!lastTool) {
+        if (this.#admissions) {
+          this.#admissions.prepare({
+            ownerUserId: claims.sub,
+            sessionId: session.sessionId,
+            clientRequestId: body.clientRequestId,
+            body,
+            turnId: 'nothing_to_retry',
+          });
+          this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+            state: 'terminal',
+            result: 'accepted',
+            phase: 'committed',
+          });
+        }
+        return {
+          status: 200,
+          body: {
+            commandId: 'retry-tool',
+            outcome: 'nothing_to_retry',
+          },
+        };
+      }
+
+      const turnId = crypto.randomUUID();
+      if (this.#admissions && persisted) {
+        this.#admissions.prepare({
+          ownerUserId: claims.sub,
+          sessionId: session.sessionId,
+          clientRequestId: body.clientRequestId,
+          body,
+          turnId,
+        });
+        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+          state: 'accepted',
+          result: 'accepted',
+          phase: 'committed',
+        });
+        await this.#enqueueEventPersistence(claims.sessionId!, async () => {
+          await persisted.persistence.critical.appendJournalCritical({
+            sessionId: claims.sessionId!,
+            type: 'assistant_started',
+            payload: { turnId },
+          });
+        });
+      }
+      void session.service.retryLastToolOutput({ preferredMessageId: turnId }).catch(() => undefined);
+      return {
+        status: 200,
+        body: {
+          commandId: 'retry-tool',
+          outcome: 'completed',
+          turnId,
+        },
+      };
+    }
+
+    if (body.commandId === 'retry-turn') {
+      const state = session.service.exportState();
+      if (state.history.length === 0) {
+        if (this.#admissions) {
+          this.#admissions.prepare({
+            ownerUserId: claims.sub,
+            sessionId: session.sessionId,
+            clientRequestId: body.clientRequestId,
+            body,
+            turnId: 'nothing_to_retry',
+          });
+          this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+            state: 'terminal',
+            result: 'accepted',
+            phase: 'committed',
+          });
+        }
+        return {
+          status: 200,
+          body: {
+            commandId: 'retry-turn',
+            outcome: 'nothing_to_retry',
+          },
+        };
+      }
+
+      const turnId = crypto.randomUUID();
+      if (this.#admissions && persisted) {
+        this.#admissions.prepare({
+          ownerUserId: claims.sub,
+          sessionId: session.sessionId,
+          clientRequestId: body.clientRequestId,
+          body,
+          turnId,
+        });
+        this.#config.persistence?.index.updateAdmission(claims.sub, session.sessionId, body.clientRequestId, {
+          state: 'accepted',
+          result: 'accepted',
+          phase: 'committed',
+        });
+        await this.#enqueueEventPersistence(claims.sessionId!, async () => {
+          await persisted.persistence.critical.appendJournalCritical({
+            sessionId: claims.sessionId!,
+            type: 'assistant_started',
+            payload: { turnId },
+          });
+        });
+      }
+      void session.service.retryLastFailedTurn({ preferredMessageId: turnId }).catch(() => undefined);
+      return {
+        status: 200,
+        body: {
+          commandId: 'retry-turn',
+          outcome: 'completed',
+          turnId,
+        },
+      };
+    }
+
+    return publicError(422, 'command_not_allowed', 'command is not allowed');
   }
 
   async #resolveInteraction(
@@ -1689,7 +1929,7 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;
@@ -1698,6 +1938,7 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   if (method === 'POST' && match[2] === 'abort') return { purpose: 'abort', sessionId };
   if (method === 'GET' && match[2] === 'events') return { purpose: 'events_connect', sessionId };
   if (method === 'POST' && match[2] === 'config') return { purpose: 'session_update', sessionId };
+  if (method === 'POST' && match[2] === 'commands') return { purpose: 'command_invoke', sessionId };
   if (method === 'POST' && match[2]?.startsWith('interactions/'))
     return { purpose: 'interaction_resolve', sessionId, interactionId: match[3] };
   return null;
@@ -1930,6 +2171,20 @@ function isTurnBody(body: unknown): body is { turnId: string } {
     !Array.isArray(body) &&
     Object.keys(body as Record<string, unknown>).length === 1 &&
     isOpaqueId((body as Record<string, unknown>).turnId)
+  );
+}
+
+const COMMAND_ALLOWLIST = new Set(['compact', 'retry-tool', 'retry-turn']);
+
+function isCommandBody(body: unknown): body is { commandId: string; clientRequestId: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return (
+    Object.keys(value).length === 2 &&
+    typeof value.commandId === 'string' &&
+    value.commandId.length > 0 &&
+    value.commandId.length <= 256 &&
+    isOpaqueId(value.clientRequestId)
   );
 }
 

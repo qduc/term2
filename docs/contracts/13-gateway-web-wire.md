@@ -409,3 +409,68 @@ confirmed by following both sides of the same value (`usage_update` from
 ```sh
 git diff --stat   # docs/contracts/13-gateway-web-wire.md only
 ```
+
+## 8. M5b additions: Session Commands RPC
+
+### Route and Authorization
+- **Method & Path**: `POST /private/agent/v1/sessions/:id/commands`
+- **Assertion Purpose**: `command_invoke` (session-scoped assertion requiring `sessionId: :id` matching the route parameter; mismatch yields `400 protocol_conflict`).
+- **Owner Guard**: `claims.sub` must match `session.binding.ownerUserId`. Unknown sessions or sessions owned by another user return `404 not_found`.
+- **Busy Guard**: If the session is currently in `running` or `awaiting_interaction` state, the invocation is rejected with `409 session_busy`.
+- **Audit Logging**: Every permitted command invocation writes a structured audit log entry with `operation: 'command_invoke'`, `outcome: 'allowed'`, and `reasonCode: 'accepted'`.
+
+### Request DTO
+The request body is strictly validated to contain exactly two properties:
+```json
+{
+  "commandId": "compact" | "retry-tool" | "retry-turn",
+  "clientRequestId": "<opaque-id-1-256-chars>"
+}
+```
+Any additional properties, empty values, or missing properties return `400 validation_error`.
+
+### Command Allowlist
+Commands are validated against an exact-match allowlist (no prefix matching):
+- `compact`
+- `retry-tool`
+- `retry-turn`
+
+Any unlisted command name (e.g. `clear`, `auto-approve`, `sandbox`, `model`, prefix variants like `comp` or `retry`) is rejected with `422 command_not_allowed`.
+
+### Response DTO
+All successful executions (including `nothing_to_retry` outcomes and replayed requests) return HTTP status `200`:
+```json
+{
+  "commandId": "compact" | "retry-tool" | "retry-turn",
+  "outcome": "completed" | "nothing_to_retry",
+  "turnId": "optional-turn-uuid",
+  "tokensBefore": 1000,
+  "tokensAfter": 400,
+  "replayed": true
+}
+```
+
+### Execution Semantics and Event Sequence
+1. **`compact`**:
+   - Invokes `ConversationService.compactContext()`.
+   - If context was compacted, returns `outcome: 'completed'` and parses `tokensBefore` and `tokensAfter` from the compaction result if available.
+   - If blocked or nothing to compact, returns `outcome: 'nothing_to_retry'`.
+   - Compaction completes synchronously within the RPC; admission is immediately settled as `terminal`.
+
+2. **`retry-tool`**:
+   - Inspects `session.service.peekLastToolOutput()`.
+   - If no tool output exists to retry, settles admission as `terminal` and returns `{ commandId: 'retry-tool', outcome: 'nothing_to_retry' }`.
+   - If a tool output exists, generates a UUID `turnId`, prepares admission via `GatewayAdmissionPersistence`, marks admission `accepted`, appends `assistant_started` to the critical event journal, and starts the retried tool execution asynchronously via `session.service.retryLastToolOutput({ preferredMessageId: turnId })`.
+   - The browser observes `assistant_started` followed by streaming deltas and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+
+3. **`retry-turn`**:
+   - Inspects `session.service.exportState().history`.
+   - If history is empty, settles admission as `terminal` and returns `{ commandId: 'retry-turn', outcome: 'nothing_to_retry' }`.
+   - If history exists, generates a UUID `turnId`, prepares admission via `GatewayAdmissionPersistence`, marks admission `accepted`, appends `assistant_started` to the critical event journal, and starts the turn execution asynchronously via `session.service.retryLastFailedTurn({ preferredMessageId: turnId })`.
+   - The browser observes `assistant_started` followed by streaming deltas and `turn_completed` / `turn_failed`, at which point `#persistConversationEvent` transitions the admission to `terminal`.
+
+### Idempotency and Conflict Detection
+- `clientRequestId` is tracked through `GatewayAdmissionPersistence` backed by SQLite.
+- Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
+- Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
+

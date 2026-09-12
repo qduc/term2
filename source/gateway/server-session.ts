@@ -194,7 +194,8 @@ export class ServerSession {
     this.assertOpen();
     const turnId = this.#preparedTurns.get(leaseId);
     if (!turnId) throw new ServerSessionError('wrong_turn');
-    const resetBudget = (this.#composition.providerBroker as { resetRequestBudget?: () => void }).resetRequestBudget;
+    const resetBudget = (this.#composition.providerBroker as { resetRequestBudget?: () => void } | undefined)
+      ?.resetRequestBudget;
     resetBudget?.();
     try {
       await this.service.commitMessage(leaseId);

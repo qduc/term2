@@ -2217,7 +2217,7 @@ function terminalTranscriptFact(event: ConversationEvent, turnId: string): LogEv
   return null;
 }
 
-function mapConversationEvent(
+export function mapConversationEvent(
   event: ConversationEvent,
   turnId: string,
   sessionId: string,

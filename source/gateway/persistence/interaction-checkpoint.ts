@@ -10,6 +10,8 @@ export type InteractionCheckpoint = {
   readonly interaction: PendingInteractionDto;
   readonly revision: number;
   readonly generation: string;
+  readonly settleOnRecovery?: 'child_interrupted';
+  readonly child?: { readonly agentId: string; readonly role: string };
 };
 
 export class InteractionCheckpointStore {
@@ -80,6 +82,34 @@ export class InteractionCheckpointStore {
       },
       { durability: 'critical' },
     );
+    if (checkpoint.settleOnRecovery === 'child_interrupted') {
+      await journal.append(
+        {
+          sessionId: journal.sessionId,
+          type: 'interaction_resolved',
+          payload: {
+            turnId: checkpoint.turnId,
+            interactionId: checkpoint.interaction.interactionId,
+            outcome: 'cancelled',
+            variant: checkpoint.interaction.variant,
+          },
+        },
+        { durability: 'critical' },
+      );
+      await journal.append(
+        {
+          sessionId: journal.sessionId,
+          type: 'subagent_interrupted',
+          payload: {
+            turnId: checkpoint.turnId,
+            agentId: checkpoint.child?.agentId ?? checkpoint.interaction.descriptor.agentName,
+            role: checkpoint.child?.role ?? checkpoint.interaction.descriptor.agentName,
+            finalText: 'Child interaction interrupted by daemon restart.',
+          },
+        },
+        { durability: 'critical' },
+      );
+    }
     this.clear();
   }
 }

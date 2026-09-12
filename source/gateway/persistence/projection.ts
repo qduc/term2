@@ -174,7 +174,12 @@ function interactionFromJournal(journal: GatewayEventJournalImpl): InteractionPr
     if (event.type === 'interaction_resolved' && typeof event.payload.interactionId === 'string') {
       resolvedInteractionIds.add(event.payload.interactionId);
     }
-    if (event.type === 'approval_required' || event.type === 'interaction_updated') {
+    if (
+      event.type === 'approval_required' ||
+      event.type === 'interaction_updated' ||
+      event.type === 'subagent_approval_required' ||
+      event.type === 'subagent_question'
+    ) {
       projection = {
         state: 'recovered',
         interaction:

@@ -91,11 +91,14 @@ export interface SubagentEventSinkHost {
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   /** Session-owned queue/control sink for adopted subagent approval pauses. */
   setBackgroundSubagentApprovalPauseSink?(sink: BackgroundSubagentApprovalPauseSink | null): void;
+  answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
   /** Optional hook to cancel live async subagent runs when the parent turn ends. */
   cancelSubagentRuns?(): void;
 }
 
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
+  setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;

@@ -516,6 +516,10 @@ export class AgentClient {
     this.#subagentBridge?.setBackgroundApprovalPauseSink(sink);
   }
 
+  answerBackgroundSubagentQuestion(runId: string, messageId: string, answer: string): boolean {
+    return this.#subagentBridge?.answerBackgroundSubagentQuestion(runId, messageId, answer) === true;
+  }
+
   requestSessionRollover(request: SessionRolloverRequest): SessionRolloverRequestOutcome {
     const rolloverId = randomUUID();
     const pending: PendingSessionRolloverRequest = {

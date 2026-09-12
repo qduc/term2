@@ -102,6 +102,12 @@ export class SubagentBridge {
     this.#subagentManager?.setBackgroundApprovalPauseSink(sink ?? undefined);
   }
 
+  answerBackgroundSubagentQuestion(runId: string, messageId: string, answer: string): boolean {
+    return (
+      this.#subagentManager?.sendMessageToAsyncRun({ target: runId, message: answer, reply_to: messageId }).ok === true
+    );
+  }
+
   /** Exact nested-tool compatibility state from the manager's live runtime. */
   getNestedToolCompatibilityState(): NestedToolCompatibilityState | undefined {
     return this.#subagentManager?.getNestedToolCompatibilityState();

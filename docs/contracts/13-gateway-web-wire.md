@@ -158,7 +158,7 @@ code is BFF-side vocabulary; the gateway never emits it.
 ## 3. Events
 
 The gateway publishes one journal event per session. Its vocabulary is frozen by
-`FROZEN_AGENT_EVENT_TYPES` (16 types), and `isPublicEventEnvelope` is the gate every
+`FROZEN_AGENT_EVENT_TYPES` (29 types after M4), and `isPublicEventEnvelope` is the gate every
 published frame must pass: `schemaVersion === 1`, integer `id`, opaque `sessionId`, a type
 in that list, an ISO `occurredAt`, and a payload that only uses keys from
 `PUBLIC_EVENT_PAYLOAD_KEYS` (nesting to depth 8, arrays ≤ 512, strings ≤ 32000 chars).
@@ -174,14 +174,14 @@ destroys the SSE response.
 | `text_delta` | `mapConversationEvent` ← `ConversationEvent` `text_delta` | `{ turnId, delta }` (bounded 8192) | handled |
 | `reasoning_delta` | `mapConversationEvent` ← `reasoning_delta` | `{ turnId, delta }` (bounded 8192) | handled |
 | `tool_started` | `mapConversationEvent` ← `tool_started` | `{ turnId, callId, toolName }` (toolName bounded 256) | handled — reads optional `argumentsText`, which the gateway never sends |
-| `command_message` | `mapConversationEvent` ← `command_message` | `{ turnId, message: { id, role, text } }` | **broken** — the adapter reads `callId`/`toolName`/`status`/`output`/`error` (§5) |
+| `command_message` | `mapConversationEvent` ← `command_message` | `{ turnId, callId, toolName, status, output?, error?, message }` | fixed by M4 |
 | `approval_required` | `mapConversationEvent` ← `approval_required`, binding minted by `#interactionBindingFor` | `{ turnId, interaction }` — `PendingInteractionDto` | handled |
 | `interaction_updated` | gateway — `#resolveInteraction` ask_user follow-up | `{ turnId, interaction }` | handled (rejects a stale id or non-increasing revision) |
 | `interaction_resolved` | gateway — `#resolveInteraction` settlement | `{ turnId, interactionId, outcome, variant }` | handled |
 | `interaction_recovered` | gateway — `interaction-checkpoint.ts` `recover()` on startup | `{ turnId, interaction, reason }`, reason limited to `daemon_restart`, `forced_shutdown`, `persistence_recovery` | handled |
-| `usage_update` | `mapConversationEvent` ← `usage_update` | `{ turnId, usage: { inputTokens, outputTokens } }` | **broken** — the adapter reads top-level `inputTokens`/`outputTokens`/`totalTokens` (§5) |
+| `usage_update` | `mapConversationEvent` ← `usage_update` | `{ turnId, inputTokens, outputTokens, totalTokens, usage }` | fixed by M4 |
 | `turn_completed` | `mapConversationEvent` ← `final` | `{ turnId, outcome: 'completed', text }` (bounded 16384) | handled |
-| `turn_failed` | `mapConversationEvent` ← `error`; also gateway-originated in `#recordContinuationFailure` | `{ turnId, outcome: 'failed', reason }` | handled |
+| `turn_failed` | `mapConversationEvent` ← `error`; also gateway-originated in `#recordContinuationFailure` | `{ turnId, outcome: 'failed', reason, finalText? }` | fixed by M4 |
 | `turn_aborted` | gateway — `#abortSession` | `{ turnId, outcome: 'aborted' }` | handled |
 
 Durability split: `text_delta` and `reasoning_delta` are appended with
@@ -408,6 +408,39 @@ confirmed by following both sides of the same value (`usage_update` from
 
 ```sh
 git diff --stat   # docs/contracts/13-gateway-web-wire.md only
+
+## M4 additions
+
+M4 adds the thirteen assigned event types: retry, retry_exhausted,
+subagent_started, subagent_tool_started, subagent_text_turn,
+subagent_command_message, subagent_approval_required, subagent_completed,
+subagent_interrupted, subagent_question, context_compaction_started,
+context_compaction_completed, and context_compaction_failed. Their payloads
+are bounded projections from M4-dto.md; no raw arguments, provider bodies,
+paths, stacks, cost records, or nested run state cross the wire. Retry,
+terminal card, approval/question, and compaction events are critical; progress
+text is stream; usage_update remains critical.
+
+The command-message repair maps source cancelled/interrupted to wire aborted
+and backgrounded to running, and skips messages without callId/toolName with a
+bounded safe counter. The turn-failed repair maps recognized ErrorEvent kinds
+to bounded reason codes and optionally carries bounded finalText. Child
+approval/question payloads use the existing PendingInteractionDto and
+interaction checkpoint/resolve seam; async child events retain their
+originating turnId when the root turn is no longer active.
+
+Child approval frames are emitted from the session-owned FIFO approval
+controller after its foreground lease publishes a pause, and the existing
+interaction resolve route calls that controller rather than the root approval
+state. Child questions use the async registry mailbox through the same route.
+At present, child approvals are available only through the adopted foreground
+subagent lease path; native async children do not publish approval pauses.
+Async children use subagent_question and the mailbox answer route instead.
+Pending child checkpoints are recovered as interaction_recovered, then
+explicitly settled as cancelled and followed by subagent_interrupted for the
+child. The gateway never fabricates a continuation for a lease that lived in
+the previous process, and never appends a terminal failure to the originating
+root turn.
 ```
 
 ## 8. M5b additions: Session Commands RPC

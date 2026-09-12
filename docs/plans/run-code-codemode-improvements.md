@@ -5,8 +5,7 @@
 Status: Milestones 0–3 are implemented through `c2f65197` (2026-09-12).
 Milestone 4 closed with no catalog change after measurement; Milestone 5 and
 Milestone 6 are implemented in this change (2026-09-12). The program exit
-criteria are satisfied; use the merge commit recorded below when this change
-lands.
+criteria are satisfied; implementation landed in `9d2ce6c6` (2026-09-12).
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -576,8 +575,7 @@ workflow compatibility tests (28 tests), `pnpm typecheck`, formatting, and
 `seen` approval snapshots are empty even when the legacy run_code path is
 selected, so the failure is not introduced by this runtime extraction. The
 failure remains an explicit handoff issue rather than being relabeled as a
-passing program gate. The merge commit is recorded here when this change
-lands.
+passing program gate. Implementation commit: `9d2ce6c6` (2026-09-12).
 
 ## Deferred follow-ups
 

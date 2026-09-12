@@ -6,6 +6,7 @@ import {
   createSessionRuntime as createProductionSessionRuntime,
 } from './session-composition.js';
 import { createConversationRuntime as createProductionConversationRuntime } from '../conversation/conversation-runtime-factory.js';
+import { estimateContext } from '../agent-runtime/context-compaction/index.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -152,6 +153,43 @@ it('manual local compaction commits checkpoint plus hot tail and retains genuine
   ]);
   expect(stored.filter((item) => item.contextSummary)).toHaveLength(1);
   expect(stored.slice(-4)).toEqual(history.slice(-4));
+});
+
+it('manual local compaction reports model-request input tokens before and after', async () => {
+  const chat = vi.fn(async () => '## Summary\nCold answers were summarized.');
+  const runtime = createConversationSession({
+    sessionId: 'manual-compact-tokens',
+    agentClient: makeMockClient({ chat }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const history = Array.from({ length: 4 }, (_, index) => [
+    { role: 'user', type: 'message', content: `user-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}` },
+  ]).flat();
+  runtime.stateFacade.importState({ history, previousResponseId: null });
+
+  const outcome = await runtime.compactContext();
+
+  expect(outcome.kind).toBe('compacted');
+  if (outcome.kind !== 'compacted') return;
+  const stored = runtime.conversationStore.getHistory();
+  expect(stored.some((item) => item.contextSummary)).toBe(true);
+  expect(outcome.checkpoint.contextSummary.estimatedTokensBefore).toBe(
+    estimateContext({ history }).renderedInputTokens,
+  );
+  // The local checkpoint marker is app-side bookkeeping, so both numbers
+  // measure the model input itself: the history before the compaction, and the
+  // checkpoint content plus hot tail after it.
+  expect(outcome.checkpoint.contextSummary.estimatedTokensAfter).toBe(
+    estimateContext({
+      history: [{ role: 'system', type: 'message', content: outcome.checkpoint.content }, ...outcome.hotTail],
+    }).renderedInputTokens,
+  );
+  // This summary is longer than the cold turn it replaced, which is the shape
+  // the command route must report as `not_reduced` rather than `completed`.
+  expect(outcome.checkpoint.contextSummary.estimatedTokensAfter).toBeGreaterThan(
+    outcome.checkpoint.contextSummary.estimatedTokensBefore!,
+  );
 });
 
 it('manual local compaction discards a stale summary without overwriting newer history', async () => {

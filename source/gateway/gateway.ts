@@ -26,6 +26,8 @@ import { SqliteReplayLedger } from './replay-ledger.js';
 import { GatewayServer } from './server.js';
 import type { RuntimeFactory } from './runtime-factory.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
+import { normalizeRunItem } from '../services/conversation/run-item-normalizer.js';
 import type { LogEvent } from '../services/logging/conversation-log-events.js';
 import {
   FROZEN_AGENT_EVENT_TYPES,
@@ -88,6 +90,25 @@ const NONCRITICAL_RUNTIME_EVENT_TYPES = new Set<ConversationEvent['type']>(['tex
 let malformedCommandMessageDrops = 0;
 
 const isCriticalRuntimeEvent = (event: ConversationEvent): boolean => !NONCRITICAL_RUNTIME_EVENT_TYPES.has(event.type);
+
+/**
+ * `retry-turn` replays the canonical transcript verbatim, so a retry is only
+ * meaningful while that transcript still ends on the user message of a turn
+ * that never produced output. Assistant output or a tool result after the last
+ * genuine user message means the turn committed something; synthetic user
+ * items (shell context, mode notices, local summaries) are not turns.
+ */
+const hasFailedTurnToRetry = (history: readonly unknown[]): boolean => {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const item = history[index];
+    if (normalizeRunItem(item).some((normalized) => normalized.type === 'tool_result')) return false;
+    const message = projectConversationMessage(item);
+    if (!message || message.isSynthetic) continue;
+    if (message.role === 'user') return true;
+    if (message.role === 'assistant') return false;
+  }
+  return false;
+};
 
 const INTERACTION_METRICS = [
   'interaction_presented',
@@ -1187,7 +1208,7 @@ export class Term2Gateway {
           if (parts[1] === 'in_progress') {
             return publicError(409, 'compact_interrupted', 'compaction was interrupted', false);
           }
-          if (parts[1] !== 'completed' && parts[1] !== 'nothing_to_retry') {
+          if (parts[1] !== 'completed' && parts[1] !== 'not_reduced' && parts[1] !== 'nothing_to_retry') {
             return publicError(500, 'compact_invalid_state', 'invalid compaction record state', false);
           }
           const outcome = parts[1];
@@ -1253,16 +1274,23 @@ export class Term2Gateway {
             });
           }
 
-          let outcome: 'completed' | 'nothing_to_retry' = 'nothing_to_retry';
+          let outcome: 'completed' | 'not_reduced' | 'nothing_to_retry' = 'nothing_to_retry';
           let tokensBefore: number | undefined;
           let tokensAfter: number | undefined;
+          const compactTurnId = crypto.randomUUID();
           try {
-            const resultText = await session.service.compactContext();
+            const resultText = await session.withCommandTurn(compactTurnId, () => session.service.compactContext());
             const match = resultText.match(/Context compacted locally\s*(?:\((\d+)\s*→\s*(\d+)\s*estimated tokens\))?/);
             const isCompacted = resultText.toLowerCase().includes('context compacted locally');
-            outcome = isCompacted ? 'completed' : 'nothing_to_retry';
             tokensBefore = match?.[1] ? Number(match[1]) : undefined;
             tokensAfter = match?.[2] ? Number(match[2]) : undefined;
+            // A compaction that grew the context is not a completed one; the
+            // numbers come from the same estimator on both sides.
+            outcome = !isCompacted
+              ? 'nothing_to_retry'
+              : tokensBefore !== undefined && tokensAfter !== undefined && tokensAfter >= tokensBefore
+              ? 'not_reduced'
+              : 'completed';
 
             if (this.#admissions) {
               const turnId = `compact:${outcome}:${tokensBefore ?? ''}:${tokensAfter ?? ''}`;
@@ -1399,7 +1427,7 @@ export class Term2Gateway {
 
         if (body.commandId === 'retry-turn') {
           const state = session.service.exportState();
-          if (state.history.length === 0) {
+          if (!hasFailedTurnToRetry(state.history)) {
             if (this.#admissions) {
               this.#admissions.prepare({
                 ownerUserId: claims.sub,

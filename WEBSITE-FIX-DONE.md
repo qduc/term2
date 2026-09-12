@@ -11,3 +11,4 @@
   - git diff --check: PASS.
 - Not fixed: unrelated failures reported by the related-test command; no full suite run per assignment scope.
 DONE website-docs-fix-2026-09-12
+DONE website-docs-fix-steer-2026-09-12

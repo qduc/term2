@@ -24,7 +24,7 @@ The gateway runs in the foreground until interrupted (`SIGINT` / `SIGTERM`).
 | `--tls-cert <pem>` | String | Absolute path to TLS certificate PEM file (required when using `--listen`). |
 | `--tls-key <pem>` | String | Absolute path to TLS private key PEM file (required when using `--listen`). |
 | `--allow-remote` | Flag | Permit binding to non-loopback network interfaces. Without this flag, non-loopback listen hosts are refused. |
-| `--pairing` | Flag | Enable interactive client pairing mode for initial connection setup. Mutually exclusive with `--bff-key` and `--allow-remote`. |
+| `--pairing` | Flag | Enable interactive client pairing mode for initial connection setup. One of `--pairing` or `--bff-key` is required; both may be set. `--allow-remote` is permitted by the parser, but do not combine it with pairing. |
 | `--bff-key <kid>=<pem>` | Repeatable | Register a trusted client's public key by key ID (`kid`) and public-key PEM path for signed requests. |
 | `--workspace-root <dir>` | Repeatable | Add allowed workspace root directories. Each path must be absolute. Defaults to the user's home directory. |
 | `--issuer <iss>` | String | Expected token issuer value for client authentication. |

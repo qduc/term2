@@ -54,7 +54,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 ### `/auto-approve [mode]`
 - **Usage**: `/auto-approve off`, `/auto-approve advisory`, `/auto-approve auto`, `/auto-approve always`
-- Sets the tool execution approval mode. Mode `always` disables sandbox prompts entirely.
+- Sets the tool execution approval mode. Mode `always` sets `sandbox.enabled = false`.
 
 ### `/rewind [last|<turn>] [edit|resend]`
 - **Usage**: `/rewind`, `/rewind 3 edit`, `/rewind last resend`

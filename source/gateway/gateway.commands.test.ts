@@ -743,15 +743,18 @@ describe('Gateway commands RPC route', () => {
       };
       persistence.index.insertAdmission(inProgressRecord);
 
-      // Replaying the interrupted compact command must return 500 compact_interrupted, not status 200 outcome
+      // Replaying the interrupted compact command must return 409 compact_interrupted, retryable: false
       const interruptedRes = await rpc(
         socketPath,
         token('command_invoke', sessionId),
         { commandId: 'compact', clientRequestId: 'req-interrupted' },
         `/private/agent/v1/sessions/${sessionId}/commands`,
       );
-      expect(interruptedRes.status).toBe(500);
-      expect((interruptedRes.body as any).error?.code).toBe('compact_interrupted');
+      expect(interruptedRes.status).toBe(409);
+      expect((interruptedRes.body as any).error).toMatchObject({
+        code: 'compact_interrupted',
+        retryable: false,
+      });
 
       // Seed a compact:failed record
       const failedRecord: AdmissionRecord = {
@@ -768,15 +771,46 @@ describe('Gateway commands RPC route', () => {
       };
       persistence.index.insertAdmission(failedRecord);
 
-      // Replaying the failed compact command must return 500 compact_failed, not status 200 outcome
+      // Replaying the failed compact command must return 409 compact_failed, retryable: false
       const failedRes = await rpc(
         socketPath,
         token('command_invoke', sessionId),
         { commandId: 'compact', clientRequestId: 'req-failed' },
         `/private/agent/v1/sessions/${sessionId}/commands`,
       );
-      expect(failedRes.status).toBe(500);
-      expect((failedRes.body as any).error?.code).toBe('compact_failed');
+      expect(failedRes.status).toBe(409);
+      expect((failedRes.body as any).error).toMatchObject({
+        code: 'compact_failed',
+        retryable: false,
+      });
+
+      // Seed a failed retry record
+      const failedRetryRecord: AdmissionRecord = {
+        ownerUserId: 'user-a',
+        sessionId,
+        clientRequestId: 'req-retry-failed',
+        normalizedBodyHash: normalizedBodyHash({ commandId: 'retry-turn', clientRequestId: 'req-retry-failed' }),
+        turnId: 'failed-retry-turn-id',
+        state: 'terminal',
+        result: 'failed',
+        phase: 'committed',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      };
+      persistence.index.insertAdmission(failedRetryRecord);
+
+      // Replaying a failed retry command must return 409 retry_failed, retryable: false
+      const failedRetryRes = await rpc(
+        socketPath,
+        token('command_invoke', sessionId),
+        { commandId: 'retry-turn', clientRequestId: 'req-retry-failed' },
+        `/private/agent/v1/sessions/${sessionId}/commands`,
+      );
+      expect(failedRetryRes.status).toBe(409);
+      expect((failedRetryRes.body as any).error).toMatchObject({
+        code: 'retry_failed',
+        retryable: false,
+      });
 
       // Seed a completed compact record: compact:completed:1200:450
       const completedRecord: AdmissionRecord = {

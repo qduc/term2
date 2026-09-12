@@ -1080,13 +1080,13 @@ export class Term2Gateway {
         if (body.commandId === 'compact') {
           const parts = lookup.record.turnId.split(':');
           if (lookup.record.result === 'failed' || parts[1] === 'failed') {
-            return publicError(500, 'compact_failed', 'compaction failed', true);
+            return publicError(409, 'compact_failed', 'compaction failed', false);
           }
           if (parts[1] === 'in_progress') {
-            return publicError(500, 'compact_interrupted', 'compaction was interrupted', true);
+            return publicError(409, 'compact_interrupted', 'compaction was interrupted', false);
           }
           if (parts[1] !== 'completed' && parts[1] !== 'nothing_to_retry') {
-            return publicError(500, 'compact_invalid_state', 'invalid compaction record state');
+            return publicError(500, 'compact_invalid_state', 'invalid compaction record state', false);
           }
           const outcome = parts[1];
           const tokensBefore = parts[2] ? Number(parts[2]) : undefined;
@@ -1113,7 +1113,7 @@ export class Term2Gateway {
           };
         }
         if (lookup.record.result === 'failed') {
-          return publicError(500, 'retry_failed', 'retry failed', true);
+          return publicError(409, 'retry_failed', 'retry failed', false);
         }
         return {
           status: 200,

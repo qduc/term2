@@ -483,6 +483,6 @@ All successful executions (including `nothing_to_retry` outcomes and replayed re
 ### Idempotency and Conflict Detection
 - `clientRequestId` is reserved before command side effects and tracked through `GatewayAdmissionPersistence` backed by SQLite and in-memory in-flight deduplication.
 - Replaying a request with the same `clientRequestId` and identical payload returns HTTP 200 with the original outcome (`outcome`, `turnId`, or compaction token metrics) and `replayed: true`.
-- Replayed compaction records are safely decoded: completed and no-op compactions return status 200 with `outcome: 'completed'` or `'nothing_to_retry'`. Interrupted compactions (`compact:in_progress`) return HTTP 500 `compact_interrupted`, and failed compactions return HTTP 500 `compact_failed`.
+- Replayed compaction records are safely decoded: completed and no-op compactions return status 200 with `outcome: 'completed'` or `'nothing_to_retry'`. Interrupted compactions (`compact:in_progress`) return HTTP 409 `compact_interrupted` with `retryable: false`. Failed compactions return HTTP 409 `compact_failed` with `retryable: false`. Unrecognized compaction states return HTTP 500 `compact_invalid_state` with `retryable: false`. Replayed failed retries return HTTP 409 `retry_failed` with `retryable: false`.
 - Replaying a `clientRequestId` with a different payload body throws an idempotency conflict and returns `409 idempotency_conflict`.
 

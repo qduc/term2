@@ -204,7 +204,6 @@ export function createProductionRuntimeFactory(input: {
       requestCapture,
       toolLifecycle,
       continuationProjectionMode,
-      _allowBackgroundShell,
       sessionSettingsSnapshot,
     }) => {
       const client = new AgentClient({

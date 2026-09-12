@@ -79,9 +79,10 @@ export function prepareGatewayManifest(stateDir: string): { manifestPath: string
 
 /**
  * Load durable browser-selected grants. A missing file means no prior grants;
- * a damaged (unparseable) file is moved aside as <file>.corrupt with a warning
- * so the evidence survives and the launcher starts empty; a file that parses
- * but carries an invalid grant list fails closed.
+ * a damaged (unparseable) file is quarantined as <file>.corrupt.<timestamp>
+ * with a warning so the evidence survives (the unique suffix keeps a second
+ * incident from destroying the first) and the launcher starts empty; a file
+ * that parses but carries an invalid grant list fails closed.
  */
 export function loadDynamicWorkspaceGrants(stateDir: string): readonly WorkspaceGrant[] {
   const grantsFile = path.join(stateDir, 'dynamic-workspaces.json');
@@ -95,13 +96,20 @@ export function loadDynamicWorkspaceGrants(stateDir: string): readonly Workspace
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // rename(2) replaces an existing destination, so the quarantine name
+    // carries a timestamp: a second incident must not destroy the first.
+    const quarantinePath = `${grantsFile}.corrupt.${Date.now()}`;
+    let moved = false;
     try {
-      renameSync(grantsFile, `${grantsFile}.corrupt`);
+      renameSync(grantsFile, quarantinePath);
+      moved = true;
     } catch {
       // Keep the damaged file in place rather than lose the evidence.
     }
     console.error(
-      `term2 serve: ${grantsFile} is damaged; moved to ${grantsFile}.corrupt, starting with no dynamic grants`,
+      moved
+        ? `term2 serve: ${grantsFile} is damaged; moved to ${quarantinePath}, starting with no dynamic grants`
+        : `term2 serve: ${grantsFile} is damaged and could not be moved aside; leaving it in place — repair or delete it before the next start`,
     );
     return [];
   }
@@ -205,8 +213,14 @@ export async function runServe(argv: readonly string[]): Promise<void> {
   // Probe once for the operator-visible warning. This does not gate readiness:
   // the shell tool refuses the unsandboxed fallback per command when the
   // sandbox runtime is unusable, so sessions still start and every other tool
-  // keeps working.
-  const sandboxWarning = sandboxStartupWarning(await getDefaultShellSandboxRunner().availability());
+  // keeps working. The probe is advisory only: a throw from the optional
+  // sandbox subsystem becomes a probe_failed warning, never a stack trace.
+  let sandboxWarning: string | undefined;
+  try {
+    sandboxWarning = sandboxStartupWarning(await getDefaultShellSandboxRunner().availability());
+  } catch (error) {
+    sandboxWarning = sandboxStartupWarning({ type: 'probe_failed', reason: messageOf(error) });
+  }
 
   // The launcher process is the credential owner: this is the operator's real
   // settings service (loaded with the same env precedence as the CLI), not a

@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -103,17 +112,60 @@ describe('dynamic workspace grant durability', () => {
     expect(existsSync(path.join(stateDir, 'dynamic-workspaces.json.tmp'))).toBe(false);
   });
 
-  it('moves a damaged file to .corrupt with a warning and starts empty', () => {
+  it('quarantines each damaged file under a unique name so a second incident preserves the first', () => {
+    const stateDir = makeRoot();
+    const grantsFile = path.join(stateDir, 'dynamic-workspaces.json');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    // Distinct fake timestamps make the two quarantine names deterministic.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_700_000_000_000);
+      writeFileSync(grantsFile, '{ first incident', 'utf8');
+      expect(loadDynamicWorkspaceGrants(stateDir)).toEqual([]);
+
+      vi.setSystemTime(1_700_000_000_001);
+      writeFileSync(grantsFile, '{ second incident', 'utf8');
+      expect(loadDynamicWorkspaceGrants(stateDir)).toEqual([]);
+
+      const quarantined = readdirSync(stateDir)
+        .filter((name) => name.startsWith('dynamic-workspaces.json.corrupt.'))
+        .sort();
+      expect(quarantined).toHaveLength(2);
+      expect(quarantined.map((name) => readFileSync(path.join(stateDir, name), 'utf8')).sort()).toEqual([
+        '{ first incident',
+        '{ second incident',
+      ]);
+      expect(existsSync(grantsFile)).toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('moved to'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says the damaged file stayed in place when the quarantine move fails', () => {
     const stateDir = makeRoot();
     const grantsFile = path.join(stateDir, 'dynamic-workspaces.json');
     writeFileSync(grantsFile, '{ truncated', 'utf8');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    expect(loadDynamicWorkspaceGrants(stateDir)).toEqual([]);
+    // Occupy the predicted quarantine path with a directory so rename(2)
+    // fails (EISDIR), regardless of the running user.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_700_000_000_000);
+      const predicted = `${grantsFile}.corrupt.1700000000000`;
+      mkdirSync(predicted);
 
-    expect(existsSync(grantsFile)).toBe(false);
-    expect(readFileSync(`${grantsFile}.corrupt`, 'utf8')).toBe('{ truncated');
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('.corrupt'));
+      expect(loadDynamicWorkspaceGrants(stateDir)).toEqual([]);
+
+      // The damaged file is still the evidence at the original path.
+      expect(readFileSync(grantsFile, 'utf8')).toBe('{ truncated');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('could not be moved aside'));
+      expect(errorSpy).toHaveBeenCalledWith(expect.not.stringContaining('moved to'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails closed when the file parses but carries an invalid grant', () => {
@@ -148,6 +200,14 @@ describe('sandboxStartupWarning', () => {
     expect(warning).toContain('shell sandbox unavailable');
     expect(warning).toContain('missing_dependency');
     expect(warning).toContain('socat not installed');
+    expect(warning).toContain('shell tool calls will be refused');
+  });
+
+  it('words a probe failure like any other unavailable state', () => {
+    const warning = sandboxStartupWarning({ type: 'probe_failed', reason: 'sandbox module threw' });
+    expect(warning).toContain('shell sandbox unavailable');
+    expect(warning).toContain('probe_failed');
+    expect(warning).toContain('sandbox module threw');
     expect(warning).toContain('shell tool calls will be refused');
   });
 });

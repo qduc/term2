@@ -1,6 +1,6 @@
 # One sandboxed code host for `run_agent_workflow` and `run_code`
 
-Status: **M1–M4 complete, reviewed and merged (2026-09-04).** `run_code` runs on
+Status: **M1–M5 complete (M5 implemented 2026-09-12); M6 remains open.** `run_code` runs on
 the shared host and resolves nested approval through the policy registry, so
 auto-approved tools now execute from inside a script.
 
@@ -14,6 +14,35 @@ promises inside the context and serializing capability results. The rule this
 establishes: **an exposed value must belong to the vm realm or cross as JSON.** The
 old test asserted `typeof process === 'undefined'`, which passed throughout — realm
 ownership needs its own assertion.
+
+### M5 confinement audit (2026-09-12)
+
+The binding site in `WORKER_TEMPLATE` is the security-relevant seam. The only
+host-realm callable used during setup is the private `bridge`; it is installed
+temporarily, consumed by VM-created closures, and removed from the context's
+global object before submitted code runs. Capability factories, namespace
+members, the console object, and catchable nested-call errors are constructed
+by code executing in the VM. Capability and member names are installed as own
+data properties, including `__proto__`, so a name cannot invoke a prototype
+setter. Arguments are JSON-round-tripped inside the VM before they reach the
+host, and host capability results are JSON-round-tripped before re-entry. The
+result serializer therefore exposes only VM-realm values or serialized plain
+data/media, not host objects, prototypes, errors, or callables.
+
+The adversarial host suite asserts constructor-chain inability directly across
+wrappers, prototypes, getters, proxies, errors, promises and async
+continuations, exposed built-ins, hostile capability/member names, and result
+deserialization. `buildWorkerSource` also pins the fixed template and its
+realm/serialization operations. These are realm-isolation tests, not a claim
+that the VM can safely execute hostile code.
+
+The exact boundary claim is: the disposable worker provides lifecycle
+isolation and termination from the parent execution, while `vm.createContext`
+provides a confined capability surface for submitted code. Neither mechanism
+is an OS/container security boundary. If hostile-code containment becomes a
+product requirement, it needs a separate architecture decision comparing an
+owned interpreter, an isolate runtime, and an OS-contained process; M5 makes no
+such product decision and does not revive the rejected process/socket design.
 
 ## Resume here
 

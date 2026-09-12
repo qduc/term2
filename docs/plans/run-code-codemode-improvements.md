@@ -3,7 +3,8 @@
 ## Resume here
 
 Status: Milestones 0–3 are implemented through `c2f65197` (2026-09-12).
-Milestone 4 closed with no catalog change after measurement; Milestone 5 is next.
+Milestone 4 closed with no catalog change after measurement; Milestone 5 is
+implemented in this change; Milestone 6 remains open.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -459,6 +460,34 @@ Do not make that decision inside this incremental plan.
 - New bindings have a test that would fail if their constructor chain reached a
   host capability.
 - The documented security claim matches the mechanism and names its limits.
+
+### M5 evidence (2026-09-12)
+
+The `WORKER_TEMPLATE` audit keeps `bridge` private to the binding closures and
+deletes its temporary global transport properties before submitted code runs.
+Capability and namespace bindings use `Object.defineProperty`, including for
+the special `__proto__` name, so registry names cannot trigger prototype setters.
+Namespace members use the same own-data-property construction. Capability
+arguments are JSON round-tripped inside the VM before `postMessage`; host-side
+capability results are JSON round-tripped before the result message is posted
+back, and the VM round-trips that message before resolving the script promise.
+Thus exposed values are either VM-realm-created wrappers/errors/promises or
+serialized plain data/media; the private bridge is not an exposed value.
+
+Adversarial host tests directly exercise constructor chains (rather than only
+checking that `process` is absent), wrapper and member prototypes, throwing
+getters, proxies, nested VM errors, promise and `then` continuations, built-in
+constructors, hostile capability/member names, and result deserialization. The
+static `buildWorkerSource` contract test pins the binding site and crossing
+operations, while the existing source/built worker e2e test pins the direct
+constructor-chain escape check across worker startup.
+
+The security claim is intentionally scoped: worker disposal and termination
+provide lifecycle isolation from the parent execution; `vm.createContext`
+provides a confined capability surface for this template. Neither is an
+OS/container boundary against hostile JavaScript. A requirement for hostile-code
+containment must open a separate architecture decision; M5 does not choose an
+interpreter, isolate runtime, or OS-contained process.
 
 ## Milestone 6 — Deepen the product/runtime boundary
 

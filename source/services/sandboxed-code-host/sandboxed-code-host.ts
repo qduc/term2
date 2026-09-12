@@ -338,10 +338,31 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         if (!handler || !ledger) return;
 
         const reply = (result: JsonValue) => {
+          // Keep structured clone from widening the capability contract. A
+          // handler is typed to return JsonValue, but this is also a runtime
+          // boundary: normalize in the host before data enters the worker.
+          let serialized: string | undefined;
+          try {
+            serialized = JSON.stringify(result);
+          } catch (error) {
+            fail('invalid_output', `${subject} capability result is not JSON-serializable: ${safeMessage(error)}`);
+            return;
+          }
+          if (serialized === undefined) {
+            fail('invalid_output', `${subject} capability result is not JSON-serializable`);
+            return;
+          }
+          let plainResult: JsonValue;
+          try {
+            plainResult = JSON.parse(serialized) as JsonValue;
+          } catch (error) {
+            fail('invalid_output', `${subject} capability result is not JSON-serializable: ${safeMessage(error)}`);
+            return;
+          }
           resultsSent++;
           idleLatch = null;
           reevaluatePause();
-          worker.postMessage({ type: `${name}.result`, requestId: message.requestId, result });
+          worker.postMessage({ type: `${name}.result`, requestId: message.requestId, result: plainResult });
         };
 
         const { type: _type, requestId: _requestId, ...payload } = message as Record<string, unknown>;

@@ -235,13 +235,30 @@ function installContextBindings() {
     };
     return tracked;
   }
+  // Structured clone can carry host-realm objects such as Date, Map, and Error.
+  // Capability arguments must not use that wider transport: normalize them in
+  // this realm first, so the bridge only ever sees JSON-created plain data.
+  function serializeTransport(value) {
+    let encoded;
+    try {
+      encoded = JSON.stringify(value);
+    } catch (_) {
+      throw new TypeError('Capability arguments must be JSON-serializable');
+    }
+    if (encoded === undefined) return null;
+    try {
+      return JSON.parse(encoded);
+    } catch (_) {
+      throw new TypeError('Capability arguments must be JSON-serializable');
+    }
+  }
   function call(name, payload) {
     const requestId = String(++sequence);
     const state = { observed: false, rejected: false, message: '' };
     nestedStates.set(requestId, state);
     const promise = new Promise((resolve) => {
       pending.set(requestId, { resolve, state });
-      bridge(name + '.run', Object.assign({ requestId }, payload));
+      bridge(name + '.run', Object.assign({ requestId }, serializeTransport(payload)));
     });
     return { promise: trackedPromise(promise, state), state };
   }
@@ -250,22 +267,32 @@ function installContextBindings() {
   }
   function namespaceBinding(name, members) {
     const namespace = Object.create(null);
-    for (const member of members) namespace[member] = (params) => {
-      const callState = call(name, { member, params });
-      return callState.promise.then((response) => {
-      // Namespace members speak an { ok, result | error } envelope so a refused or
-      // failed call is catchable inside the script instead of a silent value.
-      if (!response || typeof response !== 'object') return response;
-      // Naming the tool here is what lets a model tell which call of a fan-out
-      // failed: the underlying message often does not (e.g. 'rg: regex parse error').
-      if (response.ok === false) {
-        callState.state.rejected = true;
-        callState.state.message = 'tools.' + member + ' failed: ' + String(response.error);
-        throw new Error(callState.state.message);
-      }
-      return response.result;
+    for (const member of members) {
+      const callable = (params) => {
+        const callState = call(name, { member, params });
+        return callState.promise.then((response) => {
+          // Namespace members speak an { ok, result | error } envelope so a refused or
+          // failed call is catchable inside the script instead of a silent value.
+          if (!response || typeof response !== 'object') return response;
+          // Naming the tool here is what lets a model tell which call of a fan-out
+          // failed: the underlying message often does not (e.g. 'rg: regex parse error').
+          if (response.ok === false) {
+            callState.state.rejected = true;
+            callState.state.message = 'tools.' + member + ' failed: ' + String(response.error);
+            throw new Error(callState.state.message);
+          }
+          return response.result;
+        });
+      };
+      // Assignment gives the magic __proto__ member setter prototype-mutating
+      // semantics. Define an own data property for every member instead.
+      Object.defineProperty(namespace, member, {
+        value: callable,
+        configurable: true,
+        enumerable: true,
+        writable: true,
       });
-    };
+    }
     // Unknown members explain themselves instead of surfacing as
     // 'tools.x is not a function', which names neither the problem nor the fix.
     const guarded = new Proxy(namespace, {
@@ -282,15 +309,22 @@ function installContextBindings() {
     return Object.freeze(guarded);
   }
   for (const capability of capabilityDefinitions) {
-    globalThis[capability.name] = capability.kind === 'namespace'
-      ? namespaceBinding(capability.name, capability.members)
-      : factoryBinding(capability.name);
+    // Assignment gives the magic global __proto__ name prototype-mutating
+    // semantics. Define an own data property for every capability name.
+    Object.defineProperty(globalThis, capability.name, {
+      value: capability.kind === 'namespace' ? namespaceBinding(capability.name, capability.members) : factoryBinding(capability.name),
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
   }
   // A transport guard only: the host independently validates console data and
   // applies the cumulative budget before forwarding it to observers.
   globalThis.console = Object.freeze({ log: (...values) => {
     if (!values.every(value => json(value))) return;
-    bridge('console.log', { values });
+    try {
+      bridge('console.log', { values: serializeTransport(values) });
+    } catch (_) {}
   } });
   return {
     resolve(requestId, result) {

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Worker } from 'node:worker_threads';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxedCodeHostImpl } from './sandboxed-code-host.js';
-import type { CapabilityHandler, CapabilityOutcome, HostResult } from './host-types.js';
+import type { CapabilityHandler, CapabilityOutcome, HostResult, JsonValue } from './host-types.js';
 
 const limits = {
   timeoutMs: 5_000,
@@ -98,6 +98,192 @@ describe('SandboxedCodeHostImpl isolation', () => {
     expect(consoleOutput).toEqual([
       [{ consoleEscaped: false, capabilityEscaped: false, promiseEscaped: false, resultEscaped: false }],
     ]);
+  });
+
+  it('keeps every exposed binding, continuation, error, and builtin in the VM realm', async () => {
+    const consoleOutput: unknown[][] = [];
+    const capability: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['echo', 'fail'] },
+      limits: { maxCalls: 8, maxConcurrency: 8, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async (_prepared, context): Promise<CapabilityOutcome> =>
+        context.requestId === '2'
+          ? { kind: 'result', result: { ok: false, error: 'expected failure' } }
+          : { kind: 'result', result: { ok: true, result: { answer: 'ok' } } },
+    };
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: `
+        function reachesHostConstructor(value) {
+          try {
+            value.constructor.constructor('return process')();
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }
+        function realmChecks(value) {
+          if (value === null || value === undefined) return { escaped: false, ownPrototype: true };
+          return {
+            escaped: reachesHostConstructor(value),
+            ownPrototype: Object.getPrototypeOf(value) === null ||
+              Object.getPrototypeOf(value) === Object.prototype ||
+              Object.getPrototypeOf(value) === Function.prototype ||
+              Object.getPrototypeOf(value) === Promise.prototype ||
+              Object.getPrototypeOf(value) === Error.prototype,
+          };
+        }
+
+        const pending = tools.echo({});
+        let nestedError;
+        try { await tools.fail({}); } catch (error) { nestedError = error; }
+        const resultValue = await pending;
+        const continuation = await Promise.resolve(resultValue).then((value) => realmChecks(value));
+        console.log({
+          console: realmChecks(console),
+          consoleLog: realmChecks(console.log),
+          tools: realmChecks(tools),
+          tool: realmChecks(tools.echo),
+          promise: realmChecks(pending),
+          then: realmChecks(pending.then),
+          result: realmChecks(resultValue),
+          error: realmChecks(nestedError),
+          continuation,
+          builtins: [Object, Function, Array, Promise, Error, JSON, Reflect, globalThis]
+            .map((builtin) => reachesHostConstructor(builtin)),
+          prototypes: [
+            Object.getPrototypeOf(console.log) === Function.prototype,
+            Object.getPrototypeOf(resultValue) === Object.prototype,
+            Object.getPrototypeOf(nestedError) === Error.prototype,
+          ],
+        });
+        return { done: true };
+      `,
+      capabilities: { tools: capability },
+      limits,
+      subject: 'Script',
+      allowVoidOutput: true,
+      onConsole: (values) => consoleOutput.push(values),
+    });
+
+    expect(result).toEqual({ ok: true, output: { done: true } });
+    expect(consoleOutput).toEqual([
+      [
+        {
+          console: { escaped: false, ownPrototype: true },
+          consoleLog: { escaped: false, ownPrototype: true },
+          tools: { escaped: false, ownPrototype: true },
+          tool: { escaped: false, ownPrototype: true },
+          promise: { escaped: false, ownPrototype: true },
+          then: { escaped: false, ownPrototype: true },
+          result: { escaped: false, ownPrototype: true },
+          error: { escaped: false, ownPrototype: true },
+          continuation: { escaped: false, ownPrototype: true },
+          builtins: [false, false, false, false, false, false, false, false],
+          prototypes: [true, true, true],
+        },
+      ],
+    ]);
+  });
+
+  it('serializes capability arguments before the host bridge and results before re-entry', async () => {
+    let received: unknown;
+    const capability: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['inspect'] },
+      limits: { maxCalls: 2, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: (payload) => {
+        received = payload.params;
+        return {};
+      },
+      invoke: async () => ({
+        kind: 'result',
+        // Deliberately return a host-realm object through the typed seam. The
+        // host must reduce it to JSON before it can reach the VM.
+        result: {
+          ok: true,
+          result: Object.assign(Object.create({ hostPrototype: true }), { answer: 'ok' }) as unknown as JsonValue,
+        },
+      }),
+    };
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: `
+        const params = new Proxy({ nested: { keep: true }, date: new Date('2020-01-01T00:00:00.000Z'), ignored: () => 'no host function' }, {
+          get(target, key, receiver) {
+            return Reflect.get(target, key, receiver);
+          },
+        });
+        Object.defineProperty(params, 'fromGetter', { enumerable: true, get() { return { getter: true }; } });
+        const returned = await tools.inspect(params);
+        return {
+          receivedPrototype: returned !== null && typeof returned === 'object' && Object.getPrototypeOf(returned) === Object.prototype,
+          result: returned,
+        };
+      `,
+      capabilities: { tools: capability },
+      limits,
+      subject: 'Script',
+    });
+
+    expect(received).toEqual({
+      nested: { keep: true },
+      date: '2020-01-01T00:00:00.000Z',
+      fromGetter: { getter: true },
+    });
+    expect(result).toEqual({
+      ok: true,
+      output: {
+        receivedPrototype: true,
+        result: { answer: 'ok' },
+      },
+    });
+  });
+
+  it('keeps unusual capability and member names from changing the realm boundary', async () => {
+    const makeCapability = (name: string, members?: string[]): CapabilityHandler => ({
+      binding: members ? { name, kind: 'namespace', members } : { name, kind: 'factory' },
+      limits: { maxCalls: 4, maxConcurrency: 4, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async () => ({ kind: 'result', result: { ok: true } }),
+    });
+    const capabilities: Record<string, CapabilityHandler> = Object.create(null);
+    Object.defineProperty(capabilities, '__proto__', { value: makeCapability('__proto__'), enumerable: true });
+    Object.defineProperty(capabilities, 'constructor', { value: makeCapability('constructor'), enumerable: true });
+    Object.defineProperty(capabilities, 'toString', {
+      value: makeCapability('toString', ['__proto__', 'constructor']),
+      enumerable: true,
+    });
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: `
+        function safe(value) {
+          try { value.constructor.constructor('return process')(); return false; } catch (_) { return true; }
+        }
+        return {
+          proto: safe(__proto__),
+          constructor: safe(constructor),
+          toString: safe(toString),
+          memberProto: safe(toString.__proto__),
+          memberConstructor: safe(toString.constructor),
+          members: Object.keys(toString),
+        };
+      `,
+      capabilities,
+      limits,
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      output: {
+        proto: true,
+        constructor: true,
+        toString: true,
+        memberProto: true,
+        memberConstructor: true,
+        members: ['__proto__', 'constructor'],
+      },
+    });
   });
 });
 

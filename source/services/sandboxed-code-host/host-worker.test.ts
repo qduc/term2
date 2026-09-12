@@ -44,4 +44,20 @@ describe('buildWorkerSource', () => {
     expect(template).toMatch(/endsWith\('\.run'\)/);
     expect(template).toMatch(/endsWith\('\.result'\)/);
   });
+
+  it('pins the binding site to realm-local construction and serialized crossings', () => {
+    const source = buildWorkerSource([{ name: 'tools', kind: 'namespace', members: ['echo'] }]);
+
+    expect(source).toContain('vm.createContext(Object.create(null)');
+    expect(source).toContain('Object.defineProperty(globalThis, capability.name');
+    expect(source).toContain('function serializeTransport(value)');
+    expect(source).toContain('Object.assign({ requestId }, serializeTransport(payload))');
+    expect(source).toContain('const encoded = JSON.stringify(result)');
+    expect(source).toContain('delete globalThis.__bridge');
+    expect(source).toContain('delete globalThis.__capabilities');
+    // A future binding must not silently reintroduce host objects by assigning
+    // the wrappers before createContext or by forwarding structured-clone data.
+    expect(source).not.toContain('context.console =');
+    expect(source).not.toContain('context[capability.name] =');
+  });
 });

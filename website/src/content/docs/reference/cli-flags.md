@@ -52,8 +52,8 @@ Usage:
 | `--tls-key <pem>` | String | Conditional | TLS private key PEM path (required with `--listen`). |
 | `--allow-remote` | Boolean | No | Allow binding non-loopback network interfaces with `--listen`. |
 | `--pairing` | Boolean | No | Enable interactive client pairing mode for initial credential setup. |
-| `--bff-key <kid>=<pem>` | String | No | Trusted client authentication public key(s) (repeatable). |
+| `--bff-key <kid>=<pem>` | String | No | A trusted client's public key (by key ID and public-key PEM path) for signed requests (repeatable). |
 | `--workspace-root <dir>` | String | No | Allowed workspace root directories (repeatable). Defaults to user home directory. |
-| `--issuer <iss>` | String | No | Expected token issuer claim for client authentication. |
-| `--audience <aud>` | String | No | Expected token audience claim for client authentication. |
+| `--issuer <iss>` | String | No | Expected token issuer value for client authentication. |
+| `--audience <aud>` | String | No | Expected token audience value for client authentication. |
 | `--allow-write` | Boolean | No | Admit `read_write` workspace grants. Without this flag, every root is strictly read-only. |

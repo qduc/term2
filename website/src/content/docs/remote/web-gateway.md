@@ -25,10 +25,10 @@ The gateway runs in the foreground until interrupted (`SIGINT` / `SIGTERM`).
 | `--tls-key <pem>` | String | Absolute path to TLS private key PEM file (required when using `--listen`). |
 | `--allow-remote` | Flag | Permit binding to non-loopback network interfaces. Without this flag, non-loopback listen hosts are refused. |
 | `--pairing` | Flag | Enable interactive client pairing mode for initial connection setup. |
-| `--bff-key <kid>=<pem>` | Repeatable | Register a trusted client public key by key ID (`kid`) and certificate path. |
+| `--bff-key <kid>=<pem>` | Repeatable | Register a trusted client's public key by key ID (`kid`) and public-key PEM path for signed requests. |
 | `--workspace-root <dir>` | Repeatable | Add allowed workspace root directories. Defaults to the user's home directory. |
-| `--issuer <iss>` | String | Expected token issuer claim for client authentication. |
-| `--audience <aud>` | String | Expected token audience claim for client authentication. |
+| `--issuer <iss>` | String | Expected token issuer value for client authentication. |
+| `--audience <aud>` | String | Expected token audience value for client authentication. |
 | `--allow-write` | Flag | Admit `read_write` workspace grants. Without this flag, every workspace connection is strictly read-only. |
 
 ## Examples

@@ -7,6 +7,7 @@ import {
   RUNTIME_MODIFIABLE_SETTINGS,
 } from '../../source/services/settings/settings-schema.js';
 import { getSettingMetadata } from '../../source/services/settings/settings-ui-metadata.js';
+import { resolveSettingAtPath, unwrapSchema } from '../../source/services/settings/setting-schema-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const targetDocPath = path.join(__dirname, '../src/content/docs/reference/settings.md');
@@ -66,6 +67,46 @@ function formatDefaultValue(key: string, val: any): string {
   return `\`${String(val)}\``;
 }
 
+// Infer precise documentation type directly from Zod schema definition and metadata
+function inferSettingType(key: string, meta: any, rawDefault: any): string {
+  if (meta?.enumOptions && meta.enumOptions.length > 0) {
+    return meta.enumOptions.join(' \\| ');
+  }
+
+  const schema = resolveSettingAtPath(key);
+  const unwrapped = schema ? unwrapSchema(schema) : undefined;
+  const def = unwrapped?.def ?? unwrapped?._def;
+  const typeName = def?.type ?? def?.typeName;
+
+  if (typeName === 'record' || typeName === 'ZodRecord') {
+    const keyType = def?.keyType?.def?.type ?? 'string';
+    const valType = def?.valueType?.def?.type ?? 'string';
+    return `map of ${keyType} to ${valType}`;
+  }
+
+  if (typeName === 'object' || typeName === 'ZodObject') {
+    return 'object';
+  }
+
+  if (meta?.isArray || typeName === 'array' || typeName === 'ZodArray') {
+    return 'array';
+  }
+
+  if (typeName === 'boolean' || typeName === 'ZodBoolean' || typeof rawDefault === 'boolean') {
+    return 'boolean';
+  }
+
+  if (typeName === 'number' || typeName === 'ZodNumber' || typeof rawDefault === 'number') {
+    return 'number';
+  }
+
+  if (meta?.type && meta.type !== 'string') {
+    return meta.type;
+  }
+
+  return 'string';
+}
+
 interface SettingEntry {
   key: string;
   type: string;
@@ -82,19 +123,7 @@ for (const key of allKeys) {
   const meta = getSettingMetadata(key as any);
   const rawDefault = getPath(DEFAULT_SETTINGS, key);
   const formattedDefault = formatDefaultValue(key, rawDefault);
-
-  let typeStr = 'string';
-  if (meta?.enumOptions && meta.enumOptions.length > 0) {
-    typeStr = meta.enumOptions.join(' \\| ');
-  } else if (meta?.isArray) {
-    typeStr = 'array';
-  } else if (meta?.type) {
-    typeStr = meta.type;
-  } else if (typeof rawDefault === 'boolean') {
-    typeStr = 'boolean';
-  } else if (typeof rawDefault === 'number') {
-    typeStr = 'number';
-  }
+  const typeStr = inferSettingType(key, meta, rawDefault);
 
   const isRuntimeModifiable = RUNTIME_MODIFIABLE_SETTINGS.has(key);
   const description = meta?.description || 'No description available.';
@@ -185,6 +214,11 @@ if (!sshEnabled || sshEnabled.defaultValue !== '`false`' || !sshPort || sshPort.
 const webSearchProvider = entries.find((e) => e.key === 'webSearch.provider');
 if (!webSearchProvider || webSearchProvider.defaultValue !== '`"tavily"`') {
   throw new Error(`Validation failed: webSearch.provider must default to tavily, got ${webSearchProvider?.defaultValue}`);
+}
+
+const nicknamesEntry = entries.find((e) => e.key === 'agent.modelNicknames');
+if (!nicknamesEntry || nicknamesEntry.type !== 'map of string to string' || nicknamesEntry.defaultValue !== '`{}`') {
+  throw new Error(`Validation failed: agent.modelNicknames must be map of string to string and default to {}, got ${nicknamesEntry?.type} ${nicknamesEntry?.defaultValue}`);
 }
 
 // Build Markdown Output

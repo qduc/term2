@@ -1,0 +1,17 @@
+{
+  "name": "website",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/generate-settings.mjs && astro dev",
+    "start": "astro dev",
+    "build": "node scripts/generate-settings.mjs && astro build && node scripts/check-links.mjs",
+    "check-links": "node scripts/check-links.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.0",
+    "astro": "^7.3.2"
+  }
+}

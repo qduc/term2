@@ -1,0 +1,64 @@
+---
+title: Non-Interactive Mode
+description: Using term2 in scripts, automated pipelines, and CI/CD.
+---
+
+When you provide a prompt argument on the command line, term2 executes non-interactively without launching the terminal UI:
+
+```bash
+term2 [options] [prompt...]
+```
+
+## Basic Non-Interactive Queries
+
+Execute one-off queries with stdout output:
+
+```bash
+term2 "Explain the purpose of package.json in this project"
+```
+
+The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
+
+## Enabling Tool Execution (`--auto-approve`)
+
+By default in non-interactive mode, tool execution is disabled because there is no interactive prompt to confirm actions. To permit the agent to run tools (such as reading files, writing changes, or executing commands), pass `--auto-approve`:
+
+```bash
+term2 --auto-approve "Run pnpm typecheck and fix any trivial lint errors"
+```
+
+## Output Formatting & Scripting
+
+### Quiet Mode (`-q`, `--quiet`)
+
+Suppress non-error diagnostics on stderr to cleanly capture tool output in shell variables:
+
+```bash
+TODO_LIST=$(term2 -q "List all TODO comments in source/")
+```
+
+### JSON Mode (`--json`)
+
+Emit newline-delimited JSON (NDJSON) events on standard output for machine consumption:
+
+```bash
+term2 --json "Find potential security issues in auth.ts"
+```
+
+Each NDJSON event contains structured type, content, tool call, and usage records.
+
+### Streaming Reasoning Deltas (`--show-reasoning`)
+
+Stream thinking/reasoning deltas from reasoning-capable models (e.g. o1, o3, Grok, Claude with thinking) to standard error:
+
+```bash
+term2 --show-reasoning "Solve this mathematical recurrence relation"
+```
+
+### Lightweight Non-Interactive Execution (`--lite`)
+
+Run in lite mode without indexing the workspace codebase, ideal for quick terminal calculations, log analysis, or system commands:
+
+```bash
+term2 --lite "Show the top 5 largest directories under /var/log"
+```

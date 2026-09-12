@@ -2,10 +2,11 @@
 
 ## Resume here
 
-Status: Milestones 0–3 are implemented through `c2f65197` (2026-09-12).
-Milestone 4 closed with no catalog change after measurement; Milestone 5 and
-Milestone 6 are implemented in this change (2026-09-12). The program exit
-criteria are satisfied; implementation landed in `9d2ce6c6` (2026-09-12).
+Status: complete through Milestone 6 (2026-09-12). Milestones 0–3 are
+implemented through `c2f65197`; Milestone 4 closed with no catalog change after
+measurement; Milestone 5 landed in `ff3616fd`; and the Milestone 6 extraction
+and dead-path cleanup landed in `9d2ce6c6` and `034bb633`. The program exit
+criteria are satisfied.
 
 This plan follows a comparison of Term2's current `run_code` behavior with the
 reverse-engineered `CodeMode Specification.md` for
@@ -15,9 +16,10 @@ code.
 
 Milestone 0 confirmed the unfinished-call settlement defect through the public
 `run_code` boundary; Milestones 1–3 repaired it and established structured
-execution and scripted-output contracts. Start with Milestone 5. Milestone 4's
-measurement did not justify catalog search; keep `tools.describe` unless a new
-consumer or fresh usage evidence crosses that recorded gate.
+execution and scripted-output contracts. All implementation milestones are
+closed. Milestone 4's measurement did not justify catalog search; keep
+`tools.describe` unless a new consumer or fresh usage evidence crosses that
+recorded gate.
 
 Before touching this area, also read:
 
@@ -239,6 +241,8 @@ Persisted-setting migration, if any: none.
 Rollback boundary: the host/worker settlement-barrier change and the conversion
   of the eight expected-failure pins to ordinary passing tests.
 Ledger row: confirmed defect — admitted nested-call early settlement.
+Disposition: repaired in `8aead140`; the settlement barrier is retained as a
+  shared-host invariant.
 ```
 
 ## Milestone 1 — Make admitted-call settlement a host invariant
@@ -566,16 +570,26 @@ snapshot. No session or UI object is passed into `SandboxedCodeHost`.
 
 ### M6 validation and exit receipt
 
-Focused run_code, host, worker, tools-header, telemetry, physical-binding,
-action-receipt, and scripted-e2e tests pass (246 tests), as do the focused
-workflow compatibility tests (28 tests), `pnpm typecheck`, formatting, and
-`pnpm test:provider-black-box` (177 passed, 1 skipped). `pnpm test:related` and
-`pnpm test:changed` both select the same pre-existing
+The initial extraction's focused run_code, host, worker, tools-header, telemetry,
+physical-binding, action-receipt, and scripted-e2e tests pass (246 tests), as do
+the focused workflow compatibility tests (28 tests), `pnpm typecheck`,
+formatting, and `pnpm test:provider-black-box` (177 passed, 1 skipped). The
+final dead-path cleanup passed 263 focused tests, typecheck, ESLint, and
+formatting. `pnpm test:related` and `pnpm test:changed` both select the same
+pre-existing
 `scripts/nested-approval/scripted-adapter.acceptance.test.ts` failure: its
 `seen` approval snapshots are empty despite the outer run_code turn
 completing, so the failure is not introduced by this runtime extraction. The
 failure remains an explicit handoff issue rather than being relabeled as a
-passing program gate. Implementation commit: `9d2ce6c6` (2026-09-12).
+passing program gate.
+
+The final unit-tier run passed 8,394 tests and failed seven. All seven failures
+reproduced on untouched `main`: the nested-approval failure above, two
+outside-workspace approval assertions in `apply-patch.test.ts`, three approval
+or relaxed-match assertions in `search-replace.test.ts`, and one equal-time
+ordering assertion in `session-index-database.test.ts`. The integration tier
+passed 79 tests with one skipped. Implementation commits: `9d2ce6c6` and
+`034bb633` (2026-09-12).
 
 ## Deferred follow-ups
 

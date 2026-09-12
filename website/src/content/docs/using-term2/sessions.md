@@ -60,4 +60,4 @@ term2 provides granular control over conversation history:
 ## Handoff (`/handoff`)
 
 To pass the assistant's final response into a new session or switch to another model:
-- Run `/handoff` to capture the latest response and prepare a clean summary handoff.
+- Run `/handoff` to capture and pass the latest assistant response directly to the handoff flow.

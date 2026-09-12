@@ -21,7 +21,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 <CardGrid stagger>
   <Card title="Universal Provider Support" icon="puzzle">
-    Connect to OpenAI, OpenAI Codex/ChatGPT OAuth, xAI Grok (Responses API with encrypted reasoning and OAuth), OpenRouter, Anthropic, Google Gemini, and local OpenAI-compatible endpoints (Ollama, llama.cpp).
+    Connect to built-in providers (OpenAI, ChatGPT/Codex OAuth, xAI Grok OAuth, OpenRouter), custom Anthropic and Google Gemini adapters, and local OpenAI-compatible endpoints (Ollama, llama.cpp).
   </Card>
   <Card title="Execution Safety & Sandboxing" icon="shield">
     Sandboxed shell execution with configurable read/write boundaries (`standard` and `strict`), interactive diff previews, smart auto-approvals, and run budgets.
@@ -36,6 +36,6 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     Connect directly to remote servers over SSH with local SSH agent authentication and run full or lightweight agent sessions remotely.
   </Card>
   <Card title="Private Web Gateway" icon="open-book">
-    Launch `term2 serve` to expose an authenticated, audited Unix socket or TLS gateway for companion web backends.
+    Launch `term2 serve` to expose an authenticated, audited Unix socket or TLS gateway for programmatic control and external clients.
   </Card>
 </CardGrid>

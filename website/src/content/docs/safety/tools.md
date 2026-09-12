@@ -27,9 +27,9 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 ## Sandboxed JavaScript Execution (`run_code`)
 
 - **`run_code`**: Executes JavaScript in a sandboxed V8 context directly inside the Node.js process.
-- **Nested Tool Invocation**: Inside a `run_code` script, the agent can call other exposed tools programmatically via `await tools.<toolName>(args)`.
-- **Approval Policy**: Nested tool calls within `run_code` are automatically evaluated by the policy registry: auto-approved read operations execute seamlessly, while mutating calls require confirmation.
-- **Realm Isolation**: The host context enforces strict realm boundaries so scripts cannot escape into process or environment globals.
+- **Nested Tool Invocation**: Inside a `run_code` script, the agent can call other tools programmatically via `await tools.<toolName>(args)`.
+- **Tool Approvals in Code**: Nested read-only tool calls run automatically, while actions requiring approval prompt the user before continuing.
+- **Script Isolation**: Scripts execute in an isolated environment without access to process globals or host credentials.
 
 ## User & Advisory Tools
 

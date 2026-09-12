@@ -43,9 +43,23 @@ export TAVILY_API_KEY="tvly-..."
 export EXA_API_KEY="..."
 ```
 
-### Option 3: Interactive First-Run Wizard
+### Option 3: Persistent Configuration File (`settings.json`)
 
-If you start `term2` without configured credentials, an interactive setup prompt helps you configure your primary provider and model directly in the terminal.
+You can configure API keys and settings permanently in `settings.json` in your platform's application state directory (e.g. `~/.local/state/term2-nodejs/settings.json` on Linux):
+
+```json
+{
+  "agent": {
+    "provider": "openai",
+    "model": "gpt-5.1",
+    "openai": {
+      "apiKey": "sk-..."
+    }
+  }
+}
+```
+
+You can also launch term2 with `term2 --model` to interactively select an available model and provider from the catalog.
 
 ## Launching term2
 

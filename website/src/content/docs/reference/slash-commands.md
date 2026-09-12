@@ -74,4 +74,4 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 ### `/handoff`
 - **Usage**: `/handoff`
-- Captures the assistant's latest response and prepares an export brief for handoff to another session or model.
+- Captures and passes the latest assistant response to the interactive handoff flow.

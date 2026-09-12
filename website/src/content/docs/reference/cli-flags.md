@@ -51,9 +51,9 @@ Usage:
 | `--tls-cert <pem>` | String | Conditional | TLS certificate PEM path (required with `--listen`). |
 | `--tls-key <pem>` | String | Conditional | TLS private key PEM path (required with `--listen`). |
 | `--allow-remote` | Boolean | No | Allow binding non-loopback network interfaces with `--listen`. |
-| `--pairing` | Boolean | No | Enable browser pairing mode for initial credential handshake. |
-| `--bff-key <kid>=<pem>` | String | No | Paired BFF public key(s) (repeatable). |
+| `--pairing` | Boolean | No | Enable interactive client pairing mode for initial credential setup. |
+| `--bff-key <kid>=<pem>` | String | No | Trusted client authentication public key(s) (repeatable). |
 | `--workspace-root <dir>` | String | No | Allowed workspace root directories (repeatable). Defaults to user home directory. |
-| `--issuer <iss>` | String | No | JWT issuer claim (default: `chatforge-bff`). |
-| `--audience <aud>` | String | No | JWT audience claim (default: `term2-gateway`). |
+| `--issuer <iss>` | String | No | Expected token issuer claim for client authentication. |
+| `--audience <aud>` | String | No | Expected token audience claim for client authentication. |
 | `--allow-write` | Boolean | No | Admit `read_write` workspace grants. Without this flag, every root is strictly read-only. |

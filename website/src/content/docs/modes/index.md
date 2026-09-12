@@ -18,7 +18,7 @@ term2 features five distinct operating modes (built-in profiles) tailored to dif
 ## Switching Modes
 
 - **Toggling Plan Mode (`Shift+Tab` or `/plan`)**:
-  Pressing `Shift+Tab` toggles between Standard mode and Plan mode. In Plan mode, write operations (file editing, file creation, mutating shell commands) are blocked by the enforcement policy.
+  Pressing `Shift+Tab` toggles between Standard mode and Plan mode. In Plan mode, write operations (file editing, file creation, and mutating shell commands) are safely blocked, allowing you to design and explore without risk of unintentional modifications.
 - **Switching Profiles (`/profile <name>`)**:
   Run `/profile` followed by the profile name (`standard`, `plan`, `lite`, `mentor`, `orchestrator`) or run bare `/profile` to open the profile selection menu.
 - **Dedicated Slash Commands**:
@@ -27,11 +27,9 @@ term2 features five distinct operating modes (built-in profiles) tailored to dif
   - `/mentor`: Toggle Mentor mode on or off.
   - `/orchestrator`: Toggle Orchestrator mode on or off.
 
-## Profile Architecture
+## Plan Mode Restrictions
 
-Under the hood, term2 operates on a unified, typed Profile resolver. Each profile defines:
-1. **Instructions**: Base model instructions and workflow add-ons.
-2. **Context**: Included and excluded context sources (environment, workspace, project instructions, memory, skills).
-3. **Tools**: Enabled tool capabilities.
-4. **Enforcement Policies**: Hard denials (such as `filesystem-mutation` or `shell-mutation` in Plan mode).
-5. **Integrations**: Built-in integrations such as mentor consultation or async subagent delegation.
+When Plan mode is active:
+- **Read-Only Operation**: File edits, file creations, and workspace mutations are disabled.
+- **Safe Command Execution**: Only read-only inspection commands (such as directory listings, search, and status checks) are permitted; destructive or mutating shell commands are blocked.
+- **Structured Planning**: The agent focuses on reading code, gathering context, and outlining architecture plans or implementation steps for your review before you switch back to Standard mode to execute them.

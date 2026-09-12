@@ -33,6 +33,9 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm@11.7.0
 
+      - name: Install root dependencies (provides tsx and schema modules for settings generator)
+        run: pnpm install --frozen-lockfile
+
       - name: Install website dependencies
         run: pnpm --dir website install
 

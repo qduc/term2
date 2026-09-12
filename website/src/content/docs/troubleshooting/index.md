@@ -13,19 +13,19 @@ term2 stores logs, sessions, settings, and caches in platform-standard directori
 - **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
 
 ### Application Logs
-- **Linux**: `~/.cache/term2/logs/` (or `$XDG_CACHE_HOME/term2/logs/`)
-- **macOS**: `~/Library/Caches/term2/logs/`
-- **Windows**: `%LOCALAPPDATA%\term2\Cache\logs\`
+- **Linux**: `~/.local/state/term2-nodejs/logs/` (or `$XDG_STATE_HOME/term2-nodejs/logs/`)
+- **macOS**: `~/Library/Logs/term2-nodejs/logs/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\logs\`
 
 ### Conversation History
-- **Linux**: `~/.local/share/term2/conversations/` (or `$XDG_DATA_HOME/term2/conversations/`)
-- **macOS**: `~/Library/Application Support/term2/conversations/`
-- **Windows**: `%LOCALAPPDATA%\term2\Data\conversations\`
+- **Linux**: `~/.local/share/term2-nodejs/conversations/` (or `$XDG_DATA_HOME/term2-nodejs/conversations/`)
+- **macOS**: `~/Library/Application Support/term2-nodejs/conversations/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Data\conversations\`
 
 ### Model Catalog Cache
-- **Linux**: `~/.cache/term2/models/`
-- **macOS**: `~/Library/Caches/term2/models/`
-- **Windows**: `%LOCALAPPDATA%\term2\Cache\models\`
+- **Linux**: `~/.cache/term2-nodejs/models/` (or `$XDG_CACHE_HOME/term2-nodejs/models/`)
+- **macOS**: `~/Library/Caches/term2-nodejs/models/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Cache\models\`
 
 ---
 
@@ -44,7 +44,7 @@ term2 stores logs, sessions, settings, and caches in platform-standard directori
 - Alternatively, remove cached model files from your platform's cache directory:
   ```bash
   # Linux
-  rm -rf ~/.cache/term2/models/*
+  rm -rf ~/.cache/term2-nodejs/models/*
   ```
 
 ### 2. Missing Provider Credentials

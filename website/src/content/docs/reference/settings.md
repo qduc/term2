@@ -3,11 +3,11 @@ title: Settings Reference
 description: Complete reference of term2 configuration settings, defaults, runtime modifiability, and environment variables.
 ---
 
-> **Auto-generated Reference:** This page is derived directly from `source/services/settings/settings-schema.ts` and `settings-ui-metadata.ts`. Run `pnpm --dir website build` to re-extract settings.
+> **Auto-generated Reference:** This page is generated directly by evaluating `DEFAULT_SETTINGS`, schema definitions, and metadata from `source/services/settings/`. Run `pnpm --dir website build` to re-extract settings.
 
 term2 settings can be configured via:
 1. **Interactive Settings Menu**: Run `/settings` or `/settings <key>` in the interactive TUI.
-2. **Configuration File**: Stored in `settings.json` in your platform's state directory.
+2. **Configuration File**: Stored in `settings.json` in your platform's application state directory.
 3. **Environment Variables**: Overrides for API keys, logging, and environment options.
 
 ## Modifying Settings
@@ -23,184 +23,184 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.model` | `string` | `gpt-5.1` | ✓ Yes | `OPENROUTER_MODEL` | The AI model to use (e.g. gpt-4, claude-3-opus) |
-| `agent.efficientModel` | `string` | — | ✓ Yes | — | Model for lower-tier workflow agents (falls back to agent.model) |
-| `agent.capableModel` | `string` | — | ✓ Yes | — | Model for higher-tier workflow agents (falls back to agent.model) |
-| `agent.smartModel` | `string` | — | ✓ Yes | — | Model for smart ancillary tasks (falls back to agent.model) |
-| `agent.smartProvider` | `string` | — | ✓ Yes | — | Provider for smart ancillary tasks (falls back to agent.provider) |
-| `agent.smartReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for smart ancillary tasks (none|minimal|low|medium|high|xhigh|default) |
-| `agent.balancedModel` | `string` | — | ✓ Yes | — | Model for balanced ancillary tasks (falls back to agent.model) |
-| `agent.balancedProvider` | `string` | — | ✓ Yes | — | Provider for balanced ancillary tasks (falls back to agent.provider) |
-| `agent.balancedReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for balanced ancillary tasks (none|minimal|low|medium|high|xhigh|default) |
-| `agent.cheapModel` | `string` | — | ✓ Yes | — | Model for cheap ancillary tasks (falls back to agent.model) |
-| `agent.cheapProvider` | `string` | — | ✓ Yes | — | Provider for cheap ancillary tasks (falls back to agent.provider) |
-| `agent.cheapReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for cheap ancillary tasks (none|minimal|low|medium|high|xhigh|default) |
-| `agent.choreModel` | `string` | — | ✓ Yes | — | Model for chore ancillary tasks (falls back to agent.model) |
-| `agent.choreProvider` | `string` | — | ✓ Yes | — | Provider for chore ancillary tasks (falls back to agent.provider) |
-| `agent.reasoningEffort` | `string` | `default` | ✓ Yes | — | Reasoning effort (none|minimal|low|medium|high|xhigh|default) |
+| `agent.model` | `string` | `"gpt-5.1"` | ✓ Yes | `OPENROUTER_MODEL` | The AI model to use (e.g. gpt-4, claude-3-opus) |
+| `agent.efficientModel` | `string` | — | ✓ Yes | — | Model for lower-tier workflow agents. Falls back to agent.model when unset. |
+| `agent.capableModel` | `string` | — | ✓ Yes | — | Model for higher-tier workflow agents. Falls back to agent.model when unset. |
+| `agent.smartModel` | `string` | — | ✓ Yes | — | Model for smart ancillary tasks. Falls back to agent.model when unset. |
+| `agent.smartProvider` | `string` | — | ✓ Yes | — | Provider for smart ancillary tasks. Falls back to agent.provider when unset. |
+| `agent.smartReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort for smart ancillary tasks. Falls back to agent.reasoningEffort when unset. |
+| `agent.balancedModel` | `string` | — | ✓ Yes | — | Model for balanced ancillary tasks. Falls back to agent.model when unset. |
+| `agent.balancedProvider` | `string` | — | ✓ Yes | — | Provider for balanced ancillary tasks. Falls back to agent.provider when unset. |
+| `agent.balancedReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort for balanced ancillary tasks. Falls back to agent.reasoningEffort when unset. |
+| `agent.cheapModel` | `string` | — | ✓ Yes | — | Model for cheap ancillary tasks. Falls back to agent.model when unset. |
+| `agent.cheapProvider` | `string` | — | ✓ Yes | — | Provider for cheap ancillary tasks. Falls back to agent.provider when unset. |
+| `agent.cheapReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort for cheap ancillary tasks. Falls back to agent.reasoningEffort when unset. |
+| `agent.choreModel` | `string` | — | ✓ Yes | — | Model for chore ancillary tasks. Falls back to agent.model when unset. |
+| `agent.choreProvider` | `string` | — | ✓ Yes | — | Provider for chore ancillary tasks. Falls back to agent.provider when unset. |
+| `agent.reasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort (none|minimal|low|medium|high|xhigh|default) |
 | `agent.temperature` | `number` | — | ✓ Yes | — | Model temperature (0-2, controls randomness) |
-| `agent.provider` | `string` | `openai` | ✓ Yes | — | Provider to use for the agent (openai, openrouter, etc.) |
-| `agent.favoriteModels` | `array` | [] | ✓ Yes | — | Favorited models as "provider/modelId" strings, matched fast by --model before any catalog loads (edit via ctrl+f in the model picker) |
-| `agent.modelNicknames` | `string` | {} | ✓ Yes | — | Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (edit via ctrl+n in the model picker Favorites tab) |
-| `agent.maxTurns` | `number` | 100 | No | — | Maximum conversation turns |
-| `agent.maxOutputTokens` | `number` | 32_000 | ✓ Yes | — | Maximum tokens generated by one model request |
-| `agent.maxStreamOutputChars` | `number` | 100_000 | ✓ Yes | — | Maximum streamed text or tool-argument characters per model request; reasoning above this is truncated, not aborted |
-| `agent.maxModelRequestDurationMs` | `number` | 0 | ✓ Yes | — | Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop) |
-| `agent.maxModelStreamIdleMs` | `number` | 600_000 | No | — | Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables) |
-| `agent.retryAttempts` | `number` | 2 | ✓ Yes | — | Number of retry attempts for failed requests |
-| `agent.transport` | `string` | `websocket` | ✓ Yes | — | Network transport mechanism (websocket|http) |
-| `agent.maxParallelToolCalls` | `number` | 3 | ✓ Yes | — | Maximum number of tool calls allowed to run at the same time |
-| `agent.backgroundCheckIn.enabled` | `boolean` | true | ✓ Yes | — | Wake the agent periodically to check on a still-running background shell job or subagent while idle |
-| `agent.backgroundCheckIn.intervalMs` | `number` | 300_000 | ✓ Yes | — | How often to check in on a still-running background task, in milliseconds (default 5 minutes) |
+| `agent.provider` | `string` | `"openai"` | ✓ Yes | — | Provider to use for the agent |
+| `agent.favoriteModels` | `array` | `[]` | ✓ Yes | — | Ordered list of favorited models as "provider/modelId" strings; matched before any provider catalog loads |
+| `agent.modelNicknames` | `string` | `{}` | ✓ Yes | — | Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads |
+| `agent.maxTurns` | `number` | `100` | No | — | Maximum conversation turns |
+| `agent.maxOutputTokens` | `number` | `32000` | ✓ Yes | — | Maximum tokens generated by one model request |
+| `agent.maxStreamOutputChars` | `number` | `100000` | ✓ Yes | — | Maximum streamed text or tool-argument characters per model request; reasoning above this is truncated, not aborted |
+| `agent.maxModelRequestDurationMs` | `number` | `0` | ✓ Yes | — | Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop) |
+| `agent.maxModelStreamIdleMs` | `number` | `600000` | No | — | Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables) |
+| `agent.retryAttempts` | `number` | `2` | ✓ Yes | — | Number of retry attempts for failed requests |
+| `agent.transport` | `websocket \| http` | `"websocket"` | ✓ Yes | — | Network transport mechanism (websocket|http) |
+| `agent.maxParallelToolCalls` | `number` | `3` | ✓ Yes | — | Maximum number of tool calls allowed to run at the same time |
+| `agent.backgroundCheckIn.enabled` | `boolean` | `true` | ✓ Yes | — | Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle |
+| `agent.backgroundCheckIn.intervalMs` | `number` | `300000` | ✓ Yes | — | Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle |
 | `agent.openrouter.apiKey` | `string` | — | ✓ Yes | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `agent.openai.apiKey` | `string` | — | ✓ Yes | `OPENAI_API_KEY` | OpenAI API key |
 | `agent.openrouter.baseUrl` | `string` | — | No | `OPENROUTER_BASE_URL` | OpenRouter base URL |
 | `agent.openrouter.referrer` | `string` | — | No | `OPENROUTER_REFERRER` | OpenRouter HTTP Referer header |
 | `agent.openrouter.title` | `string` | — | No | `OPENROUTER_TITLE` | OpenRouter X-Title header |
-| `agent.codex.websocketFirstFrameTimeoutMs` | `number` | 90_000 | No | — | Codex WebSocket timeout before the first response frame, in milliseconds |
-| `agent.codex.websocketInterFrameTimeoutMs` | `number` | 600_000 | No | — | Codex WebSocket timeout between response frames, in milliseconds |
-| `agent.mentorModel` | `string` | — | ✓ Yes | — | Mentor model to use (optional, enables ask_mentor tool) |
-| `agent.mentorProvider` | `string` | — | ✓ Yes | — | Provider to use for mentor model (openai, openrouter, etc.) |
-| `agent.mentorReasoningEffort` | `string` | `default` | ✓ Yes | — | Reasoning effort for the mentor model (none|minimal|low|medium|high|xhigh|default) |
-| `agent.mentorSamples` | `number` | 1 | No | — | Independent mentor answers per consultation (1-8; >1 costs one mentor call each) |
-| `agent.mentorPool` | `array` | [] | ✓ Yes | — | Models consulted per mentor question, one answer each (overrides agent.mentorSamples) |
-| `agent.useFlexServiceTier` | `boolean` | false | ✓ Yes | — | Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only) |
-| `agent.autoApproveModel` | `string` | `gpt-4o-mini` | ✓ Yes | — | Model to use for auto-approval evaluation (fast/cheap) |
-| `agent.autoApproveProvider` | `string` | — | ✓ Yes | — | Provider for the auto-approval model (optional) |
-| `agent.autoApproveReasoningEffort` | `string` | `low` | ✓ Yes | — | Reasoning effort for risky shell auto-approval reviews (none|minimal|low|medium|high|xhigh) |
+| `agent.codex.websocketFirstFrameTimeoutMs` | `number` | `90000` | No | — | Codex WebSocket timeout before the first response frame, in milliseconds |
+| `agent.codex.websocketInterFrameTimeoutMs` | `number` | `600000` | No | — | Codex WebSocket timeout between response frames, in milliseconds |
+| `agent.mentorModel` | `string` | — | ✓ Yes | — | Model to use as a mentor |
+| `agent.mentorProvider` | `string` | — | ✓ Yes | — | Provider to use for the mentor model (defaults to agent.provider when unset) |
+| `agent.mentorReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort for the mentor model |
+| `agent.mentorSamples` | `number` | `1` | No | — | Number of independent mentor answers to gather per consultation (1 = single answer) |
+| `agent.mentorPool` | `array` | `[]` | ✓ Yes | — | Models consulted per mentor question, one answer each. When set, overrides agent.mentorSamples |
+| `agent.useFlexServiceTier` | `boolean` | `false` | ✓ Yes | — | Use OpenAI Flex Service Tier to reduce costs (OpenAI only) |
+| `agent.autoApproveModel` | `string` | `"gpt-4o-mini"` | ✓ Yes | — | Faster model to use for auto-approval evaluation |
+| `agent.autoApproveProvider` | `string` | — | ✓ Yes | — | Provider to use for the auto-approval model (defaults to agent.provider when unset) |
+| `agent.autoApproveReasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh` | `"low"` | ✓ Yes | — | Reasoning effort for risky shell auto-approval reviews |
 
 ## Run Budget & Safeguards
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.runBudget.maxUsdMicros` | `number` | 5_000_000 | ✓ Yes | — | Per-run priced-request budget in USD micros (1,000,000 = $1; default $5) |
-| `agent.runBudget.maxUnpricedTokens` | `number` | 5_000_000 | ✓ Yes | — | Per-run token budget used when request pricing is unavailable; cache reads count a tenth, and subscription providers are exempt (default 5,000,000) |
-| `agent.runBudget.maxActiveTimeMs` | `number` | 3_600_000 | ✓ Yes | — | Per-run active-time budget in milliseconds; approval wait time is excluded (default 1 hour) |
-| `agent.runBudget.warningHeadroomUsdMicros` | `number` | 1_000_000 | ✓ Yes | — | Priced-budget headroom that triggers a warning escalation (USD micros) |
-| `agent.runBudget.warningHeadroomUnpricedTokens` | `number` | 1_000_000 | ✓ Yes | — | Unpriced-token headroom that triggers a warning escalation |
-| `agent.runBudget.warningHeadroomActiveTimeMs` | `number` | 900_000 | ✓ Yes | — | Active-time headroom that triggers a warning escalation, in milliseconds |
-| `agent.runBudget.softHeadroomUsdMicros` | `number` | 250_000 | ✓ Yes | — | Priced-budget headroom that injects a soft wrap-up nudge (USD micros) |
-| `agent.runBudget.softHeadroomUnpricedTokens` | `number` | 250_000 | ✓ Yes | — | Unpriced-token headroom that injects a soft wrap-up nudge |
-| `agent.runBudget.softHeadroomActiveTimeMs` | `number` | 300_000 | ✓ Yes | — | Active-time headroom that injects a soft wrap-up nudge, in milliseconds |
-| `agent.runBudget.turnBackstop` | `string` | 150 | ✓ Yes | — | High turn-count backstop that detects an infinite loop without setting the operating budget |
-| `agent.runBudget.extensionPercent` | `number` | 50 | ✓ Yes | — | Budget percentage granted for each finite continuation extension |
-| `agent.runBudget.maxParentExtensions` | `string` | 2 | ✓ Yes | — | Maximum finite extensions a parent may grant before escalation reaches the human |
-| `agent.runBudget.identicalToolCallThreshold` | `number` | 3 | ✓ Yes | — | Identical tool calls without an intervening mutation required to report stall evidence |
-| `agent.runBudget.escalation` | `string` | `warn` | ✓ Yes | — | What a budget or stall escalation does: warn in the status bar, pause the run for a decision, or disabled |
+| `agent.runBudget.maxUsdMicros` | `number` | `5000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.maxUnpricedTokens` | `number` | `5000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.maxActiveTimeMs` | `number` | `3600000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.warningHeadroomUsdMicros` | `number` | `1000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.warningHeadroomUnpricedTokens` | `number` | `1000000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.warningHeadroomActiveTimeMs` | `number` | `900000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.softHeadroomUsdMicros` | `number` | `250000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.softHeadroomUnpricedTokens` | `number` | `250000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.softHeadroomActiveTimeMs` | `number` | `300000` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.turnBackstop` | `number` | `150` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.extensionPercent` | `number` | `50` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.maxParentExtensions` | `number` | `2` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.identicalToolCallThreshold` | `number` | `3` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
+| `agent.runBudget.escalation` | `warn \| pause \| disabled` | `"warn"` | ✓ Yes | — | What a non-soft budget stage does: warn in the status bar, pause the run for a decision, or disabled |
 
 ## Subagents & Roles
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.subagentExplorerModel` | `string` | — | ✓ Yes | — | Model override for the explorer subagent (falls back to agent.model) |
-| `agent.subagentExplorerProvider` | `string` | — | ✓ Yes | — | Provider override for the explorer subagent (falls back to agent.provider) |
-| `agent.subagentExplorerReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for the explorer subagent (none|minimal|low|medium|high|xhigh|default) |
-| `agent.subagentWorkerModel` | `string` | — | ✓ Yes | — | Model override for the worker subagent (falls back to agent.model) |
-| `agent.subagentWorkerProvider` | `string` | — | ✓ Yes | — | Provider override for the worker subagent (falls back to agent.provider) |
-| `agent.subagentWorkerReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for the worker subagent (none|minimal|low|medium|high|xhigh|default) |
-| `agent.subagentResearcherModel` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
-| `agent.subagentResearcherProvider` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
-| `agent.subagentResearcherReasoningEffort` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
-| `agent.subagentLibrarianModel` | `string` | — | ✓ Yes | — | Model override for the librarian subagent (falls back to agent.model) |
-| `agent.subagentLibrarianProvider` | `string` | — | ✓ Yes | — | Provider override for the librarian subagent (falls back to agent.provider) |
-| `agent.subagentLibrarianReasoningEffort` | `string` | — | ✓ Yes | — | Reasoning effort for the librarian subagent (none|minimal|low|medium|high|xhigh|default) |
-| `subagent.asyncSessionTtlMs` | `number` | 30 * 60 * 1000 | ✓ Yes | — | How long completed async subagent sessions are retained in memory before eviction, in milliseconds |
-| `subagent.asyncMessageCap` | `string` | 50 | ✓ Yes | — | Maximum number of user turns to retain in a persisted async subagent session |
+| `agent.subagentExplorerModel` | `string` | — | ✓ Yes | — | Model override for the explorer subagent. Falls back to agent.model when unset. |
+| `agent.subagentExplorerProvider` | `string` | — | ✓ Yes | — | Provider override for the explorer subagent. Falls back to agent.provider when unset. |
+| `agent.subagentExplorerReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset. |
+| `agent.subagentWorkerModel` | `string` | — | ✓ Yes | — | Model override for the worker subagent. Falls back to agent.model when unset. |
+| `agent.subagentWorkerProvider` | `string` | — | ✓ Yes | — | Provider override for the worker subagent. Falls back to agent.provider when unset. |
+| `agent.subagentWorkerReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset. |
+| `agent.subagentResearcherModel` | `string` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerModel instead. |
+| `agent.subagentResearcherProvider` | `string` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerProvider instead. |
+| `agent.subagentResearcherReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerReasoningEffort instead. |
+| `agent.subagentLibrarianModel` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
+| `agent.subagentLibrarianProvider` | `string` | — | ✓ Yes | — | Provider override for the librarian subagent. Falls back to agent.provider when unset. |
+| `agent.subagentLibrarianReasoningEffort` | `default \| none \| minimal \| low \| medium \| high \| xhigh` | — | ✓ Yes | — | Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset. |
+| `subagent.asyncSessionTtlMs` | `number` | `1800000` | ✓ Yes | — | How long completed async subagent sessions are retained in memory before eviction, in milliseconds |
+| `subagent.asyncMessageCap` | `number` | `50` | ✓ Yes | — | Maximum number of user turns to retain in a persisted async subagent session |
 
 ## Shell & Sandbox
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `shell.timeout` | `number` | 120000 | ✓ Yes | — | Shell command timeout in milliseconds |
-| `shell.backgroundTimeout` | `number` | 30 * 60 * 1000 | ✓ Yes | — | Timeout for background shell jobs in milliseconds (default 30 minutes) |
-| `shell.maxOutputLines` | `number` | 1000 | ✓ Yes | — | Maximum lines of shell output to capture |
-| `shell.maxOutputChars` | `number` | 40000 | ✓ Yes | — | Maximum characters of shell output to capture |
-| `shell.autoApproveMode` | `string` | `off` | ✓ Yes | — | Shell command auto-approval mode (off|advisory|auto) |
-| `shell.useRtkCompression` | `boolean` | false | ✓ Yes | — | Use RTK (third-party) to compress shell command output; term2 downloads it automatically (true|false) |
-| `sandbox.enabled` | `boolean` | true | ✓ Yes | — | Enable sandbox mode for safer command execution (true|false) |
-| `sandbox.readPolicy` | `string` | `standard` | ✓ Yes | — | File read policy for sandbox (standard|strict) |
-| `sandbox.allowReadExtra` | `array` | [] | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |
-| `sandbox.dockerHostControlProjects` | `array` | [] | ✓ Yes | — | Projects with persistent Docker host-control grants; remove a path here to revoke it (JSON array) |
-| `sandbox.allowNetworking` | `boolean` | false | ✓ Yes | — | Allow sandboxed commands to access the network (true|false) |
+| `shell.timeout` | `number` | `120000` | ✓ Yes | — | Shell command timeout in milliseconds |
+| `shell.backgroundTimeout` | `number` | `1800000` | ✓ Yes | — | Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected. |
+| `shell.maxOutputLines` | `number` | `1000` | ✓ Yes | — | Maximum lines of shell output to capture |
+| `shell.maxOutputChars` | `number` | `40000` | ✓ Yes | — | Maximum characters of shell output to capture |
+| `shell.autoApproveMode` | `off \| advisory \| auto \| always` | `"off"` | ✓ Yes | — | Mode for tool approval; always bypasses permission prompts except ask_user |
+| `shell.useRtkCompression` | `boolean` | `false` | ✓ Yes | — | Use RTK to compress shell command output |
+| `sandbox.enabled` | `boolean` | `true` | ✓ Yes | — | Enable sandbox mode for safer command execution (true|false) |
+| `sandbox.readPolicy` | `standard \| strict` | `"standard"` | ✓ Yes | — | File read policy for sandbox (standard|strict) |
+| `sandbox.allowReadExtra` | `array` | `[]` | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |
+| `sandbox.dockerHostControlProjects` | `array` | `[]` | ✓ Yes | — | Projects with persistent Docker host-control grants; remove a path here to revoke it (JSON array) |
+| `sandbox.allowNetworking` | `boolean` | `false` | ✓ Yes | — | Allow sandboxed commands to access the network (true|false) |
 
 ## Context & Compaction
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.sessionRollover.enabled` | `boolean` | true | ✓ Yes | — | Remind the agent when context reaches milestones so it can plan a session rollover (true|false) |
-| `agent.sessionRollover.milestones` | `array` | [200_000 | ✓ Yes | — | Context token milestones that trigger session rollover reminders (e.g. 200000, 300000, 400000) |
-| `agent.sessionRollover.autoBrief` | `boolean` | true | ✓ Yes | — | Automatically pass the handoff brief into the new session upon rollover (true|false) |
-| `agent.contextCompaction.enabled` | `boolean` | true | ✓ Yes | — | Enable context compaction (true|false) |
-| `agent.contextCompaction.mode` | `string` | `auto` | ✓ Yes | — | Context compaction strategy: native uses provider support only; auto prefers native then falls back to local; local always uses the application summarizer (native|auto|local; default auto) |
-| `agent.contextCompaction.compactThreshold` | `number` | 0.8 | ✓ Yes | — | Context-window ratio for automatic context compaction (0-1, 0%-100%) |
-| `agent.contextCompaction.compactThresholdTokens` | `number` | null | ✓ Yes | — | Optional raw-token ceiling for automatic context compaction (null or integer >=1000) |
+| `agent.sessionRollover.enabled` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
+| `agent.sessionRollover.milestones` | `array` | `[200000,300000,400000]` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
+| `agent.sessionRollover.autoBrief` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
+| `agent.contextCompaction.enabled` | `boolean` | `false` | ✓ Yes | — | Native and application-owned context compaction settings |
+| `agent.contextCompaction.mode` | `native \| auto \| local` | `"auto"` | ✓ Yes | — | Native and application-owned context compaction settings |
+| `agent.contextCompaction.compactThreshold` | `number` | `0.8` | ✓ Yes | — | Native and application-owned context compaction settings |
+| `agent.contextCompaction.compactThresholdTokens` | `number` | `null` | ✓ Yes | — | Native and application-owned context compaction settings |
 
 ## Tools & Permissions
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `tools.logFileOperations` | `string` | true | No | `LOG_FILE_OPERATIONS` | Log file operations to disk (true|false) |
-| `tools.enableEditHealing` | `string` | true | No | — | Use AI to automatically correct failed search_replace operations |
-| `tools.editHealingModel` | `string` | `gpt-4o-mini` | ✓ Yes | — | Model to use for edit healing (fast/cheap) |
-| `tools.editHealingProvider` | `string` | — | ✓ Yes | — | Provider for the edit-healing model (optional) |
-| `tools.shell.enabled` | `boolean` | true | ✓ Yes | — | Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
-| `tools.web.enabled` | `boolean` | true | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
-| `tools.fileRead.enabled` | `boolean` | true | ✓ Yes | — | Enable file read tools for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |
-| `tools.fileWrite.enabled` | `boolean` | true | ✓ Yes | — | Enable file edit tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
-| `tools.memory.enabled` | `boolean` | true | ✓ Yes | — | Enable memory tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
-| `tools.sessions.enabled` | `boolean` | true | ✓ Yes | — | Enable prior-session tools for the main agent (true|false). Applies on the next model request. |
-| `tools.skills.enabled` | `boolean` | true | ✓ Yes | — | Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request. |
-| `tools.mentor.enabled` | `boolean` | true | ✓ Yes | — | Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request. |
-| `tools.subagents.enabled` | `boolean` | true | ✓ Yes | — | Enable subagent delegation tools for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request. |
-| `tools.backgroundTasks.enabled` | `boolean` | true | ✓ Yes | — | Enable background task tools for the main agent (true|false). Applies on the next model request. |
-| `tools.userInteraction.enabled` | `boolean` | true | ✓ Yes | — | Enable the ask_user tool for the main agent (true|false). Applies on the next model request. |
-| `tools.codeContext.enabled` | `boolean` | true | ✓ Yes | — | Enable code-context tools for the main agent (true|false). Applies on the next model request. |
+| `tools.logFileOperations` | `boolean` | `true` | No | `LOG_FILE_OPERATIONS` | Log file operations to disk (true|false) |
+| `tools.enableEditHealing` | `boolean` | `true` | No | — | Use AI to automatically correct failed search_replace operations |
+| `tools.editHealingModel` | `string` | `"gpt-4o-mini"` | ✓ Yes | — | Model to use for edit healing (fast/cheap) |
+| `tools.editHealingProvider` | `string` | — | ✓ Yes | — | Provider to use for the edit-healing model (defaults to agent.provider when unset) |
+| `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
+| `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
+| `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools (read_file, grep, glob) for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |
+| `tools.fileWrite.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file edit tools (apply_patch / create_file / search_replace) for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
+| `tools.memory.enabled` | `boolean` | `true` | ✓ Yes | — | Enable memory tools (memory_*) for the main agent (true|false). Does not restrict subagents; applies on the next model request. |
+| `tools.sessions.enabled` | `boolean` | `true` | ✓ Yes | — | Enable prior-session tools (session_list, session_search, session_read, session_rollover) for the main agent (true|false). Applies on the next model request. |
+| `tools.skills.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request. |
+| `tools.mentor.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request. |
+| `tools.subagents.enabled` | `boolean` | `true` | ✓ Yes | — | Enable subagent delegation tools (run_subagent and its async controls) for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request. |
+| `tools.backgroundTasks.enabled` | `boolean` | `true` | ✓ Yes | — | Enable background task tools (get_shell_job, cancel_shell_job, configure_task_check_in) for the main agent (true|false). Applies on the next model request. |
+| `tools.userInteraction.enabled` | `boolean` | `true` | ✓ Yes | — | Enable the ask_user tool for the main agent (true|false). Applies on the next model request. |
+| `tools.codeContext.enabled` | `boolean` | `true` | ✓ Yes | — | Enable code-context tools (read_code_outline, code_context_search) for the main agent (true|false). Applies on the next model request. |
 
 ## UI & Terminal
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `ui.historySize` | `number` | 1000 | No | — | Number of history items to keep |
-| `ui.pasteThreshold` | `number` | 3000 | ✓ Yes | — | Max paste length before text is replaced by a placeholder |
-| `ui.displayMode` | `string` | `concise` | ✓ Yes | — | Display mode for rendering output (standard|concise) |
+| `ui.historySize` | `number` | `1000` | No | — | Number of history items to keep |
+| `ui.pasteThreshold` | `number` | `3000` | ✓ Yes | — | Max paste length before text is replaced by a placeholder |
+| `ui.displayMode` | `standard \| concise` | `"concise"` | ✓ Yes | — | Display mode for rendering conversation output |
 | `app.shellPath` | `string` | — | No | `SHELL` | Path to shell executable |
-| `app.activeProfileId` | `string` | `builtin:standard` | ✓ Yes | — | Active profile identifier (builtin:default, builtin:plan, etc.) |
-| `app.mentorMode` | `string` | false | ✓ Yes | — | Legacy mentor mode flag (mapped to active profile) |
-| `app.liteMode` | `string` | false | ✓ Yes | — | Legacy lite mode flag (mapped to active profile) |
-| `app.planMode` | `string` | false | ✓ Yes | — | Plan mode: read-only research and implementation planning (true|false) |
-| `app.orchestratorMode` | `string` | false | ✓ Yes | — | Delegate tool-backed work through subagents (true|false) |
-| `app.notifications` | `string` | true | ✓ Yes | — | Enable desktop notifications when the terminal is unfocused (true|false) |
-| `app.notificationsOnApproval` | `string` | true | ✓ Yes | — | Notify when the agent needs tool-call approval (true|false) |
-| `app.notificationsOnComplete` | `string` | true | ✓ Yes | — | Notify when the agent finishes responding (true|false) |
-| `app.searchViaShell` | `string` | `auto` | ✓ Yes | — | Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false) |
+| `app.activeProfileId` | `string` | `"builtin:standard"` | ✓ Yes | — | Active profile identifier (builtin:default, builtin:plan, etc.) |
+| `app.mentorMode` | `boolean` | `false` | ✓ Yes | — | Legacy mentor mode flag (mapped to active profile) |
+| `app.liteMode` | `boolean` | `false` | ✓ Yes | — | Legacy lite mode flag (mapped to active profile) |
+| `app.planMode` | `boolean` | `false` | ✓ Yes | — | Plan mode: read-only research and implementation planning (true|false) |
+| `app.orchestratorMode` | `boolean` | `false` | ✓ Yes | — | Delegate tool-backed work through subagents (true|false) |
+| `app.notifications` | `boolean` | `true` | ✓ Yes | — | Enable desktop notifications when the terminal is unfocused (true|false) |
+| `app.notificationsOnApproval` | `boolean` | `true` | ✓ Yes | — | Notify when the agent pauses awaiting tool-call approval (true|false) |
+| `app.notificationsOnComplete` | `boolean` | `true` | ✓ Yes | — | Notify when the agent finishes responding (true|false) |
+| `app.searchViaShell` | `string` | `"auto"` | ✓ Yes | — | Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false) |
 
 ## Memory & Skills
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `memory.enabled` | `boolean` | true | ✓ Yes | — | Enable persistent memory across sessions (true|false) |
-| `memory.directory` | `string` | path.join(envPaths('term2').data | No | — | Directory where memory files are stored (path) |
-| `memory.contextBudgetChars` | `number` | 8000 | ✓ Yes | — | Character budget for the injected memory index (number) |
-| `memory.searchDefaultLimit` | `number` | 10 | ✓ Yes | — | Default number of search results to return (number) |
-| `memory.searchMaxLimit` | `number` | 50 | ✓ Yes | — | Maximum number of search results to return (number) |
+| `memory.enabled` | `boolean` | `true` | ✓ Yes | — | Enable persistent memory across sessions (true|false) |
+| `memory.directory` | `string` | `~/.local/share/term2-nodejs/memory` | No | — | Directory where memory files are stored (path) |
+| `memory.contextBudgetChars` | `number` | `8000` | ✓ Yes | — | Character budget for the injected memory index (number) |
+| `memory.searchDefaultLimit` | `number` | `10` | ✓ Yes | — | Default number of search results to return (number) |
+| `memory.searchMaxLimit` | `number` | `50` | ✓ Yes | — | Maximum number of search results to return (number) |
 
 ## Logging & Debug
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `logging.logLevel` | `string` | `info` | ✓ Yes | `LOG_LEVEL` | Logging level (debug, info, warn, error) |
-| `logging.disableLogging` | `boolean` | false | No | `DISABLE_LOGGING` | Disable all file logging (true|false) |
-| `logging.debugLogging` | `boolean` | false | No | `DEBUG_LOGGING` | Enable debug logging to disk (true|false) |
-| `logging.suppressConsoleOutput` | `boolean` | true | ✓ Yes | — | Suppress console output (true|false) to avoid interfering with Ink UI |
-| `debug.debugBashTool` | `string` | false | No | `DEBUG_BASH_TOOL` | Enable debug logging for the bash tool (true|false) |
+| `logging.logLevel` | `error \| warn \| info \| security \| debug` | `"info"` | ✓ Yes | `LOG_LEVEL` | Logging level (debug, info, warn, error) |
+| `logging.disableLogging` | `boolean` | `false` | No | `DISABLE_LOGGING` | Disable all file logging (true|false) |
+| `logging.debugLogging` | `boolean` | `false` | No | `DEBUG_LOGGING` | Enable debug logging to disk (true|false) |
+| `logging.suppressConsoleOutput` | `boolean` | `true` | ✓ Yes | — | Suppress console output (true|false) to avoid interfering with Ink UI |
+| `debug.debugBashTool` | `boolean` | `false` | No | `DEBUG_BASH_TOOL` | Enable debug logging for the bash tool (true|false) |
 
 ## SSH & Remote
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `ssh.enabled` | `boolean` | true | No | — | Enable SSH remote execution (true|false) |
+| `ssh.enabled` | `boolean` | `false` | No | — | Enable SSH remote execution (true|false) |
 | `ssh.host` | `string` | — | No | — | SSH remote host |
-| `ssh.port` | `string` | `websocket` | No | — | SSH remote port |
+| `ssh.port` | `number` | `22` | No | — | SSH remote port |
 | `ssh.username` | `string` | — | No | — | SSH remote username |
 | `ssh.remoteDir` | `string` | — | No | — | SSH remote directory |
 
@@ -208,7 +208,7 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `webSearch.provider` | `string` | `openai` | ✓ Yes | `WEB_SEARCH_PROVIDER` | Web search provider (tavily, exa) |
+| `webSearch.provider` | `string` | `"tavily"` | ✓ Yes | `WEB_SEARCH_PROVIDER` | Web search provider (tavily, exa) |
 | `webSearch.tavily.apiKey` | `string` | — | ✓ Yes | `TAVILY_API_KEY` | Tavily search API key |
 | `webSearch.exa.apiKey` | `string` | — | ✓ Yes | `EXA_API_KEY` | Exa search API key |
 
@@ -216,13 +216,13 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `enable_agent_workflow` | `boolean` | false | No | — | Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true|false) |
+| `enable_agent_workflow` | `boolean` | `false` | No | — | Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true|false) |
 | `environment.nodeEnv` | `string` | — | No | `NODE_ENV` | Node environment (development|production|test) |
-| `hooks.user.enabled` | `boolean` | true | ✓ Yes | — | Load trusted user hooks from ~/.term2/hooks (true|false) |
-| `hooks.project.enabled` | `boolean` | true | ✓ Yes | — | Discover project hooks when the project root is trusted (true|false) |
-| `hooks.trustedProjectRoots` | `array` | [] | No | — | Canonical project roots trusted to load hooks (JSON array) |
-| `hooks.includeUserText` | `boolean` | false | ✓ Yes | — | Include user turn text in hook payloads (true|false) |
-| `hooks.includeToolArguments` | `boolean` | false | ✓ Yes | — | Include full tool arguments in hook payloads (true|false) |
-| `hooks.includeToolResults` | `string` | false | ✓ Yes | — | Include full tool results in hook payloads (true|false) |
-| `hooks.timeoutMs` | `number` | 120_000 | ✓ Yes | — | Maximum time to await one hook callback in milliseconds |
-| `providerOrder` | `string` | [] | ✓ Yes | — | Custom ordering for provider selection |
+| `hooks.user.enabled` | `boolean` | `true` | ✓ Yes | — | Load trusted user hooks from ~/.term2/hooks (true|false) |
+| `hooks.project.enabled` | `boolean` | `false` | ✓ Yes | — | Discover project hooks when the project root is trusted (true|false) |
+| `hooks.trustedProjectRoots` | `array` | `[]` | No | — | Canonical project roots trusted to load hooks (JSON array) |
+| `hooks.includeUserText` | `boolean` | `false` | ✓ Yes | — | Include user turn text in hook payloads (true|false) |
+| `hooks.includeToolArguments` | `boolean` | `false` | ✓ Yes | — | Include full tool arguments in hook payloads (true|false) |
+| `hooks.includeToolResults` | `boolean` | `false` | ✓ Yes | — | Include full tool results in hook payloads (true|false) |
+| `hooks.timeoutMs` | `number` | `5000` | ✓ Yes | — | Maximum time to await one hook callback in milliseconds |
+| `providerOrder` | `array` | `[]` | ✓ Yes | — | Preferred order of provider IDs for display in model selection tab bar |

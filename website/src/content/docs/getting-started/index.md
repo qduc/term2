@@ -9,14 +9,14 @@ Combining an interactive React (Ink) terminal user interface with an application
 
 ## Core Capabilities
 
-- **Universal Provider Support**: Native integration with OpenAI (WebSocket Responses and Chat Completions), ChatGPT/Codex OAuth (browser PKCE), xAI Grok (Responses API with encrypted reasoning and OAuth), OpenRouter, Anthropic, Google Gemini, and local OpenAI-compatible endpoints (Ollama, llama.cpp, vLLM).
+- **Universal Provider Support**: Native integration with OpenAI (WebSocket Responses and Chat Completions), ChatGPT/Codex OAuth (browser PKCE), xAI Grok (Responses API with encrypted reasoning and OAuth), and OpenRouter, plus custom adapters for Anthropic, Google Gemini, and local OpenAI-compatible endpoints (Ollama, llama.cpp, vLLM).
 - **Fine-Grained Execution Safety**: Sandboxed shell execution with configurable read/write boundaries (`standard` and `strict`), interactive unified diff previews, and run budget caps.
 - **Smart Shell Auto-Approval**: A hybrid heuristic safety evaluator that auto-approves safe read-only and workspace commands, eliminating prompt fatigue while gating risky operations.
 - **Multi-Agent Swarms**: Spawn specialized foreground or background subagents (`explorer`, `worker`, `mentor`, `librarian`) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`).
 - **Provider-Neutral Context Compaction**: Automatically compacts long conversation histories when reaching token milestones while preserving cold architectural context and hot-tail tool integrity.
 - **Time-Travel Rewind & Forking**: Non-destructive conversation rewinding with discard inspection (`/rewind`, `/undo`, `/retry`), session resumption (`/resume`, `--resume`), and branching (`--fork`).
 - **Native Remote Development**: Execute commands and manage codebases on remote servers seamlessly over SSH with local SSH agent authentication.
-- **Private Web Gateway**: Launch `term2 serve` to expose an authenticated Unix socket or TLS gateway for companion web interfaces like ChatForge BFF.
+- **Private Web Gateway**: Launch `term2 serve` to expose an authenticated Unix socket or TLS gateway for programmatic control and external clients.
 
 ## How term2 Works
 

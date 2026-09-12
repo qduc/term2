@@ -11,12 +11,12 @@ Configure the auto-approval policy using the `/auto-approve` command or via `she
 
 | Mode | Command | Behavior | Safety Guarantee |
 | :--- | :--- | :--- | :--- |
-| **`off`** | `/auto-approve off` | Every mutating tool call and shell command prompts for interactive user confirmation. | Maximum safety. Every command is manually inspected. |
+| **`off`** *(Default)* | `/auto-approve off` | Every mutating tool call and shell command prompts for interactive user confirmation. | Maximum safety. Default policy across all sessions. |
 | **`advisory`** | `/auto-approve advisory` | Prompts for confirmation on every command, accompanied by a real-time safety explanation. | High safety with consequence analysis. |
-| **`auto`** *(Default)* | `/auto-approve auto` | Automatically approves safe read-only operations and workspace file modifications. Risky commands (e.g. `rm -rf`, `git reset --hard`, network requests, system path edits) are strictly gated for confirmation. | Balanced. Prevents prompt fatigue on safe tasks while intercepting destructive actions. |
-| **`always`** | `/auto-approve always` | Completely unattended execution mode. Disables sandbox boundaries. Every tool runs without prompts. | Intended only for isolated CI/CD environments. Use with caution. |
+| **`auto`** | `/auto-approve auto` | Opt-in smart approval mode. Automatically approves safe read-only operations and workspace file modifications. Risky commands (e.g. `rm -rf`, `git reset --hard`, network requests, system path edits) are strictly gated for confirmation. | Balanced velocity. Eliminates repetitive prompts on benign actions while intercepting destructive commands. |
+| **`always`** | `/auto-approve always` | Completely unattended execution mode. Every tool runs without prompts except `ask_user`. Selecting `always` automatically disables the shell sandbox (`sandbox.enabled = false`). | For isolated, disposable environments only. |
 
-> **Note:** Enabling the sandbox (`/sandbox`) automatically demotes `always` to a safer mode, as `always` requires unrestricted execution.
+> **Sandbox Interaction:** `always` and `sandbox.enabled` are mutually exclusive: selecting `always` disables the shell sandbox, and enabling the sandbox (`/sandbox` or `sandbox.enabled = true`) immediately demotes `always` to `auto`.
 
 ## Run Budgets (`agent.runBudget`)
 

@@ -5,6 +5,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { addTokenUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type {
   DiffStatEntry,
+  SubagentDefinition,
   SubagentRequest,
   SubagentResult,
   SubagentRunHandle,
@@ -100,6 +101,14 @@ type StoredRun = {
   activityState: 'active' | 'waiting' | 'cancelling';
   waitingReason?: 'provider' | 'approval' | 'answer';
   model?: { provider: string; id: string };
+  /**
+   * The role definition resolved once for this run (pool-applied when a
+   * round-robin pool is configured for the role). Reused for every later
+   * segment of this run — including steering continuations and an explicit
+   * `continueRunId` continuation — so a run never rotates to a different
+   * pool entry mid-conversation.
+   */
+  definition?: SubagentDefinition;
   latestUsage?: NormalizedUsage;
   responseInStream: boolean;
   /**
@@ -123,6 +132,8 @@ export interface SubagentAsyncRegistryDeps {
     /** A fresh user-turn input for this segment, never SDK RunState reuse. */
     input: string;
     control: SubagentSegmentControl;
+    /** The definition resolved once for this run by `resolveDefinition`; see `StoredRun.definition`. */
+    definition?: SubagentDefinition;
   }) => Promise<SubagentResult>;
   onEvent?: (event: ConversationEvent) => void;
   /**
@@ -137,6 +148,13 @@ export interface SubagentAsyncRegistryDeps {
   createRunId?: () => string;
   sessionForRole?: (role: string) => SubagentSession | undefined;
   modelForRole?: (role: string) => { provider: string; id: string } | undefined;
+  /**
+   * Resolves the definition to run a *fresh* spawn on, called at most once
+   * per new run (never for a continuation of an existing one). When a
+   * round-robin pool is configured for the role, implementations advance
+   * that pool's cursor here — see `SubagentRolePoolSelector`.
+   */
+  resolveDefinition?: (role: string) => SubagentDefinition;
   setInterval?: (callback: () => void, delay: number) => ReturnType<typeof setInterval>;
   clearInterval?: (timer: ReturnType<typeof setInterval>) => void;
 }
@@ -158,6 +176,7 @@ export class SubagentAsyncRegistry {
   #sessionCap = 50;
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #modelForRole?: (role: string) => { provider: string; id: string } | undefined;
+  #resolveDefinition?: (role: string) => SubagentDefinition;
   #timer: ReturnType<typeof setInterval>;
   #clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   #disposed = false;
@@ -173,6 +192,7 @@ export class SubagentAsyncRegistry {
     this.#sessionContextService = deps.sessionContextService;
     this.#sessionForRole = deps.sessionForRole;
     this.#modelForRole = deps.modelForRole;
+    this.#resolveDefinition = deps.resolveDefinition;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
     this.#timer = (deps.setInterval ?? setInterval)(
       () => this.#evictExpired(),
@@ -197,8 +217,10 @@ export class SubagentAsyncRegistry {
     const continuation = request.continueRunId;
     let session: SubagentSession;
     let trafficContext: SessionTrafficContext | undefined;
+    let previousRun: StoredRun | undefined;
     if (continuation) {
       const previous = this.#runs.get(continuation);
+      previousRun = previous;
       if (!previous) {
         throw new SubagentRegistryError(
           this.#evicted.has(continuation) ? 'evicted' : 'not_found',
@@ -242,7 +264,18 @@ export class SubagentAsyncRegistry {
     trafficContext ??= this.#deriveTrafficContext(runId);
     const control = new SubagentRunControl();
     const startedAt = this.#now();
-    const model = this.#modelForRole?.(role);
+    // A continuation (`continueRunId`) inherits the resolved definition and
+    // display model of the run it continues rather than resolving again --
+    // resolving on continuation would draw another pool entry and rotate the
+    // model mid-conversation, which callers must never see.
+    const definition = previousRun ? previousRun.definition : this.#resolveDefinition?.(role);
+    const model = previousRun
+      ? previousRun.model
+      : role === 'mentor'
+      ? this.#modelForRole?.(role)
+      : definition
+      ? { provider: definition.provider, id: definition.model }
+      : this.#modelForRole?.(role);
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
     const stored: StoredRun = {
@@ -272,6 +305,7 @@ export class SubagentAsyncRegistry {
       activityState: 'waiting',
       waitingReason: 'provider',
       ...(model === undefined ? {} : { model }),
+      ...(definition === undefined ? {} : { definition }),
       responseInStream: false,
       ...(trafficContext ? { trafficContext } : {}),
     };
@@ -796,6 +830,7 @@ export class SubagentAsyncRegistry {
             onToolComplete: () => run.control.onToolComplete(),
             askOrchestrator: (question) => this.#askOrchestrator(run, question),
           },
+          definition: run.definition,
         });
 
       // Every segment — first launch, `continue_run_id`, steering continuation —

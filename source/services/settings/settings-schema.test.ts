@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(148);
-  expect(new Set(exportedKeys).size).toBe(148);
+  expect(exportedKeys).toHaveLength(151);
+  expect(new Set(exportedKeys).size).toBe(151);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -174,6 +174,17 @@ it('accepts the exact maximum mentor samples and mentor pool size', () => {
   expect(() => SettingsSchema.parse({ agent: { mentorSamples: 9 } })).toThrow();
   expect(() => SettingsSchema.parse({ agent: { mentorPool: [...mentorPool, { model: 'mentor-9' }] } })).toThrow();
 });
+
+it.each(['subagentExplorerPool', 'subagentWorkerPool', 'subagentLibrarianPool'] as const)(
+  'accepts the exact maximum pool size and rejects overflow for agent.%s',
+  (key) => {
+    const pool = Array.from({ length: 8 }, (_, index) => ({ model: `role-${index + 1}` }));
+
+    expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent).toMatchObject({ [key]: pool });
+    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, { model: 'role-9' }] } })).toThrow();
+    expect(AgentSettingsSchema.parse({})[key]).toEqual([]);
+  },
+);
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
   const parsed = SettingsSchema.parse({});

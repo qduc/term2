@@ -53,7 +53,7 @@ export type InputMode =
   | 'copy_selection'
   | 'rewind_selection'
   | 'provider_selection'
-  | 'mentor_pool_selection';
+  | 'subagent_pool_selection';
 
 export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): InputMode {
   switch (kind) {
@@ -79,8 +79,8 @@ export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): Inpu
       return 'rewind_selection';
     case 'providers':
       return 'provider_selection';
-    case 'mentor_pool':
-      return 'mentor_pool_selection';
+    case 'subagent_pool':
+      return 'subagent_pool_selection';
     default:
       return 'text';
   }

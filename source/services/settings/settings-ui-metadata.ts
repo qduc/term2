@@ -200,17 +200,23 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Provider override for the explorer subagent (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT]:
     'Reasoning effort for the explorer subagent (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_POOL]:
+    'Models used round-robin for the explorer subagent, one per spawn (overrides the model/provider/reasoning effort above for that spawn)',
   [SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL]: 'Model override for the worker subagent (falls back to agent.model)',
   [SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER]:
     'Provider override for the worker subagent (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT]:
     'Reasoning effort for the worker subagent (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_SUBAGENT_WORKER_POOL]:
+    'Models used round-robin for the worker subagent, one per spawn (overrides the model/provider/reasoning effort above for that spawn)',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL]:
     'Model override for the librarian subagent (falls back to agent.model)',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER]:
     'Provider override for the librarian subagent (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT]:
     'Reasoning effort for the librarian subagent (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_POOL]:
+    'Models used round-robin for the librarian subagent, one per spawn (overrides the model/provider/reasoning effort above for that spawn)',
   [SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS]:
     'How long completed async subagent sessions are retained in memory before eviction, in milliseconds',
   [SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP]:

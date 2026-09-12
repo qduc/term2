@@ -79,7 +79,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
         'resume',
         'settings',
         'settings-value-child',
-        'settings-mentor-pool-child',
+        'settings-subagent-pool-child',
         'settings-model',
         'command-model',
         'direct-setting-value',

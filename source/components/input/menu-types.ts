@@ -80,7 +80,9 @@ export type MenuFrame =
     }
   | {
       id: FrameId;
-      kind: 'mentor_pool';
+      kind: 'subagent_pool';
+      settingKey: string;
+      roleLabel: string;
       binding: TextBinding;
       origin: SettingsOrigin;
     }

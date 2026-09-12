@@ -137,6 +137,65 @@ export type ProviderBrokerCapability = {
   stream(input: NormalizedProviderRequest): AsyncIterable<NormalizedProviderChunk>;
 };
 
+/**
+ * Audit-operation allowlist. The tuple is the single source of truth: the
+ * `SafeLogOperation` union and the runtime set in `safe-log.ts` both derive
+ * from it, so an operation cannot be added to one without the other.
+ */
+export const SAFE_LOG_OPERATIONS = [
+  'startup',
+  'workspace_list',
+  'workspace_candidate_validate',
+  'workspace_candidate_browse',
+  'workspace_candidate_select',
+  'settings_read',
+  'settings_write',
+  'credential_write',
+  'credential_delete',
+  'oauth_login',
+  'oauth_select',
+  'oauth_delete',
+  'session_update',
+  'session_list',
+  'model_list',
+  'session_create',
+  'session_resume',
+  'session_read',
+  'message_submit',
+  'command_invoke',
+  'interaction_resolve',
+  'abort',
+  'events_connect',
+  'shutdown',
+] as const;
+export type SafeLogOperation = (typeof SAFE_LOG_OPERATIONS)[number];
+
+/** Audit-reason allowlist, derived and consumed the same way as the operations above. */
+export const SAFE_LOG_REASONS = [
+  'disabled',
+  'invalid_assertion',
+  'replay',
+  'owner_mismatch',
+  'workspace_not_found',
+  'workspace_escape',
+  'model_unavailable',
+  'provider_unavailable',
+  'shutdown',
+  'forced_shutdown',
+  'startup_failed',
+  'accepted',
+  'completed',
+  'workspace_root_unavailable',
+  'workspace_root_not_canonical',
+  'workspace_path_escape',
+  'workspace_not_readable',
+  'candidate_registry_full',
+  'settings_conflict',
+  'settings_not_allowed',
+  'not_persisted',
+] as const;
+export type SafeLogReason = (typeof SAFE_LOG_REASONS)[number];
+
 export type GatewaySafeLogMetadata = {
   schemaVersion: 1;
   sessionId?: string;
@@ -147,33 +206,9 @@ export type GatewaySafeLogMetadata = {
   providerId?: string;
   modelId?: string;
   correlationId: string;
-  operation:
-    | 'startup'
-    | 'workspace_list'
-    | 'workspace_candidate_validate'
-    | 'workspace_candidate_browse'
-    | 'workspace_candidate_select'
-    | 'settings_read'
-    | 'settings_write'
-    | 'credential_write'
-    | 'credential_delete'
-    | 'oauth_login'
-    | 'oauth_select'
-    | 'oauth_delete'
-    | 'session_update'
-    | 'session_list'
-    | 'model_list'
-    | 'session_create'
-    | 'session_resume'
-    | 'session_read'
-    | 'message_submit'
-    | 'command_invoke'
-    | 'interaction_resolve'
-    | 'abort'
-    | 'events_connect'
-    | 'shutdown';
+  operation: SafeLogOperation;
   outcome: 'allowed' | 'denied' | 'failed' | 'interrupted';
-  reasonCode?: string;
+  reasonCode?: SafeLogReason;
 };
 
 export type GatewaySessionComposition = {

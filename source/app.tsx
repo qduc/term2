@@ -70,6 +70,28 @@ import {
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 
+function projectNestedApproval(
+  nestedApproval: {
+    approval: import('./contracts/conversation.js').ApprovalDescriptor;
+    preparedArguments?: unknown;
+  } | null,
+): import('./contracts/conversation.js').ApprovalDescriptor | null {
+  if (!nestedApproval) return null;
+
+  // The prepared call is the source of truth for what the approval prompt
+  // must show. A descriptor can cross the observer boundary with placeholder
+  // arguments, especially for nested calls assembled outside the run loop.
+  if (nestedApproval.preparedArguments === undefined) return nestedApproval.approval;
+  try {
+    return {
+      ...nestedApproval.approval,
+      argumentsText: JSON.stringify(nestedApproval.preparedArguments),
+    };
+  } catch {
+    return nestedApproval.approval;
+  }
+}
+
 export {
   appendStartupBannerId,
   clearTerminalForRedraw,
@@ -1024,7 +1046,7 @@ const App: FC<AppProps> = ({
       : null;
   const effectivePendingApproval =
     sandboxPromptRequest === null
-      ? backgroundPendingApproval ?? pendingApproval ?? nestedApproval?.approval ?? null
+      ? backgroundPendingApproval ?? pendingApproval ?? projectNestedApproval(nestedApproval)
       : {
           agentName: 'Sandbox',
           toolName: 'sandbox_network_access',

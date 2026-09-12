@@ -731,6 +731,23 @@ describe('App orchestration', () => {
     );
   });
 
+  it.sequential('projects prepared nested tool arguments into the approval prompt', async () => {
+    mocks.conversationState.nestedApproval = {
+      requestId: 'nested-arguments',
+      preparedArguments: { path: '/workspace/actual.txt', content: 'actual content' },
+      approval: { agentName: 'Nested', toolName: 'create_file', argumentsText: '{}', rawInterruption: null },
+    };
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    expect(mocks.bottomAreaProps.pendingApproval.argumentsText).toBe(
+      JSON.stringify({ path: '/workspace/actual.txt', content: 'actual content' }),
+    );
+  });
+
   it.sequential('clears input after slash command actions unless they return false', async () => {
     const commandAction = vi.fn(() => true);
     mocks.slashCommands = [{ name: 'clear', description: 'Clear', action: commandAction }];

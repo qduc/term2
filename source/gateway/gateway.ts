@@ -70,6 +70,7 @@ import { ModelCatalogSession } from '../services/models/model-catalog-session.js
 import { getAvailableProviderIds } from '../utils/ai/provider-credentials.js';
 import { getProviderIds } from '../providers/index.js';
 import { LoggingService } from '../services/logging/logging-service.js';
+import type { ILoggingService } from '../services/service-interfaces.js';
 import {
   applySettingsChanges,
   buildSettingsProjection,
@@ -244,6 +245,11 @@ export type GatewayLaunchConfig = {
   autoApprove?: boolean;
   allowUnsandboxed?: boolean;
   auditWriter?: (record: GatewaySafeLogMetadata) => Promise<void>;
+  /**
+   * Launcher-owned diagnostics sink for gateway-level degradation. The launcher owns the
+   * destination and format; the gateway only decides what is worth reporting.
+   */
+  logger?: ILoggingService;
   /** Required for production admission; retained optional for legacy control-plane fixtures. */
   runtimeFactory?: RuntimeFactory;
   /** Optional plan-03 durable index/log/journal owner. */
@@ -2527,6 +2533,18 @@ export class Term2Gateway {
     return session;
   }
 
+  /**
+   * Shutdown must not fail because its audit record could not be built or written, but
+   * losing an audit record is not silent: it goes to the launcher-supplied diagnostics
+   * sink when the launcher configured one.
+   */
+  #reportShutdownAuditFailure(error: unknown): void {
+    this.#config.logger?.warn('gateway shutdown audit failed', {
+      errorCode: 'shutdown_audit_failed',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   async shutdown(graceMs = 5_000): Promise<void> {
     if (this.#shutdownPromise) return this.#shutdownPromise;
     this.#shutdownInProgress = true;
@@ -2578,24 +2596,24 @@ export class Term2Gateway {
       }
       this.#persisted.clear();
       this.#replay.close();
-      // The audit record is bounded by the same deadline. A broken audit sink
-      // must not keep the local owner process alive indefinitely, and a
-      // rejected or unbuildable record must not turn a finished shutdown into
-      // a rejection for the caller: the audit is best-effort here.
+      // The audit record is bounded by the same deadline. A broken audit sink must not
+      // keep the local owner process alive indefinitely, and neither a synchronous
+      // build failure nor a rejected write may turn a finished shutdown into a
+      // rejection for the caller: the audit is best-effort, but never silent.
       try {
         await waitBounded(
-          this.#audit.write(
-            createSafeLogMetadata({
-              operation: 'shutdown',
-              outcome: forced ? 'interrupted' : 'allowed',
-              reasonCode: forced ? 'forced_shutdown' : 'shutdown',
-            }),
-          ),
+          this.#audit
+            .write(
+              createSafeLogMetadata({
+                operation: 'shutdown',
+                outcome: forced ? 'interrupted' : 'allowed',
+                reasonCode: forced ? 'forced_shutdown' : 'shutdown',
+              }),
+            )
+            .catch((error: unknown) => this.#reportShutdownAuditFailure(error)),
         );
       } catch (error) {
-        console.error(
-          `term2 gateway: shutdown audit failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        this.#reportShutdownAuditFailure(error);
       }
     })();
     return this.#shutdownPromise;

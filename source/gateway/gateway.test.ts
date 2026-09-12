@@ -32,6 +32,7 @@ import type { ConversationAgentClient } from '../services/conversation-agent-cli
 import { createAgentStream } from '../services/agent-stream.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import type { GatewayAssertionClaims, GatewaySafeLogMetadata, ProviderBrokerCapability } from './contracts.js';
+import type { ILoggingService, LogMetadataContract } from '../services/service-interfaces.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 const tempRoots: string[] = [];
@@ -2796,10 +2797,23 @@ describe('gateway startup and assertion verifier', () => {
     }
   });
 
-  it('resolves shutdown when the audit sink fails', async () => {
+  it('logs a rejected shutdown audit to the launcher logger and still resolves a forced shutdown', async () => {
     const root = makeTemp();
     const manifestPath = path.join(root, 'manifest.json');
     writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+    const warnings: Array<{ message: string; meta: LogMetadataContract | undefined }> = [];
+    const logger: ILoggingService = {
+      info: () => {},
+      warn: (message, meta) => {
+        warnings.push({ message, meta });
+      },
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+    };
     const gateway = Term2Gateway.create({
       enabled: true,
       socketPath: path.join(root, 'gateway.sock'),
@@ -2814,13 +2828,31 @@ describe('gateway startup and assertion verifier', () => {
       workerSandboxAvailable: true,
       workspaceBoundaryProbe: boundaryProbe,
       allowWrite: true,
-      auditWriter: (record) => {
+      logger,
+      auditWriter: async (record) => {
         if (record.operation === 'shutdown') throw new Error('audit sink unavailable');
-        return Promise.resolve();
       },
       tmpDir: path.join(root, 'tmp'),
     });
-    await expect(gateway.shutdown(100)).resolves.toBeUndefined();
+    await gateway.start();
+    // The same held connection as the test above forces every bounded wait to expire,
+    // so the audit write is issued and rejected on the path that used to discard it.
+    const held = connect({ path: path.join(root, 'gateway.sock') });
+    await new Promise<void>((resolve, reject) => {
+      held.once('connect', () => resolve());
+      held.once('error', reject);
+    });
+    try {
+      await expect(gateway.shutdown(1)).resolves.toBeUndefined();
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]!.message).toBe('gateway shutdown audit failed');
+      expect(warnings[0]!.meta).toMatchObject({
+        errorCode: 'shutdown_audit_failed',
+        errorMessage: 'audit sink unavailable',
+      });
+    } finally {
+      held.destroy();
+    }
   });
 
   it('replay survives a gateway restart through the SQLite ledger', () => {

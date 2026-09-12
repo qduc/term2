@@ -296,6 +296,10 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     autoApprove: false,
     allowUnsandboxed: false,
     auditWriter,
+    // The launcher owns the diagnostics destination; the gateway only decides what is
+    // worth reporting. Without this the gateway would have nowhere to report a degraded
+    // shutdown audit.
+    logger: new LoggingService(),
     runtimeFactory,
     // Always wired: without it session_create answers with the legacy body
     // shape, which the ChatForge BFF rejects as gateway_unavailable.

@@ -405,4 +405,39 @@ describe('GatewayServer pairing bootstrap route', () => {
       await server.close();
     }
   });
+
+  it('removes a stale socket at start but refuses to unlink a regular file at the socket path', async () => {
+    const root = makeRoot();
+    const makeServer = (socketPath: string) =>
+      new GatewayServer({
+        socketPath,
+        verifier: { verify: () => claims } as unknown as AssertionVerifier,
+        handler: async () => ({ status: 200, body: { ok: true } }),
+      });
+
+    // A genuinely stale socket (bound, then abandoned without unlink) is
+    // replaced by start() exactly as before this guard existed.
+    const stalePath = path.join(root, 'stale.sock');
+    const abandoned = makeServer(stalePath);
+    await abandoned.start();
+    await abandoned.close();
+    // close() unlinks, so re-create the stale condition by binding a raw
+    // net.Server that is left open.
+    const { createServer: createNetServer } = await import('node:net');
+    const holder = createNetServer(() => undefined);
+    await new Promise<void>((resolve) => holder.listen(stalePath, resolve));
+    const replacement = makeServer(stalePath);
+    await replacement.start();
+    expect(replacement.listening).toBe(true);
+    await replacement.close();
+    await new Promise<void>((resolve) => holder.close(() => resolve()));
+
+    // A regular file at the socket path is operator data: start() must fail
+    // with a clear message and leave the file in place.
+    const filePath = path.join(root, 'notes.txt');
+    writeFileSync(filePath, 'operator data', 'utf8');
+    const server = makeServer(filePath);
+    await expect(server.start()).rejects.toThrow(/exists and is not a socket/);
+    expect(readFileSync(filePath, 'utf8')).toBe('operator data');
+  });
 });

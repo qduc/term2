@@ -385,15 +385,16 @@ describe('RuntimeFactory and ServerSession', () => {
 
 describe('production authority settings allowlist', () => {
   // The allowlist is the one seam between the launcher's credential owner and
-  // gateway sessions. A shell, sandbox, profile, or tool-enablement key here
-  // would let a web session read or steer host authority, so the structural
-  // guard fails the build instead of trusting review.
-  const FORBIDDEN_PREFIXES = ['shell.', 'sandbox.', 'app.', 'tools.'];
+  // gateway sessions. The guard is a positive list, not a denylist: only
+  // provider inputs (agent.*) and web-search keys (webSearch.*) may cross it,
+  // so a new schema prefix (hooks, ssh, debug, logging, subagent, ...) cannot
+  // silently grant host authority to a web session.
+  const ALLOWED_PREFIXES = ['agent.', 'webSearch.'];
 
-  it('never routes host-authority settings from the launcher into sessions', () => {
+  it('routes only provider and web-search settings from the launcher into sessions', () => {
     for (const key of PRODUCTION_AUTHORITY_SETTING_KEYS) {
-      const offending = FORBIDDEN_PREFIXES.find((prefix) => key.startsWith(prefix));
-      expect(offending, `allowlist entry "${key}" must not start with "${offending}"`).toBeUndefined();
+      const allowed = ALLOWED_PREFIXES.some((prefix) => key.startsWith(prefix));
+      expect(allowed, `allowlist entry "${key}" must start with agent. or webSearch.`).toBe(true);
     }
   });
 

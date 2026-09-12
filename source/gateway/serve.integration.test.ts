@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { createHash, generateKeyPairSync } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createGatewayAssertion } from './assertion.js';
+import { getDefaultShellSandboxRunner } from '../utils/shell/sandbox/shell-sandbox-runner.js';
 import { resolveSettingsDirectory } from '../services/settings/settings-path.js';
 import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
 
@@ -267,8 +268,15 @@ describe('term2 serve (child process)', () => {
     }
     expect(stderr).not.toContain('PAIRING OTP');
 
-    // State layout: manifest + sha256 derived at startup, replay DB, and the
-    // always-wired persistence coordinator root. No trust file: pairing off.
+    // The launcher warns on stderr when the shell sandbox runner is unusable
+    // on this host (and stays silent when it is available).
+    const sandboxAvailability = await getDefaultShellSandboxRunner().availability();
+    if (sandboxAvailability.type !== 'available') {
+      expect(stderr).toContain('shell sandbox unavailable');
+      expect(stderr).toContain('GATEWAY_READY');
+    }
+
+    // State layout: manifest + sha256 derived at startup, replay DB, and the    // always-wired persistence coordinator root. No trust file: pairing off.
     const manifestRaw = fs.readFileSync(path.join(stateDir, 'manifest.json'), 'utf-8');
     expect(JSON.parse(manifestRaw)).toMatchObject({ version: 1, grants: [] });
     expect(fs.readFileSync(path.join(stateDir, 'manifest.sha256'), 'utf-8').trim()).toBe(
@@ -348,4 +356,129 @@ describe('term2 serve (child process)', () => {
     expect(fs.existsSync(socketPath)).toBe(false);
     expect(stdout + stderr).not.toContain('PAIRING OTP');
   }, 180_000);
+
+  it('pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid', async () => {
+    const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'serve-pair-home-')));
+    const stateDir = path.join(tempHome, 'gateway-state');
+    const workspaceRoot = path.join(tempHome, 'workspace');
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    const workspace = realpathSync(workspaceRoot);
+    disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
+    const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(path.join(settingsDir, 'settings.json'), '{}', 'utf-8');
+
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    // kid === fingerprint for a paired client: the lowercase hex SHA-256 of
+    // the key's SPKI DER (TrustedClientsStore.normalizePublicKey).
+    const expectedKid = createHash('sha256')
+      .update(createPublicKey(publicKey).export({ type: 'spki', format: 'der' }))
+      .digest('hex');
+
+    const socketPath = path.join(stateDir, 'gateway.sock');
+    const child = spawn('node', [cliPath(), 'serve', '--state-dir', stateDir, '--local-owner', 'user-1', '--pairing'], {
+      env: createTestChildEnv({ HOME: tempHome, DISABLE_LOGGING: '1' }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    disposables.push(() => {
+      child.kill('SIGKILL');
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += String(chunk);
+    });
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += String(chunk);
+    });
+    const exitedEarly = new Promise<never>((_, reject) => {
+      child.on('close', (code, signal) =>
+        reject(new Error(`serve exited before readiness (code=${code} signal=${signal})\nstderr:\n${stderr}`)),
+      );
+    });
+
+    const deadline = Date.now() + 60_000;
+    while (!stderr.includes('GATEWAY_READY')) {
+      if (Date.now() > deadline) throw new Error(`readiness timeout\nstderr:\n${stderr}`);
+      await Promise.race([new Promise((resolve) => setTimeout(resolve, 100)), exitedEarly]);
+    }
+
+    // The OTP is the out-of-band secret: stderr only, never stdout.
+    const otpMatch = stderr.match(/PAIRING OTP: (\d{6})/);
+    expect(otpMatch).toBeTruthy();
+    expect(stdout.trim()).toBe('');
+
+    const registered = await socketRequest(socketPath, 'POST', '/private/agent/v1/pairing/register', {
+      publicKeyPem: publicKey,
+      otp: otpMatch![1],
+    });
+    expect(registered.status, registered.raw).toBe(200);
+    const registeredBody = JSON.parse(registered.raw) as { paired: boolean; kid: string };
+    expect(registeredBody.paired).toBe(true);
+    expect(registeredBody.kid).toBe(expectedKid);
+    expect(fs.existsSync(path.join(stateDir, 'trusted-clients.json'))).toBe(true);
+
+    const signPaired = (
+      purpose: Parameters<typeof createGatewayAssertion>[0]['purpose'],
+      ids: { workspaceId?: string; sessionId?: string } = {},
+    ) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: registeredBody.kid,
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'user-1',
+        purpose,
+        ...ids,
+      });
+    const rpc = async (
+      method: string,
+      requestPath: string,
+      body: unknown,
+      purpose: Parameters<typeof createGatewayAssertion>[0]['purpose'],
+      ids: { workspaceId?: string; sessionId?: string } = {},
+    ) => {
+      const response = await socketRequest(socketPath, method, requestPath, body, signPaired(purpose, ids));
+      expect(response.status, response.raw).toBeLessThan(400);
+      return jsonBody(response);
+    };
+
+    const validated = await rpc(
+      'POST',
+      '/private/agent/v1/workspace/candidates/validate',
+      { absolutePath: workspace },
+      'workspace_candidate_validate',
+    );
+    expect(validated.valid).toBe(true);
+    const selected = await rpc(
+      'POST',
+      '/private/agent/v1/workspace/candidates/select',
+      { candidateId: validated.candidateId, access: 'read' },
+      'workspace_candidate_select',
+    );
+    const created = await rpc(
+      'POST',
+      '/private/agent/v1/sessions',
+      { workspaceId: selected.workspaceId },
+      'session_create',
+      { workspaceId: selected.workspaceId },
+    );
+    expect(created.session?.id).toBeTruthy();
+
+    child.removeAllListeners();
+    child.kill('SIGTERM');
+    const exit = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`serve did not exit after SIGTERM\nstderr:\n${stderr}`)), 30_000);
+      child.on('close', (code, signal) => {
+        clearTimeout(timer);
+        resolve({ code, signal });
+      });
+    });
+    expect(exit.code).toBe(0);
+    expect(fs.existsSync(socketPath)).toBe(false);
+  }, 120_000);
 });

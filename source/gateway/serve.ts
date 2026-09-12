@@ -1,18 +1,31 @@
 import { createHash } from 'node:crypto';
 import { appendFile } from 'node:fs/promises';
-import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { buildEnvOverrides, SettingsService } from '../services/settings/settings-service.js';
 import { LoggingService } from '../services/logging/logging-service.js';
+import { getDefaultShellSandboxRunner } from '../utils/shell/sandbox/shell-sandbox-runner.js';
 import { launchGateway } from './launcher.js';
 import type { GatewayLaunchConfig, Term2Gateway } from './gateway.js';
-import type { GatewaySafeLogMetadata } from './contracts.js';
+import type { GatewaySafeLogMetadata, WorkspaceGrant } from './contracts.js';
 import { createProductionRuntimeFactory } from './runtime-factory.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
 import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
-import { loadGatewayManifest, validateDynamicGrant, WorkspaceAdmission } from './workspace-admission.js';
-import type { WorkspaceGrant } from './contracts.js';
+import {
+  loadGatewayManifest,
+  validateDynamicGrant,
+  validateGatewayManifest,
+  WorkspaceAdmission,
+} from './workspace-admission.js';
 import { DynamicWorkspaceRegistry } from './dynamic-workspace-registry.js';
 import { createRealWorkspaceBoundaryProbe } from './workspace-boundary-probe.js';
 import { parseServeArgs } from './serve-args.js';
@@ -22,13 +35,113 @@ import { parseServeArgs } from './serve-args.js';
  * production runtime factory, and the gateway control plane, then block until
  * SIGINT/SIGTERM triggers the existing bounded shutdown.
  *
- * State layout under --state-dir (0700): manifest.json + manifest.sha256
- * (derived here at startup; static grants stay empty because dynamic
- * workspaces are the ChatForge path), replay.sqlite, trusted-clients.json
- * (0600, written by TrustedClientsStore), dynamic-workspaces.json (0600,
- * durable browser-selected grants), gateway-data/ (persistence coordinator),
- * runtime-tmp/ + sandbox/ (per-session scratch), gateway-audit.jsonl.
+ * State layout under --state-dir (0700): manifest.json + manifest.sha256,
+ * replay.sqlite, trusted-clients.json (0600, written by TrustedClientsStore),
+ * dynamic-workspaces.json (0600, durable browser-selected grants),
+ * gateway-data/ (persistence coordinator), runtime-tmp/ + sandbox/
+ * (per-session scratch), gateway-audit.jsonl.
  */
+
+/** A launcher precondition failed; runServe turns this into a stderr message and exit 1. */
+export class ServeStartupError extends Error {}
+
+/**
+ * Derive the gateway manifest for a state dir. A state dir with no manifest
+ * (or an empty-grant manifest) gets the canonical empty manifest this launcher
+ * runs: workspace admission is extended at runtime by the browser-owned
+ * candidate registry, and that state is durable in dynamic-workspaces.json,
+ * not in the manifest. A manifest that already carries curated grants is
+ * preserved untouched; only its sha256 sidecar is refreshed.
+ */
+export function prepareGatewayManifest(stateDir: string): { manifestPath: string; manifestSha256: string } {
+  const manifestPath = path.join(stateDir, 'manifest.json');
+  const emptyManifest = `${JSON.stringify({ version: 1, grants: [], sshTargets: [] }, null, 2)}\n`;
+  let manifestJson = emptyManifest;
+  if (existsSync(manifestPath)) {
+    const existingRaw = readFileSync(manifestPath, 'utf8');
+    let existingGrants = 0;
+    try {
+      existingGrants = validateGatewayManifest(JSON.parse(existingRaw)).grants.length;
+    } catch (error) {
+      throw new ServeStartupError(
+        `refusing to overwrite an unreadable gateway manifest at ${manifestPath}: ${messageOf(error)}`,
+      );
+    }
+    if (existingGrants > 0) manifestJson = existingRaw;
+  }
+  const manifestSha256 = createHash('sha256').update(manifestJson).digest('hex');
+  writeFileSync(manifestPath, manifestJson, { mode: 0o600 });
+  writeFileSync(path.join(stateDir, 'manifest.sha256'), `${manifestSha256}\n`, { mode: 0o600 });
+  // Prove the artifact the startup assertion will re-read actually parses.
+  loadGatewayManifest(manifestPath, manifestSha256);
+  return { manifestPath, manifestSha256 };
+}
+
+/**
+ * Load durable browser-selected grants. A missing file means no prior grants;
+ * a damaged (unparseable) file is moved aside as <file>.corrupt with a warning
+ * so the evidence survives and the launcher starts empty; a file that parses
+ * but carries an invalid grant list fails closed.
+ */
+export function loadDynamicWorkspaceGrants(stateDir: string): readonly WorkspaceGrant[] {
+  const grantsFile = path.join(stateDir, 'dynamic-workspaces.json');
+  let raw: string;
+  try {
+    raw = readFileSync(grantsFile, 'utf8');
+  } catch {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    try {
+      renameSync(grantsFile, `${grantsFile}.corrupt`);
+    } catch {
+      // Keep the damaged file in place rather than lose the evidence.
+    }
+    console.error(
+      `term2 serve: ${grantsFile} is damaged; moved to ${grantsFile}.corrupt, starting with no dynamic grants`,
+    );
+    return [];
+  }
+  if (!Array.isArray(parsed) || !parsed.every((entry) => validateDynamicGrant(entry))) {
+    throw new ServeStartupError(`${grantsFile} contains an invalid dynamic grant; refusing to start`);
+  }
+  return parsed;
+}
+
+/** Write the durable grant list atomically (temp file, then rename). */
+export function saveDynamicWorkspaceGrants(stateDir: string, grants: readonly WorkspaceGrant[]): void {
+  const grantsFile = path.join(stateDir, 'dynamic-workspaces.json');
+  const tempPath = `${grantsFile}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(grants, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tempPath, grantsFile);
+}
+
+/** Canonicalize one --workspace-root; the registry requires real directories. */
+export function canonicalizeWorkspaceRoot(root: string): string {
+  let canonical: string;
+  try {
+    canonical = realpathSync(root);
+    if (!statSync(canonical).isDirectory()) throw new Error('not a directory');
+  } catch (error) {
+    throw new ServeStartupError(`--workspace-root ${root} is unusable: ${messageOf(error)}`);
+  }
+  return canonical;
+}
+
+/**
+ * Startup sandbox availability never gates readiness and no consumer may read
+ * workerSandboxAvailable as proof of a usable sandbox. This warning tells the
+ * operator up front when every shell tool call will be refused.
+ */
+export function sandboxStartupWarning(availability: { type: string; reason?: string }): string | undefined {
+  if (availability.type === 'available') return undefined;
+  const detail = availability.reason ? ` (${availability.reason})` : '';
+  return `term2 serve: warning: shell sandbox unavailable: ${availability.type}${detail}; shell tool calls will be refused`;
+}
+
 export async function runServe(argv: readonly string[]): Promise<void> {
   const parsed = parseServeArgs(argv);
   if (!parsed.ok) {
@@ -47,21 +160,14 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     process.exit(1);
   }
 
-  // A manifest with no static grants is correct here: workspace admission is
-  // extended at runtime by the browser-owned candidate registry, and that
-  // state is durable in dynamic-workspaces.json, not in the manifest.
-  const manifestJson = `${JSON.stringify({ version: 1, grants: [], sshTargets: [] }, null, 2)}\n`;
-  const manifestPath = path.join(stateDir, 'manifest.json');
-  const manifestSha256 = createHash('sha256').update(manifestJson).digest('hex');
+  let manifest: { manifestPath: string; manifestSha256: string };
   try {
-    writeFileSync(manifestPath, manifestJson, { mode: 0o600 });
-    writeFileSync(path.join(stateDir, 'manifest.sha256'), `${manifestSha256}\n`, { mode: 0o600 });
-    // Prove the artifact the startup assertion will re-read actually parses.
-    loadGatewayManifest(manifestPath, manifestSha256);
+    manifest = prepareGatewayManifest(stateDir);
   } catch (error) {
-    console.error(`term2 serve: cannot write gateway manifest: ${messageOf(error)}`);
+    console.error(`term2 serve: ${messageOf(error)}`);
     process.exit(1);
   }
+  const { manifestPath, manifestSha256 } = manifest;
 
   const publicKeys = new Map<string, string>();
   for (const { kid, pemPath } of args.bffKeys) {
@@ -88,10 +194,19 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     }
   }
 
-  // workerSandboxAvailable is the launch-config claim the gateway startup
-  // assertion requires. Actual shell execution stays fail closed at the tool
-  // boundary: when the sandbox runtime is unavailable the shell tool refuses
-  // the unsandboxed fallback instead of running the command.
+  let workspaceRoots: string[];
+  try {
+    workspaceRoots = args.workspaceRoots.map((root) => canonicalizeWorkspaceRoot(root));
+  } catch (error) {
+    console.error(`term2 serve: ${messageOf(error)}`);
+    process.exit(1);
+  }
+
+  // Probe once for the operator-visible warning. This does not gate readiness:
+  // the shell tool refuses the unsandboxed fallback per command when the
+  // sandbox runtime is unusable, so sessions still start and every other tool
+  // keeps working.
+  const sandboxWarning = sandboxStartupWarning(await getDefaultShellSandboxRunner().availability());
 
   // The launcher process is the credential owner: this is the operator's real
   // settings service (loaded with the same env precedence as the CLI), not a
@@ -111,20 +226,12 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     createGatewayStorageLayout(ensureDir(stateDir, 'gateway-data')),
   );
 
-  const dynamicGrantsFile = path.join(stateDir, 'dynamic-workspaces.json');
-  let initialDynamicGrants: readonly WorkspaceGrant[] = [];
+  let initialDynamicGrants: readonly WorkspaceGrant[];
   try {
-    const parsedGrants: unknown = JSON.parse(readFileSync(dynamicGrantsFile, 'utf8'));
-    if (Array.isArray(parsedGrants)) {
-      if (!parsedGrants.every((entry) => validateDynamicGrant(entry))) {
-        console.error(`term2 serve: ${dynamicGrantsFile} contains an invalid dynamic grant; refusing to start`);
-        process.exit(1);
-      }
-      initialDynamicGrants = parsedGrants;
-    }
-  } catch {
-    // Missing or corrupt file: start empty. A file that parses to an invalid
-    // grant list already failed closed above.
+    initialDynamicGrants = loadDynamicWorkspaceGrants(stateDir);
+  } catch (error) {
+    console.error(`term2 serve: ${messageOf(error)}`);
+    process.exit(1);
   }
   const boundaryProbe = createRealWorkspaceBoundaryProbe({ allowWrite: args.allowWrite });
   const admission = new WorkspaceAdmission(loadGatewayManifest(manifestPath, manifestSha256), {
@@ -133,14 +240,12 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     initialDynamicGrants,
     onDynamicGrantChange: (grants) => {
       mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-      writeFileSync(dynamicGrantsFile, `${JSON.stringify(grants, null, 2)}\n`, { mode: 0o600 });
+      saveDynamicWorkspaceGrants(stateDir, grants);
     },
   });
   const workspaceRegistry = new DynamicWorkspaceRegistry({
     admission,
-    // Browser-selected workspaces must live under the operator's home by
-    // default; a single-user local launcher has no broader allowlist to serve.
-    allowedRoots: [homedir()],
+    allowedRoots: workspaceRoots,
   });
 
   const auditPath = path.join(stateDir, 'gateway-audit.jsonl');
@@ -166,6 +271,10 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     localOwnerUserId: args.localOwnerUserId,
     workspaceRegistry,
     workspaceBoundaryProbe: boundaryProbe,
+    // Launch-config claim only: the startup assertion requires this literal,
+    // and no consumer may read it as proof of a usable sandbox. Real shell
+    // execution probes the runner per call and refuses the unsandboxed
+    // fallback; the startup warning tells the operator when that will happen.
     workerSandboxAvailable: true,
     tmpDir: ensureDir(stateDir, 'sandbox'),
     sshEnabled: false,
@@ -204,11 +313,16 @@ export async function runServe(argv: readonly string[]): Promise<void> {
     process.exit(1);
   }
 
+  if (sandboxWarning) console.error(sandboxWarning);
   const endpoint =
     args.transport.kind === 'socket'
       ? `transport=socket path=${args.transport.socketPath}`
       : `transport=tls host=${args.transport.host} port=${args.transport.port}`;
-  console.error(`GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${args.pairing ? 'on' : 'off'}`);
+  console.error(
+    `GATEWAY_READY pid=${process.pid} ${endpoint} pairing=${
+      args.pairing ? 'on' : 'off'
+    } workspaceRoots=${workspaceRoots.join(',')}`,
+  );
 
   // launchGateway's own handlers start the bounded shutdown; this once-handler
   // awaits the same idempotent shutdown and then exits deterministically even

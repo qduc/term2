@@ -204,12 +204,15 @@ const cli = meow(
 
       $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
           [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
-          [--pairing] [--bff-key <kid>=<pem path>]... [--issuer <iss>] [--audience <aud>]
-          [--allow-write]
+          [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+          [--issuer <iss>] [--audience <aud>] [--allow-write]
 
       Transport defaults to a Unix socket at <state-dir>/gateway.sock (mode 0660). TLS network
       mode requires --listen with --tls-cert and --tls-key, and binds loopback unless
-      --allow-remote is also given. Tool write access stays off until --allow-write.
+      --allow-remote is also given. Browser-selected workspaces must live under your home
+      directory unless --workspace-root (repeatable) adds allowed roots. --allow-write admits
+      read_write workspace grants (workspace write access); without it every admitted root is
+      read-only.
 
     Examples
       $ term2

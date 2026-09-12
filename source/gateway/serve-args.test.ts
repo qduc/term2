@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_SERVE_AUDIENCE, DEFAULT_SERVE_ISSUER, defaultServeStateDir, parseServeArgs } from './serve-args.js';
 
@@ -87,6 +88,17 @@ describe('parseServeArgs', () => {
   it('rejects a relative --state-dir and carries --allow-write', () => {
     expect(errorOf(['--local-owner', 'user-1', '--state-dir', 'relative/dir'])).toContain('absolute');
     expect(ok([...BASE, '--allow-write']).allowWrite).toBe(true);
+  });
+
+  it('defaults the workspace allowlist to the home directory', () => {
+    const args = ok(BASE);
+    expect(args.workspaceRoots).toEqual([os.homedir()]);
+  });
+
+  it('accepts repeatable --workspace-root entries and rejects relative ones', () => {
+    const args = ok([...BASE, '--workspace-root', '/srv/projects', '--workspace-root', '/mnt/work']);
+    expect(args.workspaceRoots).toEqual(['/srv/projects', '/mnt/work']);
+    expect(errorOf([...BASE, '--workspace-root', 'relative/root'])).toContain('absolute');
   });
 
   it('derives the default state dir from XDG_STATE_HOME or the home directory', () => {

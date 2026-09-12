@@ -24,6 +24,7 @@ export type ServeArgs = {
   audience: string;
   pairing: boolean;
   bffKeys: readonly ServeBffKey[];
+  workspaceRoots: readonly string[];
   allowWrite: boolean;
 };
 
@@ -39,6 +40,7 @@ const VALUE_FLAGS = new Set([
   '--issuer',
   '--audience',
   '--bff-key',
+  '--workspace-root',
 ]);
 const BOOLEAN_FLAGS = new Set(['--pairing', '--allow-write', '--allow-remote']);
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -66,6 +68,7 @@ export function parseServeArgs(argv: readonly string[], defaults: { stateDir?: s
   let allowWrite = false;
   let allowRemote = false;
   const bffKeys: ServeBffKey[] = [];
+  const workspaceRoots: string[] = [];
   const seenKids = new Set<string>();
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -85,6 +88,7 @@ export function parseServeArgs(argv: readonly string[], defaults: { stateDir?: s
       else if (token === '--local-owner') localOwner = value;
       else if (token === '--issuer') issuer = value;
       else if (token === '--audience') audience = value;
+      else if (token === '--workspace-root') workspaceRoots.push(value);
       else if (token === '--bff-key') {
         const separator = value.indexOf('=');
         const kid = separator < 0 ? '' : value.slice(0, separator).trim();
@@ -108,6 +112,11 @@ export function parseServeArgs(argv: readonly string[], defaults: { stateDir?: s
   }
   if (!path.isAbsolute(stateDir)) {
     return { ok: false, error: `--state-dir must be an absolute path (got "${stateDir}")` };
+  }
+  for (const root of workspaceRoots) {
+    if (!path.isAbsolute(root)) {
+      return { ok: false, error: `--workspace-root must be an absolute path (got "${root}")` };
+    }
   }
 
   let transport: ServeTransport;
@@ -147,6 +156,9 @@ export function parseServeArgs(argv: readonly string[], defaults: { stateDir?: s
       audience: audience?.trim() || DEFAULT_SERVE_AUDIENCE,
       pairing,
       bffKeys,
+      // Fail-closed default: browser-selected workspaces stay inside the
+      // operator's home unless --workspace-root widens the boundary.
+      workspaceRoots: workspaceRoots.length > 0 ? workspaceRoots : [homedir()],
       allowWrite,
     },
   };

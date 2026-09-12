@@ -12,6 +12,8 @@ import {
   interactionDtoFromSnapshot,
   isInteractionResolveRequest,
   isPublicEventEnvelope,
+  mapConversationEvent,
+  publicEventProjectionCounters,
   sessionConfigProjection,
   Term2Gateway,
 } from './gateway.js';
@@ -25,6 +27,7 @@ import type { ConversationAgentClient } from '../services/conversation-agent-cli
 import { createAgentStream } from '../services/agent-stream.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contracts.js';
+import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 const tempRoots: string[] = [];
 const makeTemp = () => {
@@ -33,6 +36,99 @@ const makeTemp = () => {
   return root;
 };
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+
+describe('M4 conversation event projections', () => {
+  const map = (event: ConversationEvent) => mapConversationEvent(event, 'turn-1', 'session-1');
+
+  it('projects command messages in the adapter shape', () => {
+    const mapped = map({
+      type: 'command_message',
+      message: {
+        id: 'message-1',
+        sender: 'command',
+        status: 'failed',
+        command: 'read',
+        output: '',
+        failureReason: 'nope',
+        toolName: 'read_file',
+        callId: 'call-1',
+      },
+    });
+    expect(mapped).toMatchObject({
+      type: 'command_message',
+      payload: { turnId: 'turn-1', callId: 'call-1', toolName: 'read_file', status: 'failed', error: 'nope' },
+    });
+  });
+
+  it('drops command messages without identity and records a bounded counter', () => {
+    const before = publicEventProjectionCounters().malformedCommandMessageDrops;
+    expect(
+      map({
+        type: 'command_message',
+        message: { id: 'message-2', sender: 'command', status: 'completed', command: 'x', output: '' },
+      } as ConversationEvent),
+    ).toBeNull();
+    expect(publicEventProjectionCounters().malformedCommandMessageDrops).toBe(before + 1);
+  });
+
+  it('projects usage, retry, subagent progress, and compaction', () => {
+    expect(
+      map({ type: 'usage_update', usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 } }),
+    ).toMatchObject({ type: 'usage_update', payload: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } });
+    expect(map({ type: 'retry', toolName: 'model', attempt: 1, maxRetries: 2, errorMessage: 'wait' })).toMatchObject({
+      type: 'retry',
+      payload: { attempt: 1, maxRetries: 2 },
+    });
+    expect(map({ type: 'subagent_text_turn', agentId: 'agent-1', role: 'worker', text: 'progress' })).toMatchObject({
+      type: 'subagent_text_turn',
+      payload: { agentId: 'agent-1', text: 'progress' },
+    });
+    expect(
+      map({ type: 'context_compaction_completed', provider: 'openai', sessionId: 'session-1', durationMs: 4 }),
+    ).toMatchObject({ type: 'context_compaction_completed', payload: { durationMs: 4 } });
+  });
+
+  it('maps error kinds to bounded reasons without stack data', () => {
+    expect(map({ type: 'error', kind: 'rate_limit', message: 'provider body', finalText: 'partial' })).toMatchObject({
+      type: 'turn_failed',
+      payload: { reason: 'rate_limit', finalText: 'partial' },
+    });
+    const unknown = map({ type: 'error', kind: 'secret/path', message: 'provider body', stack: '/secret' });
+    expect(unknown).toMatchObject({ type: 'turn_failed', payload: { reason: 'runtime_error' } });
+    expect(unknown?.payload.stack).toBeUndefined();
+  });
+});
+
+describe('M4 public event allowlist', () => {
+  it('accepts each newly projected event family', () => {
+    for (const type of [
+      'retry',
+      'retry_exhausted',
+      'subagent_started',
+      'subagent_tool_started',
+      'subagent_text_turn',
+      'subagent_command_message',
+      'subagent_approval_required',
+      'subagent_completed',
+      'subagent_interrupted',
+      'subagent_question',
+      'context_compaction_started',
+      'context_compaction_completed',
+      'context_compaction_failed',
+    ]) {
+      expect(
+        isPublicEventEnvelope({
+          schemaVersion: 1,
+          id: 1,
+          sessionId: 'session-1',
+          type: type as any,
+          occurredAt: new Date().toISOString(),
+          payload: { turnId: 'turn-1' },
+        } as any),
+      ).toBe(true);
+    }
+  });
+});
 const privateKey = keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 const secondKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });

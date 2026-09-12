@@ -69,6 +69,19 @@ export type AgentEventType =
   | 'interaction_resolved'
   | 'interaction_recovered'
   | 'usage_update'
+  | 'retry'
+  | 'retry_exhausted'
+  | 'subagent_started'
+  | 'subagent_tool_started'
+  | 'subagent_text_turn'
+  | 'subagent_command_message'
+  | 'subagent_approval_required'
+  | 'subagent_completed'
+  | 'subagent_interrupted'
+  | 'subagent_question'
+  | 'context_compaction_started'
+  | 'context_compaction_completed'
+  | 'context_compaction_failed'
   | 'turn_completed'
   | 'turn_failed'
   | 'turn_aborted';
@@ -93,6 +106,19 @@ export const FROZEN_AGENT_EVENT_TYPES = [
   'interaction_resolved',
   'interaction_recovered',
   'usage_update',
+  'retry',
+  'retry_exhausted',
+  'subagent_started',
+  'subagent_tool_started',
+  'subagent_text_turn',
+  'subagent_command_message',
+  'subagent_approval_required',
+  'subagent_completed',
+  'subagent_interrupted',
+  'subagent_question',
+  'context_compaction_started',
+  'context_compaction_completed',
+  'context_compaction_failed',
   'turn_completed',
   'turn_failed',
   'turn_aborted',

@@ -85,6 +85,7 @@ import { loginToGrok } from '../providers/grok-auth.js';
 
 const MAX_BUFFERED_SSE_EVENTS = 256;
 const NONCRITICAL_RUNTIME_EVENT_TYPES = new Set<ConversationEvent['type']>(['text_delta', 'reasoning_delta']);
+let malformedCommandMessageDrops = 0;
 
 const isCriticalRuntimeEvent = (event: ConversationEvent): boolean => !NONCRITICAL_RUNTIME_EVENT_TYPES.has(event.type);
 
@@ -151,6 +152,37 @@ const PUBLIC_EVENT_PAYLOAD_KEYS = new Set([
   'riskLevel',
   'deniedRead',
   'runBudgetEvidence',
+  'agentId',
+  'name',
+  'task',
+  'async',
+  'toolCallId',
+  'commandMessages',
+  'status',
+  'output',
+  'error',
+  'finalText',
+  'finalTextTruncated',
+  'toolsUsed',
+  'count',
+  'terminalCause',
+  'provider',
+  'attempt',
+  'maxRetries',
+  'errorMessage',
+  'retryType',
+  'errorKind',
+  'delayMs',
+  'retryAfterMs',
+  'attempts',
+  'maxAttempts',
+  'canRetry',
+  'sessionId',
+  'inputTokensBefore',
+  'inputTokensAfter',
+  'durationMs',
+  'strategy',
+  'errorCategory',
 ]);
 
 const LOCAL_OWNER_PURPOSES = new Set<GatewayAssertionClaims['purpose']>([
@@ -1347,13 +1379,18 @@ export class Term2Gateway {
       const session = this.#sessions.get(sessionId);
       const snapshot = session instanceof ServerSession ? session.service.getPendingInteractionSnapshot() : null;
       const binding =
-        event.type === 'approval_required' && snapshot
+        (event.type === 'approval_required' || event.type === 'subagent_approval_required') && snapshot
           ? this.#interactionBindingFor(sessionId, snapshot, context.turnId)
           : undefined;
       // An ask_user answer can advance the live binding before the original
       // awaitable approval sink reaches this queue. Do not republish that
       // old presentation as a second approval after interaction_updated.
-      if (event.type === 'approval_required' && binding?.revision && binding.revision > 1) return;
+      if (
+        (event.type === 'approval_required' || event.type === 'subagent_approval_required') &&
+        binding?.revision &&
+        binding.revision > 1
+      )
+        return;
       const mapped = mapConversationEvent(event, context.turnId, sessionId, binding, snapshot ?? undefined);
       if (!mapped) return;
       const transcriptFact = terminalTranscriptFact(event, context.turnId);
@@ -2040,6 +2077,113 @@ function boundedText(value: unknown, max = 8_192): string {
   return typeof value === 'string' ? value.slice(0, max) : '';
 }
 
+function safeCounter(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.min(Math.floor(value), Number.MAX_SAFE_INTEGER)
+    : 0;
+}
+
+function boundedInteger(value: unknown, max: number): number {
+  const number = safeCounter(value);
+  return Math.min(number, max);
+}
+
+function normalizedUsagePayload(usage: {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}): Record<string, number> {
+  const inputTokens = safeCounter(usage.prompt_tokens);
+  const outputTokens = safeCounter(usage.completion_tokens);
+  return { inputTokens, outputTokens, totalTokens: safeCounter(usage.total_tokens) || inputTokens + outputTokens };
+}
+
+function commandStatus(value: unknown): 'pending' | 'running' | 'completed' | 'failed' | 'aborted' | null {
+  switch (value) {
+    case 'pending':
+    case 'running':
+      return value;
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+    case 'interrupted':
+    case 'aborted':
+      return 'aborted';
+    case 'backgrounded':
+      return 'running';
+    default:
+      return null;
+  }
+}
+
+function commandMessagePayload(input: unknown): Record<string, unknown> | null {
+  const message = input as Record<string, unknown>;
+  const callId = typeof message.callId === 'string' ? message.callId : '';
+  const toolName = typeof message.toolName === 'string' ? message.toolName : '';
+  const status = commandStatus(message.status);
+  if (!callId || !toolName || !status) {
+    malformedCommandMessageDrops = Math.min(malformedCommandMessageDrops + 1, 1_000_000);
+    return null;
+  }
+  return {
+    callId: boundedText(callId, 256),
+    toolName: boundedText(toolName, 256),
+    status,
+    ...(typeof message.output === 'string' ? { output: boundedText(message.output, 16_384) } : {}),
+    ...(typeof message.failureReason === 'string' ? { error: boundedText(message.failureReason, 10_000) } : {}),
+    message: {
+      id: boundedText(message.id, 256),
+      role: 'command',
+      text: boundedText(message.command, 16_384),
+    },
+  };
+}
+
+export function publicEventProjectionCounters(): Readonly<{ malformedCommandMessageDrops: number }> {
+  return Object.freeze({ malformedCommandMessageDrops });
+}
+
+function commandMessageCandidate(
+  base: { sessionId: string; payload: Record<string, unknown>; type?: string },
+  message: unknown,
+  type: 'command_message' | 'subagent_command_message',
+): import('./persistence/contracts.js').DurableEventCandidate | null {
+  const projected = commandMessagePayload(message);
+  if (!projected) return null;
+  return {
+    ...base,
+    type,
+    payload: { ...base.payload, ...projected },
+  } as import('./persistence/contracts.js').DurableEventCandidate;
+}
+
+function errorReason(kind: string | undefined): string {
+  switch (kind) {
+    case 'provider':
+      return 'provider_error';
+    case 'network':
+      return 'network_error';
+    case 'rate_limit':
+      return 'rate_limit';
+    case 'authentication':
+      return 'authentication_error';
+    case 'cancelled':
+      return 'cancelled';
+    case 'validation':
+      return 'validation_error';
+    case 'compaction':
+      return 'compaction_failed';
+    case 'retry_exhausted':
+      return 'retry_exhausted';
+    case 'interaction_continuation_failed':
+      return 'interaction_continuation_failed';
+    default:
+      return 'runtime_error';
+  }
+}
+
 function interactionDtoFromApproval(
   approval: Record<string, unknown>,
   interactionId: string,
@@ -2240,18 +2384,7 @@ function mapConversationEvent(
         payload: { turnId, callId: event.toolCallId, toolName: boundedText(event.toolName, 256) },
       };
     case 'command_message':
-      return {
-        ...base,
-        type: 'command_message',
-        payload: {
-          turnId,
-          message: {
-            id: boundedText(event.message.id, 256),
-            role: boundedText(event.message.sender ?? (event.message as unknown as { role?: unknown }).role, 32),
-            text: boundedText((event.message as unknown as { text?: unknown }).text, 16_384),
-          },
-        },
-      };
+      return commandMessageCandidate(base, event.message, 'command_message');
     case 'approval_required': {
       if (!interactionBinding) return null;
       return {
@@ -2273,13 +2406,216 @@ function mapConversationEvent(
         },
       };
     }
-    case 'usage_update':
+    case 'usage_update': {
+      const inputTokens = safeCounter(event.usage.prompt_tokens);
+      const outputTokens = safeCounter(event.usage.completion_tokens);
+      const totalTokens = safeCounter(event.usage.total_tokens) ?? inputTokens + outputTokens;
       return {
         ...base,
         type: 'usage_update',
         payload: {
           turnId,
-          usage: { inputTokens: event.usage.prompt_tokens, outputTokens: event.usage.completion_tokens },
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          usage: { inputTokens, outputTokens, totalTokens },
+        },
+      };
+    }
+    case 'retry':
+      return {
+        ...base,
+        type: 'retry',
+        payload: {
+          turnId,
+          ...(event.agentId ? { agentId: boundedText(event.agentId, 256) } : {}),
+          toolName: boundedText(event.toolName, 256),
+          attempt: boundedInteger(event.attempt, 512),
+          maxRetries: boundedInteger(event.maxRetries, 512),
+          errorMessage: boundedText(event.errorMessage),
+          ...(event.retryType ? { retryType: event.retryType } : {}),
+          ...(event.errorKind ? { errorKind: event.errorKind } : {}),
+          ...(event.delayMs !== undefined ? { delayMs: boundedInteger(event.delayMs, 86_400_000) } : {}),
+          ...(event.retryAfterMs !== undefined ? { retryAfterMs: boundedInteger(event.retryAfterMs, 86_400_000) } : {}),
+        },
+      };
+    case 'retry_exhausted':
+      return {
+        ...base,
+        type: 'retry_exhausted',
+        payload: {
+          turnId,
+          ...(event.provider ? { provider: boundedText(event.provider, 256) } : {}),
+          errorKind: event.errorKind,
+          attempts: boundedInteger(event.attempts, 512),
+          maxAttempts: boundedInteger(event.maxAttempts, 512),
+          message: boundedText(event.message),
+          canRetry: event.canRetry,
+        },
+      };
+    case 'subagent_started':
+      return {
+        ...base,
+        type: 'subagent_started',
+        payload: {
+          turnId,
+          agentId: boundedText(event.agentId, 256),
+          ...(event.name ? { name: boundedText(event.name, 256) } : {}),
+          role: boundedText(event.role, 256),
+          task: boundedText(event.task, 16_384),
+          ...(event.async !== undefined ? { async: event.async } : {}),
+        },
+      };
+    case 'subagent_tool_started':
+      return {
+        ...base,
+        type: 'subagent_tool_started',
+        payload: {
+          turnId,
+          agentId: boundedText(event.agentId, 256),
+          role: boundedText(event.role, 256),
+          toolCallId: boundedText(event.toolCallId, 256),
+          toolName: boundedText(event.toolName, 256),
+          ...(event.commandMessages
+            ? {
+                commandMessages: event.commandMessages
+                  .slice(0, 64)
+                  .map((message) => commandMessagePayload(message))
+                  .filter(Boolean),
+              }
+            : {}),
+        },
+      };
+    case 'subagent_text_turn':
+      return {
+        ...base,
+        type: 'subagent_text_turn',
+        payload: {
+          turnId,
+          agentId: boundedText(event.agentId, 256),
+          role: boundedText(event.role, 256),
+          text: boundedText(event.text, 16_384),
+        },
+      };
+    case 'subagent_command_message':
+      return commandMessageCandidate(
+        {
+          ...base,
+          type: 'subagent_command_message',
+          payload: {
+            turnId,
+            agentId: boundedText(event.agentId, 256),
+            role: boundedText(event.role, 256),
+          },
+        },
+        event.message,
+        'subagent_command_message',
+      );
+    case 'subagent_approval_required':
+      if (!interactionBinding || !interactionSnapshot) return null;
+      return {
+        ...base,
+        type: 'subagent_approval_required',
+        payload: {
+          turnId,
+          agentId: boundedText(event.agentId, 256),
+          role: boundedText(event.role, 256),
+          interaction: interactionDtoFromSnapshot(
+            interactionSnapshot,
+            interactionBinding.publicInteractionId,
+            interactionBinding.revision,
+          ),
+        },
+      };
+    case 'subagent_completed': {
+      const result = event.result;
+      return {
+        ...base,
+        type: 'subagent_completed',
+        payload: {
+          turnId,
+          agentId: boundedText(result.agentId, 256),
+          ...(result.name ? { name: boundedText(result.name, 256) } : {}),
+          role: boundedText(result.role, 256),
+          status: result.status,
+          finalText: boundedText(result.finalText, 16_384),
+          ...(result.finalTextTruncated !== undefined ? { finalTextTruncated: result.finalTextTruncated } : {}),
+          toolsUsed: result.toolsUsed
+            .slice(0, 64)
+            .map((tool) => ({
+              toolName: boundedText(tool.toolName, 256),
+              count: boundedInteger(tool.count, 1_000_000),
+            })),
+          ...(result.usage ? { usage: normalizedUsagePayload(result.usage) } : {}),
+          ...(result.error ? { error: boundedText(result.error) } : {}),
+          ...(result.terminalCause ? { terminalCause: boundedText(String(result.terminalCause), 128) } : {}),
+          ...(event.async !== undefined ? { async: event.async } : {}),
+        },
+      };
+    }
+    case 'subagent_interrupted':
+      return {
+        ...base,
+        type: 'subagent_interrupted',
+        payload: {
+          turnId,
+          agentId: boundedText(event.agentId, 256),
+          role: boundedText(event.role, 256),
+          finalText: boundedText(event.finalText, 16_384),
+        },
+      };
+    case 'subagent_question':
+      return {
+        ...base,
+        type: 'subagent_question',
+        payload: {
+          turnId,
+          agentId: boundedText(event.runId, 256),
+          runId: boundedText(event.runId, 256),
+          messageId: boundedText(event.messageId, 256),
+          role: boundedText(event.role, 256),
+          ...(event.name ? { name: boundedText(event.name, 256) } : {}),
+          question: boundedText(event.question),
+          async: true,
+        },
+      };
+    case 'context_compaction_started':
+      return {
+        ...base,
+        type: 'context_compaction_started',
+        payload: {
+          turnId,
+          provider: boundedText(event.provider, 256),
+          sessionId: boundedText(event.sessionId, 256),
+          ...(event.inputTokensBefore !== undefined ? { inputTokensBefore: safeCounter(event.inputTokensBefore) } : {}),
+          ...(event.strategy ? { strategy: event.strategy } : {}),
+        },
+      };
+    case 'context_compaction_completed':
+      return {
+        ...base,
+        type: 'context_compaction_completed',
+        payload: {
+          turnId,
+          provider: boundedText(event.provider, 256),
+          sessionId: boundedText(event.sessionId, 256),
+          ...(event.inputTokensBefore !== undefined ? { inputTokensBefore: safeCounter(event.inputTokensBefore) } : {}),
+          ...(event.inputTokensAfter !== undefined ? { inputTokensAfter: safeCounter(event.inputTokensAfter) } : {}),
+          durationMs: boundedInteger(event.durationMs, 86_400_000),
+          ...(event.strategy ? { strategy: event.strategy } : {}),
+        },
+      };
+    case 'context_compaction_failed':
+      return {
+        ...base,
+        type: 'context_compaction_failed',
+        payload: {
+          turnId,
+          provider: boundedText(event.provider, 256),
+          sessionId: boundedText(event.sessionId, 256),
+          errorCategory: event.errorCategory,
+          durationMs: boundedInteger(event.durationMs, 86_400_000),
+          ...(event.strategy ? { strategy: event.strategy } : {}),
         },
       };
     case 'final':
@@ -2289,11 +2625,20 @@ function mapConversationEvent(
         payload: { turnId, outcome: 'completed', text: boundedText(event.finalText, 16_384) },
       };
     case 'error':
-      return { ...base, type: 'turn_failed', payload: { turnId, outcome: 'failed', reason: 'runtime_error' } };
+      return {
+        ...base,
+        type: 'turn_failed',
+        payload: {
+          turnId,
+          outcome: 'failed',
+          reason: errorReason(event.kind),
+          ...(event.finalText ? { finalText: boundedText(event.finalText, 16_384) } : {}),
+        },
+      };
     default:
       return null;
   }
 }
 
-export { createGatewayAssertion, interactionDtoFromSnapshot, isPublicEventEnvelope };
+export { createGatewayAssertion, interactionDtoFromSnapshot, isPublicEventEnvelope, mapConversationEvent };
 export type { SessionBinding };

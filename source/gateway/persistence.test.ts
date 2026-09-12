@@ -386,16 +386,48 @@ describe('P103C1 persistence corrections', () => {
     partialRestart.close();
   });
 
-  it('rejects deferred event families before sequencing or publication', async () => {
+  it('accepts M4 event families at the sequencing and publication boundary', async () => {
     const directory = path.join(createGatewayStorageLayout(root()).sessionsPath, 'journal');
     const journal = createGatewayEventJournal({ sessionId: 'session-a', directory });
-    await expect(
-      journal.append(
-        { sessionId: 'session-a', type: 'subagent_started' as never, payload: { turnId: 'turn-a' } },
-        { durability: 'critical' },
-      ),
-    ).rejects.toMatchObject({ code: 'conflict' });
-    expect(journal.highWater().lastAppendedSequence).toBe(0);
+    await journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'subagent_started',
+        payload: { turnId: 'turn-a', agentId: 'a', role: 'worker', task: 't' },
+      },
+      { durability: 'critical' },
+    );
+    expect(journal.highWater().lastAppendedSequence).toBe(1);
+    journal.close();
+  });
+
+  it('replays M4 event families when reconnecting from a cursor before them', async () => {
+    const directory = path.join(createGatewayStorageLayout(root()).sessionsPath, 'journal');
+    const journal = createGatewayEventJournal({ sessionId: 'session-a', directory });
+    const types = [
+      'retry',
+      'retry_exhausted',
+      'subagent_started',
+      'subagent_tool_started',
+      'subagent_text_turn',
+      'subagent_command_message',
+      'subagent_approval_required',
+      'subagent_completed',
+      'subagent_interrupted',
+      'subagent_question',
+      'context_compaction_started',
+      'context_compaction_completed',
+      'context_compaction_failed',
+    ] as const;
+    for (const type of types)
+      await journal.append({ sessionId: 'session-a', type, payload: { turnId: 'turn-a' } }, { durability: 'critical' });
+    const replayed: string[] = [];
+    const subscription = journal.subscribeFrom(0, (event) => replayed.push(event.type));
+    expect(subscription.kind).toBe('subscribed');
+    expect(subscription.kind === 'subscribed' ? subscription.replay.map((event) => event.type) : replayed).toEqual(
+      types,
+    );
+    if (subscription.kind === 'subscribed') subscription.unsubscribe();
     journal.close();
   });
 

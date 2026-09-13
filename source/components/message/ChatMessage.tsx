@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
-import { COLOR_ACCENT, COLOR_REASONING } from '../theme.js';
+import { COLOR_ACCENT, COLOR_REASONING, COLOR_USER_BACKGROUND } from '../theme.js';
 import type { Message } from '../../types/message.js';
 
 type Props = {
@@ -18,9 +18,12 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
           <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
         </>
       ) : msg.sender === 'user' ? (
-        <Text color={COLOR_ACCENT} bold>
-          ❯ {msg.text}
-        </Text>
+        <Box width="100%" backgroundColor={COLOR_USER_BACKGROUND} paddingX={1}>
+          <Text bold>
+            <Text color={COLOR_ACCENT}>❯ </Text>
+            {msg.text}
+          </Text>
+        </Box>
       ) : msg.sender === 'system' ? (
         <Text color={COLOR_REASONING}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (

@@ -3,9 +3,19 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
+import chalk from 'chalk';
 import ChatMessage from './ChatMessage.js';
+import { COLOR_USER_BACKGROUND } from '../theme.js';
 
 const stripAnsi = (s: string) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
+
+const hexToRgbEscape = (hex: string) => {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `\u001B[48;2;${r};${g};${b}m`;
+};
 
 it('ChatMessage renders reasoning messages with Markdown formatting', async () => {
   let lastFrame!: () => string | undefined;
@@ -61,4 +71,42 @@ it('ChatMessage renders user messages with prompt marker', async () => {
   await act(async () => {
     unmount();
   });
+});
+
+it('ChatMessage renders user messages on a background band', async () => {
+  // ink-testing-library's mock stdout disables colors at import time; raise
+  // chalk's level so the frame carries the real ANSI attributes. Level 3 keeps
+  // truecolor escapes, which the assertion below matches on.
+  const originalLevel = chalk.level;
+  chalk.level = 3;
+
+  try {
+    let lastFrame!: () => string | undefined;
+    let unmount!: () => void;
+
+    await act(async () => {
+      const result = render(
+        <ChatMessage
+          msg={{
+            id: 'user-1',
+            sender: 'user',
+            text: 'How do I run tests?',
+          }}
+        />,
+      );
+      lastFrame = result.lastFrame;
+      unmount = result.unmount;
+    });
+
+    // User messages carry the band background so they never read as another
+    // accent-colored header line.
+    const frame = lastFrame() || '';
+    expect(frame.includes(hexToRgbEscape(COLOR_USER_BACKGROUND))).toBe(true);
+
+    await act(async () => {
+      unmount();
+    });
+  } finally {
+    chalk.level = originalLevel;
+  }
 });

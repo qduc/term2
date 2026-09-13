@@ -48,6 +48,8 @@ export const COLOR_CODE_BACKGROUND = '#1e293b';
 // These name a role in this app rather than a generic rank, so a future change
 // to (say) reasoning text does not have to touch every subtle-gray caller.
 
+/** User messages: full-width background band, so they read as content blocks rather than another accent-colored header. */
+export const COLOR_USER_BACKGROUND = COLOR_BORDER;
 /** Model reasoning / thinking transcript. */
 export const COLOR_REASONING = COLOR_TEXT_SUBTLE;
 /** Tool stdout and rendered tool results. */

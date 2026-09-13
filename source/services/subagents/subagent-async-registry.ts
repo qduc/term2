@@ -241,7 +241,7 @@ export class SubagentAsyncRegistry {
         );
       if (role === 'worker')
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
-      if (role !== 'mentor' && role !== 'librarian' && role !== 'explorer') {
+      if (!['mentor', 'librarian', 'explorer', 'reviewer'].includes(role)) {
         throw new SubagentRegistryError('not_continuable', `Role ${role} cannot be continued`);
       }
       session = previous.session;

@@ -28,6 +28,18 @@ describe('loadRoleDefinition turn budgets', () => {
   });
 });
 
+describe('loadRoleDefinition reviewer', () => {
+  it('grants no direct workspace, shell, write, or web authority', () => {
+    const definition = loadRoleDefinition(
+      'reviewer',
+      settings({ 'agent.model': 'main-model', 'agent.provider': 'openai', 'memory.enabled': true }),
+    );
+
+    expect(definition).toMatchObject({ canRead: false, canWrite: false, canRunShell: false, canSearchWeb: false });
+    expect(definition.instructions).toContain('run_explorer');
+  });
+});
+
 describe('loadRoleDefinition ancillary tier reasoning', () => {
   it('defines explorer as an evidence collector without diagnostic or recommendation ownership', () => {
     const definition = loadRoleDefinition(
@@ -67,6 +79,7 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
     ['worker', 'balanced', 'medium'],
     ['explorer', 'cheap', 'low'],
     ['librarian', 'cheap', 'low'],
+    ['reviewer', 'smart', 'high'],
   ] as const)('%s uses agent.%sReasoningEffort', (role, tier, effort) => {
     const definition = loadRoleDefinition(
       role,

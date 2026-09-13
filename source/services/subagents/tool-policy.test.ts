@@ -313,6 +313,48 @@ describe('SubagentToolFactory memory authority', () => {
   });
 });
 
+describe('SubagentToolFactory reviewer role', () => {
+  const reviewer = () => createDefinition({ role: 'reviewer', canRead: false, canWrite: false });
+
+  function buildReviewerTools(runExplorer?: (task: string, signal?: AbortSignal) => Promise<any>) {
+    const settings = createMemorySettings(true);
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const factory = new SubagentToolFactory({ settings, logger: createMockLogger(), toolPolicy: policy });
+    if (runExplorer) factory.setExplorerRunner(runExplorer);
+    return factory.buildToolDefinitions(reviewer(), [], '', false, false, undefined, undefined, async () => 'answer');
+  }
+
+  it('provisions only run_explorer, even with memory enabled and an orchestrator channel', () => {
+    expect(buildReviewerTools(async () => ({})).map((tool) => tool.name)).toEqual(['run_explorer']);
+  });
+
+  it('provisions no tools when no explorer runner is wired', () => {
+    expect(buildReviewerTools().map((tool) => tool.name)).toEqual([]);
+  });
+
+  it('delegates run_explorer calls to the explorer runner with the call signal', async () => {
+    const runExplorer = vi.fn(async () => ({
+      agentId: 'explorer-1',
+      role: 'explorer',
+      status: 'completed' as const,
+      finalText: 'Found it in source/a.ts:12.',
+      filesChanged: [],
+      toolsUsed: [{ toolName: 'grep', count: 1 }],
+    }));
+    const [tool] = buildReviewerTools(runExplorer);
+    const signal = new AbortController().signal;
+
+    const output = await tool.execute({ task: 'locate a' }, undefined, { signal });
+
+    expect(runExplorer).toHaveBeenCalledWith('locate a', signal);
+    expect(output).toContain('Found it in source/a.ts:12.');
+  });
+});
+
 describe('SubagentToolFactory agent tool wrapping', () => {
   function buildFailingTool(callbacks: {
     onToolStart: (name: string) => void;

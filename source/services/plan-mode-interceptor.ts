@@ -13,7 +13,7 @@ export const installPlanModeInterceptor = (
 ): (() => void) => {
   // Subagent roles that cannot mutate the workspace (canWrite: false). The
   // `worker` role (and any future write-capable/custom role) is blocked.
-  const READ_ONLY_SUBAGENT_ROLES = new Set(['explorer', 'mentor', 'librarian']);
+  const READ_ONLY_SUBAGENT_ROLES = new Set(['explorer', 'mentor', 'librarian', 'reviewer']);
 
   const extractRole = (params: unknown): string | undefined => {
     let obj = params;
@@ -43,7 +43,7 @@ export const installPlanModeInterceptor = (
         (role !== undefined && !READ_ONLY_SUBAGENT_ROLES.has(role) && denials.has('delegated-write')) ||
         (role === undefined && denials.has('unknown-delegated-role'))
       ) {
-        return `Plan mode is active (read-only). The "${name}" tool is restricted to read-only roles (explorer, mentor, librarian) — the "${
+        return `Plan mode is active (read-only). The "${name}" tool is restricted to read-only roles (explorer, mentor, librarian, reviewer) — the "${
           role ?? 'unknown'
         }" role is disabled. Use a read-only subagent to investigate, then present an ordered implementation plan. Tell the user to exit plan mode to execute it.`;
       }

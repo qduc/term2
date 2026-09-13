@@ -31,6 +31,7 @@ import { createCreateFileToolDefinition } from '../../tools/file/create-file.js'
 import { createShellToolDefinition } from '../../tools/system/shell.js';
 import { createActivateSkillToolDefinition } from '../../tools/agent/activate-skill.js';
 import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orchestrator.js';
+import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tools/agent/run-explorer.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
@@ -1036,6 +1037,7 @@ export class SubagentToolFactory {
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
+  #runExplorer?: ExplorerRunner;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -1058,6 +1060,15 @@ export class SubagentToolFactory {
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
+  /**
+   * Supplies the explorer spawn path for the reviewer's `run_explorer` tool.
+   * Set after construction because the runners that execute explorers are
+   * built from this factory.
+   */
+  setExplorerRunner(runExplorer: ExplorerRunner): void {
+    this.#runExplorer = runExplorer;
+  }
+
   buildToolDefinitions(
     definition: SubagentDefinition,
     filesChanged: string[],
@@ -1076,6 +1087,14 @@ export class SubagentToolFactory {
 
     // Mentor is advisory-only; it must never inherit incidental capabilities.
     if (definition.role === 'mentor') return tools;
+
+    // Reviewer's only capability is delegating evidence collection to
+    // explorers; it receives no skills, memory, orchestrator, or workspace tools.
+    if (definition.role === 'reviewer') {
+      if (this.#runExplorer) tools.push(createRunExplorerToolDefinition(this.#runExplorer));
+      registerToolFormatters(tools);
+      return tools;
+    }
 
     // This callback is supplied exclusively by the async execution-segment
     // adapter. Sync and nested runners never receive it.

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -112,6 +113,22 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     onEvent: onEventWithPeek,
     skillsService: deps.skillsService,
     toolOwnership: deps.toolOwnership,
+  });
+
+  // Reviewer explorers are fresh, contained child runs: their events are not
+  // forwarded, so they never surface as orphan activity in the parent session.
+  toolFactory.setExplorerRunner((task, signal) => {
+    const agentId = randomUUID();
+    const definition = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
+    return executionRunner.runInSession(
+      agentId,
+      { role: 'explorer', task, signal, parentTool: 'run_explorer' },
+      definition,
+      new SubagentSession(agentId, 'explorer'),
+      undefined,
+      signal,
+      () => {},
+    );
   });
 
   const mentorSession = new SubagentSession('mentor', 'mentor');

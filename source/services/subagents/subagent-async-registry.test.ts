@@ -609,19 +609,22 @@ it('lets a continuation claim a free name while preserving its runId and worker 
   registry.dispose();
 });
 
-it('reuses the same run id and session only for a completed continuation', async () => {
-  const sessions: unknown[] = [];
-  const registry = make(async ({ session, request }) => {
-    sessions.push(session);
-    return result(request.role);
-  });
-  const first = registry.startRun({ role: 'explorer', task: 'one' });
-  await registry.getResult(first.runId);
-  const second = registry.startRun({ role: 'explorer', task: 'two', continueRunId: first.runId });
-  expect(second.runId).toBe(first.runId);
-  await registry.getResult(second.runId);
-  expect(sessions[0]).toBe(sessions[1]);
-});
+it.each(['explorer', 'reviewer'])(
+  'reuses the same run id and session for a completed %s continuation',
+  async (role) => {
+    const sessions: unknown[] = [];
+    const registry = make(async ({ session, request }) => {
+      sessions.push(session);
+      return result(request.role);
+    });
+    const first = registry.startRun({ role, task: 'one' });
+    await registry.getResult(first.runId);
+    const second = registry.startRun({ role, task: 'two', continueRunId: first.runId });
+    expect(second.runId).toBe(first.runId);
+    await registry.getResult(second.runId);
+    expect(sessions[0]).toBe(sessions[1]);
+  },
+);
 
 it('resolves a definition once per fresh spawn and keeps it across a continuation', async () => {
   const picks = ['pool-a', 'pool-b'];

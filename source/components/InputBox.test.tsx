@@ -1481,9 +1481,8 @@ it.sequential('InputBox allows backspace and delete keys to modify input in prov
   });
   await flushReactUpdates(10);
 
-  // Navigate up to "Add Custom Provider" (wrapping to the second-to-last item) and press Enter
-  await pressKey('\u001B[A'); // Up Arrow (wraps to Reorder Providers)
-  await pressKey('\u001B[A'); // Up Arrow (moves to Add Custom Provider)
+  // Navigate up to "Add Custom Provider" (wrapping to the last item) and press Enter
+  await pressKey('\u001B[A'); // Up Arrow (wraps to Add Custom Provider)
   await pressKey('\r'); // Enter
 
   let frame = await waitFor(lastFrame, (f) => f.includes('provider_selection'));

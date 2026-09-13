@@ -18,8 +18,7 @@ export type ProviderSelectionPhase =
   | 'wizard_url'
   | 'wizard_key'
   | 'confirm_delete'
-  | 'confirm_discard'
-  | 'reorder';
+  | 'confirm_discard';
 
 export interface CustomProviderDraft {
   name: string;

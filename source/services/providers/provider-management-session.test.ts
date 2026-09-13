@@ -24,14 +24,6 @@ describe('ProviderManagementSession public facade', () => {
     vi.clearAllMocks();
   });
 
-  it('persists an explicit provider order through the session seam', () => {
-    const session = new ProviderManagementSession(settings);
-
-    session.saveOrder(['openai', 'openrouter']);
-
-    expect(settings.setPersistent).toHaveBeenCalledWith('providerOrder', ['openai', 'openrouter']);
-  });
-
   it('forwards list() to the provider-service loader and returns its items', () => {
     const items = [{ kind: 'builtin', id: 'openai', label: 'OpenAI' }] as any;
     vi.mocked(loadProviderItems).mockReturnValue(items);

@@ -27,8 +27,4 @@ export class ProviderManagementSession {
   delete(providerId: string): void {
     deleteCustomProvider(this.#settings, providerId);
   }
-
-  saveOrder(providerIds: readonly string[]): void {
-    this.#settings.setPersistent('providerOrder', [...providerIds]);
-  }
 }

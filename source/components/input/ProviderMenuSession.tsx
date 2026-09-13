@@ -68,8 +68,7 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
             if (event.command === 'backspace' || event.command === 'delete') {
               if (editingWizard) applyMenuEditorEvent(controller, event);
               else providers.requestDelete();
-            } else if (event.command === 'reorder-up') providers.moveProviderUp();
-            else if (event.command === 'reorder-down') providers.moveProviderDown();
+            }
             return keep();
           case 'accept':
             if (

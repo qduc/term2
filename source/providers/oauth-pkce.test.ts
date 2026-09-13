@@ -136,6 +136,76 @@ describe('runPkceLoopbackLogin pasted redirect', () => {
     expect(new URLSearchParams(fetchImpl.mock.calls[0][1].body).get('code')).toBe('pasted-code');
   });
 
+  it('exchanges a pasted bare authorization code', async () => {
+    const port = await freePort();
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'issued' }));
+    const pasteInput = new PassThrough();
+    let authorizeUrl = '';
+
+    const login = runPkceLoopbackLogin(pkceConfig(port), {
+      fetchImpl: fetchImpl as typeof fetch,
+      openBrowser: () => {},
+      pasteInput,
+      onPrompt: (url) => {
+        authorizeUrl = url;
+      },
+    });
+
+    await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
+    pasteInput.write('  "ac_bare-Code.123%2Fx"  \n');
+
+    await expect(login).resolves.toMatchObject({ access_token: 'issued' });
+    expect(new URLSearchParams(fetchImpl.mock.calls[0][1].body).get('code')).toBe('ac_bare-Code.123/x');
+  });
+
+  it('checks state on a pasted query string that carries one', async () => {
+    const port = await freePort();
+    const pasteInput = new PassThrough();
+    let authorizeUrl = '';
+    const login = runPkceLoopbackLogin(pkceConfig(port), {
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openBrowser: () => {},
+      pasteInput,
+      onPrompt: (url) => {
+        authorizeUrl = url;
+      },
+    });
+
+    await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
+    pasteInput.write('?code=stolen&state=not-our-state\n');
+
+    await expect(login).rejects.toThrow(/state mismatch/);
+  });
+
+  it('ignores a pasted line that is neither a URL nor a code', async () => {
+    const port = await freePort();
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'issued' }));
+    const pasteInput = new PassThrough();
+    const rejected: string[] = [];
+    let authorizeUrl = '';
+
+    const login = runPkceLoopbackLogin(pkceConfig(port), {
+      fetchImpl: fetchImpl as typeof fetch,
+      openBrowser: () => {},
+      pasteInput,
+      onPasteRejected: (message) => {
+        rejected.push(message);
+      },
+      onPrompt: (url) => {
+        authorizeUrl = url;
+      },
+    });
+
+    await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
+    pasteInput.write('not a code\n');
+    await vi.waitFor(() => expect(rejected.length).toBeGreaterThan(0));
+    expect(rejected[0]).toMatch(/code/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    pasteInput.write('real-code\n');
+    await expect(login).resolves.toMatchObject({ access_token: 'issued' });
+  });
+
   it('ignores a non-callback paste and still accepts a later valid URL', async () => {
     const port = await freePort();
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'issued' }));

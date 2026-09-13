@@ -321,7 +321,7 @@ function oauthLoginIo(providerLabel: string) {
       console.log(`Opening your browser to log in to ${providerLabel}.`);
       console.log(`If it does not open, visit:\n${url}\n`);
       console.log(
-        'If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar, paste it here, and press Enter.',
+        'If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar (or just its code), paste it here, and press Enter.',
       );
     },
   };

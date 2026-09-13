@@ -18,6 +18,7 @@ import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-
 import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
+import type { SessionBrowser } from '../services/conversation/session-browser.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -38,6 +39,8 @@ export interface SubagentBridgeDeps {
   /** Session-owned delivery path for approvals after foreground adoption. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  /** Root session transcript browser, lent to the librarian subagent. */
+  sessionBrowser?: SessionBrowser;
 }
 
 type SubagentEventScope = 'foreground' | 'background';
@@ -78,6 +81,7 @@ export class SubagentBridge {
         skillsService: deps.skillsService,
         toolOwnership: deps.toolOwnership,
         readOnly: deps.readOnly,
+        ...(deps.sessionBrowser ? { sessionBrowser: deps.sessionBrowser } : {}),
         ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
       });
     }

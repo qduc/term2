@@ -13,6 +13,7 @@ import type {
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
 import { createSubagentRuntime, type SubagentRuntime } from './runtime.js';
+import type { SessionBrowser } from '../conversation/session-browser.js';
 import { isAbortLike, safeEmit } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-adapter.js';
@@ -51,6 +52,7 @@ export class SubagentManager {
     nestedCompatibility?: NestedToolCompatibilityState;
     backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
     readOnly?: boolean;
+    sessionBrowser?: SessionBrowser;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;

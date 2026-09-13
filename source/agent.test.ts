@@ -194,7 +194,7 @@ it('includes prior-session safety guidance for an interactive orchestrator root'
   expect(definition.instructions).toContain('stale or untrusted');
 });
 
-it('advertises memory synthesis instead of librarian delegation', () => {
+it('advertises librarian delegation only when persistent memory is enabled', () => {
   const enabled = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
     loggingService: mockLogger,
@@ -206,7 +206,7 @@ it('advertises memory synthesis instead of librarian delegation', () => {
     ...orchestratorSubagentDeps,
   });
 
-  expect(enabled.instructions).not.toContain('`librarian`');
+  expect(enabled.instructions).toContain('`librarian`');
   expect(enabled.instructions).toContain('Use memory_synthesize when the task depends on several memories');
   expect(disabled.instructions).not.toContain('`librarian`');
 });

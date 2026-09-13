@@ -95,6 +95,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(
       getSubagentDelegationAddendum({
         memoryEnabled,
+        sessionsEnabled: sessionBrowserEnabled,
         orchestratorMode: false,
         foregroundEnabled: runSubagentForegroundEnabled,
         backgroundEnabled: runSubagentAsyncEnabled,

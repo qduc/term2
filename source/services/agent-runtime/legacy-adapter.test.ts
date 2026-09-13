@@ -80,14 +80,14 @@ describe('adaptLegacyRole', () => {
     const resolved = adaptLegacyRole('librarian', settings());
     const def = adaptLegacyDefinition(resolved);
 
-    expect(resolved.name).toBe('Memory Librarian');
+    expect(resolved.name).toBe('Librarian');
     expect(def.role).toBe('librarian');
     expect(def.canRead).toBe(false);
     expect(resolved.permissions.canWrite).toBe(false);
     expect(resolved.permissions.canRunShell).toBe(false);
     expect(resolved.permissions.canSearchWeb).toBe(false);
     expect(resolved.permissions.canUseNestedAgents).toBe(false);
-    expect(resolved.instructions).toContain('memory librarian');
+    expect(resolved.instructions).toContain('You are the librarian');
   });
 
   it('rejects the librarian when persistent memory is disabled', () => {

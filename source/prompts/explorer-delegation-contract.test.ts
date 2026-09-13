@@ -39,6 +39,6 @@ describe('parent-facing explorer delegation contract', () => {
     expect(explorer).toContain('breadth or depth, never both');
     expect(worker).toContain('one cohesive implementation unit');
     expect(mentor).toContain('one decision or challenge question');
-    expect(librarian).toContain('one retrieval objective or memory-maintenance topic boundary');
+    expect(librarian).toContain('one history question or memory-maintenance topic boundary');
   });
 });

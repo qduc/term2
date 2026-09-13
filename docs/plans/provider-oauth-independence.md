@@ -141,8 +141,11 @@ not guesses, but re-verify before relying on them.
 
 - Issuer `https://auth.x.ai`; authorize `/oauth2/authorize`; token
   `/oauth2/token`; device code `/oauth2/device/code`; PKCE `S256` only.
-- Public desktop client id `b1a00492-073a-47ea-816f-4c329264a828`; registered
-  redirect `http://localhost:22255/callback`.
+- Public desktop client id `b1a00492-073a-47ea-816f-4c329264a828`. Redirect,
+  as of 2026-09-13: `http://127.0.0.1:<ephemeral port>/callback` (what
+  `grok login --oauth` 1.0.30 sends). The earlier
+  `http://localhost:22255/callback` is now rejected with "redirect_uri does not
+  match any registered URI", so the port question below is moot for Grok.
 - Subscription traffic goes to `https://cli-chat-proxy.grok.com/v1`, which
   speaks OpenAI chat completions (with a `reasoning_content` lane).
 - That proxy **rejects unrecognised clients with HTTP 426**, so

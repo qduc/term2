@@ -25,9 +25,15 @@ export const GROK_OIDC_ISSUER = 'https://auth.x.ai';
 export const GROK_OIDC_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
 export const GROK_AUTHORIZE_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/authorize`;
 export const GROK_TOKEN_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/token`;
-/** The authorization server only accepts this exact loopback callback. */
-export const GROK_REDIRECT_PORT = 22255;
-export const GROK_REDIRECT_URI = `http://localhost:${GROK_REDIRECT_PORT}/callback`;
+/**
+ * auth.x.ai stopped accepting `http://localhost:22255/callback` for this client
+ * ("redirect_uri does not match any registered URI"). The grok CLI (1.0.30)
+ * now sends `http://127.0.0.1:<ephemeral port>/callback`, so the host must be
+ * the literal IP and any loopback port is accepted.
+ */
+export function grokRedirectUri(port: number): string {
+  return `http://127.0.0.1:${port}/callback`;
+}
 export const GROK_SCOPES = [
   'openid',
   'profile',
@@ -332,11 +338,10 @@ export const GROK_PKCE_CONFIG: PkceLoginConfig = {
   clientId: GROK_OIDC_CLIENT_ID,
   authorizeEndpoint: GROK_AUTHORIZE_ENDPOINT,
   tokenEndpoint: GROK_TOKEN_ENDPOINT,
-  redirectPorts: [GROK_REDIRECT_PORT],
-  redirectUriFor: () => GROK_REDIRECT_URI,
+  redirectPorts: [0],
+  redirectUriFor: grokRedirectUri,
   callbackPath: '/callback',
   scopes: GROK_SCOPES,
-  portConflictHint: 'often a running `grok login`',
 };
 
 /**

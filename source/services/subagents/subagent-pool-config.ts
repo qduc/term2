@@ -12,6 +12,7 @@ export const ROLE_ANCILLARY_TIERS: Record<Exclude<SupportedSubagentRole, 'mentor
   explorer: 'cheap',
   worker: 'balanced',
   librarian: 'cheap',
+  reviewer: 'smart',
 };
 
 export function getAncillaryTierForRole(role: SupportedSubagentRole | string): AncillaryModelTier {

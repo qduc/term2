@@ -204,7 +204,7 @@ export class SubagentAsyncRegistry {
   startRun(request: SubagentRequest, _legacyParentSignal?: AbortSignal): SubagentRunHandle {
     if (this.#disposed) throw new Error('Subagent async registry is disposed');
     const role = request.role;
-    if (!['explorer', 'worker', 'mentor', 'librarian'].includes(role)) {
+    if (!['explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${role}`);
     }
     const name = request.name;
@@ -345,7 +345,7 @@ export class SubagentAsyncRegistry {
     if (this.#runs.has(lease.runId) || this.#evicted.has(lease.runId)) {
       throw new Error(`Async subagent run id ${lease.runId} is already retained.`);
     }
-    if (!['explorer', 'worker', 'mentor', 'librarian'].includes(request.role)) {
+    if (!['explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(request.role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${request.role}`);
     }
     if (

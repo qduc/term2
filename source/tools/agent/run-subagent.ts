@@ -30,7 +30,8 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
     'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
     'The subagent does not see your conversation or reasoning. ' +
     "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
-    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question.\n\n' +
+    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. ' +
+    'For reviewer, describe the artifact to review (diff range, files, plan) and the review criteria; it gathers evidence only through explorers.\n\n' +
     'For isolated worker edits, create a git worktree under the workspace root first ' +
     '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
     '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
@@ -40,9 +41,9 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
   );
 }
 
-const FOREGROUND_ROLES = ['explorer', 'worker'] as const;
-const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor'] as const;
-const ALL_ROLES = ['explorer', 'worker', 'mentor'] as const;
+const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer'] as const;
+const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer'] as const;
+const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer'] as const;
 const SUBAGENT_TASK_DESCRIPTION =
   'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
 

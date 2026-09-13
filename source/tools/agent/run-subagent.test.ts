@@ -226,7 +226,7 @@ it('schema requires role and task', () => {
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  for (const role of ['explorer', 'worker']) {
+  for (const role of ['explorer', 'worker', 'reviewer']) {
     expect(tool.parameters.safeParse({ execution: 'foreground', role, task: 'do work' }).success).toBe(true);
   }
   expect(tool.parameters.safeParse({ execution: 'foreground', role: 'librarian', task: 'do work' }).success).toBe(

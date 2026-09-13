@@ -23,10 +23,10 @@ import {
 
 import { relaxedNumber } from '../utils.js';
 
-const ASYNC_ROLES = ['explorer', 'worker', 'mentor'] as const;
+const ASYNC_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
 
 const runSubagentAsyncSchema = z.object({
-  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, or mentor.'),
+  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, mentor, or librarian.'),
   task: z
     .string()
     .describe(
@@ -202,7 +202,7 @@ export function createRunSubagentAsyncToolDefinition(
       'Instead, end your turn and wait for the harness completion notification, which inlines the full result so you can continue without a second tool call. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call tools.get_subagent_result(...) inside run_code if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
-      'Fresh runs support explorer, worker, and mentor. ' +
+      'Fresh runs support explorer, worker, mentor, and librarian. ' +
       'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,

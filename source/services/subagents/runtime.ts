@@ -15,6 +15,7 @@ import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
+import type { SessionBrowser } from '../conversation/session-browser.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -31,6 +32,7 @@ export interface SubagentRuntimeDeps {
   /** Session-owned queue/control sink for pauses from adopted child runs. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
+  sessionBrowser?: SessionBrowser;
 }
 
 export interface SubagentRuntime {
@@ -79,6 +81,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     skillsService: deps.skillsService,
     nestedCompatibility,
     readOnly: deps.readOnly,
+    sessionBrowser: deps.sessionBrowser,
   });
 
   const roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();

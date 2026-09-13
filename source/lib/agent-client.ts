@@ -736,6 +736,7 @@ export class AgentClient {
         executionContext: deps.executionContext,
         sessionContextService: this.#sessionContextService,
         readOnly: deps.readOnly,
+        ...(deps.sessionBrowser ? { sessionBrowser: deps.sessionBrowser } : {}),
         chat: (message, options) => this.chat(message, options),
         // Factory lives here (not in SubagentBridge) so each subagent gets a
         // lightweight transient client that shares logger/settings/executionContext

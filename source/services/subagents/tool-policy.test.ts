@@ -19,6 +19,7 @@ import {
   createSessionContextService,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
+import type { SessionBrowser } from '../conversation/session-browser.js';
 
 function createDefinition(overrides: Partial<SubagentDefinition>): SubagentDefinition {
   return {
@@ -278,6 +279,29 @@ describe('SubagentToolFactory memory authority', () => {
       'memory_update',
       'memory_delete',
     ]);
+  });
+
+  it('lends the session browser to the librarian only', () => {
+    const settings = createMemorySettings();
+    const factory = new SubagentToolFactory({
+      settings,
+      logger: createMockLogger(),
+      toolPolicy: new SubagentToolPolicy({
+        settings,
+        logger: createMockLogger(),
+        sessionContextService: createSessionContextService(),
+      }),
+      sessionBrowser: {} as SessionBrowser,
+    });
+    const names = (role: string) =>
+      factory.buildToolDefinitions(createDefinition({ role }), [], '', false).map((tool) => tool.name);
+    const sessionTools = ['session_list', 'session_search', 'session_read'];
+
+    expect(names('librarian')).toEqual(expect.arrayContaining(sessionTools));
+    for (const role of ['explorer', 'worker']) {
+      expect(names(role).filter((name) => name.startsWith('session_'))).toEqual([]);
+    }
+    expect(buildToolNames(createDefinition({ role: 'librarian' })).filter((n) => n.startsWith('session_'))).toEqual([]);
   });
 
   it('gives librarian memory-specific guidance without automatic context injection', () => {

@@ -79,9 +79,16 @@ it('retains worker autonomy without mandatory pre-delegation ceremony', () => {
   expect(result).not.toContain('Before any `run_subagent` call, plan silently');
 });
 
-it('uses the direct synthesis operation instead of advertising librarian delegation', () => {
-  const result = getSubagentDelegationAddendum({ memoryEnabled: true });
-  expect(result.includes('librarian')).toBe(false);
+it('routes prior-session history digging to the librarian when session tools exist', () => {
+  const result = getSubagentDelegationAddendum({ memoryEnabled: true, sessionsEnabled: true });
+  expect(result).toContain('from prior sessions or several memories → `librarian`');
+  expect(result).toContain('- `librarian`:');
+});
+
+it('routes memory-only history to the librarian without promising transcripts', () => {
+  const result = getSubagentDelegationAddendum({ memoryEnabled: true, sessionsEnabled: false });
+  expect(result).toContain('several memories, or memory maintenance → `librarian`');
+  expect(result).not.toContain('prior-session transcripts');
 });
 
 it('does not advertise the librarian when persistent memory is disabled', () => {

@@ -45,6 +45,8 @@ import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-polic
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { ShellSandboxRunner } from '../../utils/shell/sandbox/sandbox-policy.js';
+import type { SessionBrowser } from '../conversation/session-browser.js';
+import { createSessionBrowserToolDefinitions } from '../../tools/session-browser/session-browser-tools.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 
@@ -1036,6 +1038,7 @@ export class SubagentToolFactory {
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
+  #sessionBrowser?: SessionBrowser;
 
   constructor(deps: {
     settings: ISettingsService;
@@ -1046,6 +1049,8 @@ export class SubagentToolFactory {
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
     shellSandboxRunner?: ShellSandboxRunner;
+    /** Prior-session transcript browser; provisioned to the librarian only. */
+    sessionBrowser?: SessionBrowser;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;
@@ -1055,6 +1060,7 @@ export class SubagentToolFactory {
     this.#nestedCompatibility = deps.nestedCompatibility;
     this.#readOnly = deps.readOnly ?? false;
     this.#shellSandboxRunner = deps.shellSandboxRunner;
+    this.#sessionBrowser = deps.sessionBrowser;
     this.#memoryCapabilities = new MemoryCapabilityBuilder(deps.settings);
   }
 
@@ -1090,6 +1096,12 @@ export class SubagentToolFactory {
     tools.push(
       ...this.#memoryCapabilities.build({ kind: 'subagent', role: definition.role }, { projectPath: cwd }).tools,
     );
+
+    // History digging belongs to the librarian so raw transcript pages stay
+    // out of the parent's context.
+    if (definition.role === 'librarian' && this.#sessionBrowser) {
+      tools.push(...createSessionBrowserToolDefinitions(this.#sessionBrowser));
+    }
 
     // Extract resolved scopes from definition
     const fsReadScope = definition.filesystemScope?.read;

@@ -240,6 +240,31 @@ Keep the old role implementation available for direct/internal callers until a
 separate cleanup decision removes it completely. The candidate implementation
 and its real-run harness are preserved on the `librarian-routing` branch.
 
+## Revival as history librarian (2026-09-13)
+
+The role is advertised to the root again, with a changed job. The experiments
+above measured memory-only retrieval, where one `memory_synthesize` call fits
+the whole answer and delegation buys little. Prior-session transcripts are the
+opposite case: `session_search`/`session_read` return large, noisy pages, and
+the root was paging them into its own context because nothing else could.
+
+- The librarian now receives `session_list`/`session_search`/`session_read`
+  (lent from the root's `SessionBrowser` through `SubagentBridge` →
+  `SubagentToolFactory`; interactive root sessions only, since non-interactive
+  runs compose no browser). No other subagent role receives them.
+- `librarian` is back in the `run_subagent` role enums, foreground
+  parallel-safe, and advertised in the delegation addendum when memory is
+  enabled. The trigger names history reconstruction from prior sessions or
+  several memories; single known lookups stay with the root.
+- `memory_synthesize` is unchanged for memory-only synthesis.
+
+Unmeasured: natural invocation rate. This change is still a prompt-level
+trigger, which the first experiment found produced zero invocations for
+memory-only work. If session digging still stays in the root, the next
+candidate is a tool-level affordance on `session_search` results (the seam
+that worked for `memory_synthesize`), benchmarked on a task that depends on
+several prior sessions.
+
 ## Reproduction assets
 
 - `task-prompt.txt` — natural coding prompt

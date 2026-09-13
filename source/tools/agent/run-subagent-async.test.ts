@@ -64,11 +64,9 @@ it('run_subagent_async tool guidance treats a running handle as successful non-d
 it('run_subagent_async schema accepts supported roles', () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
 
-  for (const role of ['explorer', 'mentor']) {
+  for (const role of ['explorer', 'mentor', 'worker', 'librarian']) {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
-  expect(tool.parameters.safeParse({ role: 'worker', task: 'do work' }).success).toBe(true);
-  expect(tool.parameters.safeParse({ role: 'librarian', task: 'do work' }).success).toBe(false);
   expect(tool.parameters.safeParse({ role: 'unknown', task: 'do work' }).success).toBe(false);
 });
 

@@ -134,7 +134,8 @@ const RUN_CODE_DESCRIPTION =
   'but it is included when the script fails or times out. The code runs in an isolated ' +
   'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
   'run immediately. Tools that require user approval present the existing approval prompt and resume this script after ' +
-  'a decision; denial is catchable. Some tools are structurally unavailable inside scripts; those remain direct tools.\n\n' +
+  'a decision; denial is catchable. The catalogue below is the complete set of tools a script can call: a name that is ' +
+  'absent from it is not available inside the script, even when the direct tool surface offers it.\n\n' +
   `Each script may admit at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls. Track progress and split large work into chunks; catch individual ` +
   'failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error ' +
   'reports calls admitted and calls remaining: return the partial results and start another run_code call only for ' +
@@ -143,7 +144,8 @@ const RUN_CODE_DESCRIPTION =
   'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
   '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
   'If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; ' +
-  'for a large artifact, use line ranges or a focused `grep` projection. A scripted `read_file` result may itself have ' +
+  'for a large artifact, read line ranges or the fields you need instead of transferring the whole value. A scripted ' +
+  '`read_file` result may itself have ' +
   '`truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. ' +
   'Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript ' +
   'syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` ' +

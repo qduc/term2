@@ -79,6 +79,11 @@ export interface RunCodeNestedCallCounts {
   calls: number;
   schemaLookups: number;
   ok: number;
+  /**
+   * Unknown-name rejections: ledger rejections plus the terminal pre-dispatch
+   * rejection the sandbox raises before dispatch, which the ledger cannot
+   * observe. It can therefore exceed `calls`, which counts dispatched calls.
+   */
   unknownTool: number;
   invalidParams: number;
   approvalDenied: number;
@@ -132,7 +137,10 @@ const NESTED_BUCKET_BY_OUTCOME: Record<RunCodeCallRecord['outcome'], NestedBucke
 
 type NestedBucket = Exclude<keyof RunCodeNestedCallCounts, 'calls' | 'schemaLookups'>;
 
-const summarizeNestedCalls = (calls: readonly RunCodeCallRecord[]): RunCodeNestedCallCounts => {
+const summarizeNestedCalls = (
+  calls: readonly RunCodeCallRecord[],
+  terminalDiagnostic?: RunCodeDiagnosticCode,
+): RunCodeNestedCallCounts => {
   const counts: RunCodeNestedCallCounts = {
     calls: 0,
     schemaLookups: 0,
@@ -152,6 +160,9 @@ const summarizeNestedCalls = (calls: readonly RunCodeCallRecord[]): RunCodeNeste
     counts.calls += 1;
     counts[bucket] += 1;
   }
+  // A rejected name never reaches the ledger, so the terminal diagnostic is the
+  // only evidence that one was attempted.
+  if (terminalDiagnostic === 'unknown_tool' && counts.unknownTool === 0) counts.unknownTool = 1;
   return counts;
 };
 
@@ -241,7 +252,7 @@ export const buildRunCodeCompletionMeta = (input: RunCodeCompletionInput): LogMe
     sourceBytes: Buffer.byteLength(input.code, 'utf8'),
     sourceLines: input.code.length === 0 ? 0 : input.code.split('\n').length,
     sourceDigest: digestSource(input.code),
-    nested: summarizeNestedCalls(calls),
+    nested: summarizeNestedCalls(calls, classification.diagnosticCode),
     effectReceipts: summarizeEffectReceipts(receipts),
   };
 };

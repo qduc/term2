@@ -57,6 +57,12 @@ describe('renderToolsHeader', () => {
     expect(essentialIndex).toBeLessThan(otherIndex);
   });
 
+  it('states that the listed catalogue is the whole surface', () => {
+    const text = header([tool({ name: 'echo' })]);
+
+    expect(text).toContain('a name that is not listed is not available inside the script');
+  });
+
   it('reports failed conversion, union root, and non-object root schemas honestly as unavailable', () => {
     const text = header([
       tool({

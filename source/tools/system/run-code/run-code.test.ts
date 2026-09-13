@@ -875,6 +875,9 @@ describe('run_code', () => {
     expect(description).toContain('share the 65,536-byte admission limit');
     expect(description).not.toContain('apply_patch directly');
     expect(description).not.toContain('call it directly as a tool');
+    // The header is the only place that may name a search tool: a static mention
+    // of `grep` recommends a member an editing-surface registry does not have.
+    expect(description).not.toContain('grep');
   });
 
   it('explains that a successful script with no return value produces no result', async () => {
@@ -1122,6 +1125,7 @@ describe('run_code', () => {
     expect(description).toContain('tools.echo');
     expect(description).not.toContain('run_subagent');
     expect(description).not.toContain('tools.shell(');
+    expect(description).toContain('a name that is not listed is not available inside the script');
     expect(description).toContain('Auto-approved tools run immediately');
     expect(description).toContain('present the existing approval prompt and resume this script');
     expect(description).not.toContain('requires user approval is unavailable from inside a script');
@@ -1294,7 +1298,39 @@ describe('run_code', () => {
       expect.objectContaining({
         outcome: 'nested-validation',
         failureClass: 'unknown-tool',
-        nested: expect.objectContaining({ calls: 0, unknownTool: 0 }),
+        // No call was dispatched, so calls stays 0; the rejection itself is
+        // counted because the sandbox raises it before dispatch, leaving the
+        // terminal diagnostic as the only evidence that a name was attempted.
+        nested: expect.objectContaining({ calls: 0, unknownTool: 1 }),
+      }),
+    );
+  });
+
+  it('classifies a failed describe of an unknown name as an unknown-tool rejection', async () => {
+    const logger = logging();
+    const inspect = tool({ name: 'inspect' });
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [inspect],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([inspect]),
+    });
+
+    await definition.execute({
+      code: 'return await tools.describe("notAThing");',
+      description: 'completion telemetry',
+      timeout_ms: 60_000,
+    } as never);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        outcome: 'nested-validation',
+        failureClass: 'unknown-tool',
+        diagnosticCode: 'unknown_tool',
+        // The rejected lookup stays out of the ledger, so it is still neither a
+        // call nor a schema lookup; only the rejection itself is counted.
+        nested: expect.objectContaining({ calls: 0, unknownTool: 1, schemaLookups: 0 }),
       }),
     );
   });

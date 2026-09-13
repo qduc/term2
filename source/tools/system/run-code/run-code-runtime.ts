@@ -489,6 +489,10 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const consoleValues: JsonValue[][] = [];
     const sessionId = getConversationSessionId(input.context);
     const mediaReferences = createMediaReferenceStore();
+    // A script can catch a rejected `describe` and keep running, so the rejection
+    // cannot fail the run or enter the call ledger. It is carried to the
+    // execution instead, which is the only place the diagnostic survives.
+    let rejectedUnknownName: string | undefined;
 
     const record = (
       tool: string,
@@ -575,10 +579,12 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         const tool = registry.find((candidate) => candidate.name === name);
         if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
           const described = registry.find((candidate) => candidate.name === payload.params);
-          if (!described)
+          if (!described) {
+            rejectedUnknownName = payload.params;
             return failed(
               `Unknown tool "${payload.params}". Available: ${registry.map((entry) => entry.name).join(', ')}`,
             );
+          }
           record(name, 'describe', started);
           return { kind: 'result', result: { ok: true, result: describeTool(described) } as JsonValue };
         }
@@ -838,7 +844,14 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         ? { ...result, output: mediaReferences.resolve(result.output) as JsonValue }
         : result;
     const attachments: RunCodeAttachment[] = [];
-    const execution = createRunCodeExecution(resolvedResult, calls, receipts, consoleValues, attachments);
+    const execution = createRunCodeExecution(
+      resolvedResult,
+      calls,
+      receipts,
+      consoleValues,
+      attachments,
+      rejectedUnknownName ? 'unknown_tool' : undefined,
+    );
     emitRunCodeCompletionTelemetry(loggingService, {
       code: input.code,
       execution,

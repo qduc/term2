@@ -209,7 +209,10 @@ default log level. The older `run_code execution finished` line stays, at
 Fields: `outcome`, `hostErrorCode`, `failureClass`, `durationMs`, `timeoutMs`,
 `sourceBytes`, `sourceLines`, `sourceDigest` (sha256, first 16 hex characters),
 `nested` counts by ledger outcome, `effectReceipts` counts by action outcome,
-and `sessionId`/`runId` correlation.
+and `sessionId`/`runId` correlation. `nested.calls` and `nested.schemaLookups`
+count dispatched calls only, so they agree with the rendered call summary;
+`nested.unknownTool` additionally counts the terminal unknown-name rejection,
+which the sandbox raises before dispatch and the ledger therefore never sees.
 
 `outcome` is the requested set — `success`, `parse`, `nested-validation`,
 `runtime`, `return-serialization`, `timeout` — plus `cancelled`,
@@ -233,15 +236,15 @@ No correlation store ships with this. Derived at query time from the app log
 `effectReceipts.applied` is non-zero; repair turns are the invocations between a
 non-`success` outcome and the next `success` in that session.
 
-Known limits. Attribution reads the namespace binding's own
-`tools.<member> failed: ` prefix, so a script that throws identical text is
-misattributed as a nested rejection; the host code and both ledgers stay exact.
+Known limits. Attribution never parses failure messages: it reads the host
+`detail`, the ledger's per-call diagnostic, and the runtime-observed rejected
+`describe` name. A rejection that a script catches and survives is invisible to
+all three, so a successful invocation can still have attempted an unknown name.
 `nested-validation` covers every uncaught nested rejection, so the statically
 preventable set is `failureClass` in {`unknown-tool`, `parameter-shape`,
-`known-return-shape`, and later `typescript-syntax`}. Stage 3A's typed refusal
-envelope is the replacement for the text match. The 100-script threshold above
-requires at least that many events across several sessions before this plan is
-reconsidered.
+`known-return-shape`, and later `typescript-syntax`}. The 100-script threshold
+above requires at least that many events across several sessions before this plan
+is reconsidered.
 
 ## Remaining engineering decisions
 

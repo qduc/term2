@@ -31,7 +31,9 @@ export type MemoryStores = Record<MemoryScope, MemoryStore>;
 
 const scope = z.enum(['global', 'project']).describe('Memory scope to write to.');
 const MIN_TOOL_OUTPUT_CHARS = 512;
-const MAX_TOOL_OUTPUT_CHARS = 12_000;
+// Matches the default tool-result byte cap (output trim maxCharacters); a larger
+// budget would only produce a bounded-failure envelope for non-scripted calls.
+const MAX_TOOL_OUTPUT_CHARS = 40_000;
 const DEFAULT_INDEX_OUTPUT_CHARS = 12_000;
 const DEFAULT_DOCUMENT_OUTPUT_CHARS = 12_000;
 const DEFAULT_RESULT_LIMIT = 10;

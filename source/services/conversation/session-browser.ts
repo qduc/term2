@@ -19,7 +19,9 @@ import { SessionIndexService } from './session-index/session-index-service.js';
 import { SNIPPET_CHARS, scoreText, termsFor } from './session-search-helpers.js';
 
 export const MIN_SESSION_BROWSER_CHARS = 512;
-export const MAX_SESSION_BROWSER_CHARS = 12_000;
+// Matches the default tool-result byte cap (output trim maxCharacters); a larger
+// budget would only produce a bounded-failure envelope for non-scripted calls.
+export const MAX_SESSION_BROWSER_CHARS = 40_000;
 const DEFAULT_INDEX_CHARS = 12_000;
 const DEFAULT_READ_CHARS = 12_000;
 const DEFAULT_LIMIT = 10;
@@ -746,17 +748,28 @@ type SessionReferenceResolution =
   | { kind: 'not_found'; message: string }
   | { kind: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> };
 
+const PREVIOUS_UNAVAILABLE_MESSAGE =
+  'The current session is unknown, so "previous" cannot be resolved; use session_list to find the session.';
+const NO_OTHER_SESSION_MESSAGE = 'This session has no rollover predecessor and no other session exists in this scope.';
+
 function resolveSessionReference(
   reference: string,
   conversations: readonly RestoredState[],
   currentSessionId?: string,
 ): SessionReferenceResolution {
   if (reference === 'previous') {
+    // Without a known live session the newest session may be the live one
+    // itself, so the recency fallback is only safe when it can be excluded.
+    if (!currentSessionId) return { kind: 'not_found', message: PREVIOUS_UNAVAILABLE_MESSAGE };
     const current = conversations.find((conversation) => conversation.id === currentSessionId);
-    if (!current?.rolloverFrom) {
-      return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
-    }
-    return { kind: 'resolved', id: current.rolloverFrom };
+    if (current?.rolloverFrom) return { kind: 'resolved', id: current.rolloverFrom };
+    // `conversations` is already ordered most recently updated first, matching session_list.
+    const fallback = conversations.find(
+      (conversation) =>
+        conversation.id !== currentSessionId && isBrowsableSession(conversation) && project(conversation) !== null,
+    );
+    if (!fallback) return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
+    return { kind: 'resolved', id: fallback.id };
   }
 
   return resolveConversationReference(reference, conversations);
@@ -973,4 +986,6 @@ export {
   revision as sessionRevision,
   isBrowsableSession,
   prefixSnippet,
+  PREVIOUS_UNAVAILABLE_MESSAGE,
+  NO_OTHER_SESSION_MESSAGE,
 };

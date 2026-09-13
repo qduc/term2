@@ -401,6 +401,44 @@ it('recovers all oversized text exactly once with advancing, bounded pages', () 
   expect(chunks.join('')).toBe(text);
 });
 
+function touchSession(id: string, ts: string) {
+  appendEnvelope(id, 99, { type: 'user_message', message: { id: `${id}-late`, sender: 'user', text: 'late' } }, ts);
+}
+
+it('falls back from previous to the most recently updated other in-scope session', () => {
+  writeSession('older', '/project');
+  writeSession('newer', '/project');
+  writeSession('current', '/project');
+  writeSession('elsewhere', '/other');
+  touchSession('newer', '2030-01-01T00:00:00.000Z');
+  touchSession('current', '2031-01-01T00:00:00.000Z');
+  touchSession('elsewhere', '2032-01-01T00:00:00.000Z');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('newer');
+});
+
+it('prefers the rollover predecessor over a more recently updated session', () => {
+  writeSession('predecessor', '/project');
+  writeSession('recent', '/project');
+  writeSession('current', '/project', undefined, 'current', 'predecessor');
+  touchSession('recent', '2030-01-01T00:00:00.000Z');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
+});
+
+it('does not resolve previous without a known current session or another session', () => {
+  writeSession('only', '/project');
+
+  expect(new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'previous' })).toMatchObject({
+    error: { code: 'not_found', message: expect.stringContaining('current session is unknown') },
+  });
+  expect(
+    new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'only' })).read({ id: 'previous' }),
+  ).toMatchObject({ error: { code: 'not_found', message: expect.stringContaining('no other session') } });
+});
+
 it('reuses the resolved target snapshot across unchanged cursor pages', () => {
   writeSession('paged', '/project', undefined, 'x'.repeat(2_000));
   writeSession('current', '/project', undefined, 'current text', 'paged');

@@ -38,6 +38,11 @@ it('exposes read-only browser tools with strict bounded parameter schemas', asyn
   expect(tools.every((tool) => tool.preserveSerializedOutput)).toBe(true);
   for (const tool of tools) expect(tool.needsApproval({} as never)).toBe(false);
   expect(tools[0]!.parameters.safeParse({ maxChars: 511 }).success).toBe(false);
+  // The ceiling tracks the 40,000 default tool-result cap.
+  expect(tools[0]!.parameters.safeParse({ maxChars: 40_000 }).success).toBe(true);
+  expect(tools[0]!.parameters.safeParse({ maxChars: 40_001 }).success).toBe(false);
+  expect(tools[2]!.parameters.safeParse({ id: 'a', itemMaxChars: 40_000 }).success).toBe(true);
+  expect(tools[2]!.parameters.safeParse({ id: 'a', itemMaxChars: 40_001 }).success).toBe(false);
   expect(tools[1]!.parameters.safeParse({ query: '   ' }).success).toBe(false);
   expect(tools[1]!.parameters.safeParse({ query: 'needle', kinds: ['user', 'assistant'] }).success).toBe(true);
   expect(tools[1]!.parameters.safeParse({ query: 'needle', kinds: ['unknown'] }).success).toBe(false);

@@ -19,6 +19,8 @@ import {
 import { deltaSidecarPathFor } from '../../logging/conversation-log-events.js';
 import {
   isBrowsableSession,
+  NO_OTHER_SESSION_MESSAGE,
+  PREVIOUS_UNAVAILABLE_MESSAGE,
   prefixSnippet,
   projectMessages,
   sessionRevision,
@@ -572,19 +574,45 @@ export class SessionIndexDatabase {
 
     if (reference === 'previous') {
       if (!options.currentSessionId) {
-        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
+        return { kind: 'not_found', message: PREVIOUS_UNAVAILABLE_MESSAGE };
       }
       const current = this.#db
         .prepare('SELECT predecessor_id FROM sessions WHERE id = ?')
         .get(options.currentSessionId) as { predecessor_id: string | null } | undefined;
 
-      if (!current?.predecessor_id) {
-        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
+      // Without a rollover predecessor, fall back to the most recently updated
+      // other session in scope, in the same order session_list uses.
+      const previousId =
+        current?.predecessor_id ??
+        (
+          this.#db
+            .prepare(
+              `
+              SELECT id
+              FROM sessions
+              WHERE (project_path IS NOT NULL AND project_path = ?)
+                AND (
+                  (? IS NULL AND ssh_host IS NULL)
+                  OR
+                  (ssh_host IS NOT NULL AND ssh_host = ?)
+                )
+                AND id <> ?
+              ORDER BY updated_at DESC, id ASC
+              LIMIT 1
+            `,
+            )
+            .get(normalizedProject, normalizedHost, normalizedHost, options.currentSessionId) as
+            | { id: string }
+            | undefined
+        )?.id;
+
+      if (!previousId) {
+        return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
       }
       return {
         kind: 'resolved',
-        id: current.predecessor_id,
-        shortRef: shortRefs.get(current.predecessor_id) ?? current.predecessor_id,
+        id: previousId,
+        shortRef: shortRefs.get(previousId) ?? previousId,
       };
     }
 

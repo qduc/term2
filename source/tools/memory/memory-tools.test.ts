@@ -489,7 +489,8 @@ it('rejects blank queries and malformed or stale memory cursors with bounded pub
   const search = readTool(tools, 'memory_search');
   expect(search.parameters.safeParse({ query: '   ' }).success).toBe(false);
   expect(search.parameters.safeParse({ query: 'x', maxChars: 511 }).success).toBe(false);
-  expect(search.parameters.safeParse({ query: 'x', maxChars: 12_001 }).success).toBe(false);
+  expect(search.parameters.safeParse({ query: 'x', maxChars: 40_000 }).success).toBe(true);
+  expect(search.parameters.safeParse({ query: 'x', maxChars: 40_001 }).success).toBe(false);
 
   const invalid = JSON.parse((await readTool(tools, 'memory_get').execute({ id: memory.id, cursor: 'bad' })) as string);
   expect(invalid).toEqual({ error: { code: 'invalid_cursor', message: 'The memory cursor is invalid.' } });

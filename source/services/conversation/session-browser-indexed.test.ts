@@ -184,6 +184,48 @@ describe('SessionBrowser Indexed Backend', () => {
       }
     });
 
+    it('achieves parity with canonical browser for the previous recency fallback', async () => {
+      const touch = (id: string, ts: string) =>
+        fs.appendFileSync(
+          path.join(dir, `${id}.jsonl`),
+          `${JSON.stringify({
+            v: 3,
+            seq: 99,
+            ts,
+            event: { type: 'user_message', message: { id: `${id}-late`, sender: 'user', text: 'late' } },
+          })}\n`,
+        );
+      writeSession('session-older', '/workspace/project-a');
+      writeSession('session-newer', '/workspace/project-a');
+      writeSession('session-current', '/workspace/project-a');
+      writeSession('session-elsewhere', '/workspace/project-b');
+      touch('session-newer', '2030-01-01T00:00:00.000Z');
+      touch('session-current', '2031-01-01T00:00:00.000Z');
+      touch('session-elsewhere', '2032-01-01T00:00:00.000Z');
+
+      writeSession('session-solo', '/workspace/project-c');
+
+      let context: SessionBrowserContext = { projectPath: '/workspace/project-a', currentSessionId: 'session-current' };
+      const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+      const canonicalBrowser = new SessionBrowser(() => context, { backend: 'canonical' });
+      const indexedBrowser = new SessionBrowser(() => context, { backend: 'indexed', indexService });
+
+      try {
+        const canonicalRead = canonicalBrowser.read({ id: 'previous' }) as any;
+        expect(canonicalRead.session.id).toBe('session-newer');
+        expect(await indexedBrowser.read({ id: 'previous' })).toEqual(canonicalRead);
+
+        // A scope whose only session is the current one has nothing to fall back to.
+        context = { projectPath: '/workspace/project-c', currentSessionId: 'session-solo' };
+        const canonicalSolo = canonicalBrowser.read({ id: 'previous' });
+        expect(canonicalSolo).toMatchObject({ error: { code: 'not_found' } });
+        expect(await indexedBrowser.read({ id: 'previous' })).toEqual(canonicalSolo);
+      } finally {
+        await indexedBrowser.close();
+        await indexService.close();
+      }
+    });
+
     it('achieves exact result parity with canonical browser for filtered, seeking, and preview reads', async () => {
       const id = 'mixed-parity';
       const writer = createConversationLogWriter({ sessionId: id, dir, logger });

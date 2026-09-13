@@ -159,7 +159,6 @@ export type DomainIntent =
   | { type: 'rewind'; item: RewindItem; disposition: RewindDisposition }
   | { type: 'provider-save'; draft: CustomProviderDraft; originalId: string | null }
   | { type: 'provider-delete'; providerId: string }
-  | { type: 'provider-reorder'; providerIds: string[] }
   | { type: 'slash-execute'; command: SlashCommand; args?: string };
 
 export type IntentRequest = Readonly<{
@@ -250,8 +249,7 @@ export type ProviderSessionState =
   | { phase: 'wizard-type'; draft: CustomProviderDraft; editingField: ProviderField | null }
   | { phase: 'edit-fields'; draft: CustomProviderDraft; originalId: string }
   | { phase: 'confirm-discard'; resume: ProviderSessionState }
-  | { phase: 'confirm-delete'; providerId: string }
-  | { phase: 'reorder'; providerIds: string[] };
+  | { phase: 'confirm-delete'; providerId: string };
 
 export interface MenuCapability {
   open(frame: UnboundFrameSpec, options?: OpenOptions): void;

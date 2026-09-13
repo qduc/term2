@@ -162,27 +162,3 @@ it.sequential('ProviderSelectionMenu renders the confirm discard warning', async
   expect(frame.includes('⚠ You have unsaved changes. Discard them?')).toBe(true);
   expect(frame.includes('No, keep editing')).toBe(true);
 });
-
-it.sequential('ProviderSelectionMenu renders reorder phase with provider items', async () => {
-  const { lastFrame } = await renderInAct(
-    <ProviderSelectionMenu
-      phase="reorder"
-      selectedIndex={0}
-      activeItems={[
-        { kind: 'reorder-item', id: 'openai', label: 'OpenAI' },
-        { kind: 'reorder-item', id: 'openrouter', label: 'OpenRouter' },
-        { kind: 'reorder-item', id: 'codex', label: 'Codex' },
-      ]}
-      errorMessage={null}
-      fieldErrors={{}}
-      selectedProviderName={undefined}
-      draft={null}
-    />,
-  );
-
-  const frame = lastFrame()!;
-  expect(frame.includes('Reorder Providers')).toBe(true);
-  expect(frame.includes('OpenAI')).toBe(true);
-  expect(frame.includes('OpenRouter')).toBe(true);
-  expect(frame.includes('Codex')).toBe(true);
-});

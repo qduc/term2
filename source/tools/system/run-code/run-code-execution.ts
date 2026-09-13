@@ -122,6 +122,12 @@ export function createRunCodeExecution(
   actions: readonly RunCodeExecutionAction[],
   console: readonly JsonValue[][],
   attachments: readonly RunCodeAttachment[] = [],
+  /**
+   * Runtime-observed rejection the host result cannot carry: the script asked
+   * about a name that does not exist. It ranks below ledger evidence, because a
+   * script may catch the rejection and fail later for another reason.
+   */
+  observedDiagnostic?: 'unknown_tool',
 ): RunCodeExecution {
   if (result.ok) {
     return {
@@ -141,7 +147,7 @@ export function createRunCodeExecution(
       : result.error.code === 'runtime_error'
       ? result.error.detail === 'unhandled_nested_failure'
         ? 'unhandled_nested_failure'
-        : calls.find((call) => call.diagnostic)?.diagnostic ?? 'runtime'
+        : calls.find((call) => call.diagnostic)?.diagnostic ?? observedDiagnostic ?? 'runtime'
       : diagnosticCodeForHostError(result.error.code);
   return {
     script: {

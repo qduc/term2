@@ -108,6 +108,43 @@ describe('run_code completion telemetry', () => {
     expect(meta.effectReceipts).toEqual({ applied: 1, notApplied: 1, failed: 1, unknown: 1 });
   });
 
+  it('reports a pre-dispatch unknown-name rejection the ledger cannot observe', () => {
+    const execution: RunCodeExecution = {
+      script: { status: 'failed', diagnostic: { code: 'unknown_tool', message: 'Unknown tool "grep".' } },
+      calls: [],
+      actions: [],
+      console: [],
+      attachments: [],
+    };
+
+    expect(buildRunCodeCompletionMeta(input({ execution })).nested).toEqual({
+      calls: 0,
+      schemaLookups: 0,
+      ok: 0,
+      unknownTool: 1,
+      invalidParams: 0,
+      approvalDenied: 0,
+      prohibited: 0,
+      otherFailures: 0,
+    });
+  });
+
+  it('does not double count a rejection the ledger already recorded', () => {
+    const calls = [call('unknown_tool')];
+    const execution: RunCodeExecution = {
+      script: { status: 'failed', diagnostic: { code: 'unknown_tool', message: 'Unknown tool "grep".' } },
+      calls,
+      actions: [],
+      console: [],
+      attachments: [],
+    };
+
+    const nested = buildRunCodeCompletionMeta(input({ calls, execution })).nested as Record<string, number>;
+
+    expect(nested.unknownTool).toBe(1);
+    expect(nested.calls).toBe(1);
+  });
+
   it('accounts for every ledger outcome exactly once', () => {
     const outcomes: RunCodeCallRecord['outcome'][] = [
       'ok',

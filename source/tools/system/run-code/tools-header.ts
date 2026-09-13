@@ -171,6 +171,7 @@ export function renderToolsHeader(registry: ToolRegistry): string {
   const lines = [
     'Available inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):',
     'Use tools.describe(name) when you need the full schema and description for a tool.',
+    'Use only the tools listed here: a name that is not listed is not available inside the script.',
     ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
     ...(other.length > 0
       ? [...(essential.length > 0 ? [''] : []), 'Other tools:', ...other.map(renderCompactEntry)]

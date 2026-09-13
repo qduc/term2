@@ -12,10 +12,10 @@ design (single array denylist, claimed subagent inheritance) is superseded.
 Two design claims were corrected during implementation, per the rule that
 deviations observed while implementing are recorded, not silently fixed:
 
-1. `grep`/`glob` register **inside** the file-write branch for standard
-   non-gpt5 models (`agent.ts` standard else-branch), so disabling
-   `tools.fileWrite.enabled` also removes the search pair. Recorded as a
-   follow-up in Acknowledged gaps #5; decoupling is not Phase 1 scope.
+1. `grep`/`glob` register **inside** the file-write branch of the standard
+   branch (`agent.ts`), so disabling `tools.fileWrite.enabled` also removes
+   the search pair. Recorded as a follow-up in Acknowledged gaps #5; decoupling
+   is not Phase 1 scope.
 2. `run_subagent_async` is never registered by the composition root —
    `createRunSubagentAsyncToolDefinition` has no production caller. Async
    launches ride on `run_subagent`'s `execution` parameter, so the registered
@@ -447,8 +447,8 @@ milestone." See Acknowledged gaps.
    levers.** They already control tool availability by other means and are not
    unified with the capability booleans in Phase 1.
 5. **`grep`/`glob` registration is coupled to the write branch (found during
-   implementation).** For standard non-gpt5 models the search pair registers
-   inside `if (filesystemWriteEnabled)` in `agent.ts`, so
+   implementation).** The search pair registers inside
+   `if (filesystemWriteEnabled)` in `agent.ts`, so
    `tools.fileWrite.enabled = false` removes `create_file`/`search_replace`
    *and* `grep`/`glob`; conversely `tools.fileRead.enabled = false` removes
    them via the nested read condition. The enforced behavior is pinned by the

@@ -208,7 +208,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },
   ],
   'app.searchViaShell': [
-    { value: 'auto', description: 'Auto-enable for gpt-5 models' },
+    { value: 'auto', description: 'Default; currently identical to off (built-in search tools)' },
     { value: 'on', description: 'Always use shell commands (ripgrep/find) for search' },
     { value: 'off', description: 'Always use built-in search tools' },
   ],

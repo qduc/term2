@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { SubagentRole, SubagentDefinition } from './types.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
-import { isGpt5OrGpt6Model, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
+import { isGpt5OrGpt6Model } from '../../lib/tool-selection-policy.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import type { ExecutionContext } from '../execution-context.js';
 import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
@@ -148,15 +148,10 @@ export function selectSubagentBasePromptFile(model: string): string {
   return 'base-simple.md';
 }
 
-export function resolveSubagentSearchViaShell(
-  settings: ISettingsService,
-  model: string,
-  canRunShell: boolean,
-): boolean {
-  const searchViaShellSetting = settings.get('app.searchViaShell') ?? 'auto';
-  if (searchViaShellSetting === 'on') return canRunShell;
-  if (searchViaShellSetting === 'off') return false;
-  return shouldPreferPatchEditingModel(model) && canRunShell;
+export function resolveSubagentSearchViaShell(settings: ISettingsService, canRunShell: boolean): boolean {
+  // Uniform across models: only an explicit `on` routes subagent search
+  // through the shell; `auto` behaves like `off`.
+  return settings.get('app.searchViaShell') === 'on' && canRunShell;
 }
 
 export function buildAvailableToolGuidance(

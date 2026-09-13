@@ -373,7 +373,9 @@ it('uses the patch editing surface for modern GPT models in standard and lite mo
       const names = getToolNames({ 'agent.model': model, ...(liteMode ? { 'app.liteMode': true } : {}) });
 
       expect(names).toContain('apply_patch');
-      expect(names).not.toEqual(expect.arrayContaining(['grep', 'glob', 'create_file', 'search_replace']));
+      expect(names).not.toEqual(expect.arrayContaining(['create_file', 'search_replace']));
+      // Only the editing surface varies by model; search tools are uniform.
+      expect(names).toEqual(expect.arrayContaining(['grep', 'glob']));
     }
   }
 });
@@ -915,7 +917,7 @@ it('getAgentDefinition excludes grep and glob in lite mode when searchViaShell i
   expect(toolNames.includes('search_replace')).toBe(true);
 });
 
-it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShell', () => {
+it('getAgentDefinition for gpt-5 keeps grep and glob when searchViaShell is off', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
@@ -927,16 +929,17 @@ it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShel
   });
 
   const toolNames = definition.tools.map((tool) => tool.name);
-  expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('glob')).toBe(false);
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('glob')).toBe(true);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
   expect(toolNames.includes('read_file')).toBe(true);
   expect(toolNames.includes('apply_patch')).toBe(true);
 
+  // glob is registered, so the code-context description must point at it.
   const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
-  expect(codeContextTool?.description).toContain('use shell');
-  expect(codeContextTool?.description).not.toContain('use glob');
+  expect(codeContextTool?.description).toContain('use tools.glob(...)');
+  expect(codeContextTool?.description).not.toContain('use shell');
 });
 
 it('getAgentDefinition search tools do not reference glob when glob is omitted', () => {
@@ -957,7 +960,7 @@ it('getAgentDefinition search tools do not reference glob when glob is omitted',
   expect(codeContextTool?.description).not.toContain('use glob');
 });
 
-it('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not explicitly configured', () => {
+it('getAgentDefinition treats the unconfigured searchViaShell default as off for gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-5',
   });
@@ -967,7 +970,10 @@ it('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not
     loggingService: mockLogger,
   });
 
-  expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
+  expect(definition.instructions.includes('### Searching via the shell')).toBe(false);
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('grep')).toBe(true);
+  expect(toolNames.includes('glob')).toBe(true);
 });
 
 it('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 models', () => {
@@ -1520,11 +1526,11 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
     // effective read capability inside their registration condition.
     { key: 'tools.fileRead.enabled', absent: ['read_file', 'grep', 'glob'] },
     // Known coupling, recorded not fixed (design doc rule: deviations observed
-    // during implementation get follow-ups, not silent rewrites): for standard
-    // non-gpt5 models grep/glob register INSIDE the write branch (agent.ts
-    // standard else-branch), so disabling fileWrite also removes the search
-    // pair. Decoupling search registration from the write branch is the filed
-    // follow-up, not Phase 1 scope.
+    // during implementation get follow-ups, not silent rewrites): in the
+    // standard branch grep/glob register INSIDE the write branch (agent.ts), so
+    // disabling fileWrite also removes the search pair. Decoupling search
+    // registration from the write branch is the filed follow-up, not Phase 1
+    // scope.
     { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace', 'grep', 'glob'] },
     {
       key: 'tools.memory.enabled',

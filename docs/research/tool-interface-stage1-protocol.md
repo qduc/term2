@@ -36,7 +36,7 @@ Pinned identities (must be read back from `session_init`, not from argv):
 
 Driver: production non-interactive CLI (`node dist/cli.js -p … -m … -r … --auto-approve --json --quiet`). Real production registry/`run_code`, not a hand-authored catalog. Isolated per-cell `XDG_STATE_HOME` / `XDG_DATA_HOME` / `TERM2_CONVERSATIONS_DIR` / memory directory; OAuth stays at the real `TERM2_CONFIG_DIR`. Settings are copied into the isolated state dir and rewritten only for `memory.directory`, debug logging, sandbox-on, and mode pins. Global settings and credentials are not modified. Secrets never enter artifacts (provider summaries record ids only).
 
-`searchViaShell` stays `auto` (production). GPT-5-family models therefore see `apply_patch` where others see `create_file`/`search_replace`. Pair fairness is within a model, not across models.
+`searchViaShell` stays `auto` (production), which behaves like `off`: every model gets `grep`/`glob`. GPT-5-family models therefore see `apply_patch` where others see `create_file`/`search_replace` — the remaining cross-model surface difference. Pair fairness is within a model, not across models.
 
 ## Header evidence (N2)
 

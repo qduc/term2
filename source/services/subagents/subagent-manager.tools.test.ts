@@ -12,7 +12,7 @@ interface ToolCase {
   title: string;
   model: string;
   role: 'worker' | 'explorer';
-  searchViaShell: 'auto' | 'off';
+  searchViaShell: 'auto' | 'on' | 'off';
   grep: boolean;
   glob: boolean;
   shell: boolean;
@@ -23,19 +23,21 @@ interface ToolCase {
 }
 
 // One configuration matrix for the conditional search-tool registration across
-// the model default (gpt-5 prefers shell search, gpt-4o does not), the explicit
-// app.searchViaShell override, and the role-dependent tool surface.
+// the model identity, the explicit app.searchViaShell override, and the
+// role-dependent tool surface. `auto` behaves like `off`, so the dedicated
+// search tools are present for every model; only an explicit `on` withholds
+// them (and a read-only explorer keeps them as a blocked-shell fallback).
 const toolCases: ToolCase[] = [
   {
-    title: 'gpt-5 worker with searchViaShell auto registers shell search instead of dedicated search tools',
+    title: 'gpt-5 worker with searchViaShell auto keeps dedicated search tools',
     model: 'gpt-5',
     role: 'worker',
     searchViaShell: 'auto',
-    grep: false,
-    glob: false,
+    grep: true,
+    glob: true,
     shell: true,
-    include: ['Registered tools:', 'use `shell` with commands like `rg`', '`fd` for file search'],
-    exclude: ['Use `grep` to search', 'Use `glob` to locate', 'For workspace search, use the dedicated search tools'],
+    include: ['For workspace search, use the dedicated search tools', '`grep`', '`glob`'],
+    exclude: ['use `shell` with commands like `rg`'],
   },
   {
     title: 'gpt-4o worker with searchViaShell auto keeps dedicated search tools',
@@ -60,10 +62,10 @@ const toolCases: ToolCase[] = [
     exclude: ['use `shell` with commands like `rg`'],
   },
   {
-    title: 'read-only explorer with gpt-5 and searchViaShell auto keeps dedicated search fallback',
+    title: 'read-only explorer with gpt-5 and searchViaShell on keeps dedicated search fallback',
     model: 'gpt-5',
     role: 'explorer',
-    searchViaShell: 'auto',
+    searchViaShell: 'on',
     grep: true,
     glob: true,
     shell: true,

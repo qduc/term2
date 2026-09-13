@@ -26,7 +26,6 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
-import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
@@ -748,15 +747,11 @@ export function createShellToolDefinition(deps: {
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
-  const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
-  const resolvedSearchViaShell =
-    searchViaShellExplicit ??
-    (searchViaShellSetting === 'auto'
-      ? (() => {
-          const model = settingsService.get('agent.model');
-          return model ? shouldPreferPatchEditingModel(model) : false;
-        })()
-      : searchViaShellSetting === 'on');
+  // Only an explicit `on` routes search through the shell; `auto` (the schema
+  // default) behaves like `off`, so the description must not claim that
+  // search belongs to the shell.
+  const settingRoutesSearchViaShell = settingsService.get('app.searchViaShell') === 'on';
+  const resolvedSearchViaShell = searchViaShellExplicit ?? settingRoutesSearchViaShell;
 
   const shellDescription = orchestratorMode
     ? SHELL_DESCRIPTION_ORCHESTRATOR

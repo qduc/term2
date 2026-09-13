@@ -169,7 +169,7 @@ term2 settings can be configured via:
 | `app.notifications` | `boolean` | `true` | ✓ Yes | — | Enable desktop notifications when the terminal is unfocused (true\|false) |
 | `app.notificationsOnApproval` | `boolean` | `true` | ✓ Yes | — | Notify when the agent pauses awaiting tool-call approval (true\|false) |
 | `app.notificationsOnComplete` | `boolean` | `true` | ✓ Yes | — | Notify when the agent finishes responding (true\|false) |
-| `app.searchViaShell` | `string` | `"auto"` | ✓ Yes | — | Use shell commands (ripgrep/find) for codebase search instead of built-in tools (auto\|on\|off) |
+| `app.searchViaShell` | `string` | `"auto"` | ✓ Yes | — | Use shell commands (ripgrep/find) for codebase search instead of built-in tools; only `on` withholds them, `auto` matches `off` (auto\|on\|off) |
 
 ## Memory & Skills
 

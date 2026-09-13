@@ -292,9 +292,10 @@ export const getAgentDefinition = (
 
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-  const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
-  const searchViaShell =
-    searchViaShellSetting === 'auto' ? shouldPreferPatchEditingModel(resolvedModel) : searchViaShellSetting === 'on';
+  // Search exposure is uniform across models: only an explicit `on` withholds
+  // the dedicated search tools and routes search through the shell. `auto` is
+  // the schema default and behaves exactly like `off`.
+  const searchViaShell = settingsService.get('app.searchViaShell') === 'on';
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
@@ -403,7 +404,7 @@ export const getAgentDefinition = (
   // The glob/find-files tool is only registered in certain configurations; keep
   // the search-tool descriptions consistent so the model does not call a tool
   // that is not on its allowlist.
-  const globAvailable = !searchViaShell && (liteMode || !usesPatchEditingSurface);
+  const globAvailable = !searchViaShell;
   const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, isLiteEnv) : '';
   const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
@@ -548,17 +549,19 @@ export const getAgentDefinition = (
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
     }
     if (filesystemWriteEnabled) {
+      // Search exposure does not depend on the editing surface: the standard
+      // branch registers the dedicated search pair for every model.
+      if (filesystemReadEnabled && !searchViaShell) {
+        tools.push(
+          createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
+          createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
+        );
+      }
       if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
         );
       } else {
-        if (filesystemReadEnabled && !searchViaShell) {
-          tools.push(
-            createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
-            createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
-          );
-        }
         tools.push(
           createCreateFileToolDefinition({
             settingsService,

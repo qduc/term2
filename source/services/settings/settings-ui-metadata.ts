@@ -174,7 +174,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily search API key',
   [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa search API key',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
-    'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (auto|on|off)',
+    'Use shell commands (ripgrep/find) for codebase search instead of built-in tools; only `on` withholds them, `auto` matches `off` (auto|on|off)',
   [SETTING_KEYS.SHELL_USE_RTK_COMPRESSION]:
     'Use RTK (third-party) to compress shell command output; term2 downloads it automatically (true|false)',
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',

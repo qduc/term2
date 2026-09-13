@@ -176,7 +176,7 @@ export class ExecutionSubagentRunner {
     const diffDeltas = new Map<string, { added: number; deleted: number }>();
     const validationCapture: ValidationCapture = {};
 
-    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
+    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.canRunShell);
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(
       definition,
       filesChanged,

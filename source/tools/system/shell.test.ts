@@ -822,6 +822,7 @@ it('shell description is adjusted based on searchViaShell explicit option and se
   });
   expect(toolSettingsOff.description.includes('Do NOT use this to read, write or search.')).toBe(true);
 
+  // `auto` behaves like `off` regardless of model identity.
   const toolSettingsAutoGpt5 = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({
@@ -829,9 +830,7 @@ it('shell description is adjusted based on searchViaShell explicit option and se
       'agent.model': 'gpt-5-turbo',
     }),
   });
-  expect(
-    toolSettingsAutoGpt5.description.includes('Do NOT use this to write. Use the specialized tools for those tasks.'),
-  ).toBe(true);
+  expect(toolSettingsAutoGpt5.description.includes('Do NOT use this to read, write or search.')).toBe(true);
 
   const toolSettingsAutoNonGpt5 = createShellToolDefinition({
     loggingService: createNoopLogger(),

@@ -266,7 +266,7 @@ export class NestedSubagentRunner {
     if (options?.applyPool) {
       definition = this.#rolePoolSelector.resolveForSpawn(role, definition);
     }
-    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
+    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.canRunShell);
     const runExecutionContext = options?.executionContext ?? this.#executionContext;
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(
       definition,

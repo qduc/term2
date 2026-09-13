@@ -853,6 +853,34 @@ it('always projects encrypted reasoning include on the shared WebSocket request 
   expect(capturedWSRequest.include).toEqual(['message.output_text', 'reasoning.encrypted_content']);
 });
 
+it('sends only the tool-result delta when a WebSocket continuation is anchored to the prior response', async () => {
+  fakeResponsesWSStream = async function* () {
+    yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp-ws-next' } } };
+  };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey({}, 'gpt-test');
+
+  await collect(
+    model.stream({
+      previousResponseId: 'resp-ws-tool-call',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect this' }] },
+        {
+          type: 'reasoning',
+          id: 'rs-owned-by-prior-response',
+          text: '',
+          providerMetadata: { openai: { encrypted_content: 'ciphertext' } },
+        },
+        { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{}' },
+        { type: 'tool_result', id: 'call-1', output: 'done' },
+      ],
+      tools: [],
+    }),
+  );
+
+  expect(capturedWSRequest.previous_response_id).toBe('resp-ws-tool-call');
+  expect(capturedWSRequest.input).toEqual([{ type: 'function_call_output', call_id: 'call-1', output: 'done' }]);
+});
+
 it('includes encrypted reasoning on a first WebSocket request without reasoning input', async () => {
   fakeResponsesWSStream = async function* () {
     yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp-ws-first' } } };

@@ -310,11 +310,12 @@ export async function resolveCodexClientVersion(options?: {
     // Ignore cache read errors and re-fetch
   }
 
-  // 2. Cache expired or not found, resolve client version
-  let version = await getLocalCodexVersion(execImpl);
+  // 2. Cache expired or not found, prefer the latest published client version.
+  // The local CLI can lag behind the backend's model availability contract.
+  let version = await getNpmCodexVersion(fetchImpl);
 
   if (!version) {
-    version = await getNpmCodexVersion(fetchImpl);
+    version = await getLocalCodexVersion(execImpl);
   }
 
   if (!version) {

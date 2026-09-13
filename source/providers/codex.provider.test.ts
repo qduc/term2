@@ -433,7 +433,7 @@ it.sequential('Codex fetchModels parses custom models endpoint', async () => {
   }
 });
 
-it('resolveCodexClientVersion returns local version if available and writes to cache', async () => {
+it('resolveCodexClientVersion falls back to the local version when npm is unavailable and writes to cache', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-local');
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -441,10 +441,12 @@ it('resolveCodexClientVersion returns local version if available and writes to c
     expect(cmd).toBe('codex --version');
     return { stdout: 'codex-cli 1.2.3' };
   };
+  const mockFetch = async () => new Response(null, { status: 503 });
 
   const version = await resolveCodexClientVersion({
     cacheDir,
     execImpl: execImpl as any,
+    fetchImpl: mockFetch as any,
   });
 
   expect(version).toBe('1.2.3');
@@ -455,6 +457,25 @@ it('resolveCodexClientVersion returns local version if available and writes to c
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
   expect(cached.version).toBe('1.2.3');
   expect(typeof cached.timestamp === 'number').toBe(true);
+});
+
+it('resolveCodexClientVersion prefers the latest npm version over an older local installation', async () => {
+  const cacheDir = path.join(TEST_DIR, 'cache-npm-preferred');
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  const execImpl = async () => ({ stdout: 'codex-cli 1.2.3' });
+  const mockFetch = async (url: string) => {
+    expect(url).toBe('https://registry.npmjs.org/@openai/codex/latest');
+    return new Response(JSON.stringify({ version: '2.3.4' }), { status: 200 });
+  };
+
+  const version = await resolveCodexClientVersion({
+    cacheDir,
+    execImpl: execImpl as any,
+    fetchImpl: mockFetch as any,
+  });
+
+  expect(version).toBe('2.3.4');
 });
 
 it('sanitizeCodexRequestInit leaves non-responses requests unchanged', () => {
@@ -496,12 +517,12 @@ it('addCodexResponsesLiteHeader marks Luna Responses requests', () => {
   expect(new Headers(updated.headers).get('x-openai-internal-codex-responses-lite')).toBe('true');
 });
 
-it('resolveCodexClientVersion falls back to npm registry if local version fails', async () => {
+it('resolveCodexClientVersion uses the npm registry without invoking the local CLI', async () => {
   const cacheDir = path.join(TEST_DIR, 'cache-npm');
   fs.mkdirSync(cacheDir, { recursive: true });
 
   const execImpl = async () => {
-    throw new Error('command not found');
+    throw new Error('local CLI should not be invoked');
   };
 
   let fetchUrl = '';

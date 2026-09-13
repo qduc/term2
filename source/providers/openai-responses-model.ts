@@ -18,6 +18,7 @@ import { getModelContextWindow } from './model-catalog/catalog.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 import { WebSocketClosedEarlyError, readWebSocketCloseFrame } from './websocket-close-evidence.js';
 import { raceWebSocketAbort } from './websocket-abort-race.js';
+import { filterChainedModelInput } from '../lib/chained-input-filter.js';
 
 const endpointOf = (client: any): string => {
   const value = client?.baseURL ?? client?._options?.baseURL;
@@ -328,7 +329,10 @@ function requestBody(
     providerSupportsContextCompaction,
     sessionState,
   );
-  const projectedInput = toResponsesApiInput(request.input, lane);
+  const modelInput = request.previousResponseId
+    ? filterChainedModelInput({ input: request.input }).input
+    : request.input;
+  const projectedInput = toResponsesApiInput(modelInput, lane);
   const body = {
     model,
     input: projectedInput,

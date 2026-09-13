@@ -94,7 +94,7 @@ it.sequential('keeps six-plus tasks to one rendered row each in a short terminal
 // so renderToString's `{ columns }` option is the available width seam here.
 // Ink's render-to-string API has no viewport-height option; this covers the
 // width half of the short-terminal regression, not screen-height clipping.
-it.each([120, 72])('keeps seven richly populated tasks to one bounded row at %s columns', (columns) => {
+it.each([120, 72])('keeps seven richly populated tasks and their latest tools bounded at %s columns', (columns) => {
   const tasks = [
     {
       kind: 'subagent' as const,
@@ -236,9 +236,10 @@ it.each([120, 72])('keeps seven richly populated tasks to one bounded row at %s 
   const lines = output.split('\n').filter((line) => line.trim().length > 0);
   const taskLines = lines.filter((line) => line.startsWith('• '));
 
-  expect(lines).toHaveLength(tasks.length + 1);
+  expect(lines).toHaveLength(tasks.length + 6);
   expect(lines[0]).toContain(`Tasks · ${tasks.length} active`);
   expect(taskLines).toHaveLength(tasks.length);
+  expect(lines.filter((line) => line.trimStart().startsWith('└ '))).toHaveLength(5);
   expect(taskLines.every((line) => line.length <= columns)).toBe(true);
   expect(lines.every((line) => line.length <= columns)).toBe(true);
 });
@@ -487,18 +488,29 @@ it.sequential('keeps long task labels compact', async () => {
   expect(output).not.toContain(longTask.trim());
 });
 
-it.sequential('does not render a tool row for a task with recent tool activity', async () => {
+it.sequential('shows one bounded line for the most recent tool call of a running subagent', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel
-      tasks={[runningTask({ lastTool: { label: 'grep "TODO" src/', state: 'running' } })]}
+      tasks={[
+        runningTask({
+          recentTools: [
+            { label: 'read_file path=source/app.ts', state: 'success' },
+            { label: 'grep "TODO" src/ with a deliberately long suffix', state: 'running' },
+          ],
+        }),
+      ]}
       now={1_000}
+      columns={40}
     />,
   );
 
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Explorer');
-  expect(output).not.toContain('└');
-  expect(output).not.toContain('grep "TODO" src/');
+  expect(output).toContain('└ ◐ grep "TODO" src/');
+  expect(output).not.toContain('read_file path=source/app.ts');
+  const lines = output.split('\n').filter(Boolean);
+  expect(lines).toHaveLength(3);
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(40);
 });
 
 it.sequential('shows a concise recently completed indication without counting it as active', async () => {

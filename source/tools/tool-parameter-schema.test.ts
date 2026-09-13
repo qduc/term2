@@ -57,10 +57,11 @@ const schemaCases: SchemaCase[] = [
         loggingService,
         settingsService: createMockSettingsService(),
       }),
-    accepts: [{ command: 'echo hi' }],
+    accepts: [{ command: 'echo hi' }, { command: 'echo hi', description: 'Greet the user' }],
     rejects: [
       { command: 'echo hi', timeout_ms: null },
       { command: 'echo hi', max_output_length: null },
+      { command: 'echo hi', description: null },
     ],
   },
   {

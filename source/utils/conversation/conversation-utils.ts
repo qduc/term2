@@ -55,6 +55,9 @@ export function formatToolCommand(toolName: string, args: Record<string, unknown
   }
 
   if (toolName === 'shell') {
+    if (typeof args.description === 'string' && args.description.trim()) {
+      return args.description;
+    }
     const cmd = args.command ?? args.commands;
     if (typeof cmd === 'string' && cmd.trim()) {
       return cmd;

@@ -105,6 +105,21 @@ it('tool_started: creates pending command message with shell command', () => {
   expect(cmdMsg.callId).toBe('call-1');
 });
 
+it('tool_started: uses a shell description for the pending UI label', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-described-shell',
+    toolName: 'shell',
+    arguments: { command: 'echo hello', description: 'Greet the user' },
+  } as ConversationEvent);
+
+  expect(deps.calls.appendedMessages[0][0].command).toBe('Greet the user');
+});
+
 it('tool_dispatched: transitions pending command message to running', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

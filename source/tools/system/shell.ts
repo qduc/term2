@@ -98,6 +98,11 @@ const checkInOptionsSchema = z.object({
 
 const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
+  description: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional human-readable description to display for this shell call.'),
   timeout_ms: relaxedNumber
     .int()
     .positive()
@@ -594,6 +599,11 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
 
     return 'Unknown command';
   })();
+  const displayDescription =
+    args && typeof args === 'object' && !Array.isArray(args) && typeof args.description === 'string'
+      ? args.description.trim()
+      : '';
+  const displayCommand = displayDescription || command;
 
   const outputText = getOutputText(item);
   const backgroundRequested =
@@ -609,7 +619,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   ) {
     return [
       createBaseMessage(item, index, 0, false, {
-        command,
+        command: displayCommand,
         output: `Background job ${launchAcknowledgement.jobId} is running.`,
         success: true,
         toolName: 'shell',
@@ -658,7 +668,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
 
   return [
     createBaseMessage(item, index, 0, false, {
-      command,
+      command: displayCommand,
       output,
       success,
       failureReason,

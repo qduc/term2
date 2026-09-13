@@ -58,6 +58,16 @@ it('formatToolCommand: shell with string command', () => {
   expect(result).toBe('echo hello');
 });
 
+it('formatToolCommand: shell uses an optional description for display', () => {
+  const result = formatToolCommand('shell', { command: 'echo hello', description: 'Greet the user' });
+  expect(result).toBe('Greet the user');
+});
+
+it('formatToolCommand: shell falls back to the command for an empty description', () => {
+  const result = formatToolCommand('shell', { command: 'echo hello', description: '  ' });
+  expect(result).toBe('echo hello');
+});
+
 it('formatToolCommand: shell with commands (plural) string', () => {
   const result = formatToolCommand('shell', { commands: 'ls -la' });
   expect(result).toBe('ls -la');

@@ -18,6 +18,15 @@ including the nested-call and effect-receipt ledgers, source digest, and size,
 duration, and tool-call counts — and is the instrument for the 100-script
 reconsideration. It is a measurement path, not authorization to add a compiler.
 
+Reconsideration result (2026-09-13): the first frozen audit covered 1,820
+invocations and does not justify a compiler. Only four parameter-shape failures
+occurred; no failure recorded an applied effect receipt, although canonical
+evidence exposed one memory mutation followed by a result-shape failure that the
+receipt ledger did not represent. All 37 parse failures carried an edit payload
+inside a JavaScript string, and 35 used template literals. That narrower
+code/data composition problem is the next candidate for a controlled experiment.
+See [the failure and recovery audit](../reports/run-code-failure-recovery-audit-2026-09-13.md).
+
 ## Goal and limits
 
 Before a TypeScript script executes, check its syntax and statically knowable

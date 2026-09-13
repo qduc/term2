@@ -401,10 +401,10 @@ export const getAgentDefinition = (
 
   const cwd = executionContext?.getCwd() || process.cwd();
   const isLiteEnv = liteMode;
-  // The glob/find-files tool is only registered in certain configurations; keep
-  // the search-tool descriptions consistent so the model does not call a tool
-  // that is not on its allowlist.
-  const globAvailable = !searchViaShell;
+  // grep/glob register whenever the surface can read and search has not been
+  // routed to the shell; the flag keeps the search-tool descriptions consistent
+  // so the model does not call a tool that is not on its allowlist.
+  const globAvailable = filesystemReadEnabled && !searchViaShell;
   const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, isLiteEnv) : '';
   const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
@@ -547,16 +547,16 @@ export const getAgentDefinition = (
     // Full mode: all tools based on model
     if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
-    }
-    if (filesystemWriteEnabled) {
-      // Search exposure does not depend on the editing surface: the standard
-      // branch registers the dedicated search pair for every model.
-      if (filesystemReadEnabled && !searchViaShell) {
+      // Search is a read capability: it is gated on read plus the setting, never
+      // on write authority or the editing surface (mirrors the lite branch).
+      if (!searchViaShell) {
         tools.push(
           createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
           createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
         );
       }
+    }
+    if (filesystemWriteEnabled) {
       if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),

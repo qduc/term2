@@ -13,9 +13,11 @@ Two design claims were corrected during implementation, per the rule that
 deviations observed while implementing are recorded, not silently fixed:
 
 1. `grep`/`glob` register **inside** the file-write branch of the standard
-   branch (`agent.ts`), so disabling `tools.fileWrite.enabled` also removes
-   the search pair. Recorded as a follow-up in Acknowledged gaps #5; decoupling
-   is not Phase 1 scope.
+   branch (`agent.ts`), so disabling `tools.fileWrite.enabled` also removed
+   the search pair. Recorded as a follow-up in Acknowledged gaps #5, which was
+   not Phase 1 scope. **Repaired 2026-09-13** (uniform-search-exposure merge
+   `47db72a1` and its follow-up): search now registers with the read branch,
+   mirroring lite mode, and `globAvailable` tracks that same condition.
 2. `run_subagent_async` is never registered by the composition root —
    `createRunSubagentAsyncToolDefinition` has no production caller. Async
    launches ride on `run_subagent`'s `execution` parameter, so the registered
@@ -446,15 +448,17 @@ milestone." See Acknowledged gaps.
 4. **`app.searchViaShell` and `enable_agent_workflow` remain separate
    levers.** They already control tool availability by other means and are not
    unified with the capability booleans in Phase 1.
-5. **`grep`/`glob` registration is coupled to the write branch (found during
-   implementation).** The search pair registers inside
-   `if (filesystemWriteEnabled)` in `agent.ts`, so
-   `tools.fileWrite.enabled = false` removes `create_file`/`search_replace`
-   *and* `grep`/`glob`; conversely `tools.fileRead.enabled = false` removes
-   them via the nested read condition. The enforced behavior is pinned by the
-   table-driven test with an explanatory comment. Follow-up: move search
-   registration out of the write branch so search depends only on the read
-   toggle; that is a registration-shape change, deliberately not Phase 1.
+5. **`grep`/`glob` registration was coupled to the write branch (found during
+   implementation; repaired after Phase 1).** The search pair used to register
+   inside `if (filesystemWriteEnabled)` in `agent.ts`, so
+   `tools.fileWrite.enabled = false` removed `create_file`/`search_replace`
+   *and* `grep`/`glob`; conversely `tools.fileRead.enabled = false` removed
+   them via the nested read condition. **Repaired 2026-09-13:** the standard
+   branch now registers grep/glob in the read branch, beside `read_file`,
+   exactly as lite mode already did, so `tools.fileRead.enabled = false` is the
+   only toggle that removes the search pair. The enforced behavior is pinned by
+   the table-driven test with an explanatory comment, plus a regression test for
+   a read-only surface (write authority absent, search retained).
 
 ## Milestones
 

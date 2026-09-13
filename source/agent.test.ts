@@ -104,6 +104,22 @@ it('omits worktree switching from a read-only local agent surface', () => {
   expect(definition.tools.map((tool) => tool.name)).not.toContain('enter_worktree');
 });
 
+it('keeps the dedicated search tools on a read-only full-mode surface', () => {
+  for (const model of ['gpt-4o', 'gpt-5']) {
+    const definition = getAgentDefinition({
+      settingsService: createMockSettingsService({ 'agent.model': model }),
+      loggingService: mockLogger,
+      readOnly: true,
+    });
+
+    const toolNames = definition.tools.map((tool) => tool.name);
+    // Search is a read capability: absent write authority — and, for the patch
+    // surface, absent editing tools — must not remove grep/glob.
+    expect(toolNames).toEqual(expect.arrayContaining(['read_file', 'grep', 'glob']));
+    expect(toolNames).not.toEqual(expect.arrayContaining(['create_file', 'search_replace', 'apply_patch']));
+  }
+});
+
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
   const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
@@ -1522,16 +1538,12 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
       markers: ['Call them as `tools.<name>(params)` inside `run_code`'],
     },
     { key: 'tools.web.enabled', absent: ['web_search', 'web_fetch'] },
-    // read_file goes via the read branch; grep/glob additionally consult the
-    // effective read capability inside their registration condition.
+    // read_file, grep and glob all register inside the read branch.
     { key: 'tools.fileRead.enabled', absent: ['read_file', 'grep', 'glob'] },
-    // Known coupling, recorded not fixed (design doc rule: deviations observed
-    // during implementation get follow-ups, not silent rewrites): in the
-    // standard branch grep/glob register INSIDE the write branch (agent.ts), so
-    // disabling fileWrite also removes the search pair. Decoupling search
-    // registration from the write branch is the filed follow-up, not Phase 1
-    // scope.
-    { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace', 'grep', 'glob'] },
+    // Search is read-gated, not write-gated: disabling fileWrite leaves
+    // grep/glob registered. The coupling recorded in the design doc's
+    // Acknowledged gaps was repaired after Phase 1.
+    { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace'] },
     {
       key: 'tools.memory.enabled',
       absent: baselineNames.filter((name) => name.startsWith('memory_')),

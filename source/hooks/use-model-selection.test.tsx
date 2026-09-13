@@ -98,7 +98,7 @@ it.sequential('loads configured provider catalogs into one unified result list',
   const two = `unified-two-${Math.random()}`;
   registerTestProvider(one);
   registerTestProvider(two);
-  const settings = createMockSettingsService({ providerOrder: [one, two], 'agent.provider': one });
+  const settings = createMockSettingsService({ 'agent.provider': one });
   const picker = await renderPicker({
     settings,
     fetcher: async (provider) => (provider === one ? [{ id: 'alpha' }] : provider === two ? [{ id: 'beta' }] : []),
@@ -117,7 +117,7 @@ it.sequential('filters the unified list by model and --provider query', async ()
   const two = `filter-two-${Math.random()}`;
   registerTestProvider(one);
   registerTestProvider(two);
-  const settings = createMockSettingsService({ providerOrder: [one, two] });
+  const settings = createMockSettingsService({});
   const picker = await renderPicker({
     settings,
     input: `/model shared --provider=${two}`,
@@ -135,7 +135,7 @@ it.sequential('keeps fast provider results visible while another catalog is stil
   registerTestProvider(slow);
   registerTestProvider(fast);
   let resolveSlow!: (models: any[]) => void;
-  const settings = createMockSettingsService({ providerOrder: [slow, fast] });
+  const settings = createMockSettingsService({});
   let state!: ReturnType<typeof useModelSelection>;
   let renderer!: ReturnType<typeof render>;
   await flush(() => {
@@ -196,7 +196,6 @@ it.sequential('preselects the configured provider and model when ids collide', a
   registerTestProvider(one);
   registerTestProvider(two);
   const settings = createMockSettingsService({
-    providerOrder: [one, two],
     'agent.provider': two,
     'agent.model': 'shared',
   });
@@ -227,7 +226,6 @@ it.sequential('pins favorites and toggles the highlighted model without changing
   const provider = `favorite-${Math.random()}`;
   registerTestProvider(provider);
   const settings = createMockSettingsService({
-    providerOrder: [provider],
     'agent.provider': provider,
     'agent.model': 'beta',
     'agent.favoriteModels': [`${provider}/beta`],
@@ -248,7 +246,6 @@ it.sequential('edits nicknames only for favorited rows and closes when the favor
   const provider = `nickname-${Math.random()}`;
   registerTestProvider(provider);
   const settings = createMockSettingsService({
-    providerOrder: [provider],
     'agent.provider': provider,
     'agent.model': 'favorite',
     'agent.favoriteModels': [`${provider}/favorite`],

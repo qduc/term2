@@ -116,7 +116,6 @@ it('preselects the configured provider when multiple providers expose the same m
   registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => [{ id: 'shared' }]) as any });
   registerTestProvider({ id: providerB, label: providerB, fetchModels: (async () => [{ id: 'shared' }]) as any });
   const settingsService = createMockSettingsService({
-    providerOrder: [providerA, providerB],
     'agent.provider': providerB,
     'agent.model': 'shared',
   });

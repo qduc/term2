@@ -182,7 +182,6 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'hooks.includeToolResults',
     'hooks.timeoutMs',
   ],
-  'Provider ordering — presentation-only catalog ordering': ['providerOrder'],
   'Favorite models — presentation aid and next --model resolution fast path': ['agent.favoriteModels'],
   'Model nicknames — presentation aid and next --model resolution fast path': ['agent.modelNicknames'],
 } as const;

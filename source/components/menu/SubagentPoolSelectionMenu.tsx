@@ -49,8 +49,6 @@ export function SubagentPoolSelectionMenu({
       ? 'Select Provider'
       : phase === 'edit_reasoning'
       ? 'Select Reasoning Effort'
-      : phase === 'reorder'
-      ? `Reorder ${roleLabel} Entries`
       : phase === 'confirm_delete'
       ? `Delete ${roleLabel} Entry?`
       : 'Discard Changes?';
@@ -81,8 +79,6 @@ export function SubagentPoolSelectionMenu({
       ? 'Enter → select · Del → delete · Esc → save & close · ↑↓ → navigate'
       : phase === 'edit_fields'
       ? 'Enter → edit field / save · Esc → cancel · ↑↓ → navigate'
-      : phase === 'reorder'
-      ? '[ / ] → move · Enter → save order · Esc → cancel'
       : 'Enter → select · Esc → go back · ↑↓ → navigate';
 
   const entryCount = activeItems.filter((item) => item.kind === 'entry').length;
@@ -133,8 +129,7 @@ export function SubagentPoolSelectionMenu({
           let prefix = selected ? '▶ ' : '  ';
           let color = selected ? COLOR_SUCCESS : COLOR_TEXT;
           if (item.kind === 'action') {
-            prefix =
-              item.action === 'add' ? '+ ' : item.action === 'reorder' ? '↕ ' : item.action === 'save' ? '✓ ' : prefix;
+            prefix = item.action === 'add' ? '+ ' : item.action === 'save' ? '✓ ' : prefix;
             color =
               item.tone === 'destructive'
                 ? COLOR_DANGER
@@ -146,7 +141,7 @@ export function SubagentPoolSelectionMenu({
           } else if (item.kind === 'field') {
             label = `${item.label}: ${item.detail}`;
             color = selected ? COLOR_SUCCESS : COLOR_TEXT;
-          } else if (item.kind === 'entry' || item.kind === 'reorder-entry') {
+          } else if (item.kind === 'entry') {
             label = `${item.index + 1}. ${item.entry.model}`;
           } else if (item.kind === 'provider' || item.kind === 'reasoning') {
             color = selected ? COLOR_SUCCESS : COLOR_TEXT;

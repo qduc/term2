@@ -646,11 +646,6 @@ export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 export const SettingsSchema = z.object({
   providers: z.array(CustomProviderSchema).optional().default([]),
   enable_agent_workflow: z.boolean().optional().default(false),
-  providerOrder: z
-    .array(z.string())
-    .optional()
-    .default([])
-    .describe('Preferred order of provider IDs for display in model selection tab bar'),
   agent: AgentSettingsSchema.optional(),
   shell: ShellSettingsSchema.optional(),
   sandbox: SandboxSettingsSchema.optional(),
@@ -672,7 +667,6 @@ export const SettingsSchema = z.object({
 export interface SettingsData {
   providers: Array<z.infer<typeof CustomProviderSchema>>;
   enable_agent_workflow: boolean;
-  providerOrder: string[];
   agent: z.infer<typeof AgentSettingsSchema>;
   shell: z.infer<typeof ShellSettingsSchema>;
   sandbox: z.infer<typeof SandboxSettingsSchema>;
@@ -1024,7 +1018,6 @@ export const SETTING_KEYS = {
   HOOKS_INCLUDE_TOOL_ARGUMENTS: 'hooks.includeToolArguments',
   HOOKS_INCLUDE_TOOL_RESULTS: 'hooks.includeToolResults',
   HOOKS_TIMEOUT_MS: 'hooks.timeoutMs',
-  PROVIDER_ORDER: 'providerOrder',
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -1139,7 +1132,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
   SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
-  SETTING_KEYS.PROVIDER_ORDER,
   SETTING_KEYS.MEMORY_ENABLED,
   SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS,
   SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT,
@@ -1159,7 +1151,6 @@ export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 export const DEFAULT_SETTINGS: SettingsData = {
   providers: [],
   enable_agent_workflow: false,
-  providerOrder: [],
   agent: {
     model: 'gpt-5.1',
     efficientModel: undefined,

@@ -83,18 +83,12 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
               pool.refreshModels();
             } else if (event.command === 'delete') {
               pool.requestDelete();
-            } else if (event.command === 'reorder-up') {
-              pool.movePoolUp();
-            } else if (event.command === 'reorder-down') {
-              pool.movePoolDown();
             }
             return keep();
           case 'accept':
             setApplyError(null);
             if (editingModel) {
               pool.selectModel(textFromInput(event));
-            } else if (pool.phase === 'reorder') {
-              pool.saveReorder();
             } else {
               const selected = pool.getSelectedItem();
               if (pool.phase === 'list' && selected?.kind === 'action' && selected.action === 'save') return save();

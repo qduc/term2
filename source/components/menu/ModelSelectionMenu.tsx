@@ -1,7 +1,7 @@
 import React, { FC, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { ModelInfo } from '../../services/model-service.js';
-import { getAllProviders, sortProvidersByOrder } from '../../providers/index.js';
+import { getAllProviders } from '../../providers/index.js';
 import {
   getAvailableProviderIds,
   hasProviderCredentials,
@@ -73,17 +73,7 @@ const ModelSelectionMenu: FC<Props> = ({
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
-    const all = getAllProviders();
-    const providerOrder = settingsService.get('providerOrder') ?? [];
-    const sorted =
-      providerOrder.length > 0
-        ? sortProvidersByOrder(
-            all.map((p) => p.id),
-            providerOrder,
-          )
-            .map((id) => all.find((p) => p.id === id)!)
-            .filter(Boolean)
-        : all;
+    const sorted = getAllProviders();
     const availableIds = new Set(
       getAvailableProviderIds(
         settingsService,

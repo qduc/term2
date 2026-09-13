@@ -25,7 +25,7 @@ const renderMenu = (
   return { frame: view.lastFrame() ?? '', unmount: view.unmount };
 };
 
-it('explains an empty pool and does not offer unavailable reorder action', () => {
+it('explains an empty pool', () => {
   const { frame, unmount } = renderMenu('list', [
     { kind: 'action', action: 'add', label: 'Add Entry' },
     { kind: 'action', action: 'save', label: 'Save Changes' },
@@ -34,11 +34,10 @@ it('explains an empty pool and does not offer unavailable reorder action', () =>
   expect(frame).toContain('0/8 entries');
   expect(frame).toContain('Each entry gets one independent answer');
   expect(frame).toContain('No mentor entries configured yet');
-  expect(frame).not.toContain('Reorder Entries');
   unmount();
 });
 
-it('shows entry metadata and only offers reorder once there are multiple entries', () => {
+it('shows entry metadata for each pool entry', () => {
   const { frame, unmount } = renderMenu('list', [
     {
       kind: 'entry',
@@ -52,7 +51,6 @@ it('shows entry metadata and only offers reorder once there are multiple entries
       index: 1,
       label: 'sonnet',
     },
-    { kind: 'action', action: 'reorder', label: 'Reorder Entries' },
     { kind: 'action', action: 'save', label: 'Save Changes' },
   ]);
 
@@ -62,7 +60,6 @@ it('shows entry metadata and only offers reorder once there are multiple entries
   expect(frame).toContain('2. sonnet');
   expect(frame).toContain('Provider: Inherit mentor provider');
   expect(frame).toContain('Reasoning: Inherit mentor reasoning');
-  expect(frame).toContain('Reorder Entries');
   unmount();
 });
 

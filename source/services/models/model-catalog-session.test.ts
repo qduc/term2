@@ -57,7 +57,7 @@ it('reports one provider failure without invalidating another provider load', as
 
 it('moves through providers that have credentials, with no-key providers excluded', () => {
   const settings = {
-    get: (key: string) => (key === 'providerOrder' ? [] : undefined),
+    get: () => undefined,
     getDynamic: (key: string) => (key === 'agent.openrouter.apiKey' ? 'configured' : undefined),
   } as any;
   const session = new ModelCatalogSession({

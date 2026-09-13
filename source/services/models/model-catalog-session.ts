@@ -1,16 +1,13 @@
 import { clearModelCache, fetchModels, type ModelInfo } from '../model-service.js';
-import { getProviderIds, sortProvidersByOrder } from '../../providers/index.js';
+import { getProviderIds } from '../../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { getAvailableProviderIds } from '../../utils/ai/provider-credentials.js';
 
 export type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 
-/** Provider ids that have credentials, ordered by providerOrder (then registry order). */
-export const orderedProviderIds = (settingsService: ISettingsService, providerIds: string[]): string[] => {
-  const ids = getAvailableProviderIds(settingsService, providerIds);
-  const order = (settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
-  return order.length > 0 ? sortProvidersByOrder(ids, order) : ids;
-};
+/** Provider ids that have credentials, in registry order. */
+export const orderedProviderIds = (settingsService: ISettingsService, providerIds: string[]): string[] =>
+  getAvailableProviderIds(settingsService, providerIds);
 
 /** Owns model-catalog traversal, per-open caching, failed-provider suppression, and stale loads. */
 export class ModelCatalogSession {

@@ -8,16 +8,14 @@ import {
   resolveSubagentPoolModelSelection,
 } from './use-subagent-pool-selection.js';
 
-it('only offers reorder when a pool has at least two entries', () => {
+it('offers add and save actions below the pool entries', () => {
   const emptyActions = buildSubagentPoolListItems([]).filter((item) => item.kind === 'action');
-  const oneEntryActions = buildSubagentPoolListItems([{ model: 'gpt-5' }]).filter((item) => item.kind === 'action');
   const twoEntryActions = buildSubagentPoolListItems([{ model: 'gpt-5' }, { model: 'sonnet' }]).filter(
     (item) => item.kind === 'action',
   );
 
   expect(emptyActions.map((item) => item.action)).toEqual(['add', 'save']);
-  expect(oneEntryActions.map((item) => item.action)).toEqual(['add', 'save']);
-  expect(twoEntryActions.map((item) => item.action)).toEqual(['add', 'reorder', 'save']);
+  expect(twoEntryActions.map((item) => item.action)).toEqual(['add', 'save']);
 });
 
 it('describes inherited and explicit reasoning without changing stored values', () => {

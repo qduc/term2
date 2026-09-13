@@ -81,7 +81,6 @@ export function mergeSettings(
   const merged: SettingsData = {
     providers: (result.providers as SettingsData['providers']) || JSON.parse(JSON.stringify(defaults.providers)),
     enable_agent_workflow: (result.enable_agent_workflow as boolean) ?? defaults.enable_agent_workflow,
-    providerOrder: (result.providerOrder as string[]) ?? JSON.parse(JSON.stringify(defaults.providerOrder)),
     agent: (result.agent as SettingsData['agent']) || JSON.parse(JSON.stringify(defaults.agent)),
     shell: (result.shell as SettingsData['shell']) || JSON.parse(JSON.stringify(defaults.shell)),
     sandbox: (result.sandbox as SettingsData['sandbox']) || JSON.parse(JSON.stringify(defaults.sandbox)),
@@ -109,7 +108,6 @@ export function mergeSettings(
     return {
       providers: merged.providers,
       enable_agent_workflow: merged.enable_agent_workflow,
-      providerOrder: merged.providerOrder,
       agent: merged.agent,
       shell: merged.shell,
       sandbox: merged.sandbox,

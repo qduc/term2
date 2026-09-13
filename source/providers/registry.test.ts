@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { getProvider, getAllProviders, getProviderIds, sortProvidersByOrder } from './index.js';
+import { getProvider, getAllProviders, getProviderIds } from './index.js';
 it('openai provider is registered', () => {
   const provider = getProvider('openai');
   expect(provider).toBeTruthy();
@@ -104,34 +104,4 @@ it('openrouter provider has sensitive setting keys', () => {
   expect(Array.isArray(provider?.sensitiveSettingKeys)).toBe(true);
   expect(provider!.sensitiveSettingKeys!.includes('agent.openrouter.apiKey')).toBe(true);
   expect(provider!.sensitiveSettingKeys!.includes('agent.openrouter.baseUrl')).toBe(true);
-});
-
-it('sortProvidersByOrder returns original order when providerOrder is empty', () => {
-  const ids = ['openai', 'openrouter', 'codex'];
-  const result = sortProvidersByOrder(ids, []);
-  expect(result).toEqual(['openai', 'openrouter', 'codex']);
-});
-
-it('sortProvidersByOrder reorders according to providerOrder', () => {
-  const ids = ['openai', 'openrouter', 'codex'];
-  const result = sortProvidersByOrder(ids, ['codex', 'openai']);
-  expect(result).toEqual(['codex', 'openai', 'openrouter']);
-});
-
-it('sortProvidersByOrder appends unknown providers at the end', () => {
-  const ids = ['openai', 'openrouter', 'codex'];
-  const result = sortProvidersByOrder(ids, ['anthropic', 'codex']);
-  expect(result).toEqual(['codex', 'openai', 'openrouter']);
-});
-
-it('sortProvidersByOrder ignores providerOrder entries not in the list', () => {
-  const ids = ['openai', 'openrouter'];
-  const result = sortProvidersByOrder(ids, ['codex', 'openrouter', 'openai']);
-  expect(result).toEqual(['openrouter', 'openai']);
-});
-
-it('sortProvidersByOrder preserves relative order of unordered providers', () => {
-  const ids = ['a', 'b', 'c', 'd'];
-  const result = sortProvidersByOrder(ids, ['c', 'a']);
-  expect(result).toEqual(['c', 'a', 'b', 'd']);
 });

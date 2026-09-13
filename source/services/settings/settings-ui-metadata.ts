@@ -222,7 +222,6 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SSH_USERNAME]: 'SSH remote username',
   [SETTING_KEYS.SSH_REMOTE_DIR]: 'SSH remote directory',
   [SETTING_KEYS.ENV_NODE_ENV]: 'Node environment (development|production|test)',
-  [SETTING_KEYS.PROVIDER_ORDER]: 'Custom ordering for provider selection',
 };
 
 /**

@@ -27,18 +27,18 @@ const listingDeps = (
   providerIds: [...Object.keys(modelsByProvider), ...(options?.failProviders ?? [])],
 });
 
-it('orders credentialed providers by providerOrder and drops credential-missing runtime providers', () => {
+it('keeps credentialed providers in input order and drops credential-missing runtime providers', () => {
   const settings = {
     get: vi.fn(),
-    getDynamic: vi.fn((key: string) => (key === 'providerOrder' ? ['fake-beta', 'fake-alpha'] : [])),
+    getDynamic: vi.fn(() => []),
   } as any;
   registerProvider({ id: 'fake-alpha', label: 'Fake Alpha', fetchModels: async () => [] });
   registerProvider({ id: 'fake-beta', label: 'Fake Beta', fetchModels: async () => [] });
   registerProvider({ id: 'fake-gamma', label: 'Fake Gamma', fetchModels: async () => [], isRuntimeDefined: true });
   try {
     expect(orderedProviderIds(settings, ['fake-alpha', 'fake-gamma', 'fake-beta'])).toEqual([
-      'fake-beta',
       'fake-alpha',
+      'fake-beta',
     ]);
   } finally {
     unregisterProvider('fake-alpha');
@@ -347,11 +347,7 @@ it('runListModels with providerIds omitted selects and orders providers via the 
     // resolved through hasProviderCredentials -> resolveProviderCredentials
     // -> the stored custom-provider list. findings-no-cred has no matching
     // entry, so it stays credential-missing and must be dropped.
-    //
-    // providerOrder is the only thing that should determine ordering among
-    // the credentialed providers; put b before a to prove it isn't
-    // registration or alphabetical order leaking through.
-    settingsService.setDynamic('providerOrder', ['findings-cred-b', 'findings-cred-a']);
+    // Credentialed providers keep registry (registration) order.
 
     // The real registry also holds this host's other providers (codex,
     // grok, openai, ...), whose actual credential state is host-dependent
@@ -381,7 +377,7 @@ it('runListModels with providerIds omitted selects and orders providers via the 
       .filter((line) => line.endsWith(':'))
       .map((line) => line.replace(/:$/, '').split(' (')[0]);
 
-    expect(providerOrderInOutput).toEqual(['findings-cred-b', 'findings-cred-a']);
+    expect(providerOrderInOutput).toEqual(['findings-cred-a', 'findings-cred-b']);
     expect(outcome.output).not.toContain('findings-no-cred');
   } finally {
     unregisterProvider('findings-cred-a');

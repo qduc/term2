@@ -37,16 +37,14 @@ export type SubagentPoolPhase =
   | 'edit_provider'
   | 'edit_reasoning'
   | 'confirm_delete'
-  | 'confirm_discard'
-  | 'reorder';
+  | 'confirm_discard';
 
 export type SubagentPoolMenuItem =
   | { kind: 'entry'; entry: SubagentPoolEntry; index: number; label: string }
-  | { kind: 'action'; action: 'add' | 'reorder' | 'save' | 'cancel'; label: string; tone?: 'default' | 'destructive' }
+  | { kind: 'action'; action: 'add' | 'save' | 'cancel'; label: string; tone?: 'default' | 'destructive' }
   | { kind: 'field'; field: 'model' | 'provider' | 'reasoning'; label: string; detail: string }
   | { kind: 'provider'; id: string; label: string }
-  | { kind: 'reasoning'; value: SubagentPoolReasoningEffort | undefined; label: string }
-  | { kind: 'reorder-entry'; entry: SubagentPoolEntry; index: number; label: string };
+  | { kind: 'reasoning'; value: SubagentPoolReasoningEffort | undefined; label: string };
 
 const subagentPoolEntrySchema = z.object({
   model: z.string().min(1, 'Model is required'),
@@ -185,7 +183,6 @@ export function formatSubagentPoolEntry(entry: SubagentPoolEntry): string {
 export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
   const actions: SubagentPoolMenuItem[] = [];
   if (entries.length < MAX_SUBAGENT_POOL_ENTRIES) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
-  if (entries.length > 1) actions.push({ kind: 'action', action: 'reorder', label: 'Reorder Entries' });
   actions.push({ kind: 'action', action: 'save', label: 'Save Changes' });
   return [
     ...entries.map((entry, index) => ({
@@ -222,7 +219,6 @@ export function useSubagentPoolSelection(
   const [entries, setEntries] = useState<SubagentPoolEntry[]>([]);
   const [draft, setDraft] = useState<SubagentPoolDraft | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [reorderList, setReorderList] = useState<SubagentPoolEntry[]>([]);
   const [providerItems, setProviderItems] = useState<ProviderSelectionItem[]>([]);
   const [draftModified, setDraftModified] = useState(false);
   const [discardFromPhase, setDiscardFromPhase] = useState<SubagentPoolPhase | null>(null);
@@ -327,19 +323,11 @@ export function useSubagentPoolSelection(
         { kind: 'action', action: 'cancel', label: 'No, keep it' },
       ];
     }
-    if (phase === 'confirm_discard') {
-      return [
-        { kind: 'action', action: 'save', label: 'Yes, discard changes', tone: 'destructive' },
-        { kind: 'action', action: 'cancel', label: 'No, keep editing' },
-      ];
-    }
-    return reorderList.map((entry, index) => ({
-      kind: 'reorder-entry' as const,
-      index,
-      entry,
-      label: entry.model,
-    }));
-  }, [draft, entries, phase, providerItems, reorderList, roleLabel]);
+    return [
+      { kind: 'action', action: 'save', label: 'Yes, discard changes', tone: 'destructive' },
+      { kind: 'action', action: 'cancel', label: 'No, keep editing' },
+    ];
+  }, [draft, entries, phase, providerItems, roleLabel]);
 
   const selection = useSelection(activeItems);
 
@@ -352,7 +340,6 @@ export function useSubagentPoolSelection(
     setPhase('list');
     setDraft(null);
     setEditingIndex(null);
-    setReorderList([]);
     setDraftModified(false);
     setDiscardFromPhase(null);
     setErrorMessage(null);
@@ -496,11 +483,6 @@ export function useSubagentPoolSelection(
     if (phase === 'list') {
       if (item.kind === 'entry') openDraft(item.entry, item.index);
       else if (item.kind === 'action' && item.action === 'add') openDraft(null, null);
-      else if (item.kind === 'action' && item.action === 'reorder') {
-        setReorderList(entries.map((entry) => ({ ...entry })));
-        setPhase('reorder');
-        selection.setSelectedIndex(0);
-      }
       return;
     }
     if (phase === 'edit_fields' && draft) {
@@ -586,7 +568,6 @@ export function useSubagentPoolSelection(
     draft,
     discardFromPhase,
     editingIndex,
-    entries,
     openDraft,
     phase,
     providerItems,
@@ -694,37 +675,6 @@ export function useSubagentPoolSelection(
     setModelScrollOffset(0);
   }, []);
 
-  const movePoolUp = useCallback(() => {
-    if (phase !== 'reorder' || selection.selectedIndex <= 0) return;
-    const index = selection.selectedIndex;
-    setReorderList((current) => {
-      const next = [...current];
-      [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
-      return next;
-    });
-    selection.moveUp();
-  }, [phase, selection, selection.selectedIndex]);
-
-  const movePoolDown = useCallback(() => {
-    if (phase !== 'reorder' || selection.selectedIndex >= reorderList.length - 1) return;
-    const index = selection.selectedIndex;
-    setReorderList((current) => {
-      const next = [...current];
-      [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
-      return next;
-    });
-    selection.moveDown();
-  }, [phase, reorderList.length, selection, selection.selectedIndex]);
-
-  const saveReorder = useCallback(() => {
-    if (phase !== 'reorder') return;
-    setEntries(reorderList.map((entry) => ({ ...entry })));
-    setReorderList([]);
-    setDraftModified(true);
-    setPhase('list');
-    selection.setSelectedIndex(0);
-  }, [phase, reorderList, selection.setSelectedIndex]);
-
   const goBack = useCallback(() => {
     setErrorMessage(null);
     setInput('');
@@ -754,10 +704,6 @@ export function useSubagentPoolSelection(
         setPhase('list');
         selection.setSelectedIndex(0);
       }
-    } else if (phase === 'reorder') {
-      setReorderList([]);
-      setPhase('list');
-      selection.setSelectedIndex(0);
     } else if (phase === 'confirm_delete') {
       setEditingIndex(null);
       setPhase('list');
@@ -831,9 +777,6 @@ export function useSubagentPoolSelection(
     moveEnd: selection.moveEnd,
     pageUp: selection.pageUp,
     pageDown: selection.pageDown,
-    movePoolUp,
-    movePoolDown,
-    saveReorder,
     saveIntent,
   };
 }

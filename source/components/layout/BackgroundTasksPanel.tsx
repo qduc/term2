@@ -1,6 +1,7 @@
 import React, { useRef, type FC } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import type { BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
+import type { BackgroundSubagentTaskTool } from '../../services/subagents/subagent-notification-store.js';
 import type {
   BackgroundTaskControlDetails,
   ForegroundTransferCandidate,
@@ -10,7 +11,14 @@ import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
 
 export { BACKGROUND_TASKS_PANEL_GRACE_MS };
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
-import { COLOR_ACCENT_ALT, COLOR_TEXT_MUTED, COLOR_TEXT_SUBTLE } from '../theme.js';
+import {
+  COLOR_ACCENT_ALT,
+  COLOR_TEXT_MUTED,
+  COLOR_TEXT_SUBTLE,
+  TOOL_STATUS_COLOR,
+  TOOL_STATUS_GLYPH,
+  type ToolStatusKind,
+} from '../theme.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
@@ -183,6 +191,15 @@ const formatLiveStatus = (task: PanelTask, now: number): string => {
   return formatPhase(task, now);
 };
 
+const latestTool = (task: PanelTask): BackgroundSubagentTaskTool | undefined => {
+  if (task.kind === 'shell' || isTerminal(task)) return undefined;
+  if ('recentTools' in task && task.recentTools?.length) return task.recentTools.at(-1);
+  return 'lastTool' in task ? task.lastTool : undefined;
+};
+
+const toolStatusKind = (state: BackgroundSubagentTaskTool['state']): ToolStatusKind =>
+  state === 'success' ? 'completed' : state;
+
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) => {
   const { stdout } = useStdout();
   const columns = testColumns ?? stdout.columns ?? BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
@@ -214,14 +231,23 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
       {visible.map(({ key, placement, task }) => {
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
-        const firstLine = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
+        const formattedRow = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
+        const tool = latestTool(task);
+        const toolStatus = tool ? toolStatusKind(tool.state) : undefined;
         return (
-          <Box key={key}>
+          <Box key={key} flexDirection="column">
             <Text>
               <Text color={COLOR_TEXT_SUBTLE}>• </Text>
-              <Text color={COLOR_ACCENT_ALT}>{firstLine.badge}</Text> <Text>{firstLine.identity}</Text> ·{' '}
-              <Text>{firstLine.phase}</Text>
+              <Text color={COLOR_ACCENT_ALT}>{formattedRow.badge}</Text> <Text>{formattedRow.identity}</Text> ·{' '}
+              <Text>{formattedRow.phase}</Text>
             </Text>
+            {tool && toolStatus ? (
+              <Text color={COLOR_TEXT_MUTED}>
+                {'  └ '}
+                <Text color={TOOL_STATUS_COLOR[toolStatus]}>{TOOL_STATUS_GLYPH[toolStatus]}</Text>{' '}
+                {truncate(firstLine(tool.label).replaceAll(/\s+/g, ' '), Math.max(1, columns - 6))}
+              </Text>
+            ) : null}
           </Box>
         );
       })}

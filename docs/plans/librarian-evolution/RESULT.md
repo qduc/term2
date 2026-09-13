@@ -256,7 +256,8 @@ the root was paging them into its own context because nothing else could.
   parallel-safe, and advertised in the delegation addendum when memory is
   enabled. The trigger names history reconstruction from prior sessions or
   several memories; single known lookups stay with the root.
-- `memory_synthesize` is unchanged for memory-only synthesis.
+- `memory_synthesize` was left unchanged by this revival, then removed the
+  same day (see below).
 
 Unmeasured: natural invocation rate. This change is still a prompt-level
 trigger, which the first experiment found produced zero invocations for
@@ -264,6 +265,18 @@ memory-only work. If session digging still stays in the root, the next
 candidate is a tool-level affordance on `session_search` results (the seam
 that worked for `memory_synthesize`), benchmarked on a task that depends on
 several prior sessions.
+
+## `memory_synthesize` removed (2026-09-13)
+
+The 4/5 invocation result above was measured when memory tools were top-level.
+Since the `run_code` hide (`5b87ba4a`, 2026-09-05) they are reachable only as
+script members, where a script can issue several `memory_retrieve` queries and
+merge them itself. Production app logs and provider traffic from 2026-08-30 to
+2026-09-13 show zero `tools.memory_synthesize` calls against more than a
+thousand `tools.memory_retrieve` mentions. With the retrieval oracle tied and
+no coding gain, the tool was removed; the root guidance now asks for several
+`memory_retrieve` angles instead. Reconsider a de-duplicating operation only if
+real multi-query scripts hit `omittedIds` from overlapping results.
 
 ## Reproduction assets
 

@@ -140,7 +140,6 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
       'memory_get',
       'memory_search',
       'memory_retrieve',
-      'memory_synthesize',
       'memory_create',
       'memory_update',
       'memory_delete',
@@ -207,7 +206,6 @@ it('advertises librarian delegation only when persistent memory is enabled', () 
   });
 
   expect(enabled.instructions).toContain('`librarian`');
-  expect(enabled.instructions).toContain('Use memory_synthesize when the task depends on several memories');
   expect(disabled.instructions).not.toContain('`librarian`');
 });
 
@@ -292,7 +290,6 @@ it('keeps standard and lite tool names identical with bare dependencies', () => 
       'memory_get',
       'memory_search',
       'memory_retrieve',
-      'memory_synthesize',
       'memory_create',
       'memory_update',
       'memory_delete',
@@ -765,7 +762,6 @@ it('getAgentDefinition keeps the orchestrator tool surface cache-stable with sta
     'memory_get',
     'memory_search',
     'memory_retrieve',
-    'memory_synthesize',
     'memory_create',
     'memory_update',
     'memory_delete',

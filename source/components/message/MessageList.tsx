@@ -196,6 +196,9 @@ export const detectStaticCommitBlocker = <T extends MessageLike>(
   };
 };
 
+const getToolCallIds = (message: RenderableMessage): string[] =>
+  'members' in message && Array.isArray(message.members) ? message.members.map((member) => member.id) : [message.id];
+
 const createStaticItems = (bannerItems: string[], history: RenderableMessage[]): StaticItem[] => [
   ...bannerItems.map((id) => ({ kind: 'banner' as const, id })),
   ...history.map((message) => ({ kind: 'message' as const, id: message.id, message })),
@@ -304,11 +307,17 @@ const MessageList = <T extends MessageLike = Message>({
   const committedMessageSignaturesRef = useRef<Map<string, string>>(new Map());
   const candidateMessageSignaturesRef = useRef<Map<string, string>>(new Map());
   const previousActiveMessageIdsRef = useRef<Set<string>>(new Set());
+  // Ids of every tool call already frozen in <Static>, whether alone or as a
+  // group member. A group's id keys on its first member, so when the capped
+  // message buffer trims that member off the front, the rest of the run comes
+  // back under a new id; this set is what recognizes it as already printed.
+  const committedToolCallIdsRef = useRef<Set<string>>(new Set());
 
   const { staticItems, deferredHistory, deferredNotifications } = useMemo(() => {
     if (history.length === 0 && active.length === 0) {
       staticItemsRef.current = staticItemsRef.current.filter((item) => item.kind === 'banner');
       committedMessageSignaturesRef.current.clear();
+      committedToolCallIdsRef.current.clear();
       candidateMessageSignaturesRef.current.clear();
       previousActiveMessageIdsRef.current.clear();
     }
@@ -319,6 +328,7 @@ const MessageList = <T extends MessageLike = Message>({
     const hasActiveMessages = active.length > 0;
     const previousActiveMessageIds = previousActiveMessageIdsRef.current;
     const hasExistingStaticHistory = staticItemsRef.current.some((item) => item.kind === 'message');
+    const committedToolCallIds = committedToolCallIdsRef.current;
 
     for (const bannerId of bannerItems) {
       if (seenBannerIdsRef.current.has(bannerId)) {
@@ -368,6 +378,13 @@ const MessageList = <T extends MessageLike = Message>({
         continue;
       }
 
+      // Same rule at member granularity: a history run that shares any tool
+      // call with one already frozen is that run seen again after trimming.
+      // Reprinting it would add a stale duplicate, never new information.
+      if (isGroupableToolMessage(message) && getToolCallIds(message).some((id) => committedToolCallIds.has(id))) {
+        continue;
+      }
+
       const shouldCommitImmediately =
         (!isBackgroundNotification(message) || !hasActiveMessages) &&
         !hasDeferred &&
@@ -408,6 +425,11 @@ const MessageList = <T extends MessageLike = Message>({
       }
 
       committedMessageSignaturesRef.current.set(message.id, signature);
+      if (isGroupableToolMessage(message)) {
+        for (const id of getToolCallIds(message)) {
+          committedToolCallIds.add(id);
+        }
+      }
       candidateMessageSignaturesRef.current.delete(message.id);
       additions.push({ kind: 'message', id: message.id, message });
     }

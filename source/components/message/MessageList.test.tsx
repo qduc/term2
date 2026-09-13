@@ -1560,3 +1560,59 @@ it.sequential(
     expect(countOccurrences(printed, 'Ran 6 shell commands')).toBe(0);
   },
 );
+
+it.sequential('MessageList does not reprint a committed command group as the message cap trims its front', async () => {
+  // Regression: the UI message buffer is capped and drops the oldest message
+  // on every append. When a committed run sat at the front, each trim removed
+  // its first member, which changed the group id, so the shrunken group was
+  // committed to <Static> again — one extra copy per later message.
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const cmd = (n: number) => ({
+    id: `cmd-${n}`,
+    sender: 'command',
+    status: 'completed',
+    toolName: 'shell',
+    command: `echo ${n}`,
+  });
+  const bot = (n: number) => ({ id: `bot-${n}`, sender: 'bot', status: 'finalized', text: `reply ${n}` });
+
+  let messages: any[] = [cmd(1), cmd(2), cmd(3), cmd(4), bot(0)];
+  const renderer = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
+
+  // Trim past the whole run, down to a lone survivor and then nothing.
+  for (let n = 1; n <= 4; n += 1) {
+    messages = [...messages.slice(1), bot(n)];
+    await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={messages} />);
+  }
+
+  const printed = renderer.frames.map(stripAnsi).join('\n');
+  expect(countOccurrences(printed, 'Ran 4 shell commands')).toBeGreaterThan(0);
+  expect(countOccurrences(printed, 'Ran 3 shell commands')).toBe(0);
+  expect(countOccurrences(printed, 'Ran 2 shell commands')).toBe(0);
+  expect(countOccurrences(printed, 'echo 4')).toBe(0);
+  expect(stripAnsi(renderer.lastFrame() ?? '')).toContain('reply 4');
+});
+
+it.sequential('MessageList does not reprint a history group that overlaps already committed members', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const cmd = (n: number) => ({
+    id: `cmd-${n}`,
+    sender: 'command',
+    status: 'completed',
+    toolName: 'shell',
+    command: `echo ${n}`,
+  });
+  const done = { id: 'bot-done', sender: 'bot', status: 'finalized', text: 'done' };
+
+  const renderer = await renderInAct(
+    <MessageList settingsService={settingsService} messages={[cmd(1), cmd(2), done]} />,
+  );
+  // Same closed run, front trimmed and a new member present: new group id,
+  // but cmd-2 is already frozen in the first copy.
+  await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={[cmd(2), cmd(3), done]} />);
+
+  const printed = renderer.frames.map(stripAnsi).join('\n');
+  expect(countOccurrences(printed, 'Ran 2 shell commands')).toBeGreaterThan(0);
+  const lines = stripAnsi(renderer.lastFrame() ?? '').split('\n');
+  expect(lines.filter((line) => line.includes('shell command'))).toHaveLength(1);
+});

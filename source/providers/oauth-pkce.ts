@@ -47,8 +47,9 @@ export type PkceLoginOptions = {
   onPrompt?: (url: string) => void;
   signal?: AbortSignal;
   /**
-   * Line-oriented source for a pasted loopback redirect URL. Remote hosts never
-   * receive the browser's localhost callback; the address bar still holds it.
+   * Line-oriented source for a pasted loopback redirect URL, its query string,
+   * or the bare code. Remote hosts never receive the browser's localhost
+   * callback; the address bar still holds it.
    */
   pasteInput?: Readable;
   /** Called when a pasted line is not a usable callback, so the user can retry. */
@@ -173,6 +174,42 @@ type PastedCallback =
   | { kind: 'fail'; error: Error }
   | { kind: 'ignore'; message: string };
 
+/** Characters an authorization code may contain, raw or percent-encoded. */
+const BARE_CODE_PATTERN = /^[A-Za-z0-9._~+/=%-]+$/;
+
+/**
+ * Accepts the callback's query string (`code=...&state=...`) or the bare code.
+ *
+ * A bare code carries no state to check. That is acceptable here because the
+ * user copied it from their own browser into this terminal; the state check
+ * guards the loopback listener against codes injected by other pages.
+ */
+function interpretPastedCodeOrQuery(raw: string, config: PkceLoginConfig, expectedState: string): PastedCallback {
+  const notUsable: PastedCallback = {
+    kind: 'ignore',
+    message: `Paste the authorization code or the redirected localhost URL (${exampleCallbackUrl(config)}).`,
+  };
+
+  if (/(^|[?&])(code|error)=/.test(raw)) {
+    const params = new URLSearchParams(raw.replace(/^[?#]/, ''));
+    const result = interpretCallbackParams(
+      config,
+      expectedState,
+      params.get('error'),
+      params.get('code'),
+      params.get('state'),
+    );
+    return result instanceof Error ? { kind: 'fail', error: result } : { kind: 'code', code: result };
+  }
+
+  if (!BARE_CODE_PATTERN.test(raw)) return notUsable;
+  try {
+    return { kind: 'code', code: decodeURIComponent(raw) };
+  } catch {
+    return notUsable;
+  }
+}
+
 function interpretPastedOAuthRedirect(line: string, config: PkceLoginConfig, expectedState: string): PastedCallback {
   const raw = stripWrappingQuotes(line);
   if (!raw) return { kind: 'ignore', message: '' };
@@ -181,10 +218,7 @@ function interpretPastedOAuthRedirect(line: string, config: PkceLoginConfig, exp
   try {
     url = new URL(raw);
   } catch {
-    return {
-      kind: 'ignore',
-      message: `That is not a URL. Paste the redirected localhost address (${exampleCallbackUrl(config)}).`,
-    };
+    return interpretPastedCodeOrQuery(raw, config, expectedState);
   }
 
   if (!isLoopbackHostname(url.hostname) || url.pathname !== config.callbackPath) {

@@ -141,6 +141,35 @@ it.sequential('ProviderSelectionMenu renders inline field errors in edit_fields'
   expect(frame.includes("⚠ Base URL is required for provider type 'openai-compatible'.")).toBe(true);
 });
 
+it.sequential('ProviderSelectionMenu marks disabled providers and their re-enable route', async () => {
+  const { lastFrame } = await renderInAct(
+    <ProviderSelectionMenu
+      phase="list"
+      selectedIndex={0}
+      activeItems={[
+        {
+          kind: 'provider',
+          id: 'grok',
+          label: 'Grok',
+          isActive: false,
+          isCustom: false,
+          hasCredentials: true,
+          isDisabled: true,
+        },
+      ]}
+      errorMessage={null}
+      fieldErrors={{}}
+      selectedProviderName={undefined}
+      draft={null}
+    />,
+  );
+
+  const frame = lastFrame()!;
+  expect(frame.includes('Disabled')).toBe(true);
+  expect(frame.includes('hidden from model pickers')).toBe(true);
+  expect(frame.includes('re-enable')).toBe(true);
+});
+
 it.sequential('ProviderSelectionMenu renders the confirm discard warning', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu

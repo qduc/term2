@@ -1,13 +1,18 @@
 import { clearModelCache, fetchModels, type ModelInfo } from '../model-service.js';
 import { getProviderIds } from '../../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
-import { getAvailableProviderIds } from '../../utils/ai/provider-credentials.js';
+import { getAvailableProviderIds, isProviderDisabled } from '../../utils/ai/provider-credentials.js';
 
 export type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 
-/** Provider ids that have credentials, in registry order. */
+/**
+ * Provider ids the model pickers and catalog listings may show, in registry
+ * order: credential-available providers minus the ones the user disabled via
+ * provider management (agent.disabledProviders). This is the single seam —
+ * every picker and listing composes its provider set through here.
+ */
 export const orderedProviderIds = (settingsService: ISettingsService, providerIds: string[]): string[] =>
-  getAvailableProviderIds(settingsService, providerIds);
+  getAvailableProviderIds(settingsService, providerIds).filter((id) => !isProviderDisabled(settingsService, id));
 
 /** Owns model-catalog traversal, per-open caching, failed-provider suppression, and stale loads. */
 export class ModelCatalogSession {

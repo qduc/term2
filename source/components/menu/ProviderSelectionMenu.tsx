@@ -59,7 +59,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   const getFooter = () => {
     switch (phase) {
       case 'list':
-        return 'Enter → Edit custom provider · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
+        return 'Enter → Edit provider (enable/disable, API key) · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
       case 'accounts':
         return 'Enter → Use from next session · Del → Sign out · Esc → Back · ↑↓ → Navigate';
       case 'confirm_delete':
@@ -202,6 +202,7 @@ const ProviderSelectionMenu: FC<Props> = ({
             // Custom providers remain bright so they look interactive.
             // Note: openai and openrouter remain active/bright because we can change their api key.
             const unavailable = item.hasCredentials === false;
+            const disabled = item.isDisabled === true;
             color = isInactive
               ? COLOR_TEXT_SUBTLE
               : unavailable
@@ -217,6 +218,12 @@ const ProviderSelectionMenu: FC<Props> = ({
               suffix = unavailable ? 'Not logged in on this host · Run `term2 --grok-login`' : '';
             } else if (unavailable) {
               suffix = 'API key not configured on this host · Enter to configure';
+            }
+            if (disabled) {
+              // Disable state wins the suffix: it explains why the provider is
+              // missing from model pickers even though credentials are fine.
+              color = isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE;
+              suffix = 'Disabled · hidden from model pickers · Enter to edit and re-enable';
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';

@@ -14,7 +14,11 @@ import {
 } from '../providers/provider-service.js';
 import { resolveProviderId, resolveProviderName } from '../services/settings/custom-provider-normalization.js';
 import { ProviderManagementSession } from '../services/providers/provider-management-session.js';
-import { getProviderCredentialSettingKey } from '../utils/ai/provider-credentials.js';
+import {
+  getProviderCredentialSettingKey,
+  isProviderDisabled,
+  setProviderDisabled,
+} from '../utils/ai/provider-credentials.js';
 import {
   isOAuthAccountProvider,
   listOAuthAccounts,
@@ -36,6 +40,7 @@ export type ProviderSelectionMenuItem =
       isActive: boolean;
       isCustom: boolean;
       hasCredentials?: boolean;
+      isDisabled?: boolean;
     }
   | {
       kind: 'add-provider';
@@ -105,6 +110,7 @@ export const useProviderSelection = (
             isActive: i.isActive,
             isCustom: i.isCustom,
             hasCredentials: i.hasCredentials,
+            isDisabled: i.isDisabled,
           })),
           { kind: 'add-provider' as const, label: 'Add Custom Provider' },
         ];
@@ -140,6 +146,8 @@ export const useProviderSelection = (
       case 'edit_fields': {
         if (!draft) return [];
         const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
+        const editingDisabled = editingOriginalName ? isProviderDisabled(settingsService, editingOriginalName) : false;
+        const toggleLabel = editingDisabled ? 'Enable Provider' : 'Disable Provider';
         if (isEditingBuiltIn) {
           return [
             { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)`, fieldKey: 'name' },
@@ -150,6 +158,7 @@ export const useProviderSelection = (
               detail: draft.apiKey ? '********' : '<empty>',
               fieldKey: 'apiKey',
             },
+            { kind: 'action' as const, label: toggleLabel },
             { kind: 'action' as const, label: 'Save Changes' },
             { kind: 'action' as const, label: 'Cancel' },
           ];
@@ -169,6 +178,7 @@ export const useProviderSelection = (
             detail: draft.apiKey ? '********' : '<empty>',
             fieldKey: 'apiKey',
           },
+          { kind: 'action' as const, label: toggleLabel },
           { kind: 'action' as const, label: 'Save Changes' },
           { kind: 'action' as const, label: 'Cancel' },
         ];
@@ -186,7 +196,7 @@ export const useProviderSelection = (
       default:
         return [];
     }
-  }, [phase, items, draft, editingOriginalName, accounts, accountProviderId]);
+  }, [phase, items, draft, editingOriginalName, accounts, accountProviderId, settingsService]);
 
   const checkIsInactive = useCallback(
     (item: ProviderSelectionMenuItem) => {
@@ -282,6 +292,26 @@ export const useProviderSelection = (
     setEditingOriginalName(null);
     setFieldErrors({});
   }, [draft, editingOriginalName, providerSession, loadProviderList, setSelectedIndex]);
+
+  // Persisted immediately: disabling is a picker-visibility change, not part
+  // of the draft, so it must not wait for Save Changes.
+  const toggleEditingProviderDisabled = useCallback(() => {
+    if (!editingOriginalName) return;
+    const disabled = !isProviderDisabled(settingsService, editingOriginalName);
+    setProviderDisabled(settingsService, editingOriginalName, disabled);
+    options?.onSystemMessage?.(
+      disabled
+        ? `Disabled ${editingOriginalName}. It is hidden from model pickers until re-enabled.`
+        : `Enabled ${editingOriginalName}.`,
+    );
+    loadProviderList();
+    setPhase('list');
+    setSelectedIndex(0);
+    setDraft(null);
+    setEditingOriginalName(null);
+    setFieldErrors({});
+    setInput('');
+  }, [editingOriginalName, settingsService, options, loadProviderList, setSelectedIndex]);
 
   const selectItem = useCallback(() => {
     const listCount = activeItems.length;
@@ -429,9 +459,11 @@ export const useProviderSelection = (
           setPhase('wizard_key');
           replaceInput(draft.apiKey || '');
         } else if (index === 3) {
+          toggleEditingProviderDisabled();
+        } else if (index === 4) {
           // Save Changes
           saveDraft();
-        } else if (index === 4) {
+        } else if (index === 5) {
           // Cancel
           setPhase('list');
           setSelectedIndex(0);
@@ -467,6 +499,8 @@ export const useProviderSelection = (
           setPhase('wizard_key');
           replaceInput(draft.apiKey || '');
         } else if (index === 4) {
+          toggleEditingProviderDisabled();
+        } else if (index === 5) {
           // Save Changes
           saveDraft();
         } else {
@@ -557,6 +591,7 @@ export const useProviderSelection = (
     settingsService,
     providerSession,
     loadProviderList,
+    toggleEditingProviderDisabled,
     setInput,
     replaceInput,
     saveDraft,
@@ -720,7 +755,7 @@ export const useProviderSelection = (
           } else {
             // Wizard complete, go to fields overview before saving
             setPhase('edit_fields');
-            setSelectedIndex(isEditingBuiltIn ? 3 : 4); // focus Save changes button
+            setSelectedIndex(isEditingBuiltIn ? 4 : 5); // focus Save changes button
             setFieldErrors({});
             setDraftModified(false);
           }

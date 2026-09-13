@@ -1,7 +1,7 @@
 import type { ISettingsService } from '../services/service-interfaces.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
-import { hasProviderCredentials } from '../utils/ai/provider-credentials.js';
+import { hasProviderCredentials, isProviderDisabled } from '../utils/ai/provider-credentials.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
@@ -33,6 +33,8 @@ export interface ProviderSelectionItem {
   isCustom: boolean;
   isActive: boolean;
   hasCredentials: boolean;
+  /** True when the user disabled the provider (hidden from model pickers/catalogs). */
+  isDisabled: boolean;
 }
 
 export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
@@ -97,6 +99,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
       isCustom: false,
       isActive: p.id === activeProvider,
       hasCredentials: hasProviderCredentials(settingsService, p.id),
+      isDisabled: isProviderDisabled(settingsService, p.id),
     }));
 
   for (const c of customList) {
@@ -107,6 +110,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
         isCustom: true,
         isActive: c.id === activeProvider,
         hasCredentials: hasProviderCredentials(settingsService, c.id),
+        isDisabled: isProviderDisabled(settingsService, c.id),
       });
     }
   }
@@ -118,6 +122,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
       isCustom: customList.some((c) => c.id === activeProvider),
       isActive: true,
       hasCredentials: hasProviderCredentials(settingsService, activeProvider),
+      isDisabled: isProviderDisabled(settingsService, activeProvider),
     });
   }
 

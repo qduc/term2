@@ -22,10 +22,10 @@ export type PkceLoginConfig = {
   tokenEndpoint: string;
   /**
    * The loopback ports the authorization server has registered, in preference
-   * order. These servers match the redirect against an allow-list rather than
-   * honouring RFC 8252 port flexibility, so we may only try ports the official
-   * client registered — a fallback exists to survive a concurrent CLI login,
-   * not to pick a free port.
+   * order. Servers that match the redirect against an allow-list only accept
+   * the ports the official client registered, so a fallback exists to survive a
+   * concurrent CLI login, not to pick a free port. `[0]` binds an ephemeral
+   * port, for servers that honour RFC 8252 loopback port flexibility.
    */
   redirectPorts: number[];
   /** Builds the redirect for whichever registered port we managed to bind. */
@@ -125,7 +125,8 @@ function bindLoopbackListener(config: PkceLoginConfig): Promise<{ server: http.S
       server.once('error', onError);
       server.listen(port, '127.0.0.1', () => {
         server.off('error', onError);
-        resolve({ server, port });
+        // Port 0 asks the OS for an ephemeral port; the redirect must name the real one.
+        resolve({ server, port: (server.address() as { port: number }).port });
       });
     };
     attempt(0);
@@ -146,7 +147,8 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 function exampleCallbackUrl(config: PkceLoginConfig): string {
-  return `http://localhost:${config.redirectPorts[0]}${config.callbackPath}?code=...`;
+  const port = config.redirectPorts[0];
+  return `http://localhost:${port === 0 ? '<port>' : port}${config.callbackPath}?code=...`;
 }
 
 function interpretCallbackParams(

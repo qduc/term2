@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  GROK_REDIRECT_URI,
   GROK_TOKEN_ENDPOINT,
   GrokTokenManager,
   loginToGrok,
@@ -168,7 +167,8 @@ describe('loginToGrok', () => {
     // Play the authorization server: redirect back with the state we were given.
     await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
     const requested = new URL(authorizeUrl);
-    const callback = new URL(GROK_REDIRECT_URI);
+    const redirectUri = requested.searchParams.get('redirect_uri')!;
+    const callback = new URL(redirectUri);
     callback.searchParams.set('code', 'auth-code');
     callback.searchParams.set('state', requested.searchParams.get('state')!);
     await fetch(callback);
@@ -176,9 +176,11 @@ describe('loginToGrok', () => {
     await expect(login).resolves.toMatchObject({ access_token: 'issued' });
 
     expect(requested.searchParams.get('code_challenge_method')).toBe('S256');
-    expect(requested.searchParams.get('redirect_uri')).toBe(GROK_REDIRECT_URI);
+    // auth.x.ai rejects `localhost`; it accepts the literal loopback IP on any port.
+    expect(redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:[1-9]\d*\/callback$/);
 
     const body = new URLSearchParams(fetchImpl.mock.calls[0][1].body);
+    expect(body.get('redirect_uri')).toBe(redirectUri);
     expect(body.get('grant_type')).toBe('authorization_code');
     expect(body.get('code')).toBe('auth-code');
     // The verifier must match the challenge that opened the browser.
@@ -210,7 +212,7 @@ describe('loginToGrok', () => {
     );
 
     await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
-    const callback = new URL(GROK_REDIRECT_URI);
+    const callback = new URL(new URL(authorizeUrl).searchParams.get('redirect_uri')!);
     callback.searchParams.set('code', 'attacker-code');
     callback.searchParams.set('state', 'not-our-state');
     await fetch(callback);

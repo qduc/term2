@@ -20,6 +20,15 @@ closed. Milestone 4's measurement did not justify catalog search; keep
 `tools.describe` unless a new consumer or fresh usage evidence crosses that
 recorded gate.
 
+A later failure-recovery audit found that all 37 sampled parse failures carried
+edit payloads inside JavaScript string literals. The narrow follow-up exposes an
+optional JSON `inputs` object as a VM-realm global, so syntax-heavy patch and file
+text can cross as data instead. `run_code` supplies `{}` when the parameter is
+omitted; other `SandboxedCodeHost` callers retain no `inputs` global. Executable
+source and serialized inputs share the existing 65,536-byte admission budget.
+The evidence and follow-up measurement decision are recorded in
+[`run-code` failure and recovery audit](../reports/run-code-failure-recovery-audit-2026-09-13.md).
+
 Before touching this area, also read:
 
 - [One sandboxed code host](sandboxed-code-host.md) for the realm-isolation rule

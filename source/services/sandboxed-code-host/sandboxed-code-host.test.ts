@@ -31,6 +31,17 @@ describe('SandboxedCodeHostImpl worker startup', () => {
     expect(result).toEqual({ ok: true, output: { ready: true } });
     expect(process.cwd()).toBe(callerCwd);
   });
+
+  it('does not install the inputs binding when input data is omitted', async () => {
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return typeof inputs;',
+      capabilities: {},
+      limits,
+      subject: 'Workflow',
+    });
+
+    expect(result).toEqual({ ok: true, output: 'undefined' });
+  });
 });
 
 describe('SandboxedCodeHostImpl call budget', () => {
@@ -69,6 +80,66 @@ describe('SandboxedCodeHostImpl call budget', () => {
 });
 
 describe('SandboxedCodeHostImpl isolation', () => {
+  it('creates inputs in the VM realm without mutating the caller object or interpreting magic keys', async () => {
+    const inputData = JSON.parse(
+      '{"nested":{"value":"caller"},"list":[{"value":1}],"__proto__":{"marker":"data"}}',
+    ) as Record<string, JsonValue>;
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: `
+        let escaped = false;
+        try { inputs.constructor.constructor('return process')(); escaped = true; } catch (_) {}
+        let nestedEscaped = false;
+        try { inputs.nested.constructor.constructor('return process')(); nestedEscaped = true; } catch (_) {}
+        let arrayEscaped = false;
+        try { inputs.list.constructor.constructor('return process')(); arrayEscaped = true; } catch (_) {}
+        inputs.nested.value = 'vm';
+        inputs.list.push({ value: 2 });
+        inputs.__proto__.marker = 'vm';
+        inputs.added = true;
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'inputs');
+        return {
+          escaped,
+          nestedEscaped,
+          arrayEscaped,
+          ownMagicKey: Object.prototype.hasOwnProperty.call(inputs, '__proto__'),
+          magicValue: inputs.__proto__.marker,
+          realmPrototype: Object.getPrototypeOf(inputs) === Object.prototype,
+          nestedRealmPrototype: Object.getPrototypeOf(inputs.nested) === Object.prototype,
+          arrayRealmPrototype: Object.getPrototypeOf(inputs.list) === Array.prototype,
+          objectPrototypeUnpolluted: !Object.prototype.hasOwnProperty.call(Object.prototype, 'marker'),
+          descriptor: { writable: descriptor.writable, enumerable: descriptor.enumerable, configurable: descriptor.configurable },
+          temporaryBindingAbsent: !Object.prototype.hasOwnProperty.call(globalThis, '__inputData'),
+        };
+      `,
+      inputData,
+      capabilities: {},
+      limits,
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      output: {
+        escaped: false,
+        nestedEscaped: false,
+        arrayEscaped: false,
+        ownMagicKey: true,
+        magicValue: 'vm',
+        realmPrototype: true,
+        nestedRealmPrototype: true,
+        arrayRealmPrototype: true,
+        objectPrototypeUnpolluted: true,
+        descriptor: { writable: true, enumerable: true, configurable: true },
+        temporaryBindingAbsent: true,
+      },
+    });
+    expect(inputData).toEqual(
+      JSON.parse('{"nested":{"value":"caller"},"list":[{"value":1}],"__proto__":{"marker":"data"}}'),
+    );
+    expect(Object.prototype.hasOwnProperty.call(inputData, '__proto__')).toBe(true);
+  });
+
   it('blocks host constructors on console, capabilities, and returned values', async () => {
     const consoleOutput: unknown[][] = [];
     const result = await new SandboxedCodeHostImpl().run({
@@ -284,6 +355,106 @@ describe('SandboxedCodeHostImpl isolation', () => {
         members: ['__proto__', 'constructor'],
       },
     });
+  });
+});
+
+describe('SandboxedCodeHostImpl code and input admission budget', () => {
+  it('rejects combined code and inputs before creating a worker', async () => {
+    const workerFactory = vi.fn();
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: { text: 'x' },
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes: 20 },
+      subject: 'Script',
+      workerFactory,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'code_too_large', message: 'Script code and inputs total 21 bytes, over the 20-byte limit' },
+    });
+    expect(workerFactory).not.toHaveBeenCalled();
+  });
+
+  it.each([21, 22])('accepts combined code and inputs at and above the 21-byte boundary (%i)', async (maxCodeBytes) => {
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: { text: 'x' },
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes },
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({ ok: true, output: 1 });
+  });
+
+  it('counts UTF-8 bytes in serialized inputs', async () => {
+    const rejected = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: { text: 'é' },
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes: 21 },
+      subject: 'Script',
+    });
+    const accepted = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: { text: 'é' },
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes: 22 },
+      subject: 'Script',
+    });
+
+    expect(rejected).toEqual({
+      ok: false,
+      error: { code: 'code_too_large', message: 'Script code and inputs total 22 bytes, over the 21-byte limit' },
+    });
+    expect(accepted).toEqual({ ok: true, output: 1 });
+  });
+
+  it('charges the serialized empty object when inputs are present', async () => {
+    const rejected = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: {},
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes: 10 },
+      subject: 'Script',
+    });
+    const accepted = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: {},
+      capabilities: {},
+      limits: { ...limits, maxCodeBytes: 11 },
+      subject: 'Script',
+    });
+
+    expect(rejected).toEqual({
+      ok: false,
+      error: { code: 'code_too_large', message: 'Script code and inputs total 11 bytes, over the 10-byte limit' },
+    });
+    expect(accepted).toEqual({ ok: true, output: 1 });
+  });
+
+  it('returns a structured failure when an internal caller violates the JSON input contract', async () => {
+    const workerFactory = vi.fn();
+    const cyclic: Record<string, JsonValue> = {};
+    cyclic.self = cyclic;
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: 'return 1;',
+      inputData: cyclic,
+      capabilities: {},
+      limits,
+      subject: 'Script',
+      workerFactory,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'runtime_error', message: 'Script inputs must be JSON-serializable' },
+    });
+    expect(workerFactory).not.toHaveBeenCalled();
   });
 });
 

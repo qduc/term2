@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { workerBootstrapExecArgv } from '../../utils/worker-bootstrap.js';
 import { buildWorkerSource } from './host-worker.js';
-import type { CapabilityBinding } from './host-types.js';
+import type { CapabilityBinding, JsonValue } from './host-types.js';
 
 export interface SandboxOptions {
   syncTimeoutMs: number;
@@ -9,7 +9,13 @@ export interface SandboxOptions {
   subject?: string;
   /** When set, a script that returns nothing completes with `null` instead of failing. */
   allowVoidOutput?: boolean;
+  inputDataJson?: string;
   capabilities: readonly CapabilityBinding[];
+}
+
+export function serializeSandboxInputData(inputData: Record<string, JsonValue>): { json: string; bytes: number } {
+  const json = JSON.stringify(inputData);
+  return { json, bytes: Buffer.byteLength(json, 'utf8') };
 }
 
 /**
@@ -26,6 +32,7 @@ export function createSandbox(code: string, options: SandboxOptions): Worker {
       maxConsoleBytes: options.maxConsoleBytes,
       subject: options.subject,
       allowVoidOutput: options.allowVoidOutput,
+      inputDataJson: options.inputDataJson,
     },
   });
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { relaxedNumber } from '../../utils.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
+import type { JsonValue } from '../../../services/sandboxed-code-host/host-types.js';
 import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
 import {
@@ -46,6 +47,45 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_OUTPUT_CHARS = 30_000;
 
+const encodeInputKeysForValidation = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(encodeInputKeysForValidation);
+  if (value === null || typeof value !== 'object') return value;
+  const encoded = Object.create(null) as Record<string, unknown>;
+  for (const [key, item] of Object.entries(value)) {
+    Object.defineProperty(encoded, `$${key}`, {
+      value: encodeInputKeysForValidation(item),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return encoded;
+};
+
+const decodeValidatedInputKeys = (value: Record<string, JsonValue>): Record<string, JsonValue> => {
+  const decode = (item: JsonValue): JsonValue => {
+    if (Array.isArray(item)) return item.map(decode);
+    if (item === null || typeof item !== 'object') return item;
+    const decoded = Object.create(null) as Record<string, JsonValue>;
+    for (const [key, nested] of Object.entries(item)) {
+      Object.defineProperty(decoded, key.slice(1), {
+        value: decode(nested),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return decoded;
+  };
+  return decode(value) as Record<string, JsonValue>;
+};
+
+const runCodeInputsSchema = z
+  .preprocess(encodeInputKeysForValidation, z.record(z.string(), z.json()))
+  // Zod records omit `__proto__`; prefixing every key before validation and
+  // removing exactly one prefix afterward keeps all JSON object keys inert.
+  .overwrite(decodeValidatedInputKeys);
+
 /**
  * Script-shaped limits. They are deliberately not the workflow's: a workflow
  * spawns a handful of agents, while a script's whole point is looping over many
@@ -59,6 +99,12 @@ export const runCodeParametersSchema = z.object({
     .describe(
       'JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. ' +
         'Return the value you want the model to receive. Use console.log only for debugging.',
+    ),
+  inputs: runCodeInputsSchema
+    .optional()
+    .describe(
+      'JSON data exposed to the script as the global `inputs`. Use this for patch or file text. ' +
+        'Code and serialized inputs share the 65,536-byte admission limit.',
     ),
   include_console: z
     .boolean()
@@ -99,8 +145,9 @@ const RUN_CODE_DESCRIPTION =
   'If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; ' +
   'for a large artifact, use line ranges or a focused `grep` projection. A scripted `read_file` result may itself have ' +
   '`truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. ' +
-  'Use `tools.describe` before guessing parameters or returned fields. If a patch is scripted, escape backticks and ' +
-  '${...} inside a template literal, or use ordinary quoted strings with escaped newlines. ' +
+  'Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript ' +
+  'syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` ' +
+  'object instead of embedding it in code. Code and serialized inputs share the 65,536-byte admission limit. ' +
   'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
   'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
 
@@ -321,7 +368,7 @@ export function createRunCodeToolDefinition(
     effect: 'mutating',
     needsApproval: () => false,
     execute: async (params, context, details) => {
-      const { code, timeout_ms, description, include_console = false } = params;
+      const { code, inputs = {}, timeout_ms, description, include_console = false } = params;
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
       const registry = exposedTools();
@@ -331,6 +378,7 @@ export function createRunCodeToolDefinition(
       const runtime = createRuntime(registry);
       const runtimeResult = await runtime.execute({
         code,
+        inputs,
         timeout,
         description,
         context,

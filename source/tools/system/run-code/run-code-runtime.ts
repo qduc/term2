@@ -428,6 +428,7 @@ export interface RunCodeRuntimeOptions {
 
 export interface RunCodeRuntimeInput {
   code: string;
+  inputs: Record<string, JsonValue>;
   timeout: number;
   description: string;
   context?: unknown;
@@ -808,6 +809,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     });
     const result = await new SandboxedCodeHostImpl().run({
       code: input.code,
+      inputData: input.inputs,
       capabilities: { tools },
       limits: {
         timeoutMs: input.timeout,

@@ -1,6 +1,6 @@
 import type { Worker } from 'node:worker_threads';
 import { isJsonValue, type JsonValue } from '../agent-runtime/workflow/workflow-types.js';
-import { createSandbox } from './sandbox.js';
+import { createSandbox, serializeSandboxInputData } from './sandbox.js';
 import {
   isCapabilityOutcome,
   type CapabilityHandler,
@@ -26,9 +26,9 @@ function safeMessage(error: unknown): string {
  * The host owns everything that is the same for every caller: worker lifecycle,
  * the wall-clock deadline, parent cancellation, code and output byte budgets,
  * console capture, per-capability admission control and concurrency permits.
- * What the code can *reach* is entirely in the capabilities it is handed —
- * `run_agent_workflow` passes `agent`, `run_code` passes `tools` — so the two
- * tools differ only in that object.
+ * What the code can *reach* is explicit in the input: `run_agent_workflow`
+ * passes the `agent` capability, while `run_code` passes `tools` plus a
+ * realm-created JSON `inputs` object.
  */
 export class SandboxedCodeHostImpl implements SandboxedCodeHost {
   async run(input: HostRunInput): Promise<HostResult> {
@@ -36,8 +36,20 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
     const failure = (code: HostErrorCode, message: string): HostResult => ({ ok: false, error: { code, message } });
 
     if (typeof input.code !== 'string') return failure('runtime_error', `${subject} code must be a string`);
-    if (Buffer.byteLength(input.code, 'utf8') > limits.maxCodeBytes) {
-      return failure('code_too_large', `${subject} code exceeds the configured size limit`);
+    let inputData: ReturnType<typeof serializeSandboxInputData> | undefined;
+    try {
+      inputData = input.inputData === undefined ? undefined : serializeSandboxInputData(input.inputData);
+    } catch {
+      return failure('runtime_error', `${subject} inputs must be JSON-serializable`);
+    }
+    const admittedBytes = Buffer.byteLength(input.code, 'utf8') + (inputData?.bytes ?? 0);
+    if (admittedBytes > limits.maxCodeBytes) {
+      return failure(
+        'code_too_large',
+        inputData
+          ? `${subject} code and inputs total ${admittedBytes} bytes, over the ${limits.maxCodeBytes}-byte limit`
+          : `${subject} code exceeds the configured size limit`,
+      );
     }
 
     const entries = Object.entries(input.capabilities);
@@ -50,6 +62,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           maxConsoleBytes: limits.maxConsoleBytes,
           subject,
           allowVoidOutput: input.allowVoidOutput,
+          inputDataJson: inputData?.json,
           capabilities: entries.map(([, handler]) => handler.binding),
         });
     } catch (error) {

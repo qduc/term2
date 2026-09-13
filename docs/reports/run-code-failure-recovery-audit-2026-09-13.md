@@ -18,13 +18,37 @@ used a template literal and two used a quoted string. They were 4.96% of the
 median 16-second and p90 29-second interval. This is repeated model friction,
 not evidence of user-visible task failure or unsafe partial execution.
 
-The next product experiment, if prioritized, should therefore target the extra
-code/data quoting layer for edit payloads, not add a general type system. A
-controlled design could pass inert JSON data separately from executable source
-and expose it as a realm-created binding. This report does not select its public
-interface or authorize implementation. The experiment should first show that it
-removes these parse repairs without weakening approval, confinement, or source
-diagnostics.
+The audit therefore recommended that the next product experiment target the
+extra code/data quoting layer for edit payloads rather than add a general type
+system. At the frozen decision point it did not select or authorize a public
+interface; the follow-up below records the subsequently selected boundary and
+the evidence still needed to measure its naturalistic benefit.
+
+## Follow-up experiment selected (2026-09-13)
+
+The implemented candidate adds optional `run_code.inputs`: a JSON object exposed
+to the script as the VM-realm global `inputs`. `run-code.ts` preserves JSON keys
+such as `__proto__` as inert own data through parameter validation.
+`SandboxedCodeHostImpl.run` serializes the object before worker creation, and
+`WORKER_TEMPLATE` parses and installs it inside the VM rather than interpolating
+payload text into generated source. The public tool supplies an empty object when
+the parameter is omitted; shared-host workflow callers omit the binding.
+
+The existing 65,536-byte source admission guard now measures executable source
+plus serialized input UTF-8 bytes for callers that provide input data. Rejection
+still occurs before worker creation and uses `code_too_large`; its message names
+the measured combined bytes and limit. The completion telemetry fields
+`sourceBytes`, `sourceLines`, and `sourceDigest` remain measurements of executable
+source only, so their established meaning does not silently change.
+
+Public-boundary tests pin syntax-heavy patch text, omitted-input behavior, and
+magic-key fidelity. Shared-host tests pin VM provenance for root, nested, and
+array values; caller non-mutation; temporary-binding cleanup; property
+descriptors; omitted workflow bindings; serialization failure; and ASCII, empty,
+and multibyte admission boundaries. This proves the candidate's boundary
+contract, not its naturalistic benefit. Re-evaluate fresh completion telemetry
+after enough post-change edit scripts exist; compare parse-repair incidence,
+same-turn recovery, and latency with this report's frozen baseline.
 
 ## Scope and accounting
 
@@ -220,10 +244,10 @@ but current telemetry cannot measure that safety case for every mutating tool.
    packaging, exact declaration generation, ambient isolation, cancellation,
    resource guards, and source mapping.
 2. **Treat embedded edit payloads as the demonstrated residual pain.** The
-   current 37/37 concentration reproduces the older incident mechanism after
-   the diagnostics improvements. If product work is prioritized, preregister a
-   narrow code/data-separation experiment and compare parse repairs, task
-   completion, tokens, and end-to-end latency against the existing interface.
+   37/37 concentration reproduces the older incident mechanism after the
+   diagnostics improvements. The selected narrow code/data-separation boundary
+   is recorded above; compare fresh parse repairs, task completion, tokens, and
+   end-to-end latency against this frozen baseline before broadening it.
 3. **Audit effect-receipt coverage before using `applied == 0` as a safety
    conclusion.** At least memory mutation is not represented by that aggregate.
 4. **Check the six shape-assumption cases against actual return-schema

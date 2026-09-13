@@ -123,6 +123,8 @@ export interface HostLimits {
 
 export interface HostRunInput {
   code: string;
+  /** Optional JSON object exposed to code as the realm-local global `inputs`. */
+  inputData?: Record<string, JsonValue>;
   capabilities: Record<string, CapabilityHandler<any>>;
   limits: HostLimits;
   signal?: AbortSignal;

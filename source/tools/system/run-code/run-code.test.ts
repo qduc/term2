@@ -12,6 +12,7 @@ import {
   RUN_CODE_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
   getRunCodeExecutionResult,
+  runCodeParametersSchema,
 } from './run-code.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
@@ -722,6 +723,38 @@ describe('run_code', () => {
     expect(output).not.toContain('debug trace');
   });
 
+  it('exposes inert JSON inputs without embedding their text in JavaScript source', async () => {
+    const patch = '*** Begin Patch\n*** Add File: example.md\n+`literal` and ${placeholder}\n*** End Patch';
+    const params = runCodeParametersSchema.parse({
+      code: 'return inputs.patch;',
+      description: 'return inert patch text',
+      inputs: { patch },
+    });
+
+    const output = String(await build([]).execute(params));
+
+    expect(output).toContain(`Result:\n${patch}`);
+  });
+
+  it('exposes an empty inputs object when the parameter is omitted', async () => {
+    const output = await run([], 'return { keys: Object.keys(inputs) };');
+
+    expect(output).toContain('Result:\n{"keys":[]}');
+  });
+
+  it('preserves magic input keys through public parameter validation as inert data', async () => {
+    const params = runCodeParametersSchema.parse({
+      code: 'return { keys: Object.keys(inputs), own: Object.prototype.hasOwnProperty.call(inputs, "__proto__"), marker: inputs.__proto__.marker, polluted: Object.prototype.marker ?? null };',
+      description: 'inspect magic input key',
+      inputs: JSON.parse('{"__proto__":{"marker":"data"},"a":1}'),
+    });
+
+    const output = String(await build([]).execute(params));
+
+    expect(output).toContain('Result:\n{"keys":["__proto__","a"],"own":true,"marker":"data","polluted":null}');
+    expect((Object.prototype as { marker?: string }).marker).toBeUndefined();
+  });
+
   it('includes console trace on failure so the error remains actionable', async () => {
     const output = await run([], 'console.log("debug trace"); throw new Error("broken");');
 
@@ -837,7 +870,9 @@ describe('run_code', () => {
     expect(description).toContain('30,000');
     expect(description).toContain('read that exact path with `read_file` rather than repeating completed calls');
     expect(description).toContain('`truncated: true` and a `fullOutputPath`');
-    expect(description).toContain('template literal');
+    expect(description).toContain('pass it through the `inputs` parameter');
+    expect(description).toContain('global `inputs`');
+    expect(description).toContain('share the 65,536-byte admission limit');
     expect(description).not.toContain('apply_patch directly');
     expect(description).not.toContain('call it directly as a tool');
   });
@@ -1100,6 +1135,15 @@ describe('run_code', () => {
     expect(description).toContain('include_console');
     expect(description).not.toContain('print results with console.log');
     expect(description).not.toContain('return only inside your own functions');
+  });
+
+  it('keeps the inputs field representable in the public JSON schema', () => {
+    const schema = z.toJSONSchema(runCodeParametersSchema) as {
+      properties?: { inputs?: { type?: string; additionalProperties?: unknown } };
+    };
+
+    expect(schema.properties?.inputs?.type).toBe('object');
+    expect(schema.properties?.inputs?.additionalProperties).toBeDefined();
   });
 
   it('describes an exposed tool with its full schema and description', async () => {

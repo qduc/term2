@@ -1,3 +1,22 @@
+## [0.23.0] - 2026-09-13
+
+### Features
+- Added the term2 documentation website, covering installation, providers, operating modes, tools, safety, remote development, and configuration.
+- Added the production web gateway with authenticated session commands, broad conversation-event projection, read-only workspace enforcement, and durable session recovery for external clients.
+- Added `run_code` improvements for separate JSON inputs, structured execution outcomes, declarable return contracts, nested tool traces, and clearer failure diagnostics.
+- Added Librarian and Reviewer subagent roles, configurable round-robin model pools for subagent roles, and completed background runs that can be continued.
+- Added session retrieval filters and indexed seeks, bounded previews, and tool names in session results.
+
+### Bug Fixes
+- Fixed live streaming rows being claimed after their React update was queued, which could leave rendered state behind the conversation state.
+- Fixed nested `run_code` approval prompts so tool arguments remain visible.
+- Fixed settings menus while filtering and removed deprecated subagent researcher settings.
+
+### Improvements
+- Added shell call descriptions to the task UI.
+- Removed the unused memory synthesis tool and clarified the librarian's history-retrieval role.
+- Extended modern GPT tool handling to GPT-6 models.
+
 ## [0.22.1] - 2026-09-12
 
 ### Improvements

@@ -32,14 +32,21 @@ Subagents run under distinct role profiles with explicit permission boundaries a
 - **Permissions**: Memory tools and skills only. No general filesystem or shell access.
 - **Default Model Tier**: `agent.cheapModel`.
 
+### 5. Reviewer
+- **Purpose**: Independent review of a change, plan, or design, using explorers to gather evidence before reporting concrete findings.
+- **Permissions**: Delegation is limited to bounded read-only explorers; the reviewer does not edit the workspace.
+- **Default Model Tier**: `agent.smartModel`.
+
 ## Model Capability Tiers
 
 Subagent roles are mapped to configurable tiers in your settings:
 
 - **`agent.smartModel` / `agent.smartProvider`**: High-reasoning model for complex architecture, mentor advisory, and planning.
-- **`agent.balancedModel` / `agent.balancedProvider`**: General implementation model for code writing and edits.
-- **`agent.cheapModel` / `agent.cheapProvider`**: Fast, lightweight model for high-volume searches and indexing.
+- **`agent.balancedModel` / `agent.balancedProvider`**: General implementation model for code writing and edits. Multiple models form a round-robin pool for subagent spawns.
+- **`agent.cheapModel` / `agent.cheapProvider`**: Fast, lightweight model for high-volume searches and indexing. Multiple models form a round-robin pool for subagent spawns.
 - **`agent.choreModel` / `agent.choreProvider`**: Narrow utility model for patch self-healing and auto-approval evaluation.
+
+Pool values are configured in the settings UI or as arrays in the corresponding tier settings. Non-subagent consumers use the first configured model.
 
 ## Background Task Manager (`Ctrl+G`)
 

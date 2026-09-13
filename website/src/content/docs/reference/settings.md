@@ -26,16 +26,16 @@ term2 settings can be configured via:
 | `agent.model` | `string` | `"gpt-5.1"` | ✓ Yes | `OPENROUTER_MODEL` | The AI model to use (e.g. gpt-4, claude-3-opus) |
 | `agent.efficientModel` | `string` | — | ✓ Yes | — | Model for lower-tier workflow agents. Falls back to agent.model when unset. |
 | `agent.capableModel` | `string` | — | ✓ Yes | — | Model for higher-tier workflow agents. Falls back to agent.model when unset. |
-| `agent.smartModel` | `string` | — | ✓ Yes | — | Model for smart ancillary tasks. Falls back to agent.model when unset. |
+| `agent.smartModel` | `string` | — | ✓ Yes | — | Models for smart ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
 | `agent.smartProvider` | `string` | — | ✓ Yes | — | Provider for smart ancillary tasks. Falls back to agent.provider when unset. |
 | `agent.smartReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for smart ancillary tasks. Falls back to agent.reasoningEffort when unset. |
-| `agent.balancedModel` | `string` | — | ✓ Yes | — | Model for balanced ancillary tasks. Falls back to agent.model when unset. |
+| `agent.balancedModel` | `string` | — | ✓ Yes | — | Models for balanced ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
 | `agent.balancedProvider` | `string` | — | ✓ Yes | — | Provider for balanced ancillary tasks. Falls back to agent.provider when unset. |
 | `agent.balancedReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for balanced ancillary tasks. Falls back to agent.reasoningEffort when unset. |
-| `agent.cheapModel` | `string` | — | ✓ Yes | — | Model for cheap ancillary tasks. Falls back to agent.model when unset. |
+| `agent.cheapModel` | `string` | — | ✓ Yes | — | Models for cheap ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
 | `agent.cheapProvider` | `string` | — | ✓ Yes | — | Provider for cheap ancillary tasks. Falls back to agent.provider when unset. |
 | `agent.cheapReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for cheap ancillary tasks. Falls back to agent.reasoningEffort when unset. |
-| `agent.choreModel` | `string` | — | ✓ Yes | — | Model for chore ancillary tasks. Falls back to agent.model when unset. |
+| `agent.choreModel` | `string` | — | ✓ Yes | — | Models for chore ancillary tasks (auto-approval reviews, edit healing). Falls back to agent.model when unset. |
 | `agent.choreProvider` | `string` | — | ✓ Yes | — | Provider for chore ancillary tasks. Falls back to agent.provider when unset. |
 | `agent.reasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort (none\|minimal\|low\|medium\|high\|xhigh\|default) |
 | `agent.temperature` | `number` | — | ✓ Yes | — | Model temperature (0-2, controls randomness) |
@@ -98,9 +98,6 @@ term2 settings can be configured via:
 | `agent.subagentWorkerModel` | `string` | — | ✓ Yes | — | Model override for the worker subagent. Falls back to agent.model when unset. |
 | `agent.subagentWorkerProvider` | `string` | — | ✓ Yes | — | Provider override for the worker subagent. Falls back to agent.provider when unset. |
 | `agent.subagentWorkerReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset. |
-| `agent.subagentResearcherModel` | `string` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerModel instead. |
-| `agent.subagentResearcherProvider` | `string` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerProvider instead. |
-| `agent.subagentResearcherReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Deprecated: the researcher subagent role was folded into explorer. Retained so persisted configs still parse; use agent.subagentExplorerReasoningEffort instead. |
 | `agent.subagentLibrarianModel` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
 | `agent.subagentLibrarianProvider` | `string` | — | ✓ Yes | — | Provider override for the librarian subagent. Falls back to agent.provider when unset. |
 | `agent.subagentLibrarianReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset. |

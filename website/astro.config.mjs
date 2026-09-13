@@ -16,6 +16,7 @@ export default defineConfig({
             { label: 'Overview', link: '/getting-started/' },
             { label: 'Installation', link: '/getting-started/installation/' },
             { label: 'First Run', link: '/getting-started/first-run/' },
+            { label: "What's New", link: '/getting-started/whats-new/' },
           ],
         },
         {

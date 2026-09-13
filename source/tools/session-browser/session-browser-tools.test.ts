@@ -64,6 +64,29 @@ it('exposes read-only browser tools with strict bounded parameter schemas', asyn
   expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end', cursor: 'c1' }).success).toBe(false);
 });
 
+it('validates session_read filter, seek, and preview parameters', () => {
+  const read = createSessionBrowserToolDefinitions(browser)[2]!;
+  const parses = (params: Record<string, unknown>) => read.parameters.safeParse({ id: 'a', ...params }).success;
+
+  expect(parses({ kinds: ['user', 'assistant'] })).toBe(true);
+  expect(parses({ kinds: [] })).toBe(false);
+  expect(parses({ kinds: ['unknown'] })).toBe(false);
+  expect(parses({ index: 12, before: 3 })).toBe(true);
+  expect(parses({ index: -1 })).toBe(false);
+  expect(parses({ before: 3 })).toBe(false);
+  expect(parses({ index: 12, cursor: 'c1' })).toBe(false);
+  expect(parses({ index: 12, from: 'end' })).toBe(false);
+  expect(parses({ itemMaxChars: 200 })).toBe(true);
+  expect(parses({ itemMaxChars: 10 })).toBe(false);
+
+  // The search-to-read handoff and the filter/cursor binding are the
+  // non-obvious rules; pin them so a description cleanup cannot drop them.
+  expect(read.description).toContain('`index` set to a `session_search` `messageIndex`');
+  expect(read.description).toContain('A cursor keeps the `kinds` and `itemMaxChars` it was issued with');
+  expect(read.description).toContain('`matched`');
+  expect(read.description).toContain('`truncated: true`');
+});
+
 it('executes session_read at the tool boundary with the pinned serialized envelope field set', async () => {
   const id = 'envelope-session';
   const writer = createConversationLogWriter({ sessionId: id, dir, logger });

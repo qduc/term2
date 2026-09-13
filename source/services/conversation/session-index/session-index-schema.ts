@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = '4';
 export const PROJECTION_VERSION = '1';
 
 export type ProbeCapabilityResult = { ok: true } | { ok: false; reason: string };
@@ -86,6 +86,7 @@ export function createSchema(db: Database.Database): void {
       projected_ordinal INTEGER NOT NULL,
       original_message_index INTEGER NOT NULL,
       kind TEXT NOT NULL,
+      tool_name TEXT,
       original_text TEXT NOT NULL,
       normalized_text TEXT NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE

@@ -184,6 +184,59 @@ describe('SessionBrowser Indexed Backend', () => {
       }
     });
 
+    it('achieves exact result parity with canonical browser for filtered, seeking, and preview reads', async () => {
+      const id = 'mixed-parity';
+      const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+      writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/workspace/project-a' });
+      for (let turn = 0; turn < 3; turn++) {
+        writer.append({ type: 'user_message', message: { id: `u${turn}`, sender: 'user', text: `question ${turn}` } });
+        writer.append({
+          type: 'assistant_turn',
+          turn: { items: [{ type: 'assistant_text', text: `answer ${turn}` }] },
+          state: { previousResponseId: null },
+        });
+        writer.append({
+          type: 'command_message',
+          message: {
+            id: `c${turn}`,
+            sender: 'command',
+            status: 'completed',
+            toolName: 'shell',
+            command: `ls ${turn}`,
+            output: `${'o'.repeat(2000)} end-${turn}`,
+          },
+        });
+      }
+      void writer.close();
+      const getContext = (): SessionBrowserContext => ({ projectPath: '/workspace/project-a' });
+      const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+      const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+      const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+      const stripCursor = (obj: any) => {
+        const copy = { ...obj };
+        delete copy.nextCursor;
+        return copy;
+      };
+
+      try {
+        const inputs = [
+          { id, kinds: ['user', 'assistant'] as const },
+          { id, kinds: ['tool'] as const, itemMaxChars: 100 },
+          { id, index: 4, before: 1, limit: 2 },
+          { id, from: 'end' as const, kinds: ['user'] as const, limit: 2 },
+        ];
+        for (const input of inputs) {
+          const canonical = canonicalBrowser.read({ ...input, kinds: input.kinds ? [...input.kinds] : undefined });
+          const indexed = await indexedBrowser.read({ ...input, kinds: input.kinds ? [...input.kinds] : undefined });
+          expect((indexed as any).error).toBeUndefined();
+          expect(stripCursor(indexed)).toEqual(stripCursor(canonical));
+        }
+      } finally {
+        await indexedBrowser.close();
+        await indexService.close();
+      }
+    });
+
     it('achieves exact result parity with canonical browser for search queries across match membership, order, snippets, counts, and output budgets', async () => {
       writeSession('session-11111111', '/workspace/project-a', undefined, 'apple banana cherry pie');
       writeSession(

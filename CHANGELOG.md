@@ -1,3 +1,19 @@
+## [0.24.0] - 2026-09-13
+
+### Features
+- OAuth logins now accept a pasted callback query string or a bare authorization code, not only the full URL.
+
+### Bug Fixes
+- Fixed Grok OAuth login being rejected by auth.x.ai: the redirect now uses 127.0.0.1 on an ephemeral port, matching the registered redirect URI.
+- Fixed grep/glob disappearing from read-only surfaces or when `tools.fileWrite.enabled = false`; the search tools now gate on read authority, so only `tools.fileRead.enabled` removes them.
+- Fixed grep/glob exposure varying by model: the dedicated search tools now depend on the `app.searchViaShell` setting alone, and only an explicit `on` routes search through the shell.
+- Fixed committed command groups being reprinted once per later message as the UI message cap trimmed their front.
+- Fixed the `run_code` description recommending `grep` where it may not exist on patch-editing surfaces, and unknown-tool rejections raised before dispatch are now counted in completion telemetry.
+- Fixed the composer keeping the drafted text after submitting a custom `ask_user` answer.
+
+### Improvements
+- User messages now render on a full-width background band so they read as content blocks, with the accent color confined to the prompt glyph.
+
 ## [0.23.0] - 2026-09-13
 
 ### Features

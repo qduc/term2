@@ -41,20 +41,33 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous ID or shortRef returned by `session_list`/`session_search`; never reconstruct an ID. Ambiguous prefixes return candidates and are never guessed. On an initial read, `from: "end"` starts at the last `limit` projected records in chronological order (`limit` selects the tail region; without `from: "end"` the read starts at the first record); omit `cursor` with this option, then continue with the returned cursor and no `from`. Cursors are process-local opaque handles: use exactly the `nextCursor` returned by the preceding page with the same `id`. Never invent, edit, or reuse a cursor from another read; after an invalid or stale cursor, restart without one. `maxChars` may require continuation pages; `nextCursor` is returned only while forward content remains, so its absence after a tail read says nothing about earlier records. `total` is the projected record count for the whole session; `omitted` counts whole-session records not represented on this page for any reason — before the tail anchor, beyond `limit`, or awaiting continuation — unlike `session_list`/`session_search`, whose `omitted` counts only budget-dropped entries; a partial or resumed chunk still represents its record, so `total - omitted` records are represented here.',
+      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous ID or shortRef returned by `session_list`/`session_search`; never reconstruct an ID. Ambiguous prefixes return candidates and are never guessed. Long sessions are mostly tool output and reasoning: pass `kinds: ["user", "assistant"]` to read only the conversation, or `itemMaxChars` for an outline where each longer record is cut to a preview marked `truncated: true` (its `totalTextChars` is the full length). To open a search hit, start with `index` set to a `session_search` `messageIndex` (or an item `index`), optionally with `before` for that many preceding records; the read starts at the first record at or after that index that passes `kinds`. On an initial read, `from: "end"` starts at the last `limit` projected records in chronological order (with `kinds`, the last `limit` matching records; `limit` selects the tail region; without `from: "end"` the read starts at the first record unless `index` is set); omit `cursor` with `from` or `index`, then continue with the returned cursor and neither. Cursors are process-local opaque handles: use exactly the `nextCursor` returned by the preceding page with the same `id`. Never invent, edit, or reuse a cursor from another read; after an invalid or stale cursor, restart without one. A cursor keeps the `kinds` and `itemMaxChars` it was issued with; omit them on continuation or repeat them unchanged. `maxChars` may require continuation pages; `nextCursor` is returned only while forward content remains, so its absence after a tail read says nothing about earlier records. `total` is the projected record count for the whole session, and `matched` (present only with `kinds`) counts the records of those kinds; `omitted` counts whole-session records not represented on this page for any reason — excluded by `kinds`, before the anchor, beyond `limit`, or awaiting continuation — unlike `session_list`/`session_search`, whose `omitted` counts only budget-dropped entries; a partial or resumed chunk still represents its record, so `total - omitted` records are represented here.',
       z
-        .object({ id, from: z.literal('end').optional(), cursor: z.string().optional(), limit, maxChars })
+        .object({
+          id,
+          from: z.literal('end').optional(),
+          index: z.number().int().min(0).optional(),
+          before: z.number().int().min(0).max(50).optional(),
+          cursor: z.string().optional(),
+          kinds: z.array(sessionKind).min(1).max(6).optional(),
+          itemMaxChars: z.number().int().min(100).max(12_000).optional(),
+          limit,
+          maxChars,
+        })
         .strict()
         .superRefine((params, ctx) => {
+          const issue = (path: string, message: string) =>
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
           if (params.from === 'end' && params.cursor !== undefined)
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ['from'],
-              message: '`from: "end"` requires an initial read without cursor.',
-            });
+            issue('from', '`from: "end"` requires an initial read without cursor.');
+          if (params.index !== undefined && params.cursor !== undefined)
+            issue('index', '`index` requires an initial read without cursor.');
+          if (params.index !== undefined && params.from === 'end')
+            issue('index', 'Use either `index` or `from: "end"`, not both.');
+          if (params.before !== undefined && params.index === undefined) issue('before', '`before` requires `index`.');
         }),
       (params) => browser.read(params),
-      '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, text: string, textOffset: number, totalTextChars: number, complete: boolean }[], nextCursor?: string, total: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
+      '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, toolName?: string, text: string, textOffset: number, totalTextChars: number, complete: boolean, truncated?: boolean }[], nextCursor?: string, total: number, matched?: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
     ),
   ];
 }

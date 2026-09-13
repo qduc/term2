@@ -88,6 +88,7 @@ export type IndexedResolveResult =
 export type IndexedReadRecord = {
   index: number;
   kind: Kind;
+  toolName?: string;
   text: string;
 };
 
@@ -274,8 +275,8 @@ export class SessionIndexDatabase {
 
     const insertMessageStmt = this.#db.prepare(`
       INSERT INTO messages (
-        session_id, projected_ordinal, original_message_index, kind, original_text, normalized_text
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        session_id, projected_ordinal, original_message_index, kind, tool_name, original_text, normalized_text
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     // Refresh each changed session
@@ -308,6 +309,7 @@ export class SessionIndexDatabase {
         projectedOrdinal: number;
         originalMessageIndex: number;
         kind: string;
+        toolName: string | null;
         originalText: string;
         normalizedText: string;
       }> = [];
@@ -371,6 +373,7 @@ export class SessionIndexDatabase {
               projectedOrdinal: ordinal,
               originalMessageIndex: r.index,
               kind: r.kind,
+              toolName: r.toolName ?? null,
               originalText: r.text,
               normalizedText: r.text.toLowerCase(),
             }));
@@ -434,6 +437,7 @@ export class SessionIndexDatabase {
               msg.projectedOrdinal,
               msg.originalMessageIndex,
               msg.kind,
+              msg.toolName,
               msg.originalText,
               msg.normalizedText,
             );
@@ -691,7 +695,7 @@ export class SessionIndexDatabase {
 
     const messageRows = this.#db
       .prepare(
-        `SELECT projected_ordinal, original_message_index, kind, original_text
+        `SELECT projected_ordinal, original_message_index, kind, tool_name, original_text
         FROM messages
         WHERE session_id = ?
         ORDER BY projected_ordinal ASC`,
@@ -700,12 +704,14 @@ export class SessionIndexDatabase {
       projected_ordinal: number;
       original_message_index: number;
       kind: string;
+      tool_name: string | null;
       original_text: string;
     }>;
 
     const records: IndexedReadRecord[] = messageRows.map((m) => ({
       index: m.original_message_index,
       kind: m.kind as Kind,
+      ...(m.tool_name ? { toolName: m.tool_name } : {}),
       text: m.original_text,
     }));
 

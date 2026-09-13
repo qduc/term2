@@ -737,6 +737,175 @@ it('returns a coherent bounded failure when the runtime byte cap is tiny', () =>
   }
 });
 
+// A mixed transcript: conversation turns interleaved with a large tool record
+// and a reasoning record, so kind filters and item caps change what fits.
+function writeMixedSession(id: string) {
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+  for (let turn = 0; turn < 3; turn++) {
+    writer.append({ type: 'user_message', message: { id: `u${turn}`, sender: 'user', text: `question ${turn}` } });
+    writer.append({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'reasoning', text: `thinking ${turn}` },
+          { type: 'assistant_text', text: `answer ${turn}` },
+        ],
+      },
+      state: { previousResponseId: null },
+    });
+    // Replay drops a command_message that precedes its turn's assistant_turn.
+    writer.append({
+      type: 'command_message',
+      message: {
+        id: `c${turn}`,
+        sender: 'command',
+        status: 'completed',
+        toolName: 'shell',
+        command: `ls ${turn}`,
+        output: `${'o'.repeat(2000)} end-${turn}`,
+      },
+    });
+  }
+  void writer.close();
+}
+
+it('filters read records by kind while keeping whole-session totals', () => {
+  writeMixedSession('mixed');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const all: any = browser.read({ id: 'mixed', limit: 50, maxChars: 12_000 });
+
+  const page: any = browser.read({ id: 'mixed', kinds: ['user', 'assistant'], limit: 50 });
+  expect(page.items.map((item: any) => item.kind)).toEqual([
+    'user',
+    'assistant',
+    'user',
+    'assistant',
+    'user',
+    'assistant',
+  ]);
+  expect(page.items.map((item: any) => item.text)).toEqual(
+    all.items.filter((item: any) => item.kind === 'user' || item.kind === 'assistant').map((item: any) => item.text),
+  );
+  expect(page.total).toBe(all.total);
+  expect(page.matched).toBe(6);
+  expect(page.total - page.omitted).toBe(page.items.length);
+  expect(page.nextCursor).toBeUndefined();
+  expect(all.matched).toBeUndefined();
+});
+
+it('continues a filtered read with the cursor filter and rejects a conflicting filter', () => {
+  writeMixedSession('mixed-cursor');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const first: any = browser.read({ id: 'mixed-cursor', kinds: ['user'], limit: 1 });
+  expect(first.items.map((item: any) => item.text)).toEqual(['question 0']);
+
+  // Omitting `kinds` on continuation keeps the filter the cursor was issued for.
+  const second: any = browser.read({ id: 'mixed-cursor', cursor: first.nextCursor, limit: 1 });
+  expect(second.items.map((item: any) => item.text)).toEqual(['question 1']);
+
+  const same: any = browser.read({ id: 'mixed-cursor', cursor: second.nextCursor, kinds: ['user'], limit: 1 });
+  expect(same.items.map((item: any) => item.text)).toEqual(['question 2']);
+
+  expect(browser.read({ id: 'mixed-cursor', cursor: first.nextCursor, kinds: ['assistant'] })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+});
+
+it('anchors a filtered from-end read on the last limit matching records', () => {
+  writeMixedSession('mixed-tail');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const tail: any = browser.read({ id: 'mixed-tail', from: 'end', kinds: ['user'], limit: 2 });
+  expect(tail.items.map((item: any) => item.text)).toEqual(['question 1', 'question 2']);
+  expect(tail.matched).toBe(3);
+  expect(tail.nextCursor).toBeUndefined();
+});
+
+it('seeks to a record index with optional preceding context', () => {
+  writeMixedSession('mixed-seek');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const hit: any = browser.search({ query: 'end-1', kinds: ['tool'] });
+  const messageIndex = hit.results[0].messageIndex;
+
+  const seek: any = browser.read({ id: 'mixed-seek', index: messageIndex, limit: 1 });
+  expect(seek.items).toHaveLength(1);
+  expect(seek.items[0]).toMatchObject({ index: messageIndex, kind: 'tool', complete: true });
+  expect(seek.items[0].text).toContain('end-1');
+  expect(seek.nextCursor).toBeTruthy();
+
+  const withContext: any = browser.read({ id: 'mixed-seek', index: messageIndex, before: 1, limit: 2 });
+  expect(withContext.items.map((item: any) => item.text)).toEqual(['answer 1', seek.items[0].text]);
+
+  // `before` counts records in the filtered view.
+  const filtered: any = browser.read({ id: 'mixed-seek', index: messageIndex, before: 1, kinds: ['assistant'] });
+  expect(filtered.items[0].text).toBe('answer 1');
+
+  // An index between matching records starts at the next matching one.
+  const next: any = browser.read({ id: 'mixed-seek', index: messageIndex, kinds: ['assistant'], limit: 1 });
+  expect(next.items[0].text).toBe('answer 2');
+
+  const pastEnd: any = browser.read({ id: 'mixed-seek', index: 10_000 });
+  expect(pastEnd.items).toEqual([]);
+  expect(pastEnd.nextCursor).toBeUndefined();
+});
+
+it('rejects a record-index seek combined with a cursor or tail anchor', () => {
+  writeMixedSession('mixed-seek-reject');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const first: any = browser.read({ id: 'mixed-seek-reject', limit: 1 });
+
+  expect(browser.read({ id: 'mixed-seek-reject', cursor: first.nextCursor, index: 0 })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+  expect(browser.read({ id: 'mixed-seek-reject', from: 'end', index: 0 })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+});
+
+it('caps each item to a preview and advances past truncated records', () => {
+  writeMixedSession('mixed-preview');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const outline: any = browser.read({ id: 'mixed-preview', itemMaxChars: 100, limit: 50 });
+  const tools = outline.items.filter((item: any) => item.kind === 'tool');
+  expect(tools).toHaveLength(3);
+  for (const item of tools) {
+    expect(item.text.length).toBeLessThanOrEqual(100);
+    expect(item.truncated).toBe(true);
+    expect(item.complete).toBe(true);
+    expect(item.totalTextChars).toBeGreaterThan(2000);
+  }
+  expect(outline.items.find((item: any) => item.kind === 'user').truncated).toBeUndefined();
+  expect(outline.nextCursor).toBeUndefined();
+
+  const full: any = browser.read({ id: 'mixed-preview', index: tools[0].index, limit: 1 });
+  expect(full.items[0].text).toHaveLength(tools[0].totalTextChars);
+  expect(full.items[0].truncated).toBeUndefined();
+});
+
+it('keeps the preview cap across cursor continuation', () => {
+  writeMixedSession('mixed-preview-cursor');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const first: any = browser.read({ id: 'mixed-preview-cursor', kinds: ['tool'], itemMaxChars: 100, limit: 1 });
+  const second: any = browser.read({ id: 'mixed-preview-cursor', cursor: first.nextCursor, limit: 1 });
+  expect(second.items[0]).toMatchObject({ kind: 'tool', truncated: true });
+  expect(browser.read({ id: 'mixed-preview-cursor', cursor: first.nextCursor, itemMaxChars: 200 })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+});
+
+it('labels tool records with their tool name', () => {
+  writeMixedSession('mixed-tool-name');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const page: any = browser.read({ id: 'mixed-tool-name', kinds: ['tool'], itemMaxChars: 100 });
+  expect(page.items.map((item: any) => item.toolName)).toEqual(['shell', 'shell', 'shell']);
+  expect(page.items.every((item: any) => item.text.startsWith('ls '))).toBe(true);
+});
+
 it('does not create persistence directories while browsing', () => {
   const missing = path.join(dir, 'missing');
   setConversationsDirForTest(missing);

@@ -105,7 +105,7 @@ describe('SessionIndexDatabase', () => {
 
       const meta = index.database.prepare('SELECT key, value FROM index_metadata').all() as any[];
       const metaMap = new Map(meta.map((m) => [m.key, m.value]));
-      expect(metaMap.get('schema_version')).toBe('3');
+      expect(metaMap.get('schema_version')).toBe('4');
       expect(metaMap.get('projection_version')).toBe('1');
       expect(metaMap.get('source_directory')).toBe(convDir);
 
@@ -139,7 +139,7 @@ describe('SessionIndexDatabase', () => {
       const meta = index2.database.prepare("SELECT value FROM index_metadata WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(meta.value).toBe('3');
+      expect(meta.value).toBe('4');
       // The dummy row should be dropped during rebuild
       const rowCount = index2.database.prepare('SELECT COUNT(*) as count FROM source_inventory').get() as {
         count: number;

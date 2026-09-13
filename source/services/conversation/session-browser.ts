@@ -28,7 +28,11 @@ const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
 export type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
-export type ProjectedMessage = { index: number; kind: Kind; text: string };
+export type ProjectedMessage = { index: number; kind: Kind; text: string; toolName?: string };
+// A record as one read sees it: `fullTextChars` is set only when `itemMaxChars`
+// cut `text` to a preview prefix.
+type ViewRecord = ProjectedMessage & { fullTextChars?: number };
+const KIND_ORDER: readonly Kind[] = ['user', 'assistant', 'reasoning', 'system', 'tool', 'subagent'];
 type BrowserError = {
   error: {
     code:
@@ -46,6 +50,10 @@ type CursorState = {
   sessionId: string;
   updatedAt: string;
   revision: string;
+  // The read view the cursor was issued for; `nextIndex` indexes the records
+  // of this view, so a continuation must page the same view.
+  kinds: Kind[] | null;
+  itemMaxChars: number | null;
   nextIndex: number;
   nextTextOffset: number;
 };
@@ -70,7 +78,17 @@ type ReadSnapshot = {
 
 export type SessionListInput = { limit?: number; maxChars?: number };
 export type SessionSearchInput = { query: string; kinds?: Kind[]; limit?: number; maxChars?: number };
-export type SessionReadInput = { id: string; cursor?: string; from?: 'end'; limit?: number; maxChars?: number };
+export type SessionReadInput = {
+  id: string;
+  cursor?: string;
+  from?: 'end';
+  index?: number;
+  before?: number;
+  kinds?: Kind[];
+  itemMaxChars?: number;
+  limit?: number;
+  maxChars?: number;
+};
 
 export interface SessionBrowserOptions {
   backend?: 'canonical' | 'indexed';
@@ -324,8 +342,8 @@ export class SessionBrowser {
   #readCanonical(input: SessionReadInput): unknown {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
-    if (input.cursor !== undefined && input.from === 'end')
-      return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
+    const anchorError = readAnchorError(input, budget);
+    if (anchorError !== null) return anchorError;
     const context = this.getContext();
     const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
     let conversation: RestoredState | ReadSnapshotSession;
@@ -425,8 +443,8 @@ export class SessionBrowser {
   async #readIndexed(input: SessionReadInput): Promise<unknown> {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
-    if (input.cursor !== undefined && input.from === 'end')
-      return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
+    const anchorError = readAnchorError(input, budget);
+    if (anchorError !== null) return anchorError;
     const context = this.getContext();
     const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
     if (cached) {
@@ -552,24 +570,36 @@ export class SessionBrowser {
   ): unknown {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     const currentUpdatedAt = updatedAt(conversation);
-    const cursor: CursorState | null = input.cursor
-      ? this.#decodeCursor(input.cursor, resolvedId)
-      : {
-          sessionId: resolvedId,
-          updatedAt: currentUpdatedAt,
-          revision: currentRevision,
-          // The tail anchor is a region, not a record: start at the last
-          // `limit` projected records so last-N access works through the
-          // existing forward cursor.
-          nextIndex:
-            input.from === 'end' ? Math.max(0, projection.records.length - clamp(input.limit, DEFAULT_READ_LIMIT)) : 0,
-          nextTextOffset: 0,
-        };
-    if (!cursor) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
-    if (input.cursor && (cursor.updatedAt !== currentUpdatedAt || cursor.revision !== currentRevision))
-      return boundedError('stale_cursor', staleCursorMessage(), budget);
-    if (input.cursor && !validCursorPosition(cursor, projection.records))
-      return boundedError('invalid_cursor', invalidCursorMessage(), budget);
+    const limit = clamp(input.limit, DEFAULT_READ_LIMIT);
+    let cursor: CursorState;
+    let records: ViewRecord[];
+    if (input.cursor) {
+      const decoded = this.#decodeCursor(input.cursor, resolvedId);
+      if (!decoded) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
+      if (decoded.updatedAt !== currentUpdatedAt || decoded.revision !== currentRevision)
+        return boundedError('stale_cursor', staleCursorMessage(), budget);
+      if (
+        (input.kinds !== undefined && !sameKinds(normalizeKinds(input.kinds), decoded.kinds)) ||
+        (input.itemMaxChars !== undefined && input.itemMaxChars !== decoded.itemMaxChars)
+      )
+        return boundedError('invalid_cursor', viewMismatchMessage(), budget);
+      cursor = decoded;
+      records = viewRecords(projection.records, cursor);
+      if (!validCursorPosition(cursor, records)) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
+    } else {
+      const view = { kinds: normalizeKinds(input.kinds), itemMaxChars: input.itemMaxChars ?? null };
+      records = viewRecords(projection.records, view);
+      cursor = {
+        sessionId: resolvedId,
+        updatedAt: currentUpdatedAt,
+        revision: currentRevision,
+        ...view,
+        nextIndex: initialIndex(input, records, limit),
+        nextTextOffset: 0,
+      };
+    }
+    const cursorAt = (nextIndex: number, nextTextOffset: number) =>
+      this.#cursorFor({ ...cursor, nextIndex, nextTextOffset });
     const session = {
       id: conversation.id,
       shortRef,
@@ -582,23 +612,22 @@ export class SessionBrowser {
     let index = cursor.nextIndex;
     let offset = cursor.nextTextOffset;
     const total = projection.records.length;
-    const limit = clamp(input.limit, DEFAULT_READ_LIMIT);
-    while (index < projection.records.length && items.length < limit) {
-      const record = projection.records[index]!;
+    // `total` stays whole-session so `total - omitted === items.length` holds
+    // on every view; `matched` sizes the filtered view.
+    const counts = cursor.kinds ? { total, matched: records.length } : { total };
+    while (index < records.length && items.length < limit) {
+      const record = records[index]!;
       if (offset > record.text.length) return boundedError('invalid_cursor', invalidCursorMessage(), budget);
       const completeItem = pageItem(record, record.text.slice(offset), offset, true);
       const afterIndex = index + 1;
-      const nextCursor =
-        afterIndex < projection.records.length
-          ? this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, afterIndex, 0)
-          : undefined;
+      const nextCursor = afterIndex < records.length ? cursorAt(afterIndex, 0) : undefined;
       const candidate = fitted(
         {
           scope: context.projectPath,
           session,
           items: [...items, completeItem],
           ...(nextCursor ? { nextCursor } : {}),
-          total,
+          ...counts,
           omitted: total,
           skippedMessageCount: projection.skipped,
         },
@@ -616,14 +645,14 @@ export class SessionBrowser {
       if (items.length > 0) break;
       if (record.text.length === offset) return outputBudgetError(budget);
       const chunk = largestChunk(record, offset, (text) => {
-        const next = this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, index, offset + text.length);
+        const next = cursorAt(index, offset + text.length);
         return fitted(
           {
             scope: context.projectPath,
             session,
             items: [...items, pageItem(record, text, offset, false)],
             nextCursor: next,
-            total,
+            ...counts,
             omitted: total,
             skippedMessageCount: projection.skipped,
           },
@@ -635,8 +664,7 @@ export class SessionBrowser {
       offset += chunk.length;
       break;
     }
-    const nextCursor =
-      index < total ? this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, index, offset) : undefined;
+    const nextCursor = index < records.length ? cursorAt(index, offset) : undefined;
     // Page-local counts: every record represented on this page counts once,
     // whether complete or a partial/resumed chunk, so on every page shape
     // `total - omitted === items.length`.
@@ -648,7 +676,7 @@ export class SessionBrowser {
           session,
           items,
           ...(nextCursor ? { nextCursor } : {}),
-          total,
+          ...counts,
           omitted,
           skippedMessageCount: projection.skipped,
         },
@@ -681,8 +709,7 @@ export class SessionBrowser {
     return snapshot;
   }
 
-  #cursorFor(sessionId: string, updatedAt: string, revision: string, nextIndex: number, nextTextOffset: number) {
-    const state = { sessionId, updatedAt, revision, nextIndex, nextTextOffset };
+  #cursorFor(state: CursorState) {
     const stateKey = JSON.stringify(state);
     const existing = this.#cursorHandles.get(stateKey);
     if (existing) return existing;
@@ -763,6 +790,7 @@ function project(conversation: RestoredState) {
         records.push({
           index,
           kind: 'tool',
+          ...(message.toolName ? { toolName: message.toolName } : {}),
           text: message.output ? `${message.command}\n${message.output}` : message.command,
         });
         break;
@@ -798,8 +826,58 @@ function prefixSnippet(text: string) {
   if (text.length <= SNIPPET_CHARS) return text;
   return `${safeUtf16Slice(text, 0, SNIPPET_CHARS - 1)}…`;
 }
-function pageItem(record: ProjectedMessage, text: string, textOffset: number, complete: boolean) {
-  return { index: record.index, kind: record.kind, text, textOffset, totalTextChars: record.text.length, complete };
+function pageItem(record: ViewRecord, text: string, textOffset: number, complete: boolean) {
+  return {
+    index: record.index,
+    kind: record.kind,
+    ...(record.toolName ? { toolName: record.toolName } : {}),
+    text,
+    textOffset,
+    totalTextChars: record.fullTextChars ?? record.text.length,
+    complete,
+    ...(record.fullTextChars !== undefined ? { truncated: true } : {}),
+  };
+}
+function readAnchorError(input: SessionReadInput, budget: number) {
+  if (input.cursor !== undefined && input.from === 'end')
+    return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
+  if (input.cursor !== undefined && input.index !== undefined)
+    return boundedError('invalid_cursor', 'An `index` seek is only valid on an initial read; omit `cursor`.', budget);
+  if (input.from === 'end' && input.index !== undefined)
+    return boundedError('invalid_cursor', 'Anchor an initial read with `index` or `from: "end"`, not both.', budget);
+  return null;
+}
+function normalizeKinds(kinds: Kind[] | undefined): Kind[] | null {
+  return kinds ? KIND_ORDER.filter((kind) => kinds.includes(kind)) : null;
+}
+function sameKinds(a: Kind[] | null, b: Kind[] | null) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+function viewRecords(
+  records: ProjectedMessage[],
+  view: { kinds: Kind[] | null; itemMaxChars: number | null },
+): ViewRecord[] {
+  const kinds = view.kinds;
+  const selected = kinds ? records.filter((record) => kinds.includes(record.kind)) : records;
+  const cap = view.itemMaxChars;
+  if (cap === null) return selected;
+  return selected.map((record) =>
+    record.text.length > cap
+      ? { ...record, text: safeUtf16Slice(record.text, 0, cap), fullTextChars: record.text.length }
+      : record,
+  );
+}
+function initialIndex(input: SessionReadInput, records: ViewRecord[], limit: number) {
+  // The tail anchor is a region, not a record: start at the last `limit`
+  // records of the view so last-N access works through the forward cursor.
+  if (input.from === 'end') return Math.max(0, records.length - limit);
+  if (input.index === undefined) return 0;
+  const seek = input.index;
+  const at = records.findIndex((record) => record.index >= seek);
+  return Math.max(0, (at === -1 ? records.length : at) - (input.before ?? 0));
+}
+function viewMismatchMessage() {
+  return 'This cursor was issued with different `kinds` or `itemMaxChars`; omit them or repeat the original values on continuation.';
 }
 function fitted<T extends Record<string, unknown>>(value: T, maxChars: number): T | null {
   const result = fitSerializedEnvelope((charsUsed) => ({ ...value, charsUsed }), { maxChars });

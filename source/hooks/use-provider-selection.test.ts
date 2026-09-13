@@ -242,7 +242,7 @@ it.sequential(
     });
     await flush();
     expect(hook!.phase).toBe('edit_fields');
-    expect(hook!.selectedIndex).toBe(3); // Focus Save Changes after direct setup
+    expect(hook!.selectedIndex).toBe(4); // Focus Save Changes after direct setup
 
     await act(async () => {
       hook!.selectItem(); // Save Changes
@@ -546,7 +546,7 @@ it.sequential('useProviderSelection - add provider wizard flow and validation', 
   expect(baseUrlField?.detail?.includes('required') ?? false).toBe(false);
 
   // Save changes
-  expect(hook!.selectedIndex).toBe(4); // "Save Changes" should be pre-selected
+  expect(hook!.selectedIndex).toBe(5); // "Save Changes" should be pre-selected
 
   await act(async () => {
     hook!.selectItem();
@@ -961,10 +961,11 @@ it.sequential('useProviderSelection - unchanged provider names are allowed when 
     hook!.moveDown();
     hook!.moveDown();
     hook!.moveDown();
+    hook!.moveDown();
   });
   await flush();
 
-  expect(hook!.selectedIndex).toBe(4);
+  expect(hook!.selectedIndex).toBe(5);
 
   await act(async () => {
     hook!.selectItem();
@@ -1303,6 +1304,84 @@ it.sequential('useProviderSelection - editing a field populates input and moves 
   expect(hook!.phase).toBe('wizard_key');
   expect(inputVal).toBe('secret-key');
   expect(cursorVal, 'cursor should be at end of apiKey').toBe('secret-key'.length);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('useProviderSelection - disable/enable toggle persists immediately and refreshes the list', async () => {
+  const settingsService = createMockSettingsService([], 'openai');
+  settingsService.set('agent.openai.apiKey', 'sk-test');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+  expect(hook!.phase).toBe('list');
+
+  // Enter edit_fields for the credentialed built-in provider.
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  expect(hook!.phase).toBe('edit_fields');
+
+  const items = hook!.getActiveItems();
+  const toggleIdx = items.findIndex((i) => i.kind === 'action' && i.label === 'Disable Provider');
+  expect(toggleIdx).toBe(3); // built-in rows: Name, Type, API Key, toggle
+
+  await act(async () => {
+    hook!.moveDown(); // from the API Key row (2) to the toggle row (3)
+  });
+  await flush();
+  expect(hook!.selectedIndex).toBe(toggleIdx);
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  expect(hook!.phase).toBe('list');
+  expect(settingsService.get('agent.disabledProviders')).toEqual(['openai']);
+  expect(hook!.getActiveItems().find((i) => i.kind === 'provider' && i.id === 'openai')?.isDisabled).toBe(true);
+
+  // Re-enable through the same row, now labelled Enable Provider.
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  const enableIdx = hook!.getActiveItems().findIndex((i) => i.kind === 'action' && i.label === 'Enable Provider');
+  expect(enableIdx).toBe(3);
+  await act(async () => {
+    hook!.moveDown(); // from the API Key row (2) to the toggle row (3)
+  });
+  await flush();
+  expect(hook!.selectedIndex).toBe(enableIdx);
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  expect(hook!.phase).toBe('list');
+  expect(settingsService.get('agent.disabledProviders')).toEqual([]);
 
   await act(async () => {
     renderer.unmount();

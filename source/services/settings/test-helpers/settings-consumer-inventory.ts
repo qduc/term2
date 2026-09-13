@@ -184,6 +184,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
   ],
   'Favorite models — presentation aid and next --model resolution fast path': ['agent.favoriteModels'],
   'Model nicknames — presentation aid and next --model resolution fast path': ['agent.modelNicknames'],
+  'Disabled providers — next picker/catalog load': ['agent.disabledProviders'],
 } as const;
 
 export interface SettingReadSite {

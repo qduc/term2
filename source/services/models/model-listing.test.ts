@@ -47,6 +47,21 @@ it('keeps credentialed providers in input order and drops credential-missing run
   }
 });
 
+it('orderedProviderIds drops providers disabled in settings', () => {
+  const settings = {
+    get: vi.fn((key: string) => (key === 'agent.disabledProviders' ? ['fake-beta'] : undefined)),
+    getDynamic: vi.fn(() => []),
+  } as any;
+  registerProvider({ id: 'fake-alpha', label: 'Fake Alpha', fetchModels: async () => [] });
+  registerProvider({ id: 'fake-beta', label: 'Fake Beta', fetchModels: async () => [] });
+  try {
+    expect(orderedProviderIds(settings, ['fake-alpha', 'fake-beta'])).toEqual(['fake-alpha']);
+  } finally {
+    unregisterProvider('fake-alpha');
+    unregisterProvider('fake-beta');
+  }
+});
+
 it('returns the groups unchanged when the search term is blank', () => {
   const groups = [group('alpha', ['m1']), group('beta', ['m2'])];
   expect(filterModelGroups(groups, '  ')).toBe(groups);

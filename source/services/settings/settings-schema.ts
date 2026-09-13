@@ -188,6 +188,11 @@ export const AgentSettingsSchema = z.object({
     .describe(
       'Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads',
     ),
+  disabledProviders: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe('Provider ids hidden from model pickers and catalogs; managed and reversible in provider management'),
   openrouter: z
     .object({
       apiKey: z.string().optional().meta({ secret: true }),
@@ -745,6 +750,7 @@ export interface SettingsWithSources {
     provider: SettingWithSource<string>;
     favoriteModels: SettingWithSource<string[]>;
     modelNicknames: SettingWithSource<Record<string, string>>;
+    disabledProviders: SettingWithSource<string[]>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
     codex: SettingWithSource<{ websocketFirstFrameTimeoutMs: number; websocketInterFrameTimeoutMs: number }>;
@@ -894,6 +900,7 @@ export const SETTING_KEYS = {
   AGENT_PROVIDER: 'agent.provider',
   AGENT_FAVORITE_MODELS: 'agent.favoriteModels',
   AGENT_MODEL_NICKNAMES: 'agent.modelNicknames',
+  AGENT_DISABLED_PROVIDERS: 'agent.disabledProviders',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
   AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
@@ -1044,6 +1051,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_FAVORITE_MODELS,
   SETTING_KEYS.AGENT_MODEL_NICKNAMES,
+  SETTING_KEYS.AGENT_DISABLED_PROVIDERS,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
   SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
   SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
@@ -1203,6 +1211,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     provider: 'openai',
     favoriteModels: [],
     modelNicknames: {},
+    disabledProviders: [],
     openrouter: {
       // defaults empty; can be provided via env or config
       // defaults empty; can be provided via env or config

@@ -12,6 +12,7 @@ import {
   saveProvider,
   deleteCustomProvider,
 } from './provider-service.js';
+import { isProviderDisabled, setProviderDisabled } from '../utils/ai/provider-credentials.js';
 
 function createMockSettingsService(initialProviders: unknown[] = [], initialActive = 'openai') {
   const settings = new Map<string, unknown>([
@@ -474,6 +475,28 @@ it('deleteCustomProvider removes provider from settings and registry', () => {
   const providers = settingsService.get('providers');
   expect(providers.length).toBe(0);
   expect(settingsService.get('agent.provider')).toBe('openai');
+});
+
+it('loadProviderItems flags providers listed in agent.disabledProviders', () => {
+  const settingsService = createMockSettingsService([], 'openai');
+  settingsService.set('agent.disabledProviders', ['openrouter', 7, null]);
+  const items = loadProviderItems(settingsService);
+  expect(items.find((i) => i.id === 'openrouter')).toMatchObject({ isDisabled: true });
+  expect(items.find((i) => i.id === 'openai')).toMatchObject({ isDisabled: false });
+});
+
+it('setProviderDisabled toggles and persists the disabled list idempotently', () => {
+  const settingsService = createMockSettingsService([], 'openai');
+  expect(isProviderDisabled(settingsService, 'openrouter')).toBe(false);
+  setProviderDisabled(settingsService, 'openrouter', true);
+  expect(settingsService.get('agent.disabledProviders')).toEqual(['openrouter']);
+  setProviderDisabled(settingsService, 'openrouter', true);
+  expect(settingsService.get('agent.disabledProviders')).toEqual(['openrouter']);
+  setProviderDisabled(settingsService, 'codex', true);
+  expect(settingsService.get('agent.disabledProviders')).toEqual(['openrouter', 'codex']);
+  setProviderDisabled(settingsService, 'openrouter', false);
+  expect(settingsService.get('agent.disabledProviders')).toEqual(['codex']);
+  expect(isProviderDisabled(settingsService, 'openrouter')).toBe(false);
 });
 
 it('deleteCustomProvider does not change active provider when deleting inactive one', () => {

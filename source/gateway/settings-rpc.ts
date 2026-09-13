@@ -68,6 +68,7 @@ export type SettingsProjection = {
       label: string;
       isCustom: boolean;
       active: boolean;
+      disabled: boolean;
       credential: SecretFreeCredential;
     }>;
     oauthAccounts: Record<string, Array<{ id: string; label: string; isSelected: boolean; isInUse: boolean }>>;
@@ -147,6 +148,7 @@ export function buildSettingsProjection(
       label: provider.label,
       isCustom: provider.isCustom,
       active: provider.isActive,
+      disabled: provider.isDisabled,
       credential: providerCredentialStatus(settings, provider.id),
     }));
   } catch {

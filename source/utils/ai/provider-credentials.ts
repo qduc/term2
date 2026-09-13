@@ -1,4 +1,5 @@
 import type { ISettingsService } from '../../services/service-interfaces.js';
+import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
@@ -190,4 +191,24 @@ export const hasProviderCredentials = (settingsService: ISettingsService, provid
  */
 export const getAvailableProviderIds = (settingsService: ISettingsService, allProviderIds: string[]): string[] => {
   return allProviderIds.filter((id) => hasProviderCredentials(settingsService, id));
+};
+
+/**
+ * Providers the user disabled (agent.disabledProviders). Disabling is a
+ * picker/catalog visibility choice, not a teardown: the provider stays
+ * configured and can be re-enabled in provider management.
+ */
+export const getDisabledProviderIds = (settingsService: ISettingsService): Set<string> => {
+  const raw: unknown = settingsService?.get(SETTING_KEYS.AGENT_DISABLED_PROVIDERS);
+  return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []);
+};
+
+export const isProviderDisabled = (settingsService: ISettingsService, providerId: string): boolean =>
+  getDisabledProviderIds(settingsService).has(providerId);
+
+export const setProviderDisabled = (settingsService: ISettingsService, providerId: string, disabled: boolean): void => {
+  const current = getDisabledProviderIds(settingsService);
+  if (current.has(providerId) === disabled) return;
+  const next = disabled ? [...current, providerId] : [...current].filter((id) => id !== providerId);
+  settingsService?.setPersistent(SETTING_KEYS.AGENT_DISABLED_PROVIDERS, next);
 };

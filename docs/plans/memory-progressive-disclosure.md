@@ -213,7 +213,7 @@ string through the existing `safe()` convention.
 ```ts
 {
   limit?: integer; // effective configured default; 1..50 after clamp
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -251,7 +251,7 @@ silently represented by a fake or partial metadata object.
 {
   id: string; // existing stable-ID grammar; legacy valid IDs remain accepted
   cursor?: string; // opaque cursor issued for this memory content
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -302,7 +302,7 @@ sanitized codes.
 {
   query: string; // must contain at least one non-whitespace term
   limit?: integer; // effective configured default; 1..50 after clamp
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -387,7 +387,7 @@ search excerpt deterministic at a given query, store, limit, and budget.
 {
   query: string; // same nonblank-term rule as memory_search
   limit?: integer; // effective configured default; 1..50 after clamp
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -527,7 +527,7 @@ object string.
 ```ts
 {
   limit?: integer; // 1..50, default 10
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -580,7 +580,7 @@ the deliberate distinction from memory retrieval, whose index has stable IDs.
 {
   query: string; // nonblank whitespace-delimited terms
   limit?: integer; // 1..50, default 10
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 
@@ -635,7 +635,7 @@ the result limit was chosen. Results never contain a partial snippet.
   id: string; // safe opaque historical session ID
   cursor?: string; // short opaque cursor issued by this SessionBrowser
   limit?: integer; // 1..50, default 20
-  maxChars?: integer; // 512..12_000, default 12_000
+  maxChars?: integer; // 512..40_000, default 12_000
 }
 ```
 

@@ -436,6 +436,8 @@ describe('SessionIndexDatabase', () => {
     writeSession(childId, '/project', undefined, 'child', parentId);
     writeSession(siblingPrefixA, '/project');
     writeSession(siblingPrefixB, '/project');
+    const soloId = 'dddddddd-0000-4000-8000-000000000001';
+    writeSession(soloId, '/solo');
 
     const index = new SessionIndexDatabase(dbPath, convDir);
     try {
@@ -462,9 +464,17 @@ describe('SessionIndexDatabase', () => {
       const prev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: childId });
       expect(prev).toMatchObject({ kind: 'resolved', id: parentId });
 
-      // Previous on session with no predecessor
-      const noPrev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: parentId });
-      expect(noPrev.kind).toBe('not_found');
+      // Previous on session with no predecessor falls back to the most recently
+      // updated other session, in session_list order
+      const newestOther = index.list({ projectPath: '/project' }).sessions.find((s) => s.id !== parentId)!;
+      const fallback = index.resolveReference('previous', { projectPath: '/project', currentSessionId: parentId });
+      expect(fallback).toMatchObject({ kind: 'resolved', id: newestOther.id });
+
+      // Previous without a known current session, or with no other session in scope
+      expect(index.resolveReference('previous', { projectPath: '/project' }).kind).toBe('not_found');
+      expect(index.resolveReference('previous', { projectPath: '/solo', currentSessionId: soloId }).kind).toBe(
+        'not_found',
+      );
 
       // Not found
       const notFound = index.resolveReference('nonexistent', { projectPath: '/project' });

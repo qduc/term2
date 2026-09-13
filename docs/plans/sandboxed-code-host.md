@@ -29,6 +29,14 @@ host, and host capability results are JSON-round-tripped before re-entry. The
 result serializer therefore exposes only VM-realm values or serialized plain
 data/media, not host objects, prototypes, errors, or callables.
 
+The optional `HostRunInput.inputData` follows the same rule. `sandbox.ts`
+serializes the JSON object once before worker creation; only that primitive
+string crosses in `workerData`. `WORKER_TEMPLATE` parses it inside the VM,
+installs the resulting object as the own global `inputs` data property, and
+deletes the temporary encoded binding before submitted code runs. Omission does
+not install the global. The host charges the serialized UTF-8 bytes together
+with source bytes against `HostLimits.maxCodeBytes` before worker creation.
+
 The adversarial host suite asserts constructor-chain inability directly across
 wrappers, prototypes, getters, proxies, errors, promises and async
 continuations, exposed built-ins, hostile capability/member names, and result

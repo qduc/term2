@@ -55,9 +55,13 @@ describe('buildWorkerSource', () => {
     expect(source).toContain('const encoded = JSON.stringify(result)');
     expect(source).toContain('delete globalThis.__bridge');
     expect(source).toContain('delete globalThis.__capabilities');
+    expect(source).toContain('JSON.parse(globalThis.__inputData)');
+    expect(source).toContain("Object.defineProperty(globalThis, 'inputs'");
+    expect(source).toContain('delete globalThis.__inputData');
     // A future binding must not silently reintroduce host objects by assigning
     // the wrappers before createContext or by forwarding structured-clone data.
     expect(source).not.toContain('context.console =');
+    expect(source).not.toContain('context.inputs =');
     expect(source).not.toContain('context[capability.name] =');
   });
 });

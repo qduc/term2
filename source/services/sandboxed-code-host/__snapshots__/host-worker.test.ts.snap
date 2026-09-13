@@ -197,9 +197,11 @@ const bridge = (type, payload) => {
 Object.setPrototypeOf(bridge, null);
 context.__bridge = bridge;
 context.__capabilities = JSON.stringify(capabilities);
+if (workerData.inputDataJson !== undefined) context.__inputData = workerData.inputDataJson;
 function installContextBindings() {
   const bridge = globalThis.__bridge;
   const capabilityDefinitions = JSON.parse(globalThis.__capabilities);
+  const inputData = globalThis.__inputData === undefined ? undefined : JSON.parse(globalThis.__inputData);
   function json(value, ancestors = new Set()) {
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
     if (typeof value === 'number') return Number.isFinite(value);
@@ -212,6 +214,15 @@ function installContextBindings() {
   }
   delete globalThis.__bridge;
   delete globalThis.__capabilities;
+  delete globalThis.__inputData;
+  if (inputData !== undefined) {
+    Object.defineProperty(globalThis, 'inputs', {
+      value: inputData,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+  }
   let sequence = 0;
   const pending = new Map();
   const nestedStates = new Map();

@@ -85,6 +85,61 @@ Open work, in order:
 
 ## Guard classes
 
+### Sandboxed source-and-input admission bound
+
+Harm prevented: a `run_code` payload bypassing the existing bounded source
+channel by moving arbitrarily large inert data into a separate input channel.
+
+Scope and execution paths: `SandboxedCodeHostImpl.run` calls that provide
+`HostRunInput.inputData`. Callers that omit input data retain the original
+code-only `HostLimits.maxCodeBytes` measurement and no `inputs` global.
+
+Guard class: admission limit.
+
+Enforcement owner: `SandboxedCodeHostImpl.run`; `sandbox.ts` owns the one-time
+JSON serialization used by both measurement and worker transport.
+
+Recovery owner: the invoking tool. `run_code` reports the existing structured
+`code_too_large` outcome so the model can reduce or split code and data.
+
+Measured signal and observation boundary: UTF-8 bytes of executable source plus
+UTF-8 bytes of the serialized JSON input object, measured before worker creation.
+This is direct size evidence. Serialization itself occurs before the byte check;
+the public Zod JSON schema bounds the value class but no separate pre-serialization
+byte guard exists.
+
+Legitimate work that can produce the same signal: large patches, generated file
+bodies, and other syntax-heavy edit payloads. They are rejected rather than
+truncated because changing exact edit data would be unsafe; callers can split the
+work into smaller invocations.
+
+Configuration sources, precedence, defaults, and clamping: unchanged
+per-invocation `HostLimits.maxCodeBytes`. `run_code` continues to supply 65,536
+bytes. Its always-present empty `{}` input consumes two serialized bytes; shared
+host callers that omit `inputData` preserve the exact old code-only boundary.
+
+Action and justification: reject before worker creation or capability dispatch
+with `code_too_large`. For input-bearing calls the diagnostic reports measured
+combined bytes and the effective limit without including source or input text.
+
+Partial-work settlement: none; rejection precedes worker and capability
+creation. Retry, fallback, provider continuity, settings migration, and approval
+semantics are unchanged. Invalid internal non-JSON input returns a structured
+`runtime_error` before worker creation.
+
+Observability: `code_too_large`, measured combined bytes, and effective limit are
+available in the terminal result. Privacy-safe completion telemetry keeps
+`sourceBytes`, `sourceLines`, and `sourceDigest` scoped to executable source; it
+does not add raw input or input hashes.
+
+Rollback boundary: `run_code.inputs`, `HostRunInput.inputData`, its worker
+binding, and the combined-byte measurement.
+
+Ledger row: **verified admission contract** — public and shared-host boundary
+tests cover rejection before startup, exact and above-threshold acceptance,
+empty input cost, multibyte UTF-8 accounting, serialization failure, omitted
+bindings, and VM-realm isolation.
+
 ### Admitted nested-call settlement barrier
 
 Harm prevented: `run_code` or another shared-host caller reporting a terminal

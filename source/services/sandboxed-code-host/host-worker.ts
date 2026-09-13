@@ -6,8 +6,8 @@ import type { CapabilityBinding } from './host-types.js';
  * generated, which is what keeps the sandbox auditable now that the source is
  * built rather than written.
  *
- * The context exposes only the bound capabilities and `console`; Node's worker
- * globals never enter the vm context.
+ * The context exposes only the bound capabilities, `console`, and optional
+ * realm-created JSON `inputs`; Node's worker globals never enter the vm context.
  */
 const WORKER_TEMPLATE = String.raw`
 const { parentPort, workerData } = require('node:worker_threads');
@@ -205,9 +205,11 @@ const bridge = (type, payload) => {
 Object.setPrototypeOf(bridge, null);
 context.__bridge = bridge;
 context.__capabilities = JSON.stringify(capabilities);
+if (workerData.inputDataJson !== undefined) context.__inputData = workerData.inputDataJson;
 function installContextBindings() {
   const bridge = globalThis.__bridge;
   const capabilityDefinitions = JSON.parse(globalThis.__capabilities);
+  const inputData = globalThis.__inputData === undefined ? undefined : JSON.parse(globalThis.__inputData);
   function json(value, ancestors = new Set()) {
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
     if (typeof value === 'number') return Number.isFinite(value);
@@ -220,6 +222,15 @@ function installContextBindings() {
   }
   delete globalThis.__bridge;
   delete globalThis.__capabilities;
+  delete globalThis.__inputData;
+  if (inputData !== undefined) {
+    Object.defineProperty(globalThis, 'inputs', {
+      value: inputData,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+  }
   let sequence = 0;
   const pending = new Map();
   const nestedStates = new Map();

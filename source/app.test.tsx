@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   handleApprovalDecision: vi.fn(),
   submitApprovalDecision: vi.fn(),
   submitConversationTurn: vi.fn(async () => false),
+  conversationOptions: null as any,
   admissionConfirmation: null as any,
   submitTurnForAdmission: vi.fn(() => ({ kind: 'submitted' as const, completion: Promise.resolve() })),
   resolveAdmissionConfirmation: vi.fn<any>(),
@@ -155,6 +156,7 @@ vi.mock('./context/InputContext.js', () => ({
 
 vi.mock('./hooks/use-conversation.js', () => ({
   useConversation: (options: any) => {
+    mocks.conversationOptions = options;
     mocks.sessionRolloverCallback = options.onSessionRollover ?? null;
     return {
       messages: [],
@@ -336,6 +338,7 @@ beforeEach(() => {
   mocks.submitApprovalDecision.mockReset();
   mocks.submitConversationTurn.mockReset();
   mocks.submitConversationTurn.mockResolvedValue(false);
+  mocks.conversationOptions = null;
   mocks.setWaitingForRejectionReason.mockReset();
   mocks.setWaitingForAskUserAnswer.mockReset();
   mocks.resolveBackgroundSubagentApproval.mockReset();
@@ -559,6 +562,23 @@ describe('App orchestration', () => {
     expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'hello', images: [] });
     expect(mocks.submitTurnForAdmission).not.toHaveBeenCalled();
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it.sequential('clears the composer after submitting an ask_user custom answer', async () => {
+    mocks.conversationState.waitingForAskUserAnswer = true;
+    mocks.submitConversationTurn.mockResolvedValue(true);
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.bottomAreaProps.onSubmit({ text: 'my custom answer', images: [] });
+    });
+
+    expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'my custom answer', images: [] });
+    expect(mocks.conversationOptions.replaceInput).toBe(mocks.replaceInput);
   });
 
   it.sequential('keeps sandbox network approval live after StrictMode replays effects', async () => {

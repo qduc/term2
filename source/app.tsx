@@ -292,6 +292,7 @@ const App: FC<AppProps> = ({
     onSessionRollover: (request) => sessionRolloverHandlerRef.current?.(request),
     settingsService,
     historyService,
+    replaceInput,
     onRestoreInput: setInput,
     logWriter,
     notifier,

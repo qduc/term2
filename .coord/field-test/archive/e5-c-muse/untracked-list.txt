@@ -1,1 +1,0 @@
-source/tools/system/shell-approval.ts

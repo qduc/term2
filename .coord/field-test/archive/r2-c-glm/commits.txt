@@ -1,1 +1,0 @@
-44755ae0 refactor(shell): extract command approval-decision logic into shell-approval.ts

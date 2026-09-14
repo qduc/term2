@@ -22,6 +22,12 @@ import {
   GLYPH_WARNING,
 } from '../theme.js';
 import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model-favorites.js';
+import {
+  MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
+  MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
+  bindingHints,
+  modelMenuFooterBindings,
+} from '../input/menu-bindings.js';
 
 const EMPTY_FAVORITE_KEYS = new Set<string>();
 
@@ -70,6 +76,17 @@ const ModelSelectionMenu: FC<Props> = ({
 }) => {
   const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
   const isUnified = provider == null;
+  // The footer renders from declared binding tables (menu-bindings.ts), so a
+  // hint cannot drift from the behavior the owning session implements. While
+  // a nickname draft is open the draft editor owns the input row and only the
+  // draft bindings are advertised.
+  const footerBindings = nicknameDraft
+    ? MODEL_MENU_NICKNAME_DRAFT_BINDINGS
+    : modelMenuFooterBindings({
+        tabDimension: modelTab != null,
+        providerDimension: !isUnified,
+        nicknameAvailable: isFavoritesTab || isUnified,
+      });
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
@@ -198,24 +215,7 @@ const ModelSelectionMenu: FC<Props> = ({
             <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>
           )
         }
-        footer={
-          <MenuFooter
-            hints={[
-              ['↑↓', 'navigate'],
-              ['⏎', 'select'],
-              ...(modelTab
-                ? ([['Tab/←→', 'tab']] as [string, string][])
-                : !isUnified
-                ? ([['←→', 'provider']] as [string, string][])
-                : []),
-              // In unified mode any favorited row can be named.
-              ...(isFavoritesTab || isUnified ? ([['ctrl+n', 'nickname']] as [string, string][]) : []),
-              ['ctrl+f', 'favorite'],
-              ['ctrl+r', 'refresh model list'],
-              ['esc', 'cancel'],
-            ]}
-          />
-        }
+        footer={<MenuFooter hints={bindingHints(footerBindings)} />}
         footerOutsideBorder={true}
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
           const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));
@@ -274,12 +274,7 @@ const ModelSelectionMenu: FC<Props> = ({
         </Box>
       )}
       {!isUnified && (error || (items.length === 0 && !loading)) && (
-        <MenuFooter
-          hints={[
-            ['←→', 'switch provider'],
-            ['esc', 'cancel'],
-          ]}
-        />
+        <MenuFooter hints={bindingHints(MODEL_MENU_PROVIDER_FALLBACK_BINDINGS)} />
       )}
     </Box>
   );

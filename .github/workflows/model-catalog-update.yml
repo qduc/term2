@@ -9,8 +9,8 @@ name: Update model catalog
 # no-op) when a run produces no catalog changes.
 on:
   schedule:
-    # 06:00 UTC every Monday.
-    - cron: '0 6 * * 1'
+    # 06:00 UTC every Friday.
+    - cron: '0 6 * * 5'
   workflow_dispatch:
 
 permissions:

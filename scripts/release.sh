@@ -248,7 +248,47 @@ push_release_refs() {
     retry 3 2 -- git push "$remote" "v$version"
 }
 
+# Validation stamp: skips a full re-run of the health checks on resume when
+# HEAD and the release files are unchanged since the last passing gate. Keyed
+# to HEAD so any new commit (and its tree) invalidates it; the stamp lives in
+# the git dir so it never shows up as a dirty worktree file. Limitation: it
+# does not cover untracked files under source/, which tsc/eslint would see.
+validation_stamp_file() {
+    local git_dir
+    git_dir=$(git rev-parse --git-dir 2>/dev/null) || return 1
+    echo "$git_dir/release-validation"
+}
+
+validation_stamp_key() {
+    local head package_hash changelog_hash
+    head=$(git rev-parse HEAD 2>/dev/null || echo "no-head")
+    package_hash=$(git hash-object package.json 2>/dev/null || echo "no-package")
+    if [ -f CHANGELOG.md ]; then
+        changelog_hash=$(git hash-object CHANGELOG.md 2>/dev/null || echo "no-changelog")
+    else
+        changelog_hash="no-changelog"
+    fi
+    echo "$head:$package_hash:$changelog_hash"
+}
+
+validation_current() {
+    local stamp
+    stamp=$(validation_stamp_file) || return 1
+    [ -f "$stamp" ] || return 1
+    [ "$(cat "$stamp")" = "$(validation_stamp_key)" ]
+}
+
+mark_validated() {
+    local stamp
+    stamp=$(validation_stamp_file) || return 0
+    validation_stamp_key > "$stamp"
+}
+
 run_health_checks() {
+    if validation_current; then
+        echo -e "${YELLOW}Skipping typecheck, lint, formatting, tests, and build (already validated at $(git rev-parse --short HEAD 2>/dev/null) with identical package.json and CHANGELOG.md).${NC}"
+        return 0
+    fi
     echo -e "${BLUE}Running typecheck, source lint, formatting, tests, and build...${NC}"
     # Release validation covers the shipped source and release metadata. The
     # repository-wide lint command also traverses auxiliary tools that are not
@@ -258,6 +298,7 @@ run_health_checks() {
     pnpm exec prettier --check source package.json CHANGELOG.md
     pnpm run build
     pnpm test
+    mark_validated
 }
 
 # ---------------------------------------------------------------------------

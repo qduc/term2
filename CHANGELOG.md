@@ -1,3 +1,18 @@
+## [0.24.1] - 2026-09-14
+
+### Features
+- Added the `agent.disabledProviders` setting so disabled providers disappear from model pickers and catalogs.
+
+### Bug Fixes
+- Fixed chained OpenAI requests resending duplicate reasoning content by projecting requests to input deltas.
+- Fixed the codex client preferring the latest npm version.
+
+### Improvements
+- Compacted status bar and background-task panel labels for narrow terminals.
+- Subagent task panel shows each task's latest tool; pooled mentor output no longer exposes model names.
+- Provider order now follows the settings list; manual reordering was removed from the provider menu.
+- Session read tools fall back for "previous" and allow larger read budgets.
+
 ## [0.24.0] - 2026-09-13
 
 ### Features

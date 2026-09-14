@@ -29,9 +29,9 @@ interface MentorConsultation {
   model?: string;
   provider?: string;
   reasoningEffort?: string;
-  /** Shown in the answer's heading so the agent can attribute each opinion. */
-  label?: string;
 }
+
+const mentorLabel = (index: number): string => `Mentor ${String.fromCharCode(65 + index)}`;
 
 export class MentorRunner {
   #logger: ILoggingService;
@@ -154,7 +154,6 @@ export class MentorRunner {
         model: entry?.model,
         provider: entry?.provider,
         reasoningEffort: entry?.reasoningEffort,
-        label: entry?.model,
       }));
     }
     return Array.from({ length: this.#resolveSampleCount() }, () => ({}));
@@ -183,19 +182,18 @@ export class MentorRunner {
     );
 
     const answers: string[] = [];
-    const failures: { label?: string; reason: unknown }[] = [];
+    const failures: { index: number; reason: unknown }[] = [];
     const usageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     const costRecords: ModelRequestCost[] = [];
     let sawUsage = false;
 
     settled.forEach((outcome, index) => {
-      const label = consultations[index]?.label;
       if (outcome.status === 'rejected') {
-        failures.push({ label, reason: outcome.reason });
+        failures.push({ index, reason: outcome.reason });
         return;
       }
       const result = outcome.value;
-      const heading = `## Mentor sample ${index + 1} of ${samples}${label ? ` — ${label}` : ''}`;
+      const heading = `## ${mentorLabel(index)} of ${samples}`;
       answers.push(`${heading}\n\n${result.finalText}`);
       if (result.usage) {
         sawUsage = true;
@@ -216,10 +214,9 @@ export class MentorRunner {
     const sections = [...answers];
     if (failures.length > 0) {
       const detail = failures
-        .map(({ label, reason }: any) => {
-          const message = reason?.message ?? String(reason);
-          return label ? `${label}: ${message}` : message;
-        })
+        // Do not expose configured model or provider names to the main agent.
+        // The generic label still identifies which opinion was unavailable.
+        .map(({ index }) => `${mentorLabel(index)} failed`)
         .join('; ');
       sections.push(`_${failures.length} of ${samples} mentor samples failed: ${detail}_`);
     }

@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { SlashCommand } from '../../slash-commands.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
+import { SLASH_MENU_BINDINGS, bindingHints } from '../input/menu-bindings.js';
 
 type Props = {
   commands: SlashCommand[];
@@ -36,15 +37,7 @@ const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOf
       scrollOffset={scrollOffset}
       title="Commands"
       fallbackText="No matching commands"
-      footer={
-        <MenuFooter
-          hints={[
-            ['↑↓', 'navigate'],
-            ['⏎', 'run'],
-            ['esc', 'cancel'],
-          ]}
-        />
-      }
+      footer={<MenuFooter hints={bindingHints(SLASH_MENU_BINDINGS)} />}
       renderItem={(cmd, _index, isSelected) => (
         // flexWrap + minWidth is the narrow-terminal plan: while the
         // description has at least half the row it sits beside the label and

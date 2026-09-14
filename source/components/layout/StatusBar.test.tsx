@@ -17,7 +17,7 @@ it.sequential('StatusBar displays an active persistent Docker host-control proje
   configureDockerHostControlGrants(settingsService);
   grantDockerHostControl({ command: 'docker ps', cwd: process.cwd(), scope: 'project', sessionId: 'session-a' });
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
-  expect(lastFrame()).toContain('Docker host access: project');
+  expect(lastFrame()).toContain('Docker host: project');
   resetDockerHostControlGrantsForTests();
 });
 
@@ -62,12 +62,10 @@ it.sequential('StatusBar puts all configuration on the first row and quota on th
   const lines = (lastFrame() ?? '').split('\n');
   // Row 1 is configuration + this turn's numbers. Safety belongs beside the
   // model it governs, so it sits here too rather than on a row of its own.
-  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto'))).toBe(true);
-  expect(
-    lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto') && line.includes('↓13')),
-  ).toBe(true);
+  expect(lines.some((line) => line.includes('Codex/gpt-5.6-luna · high │ Auto'))).toBe(true);
+  expect(lines.some((line) => line.includes('Codex/gpt-5.6-luna · high │ Auto') && line.includes('↓13'))).toBe(true);
   // Row 2 carries alerts and quota only, so it is absent in the steady state.
-  expect(lines.some((line) => line.includes('7D 78% · reset ') && !line.includes('Standard'))).toBe(true);
+  expect(lines.some((line) => line.includes('7D 78%→') && !line.includes('Codex/gpt-5.6-luna'))).toBe(true);
   expect(lines.some((line) => line.includes('↓13 · Ctx 12k/272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
   expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
@@ -146,7 +144,7 @@ it.sequential('StatusBar renders an exact session cost', async () => {
     />,
   );
 
-  expect(lastFrame()).toContain('Cost $0.42');
+  expect(lastFrame()).toContain('$0.42');
 });
 
 it.sequential('StatusBar renders an estimated session cost', async () => {
@@ -158,7 +156,7 @@ it.sequential('StatusBar renders an estimated session cost', async () => {
     />,
   );
 
-  expect(lastFrame()).toContain('Est $0.42');
+  expect(lastFrame()).toContain('~$0.42');
 });
 
 it.sequential('StatusBar renders a partial session cost as a lower bound', async () => {
@@ -170,7 +168,7 @@ it.sequential('StatusBar renders a partial session cost as a lower bound', async
     />,
   );
 
-  expect(lastFrame()).toContain('Est $0.42+');
+  expect(lastFrame()).toContain('~$0.42+');
 });
 
 it.sequential('StatusBar omits unavailable and missing session cost', async () => {
@@ -200,7 +198,7 @@ it.sequential('StatusBar preserves non-zero precision for sub-cent session costs
     />,
   );
 
-  expect(lastFrame()).toContain('Cost $0.000028');
+  expect(lastFrame()).toContain('$0.000028');
 });
 
 it.sequential('StatusBar places session cost beside token and context usage', async () => {
@@ -217,7 +215,7 @@ it.sequential('StatusBar places session cost beside token and context usage', as
     />,
   );
 
-  expect(lastFrame()).toContain('↓350 · Ctx 1k/272k · Cost $0.42');
+  expect(lastFrame()).toContain('↓350 · Ctx 1k/272k · $0.42');
 });
 
 it.sequential('StatusBar warns about run-budget evidence instead of the run stopping', async () => {
@@ -239,7 +237,7 @@ it.sequential('StatusBar warns about run-budget evidence instead of the run stop
     />,
   );
 
-  expect(lastFrame()).toContain('Run tokens: 500.0k / 500.0k (100%)');
+  expect(lastFrame()).toContain('Run tokens 500.0k/500.0k (100%)');
 });
 
 it.sequential('StatusBar formats USD run-budget evidence clearly', async () => {
@@ -259,7 +257,7 @@ it.sequential('StatusBar formats USD run-budget evidence clearly', async () => {
     />,
   );
 
-  expect(lastFrame()).toContain('Run cost: $4.05 / $5.00 (81%)');
+  expect(lastFrame()).toContain('Run $4.05/$5.00 (81%)');
 });
 
 it.sequential('StatusBar renders known context used without window when the model is not in the catalog', async () => {
@@ -373,8 +371,8 @@ it.sequential('StatusBar renders Codex rate limits when valid, but hides them wh
     />,
   );
   const outputValid = lastFrameValid() ?? '';
-  expect(outputValid.includes('5H 11% · reset ')).toBe(true);
-  expect(outputValid.includes('7D 14% · reset ')).toBe(true);
+  expect(outputValid.includes('5H 11%→')).toBe(true);
+  expect(outputValid.includes('7D 14%→')).toBe(true);
   expect(outputValid.includes('undefined')).toBe(false);
   expect(outputValid.includes('NaN')).toBe(false);
 
@@ -420,7 +418,7 @@ it.sequential('StatusBar labels a Codex window by its length, not by which slot 
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('7D 58% · reset ')).toBe(true);
+  expect(output.includes('7D 58%→')).toBe(true);
   expect(output.includes('168H')).toBe(false);
 });
 
@@ -444,7 +442,7 @@ it.sequential('StatusBar shows a date for a Codex reset more than a day away', a
     />,
   );
 
-  expect(lastFrame() ?? '').toMatch(/7D 58% · reset \d{1,2}[./-]\d{1,2}/);
+  expect(lastFrame() ?? '').toMatch(/7D 58%→\d{1,2}[./-]\d{1,2}/);
 });
 
 it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', async () => {
@@ -468,9 +466,9 @@ it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', 
   );
 
   const output = lastFrame() ?? '';
-  expect(output).toMatch(/5H 11% · reset \d{1,2}:\d{2}/);
+  expect(output).toMatch(/5H 11%→\d{1,2}:\d{2}/);
   // A sub-day window resetting today needs no date to disambiguate.
-  expect(output).not.toMatch(/5H 11% · reset \d{1,2}[./-]\d{1,2}/);
+  expect(output).not.toMatch(/5H 11%→\d{1,2}[./-]\d{1,2}/);
 });
 
 it.sequential('StatusBar dates a day-scale Codex window that resets within 24 hours', async () => {
@@ -493,7 +491,7 @@ it.sequential('StatusBar dates a day-scale Codex window that resets within 24 ho
     />,
   );
 
-  expect(lastFrame() ?? '').toMatch(/7D 58% · reset \d{1,2}[./-]\d{1,2}\D{1,2}\d{1,2}:\d{2}/);
+  expect(lastFrame() ?? '').toMatch(/7D 58%→\d{1,2}[./-]\d{1,2}\D{1,2}\d{1,2}:\d{2}/);
 });
 
 it.sequential('StatusBar renders large uncached prompt warning and confirmation warning', async () => {
@@ -554,7 +552,7 @@ it.sequential('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTo
 
   const output = lastFrame() ?? '';
   // Math.round(20_000 / 1000) = 20
-  expect(output.includes('Confirm Cache Miss: ~20k')).toBe(true);
+  expect(output.includes('confirm cache miss ~20k')).toBe(true);
 });
 
 it.sequential('StatusBar shows Sandboxed when sandbox.enabled is true, replacing Auto: ...', async () => {
@@ -651,9 +649,9 @@ it.sequential('StatusBar renders a static commit blocker warning', async () => {
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Static blocked: command/running')).toBe(true);
-  expect(output.includes('24 msgs')).toBe(true);
-  expect(output.includes('18k chars')).toBe(true);
+  expect(output.includes('Static blocked command/running')).toBe(true);
+  expect(output.includes('24msg')).toBe(true);
+  expect(output.includes('18k')).toBe(true);
 });
 
 it.sequential('StatusBar shows queue badge when queueLength > 0', async () => {
@@ -714,7 +712,7 @@ it.sequential('StatusBar renders Grok credit usage with its period reset', async
     />,
   );
 
-  expect(lastFrame()).toContain('Credits 29% · reset 08/24');
+  expect(lastFrame()).toContain('Credits 29%→08/24');
 });
 
 it.sequential('StatusBar renders Grok credit usage without a period end', async () => {
@@ -751,7 +749,7 @@ it.sequential('StatusBar renders all OpenCode Go usage limits with countdown res
       }}
     />,
   );
-  expect(lastFrame()).toContain('Roll 42% · reset 20m / Week 27% · reset 4d / Month 18% · reset 16d');
+  expect(lastFrame()).toContain('Roll 42%→20m / Week 27%→4d / Month 18%→16d');
 });
 
 // Regression test for a bug where, at ~85 columns, Ink's row-level flexWrap
@@ -851,7 +849,7 @@ it.sequential('StatusBar drops cost and cache before dropping the mode label or 
   expect(output).toContain('Mentor');
   expect(output).toContain('Codex/gpt-5.6-luna');
   expect(output).not.toContain('Cost');
-  expect(output).not.toContain('Est $');
+  expect(output).not.toContain('~$');
   expect(output).not.toContain('cached');
   // Tokens are the last metric to go, so they and context still fit even
   // though cost and cache — dropped first and second — do not.
@@ -883,7 +881,9 @@ it.sequential('StatusBar renders config and metrics on a single line at a wide w
     );
   });
 
-  const configAndMetricsLine = output.split('\n').find((line) => line.includes('Standard') && line.includes('Est $'));
+  const configAndMetricsLine = output
+    .split('\n')
+    .find((line) => line.includes('Codex/gpt-5.6-luna') && line.includes('~$'));
   expect(configAndMetricsLine).toBeDefined();
   expect(configAndMetricsLine).toContain('Codex/gpt-5.6-luna');
   expect(configAndMetricsLine).toContain('cached');
@@ -907,7 +907,7 @@ it.sequential('StatusBar renders token streaming speed when present in lastUsage
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2 tok/s)');
+  expect(output).toContain('↓450 (48.2t/s)');
 });
 
 it.sequential('StatusBar prefixes estimated token speed with a tilde', async () => {
@@ -928,7 +928,7 @@ it.sequential('StatusBar prefixes estimated token speed with a tilde', async () 
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (~48.2 tok/s)');
+  expect(output).toContain('↓450 (~48.2t/s)');
 });
 
 it.sequential('StatusBar hides a burst-inflated decode rate', async () => {
@@ -971,7 +971,7 @@ it.sequential('StatusBar shows a sustained rate', async () => {
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2 tok/s)');
+  expect(output).toContain('↓450 (48.2t/s)');
 });
 
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {
@@ -984,7 +984,7 @@ it.sequential('StatusBar renders live streaming speed during in-flight generatio
     <StatusBar settingsService={settingsService} liveStreamingSpeed={{ tps: 52.4, ttftMs: 300 }} />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('(52.4 tok/s)');
+  expect(output).toContain('(52.4t/s)');
 });
 
 it.sequential('StatusBar displays OpenRouter upstream provider from lastUsage', async () => {

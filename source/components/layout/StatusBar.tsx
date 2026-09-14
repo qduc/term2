@@ -56,7 +56,7 @@ function formatStatusBarTokens(tokens: number): string {
 // terminalTextWidth for everything else. Fix it here, not in
 // terminalTextWidth itself — other callers of that function rely on its
 // conservative doubling for content that really can be double-width.
-const STATUS_BAR_NARROW_GLYPHS = new Set([GLYPH_SEPARATOR, '↑', '↓', '·', GLYPH_WARNING, GLYPH_SELECTED, '…']);
+const STATUS_BAR_NARROW_GLYPHS = new Set([GLYPH_SEPARATOR, '↑', '↓', '→', '·', GLYPH_WARNING, GLYPH_SELECTED, '…']);
 
 const PROFILE_MODE_LABELS: Record<string, string> = {
   'builtin:standard': 'Standard',
@@ -65,6 +65,11 @@ const PROFILE_MODE_LABELS: Record<string, string> = {
   'builtin:mentor': 'Mentor',
   'builtin:orchestrator': 'Orchestrator',
 };
+
+/** Compact rate for the bar (`48.2t/s`); prose contexts keep `formatTokensPerSecond`. */
+function formatStatusBarRate(tps: number, approximate: boolean): string {
+  return formatTokensPerSecond(tps, approximate).replace(' tok/s', 't/s');
+}
 
 function statusBarTextWidth(value: string): number {
   return Array.from(value).reduce(
@@ -330,11 +335,11 @@ const StatusBar: FC<StatusBarProps> = ({
       : lastUsage.tokens_per_second ?? liveStreamingSpeed?.tps;
     if (speed != null && speed > 0) {
       const approximate = lastUsage.tokens_per_second != null && Boolean(lastUsage.tokens_per_second_estimated);
-      completionPiece += ` (${formatTokensPerSecond(speed, approximate)})`;
+      completionPiece += ` (${formatStatusBarRate(speed, approximate)})`;
     }
     tokenPieces.push(completionPiece);
   } else if (liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0) {
-    tokenPieces.push(`(${formatTokensPerSecond(liveStreamingSpeed.tps)})`);
+    tokenPieces.push(`(${formatStatusBarRate(liveStreamingSpeed.tps, false)})`);
   }
   const tokensText = tokenPieces.join(' ');
 
@@ -349,9 +354,11 @@ const StatusBar: FC<StatusBarProps> = ({
     : '';
 
   const contextText = contextUsageText ? `Ctx ${contextUsageText}` : '';
+  // The `$` plus slate color identify this as cost, so the segment spends no
+  // columns on a `Cost`/`Est` label; `~` marks an estimate, `+` a lower bound.
   const costText =
     costSummary && costSummary.state !== 'unavailable'
-      ? `${costSummary.state === 'exact' ? 'Cost' : 'Est'} ${formatStatusBarCost(costSummary.knownUsdMicros)}${
+      ? `${costSummary.state === 'exact' ? '' : '~'}${formatStatusBarCost(costSummary.knownUsdMicros)}${
           costSummary.state === 'partial' ? '+' : ''
         }`
       : '';
@@ -362,9 +369,9 @@ const StatusBar: FC<StatusBarProps> = ({
     }
     if (hasPendingConfirmation) {
       const tokens = pendingLargeUncachedTokens ?? largeUncachedWarning.estimatedTokens;
-      return `${GLYPH_WARNING} Confirm Cache Miss: ~${Math.round(tokens / 1000)}k`;
+      return `${GLYPH_WARNING} confirm cache miss ~${Math.round(tokens / 1000)}k`;
     }
-    return `${GLYPH_WARNING} Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
+    return `${GLYPH_WARNING} cache miss risk ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
   })();
 
   const openCodeGoUsageText = (() => {
@@ -377,7 +384,7 @@ const StatusBar: FC<StatusBarProps> = ({
       return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
     };
     const formatLimit = (label: string, limit: { usagePercent: number; resetInSec: number }) =>
-      `${label} ${Math.round(limit.usagePercent)}% · reset ${formatReset(limit.resetInSec)}`;
+      `${label} ${Math.round(limit.usagePercent)}%→${formatReset(limit.resetInSec)}`;
     return [
       formatLimit('Roll', openCodeGoUsage.rollingUsage),
       formatLimit('Week', openCodeGoUsage.weeklyUsage),
@@ -422,7 +429,7 @@ const StatusBar: FC<StatusBarProps> = ({
         return undefined;
       }
       const reset = formatReset(window.reset_at, window.window_minutes);
-      return `${formatWindow(window.window_minutes)} ${window.used_percent}% · reset ${reset}`;
+      return `${formatWindow(window.window_minutes)} ${window.used_percent}%→${reset}`;
     };
 
     return [lastCodexRateLimit.primary, lastCodexRateLimit.secondary]
@@ -447,7 +454,7 @@ const StatusBar: FC<StatusBarProps> = ({
       2,
       '0',
     )}`;
-    return `Credits ${percent}% · reset ${reset}`;
+    return `Credits ${percent}%→${reset}`;
   })();
 
   function formatActiveTime(ms: number): string {
@@ -470,15 +477,15 @@ const StatusBar: FC<StatusBarProps> = ({
     const percent = limit > 0 ? Math.round((used / limit) * 100) : 100;
     switch (dimension) {
       case 'usd':
-        return `${GLYPH_WARNING} Run cost: ${formatUsdMicros(used)} / ${formatUsdMicros(limit)} (${percent}%)`;
+        return `${GLYPH_WARNING} Run ${formatUsdMicros(used)}/${formatUsdMicros(limit)} (${percent}%)`;
       case 'unpriced_tokens':
-        return `${GLYPH_WARNING} Run tokens: ${formatStatusBarTokens(used)} / ${formatStatusBarTokens(
+        return `${GLYPH_WARNING} Run tokens ${formatStatusBarTokens(used)}/${formatStatusBarTokens(
           limit,
         )} (${percent}%)`;
       case 'active_time':
-        return `${GLYPH_WARNING} Run time: ${formatActiveTime(used)} / ${formatActiveTime(limit)} (${percent}%)`;
+        return `${GLYPH_WARNING} Run time ${formatActiveTime(used)}/${formatActiveTime(limit)} (${percent}%)`;
       case 'turns':
-        return `${GLYPH_WARNING} Run turns: ${used} / ${limit} (${percent}%)`;
+        return `${GLYPH_WARNING} Run turns ${used}/${limit} (${percent}%)`;
       default:
         return `${GLYPH_WARNING} Run budget: ${percent}%`;
     }
@@ -492,10 +499,13 @@ const StatusBar: FC<StatusBarProps> = ({
     const sender = staticCommitBlocker.sender ?? 'unknown';
     const status = staticCommitBlocker.status ?? staticCommitBlocker.reason;
     const chars = Math.round(staticCommitBlocker.dynamicTextLength / 1000);
-    return `Static blocked: ${sender}/${status} (${staticCommitBlocker.dynamicMessageCount} msgs, ${chars}k chars)`;
+    return `Static blocked ${sender}/${status} ${staticCommitBlocker.dynamicMessageCount}msg/${chars}k`;
   })();
 
-  const modeLabel = PROFILE_MODE_LABELS[String(activeProfileId)] ?? 'Standard';
+  const profileLabel = PROFILE_MODE_LABELS[String(activeProfileId)] ?? 'Standard';
+  // The unlabeled state *is* Standard: absence of a mode word is the signal,
+  // so the common case never spends columns restating the default.
+  const modeLabel = profileLabel === 'Standard' ? '' : profileLabel;
   // 'always' (YOLO) overrides the sandbox label so YOLO mode is always visible,
   // rendered in red below. When the sandbox is on it still confines commands,
   // but every approval is auto-granted, so the mode must not hide behind
@@ -532,8 +542,8 @@ const StatusBar: FC<StatusBarProps> = ({
     {
       id: 'mode',
       text: modeLabel,
-      color: modeLabel === 'Standard' ? slate : accent,
-      bold: modeLabel !== 'Standard',
+      color: accent,
+      bold: true,
       separator: 'group',
     },
     {
@@ -628,7 +638,7 @@ const StatusBar: FC<StatusBarProps> = ({
               <>
                 {warningText && <Divider />}
                 <Text color={slate} wrap="truncate-end">
-                  Docker host access:{' '}
+                  Docker host:{' '}
                 </Text>
                 <Text color={glow} bold wrap="truncate-end">
                   {dockerHostAccess}

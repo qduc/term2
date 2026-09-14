@@ -3,7 +3,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { beforeEach, it, expect, vi } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
-import { useProviderSelection } from './use-provider-selection.js';
+import { useProviderSelection, type ProviderSelectionMenuItem } from './use-provider-selection.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 
 beforeEach(() => {
@@ -1361,7 +1361,14 @@ it.sequential('useProviderSelection - disable/enable toggle persists immediately
 
   expect(hook!.phase).toBe('list');
   expect(settingsService.get('agent.disabledProviders')).toEqual(['openai']);
-  expect(hook!.getActiveItems().find((i) => i.kind === 'provider' && i.id === 'openai')?.isDisabled).toBe(true);
+  expect(
+    hook!
+      .getActiveItems()
+      .find(
+        (i): i is Extract<ProviderSelectionMenuItem, { kind: 'provider' }> =>
+          i.kind === 'provider' && i.id === 'openai',
+      )?.isDisabled,
+  ).toBe(true);
 
   // Re-enable through the same row, now labelled Enable Provider.
   await act(async () => {

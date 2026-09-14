@@ -240,7 +240,7 @@ it('fails only when every sample fails', async () => {
  * different ways, so a disagreement between them is real signal. If every
  * entry silently ran on the same model the feature would be theatre.
  */
-it('consults every model in the pool and labels each answer with its model', async () => {
+it('consults every model in the pool and labels each answer generically', async () => {
   const seenModels: string[] = [];
   const providerId = registerTestProvider({
     label: 'Pool mentor provider',
@@ -274,8 +274,10 @@ it('consults every model in the pool and labels each answer with its model', asy
 
   expect(result.status).toBe('completed');
   expect(seenModels.sort()).toEqual(['model-a', 'model-b']);
-  expect(result.finalText).toContain('model-a');
-  expect(result.finalText).toContain('model-b');
+  expect(result.finalText).toContain('## Mentor A of 2');
+  expect(result.finalText).toContain('## Mentor B of 2');
+  expect(result.finalText).not.toContain('## Mentor A of 2 — model-a');
+  expect(result.finalText).not.toContain('## Mentor B of 2 — model-b');
   expect(result.finalText).toContain('Opinion from model-a');
   expect(result.finalText).toContain('Opinion from model-b');
   expect(result.usage?.prompt_tokens).toBe(20);
@@ -314,8 +316,8 @@ it('reports which pool model failed and keeps the rest', async () => {
 
   expect(result.status).toBe('completed');
   expect(result.finalText).toContain('Opinion from model-a');
-  // The failure names the model, so a consistently broken pool entry is visible.
-  expect(result.finalText).toContain('model-b');
+  expect(result.finalText).toContain('Mentor B failed');
+  expect(result.finalText).not.toContain('model-b is unavailable');
   expect(result.finalText).toMatch(/1 of 2 .*(failed|unavailable)/i);
 });
 

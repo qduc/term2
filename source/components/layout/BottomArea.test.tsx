@@ -267,7 +267,7 @@ it.sequential('BottomArea shows the latest subagent tool in a compact line above
   const output = lastFrame() ?? '';
   expect(output).toContain('Tasks · 1 active');
   expect(output).toContain('[Worker] implement the background overview');
-  expect(output).toContain('Ctrl+G manage');
+  expect(output).toContain('^G manage');
   expect(output).toContain('└ ◐ read_file path=source/app.ts');
   const panelLines = output
     .slice(output.indexOf('Tasks ·'), output.indexOf('❯'))
@@ -531,8 +531,8 @@ it.sequential('BottomArea advertises the manager while a shell is transferable',
   });
 
   const output = lastFrame() ?? '';
-  expect(output).toContain('Tasks · 1 active · Ctrl+G manage');
-  expect(output).toContain('[Shell · foreground]');
+  expect(output).toContain('Tasks · 1 active · ^G manage');
+  expect(output).toContain('[Shell ↑]');
   expect(output).toContain('long-command');
   expect(output).not.toContain('Foreground shell running · Ctrl+G manage');
   act(() => unmount());

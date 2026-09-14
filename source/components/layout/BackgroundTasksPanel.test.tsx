@@ -64,7 +64,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   expect(output).toContain('ui_fix');
   expect(output).toContain('Explorer');
   expect(output).toContain('ui_fix implement the narrow backgr…');
-  expect(output).toContain('Running · 1m 05s');
+  expect(output).toContain('Running · 1:05');
   expect(output).toContain('Running · 5s');
   expect(output).not.toContain('model');
 });
@@ -286,7 +286,8 @@ it.sequential('uses explicit wide, medium, and narrow label budgets without expa
   };
   {
     const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={11_000} columns={120} />);
-    expect(renderer.lastFrame() ?? '').toContain('Awaiting provider response');
+    expect(renderer.lastFrame() ?? '').toContain('Waiting');
+    expect(renderer.lastFrame() ?? '').not.toContain('Awaiting provider response');
     expect(renderer.lastFrame() ?? '').not.toContain('no activity observed for 10s');
     expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={72} />);
@@ -429,7 +430,7 @@ it.each([
       task: 'retained terminal identity remains visible',
     }),
     identity: 'retained terminal identity',
-    phase: 'Completed',
+    phase: 'Done',
   },
   {
     columns: 104,
@@ -454,7 +455,7 @@ it.each([
       },
     },
     identity: 'wide_identity',
-    phase: 'Awaiting provider response',
+    phase: 'Waiting',
   },
 ])(
   'reserves identity and phase within a real $columns-column Ink layout',
@@ -465,7 +466,7 @@ it.each([
     expect(taskLine).toContain(identity);
     expect(taskLine).toContain(phase);
     expect(taskLine.length).toBeLessThanOrEqual(columns);
-    if (foreground) expect(taskLine).toContain('foreground');
+    if (foreground) expect(taskLine).toContain('↑');
     for (const line of output.split('\n')) expect(line.length).toBeLessThanOrEqual(columns);
   },
 );
@@ -530,7 +531,7 @@ it.sequential('shows a concise recently completed indication without counting it
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Tasks · 0 active');
   expect(output).toContain('Explorer');
-  expect(output).toContain('Completed recently');
+  expect(output).toContain('✓ Done');
   expect(output).not.toContain('Running');
   // A settled task's tool history is stale; the completion status carries it.
   expect(output).not.toContain('pnpm test');
@@ -552,7 +553,7 @@ it.sequential('shows failure reason for recently failed tasks when error is pres
   );
 
   const output = renderer.lastFrame() ?? '';
-  expect(output).toContain('Failed recently (Max turns (100) exceeded)');
+  expect(output).toContain('✗ Failed (Max turns (100) exceeded)');
 });
 
 it.sequential(
@@ -567,7 +568,7 @@ it.sequential(
 
     let output = renderer.lastFrame() ?? '';
     expect(output).toContain('Tasks · 0 active');
-    expect(output).toContain('Interrupted recently (budget exhausted)');
+    expect(output).toContain('✗ Interrupted (budget)');
     expect(output).not.toContain('Running');
 
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[interrupted]} now={7_000} columns={40} />);
@@ -656,7 +657,7 @@ it.sequential('keeps activity observations and terminal errors to one row per ta
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Active');
   expect(output).toContain('Waiting');
-  expect(output).toContain('Failed · terminal');
+  expect(output).toContain('✗ Failed');
   expect(output).not.toContain('Text received');
   expect(output).not.toContain('Shell output received');
   expect(output).not.toContain('hung');
@@ -720,9 +721,9 @@ it.sequential('tags unadopted work as foreground and leaves adopted rows untagge
 
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Tasks · 3 active');
-  expect(output).toContain('[Explorer · foreground]');
+  expect(output).toContain('[Explorer ↑]');
   expect(output).toContain('audit provider fixtures');
-  expect(output).toContain('[Shell · foreground]');
+  expect(output).toContain('[Shell ↑]');
   expect(output).toContain('pnpm test');
   expect(output).toContain('[Explorer]');
   expect(output).toContain('write the report');

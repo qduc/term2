@@ -69,45 +69,34 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
-const formatPhase = (task: BackgroundTaskControlDetails, now: number): string => {
-  const elapsed = formatBackgroundTaskElapsed(now - task.startedAt);
-  const activity = task.activity;
-  if (!activity) return `Running · ${elapsed}`;
-  if (activity.phase === 'waiting') return `Awaiting ${activity.reason ?? 'provider'} response · ${elapsed}`;
-  if (activity.phase === 'cancelling') return `Cancelling · ${elapsed}`;
-  if (activity.phase === 'settled') return formatTerminalStatus(task);
-  return `Active · ${elapsed}`;
+/**
+ * Compact clock for space-constrained panel rows (`45s`, `1:05`). Prose contexts
+ * ("Started: 1m 05s ago" in the manager) keep `formatBackgroundTaskElapsed`, where
+ * `1:05` would read as a time of day.
+ */
+export const formatBackgroundTaskClock = (elapsedMs: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`;
 };
 
-const formatCompactPhase = (task: BackgroundTaskControlDetails, now: number, isNarrow: boolean): string => {
+const formatPhase = (task: BackgroundTaskControlDetails, now: number, isNarrow: boolean): string => {
   const activity = task.activity;
   if (activity?.phase === 'settled') return formatTerminalStatus(task);
   const base = !activity
     ? 'Running'
     : activity.phase === 'waiting'
-    ? 'Waiting'
+    ? // Provider is the overwhelmingly common wait; only exceptional reasons
+      // (approval, answer) cost the parenthetical, because they need the user.
+      activity.reason && activity.reason !== 'provider'
+      ? `Waiting (${activity.reason})`
+      : 'Waiting'
     : activity.phase === 'cancelling'
     ? 'Cancelling'
     : 'Active';
   if (isNarrow) return base;
-  return `${base} · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
-};
-
-const formatCompactTerminalStatus = (task: PanelTask): string => {
-  switch (task.status) {
-    case 'completed':
-      return 'Completed';
-    case 'failed':
-      return 'Failed';
-    case 'cancelled':
-      return 'Cancelled';
-    case 'timed_out':
-      return 'Timed out';
-    case 'interrupted':
-      return 'Interrupted';
-    default:
-      return 'Running';
-  }
+  return `${base} · ${formatBackgroundTaskClock(now - task.startedAt)}`;
 };
 
 const formatFirstLine = ({
@@ -126,20 +115,12 @@ const formatFirstLine = ({
   isNarrow: boolean;
 }): { badge: string; identity: string; phase: string } => {
   const controlTask = isControlTask(task) ? task : undefined;
-  const badge = `[${task.kind === 'shell' ? 'Shell' : formatRole(task.role)}${
-    placement === 'foreground' ? ' · foreground' : ''
-  }]`;
+  const badge = `[${task.kind === 'shell' ? 'Shell' : formatRole(task.role)}${placement === 'foreground' ? ' ↑' : ''}]`;
   const rawPhase = isTerminal(task)
-    ? isNarrow
-      ? formatCompactTerminalStatus(task)
-      : formatTerminalStatus(task)
+    ? formatTerminalStatus(task)
     : controlTask
-    ? isWide
-      ? formatPhase(controlTask, now)
-      : formatCompactPhase(controlTask, now, isNarrow)
-    : isNarrow
-    ? 'Running'
-    : formatLiveStatus(task, now);
+    ? formatPhase(controlTask, now, isNarrow)
+    : formatLiveStatus(task, now, isNarrow);
   const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
   const phase = truncate(rawPhase, Math.max(1, columns - fixedColumns - BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS));
   // "• " + badge + " " + identity + " · " + phase. Reserve every
@@ -154,25 +135,23 @@ const formatFirstLine = ({
   return { badge, identity: truncate(formatTaskLabel(task), Math.min(physicalBudget, classBudget)), phase };
 };
 
+// Terminal rows linger only for the panel grace period, so the "recently"
+// qualifier is carried by the row's imminent disappearance, not its wording.
+// Status glyphs reuse the shared TOOL_STATUS_GLYPH vocabulary from the tool lines.
 const formatTerminalStatus = (task: PanelTask): string => {
   switch (task.status) {
     case 'completed':
-      return 'Completed recently';
-    case 'failed':
+      return '✓ Done';
+    case 'failed': {
       const error = 'error' in task ? task.error : undefined;
-      return isControlTask(task)
-        ? error
-          ? `Failed · terminal (${error})`
-          : 'Failed · terminal'
-        : error
-        ? `Failed recently (${error})`
-        : 'Failed recently';
+      return error ? `✗ Failed (${error})` : '✗ Failed';
+    }
     case 'cancelled':
-      return 'Cancelled recently';
+      return 'Cancelled';
     case 'timed_out':
-      return 'Timed out recently';
+      return 'Timed out';
     case 'interrupted':
-      return 'Interrupted recently (budget exhausted)';
+      return '✗ Interrupted (budget)';
     default:
       return 'Running';
   }
@@ -185,10 +164,12 @@ const isTerminal = (task: PanelTask): boolean =>
   task.status === 'cancelled' ||
   task.status === 'interrupted';
 
-const formatLiveStatus = (task: PanelTask, now: number): string => {
+const formatLiveStatus = (task: PanelTask, now: number, isNarrow: boolean): string => {
   const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;
-  if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - startedAt)}`;
-  return formatPhase(task, now);
+  if (!isControlTask(task) || !task.activity) {
+    return isNarrow ? 'Running' : `Running · ${formatBackgroundTaskClock(now - startedAt)}`;
+  }
+  return formatPhase(task, now, isNarrow);
 };
 
 const latestTool = (task: PanelTask): BackgroundSubagentTaskTool | undefined => {
@@ -227,7 +208,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color={COLOR_TEXT_MUTED}>Tasks · {activeCount} active · Ctrl+G manage</Text>
+      <Text color={COLOR_TEXT_MUTED}>Tasks · {activeCount} active · ^G manage</Text>
       {visible.map(({ key, placement, task }) => {
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;

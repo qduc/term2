@@ -364,6 +364,20 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onStreamingToolInfo).not.toHaveBeenLastCalledWith(null);
   });
 
+  it('keeps the Responses API tool name when execution starts without argument deltas', async () => {
+    const cfg = makeConfig();
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'tool_started', toolCallId: 'call-1', toolName: 'grep', arguments: {} });
+      return { type: 'response', finalText: 'ok', commandMessages: [] };
+    });
+
+    await new ConversationOrchestrator(cfg).sendUserMessage('search');
+
+    expect(cfg.ui.onStreamingToolInfo).toHaveBeenCalledWith({ toolName: 'grep' });
+  });
+
   // The run loop emits one cost_update event per dispatched model request, so
   // the status bar can show per-request cost before the turn ends. This test
   // pins the hop from that event into the accumulator and the UI callback.

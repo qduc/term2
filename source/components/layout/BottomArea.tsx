@@ -52,7 +52,7 @@ export type BottomAreaProps = {
   /** True while a second Escape would interrupt the in-flight turn. */
   interruptConfirmVisible?: boolean;
   thinkingStartedAt?: number | null;
-  toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
+  toolCallStreamingInfo?: { toolName?: string; argumentCharCount?: number } | null;
   liveStreamingSpeed?: { tps: number; ttftMs?: number } | null;
   isShellMode?: boolean;
   activeShellCommand?: string;
@@ -378,12 +378,15 @@ const BottomArea: FC<BottomAreaProps> = ({
             )}
             {isProcessing && toolCallStreamingInfo && (
               <Text color={COLOR_TEXT_SUBTLE}>
-                Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
-                {toolCallStreamingInfo.argumentCharCount} chars
+                Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'}
+                {toolCallStreamingInfo.argumentCharCount != null
+                  ? ` (${toolCallStreamingInfo.argumentCharCount} chars`
+                  : ''}
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
                   ? ` · ${formatTokensPerSecond(liveStreamingSpeed.tps)}`
                   : ''}
-                ){'.'.repeat(dotCount)}
+                {toolCallStreamingInfo.argumentCharCount != null ? ')' : ''}
+                {'.'.repeat(dotCount)}
               </Text>
             )}
             {activeShellCommand && (

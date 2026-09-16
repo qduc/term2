@@ -78,7 +78,7 @@ export interface ConversationUIState {
 
   // Streaming indicators
   thinkingStartedAt: number | null;
-  toolCallStreamingInfo: { toolName?: string; argumentCharCount: number } | null;
+  toolCallStreamingInfo: { toolName?: string; argumentCharCount?: number } | null;
   liveStreamingSpeed: { tps: number; ttftMs?: number } | null;
 
   // Usage (included here so reset_all can clear them atomically)

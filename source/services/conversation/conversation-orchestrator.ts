@@ -1450,6 +1450,11 @@ export class ConversationOrchestrator {
         this.config.ui.onStreamingToolInfo(null);
       } else if (eventType === 'tool_call_streaming_delta') {
         this.config.ui.onStreamingToolInfo({ toolName: event.toolName, argumentCharCount: event.argumentCharCount });
+      } else if (eventType === 'tool_started') {
+        // Responses API can deliver the assembled function_call item without
+        // any argument-delta frame. The execution event still carries the
+        // authoritative tool name, so retain it for the loading indicator.
+        this.config.ui.onStreamingToolInfo({ toolName: event.toolName });
       } else if (eventType === 'text_delta' || eventType === 'final') {
         this.config.ui.onStreamingToolInfo(null);
       }

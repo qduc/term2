@@ -41,7 +41,7 @@ export interface UIPort {
   onResetAll(): void;
   onStreamingThinkingStarted(timestamp: number): void;
   onStreamingThinkingCleared(): void;
-  onStreamingToolInfo(info: { toolName?: string; argumentCharCount: number } | null): void;
+  onStreamingToolInfo(info: { toolName?: string; argumentCharCount?: number } | null): void;
   onStreamingSpeedUpdate?(speed: { tps: number; ttftMs?: number } | null): void;
   /** @deprecated ask_user answers now live in PendingInteractionState. */
   onAskUserAnswerSubmitted(answer: string | string[]): void;

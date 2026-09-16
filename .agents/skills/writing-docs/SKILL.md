@@ -9,6 +9,8 @@ Docs in this repo are read by agents as authoritative before they touch code. A 
 
 The companion rule for *reading* these docs is in `AGENTS.md` under "How to read the docs in this repo". This skill is the write-side counterpart: how to produce a doc that degrades gracefully instead of becoming a trap.
 
+The last full-repo docs verification sweep was `f1f9199d` (2026-08-29); it covered AGENTS.md, CONTEXT.md, README.md, ROADMAP.md, the skills, the contract docs, and plan status headers. Anything added or edited since has not been checked against the code.
+
 ## The one failure that matters most
 
 **Scope every claim to what it is actually true of.** A claim true of one component, one provider, or one lane, stated as a system-wide invariant, is the dominant defect class in this repo's docs. It is not carelessness — it happens because the author was correct at the time, when only one implementation existed. The second implementation arrives and the sentence silently becomes a lie.

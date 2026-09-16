@@ -1,3 +1,6 @@
+// Dormant decision portal (merged 2026-08-16). Binds a hard-coded LAN address
+// and writes to ~/.agents/runtime/; uncalled outside
+// scripts/candidate-gates.test.ts. Establish provenance before extending.
 import { spawn } from 'node:child_process';
 import { access, open, realpath as realpathFromDisk } from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';

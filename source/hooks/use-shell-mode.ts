@@ -32,6 +32,7 @@ export const useShellMode = ({ session, addShellMessage, replaceInput }: UseShel
 
   return {
     isShellMode: snapshot.isShellMode,
+    activeCommand: snapshot.activeCommand,
     enterShellMode,
     exitShellMode,
     handleShellSubmit,

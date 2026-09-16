@@ -14,6 +14,8 @@ export interface SSHInfo {
 
 export interface ShellInteractionSnapshot {
   isShellMode: boolean;
+  /** The command currently executing, if any. */
+  activeCommand?: string;
 }
 
 export interface ShellContextSink {
@@ -87,6 +89,8 @@ export class ShellInteractionSession {
 
   async #execute(command: string): Promise<ShellHistoryEntry> {
     this.#pendingExecutions += 1;
+    this.#snapshot = { ...this.#snapshot, activeCommand: command };
+    this.#notify();
     try {
       const result = await executeFormattedShellCommand({
         command,
@@ -104,6 +108,11 @@ export class ShellInteractionSession {
       return entry;
     } finally {
       this.#pendingExecutions -= 1;
+      this.#snapshot = {
+        ...this.#snapshot,
+        ...(this.#pendingExecutions === 0 ? { activeCommand: undefined } : {}),
+      };
+      this.#notify();
       if (this.#pendingExecutions === 0 && this.#flushRequested) {
         this.#flushRequested = false;
         this.#flushCompletedHistory();
@@ -140,8 +149,10 @@ export class ShellInteractionSession {
       return;
     }
     this.#snapshot = { isShellMode };
-    for (const listener of this.#listeners) {
-      listener();
-    }
+    this.#notify();
+  }
+
+  #notify(): void {
+    for (const listener of this.#listeners) listener();
   }
 }

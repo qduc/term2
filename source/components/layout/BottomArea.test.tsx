@@ -675,6 +675,18 @@ it.sequential('BottomArea shows tool call streaming indicator when toolCallStrea
   });
 });
 
+it.sequential('BottomArea acknowledges an active direct shell command', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    isShellMode: true,
+    activeShellCommand: 'sleep 10',
+  });
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Running shell command: sleep 10');
+  expect(output).not.toContain('generating');
+  act(() => unmount());
+});
+
 it.sequential('BottomArea shows tool call streaming indicator without tool name', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

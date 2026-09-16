@@ -55,6 +55,7 @@ export type BottomAreaProps = {
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
   liveStreamingSpeed?: { tps: number; ttftMs?: number } | null;
   isShellMode?: boolean;
+  activeShellCommand?: string;
   onShellModeEnter?: () => void;
   onShellModeExit?: () => void;
   lastUsage?: NormalizedUsage | null;
@@ -142,6 +143,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   toolCallStreamingInfo = null,
   liveStreamingSpeed = null,
   isShellMode = false,
+  activeShellCommand,
   onShellModeEnter,
   onShellModeExit,
   onSubmit,
@@ -382,6 +384,11 @@ const BottomArea: FC<BottomAreaProps> = ({
                   ? ` · ${formatTokensPerSecond(liveStreamingSpeed.tps)}`
                   : ''}
                 ){'.'.repeat(dotCount)}
+              </Text>
+            )}
+            {activeShellCommand && (
+              <Text color={COLOR_TEXT_SUBTLE}>
+                Running shell command: <Text bold>{activeShellCommand}</Text>
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (

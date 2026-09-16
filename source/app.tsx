@@ -383,7 +383,7 @@ const App: FC<AppProps> = ({
     [conversationService, settingsService, sshInfo, sshService],
   );
 
-  const { isShellMode, enterShellMode, exitShellMode, handleShellSubmit } = useShellMode({
+  const { isShellMode, activeCommand, enterShellMode, exitShellMode, handleShellSubmit } = useShellMode({
     session: shellInteractionSession,
     addShellMessage,
     replaceInput,
@@ -1309,6 +1309,7 @@ const App: FC<AppProps> = ({
             toolCallStreamingInfo={toolCallStreamingInfo}
             liveStreamingSpeed={liveStreamingSpeed}
             isShellMode={isShellMode}
+            activeShellCommand={activeCommand}
             onShellModeEnter={enterShellMode}
             onShellModeExit={exitShellMode}
             lastUsage={lastUsage}

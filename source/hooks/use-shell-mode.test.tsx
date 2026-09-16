@@ -67,6 +67,28 @@ it('clears the composer, projects results, and returns to normal mode after a co
   expect(session.getSnapshot()).toEqual({ isShellMode: false });
 });
 
+it('publishes the active command while a direct shell command is still running', async () => {
+  let resolveExecution!: (value: { text: string; exitCode: number; timedOut: boolean }) => void;
+  mocks.executeFormattedShellCommand.mockReturnValue(
+    new Promise((resolve) => {
+      resolveExecution = resolve;
+    }),
+  );
+  const session = createSession();
+  await renderHarness(session);
+  await act(async () => {
+    shellApi!.enterShellMode();
+    void shellApi!.handleShellSubmit('sleep 10');
+  });
+
+  expect(session.getSnapshot()).toEqual({ isShellMode: true, activeCommand: 'sleep 10' });
+  resolveExecution({ text: '', exitCode: 0, timedOut: false });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(session.getSnapshot()).toEqual({ isShellMode: false });
+});
+
 it.each(['echo one', 'echo two'])('flushes shell history when shell mode closes (submitted: %s)', async (command) => {
   const session = createSession();
   await renderHarness(session);

@@ -1441,9 +1441,16 @@ export class ConversationOrchestrator {
         this.config.ui.onStreamingThinkingCleared();
       }
 
-      if (eventType === 'tool_call_streaming_delta') {
+      if (eventType === 'reasoning_delta') {
+        // A tool call can remain in flight after the provider has finished
+        // streaming its arguments. Keep the call indicator visible until the
+        // tool result or the next model response arrives; otherwise the
+        // bottom area falls back to the misleading generic "generating" label
+        // while the tool itself is still running.
+        this.config.ui.onStreamingToolInfo(null);
+      } else if (eventType === 'tool_call_streaming_delta') {
         this.config.ui.onStreamingToolInfo({ toolName: event.toolName, argumentCharCount: event.argumentCharCount });
-      } else if (eventType === 'tool_started' || eventType === 'text_delta' || eventType === 'final') {
+      } else if (eventType === 'text_delta' || eventType === 'final') {
         this.config.ui.onStreamingToolInfo(null);
       }
 

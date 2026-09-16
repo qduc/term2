@@ -353,6 +353,7 @@ describe('ConversationOrchestrator', () => {
     vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
       options.onEvent({ type: 'reasoning_delta', delta: 'Thinking' });
       options.onEvent({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 });
+      options.onEvent({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: {} });
       return terminal;
     });
 
@@ -360,6 +361,7 @@ describe('ConversationOrchestrator', () => {
 
     expect(cfg.ui.onStreamingThinkingStarted).toHaveBeenCalled();
     expect(cfg.ui.onStreamingToolInfo).toHaveBeenCalledWith({ toolName: 'shell', argumentCharCount: 12 });
+    expect(cfg.ui.onStreamingToolInfo).not.toHaveBeenLastCalledWith(null);
   });
 
   // The run loop emits one cost_update event per dispatched model request, so

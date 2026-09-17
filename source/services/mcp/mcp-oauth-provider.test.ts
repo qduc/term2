@@ -133,7 +133,7 @@ describe('McpOAuthProvider', () => {
     const client = provider();
     const discovery = {
       authorizationServerUrl: ISSUER,
-      authorizationServerMetadata: { issuer: ISSUER, authorization_endpoint: `${ISSUER}/authorize` },
+      resourceMetadataUrl: `${SERVER}/.well-known/oauth-protected-resource`,
     };
     client.saveDiscoveryState(discovery);
 

@@ -1,8 +1,12 @@
 import crypto from 'node:crypto';
-import http from 'node:http';
-import readline from 'node:readline';
-import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
+import {
+  awaitLoopbackCallback,
+  bindLoopbackRedirect,
+  closeLoopbackServer,
+  openInBrowser,
+  type LoopbackFlowConfig,
+} from '../lib/oauth-loopback.js';
 
 /**
  * The browser half of an OAuth 2.0 + PKCE login for a public native client.
@@ -13,7 +17,12 @@ import type { Readable } from 'node:stream';
  * thing that differs between them is endpoints, scopes, and how the token
  * endpoint wants its request body encoded, so all of that is configuration and
  * the flow itself lives here once.
+ *
+ * The loopback listener and callback handling live in `source/lib/oauth-loopback.ts`
+ * so MCP OAuth (whose redirect port is chosen at runtime) can reuse them.
  */
+export { openInBrowser };
+
 export type PkceLoginConfig = {
   /** Human-facing provider name, used in prompts and error messages. */
   label: string;
@@ -60,22 +69,6 @@ function base64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function openInBrowser(url: string): void {
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
-  try {
-    const child = spawn(command, args, { stdio: 'ignore', detached: true });
-    child.on('error', () => {
-      // Ignored: opening a browser in a headless/server/minimal environment or when
-      // the browser launcher is missing (e.g. xdg-open ENOENT) is non-fatal.
-      // The caller always prints the URL, so the user can complete login manually.
-    });
-    child.unref();
-  } catch {
-    // The caller always prints the URL, so a failed launcher is not fatal.
-  }
-}
-
 function buildAuthorizeUrl(config: PkceLoginConfig, redirectUri: string, challenge: string, state: string): URL {
   const url = new URL(config.authorizeEndpoint);
   url.searchParams.set('client_id', config.clientId);
@@ -91,245 +84,9 @@ function buildAuthorizeUrl(config: PkceLoginConfig, redirectUri: string, challen
   return url;
 }
 
-/**
- * Binds the first registered loopback port that is free.
- *
- * We may only try ports the official client registered, so an exhausted list is
- * a real failure with a real cause: another login is almost certainly holding
- * the port.
- */
-function bindLoopbackListener(config: PkceLoginConfig): Promise<{ server: http.Server; port: number }> {
-  return new Promise((resolve, reject) => {
-    const attempt = (index: number) => {
-      const port = config.redirectPorts[index];
-      const server = http.createServer();
-      const onError = (err: NodeJS.ErrnoException) => {
-        server.close();
-        if (err.code !== 'EADDRINUSE') {
-          reject(err);
-          return;
-        }
-        if (index + 1 < config.redirectPorts.length) {
-          attempt(index + 1);
-          return;
-        }
-        reject(
-          new Error(
-            `${config.label} login could not bind any of its registered redirect ports (${config.redirectPorts.join(
-              ', ',
-            )}). The authorization server only accepts those exact redirects, so close whatever holds them${
-              config.portConflictHint ? ` (${config.portConflictHint})` : ''
-            } and retry.`,
-          ),
-        );
-      };
-      server.once('error', onError);
-      server.listen(port, '127.0.0.1', () => {
-        server.off('error', onError);
-        // Port 0 asks the OS for an ephemeral port; the redirect must name the real one.
-        resolve({ server, port: (server.address() as { port: number }).port });
-      });
-    };
-    attempt(0);
-  });
-}
-
-function stripWrappingQuotes(value: string): string {
-  const trimmed = value.trim();
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-}
-
 function exampleCallbackUrl(config: PkceLoginConfig): string {
   const port = config.redirectPorts[0];
   return `http://localhost:${port === 0 ? '<port>' : port}${config.callbackPath}?code=...`;
-}
-
-function interpretCallbackParams(
-  config: PkceLoginConfig,
-  expectedState: string,
-  error: string | null,
-  code: string | null,
-  state: string | null,
-): Error | string {
-  if (error) return new Error(`${config.label} login was rejected: ${error}`);
-  if (state !== expectedState) {
-    // A mismatched state means this callback did not come from the
-    // authorization request we started; the code may be an attacker's.
-    return new Error(`${config.label} login failed: OAuth state mismatch`);
-  }
-  if (!code) return new Error(`${config.label} login failed: no authorization code in callback`);
-  return code;
-}
-
-type PastedCallback =
-  | { kind: 'code'; code: string }
-  | { kind: 'fail'; error: Error }
-  | { kind: 'ignore'; message: string };
-
-/** Characters an authorization code may contain, raw or percent-encoded. */
-const BARE_CODE_PATTERN = /^[A-Za-z0-9._~+/=%-]+$/;
-
-/**
- * Accepts the callback's query string (`code=...&state=...`) or the bare code.
- *
- * A bare code carries no state to check. That is acceptable here because the
- * user copied it from their own browser into this terminal; the state check
- * guards the loopback listener against codes injected by other pages.
- */
-function interpretPastedCodeOrQuery(raw: string, config: PkceLoginConfig, expectedState: string): PastedCallback {
-  const notUsable: PastedCallback = {
-    kind: 'ignore',
-    message: `Paste the authorization code or the redirected localhost URL (${exampleCallbackUrl(config)}).`,
-  };
-
-  if (/(^|[?&])(code|error)=/.test(raw)) {
-    const params = new URLSearchParams(raw.replace(/^[?#]/, ''));
-    const result = interpretCallbackParams(
-      config,
-      expectedState,
-      params.get('error'),
-      params.get('code'),
-      params.get('state'),
-    );
-    return result instanceof Error ? { kind: 'fail', error: result } : { kind: 'code', code: result };
-  }
-
-  if (!BARE_CODE_PATTERN.test(raw)) return notUsable;
-  try {
-    return { kind: 'code', code: decodeURIComponent(raw) };
-  } catch {
-    return notUsable;
-  }
-}
-
-function interpretPastedOAuthRedirect(line: string, config: PkceLoginConfig, expectedState: string): PastedCallback {
-  const raw = stripWrappingQuotes(line);
-  if (!raw) return { kind: 'ignore', message: '' };
-
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return interpretPastedCodeOrQuery(raw, config, expectedState);
-  }
-
-  if (!isLoopbackHostname(url.hostname) || url.pathname !== config.callbackPath) {
-    return {
-      kind: 'ignore',
-      message: `Paste the redirected localhost URL from the address bar (${exampleCallbackUrl(config)}).`,
-    };
-  }
-
-  const result = interpretCallbackParams(
-    config,
-    expectedState,
-    url.searchParams.get('error'),
-    url.searchParams.get('code'),
-    url.searchParams.get('state'),
-  );
-  return result instanceof Error ? { kind: 'fail', error: result } : { kind: 'code', code: result };
-}
-
-function awaitCallback(
-  config: PkceLoginConfig,
-  server: http.Server,
-  redirectUri: string,
-  expectedState: string,
-  options: {
-    signal?: AbortSignal;
-    pasteInput?: Readable;
-    onPasteRejected?: (message: string) => void;
-  } = {},
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    let settled = false;
-    let paste: readline.Interface | undefined;
-    const cleanup = () => {
-      options.signal?.removeEventListener('abort', onAbort);
-      server.off('error', onError);
-      paste?.close();
-    };
-    const doResolve = (value: string) => {
-      cleanup();
-      resolve(value);
-    };
-    const doReject = (err: Error) => {
-      cleanup();
-      reject(err);
-    };
-    if (options.signal?.aborted) {
-      doReject(new Error(`${config.label} login cancelled`));
-      return;
-    }
-    const onAbort = () => {
-      settled = true;
-      server.close();
-      server.closeAllConnections?.();
-      doReject(new Error(`${config.label} login cancelled`));
-    };
-    options.signal?.addEventListener('abort', onAbort, { once: true });
-    // The callback is single-use. A retried or duplicated request after the
-    // socket has been torn down must not run the handler a second time.
-    server.on('request', (req, res) => {
-      if (settled) {
-        res.destroy();
-        return;
-      }
-      const requestUrl = new URL(req.url || '/', redirectUri);
-      if (requestUrl.pathname !== config.callbackPath) {
-        res.writeHead(404).end();
-        return;
-      }
-      settled = true;
-      const result = interpretCallbackParams(
-        config,
-        expectedState,
-        requestUrl.searchParams.get('error'),
-        requestUrl.searchParams.get('code'),
-        requestUrl.searchParams.get('state'),
-      );
-      const failure = result instanceof Error ? result : null;
-
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' });
-      res.end(failure ? `${failure.message}\nYou can close this tab.` : 'Login complete. You can close this tab.');
-      // Free the callback port immediately: a keep-alive browser socket would
-      // otherwise hold it and make the next login attempt fail.
-      server.close();
-      server.closeAllConnections?.();
-      if (failure) doReject(failure);
-      else doResolve(result as string);
-    });
-
-    if (options.pasteInput) {
-      paste = readline.createInterface({ input: options.pasteInput, crlfDelay: Infinity });
-      paste.on('line', (line) => {
-        if (settled) return;
-        const interpreted = interpretPastedOAuthRedirect(line, config, expectedState);
-        if (interpreted.kind === 'ignore') {
-          if (interpreted.message) options.onPasteRejected?.(interpreted.message);
-          return;
-        }
-        settled = true;
-        server.close();
-        server.closeAllConnections?.();
-        if (interpreted.kind === 'fail') doReject(interpreted.error);
-        else doResolve(interpreted.code);
-      });
-    }
-
-    const onError = (err: Error) => {
-      doReject(err);
-    };
-    server.on('error', onError);
-  });
 }
 
 /**
@@ -350,11 +107,21 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
 
   // Bind before building the URL: the redirect_uri we send must name the port
   // we actually got, or the authorization server will refuse the callback.
-  const { server, port } = await bindLoopbackListener(config);
+  const { server, port } = await bindLoopbackRedirect({
+    ports: config.redirectPorts,
+    label: config.label,
+    portConflictHint: config.portConflictHint,
+  });
   const redirectUri = config.redirectUriFor(port);
+  const flowConfig: LoopbackFlowConfig = {
+    label: config.label,
+    callbackPath: config.callbackPath,
+    redirectUri,
+    exampleCallbackUrl: exampleCallbackUrl(config),
+  };
   const authUrl = buildAuthorizeUrl(config, redirectUri, challenge, state).toString();
 
-  const callback = awaitCallback(config, server, redirectUri, state, {
+  const callback = awaitLoopbackCallback(server, flowConfig, state, {
     signal: options.signal,
     pasteInput: options.pasteInput,
     onPasteRejected: options.onPasteRejected,
@@ -367,8 +134,7 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
   try {
     code = await callback;
   } catch (error) {
-    server.close();
-    server.closeAllConnections?.();
+    closeLoopbackServer(server);
     throw error;
   }
 

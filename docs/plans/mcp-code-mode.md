@@ -2,9 +2,10 @@
 
 ## Resume here
 
-Status: **proposed, not started** (drafted 2026-09-17; no implementation merged).
-Next step: Milestone 0 spikes. Nothing below has been validated against a running MCP
-server yet.
+Status: **Milestone 0 complete** (reports merged to `main` 2026-09-17); **Milestone 1 in
+progress** — no MCP implementation merged yet. The `McpToolSource` contract
+(`source/services/mcp/mcp-tool-source.ts`) is on `main`. Live coordination record for the
+current delivery run: `.coord/mcp-code-mode/tasks.md` (untracked, local).
 
 Before touching this area, also read:
 
@@ -31,20 +32,33 @@ functions inside `run_code` scripts**, never as direct model tools.
    deprecated in the `2026-07-28` spec. Elicitation is out unless a concrete server needs it
    (it is not deprecated; it needs the server to call back into term2 mid-call).
 3. **No trust prompt** for project-scoped `.mcp.json`.
-4. **Sandbox by config provenance** (follows from 3):
-   - Servers from **user** config run unsandboxed.
-   - Stdio servers from a **project** `.mcp.json` run inside the shell sandbox
-     (`createSandboxRuntimeConfig` in `source/utils/shell/sandbox/sandbox-policy.ts`).
-   - A project server may be unsandboxed only by a per-server override in **user** config.
-     Nothing in a repository's own `.mcp.json` can opt out.
-   - A sandbox-caused server failure names the exact user-config override to add.
-   - Remote HTTP servers have no local process; provenance does not change their handling.
+4. **Project stdio servers are opt-in** (revised 2026-09-17 after the M0 sandbox spike;
+   follows from 3):
+   - Servers from **user** config start normally.
+   - A stdio server from a **project** `.mcp.json` never starts unless the **user** config
+     enables it: `"projectServers": { "<name>": { "enabled": true } }`. A `projectServers`
+     key inside a project `.mcp.json` is ignored.
+   - Until enabled, the server appears in the catalog as failed, with an error naming the
+     exact user-config line to add.
+   - Project HTTP/SSE servers connect without opt-in (no local process), but their config
+     values are taken literally: `${VAR}` expansion is user-config only, so a repository
+     cannot send the user's secrets to a URL it chooses.
+   - On a user/project name clash the **user** entry wins.
 
-   Rationale: with no trust prompt, an unsandboxed project server would let a cloned repo
-   run arbitrary commands at server start — before per-call approval can intervene.
-   Rejected: all-unsandboxed (open hole given decision 3); all-sandboxed-with-grants
-   (the sandbox strips `*_TOKEN`/`*_API_KEY` env and denies network, so nearly every real
-   server would need grants, including ones the user wrote); ignoring project config
+   Rationale: with no trust prompt, auto-starting a project stdio server would let a cloned
+   repo run arbitrary commands at startup, before per-call approval can intervene.
+
+   Superseded original (2026-09-17): run project stdio servers **inside the shell sandbox**,
+   with a user-config override to unsandbox. Rejected after
+   [the M0 sandbox spike](../research/mcp-m0-sandboxed-stdio.md) showed a sandboxed server is
+   rarely usable and costly to support: this host lacks `socat` so the sandbox is unavailable
+   at all; network needs the process-global `sandbox.allowNetworking`; node `fetch` ignores
+   the proxy; `npx -y` fails on read-only `~/.npm`; `*_TOKEN` env is stripped; the runtime's
+   single process-wide config means an unrelated shell `wrap` resets it and silently severs a
+   live server's network; holding `acquire()` deadlocks the shell tool; and bwrap mount-point
+   dotfiles persist in the workspace for the whole session. Nearly every real server would have
+   needed the user override anyway, so opt-in gives the same safety without a sandbox launcher.
+   Also rejected: all-unsandboxed (open hole given decision 3); ignoring project config
    (breaks team-shared configs).
 
 Defaults accepted without override:
@@ -69,7 +83,7 @@ Defaults accepted without override:
   `ToolApprovalPolicyRegistry` and `NestedApprovalOwner` like any nested call.
 - **Header renders every tool.** `renderToolsHeader` in `tools-header.ts` prints a
   signature for every non-essential tool. Catalog size is unbounded with MCP.
-- **Dotted names.** `tools.<name>` is flat today; `tools.github.create_issue` needs a
+- **Dotted names** (resolved: flat `<server>__<tool>`, see M1). `tools.<name>` is flat today; `tools.github.create_issue` needs a
   namespace object or a flattened identifier scheme. Server/tool names may contain
   characters invalid in JS identifiers.
 - **JSON Schema, not Zod.** `renderCompactSignature` already reads JSON Schema
@@ -81,9 +95,22 @@ Defaults accepted without override:
 
 ## Milestones
 
-### Milestone 0 — spikes (no production code)
+### Milestone 0 — spikes (no production code) — complete
 
-Answer, with evidence recorded here:
+Results (spike code stays on branches `mcp-m0-sdk`, `mcp-m0-sandbox`, `mcp-m0-servers`):
+
+- [SDK compatibility](../research/mcp-m0-sdk-compat.md): `@modelcontextprotocol/client@2.0.0`
+  connected to and called tools on v1 stdio, v1 Streamable HTTP, v1 legacy HTTP+SSE, and v2
+  Streamable HTTP fixtures. Decision: v2 client only in production. Pagination, `list_changed`,
+  abort/timeout and crash behavior were not exercised by the spike.
+- [Test servers and catalog cost](../research/mcp-m0-test-servers.md): `github-mcp-server`
+  v1.12.2 lists 90 tools without a token; compact signatures for all 90 are ~14.6k chars vs
+  ~2.3k for names only (raw JSON ~257k). Decision: MCP header is names-only, details via
+  `tools.describe`. No tested server paginates.
+- [Sandboxed stdio](../research/mcp-m0-sandboxed-stdio.md): mechanically feasible but not
+  practical; led to the Decision 4 revision above.
+
+Original questions:
 
 1. **SDK line.** `@modelcontextprotocol/client` v2 implements `2026-07-28`. Does it connect to
    handshake-era (`2025-11-25` and earlier) servers, and to legacy HTTP+SSE? If not, what
@@ -100,9 +127,12 @@ Answer, with evidence recorded here:
 - Connection manager: stdio, Streamable HTTP, legacy SSE; static header/token auth;
   timeouts; crash/unreachable surfaced as structured script errors; `tools/list`
   pagination; `list_changed` refresh batched to turn boundaries.
-- Sandbox-by-provenance for stdio (decision 4) with actionable failure text.
-- Script-only registry entries; `tools.<server>.<tool>` namespacing with a documented
-  mangling rule for invalid identifiers.
+- Project stdio opt-in (decision 4) with actionable failure text.
+- Script-only registry entries. Naming: flat members `<server>__<tool>`, every character
+  outside `[A-Za-z0-9_$]` replaced by `_`, a leading digit prefixed with `_`; colliding MCP
+  members (with each other or a built-in) are exposed as neither and listed in the catalog.
+  Rationale: nested `tools.<server>.<tool>` would need changes to the sandboxed code host's
+  flat namespace bindings (`CapabilityKind` in `host-types.ts`) and its realm-isolation rules.
 - Catalog scaling from day one: per-server one-line summary plus tool names in the header;
   full signatures via `tools.describe`. Reopens `run_code` Milestone 4 with this concrete
   consumer — record header size before and after.

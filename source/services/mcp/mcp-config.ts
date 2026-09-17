@@ -8,8 +8,9 @@
  * Invalid entries resolve to config errors — the connection manager turns
  * those into `failed` snapshots — so one bad line never blocks startup.
  */
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { resolveSettingsDirectory } from '../settings/settings-path.js';
 import type { McpServerProvenance, McpTransportKind } from './mcp-tool-source.js';
@@ -32,7 +33,7 @@ export interface ResolvedMcpServerConfig {
   readonly cwd?: string;
   readonly url?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  /** `projectServers.<name>.enabled` from user config; only set on project entries. */
+  /** `projectServers."<workspace root>".<name>.enabled` from user config; only set on project entries. */
   readonly projectEnabledOverride?: boolean;
   /** Why this entry is unusable; always yields a `failed` snapshot. */
   readonly error?: string;
@@ -66,6 +67,9 @@ const ENV_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const expandValue = (value: string, env: NodeJS.ProcessEnv): string =>
   value.replace(ENV_PATTERN, (_whole, name: string) => env[name] ?? '');
 
+/** Relative cwd paths run against the config file's context, never term2's process cwd. */
+const resolveCwd = (cwd: string, cwdBase: string): string => (isAbsolute(cwd) ? cwd : resolve(cwdBase, cwd));
+
 const asStringRecord = (value: unknown): Record<string, string> | undefined => {
   if (!isRecord(value)) return undefined;
   const out: Record<string, string> = {};
@@ -76,12 +80,29 @@ const asStringRecord = (value: unknown): Record<string, string> | undefined => {
   return out;
 };
 
+/**
+ * The `projectServers` block of user config, keyed by workspace root:
+ * `"<absolute workspace root>" -> "<server name>" -> { enabled }`. An opt-in
+ * is valid only for that exact workspace, never for same-named servers
+ * elsewhere.
+ */
+type ProjectOverrides = Map<string, Map<string, McpServerOverrides>>;
+
 interface ParsedSource {
   readonly entries: Map<string, unknown>;
-  readonly projectOverrides: Map<string, McpServerOverrides>;
+  readonly projectOverrides: ProjectOverrides;
 }
 
 const EMPTY_SOURCE: ParsedSource = { entries: new Map(), projectOverrides: new Map() };
+
+/** Canonical form for opt-in matching; falls back to the input when the path does not exist. */
+export const realpathOrSelf = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};
 
 const parseSourceFile = (sourceName: string, contents: string, note: (m: string) => void): ParsedSource => {
   let root: unknown;
@@ -104,16 +125,24 @@ const parseSourceFile = (sourceName: string, contents: string, note: (m: string)
       for (const [name, entry] of Object.entries(rawServers)) entries.set(name, entry);
     }
   }
-  const projectOverrides = new Map<string, McpServerOverrides>();
+  const projectOverrides: ProjectOverrides = new Map();
   const rawOverrides = root.projectServers;
   if (rawOverrides !== undefined) {
     if (!isRecord(rawOverrides)) {
       note(`${sourceName}: "projectServers" is not an object and was ignored.`);
     } else {
-      for (const [name, value] of Object.entries(rawOverrides)) {
-        if (isRecord(value) && typeof value.enabled === 'boolean') {
-          projectOverrides.set(name, { enabled: value.enabled });
+      for (const [rootPath, servers] of Object.entries(rawOverrides)) {
+        if (!isRecord(servers)) {
+          note(`${sourceName}: "projectServers.${rootPath}" is not an object and was ignored.`);
+          continue;
         }
+        const byName = new Map<string, McpServerOverrides>();
+        for (const [name, value] of Object.entries(servers)) {
+          if (isRecord(value) && typeof value.enabled === 'boolean') {
+            byName.set(name, { enabled: value.enabled });
+          }
+        }
+        projectOverrides.set(rootPath, byName);
       }
     }
   }
@@ -128,6 +157,8 @@ const resolveEntry = (
   /** User config expands `${VAR}`; project config is literal. */
   expandVariables: boolean,
   projectEnabledOverride: boolean | undefined,
+  /** Relative `cwd` resolves against this: the config file's workspace (project) or settings dir (user). */
+  cwdBase: string,
 ): ResolvedMcpServerConfig => {
   const fail = (error: string): ResolvedMcpServerConfig => ({
     name,
@@ -177,7 +208,7 @@ const resolveEntry = (
     ...(rawEnv !== undefined
       ? { env: Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, expandArg(v)])) }
       : {}),
-    ...(rawCwd !== undefined ? { cwd: expandArg(rawCwd) } : {}),
+    ...(rawCwd !== undefined ? { cwd: resolveCwd(expandArg(rawCwd), cwdBase) } : {}),
     ...(rawUrl !== undefined ? { url: expandArg(rawUrl) } : {}),
     ...(rawHeaders !== undefined
       ? { headers: Object.fromEntries(Object.entries(rawHeaders).map(([k, v]) => [k, expandArg(v)])) }
@@ -214,16 +245,24 @@ export async function loadMcpConfig(options: LoadMcpConfigOptions = {}): Promise
   const user = await loadSource(userConfigPath, userConfigPath);
   const project = await loadSource(projectConfigPath, projectConfigPath);
 
+  // Opt-in matching compares the real path of the workspace with the real path
+  // of each projectServers key, so a symlinked session root still matches.
+  const workspaceKey = realpathOrSelf(workspaceRoot);
+
   const servers: ResolvedMcpServerConfig[] = [];
   for (const [name, entry] of user.entries) {
-    servers.push(resolveEntry(name, 'user', entry, env, true, undefined));
+    servers.push(resolveEntry(name, 'user', entry, env, true, undefined, settingsDir));
   }
   for (const [name, entry] of project.entries) {
     if (user.entries.has(name)) {
       note(`project server "${name}" from ${projectConfigPath} was dropped: a user entry with the same name wins.`);
       continue;
     }
-    servers.push(resolveEntry(name, 'project', entry, env, false, user.projectOverrides.get(name)?.enabled));
+    let projectEnabledOverride: boolean | undefined;
+    for (const [rootPath, byName] of user.projectOverrides) {
+      if (realpathOrSelf(rootPath) === workspaceKey) projectEnabledOverride = byName.get(name)?.enabled;
+    }
+    servers.push(resolveEntry(name, 'project', entry, env, false, projectEnabledOverride, workspaceRoot));
   }
   return { servers, notes, userConfigPath };
 }

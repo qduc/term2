@@ -31,7 +31,8 @@ async function startHttpFixture(script: string): Promise<{ url: string; stop: ()
 
 const until = async (probe: () => boolean | Promise<boolean>, message: string): Promise<void> => {
   const deadline = Date.now() + 5000;
-  while (!probe()) {
+  // The probe is usually async; a Promise is truthy, so it must be awaited.
+  while (!(await probe())) {
     if (Date.now() > deadline) throw new Error(`timeout waiting for: ${message}`);
     await new Promise((r) => setTimeout(r, 25));
   }
@@ -44,6 +45,18 @@ const isProcessAlive = async (pid: number): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+/**
+ * Reads the fixture's pid file and probes that exact process. Unlike waiting
+ * for the fixture's exit-handler cleanup, this also holds when the process is
+ * killed by a signal, which never runs 'exit' handlers.
+ */
+const fixtureGone = async (pidFile: string): Promise<boolean> => {
+  const raw = await readFile(pidFile, 'utf8').catch(() => '');
+  const pid = Number(raw);
+  if (!pid) return true;
+  return !(await isProcessAlive(pid));
 };
 
 describe('McpConnectionManager', () => {
@@ -78,8 +91,16 @@ describe('McpConnectionManager', () => {
 
     const snapshot = manager.snapshot().find((s) => s.name === 'fx');
     expect(snapshot?.state).toBe('ready');
-    // 2 tools on page 1, 2 on page 2: the manager followed the cursor chain.
-    expect(snapshot?.tools.map((t) => t.name)).toEqual(['echo', 'fail', 'env_probe', 'crash', 'slow', 'refresh']);
+    // 2 tools on page 1, 3 on page 2: the manager followed the cursor chain.
+    expect(snapshot?.tools.map((t) => t.name)).toEqual([
+      'echo',
+      'fail',
+      'env_probe',
+      'crash',
+      'slow',
+      'refresh',
+      'die',
+    ]);
 
     // Identity is stable while nothing changes.
     expect(manager.snapshot()).toBe(manager.snapshot());
@@ -196,7 +217,9 @@ describe('McpConnectionManager', () => {
       launches.push(spec.name);
       return { command: spec.command, args: spec.args, env: spec.env };
     };
-    const userConfigPath = join(await tempDir(), 'mcp.json');
+    const dir = await tempDir();
+    const userConfigPath = join(dir, 'mcp.json');
+    const workspaceRoot = join(dir, 'repo');
     const project: ResolvedMcpServerConfig = {
       name: 'repo-fx',
       provenance: 'project',
@@ -204,7 +227,9 @@ describe('McpConnectionManager', () => {
       command: process.execPath,
       args: [join(fixturesDir, 'stdio-fixture.mjs')],
     };
-    const manager = track(new McpConnectionManager({ servers: [project], userConfigPath, stdioLauncher: launcher }));
+    const manager = track(
+      new McpConnectionManager({ servers: [project], userConfigPath, workspaceRoot, stdioLauncher: launcher }),
+    );
     manager.start();
     await manager.whenSettled();
 
@@ -213,6 +238,8 @@ describe('McpConnectionManager', () => {
     expect(snapshot?.error).toContain('projectServers');
     expect(snapshot?.error).toContain('"repo-fx"');
     expect(snapshot?.error).toContain('enabled');
+    // The exact nested line: scoped to this workspace's real path.
+    expect(snapshot?.error).toContain(workspaceRoot);
     expect(snapshot?.error).toContain(userConfigPath);
     expect(launches).toEqual([]);
   });
@@ -330,6 +357,105 @@ describe('McpConnectionManager', () => {
         return true;
       }
     }, 'fixture process to exit after close()');
+  });
+
+  it('close() during a slow handshake kills the child and never reports ready', async () => {
+    const dir = await tempDir();
+    const pidFile = join(dir, 'fixture.pid');
+    const config = {
+      ...stdioCommand(),
+      env: { MCP_FIXTURE_PID_FILE: pidFile, MCP_FIXTURE_SLOW_INIT_MS: '2000' },
+    };
+    const manager = track(new McpConnectionManager({ servers: [config] }));
+    let changes = 0;
+    manager.onCatalogChanged(() => {
+      changes += 1;
+    });
+    manager.start();
+    await until(async () => {
+      try {
+        await readFile(pidFile, 'utf8');
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'fixture child to spawn (handshake still pending)');
+
+    await manager.close();
+    // The handshake never completed, so the snapshot must never say ready.
+    expect(manager.snapshot().find((s) => s.name === 'fx')?.state).not.toBe('ready');
+    const changesAtClose = changes;
+    // Proves the exact child process that spawned was killed by close().
+    await until(() => fixtureGone(pidFile), 'fixture child to be killed by close()');
+    // ...and nothing notifies listeners once close() has resolved.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(changes).toBe(changesAtClose);
+  });
+
+  it('close() during the launcher await never spawns a process', async () => {
+    const launches: string[] = [];
+    const launcher = async (spec: StdioLaunchSpec) => {
+      launches.push(spec.name);
+      await new Promise((r) => setTimeout(r, 150));
+      return { command: spec.command, args: spec.args, env: spec.env };
+    };
+    const manager = track(new McpConnectionManager({ servers: [stdioCommand()], stdioLauncher: launcher }));
+    manager.start();
+    await manager.close();
+    await new Promise((r) => setTimeout(r, 250));
+    expect(launches).toEqual(['fx']);
+    expect(manager.snapshot().find((s) => s.name === 'fx')?.state).not.toBe('ready');
+  });
+
+  it('tears the spawned process down when the first tools/list fails', async () => {
+    const dir = await tempDir();
+    const pidFile = join(dir, 'fixture.pid');
+    const config: ResolvedMcpServerConfig = {
+      name: 'bad-list',
+      provenance: 'user',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [join(fixturesDir, 'stdio-bad-list.mjs')],
+      env: { MCP_FIXTURE_PID_FILE: pidFile },
+    };
+    const manager = track(new McpConnectionManager({ servers: [config] }));
+    manager.start();
+    await manager.whenSettled();
+
+    const snapshot = manager.snapshot().find((s) => s.name === 'bad-list');
+    expect(snapshot?.state).toBe('failed');
+    expect(snapshot?.error).toContain('tool catalog is broken');
+    // The handshake succeeded, so a process existed; it must be gone now.
+    await until(() => fixtureGone(pidFile), 'fixture process to exit after failed setup');
+  });
+
+  it('maps a mid-call process crash to server_unavailable', async () => {
+    const manager = track(new McpConnectionManager({ servers: [stdioCommand()] }));
+    manager.start();
+    await manager.whenSettled();
+
+    // 'die' exits the fixture without replying: the request dies with the transport.
+    await expect(manager.callTool('fx', 'die', {}, { signal: new AbortController().signal })).rejects.toMatchObject({
+      code: 'server_unavailable',
+    });
+  });
+
+  it('does not mark a server failed or notify after close() races list_changed', async () => {
+    const manager = track(new McpConnectionManager({ servers: [stdioCommand()] }));
+    manager.start();
+    await manager.whenSettled();
+    let changes = 0;
+    manager.onCatalogChanged(() => {
+      changes += 1;
+    });
+
+    // 'refresh' emits notifications/tools/list_changed; the refetch races close().
+    void manager.callTool('fx', 'refresh', {}, { signal: new AbortController().signal }).catch(() => {});
+    await manager.close();
+    const changesAtClose = changes;
+    await new Promise((r) => setTimeout(r, 100));
+    expect(changes).toBe(changesAtClose);
+    expect(manager.snapshot().find((s) => s.name === 'fx')?.state).not.toBe('failed');
   });
 
   it('surfaces McpCallError as a rejected McpCallError instance', async () => {

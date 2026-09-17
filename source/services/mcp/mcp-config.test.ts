@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadMcpConfig } from './mcp-config.js';
 
@@ -105,19 +108,22 @@ describe('loadMcpConfig', () => {
     expect(p?.url).toBe('https://${HOST}/mcp');
   });
 
-  it('attaches projectServers enabled overrides from user config to project entries', async () => {
+  it('attaches workspace-scoped projectServers enabled overrides from user config to project entries', async () => {
     const { servers } = await loadMcpConfig({
+      workspaceRoot: '/repo',
       files: readFile({
         'mcp.json': JSON.stringify({
           mcpServers: { mine: { command: 'a' } },
           projectServers: {
-            allowed: { enabled: true },
-            denied: { enabled: false },
+            '/repo': {
+              allowed: { enabled: true },
+              denied: { enabled: false },
+            },
           },
         }),
         '.mcp.json': JSON.stringify({
           mcpServers: { allowed: { command: 'b' }, denied: { command: 'c' }, unlisted: { command: 'd' } },
-          projectServers: { evil: { enabled: true } },
+          projectServers: { '/repo': { evil: { enabled: true } } },
         }),
       }),
     });
@@ -128,6 +134,55 @@ describe('loadMcpConfig', () => {
     expect(byName.mine.projectEnabledOverride).toBeUndefined();
     // projectServers inside a project .mcp.json is ignored
     expect(servers.find((s) => s.name === 'evil')).toBeUndefined();
+  });
+
+  it('an opt-in for one workspace does not enable a same-named server in another workspace', async () => {
+    const { servers } = await loadMcpConfig({
+      workspaceRoot: '/other-repo',
+      files: readFile({
+        'mcp.json': JSON.stringify({
+          projectServers: { '/repo': { github: { enabled: true } } },
+        }),
+        '.mcp.json': JSON.stringify({ mcpServers: { github: { command: 'clone-cmd' } } }),
+      }),
+    });
+    expect(servers[0]).toMatchObject({ name: 'github', provenance: 'project', projectEnabledOverride: undefined });
+  });
+
+  it('matches the workspace root by realpath on both sides of the projectServers key', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcp-config-'));
+    try {
+      const workspace = join(dir, 'workspace');
+      await mkdir(workspace);
+      const link = join(dir, 'workspace-link');
+      await symlink(workspace, link);
+      await writeFile(join(workspace, '.mcp.json'), JSON.stringify({ mcpServers: { repo: { command: 'b' } } }));
+      // User config keys the override by the real workspace path; the session
+      // opened the workspace through the symlink.
+      await writeFile(
+        join(dir, 'mcp.json'),
+        JSON.stringify({ projectServers: { [workspace]: { repo: { enabled: true } } } }),
+      );
+      const { servers } = await loadMcpConfig({ workspaceRoot: link, settingsDir: dir });
+      expect(servers).toHaveLength(1);
+      expect(servers[0].projectEnabledOverride).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a relative cwd against the workspace root (project) and the settings dir (user)', async () => {
+    const { servers } = await loadMcpConfig({
+      settingsDir: '/home/u/.term2',
+      workspaceRoot: '/repo',
+      files: readFile({
+        'mcp.json': JSON.stringify({ mcpServers: { u: { command: 'a', cwd: 'servers' } } }),
+        '.mcp.json': JSON.stringify({ mcpServers: { p: { command: 'b', cwd: './backend' } } }),
+      }),
+    });
+    const byName = Object.fromEntries(servers.map((s) => [s.name, s]));
+    expect(byName.u.cwd).toBe('/home/u/.term2/servers');
+    expect(byName.p.cwd).toBe('/repo/backend');
   });
 
   it('treats missing config files as empty, not an error', async () => {

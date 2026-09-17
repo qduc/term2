@@ -45,6 +45,11 @@ const page2Tools = () => [
     description: 'emits tools/list_changed, then adds added_tool',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'die',
+    description: 'exits the process without replying (mid-call crash tests)',
+    inputSchema: { type: 'object', properties: {} },
+  },
   ...(addedTool
     ? [{ name: addedTool, description: 'appeared after refresh', inputSchema: { type: 'object', properties: {} } }]
     : []),
@@ -58,14 +63,18 @@ function handle(message, reply) {
   if (Object.prototype.hasOwnProperty.call(message, 'id') === false || message.id === undefined) return; // notification
   const { id, method, params } = message;
   if (method === 'initialize') {
-    reply({
-      id,
-      result: {
-        protocolVersion: params?.protocolVersion ?? '2025-06-18',
-        capabilities: { tools: {} },
-        serverInfo: { name: 'stdio-fixture', version: '1.0.0' },
-      },
-    });
+    const respond = () =>
+      reply({
+        id,
+        result: {
+          protocolVersion: params?.protocolVersion ?? '2025-06-18',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'stdio-fixture', version: '1.0.0' },
+        },
+      });
+    // Lets a test hold the handshake open and race close() against it.
+    if (process.env.MCP_FIXTURE_SLOW_INIT_MS) setTimeout(respond, Number(process.env.MCP_FIXTURE_SLOW_INIT_MS));
+    else respond();
   } else if (method === 'tools/list') {
     if (params?.cursor === 'page-2') {
       reply({ id, result: { tools: page2Tools() } });
@@ -96,6 +105,9 @@ function handle(message, reply) {
       reply({ id, result: text('refreshed') });
     } else if (name === 'slow') {
       setTimeout(() => reply({ id, result: text('finally') }), 10_000);
+    } else if (name === 'die') {
+      // No reply: the request is still pending when the transport dies.
+      process.exit(4);
     } else {
       reply({ id, error: { code: -32602, message: `unknown tool ${name}` } });
     }

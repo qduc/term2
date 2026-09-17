@@ -777,6 +777,8 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           const message = error instanceof Error ? error.message : String(error);
           record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure');
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'failed', message);
+          if (isMcpToolDefinition(prepared.tool))
+            return { kind: 'result', result: { ok: true, result: { ok: false, error: message } } as JsonValue };
           return failed(message);
         }
       },

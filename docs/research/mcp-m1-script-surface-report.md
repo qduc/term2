@@ -10,6 +10,11 @@
   calls into the existing `createRunCodeRuntime` prepare/approval/invoke path.
 - Added `source/tools/system/run-code/mcp-script-surface.test.ts` with six
   production-path tests.
+- Review round 1 fixed MCP signature leakage from the general header, preserved
+  MCP failure envelopes while recording failed call outcomes, built the catalog
+  once per description read, and added coverage for collisions, sanitization,
+  server states, non-text output, abort propagation, and provider-registry
+  isolation.
 
 ## Design choices
 
@@ -21,7 +26,9 @@
 - Catalog snapshots are read when the description/registry is built. The source
   change subscription is intentionally unused in this slice; turn-boundary
   freshness is deferred as specified.
-- Headers contain server state, tool count, and member names only. Full MCP
+- Headers contain server state, tool count, and member names only. The general
+  `renderToolsHeader` receives only non-MCP tools, so MCP signatures and
+  descriptions cannot leak into the provider-facing header. Full MCP
   descriptions and original names are available through `tools.describe`, with
   server text capped at 2,000 characters and explicitly labeled.
 - JSON Schema validation uses the permitted minimal validator: object root,
@@ -33,8 +40,9 @@
   it never affects approval. Without an approval owner, prompting calls remain
   unavailable from the script.
 - Results prefer `structuredContent`; otherwise text blocks are joined and
-  non-text blocks become `[<type> content omitted]`. `isError` is returned as
-  `{ ok: false, error }`; `McpCallError` includes its code. Existing runtime
+  non-text blocks become `[<type> content omitted]`. `isError` and
+  `McpCallError` are returned to scripts as `{ ok: false, error }` while the
+  runtime ledger records an `error` outcome. Existing runtime
   serialization/bounding and abort-signal propagation are retained.
 
 ## Tests
@@ -46,7 +54,11 @@
 3. pre-approval required/primitive argument validation;
 4. server `isError` script-visible envelopes;
 5. denial when approval is required without a nested owner;
-6. original-name description output and 2,000-character server-text capping.
+6. original-name description output and 2,000-character server-text capping;
+7. collision omission, built-in collision, identifier sanitization, connecting
+   and failed states, non-text content, abort propagation, and provider-registry
+   isolation;
+8. `isError` and `McpCallError` both produce failure ledger outcomes.
 
 ## Gates
 
@@ -56,7 +68,7 @@ Required verify command, passed:
 NODE_ENV=test pnpm exec vitest run source/tools/system/run-code && pnpm typecheck
 ```
 
-Observed: 8 test files passed, 223 tests passed; `pnpm typecheck` passed.
+Observed: 8 test files passed, 228 tests passed; `pnpm typecheck` passed.
 
 Related-test gate passed:
 
@@ -64,7 +76,7 @@ Related-test gate passed:
 pnpm test:related ./source/tools/system/run-code/mcp-script-surface.ts ./source/tools/system/run-code/run-code.ts ./source/tools/system/run-code/run-code-runtime.ts
 ```
 
-Observed: 53 test files, 1,097 passing tests and 1 expected fail.
+Observed: 53 test files, 1,102 passing tests and 1 expected fail.
 
 Changed-file ESLint and Prettier checks passed:
 
@@ -76,6 +88,18 @@ pnpm exec prettier --check source/tools/system/run-code/mcp-script-surface.ts so
 The repository-wide `pnpm lint` command did not pass because the baseline has
 62 warnings and Prettier reports 33 pre-existing unrelated files. It reported
 zero errors in the changed files; the changed-file checks above passed.
+
+## Review round 1 disposition
+
+All four coordinator findings were addressed in the follow-up commit:
+
+1. MCP tools are excluded from `renderToolsHeader`; only the dedicated compact
+   MCP catalog lists members.
+2. MCP server/protocol failures throw through the existing runtime catch, which
+   records `error` while returning the nested `{ ok: false, error }` envelope.
+3. Tests cover all requested naming, collision, state, content, abort, and
+   registry-isolation decisions.
+4. A single `McpCatalog` value is reused for each description read.
 
 ## Known gaps / risks
 

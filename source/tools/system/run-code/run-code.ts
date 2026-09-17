@@ -20,7 +20,7 @@ import {
   normalizeToolArguments,
 } from '../../format-helpers.js';
 import { renderToolsHeader } from './tools-header.js';
-import { createMcpCatalog, renderMcpCatalog } from './mcp-script-surface.js';
+import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../../services/mcp/mcp-tool-source.js';
 import { RUN_CODE_EXECUTION_RESULT, type RunCodeExecution } from './run-code-execution.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../../utils/shell/shell-output.js';
@@ -368,11 +368,11 @@ export function createRunCodeToolDefinition(
     }
     return catalog;
   };
-  const exposedTools = (): ToolRegistry => {
+  const exposedTools = (mcpCatalog = getMcpCatalog()): ToolRegistry => {
     const tools = (options.getToolRegistry?.() ?? boundRegistry ?? []).filter(
       (tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name),
     );
-    return [...tools, ...(getMcpCatalog()?.tools ?? [])];
+    return [...tools, ...(mcpCatalog?.tools ?? [])];
   };
   const createRuntime = (registry: ToolRegistry) =>
     createRunCodeRuntime({
@@ -392,9 +392,12 @@ export function createRunCodeToolDefinition(
     // Read late, after bindRunCodeRegistry, so the model is told which tools
     // the script can actually reach rather than a guess made before wrapping.
     get description() {
-      const registry = exposedTools();
-      const header = renderToolsHeader(createRuntime(registry).discovery());
-      const mcpHeader = options.mcpToolSource ? renderMcpCatalog(getMcpCatalog()!) : '';
+      const mcpCatalog = getMcpCatalog();
+      const registry = exposedTools(mcpCatalog);
+      const header = renderToolsHeader(
+        createRuntime(registry.filter((tool) => !isMcpToolDefinition(tool))).discovery(),
+      );
+      const mcpHeader = mcpCatalog ? renderMcpCatalog(mcpCatalog) : '';
       return [RUN_CODE_DESCRIPTION, header, mcpHeader].filter(Boolean).join('\n\n');
     },
     parameters: runCodeParametersSchema,

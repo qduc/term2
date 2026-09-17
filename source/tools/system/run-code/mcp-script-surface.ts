@@ -120,12 +120,12 @@ export const createMcpCatalog = (source: McpToolSource, builtInNames: ReadonlySe
             const result = await source.callTool(server.name, descriptor.name, args as Record<string, unknown>, {
               signal: (context as { signal?: AbortSignal } | undefined)?.signal ?? new AbortController().signal,
             });
-            if (result.isError) return { ok: false, error: mcpTextResult(result.content) };
+            if (result.isError) throw new Error(mcpTextResult(result.content));
             if (result.structuredContent !== undefined) return result.structuredContent;
             return mcpTextResult(result.content);
           } catch (error) {
             const message = error instanceof McpCallError ? `[${error.code}] ${error.message}` : String(error);
-            return { ok: false, error: message };
+            throw new Error(message);
           }
         },
         formatCommandMessage: noopFormatter,

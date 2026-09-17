@@ -26,6 +26,15 @@
   frozen after `list_changed` and refreshes at the next boundary.
 - Existing MCP connection/config tests and profile/agent/non-interactive tests
   cover the production paths; the plan denial expectation was updated.
+- `source/services/approval/non-interactive-approval-policy.mcp.test.ts`:
+  allowlist wildcard/exact/malformed/empty behavior and explicit non-MCP
+  membership behavior through `runWithSession`.
+- `source/agent.test.ts`: capability-enabled/disabled/plan/subagent surfaces
+  and provider-facing exclusion.
+- `source/tools/system/run-code/mcp-script-surface.test.ts`: real
+  `McpConnectionManager` plus the stdio fixture, calling `echo` from a script.
+- `source/services/mcp/mcp-connection-manager.test.ts`: empty configuration
+  lifecycle.
 
 ## Gates
 
@@ -34,11 +43,13 @@
 - `pnpm typecheck` — passed.
 - Review-round focused/related reruns — passed: 305 focused tests and 1047
   related tests (the latter includes 1 pre-existing expected failure).
+- New-test focused command:
+  `NODE_ENV=test pnpm exec vitest run source/agent.test.ts source/tools/system/run-code/mcp-script-surface.test.ts source/services/approval/non-interactive-approval-policy.mcp.test.ts source/services/mcp/mcp-connection-manager.test.ts` — passed (109 tests).
 - `pnpm lint` — ESLint passed with existing warnings; repository Prettier check failed on pre-existing unrelated files plus `source/agent.ts` and the new turn-stable file before formatting. Changed files were formatted individually; the repository-wide check still reports unrelated existing formatting drift.
 
 ## Known gaps / risks
 
-- Gateway runtime composition and a provider-driven end-to-end CLI fixture were
-  not added in this slice; gateway sessions therefore need an explicit source
-  injection in a follow-up. The existing MCP stdio fixture and connection-level
-  tests cover transport behavior, but not the complete fake-provider CLI path.
+- Gateway runtime composition remains a follow-up. The real stdio fixture
+  end-to-end script path is covered by the command above; a fake-provider
+  `runNonInteractive` harness remains outside this branch because the CLI
+  composition owns config loading and process startup.

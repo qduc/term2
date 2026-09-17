@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpCallError, McpConnectionManager } from './mcp-connection-manager.js';
 import type { ResolvedMcpServerConfig } from './mcp-config.js';
 import type { StdioLaunchSpec } from './mcp-stdio-launcher.js';
@@ -68,6 +68,17 @@ describe('McpConnectionManager', () => {
     await Promise.all(managers.splice(0).map((m) => m.close().catch(() => {})));
     for (const fixture of httpFixtures.splice(0)) fixture.stop();
     await Promise.all(tempDirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  });
+
+  it('keeps an empty configured server set inert and closes cleanly', async () => {
+    const manager = new McpConnectionManager({ servers: [] });
+    const changed = vi.fn();
+    manager.onCatalogChanged(changed);
+    manager.start();
+    await manager.whenSettled();
+    expect(manager.snapshot()).toEqual([]);
+    await manager.close();
+    expect(changed).not.toHaveBeenCalled();
   });
 
   const track = (manager: McpConnectionManager): McpConnectionManager => {

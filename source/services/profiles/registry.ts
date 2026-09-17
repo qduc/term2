@@ -41,6 +41,7 @@ export const BUILTIN_TOOL_CAPABILITIES = [
   'background-tasks',
   'user-interaction',
   'code-context',
+  'mcp',
 ] as const;
 
 export const BUILTIN_ENFORCEMENT_POLICIES = [
@@ -108,7 +109,7 @@ export const builtinPolicies: readonly EnforcementPolicyDefinition[] = [
   {
     id: BUILTIN_ENFORCEMENT_POLICIES[1],
     kind: 'enforcement',
-    denials: ['filesystem-mutation', 'shell-mutation', 'delegated-write', 'unknown-delegated-role'],
+    denials: ['filesystem-mutation', 'shell-mutation', 'mcp', 'delegated-write', 'unknown-delegated-role'],
     handoffRestriction: 'plan-read-only',
   },
 ];

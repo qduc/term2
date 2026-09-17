@@ -67,6 +67,8 @@ import {
 import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 import { SessionBrowser } from './services/conversation/session-browser.js';
+import { loadMcpConfig } from './services/mcp/mcp-config.js';
+import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -845,6 +847,20 @@ if (sshFlag) {
   executionContext = new ExecutionContext();
 }
 
+const mcpConfig = await loadMcpConfig({
+  workspaceRoot: executionContext.getHomeWorkspace(),
+  onNote: (message) => logger.warn('MCP configuration notice', { message }),
+});
+const mcpManager = mcpConfig.servers.length
+  ? new McpConnectionManager({
+      servers: mcpConfig.servers,
+      userConfigPath: mcpConfig.userConfigPath,
+      workspaceRoot: executionContext.getHomeWorkspace(),
+      onNotice: (message) => logger.warn('MCP catalog notice', { message }),
+    })
+  : undefined;
+mcpManager?.start();
+
 const history = new HistoryService({
   loggingService: logger,
   settingsService: settings,
@@ -923,6 +939,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         skillsService,
         requestCapture,
         sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
+        mcpToolSource: mcpManager,
       },
       toolOwnership,
       postExecutePauseCapability,
@@ -953,6 +970,7 @@ if (hasPositionalPrompt) {
     settingsService: settings,
     sessionContextService,
     hookLifecycle: hookService,
+    mcpAllowlist: mcpConfig.nonInteractiveAllow,
   });
   process.exit(exitCode);
 }
@@ -1177,6 +1195,7 @@ if (conversationService.hookEvents) {
   );
 }
 await conversationService.shutdown();
+await mcpManager?.close();
 await sessionBrowser.close();
 activeSessionBrowser = null;
 await logWriter.close();

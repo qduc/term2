@@ -69,6 +69,7 @@ export interface NonInteractiveConfig {
   backgroundWaitTimeoutMs?: number;
   /** Abort the active foreground turn when the process receives a signal. */
   abort?: () => void;
+  mcpAllowlist?: readonly string[];
 }
 
 export { NON_INTERACTIVE_REJECTION_REASON } from './services/approval/non-interactive-approval-policy.js';
@@ -187,6 +188,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     agentClient: config.agentClient,
     logger: config.logger,
     sessionContextService,
+    mcpAllowlist: config.mcpAllowlist,
   });
 
   let streamedTextLength = 0;

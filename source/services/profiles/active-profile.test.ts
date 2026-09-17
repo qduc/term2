@@ -19,7 +19,7 @@ describe('resolveActiveEnforcement', () => {
 
     expect(enforcement.policies).toEqual(new Set(['builtin:enforcement/normal', 'builtin:enforcement/plan-read-only']));
     expect(enforcement.denials).toEqual(
-      new Set(['filesystem-mutation', 'shell-mutation', 'delegated-write', 'unknown-delegated-role']),
+      new Set(['filesystem-mutation', 'shell-mutation', 'mcp', 'delegated-write', 'unknown-delegated-role']),
     );
     expect(enforcement.handoffRestrictions).toEqual(new Set(['plan-read-only']));
   });

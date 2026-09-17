@@ -177,8 +177,28 @@ it('formatToolCommand: generic fallback with no scalars returns tool name', () =
 });
 
 it('formatToolCommand: handles null/undefined args', () => {
-  const result = formatToolCommand('shell', null as any);
-  expect(result).toBe('shell');
+  expect(formatToolCommand('shell', null)).toBe('shell');
+  expect(formatToolCommand('shell', undefined)).toBe('shell');
+});
+
+it('formatToolCommand: malformed-JSON string args for a tool with no dedicated formatter returns tool name without throwing', () => {
+  const malformed = '{"code": console.log("broken json"';
+  expect(() => formatToolCommand('run_code', malformed)).not.toThrow();
+  expect(formatToolCommand('run_code', malformed)).toBe('run_code');
+});
+
+it('formatToolCommand: malformed-JSON string args for shell returns tool name without throwing', () => {
+  const malformed = '{"command": echo hello';
+  expect(() => formatToolCommand('shell', malformed)).not.toThrow();
+  expect(formatToolCommand('shell', malformed)).toBe('shell');
+});
+
+it('formatToolCommand: handles non-plain-object args safely', () => {
+  expect(formatToolCommand('run_code', ['a', 'b'])).toBe('run_code');
+  expect(formatToolCommand('run_code', 123)).toBe('run_code');
+  expect(formatToolCommand('run_code', 'plain string')).toBe('run_code');
+  expect(formatToolCommand('shell', ['a', 'b'])).toBe('shell');
+  expect(formatToolCommand('grep', 'broken')).toBe('grep');
 });
 
 // =============================================================================

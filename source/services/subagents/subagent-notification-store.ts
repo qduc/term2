@@ -382,7 +382,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     const lastTool: BackgroundSubagentTaskTool =
       event.type === 'subagent_tool_started'
         ? {
-            label: formatToolCommand(event.toolName, parseToolArguments(event.arguments) as Record<string, unknown>),
+            label: formatToolCommand(event.toolName, parseToolArguments(event.arguments)),
             state: 'running',
           }
         : {

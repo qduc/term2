@@ -295,7 +295,7 @@ export function createConversationEventHandler(
 
         // Emit a "pending" command message when tool is called
         // tool_started.arguments may be either an object or a JSON string
-        const command = formatToolCommand(toolName, args as Record<string, unknown>);
+        const command = formatToolCommand(toolName, args);
 
         const pendingMessage: CommandMessage = {
           id: toolCallId ?? createMessageId(),

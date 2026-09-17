@@ -592,6 +592,20 @@ it('parses JSON-string tool arguments into the projected tool label', () => {
   });
 });
 
+it('falls back safely to the tool name when tool arguments are malformed JSON', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+
+  expect(() => {
+    store.recordLifecycle(toolStarted({ toolName: 'run_code', arguments: '{"code": console.log("broken"' }));
+  }).not.toThrow();
+
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'run_code',
+    state: 'running',
+  });
+});
+
 it('settles the projected tool to its outcome when the background tool call finishes', () => {
   const store = makeStore();
   store.recordLifecycle(started());

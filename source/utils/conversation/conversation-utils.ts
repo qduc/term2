@@ -49,8 +49,12 @@ export function parseToolArguments(rawArgs: unknown): unknown {
  * Each tool has its own formatting logic.
  */
 
-export function formatToolCommand(toolName: string, args: Record<string, unknown> | null | undefined): string {
-  if (!args) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function formatToolCommand(toolName: string, args: unknown): string {
+  if (!isPlainObject(args)) {
     return toolName;
   }
 

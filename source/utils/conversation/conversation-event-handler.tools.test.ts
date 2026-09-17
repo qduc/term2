@@ -120,6 +120,29 @@ it('tool_started: uses a shell description for the pending UI label', () => {
   expect(deps.calls.appendedMessages[0][0].command).toBe('Greet the user');
 });
 
+it('tool_started: handles malformed JSON string arguments without throwing', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  expect(() => {
+    handler({
+      type: 'tool_started',
+      toolCallId: 'call-malformed',
+      toolName: 'run_code',
+      arguments: '{"code": console.log("broken"',
+    } as ConversationEvent);
+  }).not.toThrow();
+
+  expect(deps.calls.appendedMessages.length).toBe(1);
+  const cmdMsg = deps.calls.appendedMessages[0][0];
+  expect(cmdMsg.sender).toBe('command');
+  expect(cmdMsg.status).toBe('pending');
+  expect(cmdMsg.command).toBe('run_code');
+  expect(cmdMsg.toolName).toBe('run_code');
+  expect(cmdMsg.toolArgs).toBe('{"code": console.log("broken"');
+});
+
 it('tool_dispatched: transitions pending command message to running', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

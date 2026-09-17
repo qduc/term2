@@ -86,6 +86,7 @@
     "@ai-sdk/google": "^3.0.72",
     "@ai-sdk/provider": "^3.0.10",
     "@anthropic-ai/sandbox-runtime": "^0.0.56",
+    "@modelcontextprotocol/client": "2.0.0",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@qduc/web-fetch": "^0.1.4",
     "ai": "^6.0.177",
@@ -109,6 +110,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@modelcontextprotocol/server": "2.0.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",
     "@types/node": "^24.10.1",

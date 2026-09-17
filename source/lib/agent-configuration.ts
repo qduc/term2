@@ -176,7 +176,6 @@ export class AgentConfiguration implements AgentSource {
 
   // AgentSource implementation
   getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
-    this.#mcpToolSource?.beginTurn();
     if (sessionId && !this.#isTransientClient) {
       const capabilities = getProvider(this.#provider)?.capabilities;
       const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
@@ -202,6 +201,11 @@ export class AgentConfiguration implements AgentSource {
       };
     }
     return this.#agent;
+  }
+
+  /** Advance the MCP catalog snapshot at the real start of a provider turn. */
+  beginTurn(): void {
+    this.#mcpToolSource?.beginTurn();
   }
 
   getProvider(): string {

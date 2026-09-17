@@ -1313,6 +1313,7 @@ export class AgentClient {
         throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
       }
       const provider = this.#agentConfig.getProvider();
+      this.#agentConfig.beginTurn();
       const supportsChaining = this.supportsConversationChaining();
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
       const requestPreparation = this.#openAIRequestPreparation(options);

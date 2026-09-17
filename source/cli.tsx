@@ -104,6 +104,7 @@ const printUsageOnce = () => {
 type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
 let activeSessionBrowser: SessionBrowser | null = null;
+let activeMcpManager: McpConnectionManager | null = null;
 let effectiveSessionId: string | undefined;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
@@ -114,6 +115,7 @@ process.on('SIGINT', () => {
   void Promise.all([
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
   ]).finally(() => {
     printUsageOnce();
     process.exit(130);
@@ -127,6 +129,7 @@ process.on('SIGTERM', () => {
   void Promise.all([
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
   ]).finally(() => {
     process.exit(143);
   });
@@ -859,6 +862,7 @@ const mcpManager = mcpConfig.servers.length
       onNotice: (message) => logger.warn('MCP catalog notice', { message }),
     })
   : undefined;
+activeMcpManager = mcpManager ?? null;
 mcpManager?.start();
 
 const history = new HistoryService({
@@ -971,6 +975,7 @@ if (hasPositionalPrompt) {
     sessionContextService,
     hookLifecycle: hookService,
     mcpAllowlist: mcpConfig.nonInteractiveAllow,
+    mcpToolSource: mcpManager,
   });
   process.exit(exitCode);
 }

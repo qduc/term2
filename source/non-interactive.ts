@@ -23,6 +23,7 @@ import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 import { primeActiveProfileNoticeIfActive } from './services/mode-notices.js';
 import { formatBackgroundSubagentNotifications } from './services/conversation/conversation-orchestrator.js';
 import type { BackgroundSubagentNotificationPort } from './services/subagents/subagent-notification-store.js';
+import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 
 export const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
@@ -70,6 +71,7 @@ export interface NonInteractiveConfig {
   /** Abort the active foreground turn when the process receives a signal. */
   abort?: () => void;
   mcpAllowlist?: readonly string[];
+  mcpToolSource?: import('./services/mcp/mcp-tool-source.js').McpToolSource;
 }
 
 export { NON_INTERACTIVE_REJECTION_REASON } from './services/approval/non-interactive-approval-policy.js';
@@ -189,6 +191,29 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     logger: config.logger,
     sessionContextService,
     mcpAllowlist: config.mcpAllowlist,
+    isMcpTool: config.mcpToolSource
+      ? (name) =>
+          config
+            .mcpToolSource!.snapshot()
+            .some((server) => server.tools.some((tool) => `${server.name}__${tool.name}` === name))
+      : undefined,
+    isMcpAllowed: config.mcpToolSource
+      ? (name, allowlist) =>
+          allowlist.some((entry) => {
+            const parts = entry.split('/');
+            if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
+            return config
+              .mcpToolSource!.snapshot()
+              .some((server) =>
+                server.tools.some(
+                  (tool) =>
+                    mcpMemberName(server.name, tool.name) === name &&
+                    server.name === parts[0] &&
+                    (parts[1] === '*' || tool.name === parts[1]),
+                ),
+              );
+          })
+      : undefined,
   });
 
   let streamedTextLength = 0;

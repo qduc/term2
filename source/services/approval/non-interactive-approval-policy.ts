@@ -24,6 +24,8 @@ export interface NonInteractiveApprovalPolicyDeps {
   logger?: ILoggingService;
   sessionContextService: ISessionContextService;
   mcpAllowlist?: readonly string[];
+  isMcpTool?: (name: string) => boolean;
+  isMcpAllowed?: (name: string, allowlist: readonly string[]) => boolean;
 }
 
 const noOpLogger: ILoggingService = {
@@ -55,13 +57,10 @@ export class NonInteractiveApprovalPolicy {
     }
 
     const { approval } = input;
-    if (approval.toolName.includes('__')) {
+    if (this.deps.isMcpTool?.(approval.toolName) === true) {
       const allowed = this.deps.mcpAllowlist ?? [];
       const member = approval.toolName;
-      const matches = allowed.some((entry) => {
-        const [server, tool] = entry.split('/', 2);
-        return tool !== undefined && (tool === '*' || `${server}__${tool}` === member);
-      });
+      const matches = this.deps.isMcpAllowed?.(member, allowed) ?? false;
       return matches
         ? { answer: 'y' }
         : {

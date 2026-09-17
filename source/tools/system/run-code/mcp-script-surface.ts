@@ -5,9 +5,14 @@ import {
   type McpToolSource,
 } from '../../../services/mcp/mcp-tool-source.js';
 import type { AnyToolDefinition, FormatCommandMessage, JsonSchemaObject } from '../../types.js';
+import { renderCompactSignature } from './tools-header.js';
 
 export const MCP_TOOL_BINDING = Symbol('term2.mcpToolBinding');
 const MAX_DESCRIPTION_CHARS = 2000;
+const clampOneLine = (value: string, limit: number): string => {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  return compact.length <= limit ? compact : compact.slice(0, limit);
+};
 
 export interface McpToolBinding {
   readonly [MCP_TOOL_BINDING]: true;
@@ -47,12 +52,13 @@ export const validateMcpArguments = (schema: JsonSchemaObject, value: unknown): 
   const record = value as Record<string, unknown>;
   const required = Array.isArray(schema.required) ? schema.required : [];
   for (const key of required)
-    if (typeof key === 'string' && !(key in record)) return `missing required property "${key}"`;
+    if (typeof key === 'string' && !Object.prototype.hasOwnProperty.call(record, key))
+      return `missing required property "${key}"`;
   const properties = schema.properties;
   if (properties && typeof properties === 'object') {
     for (const [key, property] of Object.entries(properties)) {
       if (
-        key in record &&
+        Object.prototype.hasOwnProperty.call(record, key) &&
         property &&
         typeof property === 'object' &&
         !primitiveMatches(record[key], (property as JsonSchemaObject).type)
@@ -68,6 +74,10 @@ export const describeMcpTool = (binding: McpToolBinding): Record<string, unknown
   name: mcpMemberName(binding.server, binding.tool),
   server: binding.server,
   tool: binding.tool,
+  signature: renderCompactSignature({
+    name: mcpMemberName(binding.server, binding.tool),
+    parameters: binding.descriptor.inputSchema,
+  }),
   description: `[server-provided text] ${(binding.descriptor.description ?? '').slice(0, MAX_DESCRIPTION_CHARS)}`,
   parameters: binding.descriptor.inputSchema,
   ...(binding.descriptor.outputSchema ? { outputSchema: binding.descriptor.outputSchema } : {}),
@@ -124,8 +134,8 @@ export const createMcpCatalog = (source: McpToolSource, builtInNames: ReadonlySe
             if (result.structuredContent !== undefined) return result.structuredContent;
             return mcpTextResult(result.content);
           } catch (error) {
-            const message = error instanceof McpCallError ? `[${error.code}] ${error.message}` : String(error);
-            throw new Error(message);
+            if (error instanceof McpCallError) throw new Error(`[${error.code}] ${error.message}`);
+            throw error;
           }
         },
         formatCommandMessage: noopFormatter,
@@ -152,13 +162,15 @@ export const renderMcpCatalog = (catalog: McpCatalog): string => {
   for (const server of catalog.snapshots) {
     const members = catalog.tools
       .filter((tool) => tool[MCP_TOOL_BINDING].server === server.name)
-      .map((tool) => tool.name);
-    const error = server.state === 'failed' && server.error ? ` — ${server.error.slice(0, 160)}` : '';
+      .map((tool) => clampOneLine(tool.name, 80));
+    const serverName = clampOneLine(server.name, 80);
+    const error =
+      server.state === 'failed' && server.error ? ` — [server-provided error] ${clampOneLine(server.error, 160)}` : '';
     lines.push(
-      `- ${server.name}: ${server.state}, ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}${error}`,
+      `- ${serverName}: ${server.state}, ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}${error}`,
     );
     if (members.length) lines.push(`  members: ${members.join(', ')}`);
   }
-  for (const collision of catalog.collisions) lines.push(`- collision: ${collision}`);
+  for (const collision of catalog.collisions) lines.push(`- collision: ${clampOneLine(collision, 160)}`);
   return lines.join('\n');
 };

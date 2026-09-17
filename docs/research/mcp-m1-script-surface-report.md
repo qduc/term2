@@ -30,7 +30,12 @@
   `renderToolsHeader` receives only non-MCP tools, so MCP signatures and
   descriptions cannot leak into the provider-facing header. Full MCP
   descriptions and original names are available through `tools.describe`, with
-  server text capped at 2,000 characters and explicitly labeled.
+  server text capped at 2,000 characters and explicitly labeled. The describe
+  result also includes the compact rendered signature.
+- Script-visible MCP failures use the runtime's standard rejected-call path;
+  `isError` text is not double-prefixed, and `McpCallError` includes its code.
+  Every server/config/tool string rendered in the catalog is collapsed to one
+  line and bounded; server error text is explicitly labeled.
 - JSON Schema validation uses the permitted minimal validator: object root,
   `required`, and top-level primitive types. Deeper validation remains the
   server's responsibility; no dependency was added.
@@ -41,8 +46,9 @@
   unavailable from the script.
 - Results prefer `structuredContent`; otherwise text blocks are joined and
   non-text blocks become `[<type> content omitted]`. `isError` and
-  `McpCallError` are returned to scripts as `{ ok: false, error }` while the
-  runtime ledger records an `error` outcome. Existing runtime
+  `McpCallError` reject the script call with the standard
+  `tools.<member> failed: ...` message while the runtime ledger records an
+  `error` outcome. Existing runtime
   serialization/bounding and abort-signal propagation are retained.
 
 ## Tests
@@ -52,7 +58,8 @@
 1. compact MCP catalog rendering and script-only exposure;
 2. structured-content calls through the real runtime and approval registry;
 3. pre-approval required/primitive argument validation;
-4. server `isError` script-visible envelopes;
+4. server `isError` and transport failures reject at the script boundary with
+   the standard failure message and no success result envelope;
 5. denial when approval is required without a nested owner;
 6. original-name description output and 2,000-character server-text capping;
 7. collision omission, built-in collision, identifier sanitization, connecting
@@ -69,6 +76,14 @@ NODE_ENV=test pnpm exec vitest run source/tools/system/run-code && pnpm typechec
 ```
 
 Observed: 8 test files passed, 228 tests passed; `pnpm typecheck` passed.
+
+Review round 2 focused regression gate:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/tools/system/run-code/mcp-script-surface.test.ts
+```
+
+Observed: 1 test file passed, 11 tests passed.
 
 Related-test gate passed:
 
@@ -88,6 +103,19 @@ pnpm exec prettier --check source/tools/system/run-code/mcp-script-surface.ts so
 The repository-wide `pnpm lint` command did not pass because the baseline has
 62 warnings and Prettier reports 33 pre-existing unrelated files. It reported
 zero errors in the changed files; the changed-file checks above passed.
+
+## Review round 2 disposition
+
+All five cross-review findings were addressed:
+
+1. MCP failures now fall through the runtime's standard `failed(message)` path,
+   with exactly one transport-code prefix.
+2. Catalog server names, member names, errors, and collision lines are one-line
+   bounded strings, with server error text labeled.
+3. Required/property validation uses own-property checks.
+4. MCP describe output includes `renderCompactSignature`.
+5. Regression assertions verify script rejection, rendered collision output,
+   and the bounded error text.
 
 ## Review round 1 disposition
 

@@ -37,10 +37,14 @@ const source = (
   onCatalogChanged: () => vi.fn(),
 });
 
-const make = (mcpToolSource: McpToolSource, approval = new ToolApprovalPolicyRegistry()) =>
+const make = (
+  mcpToolSource: McpToolSource,
+  approval = new ToolApprovalPolicyRegistry(),
+  getToolRegistry: () => readonly any[] = () => [],
+) =>
   createRunCodeToolDefinition({
     loggingService: logging(),
-    getToolRegistry: () => [],
+    getToolRegistry,
     getCwd: () => process.cwd(),
     approvalPolicyRegistry: approval,
     mcpToolSource,
@@ -113,12 +117,13 @@ describe('run_code MCP script surface', () => {
     approval.register({ toolName: 'remote_server__echo_tool', needsApproval: () => false });
     const rendered = await executeWith(
       runCode,
-      "return await tools.remote_server__echo_tool({ value: 'x' });",
+      "return await tools.remote_server__echo_tool({ value: 'x' }).catch((error) => ({ caught: true, message: String(error), hasResult: 'result' in error }));",
       new AbortController().signal,
     );
     const output = String(rendered);
-    expect(output).toContain('"ok":false');
-    expect(output).toContain('bad input');
+    expect(output).toContain('"caught":true');
+    expect(output).toContain('tools.remote_server__echo_tool failed: bad input');
+    expect(output).toContain('"hasResult":false');
     expect(getRunCodeExecutionResult(rendered)?.calls.at(-1)?.outcome).toBe('error');
 
     const transportApproval = new ToolApprovalPolicyRegistry();
@@ -132,10 +137,13 @@ describe('run_code MCP script surface', () => {
     transportApproval.register({ toolName: 'remote_server__echo_tool', needsApproval: () => false });
     const transportRendered = await executeWith(
       transportRun,
-      "return await tools.remote_server__echo_tool({ value: 'x' });",
+      "return await tools.remote_server__echo_tool({ value: 'x' }).catch((error) => ({ caught: true, message: String(error), hasResult: 'result' in error }));",
       new AbortController().signal,
     );
     expect(String(transportRendered)).toContain('[timeout] server call timed out');
+    expect(String(transportRendered)).toContain(
+      'tools.remote_server__echo_tool failed: [timeout] server call timed out',
+    );
     expect(getRunCodeExecutionResult(transportRendered)?.calls.at(-1)?.outcome).toBe('error');
   });
 
@@ -168,12 +176,23 @@ describe('run_code MCP script surface', () => {
     );
     expect(catalog.tools).toHaveLength(0);
     expect(catalog.collisions).toHaveLength(1);
+    const runCode = make(
+      source(vi.fn(), descriptor.description, [
+        { name: '1st-server', provenance: 'user', transport: 'stdio', state: 'ready', tools: [one] },
+        { name: '1st_server', provenance: 'user', transport: 'stdio', state: 'ready', tools: [two] },
+      ]),
+    );
+    expect(runCode.description).toContain('collision:');
   });
 
   it('omits an MCP member colliding with a built-in name', () => {
     const catalog = createMcpCatalog(source(vi.fn()), new Set(['remote_server__echo_tool']));
     expect(catalog.tools).toHaveLength(0);
     expect(catalog.collisions[0]).toContain('built-in tool');
+    expect(
+      make(source(vi.fn()), new ToolApprovalPolicyRegistry(), () => [{ name: 'remote_server__echo_tool' } as any])
+        .description,
+    ).toContain('collision:');
   });
 
   it('renders connecting and failed servers without members and bounds failure text', () => {
@@ -181,11 +200,20 @@ describe('run_code MCP script surface', () => {
     const runCode = make(
       source(vi.fn(), descriptor.description, [
         { name: 'connecting', provenance: 'user', transport: 'stdio', state: 'connecting', tools: [] },
-        { name: 'failed', provenance: 'user', transport: 'stdio', state: 'failed', error: longError, tools: [] },
+        {
+          name: 'failed\n-injected',
+          provenance: 'user',
+          transport: 'stdio',
+          state: 'failed',
+          error: `${longError}\n-injected`,
+          tools: [],
+        },
       ]),
     );
     expect(runCode.description).toContain('connecting: connecting, 0 tools');
-    expect(runCode.description).toContain('failed: failed, 0 tools');
+    expect(runCode.description).toContain('failed -injected: failed, 0 tools');
+    expect(runCode.description).toContain(`[server-provided error] ${longError.slice(0, 160)}`);
+    expect(runCode.description).not.toContain('\n-injected');
     expect(runCode.description).not.toContain('e'.repeat(161));
   });
 

@@ -62,6 +62,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Background shell output:** [Monitor map](docs/plans/background-shell-monitor/MAP.md)
 - **Queued/in-flight input:** [Queue editing](docs/plans/queue-editing.md) and [mid-turn injection](docs/plans/mid-turn-injection.md)
 - **Provider continuity:** [Chain settlement](docs/plans/chain-settlement.md)
+- **MCP servers:** [MCP as `run_code` functions](docs/plans/mcp-code-mode.md)
 
 # Parallel Work Isolation
 

@@ -2,10 +2,19 @@
 
 ## Resume here
 
-Status: **Milestone 0 complete** (reports merged to `main` 2026-09-17); **Milestone 1 in
-progress** — no MCP implementation merged yet. The `McpToolSource` contract
-(`source/services/mcp/mcp-tool-source.ts`) is on `main`. Live coordination record for the
-current delivery run: `.coord/mcp-code-mode/tasks.md` (untracked, local).
+Status: **Milestones 0 and 1 complete**; **Milestone 2 half complete**. Merged to `main`:
+the `McpToolSource` contract (`360f7a36`), the script surface (`d0288cce`), config + connection
+manager (`f3bb6916`), app wiring (`1077e20d`), and the OAuth core — credential store, provider
+adapter, shared loopback helper, offline fixtures (`48053aaa`). Full unit suite green at
+`1077e20d` (626 files / 8689 tests).
+
+**Resume here:** the rest of Milestone 2 (login trigger, catalog `needs-auth` state, connection-
+manager OAuth integration, gateway/non-interactive behavior) is blocked on four user decisions
+recorded in `.coord/mcp-code-mode/PARKED-DECISIONS.md` (D1 login trigger, D2 project HTTP + OAuth,
+D3 redirect ports, D4 DCR fallback). Do not implement those without an answer. Milestone 3 stays
+evidence-gated. Known gaps carried forward: no auto-reconnect after a server fails; HTTP/SSE session
+drop is not detected; the gateway composes no manager yet; no provider-driven end-to-end CLI test
+(script → real stdio server is covered).
 
 Before touching this area, also read:
 
@@ -121,7 +130,7 @@ Original questions:
    (`github/github-mcp-server` with all toolsets), one Streamable HTTP server, one
    OAuth-protected remote server. Record tool counts and rendered catalog size.
 
-### Milestone 1 — connect, catalog, call (all transports, non-OAuth auth)
+### Milestone 1 — connect, catalog, call (all transports, non-OAuth auth) — complete (`1077e20d`)
 
 - Config loading (user + project), provenance tracking, per-mode opt-in.
 - Connection manager: stdio, Streamable HTTP, legacy SSE; static header/token auth;
@@ -144,7 +153,7 @@ Exit: every Milestone 0 test server except the OAuth one is callable from a scri
 approval, in interactive and non-interactive modes; provider black-box coverage for the
 new `run_code` description shape.
 
-### Milestone 2 — OAuth remote servers
+### Milestone 2 — OAuth remote servers — core merged (`48053aaa`), rest blocked on D1–D4
 
 - OAuth 2.1 + PKCE via the SDK's auth provider interface, token storage and refresh.
 - Client ID Metadata Documents first; Dynamic Client Registration only as a fallback

@@ -87,10 +87,18 @@ describe('McpOAuthProvider', () => {
     expect(client.tokens()).toMatchObject({ access_token: 'newer' });
   });
 
-  it('refuses to read or write credentials without knowing the issuer', () => {
+  it('reports no client information when the SDK asks without an issuer', () => {
+    const client = provider();
+    client.saveClientInformation({ client_id: 'client-1', issuer: ISSUER }, context(ISSUER));
+
+    // The SDK's contract for the unkeyed read is "undefined means not
+    // registered", so another authorization server's client id must not leak.
+    expect(client.clientInformation()).toBeUndefined();
+  });
+
+  it('refuses to write credentials without knowing the issuer', () => {
     const client = provider();
 
-    expect(() => client.clientInformation()).toThrow(/issuer/i);
     expect(() => client.saveClientInformation({ client_id: 'client-1' })).toThrow(/issuer/i);
     expect(() => client.saveTokens(tokens('a'))).toThrow(/issuer/i);
   });

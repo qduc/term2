@@ -50,8 +50,8 @@ function requireIssuer(
 ): string {
   const issuer = ctx?.issuer ?? stampedIssuer;
   if (!issuer) {
-    // Guessing would risk handing one authorization server's credential to
-    // another. The SDK always passes a context on these calls.
+    // Guessing would risk filing one authorization server's credential under
+    // another's. The SDK always passes a context when it saves.
     throw new Error(`McpOAuthProvider.${method} requires the authorization server issuer`);
   }
   return issuer;
@@ -111,9 +111,14 @@ export class McpOAuthProvider implements OAuthClientProvider {
     return this.pendingState;
   }
 
+  /**
+   * With no issuer there is no way to tell an unregistered client from another
+   * authorization server's, and the SDK's contract for that call is "undefined
+   * means not registered" — never another server's credential.
+   */
   clientInformation(ctx?: OAuthClientInformationContext): StoredOAuthClientInformation | undefined {
-    const issuer = requireIssuer(ctx, undefined, 'clientInformation');
-    return this.options.store.getClientInformation(this.options.serverUrl, issuer);
+    if (!ctx?.issuer) return undefined;
+    return this.options.store.getClientInformation(this.options.serverUrl, ctx.issuer);
   }
 
   saveClientInformation(clientInformation: StoredOAuthClientInformation, ctx?: OAuthClientInformationContext): void {

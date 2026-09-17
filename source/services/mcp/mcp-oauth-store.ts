@@ -84,6 +84,10 @@ export function normalizeMcpServerUrl(raw: string): string {
   }
   url.search = '';
   url.hash = '';
+  // Userinfo is not part of the server's identity, and a password must never
+  // reach the credential file's key on disk.
+  url.username = '';
+  url.password = '';
   url.protocol = url.protocol.toLowerCase();
   url.hostname = url.hostname.toLowerCase();
   // The URL parser already drops a default port for the schemes it knows; the

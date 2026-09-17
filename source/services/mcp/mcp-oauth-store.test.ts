@@ -59,6 +59,11 @@ describe('normalizeMcpServerUrl', () => {
   it('keeps a non-default port and the path case', () => {
     expect(normalizeMcpServerUrl('https://mcp.example.test:8443/MCP')).toBe('https://mcp.example.test:8443/MCP');
   });
+
+  it('ignores userinfo, which is not part of the server identity', () => {
+    expect(normalizeMcpServerUrl('https://user:pw@mcp.example.test/mcp')).toBe('https://mcp.example.test/mcp');
+    expect(normalizeMcpServerUrl('https://mcp.example.test/mcp')).toBe('https://mcp.example.test/mcp');
+  });
 });
 
 describe('McpOAuthStore', () => {
@@ -103,6 +108,17 @@ describe('McpOAuthStore', () => {
       access_token: 'at-1',
     });
     expect(Object.keys(readFile().servers)).toEqual(['https://mcp.example.test/mcp']);
+  });
+
+  it('never writes a password from a server URL into the credential file', () => {
+    const store = new McpOAuthStore({ filePath: storePath });
+    store.saveTokens('https://api-user:secret-pass@mcp.example.test/mcp', 'https://auth.example.test', tokens('at-1'));
+
+    const written = fs.readFileSync(storePath, 'utf8');
+    expect(written).not.toContain('secret-pass');
+    expect(written).not.toContain('api-user');
+    expect(Object.keys(readFile().servers)).toEqual(['https://mcp.example.test/mcp']);
+    expect(store.getTokens('https://mcp.example.test/mcp')).toMatchObject({ access_token: 'at-1' });
   });
 
   it('never shares tokens between different server URLs', () => {

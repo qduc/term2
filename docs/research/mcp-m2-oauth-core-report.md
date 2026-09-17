@@ -84,8 +84,8 @@ Both bind ephemeral loopback ports and make no external requests.
 
 | File | What it proves |
 | --- | --- |
-| `source/services/mcp/mcp-oauth-store.test.ts` (14) | URL normalization equivalence; round-trip of client info, tokens, verifier and discovery state; `0o600` on disk; equivalent URL spellings share one entry; different URLs never share tokens; issuer sub-keying; most-recent-issuer read; corrupt file yields an empty store without throwing and is replaced by the next write; stale temp files swept; the exact tmp → write → fsync → close → rename sequence; a failed rename leaves the previous credentials intact with no temp file behind; `invalidateCredentials` scope-by-scope and server-by-server |
-| `source/services/mcp/mcp-oauth-provider.test.ts` (14) | Interface conformance (typed assignment plus a behavioral call); client metadata; runtime redirect-URL thunk; per-issuer credential storage; no-context token read; refusal to guess an issuer; verifier round-trip and the missing-verifier error; state value exposed for callback validation; redirect delegation; discovery-state round-trip; invalidation scopes; CIMD acceptance and rejection |
+| `source/services/mcp/mcp-oauth-store.test.ts` (16) | URL normalization equivalence (including userinfo, F1); round-trip of client info, tokens, verifier and discovery state; `0o600` on disk; equivalent URL spellings share one entry; different URLs never share tokens; issuer sub-keying; most-recent-issuer read; corrupt file yields an empty store without throwing and is replaced by the next write; stale temp files swept; the exact tmp → write → fsync → close → rename sequence; a failed rename leaves the previous credentials intact with no temp file behind; `invalidateCredentials` scope-by-scope and server-by-server |
+| `source/services/mcp/mcp-oauth-provider.test.ts` (15) | Interface conformance (typed assignment plus a behavioral call); client metadata; runtime redirect-URL thunk; per-issuer credential storage; no-context token read; unkeyed `clientInformation()` returns `undefined` (F2) while the save methods refuse to guess an issuer; verifier round-trip and the missing-verifier error; state value exposed for callback validation; redirect delegation; discovery-state round-trip; invalidation scopes; CIMD acceptance and rejection |
 | `source/services/mcp/mcp-oauth-flow.test.ts` (4) | The protected fixture refuses an unauthenticated request and advertises its authorization server; the real SDK `auth()` discovers the AS from that metadata, returns `REDIRECT` with an S256 PKCE challenge and a state the provider can validate, redeems the code, stores tokens (with the callback leg binding the issuer from persisted discovery state), and then refreshes — one browser trip, rotated refresh token, the access token actually accepted by the resource server; a wrong `code_verifier` is refused with `invalid_grant`; a real MCP client with the obtained token lists the fixture's tool |
 | `source/lib/oauth-loopback.test.ts` (7) | ephemeral bind on `127.0.0.1`; preferred-port fallback; the all-ports-taken error naming the client and the conflict hint; callback capture with matching state; state mismatch rejected; a non-callback path 404s and the wait continues; abort |
 | `source/providers/oauth-pkce.test.ts` (10, unchanged) | the provider login flow behaves exactly as before the extraction |
@@ -95,15 +95,19 @@ Both bind ephemeral loopback ports and make no external requests.
 ```
 $ NODE_ENV=test pnpm exec vitest run source/services/mcp source/providers/oauth-pkce.test.ts source/lib && pnpm typecheck
  Test Files  30 passed (30)
-      Tests  524 passed (524)
+      Tests  527 passed (527)
 $ tsc --noEmit   (clean)
 ```
 
 ```
 $ pnpm test:related ./source/lib/oauth-loopback.ts ./source/providers/oauth-pkce.ts ./source/services/mcp/mcp-oauth-store.ts ./source/services/mcp/mcp-oauth-provider.ts
  Test Files  182 passed (182)
-      Tests  3187 passed | 2 expected fail | 1 skipped (3190)
+      Tests  3187 passed | 2 expected fail | 1 skipped (3190)   # before the review fixes
  Duration  89.61s
+
+$ pnpm test:related ./source/services/mcp/mcp-oauth-store.ts ./source/services/mcp/mcp-oauth-provider.ts
+ Test Files  3 passed (3)
+      Tests  35 passed (35)                                   # after the review fixes
 ```
 
 ```
@@ -117,6 +121,25 @@ $ pnpm lint
 `scripts/experiments/`, `scripts/run-deterministic-lane.mjs`, …). None of this change's files are in
 that list — checked by intersecting the offender list with `git status`/`git diff --name-only`. Per the
 delivery rules the pre-existing failure is left alone.
+
+## Cross-review findings (fixed)
+
+`XR-oauth-core` (review round 1) raised two LOW findings, both fixed in the same branch with a
+regression test each:
+
+- **F1 — userinfo was neither normalized away nor kept out of the file.** `normalizeMcpServerUrl`
+  now clears `url.username`/`url.password` alongside `search`/`hash`, so
+  `https://user:pw@h/mcp` and `https://h/mcp` are one server entry and no password can be written
+  into the credential file's JSON key. Tests: the normalization equivalence, and a store round-trip
+  asserting the written file contains neither `api-user` nor `secret-pass`.
+- **F2 — `clientInformation()` threw on the SDK's optional `ctx`.** It now returns `undefined`,
+  which is the interface's stated meaning for "not registered" and cannot leak another authorization
+  server's client id. Test: with a client id stored for an issuer, `clientInformation()` with no
+  context returns `undefined`. The two `save*` methods stay strict — the SDK always passes a context
+  when it writes, and filing a credential under a guessed issuer is a silent corruption.
+
+The reviewer also confirmed the `oauth-pkce.ts` refactor preserves behavior and that declaring
+`refresh_token` in `grant_types` is correct (the SDK needs it to request `offline_access`).
 
 ## Corrections to `M2-oauth-seams.md`
 

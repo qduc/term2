@@ -40,6 +40,7 @@ import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../c
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
+import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -85,6 +86,7 @@ export interface AgentFactoryDeps {
     target: { kind: 'shell' | 'subagent'; id: string },
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
+  mcpToolSource?: McpToolSource;
 }
 
 export interface AgentBuildResult {
@@ -485,6 +487,7 @@ export function buildAgent(
       ...(deps.requestSessionRollover ? { requestSessionRollover: deps.requestSessionRollover } : {}),
       configureTaskCheckIn: deps.configureTaskCheckIn,
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,
+      mcpToolSource: deps.mcpToolSource,
     },
     resolvedModel,
   );

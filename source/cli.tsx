@@ -67,6 +67,8 @@ import {
 import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 import { SessionBrowser } from './services/conversation/session-browser.js';
+import { loadMcpConfig } from './services/mcp/mcp-config.js';
+import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -102,6 +104,7 @@ const printUsageOnce = () => {
 type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
 let activeSessionBrowser: SessionBrowser | null = null;
+let activeMcpManager: McpConnectionManager | null = null;
 let effectiveSessionId: string | undefined;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
@@ -112,6 +115,7 @@ process.on('SIGINT', () => {
   void Promise.all([
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
   ]).finally(() => {
     printUsageOnce();
     process.exit(130);
@@ -125,6 +129,7 @@ process.on('SIGTERM', () => {
   void Promise.all([
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+    activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
   ]).finally(() => {
     process.exit(143);
   });
@@ -845,6 +850,21 @@ if (sshFlag) {
   executionContext = new ExecutionContext();
 }
 
+const mcpConfig = await loadMcpConfig({
+  workspaceRoot: executionContext.getHomeWorkspace(),
+  onNote: (message) => logger.warn('MCP configuration notice', { message }),
+});
+const mcpManager = mcpConfig.servers.length
+  ? new McpConnectionManager({
+      servers: mcpConfig.servers,
+      userConfigPath: mcpConfig.userConfigPath,
+      workspaceRoot: executionContext.getHomeWorkspace(),
+      onNotice: (message) => logger.warn('MCP catalog notice', { message }),
+    })
+  : undefined;
+activeMcpManager = mcpManager ?? null;
+mcpManager?.start();
+
 const history = new HistoryService({
   loggingService: logger,
   settingsService: settings,
@@ -923,6 +943,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         skillsService,
         requestCapture,
         sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
+        mcpToolSource: mcpManager,
       },
       toolOwnership,
       postExecutePauseCapability,
@@ -953,6 +974,8 @@ if (hasPositionalPrompt) {
     settingsService: settings,
     sessionContextService,
     hookLifecycle: hookService,
+    mcpAllowlist: mcpConfig.nonInteractiveAllow,
+    mcpToolSource: mcpManager,
   });
   process.exit(exitCode);
 }
@@ -1177,6 +1200,7 @@ if (conversationService.hookEvents) {
   );
 }
 await conversationService.shutdown();
+await mcpManager?.close();
 await sessionBrowser.close();
 activeSessionBrowser = null;
 await logWriter.close();

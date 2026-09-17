@@ -74,6 +74,7 @@ import type { SessionBrowser } from './services/conversation/session-browser.js'
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from './contracts/session-rollover.js';
 import { ToolApprovalPolicyRegistry } from './services/approval/tool-approval-policy-registry.js';
 import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
+import type { McpToolSource } from './services/mcp/mcp-tool-source.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -255,6 +256,8 @@ export const getAgentDefinition = (
       target: { kind: 'shell' | 'subagent'; id: string },
       options: { enabled?: boolean; intervalMs?: number },
     ) => void;
+    /** Root-session-only MCP source; subagent definitions intentionally omit it. */
+    mcpToolSource?: McpToolSource;
   },
   model?: string,
 ): AgentDefinition => {
@@ -285,6 +288,7 @@ export const getAgentDefinition = (
     requestSessionRollover,
     configureTaskCheckIn,
     setTaskCheckInPolicy,
+    mcpToolSource,
   } = deps;
   const resolvedApprovalPolicyRegistry = approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
   const defaultModel = settingsService.get('agent.model');
@@ -642,6 +646,7 @@ export const getAgentDefinition = (
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
         sessionAccess,
+        ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),
       }),
     );
   }

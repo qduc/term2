@@ -45,6 +45,7 @@ export interface McpConfigLoadResult {
   readonly notes: readonly string[];
   /** Absolute path of the user config file, for actionable override hints. */
   readonly userConfigPath: string;
+  readonly nonInteractiveAllow: readonly string[];
 }
 
 export interface LoadMcpConfigOptions {
@@ -91,9 +92,10 @@ type ProjectOverrides = Map<string, Map<string, McpServerOverrides>>;
 interface ParsedSource {
   readonly entries: Map<string, unknown>;
   readonly projectOverrides: ProjectOverrides;
+  readonly nonInteractiveAllow: readonly string[];
 }
 
-const EMPTY_SOURCE: ParsedSource = { entries: new Map(), projectOverrides: new Map() };
+const EMPTY_SOURCE: ParsedSource = { entries: new Map(), projectOverrides: new Map(), nonInteractiveAllow: [] };
 
 /** Canonical form for opt-in matching; falls back to the input when the path does not exist. */
 export const realpathOrSelf = (path: string): string => {
@@ -126,6 +128,9 @@ const parseSourceFile = (sourceName: string, contents: string, note: (m: string)
     }
   }
   const projectOverrides: ProjectOverrides = new Map();
+  const nonInteractiveAllow = Array.isArray(root.nonInteractiveAllow)
+    ? root.nonInteractiveAllow.filter((value): value is string => typeof value === 'string')
+    : [];
   const rawOverrides = root.projectServers;
   if (rawOverrides !== undefined) {
     if (!isRecord(rawOverrides)) {
@@ -152,7 +157,7 @@ const parseSourceFile = (sourceName: string, contents: string, note: (m: string)
       }
     }
   }
-  return { entries, projectOverrides };
+  return { entries, projectOverrides, nonInteractiveAllow };
 };
 
 const resolveEntry = (
@@ -270,5 +275,5 @@ export async function loadMcpConfig(options: LoadMcpConfigOptions = {}): Promise
     }
     servers.push(resolveEntry(name, 'project', entry, env, false, projectEnabledOverride, workspaceRoot));
   }
-  return { servers, notes, userConfigPath };
+  return { servers, notes, userConfigPath, nonInteractiveAllow: user.nonInteractiveAllow };
 }

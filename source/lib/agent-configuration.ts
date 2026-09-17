@@ -21,6 +21,8 @@ import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../c
 import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../services/approval/nested-approval-owner.js';
 import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-code.js';
+import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
+import { TurnStableMcpToolSource } from '../services/mcp/turn-stable-mcp-tool-source.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -61,6 +63,7 @@ export interface AgentConfigurationDeps {
     target: { kind: 'shell' | 'subagent'; id: string },
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
+  mcpToolSource?: McpToolSource;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -101,6 +104,7 @@ export class AgentConfiguration implements AgentSource {
     target: { kind: 'shell' | 'subagent'; id: string },
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
+  #mcpToolSource?: TurnStableMcpToolSource;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -140,6 +144,7 @@ export class AgentConfiguration implements AgentSource {
     this.#requestSessionRollover = deps.requestSessionRollover;
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
+    this.#mcpToolSource = deps.mcpToolSource ? new TurnStableMcpToolSource(deps.mcpToolSource) : undefined;
     this.#approvalPolicyRegistry = config.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
 
     // Create editor
@@ -196,6 +201,11 @@ export class AgentConfiguration implements AgentSource {
       };
     }
     return this.#agent;
+  }
+
+  /** Advance the MCP catalog snapshot at the real start of a provider turn. */
+  beginTurn(): void {
+    this.#mcpToolSource?.beginTurn();
   }
 
   getProvider(): string {
@@ -269,6 +279,7 @@ export class AgentConfiguration implements AgentSource {
       ...(this.#requestSessionRollover ? { requestSessionRollover: this.#requestSessionRollover } : {}),
       configureTaskCheckIn: this.#configureTaskCheckIn,
       setTaskCheckInPolicy: this.#setTaskCheckInPolicy,
+      mcpToolSource: this.#mcpToolSource,
     };
   }
 

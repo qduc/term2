@@ -23,6 +23,9 @@ export interface NonInteractiveApprovalPolicyDeps {
   agentClient?: ConversationAgentClient;
   logger?: ILoggingService;
   sessionContextService: ISessionContextService;
+  mcpAllowlist?: readonly string[];
+  isMcpTool?: (name: string) => boolean;
+  isMcpAllowed?: (name: string, allowlist: readonly string[]) => boolean;
 }
 
 const noOpLogger: ILoggingService = {
@@ -54,6 +57,18 @@ export class NonInteractiveApprovalPolicy {
     }
 
     const { approval } = input;
+    if (this.deps.isMcpTool?.(approval.toolName) === true) {
+      const allowed = this.deps.mcpAllowlist ?? [];
+      const member = approval.toolName;
+      const matches = this.deps.isMcpAllowed?.(member, allowed) ?? false;
+      return matches
+        ? { answer: 'y' }
+        : {
+            answer: 'n',
+            rejectionReason: NON_INTERACTIVE_REJECTION_REASON,
+            reportRejection: false,
+          };
+    }
     if (approval.toolName !== 'shell' && approval.toolName !== 'bash') {
       return { answer: 'y' };
     }

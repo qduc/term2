@@ -383,6 +383,69 @@ it('exposes only the tool groups selected by the resolved Profile', () => {
   }
 });
 
+it('gates MCP by capability and keeps members out of the provider tool list', () => {
+  const source = {
+    snapshot: () => [
+      {
+        name: 'svc',
+        provenance: 'user' as const,
+        transport: 'stdio' as const,
+        state: 'ready' as const,
+        tools: [{ name: 'echo', inputSchema: {} }],
+      },
+    ],
+    callTool: async () => ({ content: [], isError: false }),
+    onCatalogChanged: () => () => {},
+  };
+  const profiles = builtinProfileRegistry.profiles as Map<string, ProfileDefinition>;
+  const ids = ['builtin:mcp-enabled-test', 'builtin:mcp-disabled-test', 'builtin:mcp-plan-test'];
+  profiles.set(ids[0], {
+    schemaVersion: 1,
+    id: 'mcp-enabled-test',
+    version: '1.0.0',
+    name: ids[0],
+    blocks: { tools: { kind: 'tools', include: ['shell', 'mcp'] } },
+  });
+  profiles.set(ids[1], {
+    schemaVersion: 1,
+    id: 'mcp-disabled-test',
+    version: '1.0.0',
+    name: ids[1],
+    blocks: { tools: { kind: 'tools', include: ['shell'] } },
+  });
+  profiles.set(ids[2], {
+    schemaVersion: 1,
+    id: 'mcp-plan-test',
+    version: '1.0.0',
+    name: ids[2],
+    extends: 'builtin:plan',
+    blocks: { tools: { kind: 'tools', include: ['shell', 'mcp'] } },
+  });
+  try {
+    const make = (id: string) =>
+      getAgentDefinition({
+        settingsService: createMockSettingsService({ 'app.activeProfileId': id }),
+        loggingService: mockLogger,
+        mcpToolSource: source,
+      });
+    const enabled = make(ids[0]);
+    const disabled = make(ids[1]);
+    const plan = make(ids[2]);
+    expect(enabled.tools.map((tool) => tool.name)).not.toContain('svc__echo');
+    expect(enabled.tools.find((tool) => tool.name === 'run_code')?.description).toContain('svc__echo');
+    expect(disabled.tools.find((tool) => tool.name === 'run_code')?.description).not.toContain('MCP tools');
+    expect(plan.tools.find((tool) => tool.name === 'run_code')?.description).not.toContain('MCP tools');
+    expect(
+      getAgentDefinition({
+        settingsService: createMockSettingsService({ 'app.activeProfileId': ids[0] }),
+        loggingService: mockLogger,
+      }).tools.find((tool) => tool.name === 'run_code')?.description,
+    ).not.toContain('MCP tools');
+  } finally {
+    for (const id of ids) profiles.delete(id);
+  }
+});
+
 it('uses the patch editing surface for modern GPT models in standard and lite modes', () => {
   for (const liteMode of [false, true]) {
     for (const model of ['gpt-5', 'gpt-6']) {

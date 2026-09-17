@@ -4,6 +4,9 @@ import { createMcpCatalog, mcpMemberName } from './mcp-script-surface.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { McpCallError, type McpServerSnapshot, type McpToolSource } from '../../../services/mcp/mcp-tool-source.js';
+import { McpConnectionManager } from '../../../services/mcp/mcp-connection-manager.js';
+import type { ResolvedMcpServerConfig } from '../../../services/mcp/mcp-config.js';
+import { resolve } from 'node:path';
 
 const logging = (): ILoggingService =>
   ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), security: vi.fn() } as unknown as ILoggingService);
@@ -61,6 +64,35 @@ const executeWith = (tool: ReturnType<typeof make>, code: string, signal: AbortS
   );
 
 describe('run_code MCP script surface', () => {
+  it('runs a real stdio fixture call from a script through the connection manager', async () => {
+    const manager = new McpConnectionManager({
+      servers: [
+        {
+          name: 'fx',
+          provenance: 'user',
+          transport: 'stdio',
+          command: process.execPath,
+          args: [resolve(import.meta.dirname, '../../../services/mcp/test-fixtures/stdio-fixture.mjs')],
+        } satisfies ResolvedMcpServerConfig,
+      ],
+    });
+    manager.start();
+    await manager.whenSettled();
+    const approval = new ToolApprovalPolicyRegistry();
+    const runCode = make(manager, approval);
+    void runCode.description;
+    approval.register({ toolName: 'fx__echo', needsApproval: () => false });
+    try {
+      const rendered = await executeWith(
+        runCode,
+        "return await tools.fx__echo({ message: 'from-script' });",
+        new AbortController().signal,
+      );
+      expect(String(rendered)).toContain('from-script');
+    } finally {
+      await manager.close();
+    }
+  });
   it('keeps MCP members script-only while rendering a compact catalog', () => {
     const runCode = make(source(vi.fn()));
     expect(runCode.name).toBe('run_code');

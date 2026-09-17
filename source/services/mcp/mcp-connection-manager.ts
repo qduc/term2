@@ -39,6 +39,8 @@ export interface McpConnectionManagerOptions {
   workspaceRoot?: string;
   /** Where stdio servers are actually spawned. Defaults to an unsandboxed spawn. */
   stdioLauncher?: StdioLauncher;
+  /** Receives one notice per server that enters the failed state. */
+  onNotice?: (message: string) => void;
 }
 
 type ConnectionState = 'connecting' | 'ready' | 'failed';
@@ -71,6 +73,8 @@ export class McpConnectionManager implements McpToolSource {
   private readonly stdioLauncher: StdioLauncher;
   private readonly userConfigPath?: string;
   private readonly workspaceRoot?: string;
+  private readonly onNotice?: (message: string) => void;
+  private readonly noticedFailures = new Set<string>();
   private snapshotCache: readonly McpServerSnapshot[] = [];
   private started = false;
   private closed = false;
@@ -80,6 +84,7 @@ export class McpConnectionManager implements McpToolSource {
     this.stdioLauncher = options.stdioLauncher ?? unsandboxedStdioLauncher;
     this.userConfigPath = options.userConfigPath;
     this.workspaceRoot = options.workspaceRoot;
+    this.onNotice = options.onNotice;
     for (const config of options.servers) {
       if (this.connections.has(config.name)) {
         this.connections.set(config.name, {
@@ -368,6 +373,10 @@ export class McpConnectionManager implements McpToolSource {
     connection.state = 'failed';
     connection.error = error;
     connection.tools = [];
+    if (!this.noticedFailures.has(connection.config.name)) {
+      this.noticedFailures.add(connection.config.name);
+      this.onNotice?.(`MCP server "${connection.config.name}" failed: ${error}`);
+    }
     this.rebuildSnapshot();
   }
 

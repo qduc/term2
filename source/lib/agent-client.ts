@@ -631,6 +631,7 @@ export class AgentClient {
       requestCapture?: ProviderRequestCapture;
       /** Explicit gateway read-only posture; omitted for CLI sessions. */
       readOnly?: boolean;
+      mcpToolSource?: import('../services/mcp/mcp-tool-source.js').McpToolSource;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
     subagentBridge?: SubagentBridge;
@@ -681,6 +682,7 @@ export class AgentClient {
         postExecutePauseCapability,
         sessionAccess,
         readOnly: deps.readOnly,
+        mcpToolSource: deps.mcpToolSource,
         backgroundShellRegistry: this.#backgroundShellRegistry,
         backgroundShellOutput: this.#backgroundShellOutput,
         shellChildRegistry: this.#shellChildRegistry,
@@ -1311,6 +1313,7 @@ export class AgentClient {
         throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
       }
       const provider = this.#agentConfig.getProvider();
+      this.#agentConfig.beginTurn();
       const supportsChaining = this.supportsConversationChaining();
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
       const requestPreparation = this.#openAIRequestPreparation(options);

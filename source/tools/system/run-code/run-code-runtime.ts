@@ -18,6 +18,7 @@ import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
 import { isZodToolParameterSchema, type AnyToolDefinition, type ToolRegistry } from '../../types.js';
 import { renderCompactSignature } from './tools-header.js';
+import { MCP_TOOL_BINDING, describeMcpTool, isMcpToolDefinition, validateMcpArguments } from './mcp-script-surface.js';
 import {
   getScriptedReturnContract,
   scriptedReturnContractJsonSchema,
@@ -586,7 +587,10 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             );
           }
           record(name, 'describe', started);
-          return { kind: 'result', result: { ok: true, result: describeTool(described) } as JsonValue };
+          const describedValue = isMcpToolDefinition(described)
+            ? describeMcpTool(described[MCP_TOOL_BINDING])
+            : describeTool(described);
+          return { kind: 'result', result: { ok: true, result: describedValue } as JsonValue };
         }
         if (!tool) {
           record(name || '(unnamed)', 'unknown_tool', started, undefined, undefined, 'unknown_tool');
@@ -598,6 +602,13 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         }
         const targetSchema = tool.canonicalParameters ?? tool.parameters;
         let normalized: unknown = payload.params ?? {};
+        if (isMcpToolDefinition(tool)) {
+          const validationError = validateMcpArguments(tool[MCP_TOOL_BINDING].descriptor.inputSchema, normalized);
+          if (validationError) {
+            record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+            return failed(`Invalid parameters for "${name}": ${validationError}`);
+          }
+        }
         try {
           normalized = normalizeToolParameters(normalized, targetSchema);
         } catch {

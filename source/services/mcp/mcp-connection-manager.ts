@@ -31,8 +31,6 @@ const LIST_TIMEOUT_MS = 15_000;
 /** Upper bound on waiting for a client/transport close during `close()`. */
 const CLOSE_TIMEOUT_MS = 5_000;
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 export interface McpConnectionManagerOptions {
   servers: readonly ResolvedMcpServerConfig[];
   /** Path of the user config file, cited in the project-stdio opt-in error. */
@@ -158,7 +156,20 @@ export class McpConnectionManager implements McpToolSource {
     await Promise.all(
       Array.from(this.connections.values(), async (connection) => {
         connection.closing = true;
-        await Promise.race([this.teardown(connection), delay(CLOSE_TIMEOUT_MS)]);
+        // The grace timer is cleared (and unref'd) as soon as teardown wins,
+        // so a finished close() never keeps the event loop alive.
+        let grace: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            this.teardown(connection),
+            new Promise<void>((resolve) => {
+              grace = setTimeout(resolve, CLOSE_TIMEOUT_MS);
+              grace.unref?.();
+            }),
+          ]);
+        } finally {
+          if (grace !== undefined) clearTimeout(grace);
+        }
       }),
     );
   }

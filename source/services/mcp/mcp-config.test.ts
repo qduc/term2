@@ -149,6 +149,25 @@ describe('loadMcpConfig', () => {
     expect(servers[0]).toMatchObject({ name: 'github', provenance: 'project', projectEnabledOverride: undefined });
   });
 
+  it('ignores projectServers keys that are not absolute paths, with a note', async () => {
+    const notes: string[] = [];
+    const { servers } = await loadMcpConfig({
+      workspaceRoot: '/repo',
+      files: readFile({
+        'mcp.json': JSON.stringify({
+          projectServers: { repo: { a: { enabled: true } }, '/repo': { b: { enabled: true } } },
+        }),
+        '.mcp.json': JSON.stringify({ mcpServers: { a: { command: 'x' }, b: { command: 'y' } } }),
+      }),
+      onNote: (m) => notes.push(m),
+    });
+    const byName = Object.fromEntries(servers.map((s) => [s.name, s]));
+    // The relative key is never resolved against term2's process cwd.
+    expect(byName.a.projectEnabledOverride).toBeUndefined();
+    expect(byName.b.projectEnabledOverride).toBe(true);
+    expect(notes.join('\n')).toMatch(/absolute path/);
+  });
+
   it('matches the workspace root by realpath on both sides of the projectServers key', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mcp-config-'));
     try {

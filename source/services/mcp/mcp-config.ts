@@ -132,6 +132,12 @@ const parseSourceFile = (sourceName: string, contents: string, note: (m: string)
       note(`${sourceName}: "projectServers" is not an object and was ignored.`);
     } else {
       for (const [rootPath, servers] of Object.entries(rawOverrides)) {
+        // Keys are workspace roots: relative paths must never be resolved
+        // against term2's process cwd, so they are ignored with a note.
+        if (!isAbsolute(rootPath)) {
+          note(`${sourceName}: "projectServers.${rootPath}" is not an absolute path and was ignored.`);
+          continue;
+        }
         if (!isRecord(servers)) {
           note(`${sourceName}: "projectServers.${rootPath}" is not an object and was ignored.`);
           continue;

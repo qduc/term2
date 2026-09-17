@@ -5,8 +5,8 @@ Delivers the first runnable slice of [MCP servers as run_code functions](../plan
 
 ## Status
 
-Complete. Review round 1 fixes (C1–C4, F1–F6) applied; see [Review round 1](#review-round-1) below.
-Gates: 35/35 `source/services/mcp` tests, `pnpm typecheck` clean, `pnpm exec eslint source/services/mcp` + prettier clean, `pnpm test:related` 35/35.
+Complete. Review round 1 fixes (C1–C4, F1–F6) and round 2 fixes (close-grace timer, absolute projectServers keys) applied; see [Review round 1](#review-round-1) and [Review round 2](#review-round-2) below.
+Gates: 37/37 `source/services/mcp` tests, `pnpm typecheck` clean, `pnpm exec eslint source/services/mcp` + prettier clean, `pnpm test:related` 37/37.
 
 ## Symbols and files
 
@@ -53,7 +53,7 @@ Gates: 35/35 `source/services/mcp` tests, `pnpm typecheck` clean, `pnpm exec esl
 
 ## Tests
 
-### `mcp-config.test.ts` (14)
+### `mcp-config.test.ts` (15)
 
 | Test | Proves |
 | --- | --- |
@@ -66,13 +66,14 @@ Gates: 35/35 `source/services/mcp` tests, `pnpm typecheck` clean, `pnpm exec esl
 | an opt-in for one workspace does not enable a same-named server in another | the workspace scoping of the opt-in (security boundary) |
 | matches the workspace root by realpath on both sides | a symlinked session root still matches the user-config key (real fs + symlink) |
 | resolves a relative cwd against the workspace root (project) and the settings dir (user) | relative `cwd` never depends on term2's process cwd |
+| ignores projectServers keys that are not absolute paths, with a note | a relative key is never resolved against term2's process cwd; absolute keys still apply |
 | missing config files are empty | ENOENT is not an error |
 | project file not valid JSON is noted and skipped | malformed files degrade to notes |
 | non-object mcpServers section is noted and skipped | shape validation at the section level |
 | parses headers and cwd | optional fields survive validation |
 | exposes the resolved user config path | errors can cite the file to edit |
 
-### `mcp-connection-manager.test.ts` (21)
+### `mcp-connection-manager.test.ts` (22)
 
 | Test | Proves |
 | --- | --- |
@@ -92,6 +93,7 @@ Gates: 35/35 `source/services/mcp` tests, `pnpm typecheck` clean, `pnpm exec esl
 | connects to legacy HTTP+SSE | real SSE transport |
 | close() shuts every connection down, no child processes | lifecycle teardown against a real child process (pid liveness check) |
 | close() during a slow handshake kills the child and never reports ready | no `ready` snapshot, listener call, or orphan child after close() races the handshake |
+| close() of settled connections leaves no pending grace timer | `process.getActiveResourcesInfo()` shows the close() grace timer cleared once teardown wins |
 | close() during the launcher await never spawns a process | the post-launcher abandonment check stops the spawn itself |
 | tears the spawned process down when the first tools/list fails | a JSON-RPC error on the first catalog fetch closes client + transport before `failed` |
 | maps a mid-call process crash to server_unavailable | connection loss during a call is `server_unavailable`, not `protocol` |
@@ -136,16 +138,28 @@ Fixes for the coordinator findings C1–C4 (`.coord/mcp-code-mode/reviews/coord-
   session is not detected in this slice; the server stays `ready` until a call
   fails. Comment in `connectHttp` and the gaps list below.
 
+## Review round 2
+
+- **close() grace timer kept the event loop alive.** The `Promise.race` timeout in
+  `close()` is now unref'd and cleared in a `finally` once teardown wins, so a
+  finished `close()` leaves no pending timer. Test: `Timeout` resources counted via
+  `process.getActiveResourcesInfo()` before/after closing a settled manager. Mutation
+  check observed: with the timer never cleared, the test fails (2 vs ≤ 1).
+- **projectServers keys must be absolute.** A non-absolute key would have been
+  realpath'd against term2's process cwd; such keys are now ignored with a note
+  (`"projectServers.<key>" is not an absolute path and was ignored.`), and absolute
+  keys still apply (tested).
+
 ## Gate output
 
 ```
 $ NODE_ENV=test pnpm exec vitest run source/services/mcp && pnpm typecheck
  Test Files  2 passed (2)
-      Tests  35 passed (35)
+      Tests  37 passed (37)
 $ tsc --noEmit        (exit 0)
 
 $ pnpm test:related ./source/services/mcp/mcp-config.ts ./source/services/mcp/mcp-connection-manager.ts ./source/services/mcp/mcp-stdio-launcher.ts
-                      → Test Files 2 passed, Tests 35 passed
+                      → Test Files 2 passed, Tests 37 passed
 $ pnpm exec eslint source/services/mcp   → clean
 $ pnpm exec prettier --check source/services/mcp → clean
 ```

@@ -440,6 +440,18 @@ describe('McpConnectionManager', () => {
     });
   });
 
+  it('close() of settled connections leaves no pending grace timer', async () => {
+    const manager = track(new McpConnectionManager({ servers: [stdioCommand()] }));
+    manager.start();
+    await manager.whenSettled();
+    const timersBefore = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+    await manager.close();
+    // A leaked close() grace timer would still be pending here (5s), so the
+    // count could only grow; equality-or-fewer proves it was cleared.
+    const timersAfter = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+    expect(timersAfter).toBeLessThanOrEqual(timersBefore);
+  });
+
   it('does not mark a server failed or notify after close() races list_changed', async () => {
     const manager = track(new McpConnectionManager({ servers: [stdioCommand()] }));
     manager.start();

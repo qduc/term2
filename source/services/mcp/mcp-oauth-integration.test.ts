@@ -241,3 +241,81 @@ describe('runMcpOAuthLogin', () => {
     expect(new URL(urls[0]).origin).toBe(authorizationServer.issuer);
   });
 });
+
+/**
+ * Regression cover for defects found by probing real hosted servers, which the
+ * fixture suite had missed.
+ */
+describe('real-server failure modes', () => {
+  /** A server that refuses every request with a bare 401, like an SSE endpoint. */
+  async function start401Server(): Promise<{ url: string; stop: () => Promise<void> }> {
+    const { createServer } = await import('node:http');
+    const server = createServer((_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'text/plain' }).end('Unauthorized');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as { port: number };
+    return {
+      url: `http://127.0.0.1:${port}/sse`,
+      stop: () =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections?.();
+          server.close(() => resolve());
+        }),
+    };
+  }
+
+  it('routes an SSE transport 401 to needs-auth, not an opaque failure', async () => {
+    // Observed against Asana and Atlassian: the legacy SSE transport reports the
+    // refusal as `SseError: Non-200 status code (401)`, which used to land in
+    // `failed` and left no way to log in.
+    const refuser = await start401Server();
+    try {
+      const created = manager(serverConfig({ name: 'sse-server', transport: 'sse', url: refuser.url }));
+      created.start();
+      await created.whenSettled();
+
+      const snapshot = snapshotOf(created);
+      expect(snapshot.state).toBe('needs-auth');
+      expect(snapshot.error).toContain('/mcp-login sse-server');
+    } finally {
+      await refuser.stop();
+    }
+  });
+
+  it('presents a configured client id instead of attempting registration', async () => {
+    // GitHub's authorization server advertises no registration_endpoint at all,
+    // so a login can only start from a client id registered out of band.
+    const config = serverConfig({ clientId: 'preregistered-client' });
+    await runMcpOAuthLogin({
+      serverName: config.name,
+      serverUrl: config.url ?? '',
+      store,
+      clientId: 'preregistered-client',
+      openBrowser: (url) => {
+        void fetch(url, { redirect: 'follow' }).catch(() => {});
+      },
+    });
+
+    // Nothing was dynamically registered, and the configured id was the one used.
+    expect(authorizationServer.registeredClientIds).toHaveLength(0);
+    expect(store.getTokens(config.url ?? '')).toBeDefined();
+  });
+
+  it('keeps a configured client id out of the credential store', async () => {
+    const config = serverConfig({ clientId: 'preregistered-client' });
+    await runMcpOAuthLogin({
+      serverName: config.name,
+      serverUrl: config.url ?? '',
+      store,
+      clientId: 'preregistered-client',
+      openBrowser: (url) => {
+        void fetch(url, { redirect: 'follow' }).catch(() => {});
+      },
+    });
+
+    // Config owns the id; a persisted copy would go stale if the user changed it.
+    const issuer = store.getTokens(config.url ?? '')?.issuer ?? '';
+    expect(store.getClientInformation(config.url ?? '', issuer)).toBeUndefined();
+  });
+});

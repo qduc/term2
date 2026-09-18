@@ -14,6 +14,7 @@ import {
   SdkError,
   SdkErrorCode,
   SdkHttpError,
+  SseError,
   SSEClientTransport,
   StreamableHTTPClientTransport,
   UnauthorizedError,
@@ -102,6 +103,7 @@ export interface McpOAuthTarget {
   readonly serverName: string;
   readonly serverUrl: string;
   readonly clientMetadataUrl?: string;
+  readonly clientId?: string;
   readonly redirectPorts?: readonly number[];
 }
 
@@ -326,7 +328,13 @@ export class McpConnectionManager implements McpToolSource {
    */
   private isAuthRequired(error: unknown): boolean {
     if (error instanceof UnauthorizedError || error instanceof McpInteractiveLoginRequiredError) return true;
-    return error instanceof SdkHttpError && error.status === 401;
+    if (error instanceof SdkHttpError && error.status === 401) return true;
+    // The legacy SSE transport reports the same 401 as an `SseError` carrying
+    // the status in `code`, because the refused response arrives on the event
+    // stream rather than from a JSON-RPC POST. Observed against real servers
+    // (Asana, Atlassian), which without this land in `failed` with an opaque
+    // "SSE error: Non-200 status code (401)" instead of an actionable login.
+    return error instanceof SseError && error.code === 401;
   }
 
   /**
@@ -428,6 +436,7 @@ export class McpConnectionManager implements McpToolSource {
       serverUrl: config.url,
       store: this.oauthStore,
       ...(config.clientMetadataUrl !== undefined ? { clientMetadataUrl: config.clientMetadataUrl } : {}),
+      ...(config.clientId !== undefined ? { clientId: config.clientId } : {}),
     });
   }
 
@@ -445,6 +454,7 @@ export class McpConnectionManager implements McpToolSource {
       serverName: config.name,
       serverUrl: config.url,
       ...(config.clientMetadataUrl !== undefined ? { clientMetadataUrl: config.clientMetadataUrl } : {}),
+      ...(config.clientId !== undefined ? { clientId: config.clientId } : {}),
       ...(config.redirectPorts !== undefined ? { redirectPorts: config.redirectPorts } : {}),
     };
   }

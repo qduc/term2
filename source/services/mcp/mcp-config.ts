@@ -40,6 +40,14 @@ export interface ResolvedMcpServerConfig {
    */
   readonly clientMetadataUrl?: string;
   /**
+   * A pre-registered OAuth client id, for authorization servers that support
+   * neither CIMD nor Dynamic Client Registration and instead require an app
+   * registered out of band. GitHub is the observed case: its metadata
+   * advertises no `registration_endpoint` at all, so without this the login
+   * cannot begin. Takes precedence over both other paths.
+   */
+  readonly clientId?: string;
+  /**
    * Loopback ports to fall back to when an authorization server only accepts
    * pre-registered redirect URIs (plan D3). An ephemeral port is always tried
    * first, so most servers need no entry here.
@@ -219,6 +227,8 @@ const resolveEntry = (
   if (entry.headers !== undefined && rawHeaders === undefined) return fail('headers must be an object of strings');
   const rawCwd = entry.cwd;
   if (rawCwd !== undefined && typeof rawCwd !== 'string') return fail('cwd must be a string');
+  const rawClientId = entry.clientId;
+  if (rawClientId !== undefined && typeof rawClientId !== 'string') return fail('clientId must be a string');
   const rawClientMetadataUrl = entry.clientMetadataUrl;
   if (rawClientMetadataUrl !== undefined && typeof rawClientMetadataUrl !== 'string') {
     return fail('clientMetadataUrl must be a string');
@@ -249,6 +259,7 @@ const resolveEntry = (
       ? { headers: Object.fromEntries(Object.entries(rawHeaders).map(([k, v]) => [k, expandArg(v)])) }
       : {}),
     ...(rawClientMetadataUrl !== undefined ? { clientMetadataUrl: expandArg(rawClientMetadataUrl) } : {}),
+    ...(rawClientId !== undefined ? { clientId: expandArg(rawClientId) } : {}),
     ...(rawRedirectPorts !== undefined ? { redirectPorts: rawRedirectPorts as number[] } : {}),
     projectEnabledOverride,
   };

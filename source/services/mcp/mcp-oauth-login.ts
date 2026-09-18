@@ -49,6 +49,8 @@ export interface McpOAuthLoginOptions {
   store: McpOAuthStore;
   /** CIMD document URL, when the server config names one. Skips DCR. */
   clientMetadataUrl?: string;
+  /** Pre-registered client id, for servers offering neither DCR nor CIMD. */
+  clientId?: string;
   /**
    * Registered redirect ports to fall back to when the ephemeral port is not
    * acceptable to the authorization server (D3). Tried in order after port 0.
@@ -101,6 +103,7 @@ export async function runMcpOAuthLogin(options: McpOAuthLoginOptions): Promise<M
     serverUrl: options.serverUrl,
     redirectUrl: redirectUri,
     ...(options.clientMetadataUrl !== undefined ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
+    ...(options.clientId !== undefined ? { clientId: options.clientId } : {}),
     onAuthorizationRedirect: (url) => {
       authorizationUrl = url;
     },
@@ -157,6 +160,7 @@ export function createRefreshOnlyProvider(options: {
   serverUrl: string;
   store: McpOAuthStore;
   clientMetadataUrl?: string;
+  clientId?: string;
 }): McpOAuthProvider {
   return new McpOAuthProvider({
     store: options.store,
@@ -165,6 +169,7 @@ export function createRefreshOnlyProvider(options: {
     // builds an authorization URL, which the throw below always preempts.
     redirectUrl: `http://127.0.0.1:0${CALLBACK_PATH}`,
     ...(options.clientMetadataUrl !== undefined ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
+    ...(options.clientId !== undefined ? { clientId: options.clientId } : {}),
     onAuthorizationRedirect: () => {
       throw new McpInteractiveLoginRequiredError(options.serverName);
     },

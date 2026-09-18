@@ -18,6 +18,7 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../utils/shell/sandbox/denied-read-detector.js';
+import { evaluateDecisionShadow, type DecisionShadowResult } from './decision-shadow.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -421,6 +422,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   sessionAccess,
   throwOnError = false,
   retryOptions,
+  decisionShadow = evaluateDecisionShadow,
 }: {
   commands: ShellAutoApprovalCommand[];
   history: ProviderInputItem[];
@@ -436,6 +438,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     sleep?: (ms: number) => Promise<void>;
     random?: () => number;
   };
+  decisionShadow?: typeof evaluateDecisionShadow;
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   void retryOptions;
   const out = new Map<string, ShellAutoApprovalAdvisory>();
@@ -488,6 +491,47 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   const instructions = SHELL_AUTO_APPROVAL_INSTRUCTIONS;
   const prompt = buildPrompt(toEvaluateByLLM, history, manualDecisions);
+  const recordShadow = (advisories: Map<string, ShellAutoApprovalAdvisory>): void => {
+    const shadowModel = settingsService.get('agent.autoApproveDecisionShadowModel');
+    if (!shadowModel) return;
+    const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY || '';
+    const baseUrl = settingsService.get('agent.openrouter.baseUrl');
+    void decisionShadow({
+      model: shadowModel,
+      evidence: prompt,
+      requestCount: toEvaluateByLLM.length,
+      apiKey,
+      ...(baseUrl ? { baseUrl } : {}),
+    })
+      .then((results: DecisionShadowResult[]) => {
+        for (const [index, item] of toEvaluateByLLM.entries()) {
+          const reviewer = advisories.get(item.id);
+          const shadow = results[index];
+          if (!reviewer || !shadow) continue;
+          logger.info('Approval decision shadow comparison', {
+            eventType: 'approval.decision_shadow.compared',
+            requestIndex: index,
+            reviewerModel: autoApproveModel,
+            shadowModel,
+            reviewerApproved: reviewer.approved,
+            reviewerRiskLevel: reviewer.riskLevel,
+            reviewerAuthorization: reviewer.authorization,
+            shadowWouldApprove: shadow.wouldApprove,
+            shadowRiskLevel: shadow.riskLevel,
+            shadowAuthorization: shadow.authorization,
+            shadowConfidence: shadow.confidence,
+            agreement: reviewer.approved === shadow.wouldApprove,
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        logger.warn('Approval decision shadow evaluation failed', {
+          eventType: 'approval.decision_shadow.failed',
+          shadowModel,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  };
   const configuredReasoningEffort = settingsService.get('agent.autoApproveReasoningEffort');
   const elevatedReasoningEffort: ReasoningEffortSetting = configuredReasoningEffort ?? 'low';
   const reasoningEffort: ReasoningEffortSetting = needsElevatedReasoning ? elevatedReasoningEffort : 'none';
@@ -645,7 +689,9 @@ export async function evaluateShellAutoApprovalAdvisories({
 
     if (shouldTryStructured) {
       try {
-        return await tryStructuredMode();
+        const advisories = await tryStructuredMode();
+        recordShadow(advisories);
+        return advisories;
       } catch (error) {
         if (!isUnsupportedStructuredOutputError(error)) {
           throw error;
@@ -659,7 +705,9 @@ export async function evaluateShellAutoApprovalAdvisories({
       }
     }
 
-    return await tryPromptMode();
+    const advisories = await tryPromptMode();
+    recordShadow(advisories);
+    return advisories;
   } catch (error) {
     logger.error('Batch auto-approval evaluation failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -669,13 +717,15 @@ export async function evaluateShellAutoApprovalAdvisories({
       throw error;
     }
 
-    return buildInvalidEvaluationAdvisories({
+    const advisories = buildInvalidEvaluationAdvisories({
       commands: toEvaluateByLLM,
       redSafetyDetails,
       model: autoApproveModel,
       reasoning: 'LLM evaluation encountered an error.',
       isError: true,
     });
+    recordShadow(advisories);
+    return advisories;
   }
 
   return out;

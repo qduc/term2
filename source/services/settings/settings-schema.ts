@@ -260,6 +260,11 @@ export const AgentSettingsSchema = z.object({
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('low')
     .describe('Reasoning effort for risky shell auto-approval reviews'),
+  autoApproveDecisionShadowModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Send approval context to this OpenRouter Decisions model for comparison; never controls approval'),
   subagentExplorerModel: z
     .string()
     .min(1)
@@ -769,6 +774,7 @@ export interface SettingsWithSources {
     autoApproveModel: SettingWithSource<string>;
     autoApproveProvider: SettingWithSource<string | undefined>;
     autoApproveReasoningEffort: SettingWithSource<string>;
+    autoApproveDecisionShadowModel: SettingWithSource<string | undefined>;
     subagentExplorerModel: SettingWithSource<string | undefined>;
     subagentExplorerProvider: SettingWithSource<string | undefined>;
     subagentExplorerReasoningEffort: SettingWithSource<string | undefined>;
@@ -959,6 +965,7 @@ export const SETTING_KEYS = {
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   AGENT_AUTO_APPROVE_REASONING_EFFORT: 'agent.autoApproveReasoningEffort',
+  AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL: 'agent.autoApproveDecisionShadowModel',
   AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
   AGENT_SUBAGENT_EXPLORER_PROVIDER: 'agent.subagentExplorerProvider',
   AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
@@ -1046,6 +1053,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_CHORE_MODEL,
   SETTING_KEYS.AGENT_CHORE_PROVIDER,
   SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
@@ -1238,6 +1246,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     autoApproveModel: 'gpt-4o-mini',
     autoApproveProvider: undefined,
     autoApproveReasoningEffort: 'low',
+    autoApproveDecisionShadowModel: undefined,
     subagentExplorerModel: undefined,
     subagentExplorerProvider: undefined,
     subagentExplorerReasoningEffort: undefined,

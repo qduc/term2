@@ -113,6 +113,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.autoApproveModel',
     'agent.autoApproveProvider',
     'agent.autoApproveReasoningEffort',
+    'agent.autoApproveDecisionShadowModel',
   ],
   'Subagent launch/retention — next child run or registry operation': [
     'agent.subagentExplorerModel',

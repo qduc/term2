@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(145);
-  expect(new Set(exportedKeys).size).toBe(145);
+  expect(exportedKeys).toHaveLength(146);
+  expect(new Set(exportedKeys).size).toBe(146);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -239,6 +239,8 @@ it('auto-approval reasoning effort defaults to low and is runtime modifiable', (
   expect(AgentSettingsSchema.parse({}).autoApproveReasoningEffort).toBe('low');
   expect(DEFAULT_SETTINGS.agent.autoApproveReasoningEffort).toBe('low');
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT)).toBe(true);
+  expect(AgentSettingsSchema.parse({}).autoApproveDecisionShadowModel).toBeUndefined();
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL)).toBe(true);
   expect(() => AgentSettingsSchema.parse({ autoApproveReasoningEffort: 'default' })).toThrow();
 });
 

@@ -5,7 +5,8 @@
 Status: **Milestones 0, 1, and 2 complete**. Merged to `main`: the `McpToolSource` contract
 (`360f7a36`), the script surface (`d0288cce`), config + connection manager (`f3bb6916`), app
 wiring (`1077e20d`), the OAuth core — credential store, provider adapter, shared loopback
-helper, offline fixtures (`48053aaa`) — and the OAuth integration that resolved D1–D4.
+helper, offline fixtures (`48053aaa`) — the OAuth integration that resolved D1–D4, the
+fixes three real servers exposed, and the `/mcp` + startup-notice user surface.
 
 **Resume here:** Milestone 3 only, and it stays evidence-gated. `tools.search` in particular
 has now been **checked against its gate and refused** (2026-09-18) — see "Catalog cost measured
@@ -187,6 +188,34 @@ nobody can type.
 
 Exit met: `mcp-oauth-integration.test.ts` drives a real protected fixture through needs-auth →
 login → reconnect → callable tool, plus silent refresh and both sides of the D2 gate.
+
+## User-facing surface (2026-09-18)
+
+A UX review after Milestone 2 found the feature had been built so the **agent** could
+see everything and the **user** could see nothing. Two fixes, both shipped:
+
+- **Notices reached only the log file.** `onNotice`/`onNote` were wired to `logger.warn`,
+  which only reaches the console when `debugLogging` is on. A server that failed or needed
+  a login was therefore silent in the UI, with its carefully-worded remedy written where
+  nobody looks. `source/hooks/use-mcp-notices.ts` now surfaces the states a user can act on
+  (`needs-auth`, `failed`) as system messages. It reports servers that settled before mount
+  as well as after — they connect concurrently with startup, so the interesting state often
+  lands before first render and fires no further change event — announces each state once,
+  and stays silent for healthy servers.
+- **No status view existed.** `/mcp` (`source/commands/mcp-status-command.ts`) lists every
+  server with state, tool count, provenance and error. With nothing configured it names the
+  user config file, which is otherwise undiscoverable since the plan ships no settings UI.
+
+Rendering lives in `source/services/mcp/mcp-status.ts` as pure functions over snapshots, so
+`/mcp` and the notices cannot drift apart in wording.
+
+Consequence worth keeping: **error strings no longer name their own server.** Every render
+context already supplies the name, and self-naming produced
+`MCP server "github" needs login: server "github" requires OAuth login — run /mcp-login
+github`. Keep new error text as a bare predicate or remedy.
+
+Not done: the opt-in errors still embed a JSON snippet mid-sentence, which wraps awkwardly
+in a narrow terminal.
 
 ## What real servers taught us (2026-09-18)
 

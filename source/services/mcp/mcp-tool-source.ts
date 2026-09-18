@@ -13,7 +13,12 @@ export type McpServerProvenance = 'user' | 'project';
 
 export type McpTransportKind = 'stdio' | 'streamable-http' | 'sse';
 
-export type McpServerState = 'connecting' | 'ready' | 'failed';
+/**
+ * `needs-auth` is a distinct resting state, not a failure: the server answered
+ * correctly and asked for an OAuth login that only the user can start
+ * (plan decision D1). `error` carries the `/mcp-login` instruction.
+ */
+export type McpServerState = 'connecting' | 'ready' | 'failed' | 'needs-auth';
 
 export interface McpToolAnnotations {
   readonly title?: string;
@@ -40,7 +45,10 @@ export interface McpServerSnapshot {
   readonly provenance: McpServerProvenance;
   readonly transport: McpTransportKind;
   readonly state: McpServerState;
-  /** Human-readable reason when `state === 'failed'`, including sandbox override hints. */
+  /**
+   * Human-readable reason when `state` is `failed` or `needs-auth`, including
+   * sandbox override hints and the `/mcp-login` instruction.
+   */
   readonly error?: string;
   /** Empty unless `state === 'ready'`. */
   readonly tools: readonly McpToolDescriptor[];

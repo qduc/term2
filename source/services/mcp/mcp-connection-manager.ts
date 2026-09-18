@@ -13,8 +13,10 @@ import {
   Client,
   SdkError,
   SdkErrorCode,
+  SdkHttpError,
   SSEClientTransport,
   StreamableHTTPClientTransport,
+  UnauthorizedError,
 } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { McpCallError } from './mcp-tool-source.js';
@@ -23,6 +25,8 @@ import type { McpServerSnapshot, McpToolDescriptor, McpToolSource } from './mcp-
 export { McpCallError };
 import { realpathOrSelf, type ResolvedMcpServerConfig } from './mcp-config.js';
 import { unsandboxedStdioLauncher, type StdioLauncher } from './mcp-stdio-launcher.js';
+import { createRefreshOnlyProvider, McpInteractiveLoginRequiredError, mcpNeedsAuthMessage } from './mcp-oauth-login.js';
+import type { McpOAuthStore } from './mcp-oauth-store.js';
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 const STDERR_TAIL_CHARS = 2000;
@@ -41,9 +45,20 @@ export interface McpConnectionManagerOptions {
   stdioLauncher?: StdioLauncher;
   /** Receives one notice per server that enters the failed state. */
   onNotice?: (message: string) => void;
+  /**
+   * Credential storage for OAuth-protected HTTP servers. Without it no stored
+   * token is ever presented and such a server resolves to `needs-auth`.
+   */
+  oauthStore?: McpOAuthStore;
+  /**
+   * False in non-interactive runs, where no one can complete a browser login.
+   * A server needing one then resolves to `failed` with that reason, rather
+   * than to `needs-auth` naming a command that cannot be typed.
+   */
+  interactive?: boolean;
 }
 
-type ConnectionState = 'connecting' | 'ready' | 'failed';
+type ConnectionState = 'connecting' | 'ready' | 'failed' | 'needs-auth';
 
 interface Connection {
   readonly config: ResolvedMcpServerConfig;
@@ -67,6 +82,29 @@ const projectOptInError = (
     workspaceRoot ?? '<workspace root>'
   }": { "${name}": { "enabled": true } } }\` to ${userConfigPath ?? 'the user mcp.json'}`;
 
+/**
+ * Plan decision D2 (2026-09-18): a project `.mcp.json` may name any URL, so an
+ * OAuth login it provokes would send the user to an issuer the repository chose.
+ * Project HTTP servers therefore need the same workspace-scoped opt-in as
+ * project stdio servers before any credential flow may begin.
+ */
+const projectOAuthOptInError = (
+  name: string,
+  workspaceRoot: string | undefined,
+  userConfigPath: string | undefined,
+): string =>
+  `project server "${name}" requires an OAuth login, which a project config may not start on its own: enable it for this workspace by adding \`"projectServers": { "${
+    workspaceRoot ?? '<workspace root>'
+  }": { "${name}": { "enabled": true } } }\` to ${userConfigPath ?? 'the user mcp.json'}, then run /mcp-login ${name}`;
+
+/** Everything `/mcp-login` needs to drive a flow for one configured server. */
+export interface McpOAuthTarget {
+  readonly serverName: string;
+  readonly serverUrl: string;
+  readonly clientMetadataUrl?: string;
+  readonly redirectPorts?: readonly number[];
+}
+
 export class McpConnectionManager implements McpToolSource {
   private readonly connections = new Map<string, Connection>();
   private readonly listeners = new Set<() => void>();
@@ -74,6 +112,8 @@ export class McpConnectionManager implements McpToolSource {
   private readonly userConfigPath?: string;
   private readonly workspaceRoot?: string;
   private readonly onNotice?: (message: string) => void;
+  private readonly oauthStore?: McpOAuthStore;
+  private readonly interactive: boolean;
   private readonly noticedFailures = new Set<string>();
   private snapshotCache: readonly McpServerSnapshot[] = [];
   private started = false;
@@ -85,6 +125,8 @@ export class McpConnectionManager implements McpToolSource {
     this.userConfigPath = options.userConfigPath;
     this.workspaceRoot = options.workspaceRoot;
     this.onNotice = options.onNotice;
+    this.oauthStore = options.oauthStore;
+    this.interactive = options.interactive ?? true;
     for (const config of options.servers) {
       if (this.connections.has(config.name)) {
         this.connections.set(config.name, {
@@ -262,10 +304,62 @@ export class McpConnectionManager implements McpToolSource {
       // The failure may itself be caused by close() aborting the connect;
       // never record a failure or notify after close.
       if (this.isAbandoned(connection)) return;
+      if (this.isAuthRequired(error)) {
+        this.markAuthRequired(connection);
+        return;
+      }
       const detail = error instanceof Error ? error.message : String(error);
       const tail = connection.stderrTail ? ` stderr: ${connection.stderrTail}` : '';
       this.markFailed(connection, `${detail}${tail}`);
     }
+  }
+
+  /**
+   * All three shapes mean the same thing: the server wants a credential this
+   * session does not have.
+   *
+   * The `SdkHttpError` case is not redundant — the transport only raises
+   * `UnauthorizedError` when an auth provider is attached, and one is attached
+   * only once a credential is stored. A server nobody has logged in to yet
+   * therefore reports its 401 as a plain HTTP error, which is precisely the
+   * case that must reach `needs-auth`.
+   */
+  private isAuthRequired(error: unknown): boolean {
+    if (error instanceof UnauthorizedError || error instanceof McpInteractiveLoginRequiredError) return true;
+    return error instanceof SdkHttpError && error.status === 401;
+  }
+
+  /**
+   * Routes a server that asked for a login to the right resting state: an
+   * actionable `needs-auth` interactively, a `failed` that says why when no one
+   * can complete a browser flow (non-interactive) or when a project config is
+   * not allowed to start one (D2).
+   */
+  private markAuthRequired(connection: Connection): void {
+    const { config } = connection;
+    if (!this.oauthEligible(config)) {
+      this.markFailed(
+        connection,
+        projectOAuthOptInError(config.name, realpathOrSelf(this.workspaceRoot ?? ''), this.userConfigPath),
+      );
+      return;
+    }
+    if (!this.interactive) {
+      this.markFailed(
+        connection,
+        `server "${config.name}" requires an OAuth login, which cannot be completed in a non-interactive run: authenticate once with \`/mcp-login ${config.name}\` in an interactive session and the stored token will refresh here`,
+      );
+      return;
+    }
+    if (this.isAbandoned(connection)) return;
+    connection.state = 'needs-auth';
+    connection.error = `server "${config.name}" ${mcpNeedsAuthMessage(config.name)}`;
+    connection.tools = [];
+    if (!this.noticedFailures.has(config.name)) {
+      this.noticedFailures.add(config.name);
+      this.onNotice?.(`MCP server "${config.name}" ${mcpNeedsAuthMessage(config.name)}`);
+    }
+    this.rebuildSnapshot();
   }
 
   private async connectStdio(connection: Connection): Promise<void> {
@@ -298,16 +392,81 @@ export class McpConnectionManager implements McpToolSource {
     if (config.url === undefined) throw new Error('http/sse server has no url');
     const headers = config.headers ?? {};
     const url = new URL(config.url);
+    // An auth provider is attached only when a credential is already stored, so
+    // startup never runs discovery or dynamic client registration against a URL
+    // nobody has logged in to yet. Present tokens refresh silently; an absent
+    // one falls through to the 401 that `connectOne` maps to `needs-auth`.
+    const authProvider = this.refreshOnlyAuthProvider(config);
+    const options = { requestInit: { headers }, ...(authProvider ? { authProvider } : {}) };
     const transport =
       config.transport === 'sse'
-        ? new SSEClientTransport(url, { requestInit: { headers } })
-        : new StreamableHTTPClientTransport(url, { requestInit: { headers } });
+        ? new SSEClientTransport(url, options)
+        : new StreamableHTTPClientTransport(url, options);
     // Stored like stdio so teardown is uniform across transports.
     connection.transport = transport;
     // Known gap: HTTP/SSE transports do not observe a dropped remote session
     // (no onclose signal we can rely on here), so such a server stays `ready`
     // until a call fails. Not handled in this slice.
     await this.connectClient(connection, transport);
+  }
+
+  /**
+   * A provider that refreshes a stored credential but never starts a login, or
+   * `undefined` when there is nothing stored to refresh.
+   *
+   * D2: a project server that has not been opted in gets no provider at all, so
+   * a repository cannot cause even a discovery request to an issuer it chose.
+   */
+  private refreshOnlyAuthProvider(
+    config: ResolvedMcpServerConfig,
+  ): ReturnType<typeof createRefreshOnlyProvider> | undefined {
+    if (!this.oauthStore || config.url === undefined) return undefined;
+    if (!this.oauthEligible(config)) return undefined;
+    if (this.oauthStore.getTokens(config.url) === undefined) return undefined;
+    return createRefreshOnlyProvider({
+      serverName: config.name,
+      serverUrl: config.url,
+      store: this.oauthStore,
+      ...(config.clientMetadataUrl !== undefined ? { clientMetadataUrl: config.clientMetadataUrl } : {}),
+    });
+  }
+
+  /** Whether this server's config is allowed to hold or obtain OAuth credentials (D2). */
+  private oauthEligible(config: ResolvedMcpServerConfig): boolean {
+    return config.provenance === 'user' || config.projectEnabledOverride === true;
+  }
+
+  /** The login details for a server, or undefined when it may not use OAuth. */
+  oauthTarget(name: string): McpOAuthTarget | undefined {
+    const connection = this.connections.get(name);
+    const config = connection?.config;
+    if (!config || config.url === undefined || !this.oauthEligible(config)) return undefined;
+    return {
+      serverName: config.name,
+      serverUrl: config.url,
+      ...(config.clientMetadataUrl !== undefined ? { clientMetadataUrl: config.clientMetadataUrl } : {}),
+      ...(config.redirectPorts !== undefined ? { redirectPorts: config.redirectPorts } : {}),
+    };
+  }
+
+  /**
+   * Re-runs one server's connection, used after `/mcp-login` stores a token.
+   *
+   * Clears the previous failure first so a re-entered failure is noticed (and
+   * announced) again rather than being swallowed as a duplicate.
+   */
+  async reconnect(name: string): Promise<void> {
+    const connection = this.connections.get(name);
+    if (!connection || this.isAbandoned(connection)) return;
+    await this.teardown(connection);
+    if (this.isAbandoned(connection)) return;
+    this.noticedFailures.delete(name);
+    connection.state = 'connecting';
+    delete connection.error;
+    connection.tools = [];
+    delete connection.stderrTail;
+    this.rebuildSnapshot();
+    await this.connectOne(connection);
   }
 
   private async connectClient(

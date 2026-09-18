@@ -164,8 +164,12 @@ export const renderMcpCatalog = (catalog: McpCatalog): string => {
       .filter((tool) => tool[MCP_TOOL_BINDING].server === server.name)
       .map((tool) => clampOneLine(tool.name, 80));
     const serverName = clampOneLine(server.name, 80);
+    // `needs-auth` carries the login instruction, so it is shown for the same
+    // reason a failure is: without it the model only sees an unusable server.
     const error =
-      server.state === 'failed' && server.error ? ` — [server-provided error] ${clampOneLine(server.error, 160)}` : '';
+      (server.state === 'failed' || server.state === 'needs-auth') && server.error
+        ? ` — [server-provided error] ${clampOneLine(server.error, 160)}`
+        : '';
     lines.push(
       `- ${serverName}: ${server.state}, ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}${error}`,
     );

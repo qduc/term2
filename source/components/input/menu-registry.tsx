@@ -12,6 +12,7 @@ import { CopyMenuSession } from './CopyMenuSession.js';
 import { SubagentPoolMenuSession } from './SubagentPoolMenuSession.js';
 import { ResumeMenuSession } from './ResumeMenuSession.js';
 import { ProfileMenuSession } from './ProfileMenuSession.js';
+import { McpMenuSession } from './McpMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -35,6 +36,7 @@ const defaultRegistry: MenuRegistry = {
   copy: CopyMenuSession,
   rewind: RewindMenuSession,
   providers: ProviderMenuSession,
+  mcp: McpMenuSession,
   slash: SlashMenuSession as React.ComponentType<any>,
   settings: SettingsMenuSession as React.ComponentType<any>,
   settings_value: SettingsValueMenuSession as React.ComponentType<any>,

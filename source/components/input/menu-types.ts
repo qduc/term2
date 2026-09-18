@@ -100,7 +100,8 @@ export type MenuFrame =
   | { id: FrameId; kind: 'profile'; binding: TextBinding }
   | { id: FrameId; kind: 'copy'; items: CopySelection[] }
   | { id: FrameId; kind: 'rewind'; items: RewindItem[]; initialDisposition: RewindDisposition }
-  | { id: FrameId; kind: 'providers'; returnPoint: ReturnPoint };
+  | { id: FrameId; kind: 'providers'; returnPoint: ReturnPoint }
+  | { id: FrameId; kind: 'mcp'; returnPoint: ReturnPoint };
 
 export type MenuState = Readonly<{
   editor: EditorSnapshot;
@@ -128,7 +129,8 @@ export type FrameSpec = FrameSpecOf;
 export type UnboundFrameSpec =
   | Omit<Extract<MenuFrame, { kind: 'copy' }>, 'id'>
   | Omit<Extract<MenuFrame, { kind: 'rewind' }>, 'id'>
-  | Omit<Extract<MenuFrame, { kind: 'providers' }>, 'id' | 'returnPoint'>;
+  | Omit<Extract<MenuFrame, { kind: 'providers' }>, 'id' | 'returnPoint'>
+  | Omit<Extract<MenuFrame, { kind: 'mcp' }>, 'id' | 'returnPoint'>;
 
 export type OpenOptions = Readonly<{
   buffer?: BufferChange;

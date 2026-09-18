@@ -12,6 +12,8 @@ import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
 import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import type { McpConnectionManager } from '../../services/mcp/mcp-connection-manager.js';
+import type { McpConfigController } from '../../services/mcp/mcp-config-controller.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
@@ -129,6 +131,9 @@ export type BottomAreaProps = {
   onCopySelection?: (selection: CopySelection) => void;
   listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
   resumeConversation?: (target?: string) => void | Promise<void>;
+  mcpManager?: McpConnectionManager;
+  mcpConfigController?: McpConfigController;
+  onMcpLogin?: (name: string) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -216,6 +221,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   onCopySelection,
   listConversations,
   resumeConversation,
+  mcpManager,
+  mcpConfigController,
+  onMcpLogin,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -468,6 +476,9 @@ const BottomArea: FC<BottomAreaProps> = ({
           onCopySelection={onCopySelection}
           listConversations={listConversations}
           resumeConversation={resumeConversation}
+          mcpManager={mcpManager}
+          mcpConfigController={mcpConfigController}
+          onMcpLogin={onMcpLogin}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

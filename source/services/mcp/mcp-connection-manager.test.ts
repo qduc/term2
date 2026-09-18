@@ -60,6 +60,16 @@ const fixtureGone = async (pidFile: string): Promise<boolean> => {
 };
 
 describe('McpConnectionManager', () => {
+  it('reconciles a changed server set without replacing the tool source', async () => {
+    const launcher = vi.fn(async (spec: StdioLaunchSpec) => spec);
+    const manager = new McpConnectionManager({ servers: [], stdioLauncher: launcher });
+    manager.start();
+    await manager.replaceServers([{ ...stdioCommand(), name: 'added' }]);
+    expect(manager.snapshot().map((server) => server.name)).toEqual(['added']);
+    await manager.replaceServers([]);
+    expect(manager.snapshot()).toEqual([]);
+    await manager.close();
+  });
   const httpFixtures: Array<{ stop: () => void }> = [];
   const managers: McpConnectionManager[] = [];
   const tempDirs: string[] = [];

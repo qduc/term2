@@ -223,6 +223,36 @@ export class McpConnectionManager implements McpToolSource {
     );
   }
 
+  /** Reconciles edited config while preserving this stable tool-source object. */
+  async replaceServers(configs: readonly ResolvedMcpServerConfig[]): Promise<void> {
+    if (this.closed) return;
+    const nextByName = new Map(configs.map((config) => [config.name, config]));
+    const connect: Connection[] = [];
+
+    for (const [name, connection] of this.connections) {
+      const next = nextByName.get(name);
+      if (next && JSON.stringify(next) === JSON.stringify(connection.config)) {
+        nextByName.delete(name);
+        continue;
+      }
+      connection.closing = true;
+      await this.teardown(connection);
+      this.connections.delete(name);
+      this.noticedFailures.delete(name);
+    }
+
+    for (const config of configs) {
+      if (!nextByName.has(config.name)) continue;
+      const connection: Connection = { config, state: 'connecting', tools: [] };
+      this.connections.set(config.name, connection);
+      connect.push(connection);
+    }
+    this.rebuildSnapshot();
+    const settling = connect.map((connection) => this.connectOne(connection));
+    this.settlePromise = Promise.all(settling).then(() => undefined);
+    await this.settlePromise;
+  }
+
   /**
    * Closes and clears this connection's client and transport, waiting for the
    * closes to finish (bounded by the caller). Clearing first means a close()

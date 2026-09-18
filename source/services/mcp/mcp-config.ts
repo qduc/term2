@@ -33,6 +33,18 @@ export interface ResolvedMcpServerConfig {
   readonly cwd?: string;
   readonly url?: string;
   readonly headers?: Readonly<Record<string, string>>;
+  /**
+   * CIMD: an HTTPS document the authorization server fetches client metadata
+   * from, which lets the login skip Dynamic Client Registration (plan D4 keeps
+   * DCR only as the fallback when this is absent).
+   */
+  readonly clientMetadataUrl?: string;
+  /**
+   * Loopback ports to fall back to when an authorization server only accepts
+   * pre-registered redirect URIs (plan D3). An ephemeral port is always tried
+   * first, so most servers need no entry here.
+   */
+  readonly redirectPorts?: readonly number[];
   /** `projectServers."<workspace root>".<name>.enabled` from user config; only set on project entries. */
   readonly projectEnabledOverride?: boolean;
   /** Why this entry is unusable; always yields a `failed` snapshot. */
@@ -207,6 +219,18 @@ const resolveEntry = (
   if (entry.headers !== undefined && rawHeaders === undefined) return fail('headers must be an object of strings');
   const rawCwd = entry.cwd;
   if (rawCwd !== undefined && typeof rawCwd !== 'string') return fail('cwd must be a string');
+  const rawClientMetadataUrl = entry.clientMetadataUrl;
+  if (rawClientMetadataUrl !== undefined && typeof rawClientMetadataUrl !== 'string') {
+    return fail('clientMetadataUrl must be a string');
+  }
+  const rawRedirectPorts = entry.redirectPorts;
+  if (
+    rawRedirectPorts !== undefined &&
+    (!Array.isArray(rawRedirectPorts) ||
+      rawRedirectPorts.some((p) => typeof p !== 'number' || !Number.isInteger(p) || p < 1 || p > 65535))
+  ) {
+    return fail('redirectPorts must be an array of port numbers');
+  }
 
   const expandArg = (value: string): string => (expandVariables ? expandValue(value, env) : value);
   const transport: McpTransportKind = type === 'http' ? 'streamable-http' : type;
@@ -224,6 +248,8 @@ const resolveEntry = (
     ...(rawHeaders !== undefined
       ? { headers: Object.fromEntries(Object.entries(rawHeaders).map(([k, v]) => [k, expandArg(v)])) }
       : {}),
+    ...(rawClientMetadataUrl !== undefined ? { clientMetadataUrl: expandArg(rawClientMetadataUrl) } : {}),
+    ...(rawRedirectPorts !== undefined ? { redirectPorts: rawRedirectPorts as number[] } : {}),
     projectEnabledOverride,
   };
 };

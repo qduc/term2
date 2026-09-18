@@ -262,3 +262,67 @@ describe('loadMcpConfig', () => {
     expect(result.userConfigPath).not.toMatch(/\.mcp\.json$/);
   });
 });
+
+describe('OAuth fields (plan decisions D3 and D4)', () => {
+  it('carries clientMetadataUrl and redirectPorts through to the resolved entry', async () => {
+    const { servers } = await loadMcpConfig({
+      files: readFile({
+        'mcp.json': JSON.stringify({
+          mcpServers: {
+            linear: {
+              url: 'https://mcp.linear.app/mcp',
+              clientMetadataUrl: 'https://term2.example/client.json',
+              redirectPorts: [33418, 33419],
+            },
+          },
+        }),
+      }),
+    });
+    expect(servers[0]).toMatchObject({
+      clientMetadataUrl: 'https://term2.example/client.json',
+      redirectPorts: [33418, 33419],
+    });
+  });
+
+  it('omits both fields when the entry does not set them, so DCR stays the fallback', async () => {
+    const { servers } = await loadMcpConfig({
+      files: readFile({ 'mcp.json': JSON.stringify({ mcpServers: { plain: { url: 'https://example.com/mcp' } } }) }),
+    });
+    expect(servers[0].clientMetadataUrl).toBeUndefined();
+    expect(servers[0].redirectPorts).toBeUndefined();
+  });
+
+  it('rejects a redirect port outside the valid range rather than binding something unexpected', async () => {
+    const { servers } = await loadMcpConfig({
+      files: readFile({
+        'mcp.json': JSON.stringify({ mcpServers: { bad: { url: 'https://example.com/mcp', redirectPorts: [70000] } } }),
+      }),
+    });
+    expect(servers[0].error).toContain('redirectPorts');
+  });
+
+  it('rejects a non-string clientMetadataUrl', async () => {
+    const { servers } = await loadMcpConfig({
+      files: readFile({
+        'mcp.json': JSON.stringify({ mcpServers: { bad: { url: 'https://example.com/mcp', clientMetadataUrl: 5 } } }),
+      }),
+    });
+    expect(servers[0].error).toContain('clientMetadataUrl');
+  });
+
+  it('expands ${VAR} in a user-config clientMetadataUrl but not a project one', async () => {
+    const { servers } = await loadMcpConfig({
+      env: { HOST: 'term2.example' },
+      files: readFile({
+        'mcp.json': JSON.stringify({
+          mcpServers: { u: { url: 'https://a/mcp', clientMetadataUrl: 'https://${HOST}/c.json' } },
+        }),
+        '.mcp.json': JSON.stringify({
+          mcpServers: { p: { url: 'https://b/mcp', clientMetadataUrl: 'https://${HOST}/c.json' } },
+        }),
+      }),
+    });
+    expect(servers.find((s) => s.name === 'u')?.clientMetadataUrl).toBe('https://term2.example/c.json');
+    expect(servers.find((s) => s.name === 'p')?.clientMetadataUrl).toBe('https://${HOST}/c.json');
+  });
+});

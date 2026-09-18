@@ -45,6 +45,8 @@ import type { RewindDisposition } from './commands/rewind-command.js';
 import { buildRewindItems } from './utils/conversation/rewind-items.js';
 import { tryExecuteSlashCommand } from './utils/slash-command-dispatch.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
+import type { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
+import type { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import { deriveInputOwner } from './lib/input-owner.js';
 import { publishHarnessInputState } from './lib/harness-input-idle.js';
@@ -134,6 +136,9 @@ interface AppProps {
   onHasConversationContent?: (hasContent: boolean) => void;
   skillsService?: SkillsService;
   terminalTitleBase: string;
+  /** Null when this session configured no MCP servers; /mcp-login then says so. */
+  mcpManager?: McpConnectionManager | null;
+  mcpOAuthStore?: McpOAuthStore | null;
 }
 
 const App: FC<AppProps> = ({
@@ -158,6 +163,8 @@ const App: FC<AppProps> = ({
   onHasConversationContent,
   skillsService,
   terminalTitleBase,
+  mcpManager = null,
+  mcpOAuthStore = null,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -870,6 +877,8 @@ const App: FC<AppProps> = ({
     turnInFlight: isProcessing,
     listConversations: listSavedConversations,
     resumeConversation,
+    mcpManager,
+    mcpOAuthStore,
   });
 
   const handleRewindSelect = useCallback(

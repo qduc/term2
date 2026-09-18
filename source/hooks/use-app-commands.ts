@@ -17,6 +17,9 @@ import { createQuitSlashCommand } from '../commands/quit-command.js';
 import { createModelSlashCommand } from '../commands/model-command.js';
 import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.js';
 import { createSandboxSlashCommand } from '../commands/sandbox-command.js';
+import { createMcpLoginCommand } from '../commands/mcp-login-command.js';
+import type { McpConnectionManager } from '../services/mcp/mcp-connection-manager.js';
+import type { McpOAuthStore } from '../services/mcp/mcp-oauth-store.js';
 import { createEffortSlashCommand } from '../commands/effort-command.js';
 import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
@@ -63,6 +66,9 @@ interface UseAppCommandsProps {
   turnInFlight?: boolean;
   listConversations: () => ConversationListEntry[];
   resumeConversation: (target?: string) => void | Promise<void>;
+  /** Null when this session configured no MCP servers. Drives /mcp-login. */
+  mcpManager?: McpConnectionManager | null;
+  mcpOAuthStore?: McpOAuthStore | null;
 }
 
 // Re-export for backward compat
@@ -101,6 +107,8 @@ export const useAppCommands = ({
   turnInFlight = false,
   listConversations,
   resumeConversation,
+  mcpManager = null,
+  mcpOAuthStore = null,
 }: UseAppCommandsProps) => {
   const { togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -231,6 +239,7 @@ export const useAppCommands = ({
         requestModeSwitchConfirm,
       }),
       createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
+      createMcpLoginCommand({ manager: mcpManager, store: mcpOAuthStore, addSystemMessage }),
       {
         name: 'providers',
         description: 'Manage API providers (list, add, edit, delete)',
@@ -249,6 +258,8 @@ export const useAppCommands = ({
     exit,
     getSessionUsage,
     refreshProviderUsage,
+    mcpManager,
+    mcpOAuthStore,
     messages,
     replaceInput,
     settingsService,

@@ -2,19 +2,18 @@
 
 ## Resume here
 
-Status: **Milestones 0 and 1 complete**; **Milestone 2 half complete**. Merged to `main`:
-the `McpToolSource` contract (`360f7a36`), the script surface (`d0288cce`), config + connection
-manager (`f3bb6916`), app wiring (`1077e20d`), and the OAuth core — credential store, provider
-adapter, shared loopback helper, offline fixtures (`48053aaa`). Full unit suite green at
-`1077e20d` (626 files / 8689 tests).
+Status: **Milestones 0, 1, and 2 complete**. Merged to `main`: the `McpToolSource` contract
+(`360f7a36`), the script surface (`d0288cce`), config + connection manager (`f3bb6916`), app
+wiring (`1077e20d`), the OAuth core — credential store, provider adapter, shared loopback
+helper, offline fixtures (`48053aaa`) — and the OAuth integration that resolved D1–D4.
 
-**Resume here:** the rest of Milestone 2 (login trigger, catalog `needs-auth` state, connection-
-manager OAuth integration, gateway/non-interactive behavior) is blocked on four user decisions
-recorded in `.coord/mcp-code-mode/PARKED-DECISIONS.md` (D1 login trigger, D2 project HTTP + OAuth,
-D3 redirect ports, D4 DCR fallback). Do not implement those without an answer. Milestone 3 stays
-evidence-gated. Known gaps carried forward: no auto-reconnect after a server fails; HTTP/SSE session
-drop is not detected; the gateway composes no manager yet; no provider-driven end-to-end CLI test
-(script → real stdio server is covered).
+**Resume here:** Milestone 3 only, and it stays evidence-gated — do not start an item there
+without telemetry or a concrete server that needs it. Known gaps carried forward: no
+auto-reconnect after a server fails (`/mcp-login` reconnects one server on demand, nothing
+retries on its own); HTTP/SSE session drop is still not detected; **the gateway composes no
+manager, so an OAuth login has no web path** (the `oauth_login` assertion purpose in
+`source/gateway/contracts.ts` is the seam to reuse when one is wanted); no provider-driven
+end-to-end CLI test (script → real stdio server is covered).
 
 Before touching this area, also read:
 
@@ -153,15 +152,40 @@ Exit: every Milestone 0 test server except the OAuth one is callable from a scri
 approval, in interactive and non-interactive modes; provider black-box coverage for the
 new `run_code` description shape.
 
-### Milestone 2 — OAuth remote servers — core merged (`48053aaa`), rest blocked on D1–D4
+### Milestone 2 — OAuth remote servers — complete
 
-- OAuth 2.1 + PKCE via the SDK's auth provider interface, token storage and refresh.
-- Client ID Metadata Documents first; Dynamic Client Registration only as a fallback
-  (DCR is deprecated in `2026-07-28`).
-- Evaluate reuse of provider OAuth plumbing — see
-  [provider OAuth independence](provider-oauth-independence.md).
+Core merged at `48053aaa` (store, `OAuthClientProvider` adapter, shared loopback helper in
+`source/lib/oauth-loopback.ts`, offline fixtures). The integration on top of it resolved the
+four decisions parked in `.coord/mcp-code-mode/PARKED-DECISIONS.md`:
 
-Exit: the OAuth test server works end to end, including token refresh.
+- **D1 — login trigger: explicit `/mcp-login <server>`.** term2 never opens a browser on its
+  own. A server wanting a credential rests in the new `needs-auth` state whose `error` names
+  the command. Rationale: no surprise browser popups, and the trigger reads the same for user
+  and project servers.
+- **D2 — project HTTP + OAuth: require the workspace-scoped user opt-in**, the same one
+  project stdio servers need. A project entry without it is `failed` with the exact config
+  line, gets no auth provider at all (so no discovery or DCR fires against a
+  repository-chosen issuer), and `oauthTarget()` returns `undefined` so `/mcp-login` refuses
+  it. Chosen over merely displaying the issuer: a click should not be the only thing between
+  a cloned repo and an attacker-chosen authorization server.
+- **D3 — redirect ports: ephemeral first, configured list as fallback.** `redirectPorts` is
+  per-server, because the allow-list belongs to that server's authorization server.
+- **D4 — keep the DCR fallback.** `clientMetadataUrl` (CIMD) is tried first when configured;
+  servers that have not adopted CIMD still register dynamically.
+
+One design point worth keeping: an auth provider is attached to a transport **only once a
+credential is stored**. Startup therefore never runs discovery or dynamic registration against
+a URL nobody has logged in to, while an expired access token still refreshes silently
+mid-session. The consequence is that an unauthenticated server's 401 arrives as a plain
+`SdkHttpError` rather than `UnauthorizedError` — the transport only raises the latter when a
+provider is present — so both shapes must map to `needs-auth`.
+
+Non-interactive runs refresh a stored credential normally but report a `failed` state
+explaining that the login must happen in an interactive session, rather than naming a command
+nobody can type.
+
+Exit met: `mcp-oauth-integration.test.ts` drives a real protected fixture through needs-auth →
+login → reconnect → callable tool, plus silent refresh and both sides of the D2 gate.
 
 ### Milestone 3 — gated follow-ups
 
@@ -174,7 +198,10 @@ Each only on evidence (telemetry or a concrete server that needs it):
 
 ## Open questions
 
-- Exact user-config file name/location and the override key shape for decision 4.
+- ~~Exact user-config file name/location and the override key shape for decision 4.~~
+  Settled in M1: `mcp.json` next to `settings.json`, with
+  `projectServers."<absolute workspace root>"."<server name>".enabled`. The same opt-in now
+  also gates project HTTP servers' OAuth (D2).
 - Whether per-mode opt-in lists servers, tools, or both.
 - Tool-description prompt injection: descriptions are server-authored text rendered into
   the prompt. The survey's keyword stripping is unproven; decide on a mitigation (e.g.

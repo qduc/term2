@@ -69,6 +69,7 @@ import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 import { SessionBrowser } from './services/conversation/session-browser.js';
 import { loadMcpConfig } from './services/mcp/mcp-config.js';
 import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
+import { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -854,12 +855,19 @@ const mcpConfig = await loadMcpConfig({
   workspaceRoot: executionContext.getHomeWorkspace(),
   onNote: (message) => logger.warn('MCP configuration notice', { message }),
 });
+// Composed only when a server exists, so a session with no MCP config never
+// touches the credential file.
+const mcpOAuthStore = mcpConfig.servers.length ? new McpOAuthStore() : undefined;
 const mcpManager = mcpConfig.servers.length
   ? new McpConnectionManager({
       servers: mcpConfig.servers,
       userConfigPath: mcpConfig.userConfigPath,
       workspaceRoot: executionContext.getHomeWorkspace(),
       onNotice: (message) => logger.warn('MCP catalog notice', { message }),
+      ...(mcpOAuthStore ? { oauthStore: mcpOAuthStore } : {}),
+      // A positional prompt means nobody is at the keyboard to finish a browser
+      // login, so an unauthenticated server says so instead of naming /mcp-login.
+      interactive: !hasPositionalPrompt,
     })
   : undefined;
 activeMcpManager = mcpManager ?? null;
@@ -1184,6 +1192,8 @@ const { waitUntilExit } = render(
           effectiveHasConversationContent = hasContent;
         }}
         terminalTitleBase={terminalTitleBase}
+        mcpManager={mcpManager ?? null}
+        mcpOAuthStore={mcpOAuthStore ?? null}
       />
     </InputProvider>
   ) as ReactNode,

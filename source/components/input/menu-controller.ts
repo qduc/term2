@@ -197,7 +197,7 @@ export class MenuControllerImpl implements MenuController {
     let nextStack = [...stack.slice(0, -1)];
     const back = this.backPolicyFor(topFrame);
 
-    if (topFrame.kind === 'providers') {
+    if (topFrame.kind === 'providers' || topFrame.kind === 'mcp') {
       nextEditor = {
         ...topFrame.returnPoint.editor,
         revision: editor.revision + 1,
@@ -292,7 +292,10 @@ export class MenuControllerImpl implements MenuController {
     // Explicitly opened frames ignore text trigger reconciliation until closed
     if (
       topFrame &&
-      (topFrame.kind === 'rewind' || topFrame.kind === 'providers' || topFrame.kind === 'subagent_pool')
+      (topFrame.kind === 'rewind' ||
+        topFrame.kind === 'providers' ||
+        topFrame.kind === 'mcp' ||
+        topFrame.kind === 'subagent_pool')
     ) {
       if (topFrame.kind === 'subagent_pool' && 'binding' in topFrame) {
         const binding = {
@@ -496,7 +499,7 @@ export class MenuControllerImpl implements MenuController {
     const backPolicy = appliesBackPolicy ? this.backPolicyFor(topFrame) : undefined;
     let buffer = effect.buffer;
 
-    if (topFrame?.kind === 'providers' && appliesBackPolicy) {
+    if ((topFrame?.kind === 'providers' || topFrame?.kind === 'mcp') && appliesBackPolicy) {
       buffer = {
         type: 'replace',
         text: topFrame.returnPoint.editor.text,
@@ -724,7 +727,7 @@ export class MenuControllerImpl implements MenuController {
   public open(unboundFrame: UnboundFrameSpec, options?: OpenOptions): void {
     let editor = { ...this.state.editor };
 
-    if (options?.preserveEditorAsReturnPoint || unboundFrame.kind === 'providers') {
+    if (options?.preserveEditorAsReturnPoint || unboundFrame.kind === 'providers' || unboundFrame.kind === 'mcp') {
       // returnPoint is captured editor
     }
 
@@ -743,7 +746,7 @@ export class MenuControllerImpl implements MenuController {
     const frameId = this.generateFrameId();
     let frame: MenuFrame;
 
-    if (unboundFrame.kind === 'providers') {
+    if (unboundFrame.kind === 'providers' || unboundFrame.kind === 'mcp') {
       frame = {
         ...unboundFrame,
         id: frameId,

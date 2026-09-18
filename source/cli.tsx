@@ -70,6 +70,7 @@ import { SessionBrowser } from './services/conversation/session-browser.js';
 import { loadMcpConfig } from './services/mcp/mcp-config.js';
 import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
 import { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
+import { McpConfigController } from './services/mcp/mcp-config-controller.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -861,23 +862,27 @@ const mcpConfig = await loadMcpConfig({
     logger.warn('MCP configuration notice', { message });
   },
 });
-// Composed only when a server exists, so a session with no MCP config never
-// touches the credential file.
-const mcpOAuthStore = mcpConfig.servers.length ? new McpOAuthStore() : undefined;
-const mcpManager = mcpConfig.servers.length
-  ? new McpConnectionManager({
-      servers: mcpConfig.servers,
-      userConfigPath: mcpConfig.userConfigPath,
-      workspaceRoot: executionContext.getHomeWorkspace(),
-      onNotice: (message) => logger.warn('MCP catalog notice', { message }),
-      ...(mcpOAuthStore ? { oauthStore: mcpOAuthStore } : {}),
-      // A positional prompt means nobody is at the keyboard to finish a browser
-      // login, so an unauthenticated server says so instead of naming /mcp-login.
-      interactive: !hasPositionalPrompt,
-    })
-  : undefined;
-activeMcpManager = mcpManager ?? null;
-mcpManager?.start();
+// The manager remains stable even when the initial catalog is empty so /mcp
+// can add a server and expose it to run_code without restarting the session.
+const mcpOAuthStore = new McpOAuthStore();
+const mcpManager = new McpConnectionManager({
+  servers: mcpConfig.servers,
+  userConfigPath: mcpConfig.userConfigPath,
+  workspaceRoot: executionContext.getHomeWorkspace(),
+  onNotice: (message) => logger.warn('MCP catalog notice', { message }),
+  oauthStore: mcpOAuthStore,
+  // A positional prompt means nobody is at the keyboard to finish a browser
+  // login, so an unauthenticated server says so instead of naming /mcp-login.
+  interactive: !hasPositionalPrompt,
+});
+const mcpConfigController = new McpConfigController({
+  userConfigPath: mcpConfig.userConfigPath,
+  workspaceRoot: executionContext.getHomeWorkspace(),
+  replaceServers: (servers) => mcpManager.replaceServers(servers),
+  onNote: (message) => logger.warn('MCP configuration notice', { message }),
+});
+activeMcpManager = mcpManager;
+mcpManager.start();
 
 const history = new HistoryService({
   loggingService: logger,
@@ -1198,8 +1203,9 @@ const { waitUntilExit } = render(
           effectiveHasConversationContent = hasContent;
         }}
         terminalTitleBase={terminalTitleBase}
-        mcpManager={mcpManager ?? null}
-        mcpOAuthStore={mcpOAuthStore ?? null}
+        mcpManager={mcpManager}
+        mcpOAuthStore={mcpOAuthStore}
+        mcpConfigController={mcpConfigController}
         mcpStartupNotices={mcpStartupNotices}
         mcpUserConfigPath={mcpConfig.userConfigPath}
       />
@@ -1218,7 +1224,7 @@ if (conversationService.hookEvents) {
   );
 }
 await conversationService.shutdown();
-await mcpManager?.close();
+await mcpManager.close();
 await sessionBrowser.close();
 activeSessionBrowser = null;
 await logWriter.close();

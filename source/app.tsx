@@ -48,6 +48,7 @@ import type { SkillsService, SkillInfo } from './services/skills/skills-service.
 import type { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
 import { useMcpNotices } from './hooks/use-mcp-notices.js';
 import type { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
+import type { McpConfigController } from './services/mcp/mcp-config-controller.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import { deriveInputOwner } from './lib/input-owner.js';
 import { publishHarnessInputState } from './lib/harness-input-idle.js';
@@ -143,6 +144,7 @@ interface AppProps {
   /** Config-load problems gathered before mount; surfaced once on start. */
   mcpStartupNotices?: readonly string[];
   mcpUserConfigPath?: string;
+  mcpConfigController?: McpConfigController;
 }
 
 const App: FC<AppProps> = ({
@@ -171,6 +173,7 @@ const App: FC<AppProps> = ({
   mcpOAuthStore = null,
   mcpStartupNotices,
   mcpUserConfigPath,
+  mcpConfigController,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -874,6 +877,13 @@ const App: FC<AppProps> = ({
       controller.closeAll();
       controller.open({ kind: 'providers' });
     },
+    openMcpMenu:
+      mcpManager && mcpConfigController
+        ? () => {
+            controller.closeAll();
+            controller.open({ kind: 'mcp' });
+          }
+        : undefined,
     openCopyMenu,
     onHandoff: handoff.startHandoff,
     sendUserMessage,
@@ -1382,6 +1392,9 @@ const App: FC<AppProps> = ({
             onCopySelection={handleCopySelection}
             listConversations={listSavedConversations}
             resumeConversation={resumeConversation}
+            mcpManager={mcpManager ?? undefined}
+            mcpConfigController={mcpConfigController}
+            onMcpLogin={(name) => slashCommands.find((command) => command.name === 'mcp-login')?.action(name)}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}

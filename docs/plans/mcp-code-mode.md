@@ -75,7 +75,8 @@ Defaults accepted without override:
 
 - Per-mode/profile opt-in to MCP tools (subagents included).
 - Read the de-facto `mcpServers` JSON format from project `.mcp.json` and from a user-level
-  file next to term2's `settings.json`. File-only config at first; no `/settings` UI.
+  file next to term2's `settings.json`. `/mcp` manages user-level entries; project entries
+  remain repository-owned and read-only in the UI.
 - Servers start in the background at launch; an unready server appears in the catalog as
   connecting rather than blocking startup.
 - Every MCP call requires approval. Tool annotations (`readOnlyHint` etc.) are hints the
@@ -202,12 +203,14 @@ see everything and the **user** could see nothing. Two fixes, both shipped:
   as well as after — they connect concurrently with startup, so the interesting state often
   lands before first render and fires no further change event — announces each state once,
   and stays silent for healthy servers.
-- **No status view existed.** `/mcp` (`source/commands/mcp-status-command.ts`) lists every
-  server with state, tool count, provenance and error. With nothing configured it names the
-  user config file, which is otherwise undiscoverable since the plan ships no settings UI.
+- **No management view existed.** `/mcp` opens an interactive server list with state, tool
+  count, provenance and errors. It can inspect and reconnect every server, and add, edit, or
+  delete user-level entries through `McpConfigController`; edits preserve unrelated JSON and
+  reconcile the live `McpConnectionManager` without replacing the script-visible tool source.
+  Project entries remain read-only because their definitions belong to the repository.
 
-Rendering lives in `source/services/mcp/mcp-status.ts` as pure functions over snapshots, so
-`/mcp` and the notices cannot drift apart in wording.
+Fallback text rendering and startup notices live in `source/services/mcp/mcp-status.ts` as
+pure functions over snapshots. The interactive menu renders the same snapshots directly.
 
 Consequence worth keeping: **error strings no longer name their own server.** Every render
 context already supplies the name, and self-naming produced

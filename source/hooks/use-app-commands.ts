@@ -72,6 +72,7 @@ interface UseAppCommandsProps {
   mcpOAuthStore?: McpOAuthStore | null;
   /** Shown by /mcp when nothing is configured, so the user learns where to look. */
   mcpUserConfigPath?: string;
+  openMcpMenu?: () => void;
 }
 
 // Re-export for backward compat
@@ -113,6 +114,7 @@ export const useAppCommands = ({
   mcpManager = null,
   mcpOAuthStore = null,
   mcpUserConfigPath,
+  openMcpMenu,
 }: UseAppCommandsProps) => {
   const { togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -247,6 +249,7 @@ export const useAppCommands = ({
         manager: mcpManager,
         ...(mcpUserConfigPath !== undefined ? { userConfigPath: mcpUserConfigPath } : {}),
         addSystemMessage,
+        openMcpMenu,
       }),
       createMcpLoginCommand({ manager: mcpManager, store: mcpOAuthStore, addSystemMessage }),
       {
@@ -270,6 +273,7 @@ export const useAppCommands = ({
     mcpManager,
     mcpOAuthStore,
     mcpUserConfigPath,
+    openMcpMenu,
     messages,
     replaceInput,
     settingsService,

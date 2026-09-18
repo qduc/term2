@@ -17,6 +17,13 @@ const server = (name: string, state: McpServerSnapshot['state'], error?: string)
 });
 
 describe('/mcp', () => {
+  it('opens the interactive manager when the UI supplies one', () => {
+    const openMcpMenu = vi.fn();
+    const addSystemMessage = vi.fn();
+    createMcpStatusCommand({ manager: null, addSystemMessage, openMcpMenu }).action();
+    expect(openMcpMenu).toHaveBeenCalledOnce();
+    expect(addSystemMessage).not.toHaveBeenCalled();
+  });
   it('shows the config path when no manager was composed at all', () => {
     const messages: string[] = [];
     createMcpStatusCommand({

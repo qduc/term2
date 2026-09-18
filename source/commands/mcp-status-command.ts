@@ -15,17 +15,23 @@ export interface CreateMcpStatusCommandDeps {
   /** Named in the empty state so the user learns where to define servers. */
   userConfigPath?: string;
   addSystemMessage: (text: string) => void;
+  openMcpMenu?: () => void;
 }
 
 export function createMcpStatusCommand({
   manager,
   userConfigPath,
   addSystemMessage,
+  openMcpMenu,
 }: CreateMcpStatusCommandDeps): SlashCommand {
   return {
     name: 'mcp',
     description: 'Show configured MCP servers and their connection state',
     action: () => {
+      if (openMcpMenu) {
+        openMcpMenu();
+        return true;
+      }
       addSystemMessage(
         formatMcpStatus({
           snapshots: manager?.snapshot() ?? [],

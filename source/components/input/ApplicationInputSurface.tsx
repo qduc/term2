@@ -23,6 +23,8 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
 import type { PendingQueueMessage } from './PendingQueueList.js';
+import type { McpConnectionManager } from '../../services/mcp/mcp-connection-manager.js';
+import type { McpConfigController } from '../../services/mcp/mcp-config-controller.js';
 
 export type ApplicationInputSurfaceProps = {
   enabled?: boolean;
@@ -51,6 +53,9 @@ export type ApplicationInputSurfaceProps = {
   onCopySelection?: (selection: CopySelection) => void;
   listConversations?: () => ConversationListEntry[];
   resumeConversation?: (target?: string) => void | Promise<void>;
+  mcpManager?: McpConnectionManager;
+  mcpConfigController?: McpConfigController;
+  onMcpLogin?: (name: string) => void;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -128,6 +133,9 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     onCopySelection: props.onCopySelection,
     onSystemMessage: props.onSystemMessage,
     onResumeConversation: props.resumeConversation,
+    mcpManager: props.mcpManager,
+    mcpConfigController: props.mcpConfigController,
+    onMcpLogin: props.onMcpLogin,
   };
 
   if (stack.length > 0) {

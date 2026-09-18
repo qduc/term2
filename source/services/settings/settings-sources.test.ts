@@ -74,6 +74,18 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(codex.websocketInterFrameTimeoutMs.source).toBe('default');
 });
 
+it('reports the configured approval decision shadow model and its source', () => {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    agent: { ...DEFAULT_SETTINGS.agent, autoApproveDecisionShadowModel: '~typesafe/jev-latest' },
+  };
+  const result = buildSettingsWithSources(settings, (key) =>
+    key === 'agent.autoApproveDecisionShadowModel' ? 'config' : 'default',
+  );
+  expect(result.agent.autoApproveDecisionShadowModel).toEqual({ value: '~typesafe/jev-latest', source: 'config' });
+  expect(result.agent.disabledProviders).toEqual({ value: settings.agent.disabledProviders, source: 'default' });
+});
+
 // Regression: sandbox.allowNetworking existed in the zod schema, SETTING_KEYS,
 // RUNTIME_MODIFIABLE_SETTINGS and DEFAULT_SETTINGS, but was missing from both
 // SettingsWithSources and the SETTINGS_SOURCE_KEYS runtime map, so `/settings`

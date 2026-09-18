@@ -30,12 +30,132 @@ it('records Jev shadow disagreement without changing the chore model approval', 
   expect(events[0].details).toEqual(
     expect.objectContaining({
       eventType: 'approval.decision_shadow.compared',
-      reviewerApproved: true,
-      shadowWouldApprove: false,
-      agreement: false,
+      reviewerRiskAuthorizationEligible: true,
+      shadowRiskAuthorizationEligible: false,
+      classificationAgreement: false,
+      riskAuthorizationAgreement: false,
     }),
   );
   expect(JSON.stringify(events)).not.toContain('ls source');
+});
+
+it('does not compare Jev against a system rejection or a failed reviewer', async () => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const decisionShadow = vi.fn(async () => [
+    { riskLevel: 'low' as const, authorization: 'explicit' as const, confidence: 1, wouldApprove: true },
+  ]);
+  const common = {
+    history: [],
+    settingsService: settings as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+  };
+  await evaluateShellAutoApprovalAdvisories({
+    ...common,
+    commands: [{ id: 'red', command: 'rm -rf /' }],
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'safe', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+        }),
+    } as any,
+  });
+  await evaluateShellAutoApprovalAdvisories({
+    ...common,
+    commands: [{ id: 'error', command: 'pwd' }],
+    agentClient: {
+      chat: async () => {
+        throw new Error('reviewer unavailable');
+      },
+    } as any,
+  });
+  expect(decisionShadow).not.toHaveBeenCalled();
+});
+
+it('waits for opted-in shadow comparison when requested by a non-interactive caller', async () => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  let finishShadow!: (
+    value: Array<{ riskLevel: 'low'; authorization: 'explicit'; confidence: number; wouldApprove: true }>,
+  ) => void;
+  const decisionShadow = vi.fn(
+    () =>
+      new Promise<Awaited<ReturnType<typeof import('./decision-shadow.js').evaluateDecisionShadow>>>((resolve) => {
+        finishShadow = resolve;
+      }),
+  );
+  let settled = false;
+  const pending = evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'pwd' }],
+    history: [],
+    settingsService: settings as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'safe', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+        }),
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+    awaitDecisionShadow: true,
+  }).then(() => {
+    settled = true;
+  });
+  await vi.waitFor(() => expect(decisionShadow).toHaveBeenCalledTimes(1));
+  expect(settled).toBe(false);
+  finishShadow([{ riskLevel: 'low', authorization: 'explicit', confidence: 1, wouldApprove: true }]);
+  await pending;
+  expect(settled).toBe(true);
+});
+
+it('bounds outstanding shadow comparisons without delaying approval', async () => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const finishers: Array<
+    (value: Awaited<ReturnType<typeof import('./decision-shadow.js').evaluateDecisionShadow>>) => void
+  > = [];
+  const decisionShadow = vi.fn(
+    () =>
+      new Promise<Awaited<ReturnType<typeof import('./decision-shadow.js').evaluateDecisionShadow>>>((resolve) => {
+        finishers.push(resolve);
+      }),
+  );
+  const warnings: Array<Record<string, unknown>> = [];
+  const common = {
+    history: [],
+    settingsService: settings as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'safe', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+        }),
+    } as any,
+    logger: {
+      ...createMockLogger(),
+      warn: (_message: string, details: Record<string, unknown>) => warnings.push(details),
+    } as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+  };
+  const results = await Promise.all(
+    Array.from({ length: 5 }, (_, index) =>
+      evaluateShellAutoApprovalAdvisories({
+        ...common,
+        commands: [{ id: `call-${index}`, command: 'pwd' }],
+      }),
+    ),
+  );
+  expect(results.every((result) => result.values().next().value?.approved === true)).toBe(true);
+  expect(decisionShadow).toHaveBeenCalledTimes(4);
+  expect(warnings.some((item) => item.eventType === 'approval.decision_shadow.saturated')).toBe(true);
+  for (const finish of finishers)
+    finish([{ riskLevel: 'low', authorization: 'explicit', confidence: 1, wouldApprove: true }]);
 });
 
 it('keeps the chore model result when the optional decision shadow fails', async () => {

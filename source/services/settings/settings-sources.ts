@@ -1,5 +1,12 @@
 import type { SettingSource, SettingsData, SettingsWithSources } from './settings-schema.js';
 
+/** Keep source reporting exhaustive, while allowing nested projections such as agent.codex. */
+type SourceKeyShape<T> = T extends { value: infer V; source: SettingSource }
+  ? string | (V extends object ? SourceKeyShape<V> : never)
+  : T extends object
+  ? { [K in keyof T]-?: SourceKeyShape<T[K]> }
+  : string;
+
 type SourceGetter = (key: string) => SettingSource;
 
 export const SETTINGS_SOURCE_KEYS = {
@@ -56,6 +63,7 @@ export const SETTINGS_SOURCE_KEYS = {
     provider: 'agent.provider',
     favoriteModels: 'agent.favoriteModels',
     modelNicknames: 'agent.modelNicknames',
+    disabledProviders: 'agent.disabledProviders',
     openrouter: 'agent.openrouter',
     openai: 'agent.openai',
     codex: {
@@ -77,6 +85,7 @@ export const SETTINGS_SOURCE_KEYS = {
     autoApproveModel: 'agent.autoApproveModel',
     autoApproveProvider: 'agent.autoApproveProvider',
     autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
+    autoApproveDecisionShadowModel: 'agent.autoApproveDecisionShadowModel',
     subagentExplorerModel: 'agent.subagentExplorerModel',
     subagentExplorerProvider: 'agent.subagentExplorerProvider',
     subagentExplorerReasoningEffort: 'agent.subagentExplorerReasoningEffort',
@@ -181,7 +190,7 @@ export const SETTINGS_SOURCE_KEYS = {
     includeToolResults: 'hooks.includeToolResults',
     timeoutMs: 'hooks.timeoutMs',
   },
-} as const;
+} as const satisfies SourceKeyShape<SettingsWithSources>;
 
 function getValueByPath(settings: SettingsData, path: string): unknown {
   const keys = path.split('.');

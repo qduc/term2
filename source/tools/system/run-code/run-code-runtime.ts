@@ -679,6 +679,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
                   argumentsText: JSON.stringify(prepared.params),
                   rawInterruption: null,
                   callId,
+                  workspaceRoot: prepared.authorityRoot,
                   outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
                     prepared.tool.name,
                     prepared.params,

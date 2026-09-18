@@ -48,6 +48,24 @@ it.sequential('outside-workspace grep approval offers the shared session folder 
   expect(answer).toBe('allow-folder-session');
 });
 
+it.sequential('nested read approval identifies the active workspace root', async () => {
+  const result = await renderInAct(
+    <ApprovalPrompt
+      approval={{
+        ...makeApproval('read_file', { path: '/repo/source/file.ts' }),
+        agentName: 'Nested run_code',
+        workspaceRoot: '/repo/.worktrees/feature',
+      }}
+      onApprove={() => {}}
+      onReject={() => {}}
+    />,
+  );
+
+  const frame = toVisibleText(result.lastFrame() ?? '');
+  expect(frame).toContain('Active workspace: /repo/.worktrees/feature');
+  expect(frame).toContain('/repo/source/file.ts');
+});
+
 it.sequential('outside-workspace glob approval names the directory of an absolute pattern', async () => {
   const result = await renderInAct(
     <ApprovalPrompt

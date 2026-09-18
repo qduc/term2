@@ -183,6 +183,7 @@ describe('run_code', () => {
       );
       await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
       const displayed = owner.getSnapshot()!;
+      expect(displayed.approval.workspaceRoot).toBe(workspaceDir);
       expect(displayed.approval.outsideWorkspaceEdit).toEqual({ path: targetA, folder: targetADir });
       unlinkSync(linkPath);
       symlinkSync(targetBDir, linkPath);

@@ -1076,6 +1076,9 @@ const ApprovalPrompt: FC<Props> = ({
           </>
         )}
       </Text>
+      {isFolderReadApproval && approval.workspaceRoot && (
+        <Text color={COLOR_TEXT_SUBTLE}>Active workspace: {approval.workspaceRoot}</Text>
+      )}
       {isDockerHostControlApproval ? (
         // Red left border, not just red text: Docker host control is the single
         // riskiest approval this app shows, and should be recognizable by shape

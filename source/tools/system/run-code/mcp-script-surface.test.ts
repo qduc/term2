@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRunCodeToolDefinition, getRunCodeExecutionResult } from './run-code.js';
-import { createMcpCatalog, mcpMemberName } from './mcp-script-surface.js';
+import { createMcpCatalog, describeMcpTool, mcpMemberName, MCP_TOOL_BINDING } from './mcp-script-surface.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { McpCallError, type McpServerSnapshot, type McpToolSource } from '../../../services/mcp/mcp-tool-source.js';
@@ -300,5 +300,27 @@ describe('run_code MCP script surface', () => {
     await execute(runCode, "return await tools.remote_server__echo_tool({ value: 'x' }).catch(() => null);");
     expect(root).toHaveLength(0);
     expect(root.some((tool) => tool.name === 'remote_server__echo_tool')).toBe(false);
+  });
+});
+
+describe('describe truncation', () => {
+  const describeOf = (description: string) =>
+    describeMcpTool({
+      [MCP_TOOL_BINDING]: true as const,
+      source: source(vi.fn()),
+      server: 'remote-server',
+      tool: 'echo-tool',
+      descriptor: { ...descriptor, description },
+    } as never).description as string;
+
+  it('marks a clipped description so it is distinguishable from a complete one', () => {
+    const clipped = describeOf('x'.repeat(5000));
+    expect(clipped).toContain('[truncated]');
+    // The marker is the only thing past the cap; the prose itself is still bounded.
+    expect(clipped.length).toBeLessThan(2100 + '[server-provided text] '.length);
+  });
+
+  it('leaves a description that fits completely unmarked', () => {
+    expect(describeOf('short and complete')).not.toContain('[truncated]');
   });
 });

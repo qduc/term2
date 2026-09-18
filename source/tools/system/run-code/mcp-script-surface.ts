@@ -9,6 +9,14 @@ import { renderCompactSignature } from './tools-header.js';
 
 export const MCP_TOOL_BINDING = Symbol('term2.mcpToolBinding');
 const MAX_DESCRIPTION_CHARS = 2000;
+/**
+ * Cuts an over-long description and says so. Without the marker a clipped
+ * description is byte-for-byte indistinguishable from a complete one, so the
+ * model cannot tell that a tool's usage notes stop mid-sentence.
+ */
+const clampWithMarker = (value: string, limit: number): string =>
+  value.length <= limit ? value : `${value.slice(0, limit)}… [truncated]`;
+
 const clampOneLine = (value: string, limit: number): string => {
   const compact = value.replace(/\s+/g, ' ').trim();
   return compact.length <= limit ? compact : compact.slice(0, limit);
@@ -78,7 +86,7 @@ export const describeMcpTool = (binding: McpToolBinding): Record<string, unknown
     name: mcpMemberName(binding.server, binding.tool),
     parameters: binding.descriptor.inputSchema,
   }),
-  description: `[server-provided text] ${(binding.descriptor.description ?? '').slice(0, MAX_DESCRIPTION_CHARS)}`,
+  description: `[server-provided text] ${clampWithMarker(binding.descriptor.description ?? '', MAX_DESCRIPTION_CHARS)}`,
   parameters: binding.descriptor.inputSchema,
   ...(binding.descriptor.outputSchema ? { outputSchema: binding.descriptor.outputSchema } : {}),
 });

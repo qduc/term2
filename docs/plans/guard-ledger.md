@@ -270,6 +270,24 @@ run-budget plan.
 model context, spools the complete payload to an artifact, and appends a
 retrieval path. It is the only row that arrived `verified safe`.
 
+### OpenRouter Decisions shadow request containment
+
+Harm prevented: optional approval-comparison requests accumulating while an OpenRouter proxy stalls, retaining approval evidence and network connections. The shadow path never supplies an approval decision.
+
+Scope and execution paths: `evaluateShellAutoApprovalAdvisories` when `agent.autoApproveDecisionShadowModel` is configured. Interactive callers launch comparison without waiting; `NonInteractiveApprovalPolicy` waits so a one-shot process can record the result before exit.
+
+Guard class and owners: host-wide admission limit plus a per-request containment deadline. The approval evaluator admits at most four outstanding comparisons; `requestOpenRouterDecisions` aborts each request after 10,000ms. The evaluator owns recovery by logging a skipped or failed comparison and preserving the chore-model advisory.
+
+Signals: the active comparison count is direct admission evidence. Elapsed time is a proxy for a stalled network request; a legitimate slow response can exceed 10 seconds, so expiry loses only optional telemetry. A busy host can skip a legitimate fifth comparison. Neither signal changes the underlying approval.
+
+Configuration and precedence: the shadow model is opt-in and unset by default; the four-request limit and 10,000ms deadline are fixed. No persisted value is rewritten or clamped. The OpenRouter key and base URL use the existing setting, then environment-key fallback where applicable.
+
+Settlement and recovery: a skipped request is never sent. A timed-out or invalid request logs `approval.decision_shadow.failed`; capacity logs `approval.decision_shadow.saturated` with active count and limit. No automatic retry occurs. Partial provider responses are discarded; the comparison is observation-only, so provider continuity, approval settlement, and tool effects are unchanged. Logs do not include command text or credentials.
+
+Rollback boundary: the shadow admission/deadline logic and its opt-in setting. Tests cover the fourth and fifth concurrent requests, deadline minus one and at deadline, non-interactive waiting, and unchanged approval on shadow failure. Ledger row: **verified optional-observation containment**.
+
+Red proof: focused provider, settings-source, and approval tests failed on the dropped proxy prefix, omitted setting source, misleading comparison, and lost non-interactive wait before the repairs. Verification: focused tests passed (4 files, 50 tests), `pnpm test:related` and `pnpm test:changed` each passed 166 files / 2,970 tests (2 expected failures, 1 skip), `pnpm typecheck` passed, and `pnpm test:provider-black-box` passed 20 files / 177 tests (1 skip). A live two-request Jev call returned four typed choice answers through the adapter.
+
 ## Confirmed defect: `agent.maxParallelToolCalls` never reaches the run loop
 
 The chain breaks at the last hop:
@@ -2171,6 +2189,7 @@ Catalogued, no hypothesized failure mode:
 | OpenCode transport discovery cache | 24h successful endpoint-table snapshot; a 2s failed or invalid lookup falls back to local Chat routing | no |
 | Active-turn cancel wait | 10,000 ms | injectable |
 | Shell auto-approval evidence caps | 8 / 3000 / 500 / 10 / 1000 / 20 | no |
+| OpenRouter Decisions approval shadow | 4 concurrent requests / 10,000ms each; skips optional comparison on saturation | no |
 | Tool argument repair caps | 200,000 / 8 / 2048 / 160 / 16 | no |
 | Code-context search bounds | 512KiB / 10,000 files / 20 results | `max_results` |
 | Background shell watch match text | 4096 chars / 1500 ms idle | watch options |

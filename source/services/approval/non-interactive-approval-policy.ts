@@ -6,6 +6,7 @@ import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.
 import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getTierModelPool } from '../agent-runtime/model-resolver.js';
+import type { evaluateDecisionShadow } from './decision-shadow.js';
 
 export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 
@@ -26,6 +27,7 @@ export interface NonInteractiveApprovalPolicyDeps {
   mcpAllowlist?: readonly string[];
   isMcpTool?: (name: string) => boolean;
   isMcpAllowed?: (name: string, allowlist: readonly string[]) => boolean;
+  decisionShadow?: typeof evaluateDecisionShadow;
 }
 
 const noOpLogger: ILoggingService = {
@@ -109,6 +111,8 @@ export class NonInteractiveApprovalPolicy {
         agentClient: this.deps.agentClient!,
         logger: this.deps.logger ?? noOpLogger,
         sessionContextService: this.deps.sessionContextService,
+        awaitDecisionShadow: true,
+        decisionShadow: this.deps.decisionShadow,
       });
       const advisory = advisories.get(callId);
       if (advisory?.approved) {

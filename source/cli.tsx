@@ -851,9 +851,15 @@ if (sshFlag) {
   executionContext = new ExecutionContext();
 }
 
+// Kept for the UI as well as the log: a dropped or malformed server entry is
+// otherwise invisible to the user, who has no other view of their MCP config.
+const mcpStartupNotices: string[] = [];
 const mcpConfig = await loadMcpConfig({
   workspaceRoot: executionContext.getHomeWorkspace(),
-  onNote: (message) => logger.warn('MCP configuration notice', { message }),
+  onNote: (message) => {
+    mcpStartupNotices.push(message);
+    logger.warn('MCP configuration notice', { message });
+  },
 });
 // Composed only when a server exists, so a session with no MCP config never
 // touches the credential file.
@@ -1194,6 +1200,8 @@ const { waitUntilExit } = render(
         terminalTitleBase={terminalTitleBase}
         mcpManager={mcpManager ?? null}
         mcpOAuthStore={mcpOAuthStore ?? null}
+        mcpStartupNotices={mcpStartupNotices}
+        mcpUserConfigPath={mcpConfig.userConfigPath}
       />
     </InputProvider>
   ) as ReactNode,

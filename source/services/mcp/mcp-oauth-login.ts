@@ -38,8 +38,7 @@ export class McpInteractiveLoginRequiredError extends Error {
 }
 
 /** The exact text a user acts on when a server is waiting for a login. */
-export const mcpNeedsAuthMessage = (serverName: string): string =>
-  `requires OAuth login — run /mcp-login ${serverName}`;
+export const mcpNeedsAuthMessage = (serverName: string): string => `run /mcp-login ${serverName} to authenticate`;
 
 export interface McpOAuthLoginOptions {
   /** Config key of the server, used only in user-facing text. */

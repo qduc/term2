@@ -133,7 +133,6 @@ export type BottomAreaProps = {
   resumeConversation?: (target?: string) => void | Promise<void>;
   mcpManager?: McpConnectionManager;
   mcpConfigController?: McpConfigController;
-  onMcpLogin?: (name: string) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -223,7 +222,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   resumeConversation,
   mcpManager,
   mcpConfigController,
-  onMcpLogin,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -478,7 +476,6 @@ const BottomArea: FC<BottomAreaProps> = ({
           resumeConversation={resumeConversation}
           mcpManager={mcpManager}
           mcpConfigController={mcpConfigController}
-          onMcpLogin={onMcpLogin}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

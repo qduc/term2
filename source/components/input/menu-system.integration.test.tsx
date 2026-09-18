@@ -13,6 +13,8 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
+import type { McpConnectionManager } from '../../services/mcp/mcp-connection-manager.js';
+import type { McpConfigController } from '../../services/mcp/mcp-config-controller.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 
@@ -119,6 +121,8 @@ const renderSurface = async (
     listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
     resumeConversation?: (target?: string) => void | Promise<void>;
     settingsService?: ReturnType<typeof createMockSettingsService>;
+    mcpManager?: McpConnectionManager;
+    mcpConfigController?: McpConfigController;
   },
 ) => {
   const result = await renderInAct(
@@ -136,6 +140,8 @@ const renderSurface = async (
         onCopySelection={options?.onCopySelection}
         listConversations={options?.listConversations}
         resumeConversation={options?.resumeConversation}
+        mcpManager={options?.mcpManager}
+        mcpConfigController={options?.mcpConfigController}
       />
       {children}
     </InputProvider>,
@@ -211,6 +217,46 @@ it.sequential('copy menu owns keyboard input and accepts the selected code block
   await waitFor(() => controller.getSnapshot().stack.length === 0);
 
   expect(onCopySelection).toHaveBeenCalledWith(copySelections[1]);
+});
+
+it.sequential('MCP menu owns keyboard navigation and Escape restores the editor handoff', async () => {
+  const controller = new MenuControllerImpl();
+  const intentHost = vi.fn(({ intentRequest }) => ({
+    id: intentRequest.id,
+    sourceFrameId: intentRequest.sourceFrameId,
+    ok: true as const,
+  }));
+  controller.setIntentHost(intentHost);
+  const manager = {
+    snapshot: () => [{ name: 'remote', provenance: 'user', transport: 'streamable-http', state: 'ready', tools: [] }],
+    onCatalogChanged: () => () => {},
+    oauthTarget: () => undefined,
+  } as unknown as McpConnectionManager;
+  const configController = {
+    listUserServers: async () => [],
+  } as unknown as McpConfigController;
+  controller.replaceText('keep me', 4);
+  controller.open({ kind: 'mcp' });
+  const { stdin, lastFrame } = await renderSurface(controller, slashCommands, undefined, {
+    mcpManager: manager,
+    mcpConfigController: configController,
+  });
+  await waitFor(() => (lastFrame() ?? '').includes('MCP Server Management'));
+  await writeInput(stdin, '\r');
+  await waitFor(() => (lastFrame() ?? '').includes('MCP Server: remote'));
+  await writeInput(stdin, '\r');
+  await waitFor(() => intentHost.mock.calls.length === 1, 'MCP reconnect intent');
+  expect(intentHost.mock.calls[0]?.[0].intentRequest.intent).toEqual({
+    type: 'mcp-reconnect',
+    serverName: 'remote',
+  });
+
+  await writeInput(stdin, '\u001b');
+  await waitFor(() => (lastFrame() ?? '').includes('MCP Server Management'));
+  await writeInput(stdin, '\u001b');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(controller.getSnapshot().editor).toMatchObject({ text: 'keep me', cursor: 4 });
 });
 
 it.sequential('clears a slash command when Escape arrives during the menu handoff', async () => {

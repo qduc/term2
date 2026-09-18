@@ -18,6 +18,7 @@ import { createModelSlashCommand } from '../commands/model-command.js';
 import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.js';
 import { createSandboxSlashCommand } from '../commands/sandbox-command.js';
 import { createMcpLoginCommand } from '../commands/mcp-login-command.js';
+import { createMcpStatusCommand } from '../commands/mcp-status-command.js';
 import type { McpConnectionManager } from '../services/mcp/mcp-connection-manager.js';
 import type { McpOAuthStore } from '../services/mcp/mcp-oauth-store.js';
 import { createEffortSlashCommand } from '../commands/effort-command.js';
@@ -69,6 +70,8 @@ interface UseAppCommandsProps {
   /** Null when this session configured no MCP servers. Drives /mcp-login. */
   mcpManager?: McpConnectionManager | null;
   mcpOAuthStore?: McpOAuthStore | null;
+  /** Shown by /mcp when nothing is configured, so the user learns where to look. */
+  mcpUserConfigPath?: string;
 }
 
 // Re-export for backward compat
@@ -109,6 +112,7 @@ export const useAppCommands = ({
   resumeConversation,
   mcpManager = null,
   mcpOAuthStore = null,
+  mcpUserConfigPath,
 }: UseAppCommandsProps) => {
   const { togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -239,6 +243,11 @@ export const useAppCommands = ({
         requestModeSwitchConfirm,
       }),
       createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
+      createMcpStatusCommand({
+        manager: mcpManager,
+        ...(mcpUserConfigPath !== undefined ? { userConfigPath: mcpUserConfigPath } : {}),
+        addSystemMessage,
+      }),
       createMcpLoginCommand({ manager: mcpManager, store: mcpOAuthStore, addSystemMessage }),
       {
         name: 'providers',
@@ -260,6 +269,7 @@ export const useAppCommands = ({
     refreshProviderUsage,
     mcpManager,
     mcpOAuthStore,
+    mcpUserConfigPath,
     messages,
     replaceInput,
     settingsService,

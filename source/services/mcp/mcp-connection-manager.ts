@@ -79,7 +79,7 @@ const projectOptInError = (
   workspaceRoot: string | undefined,
   userConfigPath: string | undefined,
 ): string =>
-  `project stdio server "${name}" was not started: it must be enabled for this workspace by adding \`"projectServers": { "${
+  `not started — a project stdio server must be enabled for this workspace by adding \`"projectServers": { "${
     workspaceRoot ?? '<workspace root>'
   }": { "${name}": { "enabled": true } } }\` to ${userConfigPath ?? 'the user mcp.json'}`;
 
@@ -94,7 +94,7 @@ const projectOAuthOptInError = (
   workspaceRoot: string | undefined,
   userConfigPath: string | undefined,
 ): string =>
-  `project server "${name}" requires an OAuth login, which a project config may not start on its own: enable it for this workspace by adding \`"projectServers": { "${
+  `requires an OAuth login, which a project config may not start on its own: enable it for this workspace by adding \`"projectServers": { "${
     workspaceRoot ?? '<workspace root>'
   }": { "${name}": { "enabled": true } } }\` to ${userConfigPath ?? 'the user mcp.json'}, then run /mcp-login ${name}`;
 
@@ -355,17 +355,17 @@ export class McpConnectionManager implements McpToolSource {
     if (!this.interactive) {
       this.markFailed(
         connection,
-        `server "${config.name}" requires an OAuth login, which cannot be completed in a non-interactive run: authenticate once with \`/mcp-login ${config.name}\` in an interactive session and the stored token will refresh here`,
+        `requires an OAuth login, which cannot be completed in a non-interactive run: authenticate once with \`/mcp-login ${config.name}\` in an interactive session and the stored token will refresh here`,
       );
       return;
     }
     if (this.isAbandoned(connection)) return;
     connection.state = 'needs-auth';
-    connection.error = `server "${config.name}" ${mcpNeedsAuthMessage(config.name)}`;
+    connection.error = mcpNeedsAuthMessage(config.name);
     connection.tools = [];
     if (!this.noticedFailures.has(config.name)) {
       this.noticedFailures.add(config.name);
-      this.onNotice?.(`MCP server "${config.name}" ${mcpNeedsAuthMessage(config.name)}`);
+      this.onNotice?.(`MCP server "${config.name}": ${mcpNeedsAuthMessage(config.name)}`);
     }
     this.rebuildSnapshot();
   }

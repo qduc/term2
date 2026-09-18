@@ -74,6 +74,7 @@ export function createMcpLoginCommand({
             serverUrl: target.serverUrl,
             store,
             ...(target.clientMetadataUrl !== undefined ? { clientMetadataUrl: target.clientMetadataUrl } : {}),
+            ...(target.clientId !== undefined ? { clientId: target.clientId } : {}),
             ...(target.redirectPorts !== undefined ? { redirectPorts: target.redirectPorts } : {}),
             onAuthorizationUrl: (url) => addSystemMessage(`Open this URL to authorize "${name}":\n${url}`),
           });

@@ -30,6 +30,12 @@ export type McpOAuthProviderOptions = {
    */
   clientMetadataUrl?: string;
   /**
+   * A pre-registered client id from config. When set, the SDK never attempts
+   * dynamic registration, which is the only way to reach an authorization
+   * server that offers neither DCR nor CIMD.
+   */
+  clientId?: string;
+  /**
    * Receives the authorization URL. Opening a browser, prompting the user, or
    * refusing (non-interactive, project server) is the caller's policy; this
    * adapter only reports what the SDK asked for.
@@ -117,11 +123,22 @@ export class McpOAuthProvider implements OAuthClientProvider {
    * means not registered" — never another server's credential.
    */
   clientInformation(ctx?: OAuthClientInformationContext): StoredOAuthClientInformation | undefined {
-    if (!ctx?.issuer) return undefined;
-    return this.options.store.getClientInformation(this.options.serverUrl, ctx.issuer);
+    const stored = ctx?.issuer
+      ? this.options.store.getClientInformation(this.options.serverUrl, ctx.issuer)
+      : undefined;
+    if (stored) return stored;
+    // A configured client id is not bound to an issuer the way a dynamically
+    // registered one is: the user registered this app themselves, for this
+    // server, so it is returned even when the SDK asks without a context.
+    // Returning it here is what stops `auth()` from attempting registration.
+    if (this.options.clientId) return { client_id: this.options.clientId };
+    return undefined;
   }
 
   saveClientInformation(clientInformation: StoredOAuthClientInformation, ctx?: OAuthClientInformationContext): void {
+    // A configured client id is owned by config, not by the store; persisting a
+    // copy would leave a stale credential behind if the user later changes it.
+    if (this.options.clientId) return;
     const issuer = requireIssuer(ctx, clientInformation.issuer, 'saveClientInformation');
     this.options.store.saveClientInformation(this.options.serverUrl, issuer, clientInformation);
   }

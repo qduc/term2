@@ -7,8 +7,9 @@ Status: **Milestones 0, 1, and 2 complete**. Merged to `main`: the `McpToolSourc
 wiring (`1077e20d`), the OAuth core — credential store, provider adapter, shared loopback
 helper, offline fixtures (`48053aaa`) — and the OAuth integration that resolved D1–D4.
 
-**Resume here:** Milestone 3 only, and it stays evidence-gated — do not start an item there
-without telemetry or a concrete server that needs it. Known gaps carried forward: no
+**Resume here:** Milestone 3 only, and it stays evidence-gated. `tools.search` in particular
+has now been **checked against its gate and refused** (2026-09-18) — see "Catalog cost measured
+against real servers" below before reopening it. Known gaps carried forward: no
 auto-reconnect after a server fails (`/mcp-login` reconnects one server on demand, nothing
 retries on its own); HTTP/SSE session drop is still not detected; **the gateway composes no
 manager, so an OAuth login has no web path** (the `oauth_login` assertion purpose in
@@ -187,6 +188,78 @@ nobody can type.
 Exit met: `mcp-oauth-integration.test.ts` drives a real protected fixture through needs-auth →
 login → reconnect → callable tool, plus silent refresh and both sides of the D2 gate.
 
+## What real servers taught us (2026-09-18)
+
+Ten real hosted servers were probed after Milestone 2 merged. Seven worked unassisted:
+Linear, Notion, Sentry, Intercom and Stripe all reach the browser via DCR; HuggingFace and
+DeepWiki connect with no auth and list tools. Three defects surfaced that the fixture suite
+could not:
+
+1. **SSE 401s were not recognised as needing a login** (Asana, Atlassian). The legacy SSE
+   transport reports a refusal as `SseError` with the status in `code` — not
+   `UnauthorizedError`, not `SdkHttpError` — because it arrives on the event stream rather
+   than from a JSON-RPC POST. Those servers landed in `failed` with an opaque "Non-200 status
+   code (401)" and no way in. Fixed. **Root cause worth remembering: every OAuth fixture is
+   streamable-HTTP, so the SSE transport had connection coverage but no auth coverage.** Three
+   transports exist; a change to an auth path must be exercised on all three.
+2. **No way to supply a pre-registered client id** (GitHub). Its authorization server
+   advertises no `registration_endpoint` and does not support CIMD — the two mechanisms we
+   had were exactly the two it lacks. Added a per-server `clientId`, which short-circuits
+   registration and is deliberately not persisted, since config owns it. Reaching a working
+   GitHub login still needs a GitHub App registered out of band.
+3. **`npx`-based stdio servers fail inside a repo that pins another package manager.** All
+   four npx servers died with `EBADDEVENGINES` because term2's own `package.json` declares
+   `devEngines: pnpm` and the stdio launcher spawns in term2's cwd. Since most MCP servers
+   ship as `npx -y @foo/bar`, anyone running term2 in a pnpm or yarn repo hits this. Setting
+   the server's `cwd` works around it. **Not fixed** — a sensible default cwd for stdio
+   servers is an open question.
+
+## Catalog cost measured against real servers (2026-09-18)
+
+Ten real hosted servers, **174 tools** (Azure 71, Chrome DevTools 29, Playwright 26,
+filesystem 14, everything 13, memory 9, HuggingFace 4, MS Learn 3, DeepWiki 3, Context7 2).
+Tokens are chars/4.
+
+| | chars | tokens |
+|---|---|---|
+| Names-only header (what we send) | 5,274 | ~1,319 |
+| All compact signatures instead | 16,092 | ~4,023 |
+| Raw tool definitions (conventional harness) | 179,176 | ~44,794 |
+
+**Our header is 2.9% of the conventional baseline — a 34× reduction**, and 3× cheaper than
+even compact signatures. This is the measurement `run_code` Milestone 4 asked for.
+
+`tools.describe` cost, driven through the real dispatch path with a synthetic 174-tool catalog
+of HuggingFace-sized schemas: 1 tool → ~1,842 tokens; 5–20 tools → ~7,500 tokens (the
+`MAX_OUTPUT_CHARS` clip in `run-code.ts`); 40+ tools → **rejected** by
+`RUN_CODE_LIMITS.maxOutputBytes`, the model receiving a 65-token "over the 262144-byte limit,
+return less per call" instruction. So the describe-everything case fails safe, and the ceiling
+entering context from one `run_code` call is ~7,500 tokens. `describe` takes a single member
+name and cannot enumerate.
+
+### Why `tools.search` was refused, not deferred
+
+The Milestone 3 gate is "if `tools.describe` usage or unknown-tool failures show discovery
+cost." That evidence already exists: `run-code-telemetry.ts` counts `schemaLookups` and
+`unknownTool` per invocation into the durable app log. Querying **2,396 real `run_code`
+invocations / 3,630 nested tool calls**:
+
+- 4 describe calls total — **0.1%** of nested calls
+- 0.2% of runs used describe at all, **max 1 per run**
+- 2 unknown-tool rejections, total
+
+There is no discovery cost to fix. Re-run that query before reopening `tools.search`; these
+runs predate real MCP use and mostly reflect built-in tools, so the number could move once
+large MCP catalogs are in daily use. **The signal to act is that ratio rising, not catalog
+size** — catalog size is already 34× better than the alternative.
+
+Also rejected on this evidence: capping `parameters`/`outputSchema` the way
+`MAX_DESCRIPTION_CHARS` caps prose. Those are objects, so slicing serialized JSON would hand
+the model invalid syntax; and `validateMcpArguments` fails *permissively* (top-level shape
+only, missing schema reads as "no constraint"), so a truncated schema would surface as an
+opaque error from the real server with no client-side net. Only the missing truncation marker
+on the description was a genuine defect, and that is fixed.
+
 ### Milestone 3 — gated follow-ups
 
 Each only on evidence (telemetry or a concrete server that needs it):
@@ -205,4 +278,9 @@ Each only on evidence (telemetry or a concrete server that needs it):
 - Whether per-mode opt-in lists servers, tools, or both.
 - Tool-description prompt injection: descriptions are server-authored text rendered into
   the prompt. The survey's keyword stripping is unproven; decide on a mitigation (e.g.
-  length caps, omitting descriptions from the header) with evidence.
+  length caps, omitting descriptions from the header) with evidence. Partly mitigated
+  already: the header carries names only, and `describe` labels the description
+  `[server-provided text]` and caps it at `MAX_DESCRIPTION_CHARS` with a truncation marker.
+- Default working directory for stdio servers. They currently inherit term2's cwd, which
+  breaks `npx`-based servers inside a repo pinning another package manager (see "What real
+  servers taught us").

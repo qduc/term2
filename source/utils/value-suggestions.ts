@@ -8,6 +8,7 @@ import {
 import { getProvider, getProviderIds } from '../providers/index.js';
 import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
 import { KNOWN_CUSTOM_PROVIDER_TYPES } from '../services/settings/settings-schema.js';
+import { fetchDecisionModels, isDecisionShadowModelKey } from '../services/models/decision-model-listing.js';
 
 export { isSecretSetting, isStringSetting, isNumberSetting };
 
@@ -91,6 +92,12 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'gpt-4o-mini', description: 'OpenAI fast model' },
     { value: 'claude-3-haiku-20240307', description: 'Anthropic fast model' },
     { value: 'gemini-1.5-flash', description: 'Google fast model' },
+  ],
+  // Fallback while the live decisions-catalog fetch (see
+  // fetchLiveSettingValueSuggestions) is in flight or fails.
+  'agent.autoApproveDecisionShadowModel': [
+    { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
+    { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
   ],
   'agent.temperature': [
     { value: '0', description: 'Deterministic' },
@@ -257,6 +264,35 @@ export function buildSettingValueSuggestions(key: string): SettingValueSuggestio
   }
   // Otherwise derive from schema: enum values → suggestions, boolean → true/false.
   return autoSuggestFromSchema(key);
+}
+
+/**
+ * Live suggestion source for settings whose values come from a remote
+ * catalog. Returns null when the key has no live source or the fetch fails;
+ * callers keep the curated/sync suggestions in that case.
+ */
+export async function fetchLiveSettingValueSuggestions(
+  key: string,
+  opts?: { fetchImpl?: typeof fetch },
+): Promise<SettingValueSuggestion[] | null> {
+  if (!isDecisionShadowModelKey(key)) return null;
+  const models = await fetchDecisionModels(opts?.fetchImpl ? { fetchImpl: opts.fetchImpl } : undefined);
+  if (models === null) return null;
+  return models.map((m) => ({ value: m.id, ...(m.name ? { description: m.name } : {}) }));
+}
+
+/**
+ * Merge live suggestions over the sync/curated list: live entries win on
+ * duplicate values and lead the list; an empty or failed live fetch (null)
+ * leaves the curated list untouched.
+ */
+export function mergeSettingValueSuggestions(
+  curated: SettingValueSuggestion[],
+  live: SettingValueSuggestion[] | null,
+): SettingValueSuggestion[] {
+  if (!live || live.length === 0) return curated;
+  const curatedOnly = curated.filter((c) => !live.some((l) => l.value === c.value));
+  return [...live, ...curatedOnly];
 }
 
 export function filterSettingValueSuggestionsByQuery(

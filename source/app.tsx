@@ -53,6 +53,7 @@ import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/termin
 import { deriveInputOwner } from './lib/input-owner.js';
 import { publishHarnessInputState } from './lib/harness-input-idle.js';
 import { handleSettingsIntent } from './components/input/settings-intent-host.js';
+import { handleMcpIntent } from './components/input/mcp-intent-host.js';
 import {
   registerSandboxNetworkApprovalHandler,
   type NetworkApprovalAnswer,
@@ -1251,9 +1252,9 @@ const App: FC<AppProps> = ({
 
   // The application effect host: executes typed domain intents only after
   // the controller has committed the required input and stack transition.
-  // Settings/model application is the first production user of a correlated
-  // IntentResult (success or field error) delivered back to the originating
-  // frame; rewind remains fire-and-forget.
+  // Settings/model and MCP application use correlated IntentResults (success
+  // or field error) delivered back to the originating frame; rewind remains
+  // fire-and-forget.
   useEffect(() => {
     controller.setIntentHost(({ intentRequest }) => {
       if (intentRequest.intent.type === 'rewind') {
@@ -1280,6 +1281,15 @@ const App: FC<AppProps> = ({
         }
         void submitAdmittedTurn({ text: intentRequest.intent.text });
         return;
+      }
+      if (intentRequest.intent.type.startsWith('mcp-') && mcpManager && mcpConfigController) {
+        return handleMcpIntent(intentRequest, {
+          manager: mcpManager,
+          configController: mcpConfigController,
+          login: (name) => {
+            slashCommands.find((command) => command.name === 'mcp-login')?.action(name);
+          },
+        });
       }
       const result = handleSettingsIntent(intentRequest, {
         settingsService,
@@ -1310,6 +1320,8 @@ const App: FC<AppProps> = ({
     slashCommands,
     replaceInput,
     firstRunSetup,
+    mcpManager,
+    mcpConfigController,
   ]);
 
   return (
@@ -1394,7 +1406,6 @@ const App: FC<AppProps> = ({
             resumeConversation={resumeConversation}
             mcpManager={mcpManager ?? undefined}
             mcpConfigController={mcpConfigController}
-            onMcpLogin={(name) => slashCommands.find((command) => command.name === 'mcp-login')?.action(name)}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}

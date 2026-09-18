@@ -60,15 +60,22 @@ const fixtureGone = async (pidFile: string): Promise<boolean> => {
 };
 
 describe('McpConnectionManager', () => {
-  it('reconciles a changed server set without replacing the tool source', async () => {
-    const launcher = vi.fn(async (spec: StdioLaunchSpec) => spec);
-    const manager = new McpConnectionManager({ servers: [], stdioLauncher: launcher });
+  it('reconnects a changed live server while preserving the tool source and refreshed catalog', async () => {
+    const manager = new McpConnectionManager({ servers: [stdioCommand()] });
+    managers.push(manager);
+    const toolSource = manager;
     manager.start();
-    await manager.replaceServers([{ ...stdioCommand(), name: 'added' }]);
-    expect(manager.snapshot().map((server) => server.name)).toEqual(['added']);
-    await manager.replaceServers([]);
-    expect(manager.snapshot()).toEqual([]);
-    await manager.close();
+    await manager.whenSettled();
+    expect(manager.snapshot()[0]?.tools.map((tool) => tool.name)).toContain('echo');
+
+    await manager.replaceServers([{ ...stdioCommand(), env: { MCP_FIXTURE_SECRET: 'changed' } }]);
+
+    expect(manager).toBe(toolSource);
+    expect(manager.snapshot()).toHaveLength(1);
+    expect(manager.snapshot()[0]).toMatchObject({ name: 'fx', state: 'ready' });
+    expect(manager.snapshot()[0]?.tools.map((tool) => tool.name)).toContain('echo');
+    const result = await toolSource.callTool('fx', 'env_probe', {}, { signal: new AbortController().signal });
+    expect(result.content).toEqual([{ type: 'text', text: 'changed' }]);
   });
   const httpFixtures: Array<{ stop: () => void }> = [];
   const managers: McpConnectionManager[] = [];

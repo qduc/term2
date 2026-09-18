@@ -3,6 +3,7 @@ import type { RewindDisposition } from '../../commands/rewind-command.js';
 import type { CustomProviderDraft, ProviderSelectionItem } from '../../hooks/use-provider-selection.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
+import type { RawMcpServerConfig } from '../../services/mcp/mcp-config-controller.js';
 import type { TriggerRuleRegistry } from './menu-controller.js';
 
 export type ProviderField = 'name' | 'type' | 'baseUrl' | 'apiKey';
@@ -161,6 +162,15 @@ export type DomainIntent =
   | { type: 'rewind'; item: RewindItem; disposition: RewindDisposition }
   | { type: 'provider-save'; draft: CustomProviderDraft; originalId: string | null }
   | { type: 'provider-delete'; providerId: string }
+  | { type: 'mcp-reconnect'; serverName: string }
+  | { type: 'mcp-login'; serverName: string }
+  | {
+      type: 'mcp-save';
+      originalName: string | null;
+      name: string;
+      config: RawMcpServerConfig;
+    }
+  | { type: 'mcp-delete'; serverName: string }
   | { type: 'slash-execute'; command: SlashCommand; args?: string };
 
 export type IntentRequest = Readonly<{
@@ -181,7 +191,7 @@ export type IntentResult =
 
 export type IntentHost = (event: {
   intentRequest: NonNullable<MenuEffect['intent']>;
-}) => Promise<IntentResult> | IntentResult | void;
+}) => Promise<IntentResult | void> | IntentResult | void;
 
 export type MenuEffect = Readonly<{
   buffer?: BufferChange;

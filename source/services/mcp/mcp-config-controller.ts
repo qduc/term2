@@ -1,15 +1,19 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import * as nodeFileSystem from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadMcpConfig, type ResolvedMcpServerConfig } from './mcp-config.js';
 
 export type RawMcpServerConfig = Record<string, unknown>;
+export type McpConfigFileSystem = Pick<typeof nodeFileSystem, 'readFile' | 'mkdir' | 'writeFile' | 'rename'>;
 
 export interface McpConfigControllerOptions {
   userConfigPath: string;
   workspaceRoot: string;
   replaceServers: (servers: readonly ResolvedMcpServerConfig[]) => Promise<void>;
   onNote?: (message: string) => void;
+  fileSystem?: McpConfigFileSystem;
+  temporaryPath?: (userConfigPath: string) => string;
+  loadConfig?: typeof loadMcpConfig;
 }
 
 type UserConfigRoot = Record<string, unknown> & { mcpServers?: Record<string, unknown> };
@@ -19,18 +23,24 @@ export class McpConfigController {
   private readonly workspaceRoot: string;
   private readonly replaceServers: McpConfigControllerOptions['replaceServers'];
   private readonly onNote?: (message: string) => void;
+  private readonly fileSystem: McpConfigFileSystem;
+  private readonly temporaryPath: (userConfigPath: string) => string;
+  private readonly loadConfig: typeof loadMcpConfig;
 
   constructor(options: McpConfigControllerOptions) {
     this.userConfigPath = options.userConfigPath;
     this.workspaceRoot = options.workspaceRoot;
     this.replaceServers = options.replaceServers;
     this.onNote = options.onNote;
+    this.fileSystem = options.fileSystem ?? nodeFileSystem;
+    this.temporaryPath = options.temporaryPath ?? ((path) => `${path}.${randomUUID()}.tmp`);
+    this.loadConfig = options.loadConfig ?? loadMcpConfig;
   }
 
   private async readRoot(): Promise<UserConfigRoot> {
     let contents: string;
     try {
-      contents = await readFile(this.userConfigPath, 'utf8');
+      contents = await this.fileSystem.readFile(this.userConfigPath, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
       throw error;
@@ -85,11 +95,11 @@ export class McpConfigController {
 
   private async persistAndReload(root: UserConfigRoot): Promise<void> {
     const directory = dirname(this.userConfigPath);
-    await mkdir(directory, { recursive: true });
-    const temporary = `${this.userConfigPath}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(root, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporary, this.userConfigPath);
-    const loaded = await loadMcpConfig({
+    await this.fileSystem.mkdir(directory, { recursive: true });
+    const temporary = this.temporaryPath(this.userConfigPath);
+    await this.fileSystem.writeFile(temporary, `${JSON.stringify(root, null, 2)}\n`, { mode: 0o600 });
+    await this.fileSystem.rename(temporary, this.userConfigPath);
+    const loaded = await this.loadConfig({
       settingsDir: directory,
       workspaceRoot: this.workspaceRoot,
       ...(this.onNote ? { onNote: this.onNote } : {}),

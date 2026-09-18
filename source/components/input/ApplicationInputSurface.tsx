@@ -55,7 +55,6 @@ export type ApplicationInputSurfaceProps = {
   resumeConversation?: (target?: string) => void | Promise<void>;
   mcpManager?: McpConnectionManager;
   mcpConfigController?: McpConfigController;
-  onMcpLogin?: (name: string) => void;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -135,7 +134,6 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     onResumeConversation: props.resumeConversation,
     mcpManager: props.mcpManager,
     mcpConfigController: props.mcpConfigController,
-    onMcpLogin: props.onMcpLogin,
   };
 
   if (stack.length > 0) {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputContext } from '../../context/InputContext.js';
 import type { McpConfigController, RawMcpServerConfig } from '../../services/mcp/mcp-config-controller.js';
 import type { McpConnectionManager } from '../../services/mcp/mcp-connection-manager.js';
@@ -6,7 +6,7 @@ import type { McpServerSnapshot } from '../../services/mcp/mcp-tool-source.js';
 import { McpSelectionMenu, type McpMenuItem } from '../menu/McpSelectionMenu.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import type { MenuComponentProps } from './menu-registry.js';
-import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
+import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'mcp' }>>;
 type Phase = 'list' | 'detail' | 'form' | 'confirm-delete';
@@ -22,7 +22,13 @@ type Field =
   | 'clientId'
   | 'clientMetadataUrl'
   | 'redirectPorts';
-type Draft = { originalName: string | null; name: string; config: RawMcpServerConfig };
+type Draft = {
+  originalName: string | null;
+  name: string;
+  config: RawMcpServerConfig;
+  maskedFields: ReadonlySet<Field>;
+};
+type PendingIntent = { type: 'save'; name: string } | { type: 'delete' } | { type: 'refresh' };
 type Item = McpMenuItem &
   (
     | { kind: 'server'; name: string }
@@ -32,7 +38,6 @@ type Item = McpMenuItem &
   );
 
 const jsonFields = new Set<Field>(['args', 'env', 'headers', 'redirectPorts']);
-const secretFields = new Set<Field>(['env', 'headers']);
 const fieldLabel: Record<Field, string> = {
   name: 'Name',
   type: 'Transport',
@@ -58,8 +63,7 @@ const displayValue = (field: Field, draft: Draft): string => {
   if (field === 'name') return draft.name || 'required';
   if (field === 'type') return transportOf(draft.config);
   const value = draft.config[field];
-  if (secretFields.has(field))
-    return value && typeof value === 'object' && Object.keys(value as object).length ? '<configured>' : '<none>';
+  if (draft.maskedFields.has(field)) return value === undefined || value === '' ? '<none>' : '<configured>';
   if (value === undefined || value === '') return '<none>';
   return typeof value === 'string' ? value : JSON.stringify(value);
 };
@@ -99,7 +103,6 @@ const normalizedConfig = (draft: Draft): RawMcpServerConfig => {
 export function McpMenuSession({ frame, active, controller, interactions, services }: Props) {
   const manager = services.mcpManager as McpConnectionManager;
   const configController = services.mcpConfigController as McpConfigController;
-  const login = services.onMcpLogin as ((name: string) => void) | undefined;
   const { setMenuPromptLabel } = useInputContext();
   const [phase, setPhase] = useState<Phase>('list');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -109,6 +112,7 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [error, setError] = useState<string>();
+  const pendingIntents = useRef(new Map<string, PendingIntent>());
 
   const refresh = useCallback(async () => {
     setSnapshots(manager.snapshot());
@@ -177,8 +181,15 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
   const enterForm = (entry?: { name: string; config: RawMcpServerConfig }) => {
     setDraft(
       entry
-        ? { originalName: entry.name, name: entry.name, config: { ...entry.config } }
-        : { originalName: null, name: '', config: { type: 'stdio' } },
+        ? {
+            originalName: entry.name,
+            name: entry.name,
+            config: { ...entry.config },
+            maskedFields: new Set(
+              Object.keys(entry.config).filter((field): field is Field => field !== 'type' && field in fieldLabel),
+            ),
+          }
+        : { originalName: null, name: '', config: { type: 'stdio' }, maskedFields: new Set() },
     );
     setPhase('form');
     setSelectedIndex(0);
@@ -201,8 +212,28 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
 
   const interaction = useMemo<MenuInteraction>(
     () => ({
-      handle: (event: MenuEvent) => {
+      handle: (event) => {
         const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
+        if (!('type' in event)) {
+          const pending = pendingIntents.current.get(event.id);
+          if (!pending) return keep();
+          pendingIntents.current.delete(event.id);
+          if (!event.ok) {
+            setError(event.message);
+            return keep();
+          }
+          setError(undefined);
+          if (pending.type === 'save' || pending.type === 'delete') {
+            void refresh()
+              .then(() => {
+                setSelectedName(pending.type === 'save' ? pending.name : null);
+                setPhase(pending.type === 'save' ? 'detail' : 'list');
+                setSelectedIndex(0);
+              })
+              .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+          }
+          return keep();
+        }
         if (editingField) {
           if (
             event.type === 'input' ||
@@ -214,16 +245,22 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
           if (event.type === 'accept' && draft) {
             const text = event.input.kind === 'none' ? '' : event.input.text;
             try {
-              if (secretFields.has(editingField) && text === '') {
+              if (draft.maskedFields.has(editingField) && text === '') {
                 setEditingField(null);
                 controller.clearText();
                 return keep();
               }
-              const value = jsonFields.has(editingField) && text ? JSON.parse(text) : text;
-              if (editingField === 'args' && (!Array.isArray(value) || value.some((x) => typeof x !== 'string')))
+              const value =
+                text === '<clear>' ? undefined : jsonFields.has(editingField) && text ? JSON.parse(text) : text;
+              if (
+                editingField === 'args' &&
+                value !== undefined &&
+                (!Array.isArray(value) || value.some((x) => typeof x !== 'string'))
+              )
                 throw new Error('Arguments must be a JSON array of strings.');
               if (
                 (editingField === 'env' || editingField === 'headers') &&
+                value !== undefined &&
                 (typeof value !== 'object' ||
                   value === null ||
                   Array.isArray(value) ||
@@ -232,11 +269,16 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
                 throw new Error(`${fieldLabel[editingField]} must be a JSON object of strings.`);
               if (
                 editingField === 'redirectPorts' &&
+                value !== undefined &&
                 (!Array.isArray(value) || value.some((x) => !Number.isInteger(x) || x < 1 || x > 65535))
               )
                 throw new Error('Redirect ports must be a JSON array of port numbers.');
               if (editingField === 'name') setDraft({ ...draft, name: text });
-              else setDraft({ ...draft, config: { ...draft.config, [editingField]: value || undefined } });
+              else {
+                const maskedFields = new Set(draft.maskedFields);
+                maskedFields.delete(editingField);
+                setDraft({ ...draft, config: { ...draft.config, [editingField]: value || undefined }, maskedFields });
+              }
               setEditingField(null);
               controller.clearText();
               setError(undefined);
@@ -284,7 +326,7 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
             setEditingField(item.field);
             const existing = item.field === 'name' ? draft.name : draft.config[item.field];
             controller.replaceText(
-              secretFields.has(item.field)
+              draft.maskedFields.has(item.field)
                 ? ''
                 : existing === undefined
                 ? ''
@@ -301,48 +343,50 @@ export function McpMenuSession({ frame, active, controller, interactions, servic
           } else if (item.action === 'delete') {
             setPhase('confirm-delete');
             setSelectedIndex(0);
-          } else if (item.action === 'reconnect' && selectedName)
-            void manager.reconnect(selectedName).catch((e) => setError(String(e)));
-          else if (item.action === 'login' && selectedName) login?.(selectedName);
-          else if (item.action === 'confirm-delete' && selectedName)
-            void configController
-              .deleteUserServer(selectedName)
-              .then(async () => {
-                await refresh();
-                setSelectedName(null);
-                setPhase('list');
-                setSelectedIndex(0);
-              })
-              .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-          else if (item.action === 'save' && draft)
-            void Promise.resolve()
-              .then(() => configController.saveUserServer(draft.originalName, draft.name, normalizedConfig(draft)))
-              .then(async () => {
-                await refresh();
-                setSelectedName(draft.name.trim());
-                setPhase('detail');
-                setSelectedIndex(0);
-                setError(undefined);
-              })
-              .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+          } else if (item.action === 'reconnect' && selectedName) {
+            const id = `mcp-reconnect:${frame.id}:${selectedName}`;
+            pendingIntents.current.set(id, { type: 'refresh' });
+            return {
+              stack: { type: 'keep' },
+              intent: { id, sourceFrameId: frame.id, intent: { type: 'mcp-reconnect', serverName: selectedName } },
+            };
+          } else if (item.action === 'login' && selectedName) {
+            const id = `mcp-login:${frame.id}:${selectedName}`;
+            pendingIntents.current.set(id, { type: 'refresh' });
+            return {
+              stack: { type: 'keep' },
+              intent: { id, sourceFrameId: frame.id, intent: { type: 'mcp-login', serverName: selectedName } },
+            };
+          } else if (item.action === 'confirm-delete' && selectedName) {
+            const id = `mcp-delete:${frame.id}:${selectedName}`;
+            pendingIntents.current.set(id, { type: 'delete' });
+            return {
+              stack: { type: 'keep' },
+              intent: { id, sourceFrameId: frame.id, intent: { type: 'mcp-delete', serverName: selectedName } },
+            };
+          } else if (item.action === 'save' && draft) {
+            try {
+              const config = normalizedConfig(draft);
+              const name = draft.name.trim();
+              const id = `mcp-save:${frame.id}:${draft.originalName ?? 'new'}:${name}`;
+              pendingIntents.current.set(id, { type: 'save', name });
+              return {
+                stack: { type: 'keep' },
+                intent: {
+                  id,
+                  sourceFrameId: frame.id,
+                  intent: { type: 'mcp-save', originalName: draft.originalName, name, config },
+                },
+              };
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e));
+            }
+          }
         }
         return keep();
       },
     }),
-    [
-      configController,
-      controller,
-      draft,
-      editingField,
-      items,
-      login,
-      manager,
-      phase,
-      refresh,
-      selectedIndex,
-      selectedName,
-      userConfigs,
-    ],
+    [controller, draft, editingField, items, manager, phase, refresh, selectedIndex, selectedName, userConfigs],
   );
   useEffect(() => {
     if (!active) return;

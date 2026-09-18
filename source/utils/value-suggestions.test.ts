@@ -1,11 +1,14 @@
-import { it, expect } from 'vitest';
+import { beforeEach, it, expect } from 'vitest';
 import {
   buildSettingValueSuggestions,
+  fetchLiveSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
   isNumberSetting,
   isStringSetting,
+  mergeSettingValueSuggestions,
   type SettingValueSuggestion,
 } from './value-suggestions.js';
+import { clearDecisionModelListCache } from '../services/models/decision-model-listing.js';
 import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
 import { SettingsSchema } from '../services/settings/settings-schema.js';
 import { getProviderIds, upsertProvider, unregisterProvider } from '../providers/index.js';
@@ -76,6 +79,75 @@ it('every enum/boolean setting has auto-generated suggestions', () => {
     const suggestions = buildSettingValueSuggestions(key);
     expect(suggestions.length).toBeGreaterThan(0);
   }
+});
+
+beforeEach(() => {
+  // The live-suggestion tests share the decision-model cache module state.
+  clearDecisionModelListCache();
+});
+
+it('has a non-empty curated fallback for the decision shadow model key', () => {
+  const suggestions = buildSettingValueSuggestions('agent.autoApproveDecisionShadowModel');
+  expect(suggestions.length).toBeGreaterThan(0);
+  expect(suggestions.map((s) => s.value)).toContain('~typesafe/jev-latest');
+});
+
+it('fetchLiveSettingValueSuggestions returns null for keys without a live source', async () => {
+  expect(await fetchLiveSettingValueSuggestions('agent.temperature')).toBeNull();
+  expect(await fetchLiveSettingValueSuggestions('agent.autoApproveModel')).toBeNull();
+});
+
+it('fetchLiveSettingValueSuggestions maps the decision-model listing to suggestions', async () => {
+  const fetchImpl = (async () =>
+    new Response(
+      JSON.stringify({
+        data: [
+          { id: '~typesafe/jev-latest', name: 'TypeSafe: Jev Latest' },
+          { id: 'typesafe/jev-1.13', name: 'TypeSafe: Jev 1.13' },
+        ],
+      }),
+      { status: 200 },
+    )) as typeof fetch;
+
+  const suggestions = await fetchLiveSettingValueSuggestions('agent.autoApproveDecisionShadowModel', { fetchImpl });
+
+  expect(suggestions).toEqual([
+    { value: '~typesafe/jev-latest', description: 'TypeSafe: Jev Latest' },
+    { value: 'typesafe/jev-1.13', description: 'TypeSafe: Jev 1.13' },
+  ]);
+});
+
+it('fetchLiveSettingValueSuggestions returns null when the live fetch fails', async () => {
+  const fetchImpl = (async () => new Response('boom', { status: 500 })) as typeof fetch;
+
+  const suggestions = await fetchLiveSettingValueSuggestions('agent.autoApproveDecisionShadowModel', { fetchImpl });
+
+  expect(suggestions).toBeNull();
+});
+
+it('mergeSettingValueSuggestions puts live entries first and drops curated duplicates', () => {
+  const curated: SettingValueSuggestion[] = [
+    { value: '~typesafe/jev-latest', description: 'Curated Jev' },
+    { value: 'typesafe/jev-1.13' },
+  ];
+  const live: SettingValueSuggestion[] = [
+    { value: 'typesafe/jev-1.13', description: 'Live Jev 1.13' },
+    { value: '~typesafe/jev-latest', description: 'Live Jev Latest' },
+  ];
+
+  const merged = mergeSettingValueSuggestions(curated, live);
+
+  expect(merged).toEqual([
+    { value: 'typesafe/jev-1.13', description: 'Live Jev 1.13' },
+    { value: '~typesafe/jev-latest', description: 'Live Jev Latest' },
+  ]);
+});
+
+it('mergeSettingValueSuggestions keeps curated entries when live is empty', () => {
+  const curated: SettingValueSuggestion[] = [{ value: '~typesafe/jev-latest', description: 'Curated Jev' }];
+
+  expect(mergeSettingValueSuggestions(curated, [])).toEqual(curated);
+  expect(mergeSettingValueSuggestions(curated, null)).toEqual(curated);
 });
 
 it('filterSettingValueSuggestionsByQuery filters by partial match', () => {

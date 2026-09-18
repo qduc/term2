@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { useSelection } from './use-selection.js';
-import { buildSettingValueSuggestions, filterSettingValueSuggestionsByQuery } from '../utils/value-suggestions.js';
+import {
+  buildSettingValueSuggestions,
+  fetchLiveSettingValueSuggestions,
+  filterSettingValueSuggestionsByQuery,
+  mergeSettingValueSuggestions,
+  type SettingValueSuggestion,
+} from '../utils/value-suggestions.js';
 import { isNumberSetting, isSecretSetting, isStringSetting } from '../services/settings/settings-ui-metadata.js';
 
 const MAX_RESULTS = 10;
@@ -16,7 +22,25 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
 
   const [settingsVersion, setSettingsVersion] = useState(0);
 
+  // Live catalog suggestions (e.g. the OpenRouter decisions list for the
+  // decision-shadow model) resolved asynchronously while the frame is open;
+  // each run cancels the previous one's still-pending result.
+  const [liveSuggestions, setLiveSuggestions] = useState<SettingValueSuggestion[] | null>(null);
+
   const resolvedSettingKey = isControllerOpen ? controllerFrame.settingKey : null;
+
+  useEffect(() => {
+    if (!resolvedSettingKey) return;
+    setLiveSuggestions(null);
+    let cancelled = false;
+    fetchLiveSettingValueSuggestions(resolvedSettingKey).then((result) => {
+      if (cancelled || result === null) return;
+      setLiveSuggestions(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedSettingKey]);
 
   // Recompute current setting value suggestions when settings change.
   // (Useful if we later want to add "current" or dynamic suggestions.)
@@ -36,7 +60,10 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     if (!resolvedSettingKey) return [];
     // settingsVersion is used to allow refresh when values change.
     void settingsVersion;
-    const suggestions = [...buildSettingValueSuggestions(resolvedSettingKey)];
+    const suggestions = mergeSettingValueSuggestions(
+      [...buildSettingValueSuggestions(resolvedSettingKey)],
+      liveSuggestions,
+    );
     // Never surface a stored credential as a suggestion.
     if (isSecretSetting(resolvedSettingKey)) return suggestions;
     try {
@@ -54,7 +81,7 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
       // Ignore
     }
     return suggestions;
-  }, [resolvedSettingKey, settingsVersion, settingsService]);
+  }, [resolvedSettingKey, settingsVersion, settingsService, liveSuggestions]);
 
   const filteredEntries = useMemo(() => {
     return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, resolvedSettingKey ?? undefined);

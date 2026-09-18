@@ -94,6 +94,8 @@ export interface ApprovalDescriptor {
   callId?: string;
   llmAdvisory?: LLMAdvisory;
   deniedRead?: DeniedReadMetadata;
+  /** Root used to classify a nested file call as outside the active workspace. */
+  workspaceRoot?: string;
   /** Present for a file-mutating tool whose target is outside the workspace. */
   outsideWorkspaceEdit?: {
     path: string;

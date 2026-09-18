@@ -39,6 +39,41 @@ it('records Jev shadow disagreement without changing the chore model approval', 
   expect(JSON.stringify(events)).not.toContain('ls source');
 });
 
+it('gives the shadow the latest user request even when recent tool traffic buries it', async () => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const decisionShadow = vi.fn(async () => [
+    { riskLevel: 'low' as const, authorization: 'implied' as const, confidence: 0.8, wouldApprove: true },
+  ]);
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'test', command: 'pnpm test' }],
+    history: [
+      { role: 'user', type: 'message', content: 'release the next version' },
+      ...Array.from({ length: 9 }, () => ({ role: 'assistant', type: 'message', content: 'working' })),
+    ],
+    settingsService: settings as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'Relevant test.', riskLevel: 'low', authorization: 'implied', confidence: 'high' }],
+        }),
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+    awaitDecisionShadow: true,
+  });
+  expect(decisionShadow).toHaveBeenCalledWith(
+    expect.objectContaining({
+      evidence: expect.objectContaining({
+        userRequest: 'release the next version',
+        requests: [{ toolName: 'shell', command: 'pnpm test', unsandboxed: false }],
+      }),
+    }),
+  );
+});
+
 it('does not compare Jev against a system rejection or a failed reviewer', async () => {
   const settings = createMockSettings('advisory');
   settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');

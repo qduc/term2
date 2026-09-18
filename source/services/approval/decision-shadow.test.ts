@@ -5,7 +5,22 @@ it('compares typed Jev classifications for each approval request', async () => {
   const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
     expect(Object.keys(body.questions)).toEqual(['risk_0', 'authorization_0', 'risk_1', 'authorization_1']);
-    expect(body.state.evidence).toContain('request evidence');
+    expect(body.state).toEqual({
+      policy: expect.any(String),
+      evidence: {
+        userRequest: 'release the next version',
+        recentContext: 'request evidence',
+        priorHumanDecisions: '(none this session)',
+        requests: [
+          { toolName: 'shell', command: 'pnpm test' },
+          { toolName: 'shell', command: 'curl public API' },
+        ],
+      },
+    });
+    expect(body.questions.risk_0.instructions).toContain('`evidence.requests[0]`');
+    expect(body.questions.authorization_1.instructions).toContain('`evidence.userRequest`');
+    expect(body.questions.risk_0.criteria.low).toContain('public information retrieval');
+    expect(body.questions.risk_0.criteria.high).toContain('network exfiltration');
     return new Response(
       JSON.stringify({
         answers: {
@@ -20,8 +35,15 @@ it('compares typed Jev classifications for each approval request', async () => {
   });
   const results = await evaluateDecisionShadow({
     model: '~typesafe/jev-latest',
-    evidence: 'request evidence',
-    requestCount: 2,
+    evidence: {
+      userRequest: 'release the next version',
+      recentContext: 'request evidence',
+      priorHumanDecisions: '(none this session)',
+      requests: [
+        { toolName: 'shell', command: 'pnpm test' },
+        { toolName: 'shell', command: 'curl public API' },
+      ],
+    },
     apiKey: 'test-key',
     fetchImpl,
   });
@@ -46,8 +68,12 @@ it('rejects incomplete answers instead of treating them as approval', async () =
   await expect(
     evaluateDecisionShadow({
       model: '~typesafe/jev-latest',
-      evidence: 'request evidence',
-      requestCount: 1,
+      evidence: {
+        userRequest: '',
+        recentContext: 'request evidence',
+        priorHumanDecisions: '',
+        requests: [{ toolName: 'shell', command: 'pwd' }],
+      },
       apiKey: 'test-key',
       fetchImpl,
     }),

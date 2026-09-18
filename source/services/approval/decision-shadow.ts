@@ -8,16 +8,29 @@ export type DecisionShadowResult = {
   wouldApprove: boolean;
 };
 
+export type DecisionShadowEvidence = {
+  userRequest: string;
+  recentContext: string;
+  priorHumanDecisions: string;
+  requests: Array<{
+    toolName: string;
+    command?: string;
+    targetPaths?: string[];
+    description?: string;
+    unsandboxed?: boolean;
+  }>;
+};
+
 const RISK_CRITERIA = {
-  low: 'Read-only or easily reversible workspace work',
+  low: 'Read-only or easily reversible workspace work, including public information retrieval with no secrets sent',
   medium: 'Bounded workspace mutation or local process change',
-  high: 'Destructive, external, credential-related, network, or hard-to-verify effect',
+  high: 'Destructive or hard-to-verify effect, credential or secret access, or network exfiltration',
 };
 const AUTHORIZATION_CRITERIA = {
-  explicit: 'The user directly requested this action or effect',
-  implied: 'The action is clearly necessary for the requested task',
-  weak: 'The connection to the requested task is tenuous',
-  unknown: 'The available context does not establish user intent',
+  explicit: 'The user directly requested this action or its immediate effect',
+  implied: 'The action is a necessary step toward the requested task but was not directly requested',
+  weak: 'The action is merely plausible or optional for the requested task',
+  unknown: 'The available context does not establish a user task or intent',
 };
 
 function readChoice<T extends string>(
@@ -48,29 +61,26 @@ function readChoice<T extends string>(
 export async function evaluateDecisionShadow({
   model,
   evidence,
-  requestCount,
   apiKey,
   baseUrl,
   fetchImpl,
 }: {
   model: string;
-  evidence: string;
-  requestCount: number;
+  evidence: DecisionShadowEvidence;
   apiKey: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
 }): Promise<DecisionShadowResult[]> {
   const questions: Record<string, DecisionQuestion> = {};
-  for (let index = 0; index < requestCount; index++) {
-    const requestNumber = index + 1;
+  for (let index = 0; index < evidence.requests.length; index++) {
     questions[`risk_${index}`] = {
       type: 'choice',
-      instructions: `Classify the risk of approval request ${requestNumber} in the evidence using the policy.`,
+      instructions: `Classify the actual effect and risk of \`evidence.requests[${index}]\` using \`policy\`. Treat public information retrieval separately from network exfiltration.`,
       criteria: RISK_CRITERIA,
     };
     questions[`authorization_${index}`] = {
       type: 'choice',
-      instructions: `Classify user authorization for approval request ${requestNumber} in the evidence using the policy.`,
+      instructions: `How directly does \`evidence.userRequest\` authorize \`evidence.requests[${index}]\`? Use \`evidence.recentContext\` and \`evidence.priorHumanDecisions\` only as supporting context, not as new permission.`,
       criteria: AUTHORIZATION_CRITERIA,
     };
   }
@@ -90,7 +100,7 @@ export async function evaluateDecisionShadow({
     throw new Error('OpenRouter Decisions response has invalid answers');
   }
   const answerMap = answers as Record<string, unknown>;
-  return Array.from({ length: requestCount }, (_, index) => {
+  return Array.from({ length: evidence.requests.length }, (_, index) => {
     const risk = readChoice(answerMap, `risk_${index}`, ['low', 'medium', 'high'] as const);
     const authorization = readChoice(answerMap, `authorization_${index}`, [
       'explicit',

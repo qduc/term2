@@ -18,7 +18,7 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../utils/shell/sandbox/denied-read-detector.js';
-import { evaluateDecisionShadow, type DecisionShadowResult } from './decision-shadow.js';
+import { evaluateDecisionShadow, type DecisionShadowEvidence, type DecisionShadowResult } from './decision-shadow.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -157,6 +157,37 @@ const buildCompactHistoryContext = (history: ProviderInputItem[]): string => {
   const text = lines.length > 0 ? lines.join('\n') : '(no recent conversation context)';
   return truncate(text, MAX_CONTEXT_CHARS);
 };
+
+const latestUserRequest = (history: ProviderInputItem[]): string => {
+  for (let index = history.length - 1; index >= 0; index--) {
+    const message = projectConversationMessage(history[index]);
+    if (message?.role === 'user' && message.allText.trim()) {
+      return truncate(message.allText.replace(/\s+/g, ' ').trim(), MAX_MESSAGE_CHARS);
+    }
+  }
+  return '';
+};
+
+const buildDecisionShadowEvidence = (
+  commands: ShellAutoApprovalCommand[],
+  history: ProviderInputItem[],
+  manualDecisions?: ShellAutoApprovalManualDecision[],
+): DecisionShadowEvidence => ({
+  userRequest: latestUserRequest(history),
+  recentContext: buildCompactHistoryContext(history),
+  priorHumanDecisions: buildManualDecisionsContext(manualDecisions),
+  requests: commands.map((command) => ({
+    toolName: command.toolName ?? 'shell',
+    ...(command.command ? { command: command.command } : {}),
+    ...(command.targetPaths?.length
+      ? { targetPaths: command.targetPaths }
+      : command.targetPath
+      ? { targetPaths: [command.targetPath] }
+      : {}),
+    ...(command.description ? { description: command.description } : {}),
+    unsandboxed: command.unsandboxed === true,
+  })),
+});
 
 const buildRedSystemReasoning = (detail: string, llmReasoning?: string): string => {
   const base = `Blocked by safety heuristics (RED): ${detail}. Manual approval is strictly required.`;
@@ -519,8 +550,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       .then(() =>
         decisionShadow({
           model: shadowModel,
-          evidence: prompt,
-          requestCount: toEvaluateByLLM.length,
+          evidence: buildDecisionShadowEvidence(toEvaluateByLLM, history, manualDecisions),
           apiKey,
           ...(baseUrl ? { baseUrl } : {}),
         }),

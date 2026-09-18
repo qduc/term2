@@ -1,7 +1,70 @@
 import os from 'node:os';
 import path from 'node:path';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
+
+it('records Jev shadow disagreement without changing the chore model approval', async () => {
+  const events: Array<{ message: string; details: any }> = [];
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect the tree' }],
+    settingsService: settings as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'Safe.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+        }),
+    } as any,
+    logger: {
+      ...createMockLogger(),
+      info: (message: string, details: any) => events.push({ message, details }),
+    } as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow: async () => [{ riskLevel: 'high', authorization: 'implied', confidence: 0.9, wouldApprove: false }],
+  });
+  expect(advisories.get('call-safe')?.approved).toBe(true);
+  await vi.waitFor(() => expect(events).toHaveLength(1));
+  expect(events[0].details).toEqual(
+    expect.objectContaining({
+      eventType: 'approval.decision_shadow.compared',
+      reviewerApproved: true,
+      shadowWouldApprove: false,
+      agreement: false,
+    }),
+  );
+  expect(JSON.stringify(events)).not.toContain('ls source');
+});
+
+it('keeps the chore model result when the optional decision shadow fails', async () => {
+  const warnings: Array<Record<string, unknown>> = [];
+  const settings = createMockSettings('advisory');
+  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [],
+    settingsService: settings as any,
+    agentClient: {
+      chat: async () =>
+        JSON.stringify({
+          results: [{ reasoning: 'Safe.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+        }),
+    } as any,
+    logger: {
+      ...createMockLogger(),
+      warn: (_message: string, details: Record<string, unknown>) => warnings.push(details),
+    } as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow: async () => {
+      throw new Error('shadow unavailable');
+    },
+  });
+  expect(advisories.get('call-safe')?.approved).toBe(true);
+  await vi.waitFor(() => expect(warnings).toHaveLength(1));
+  expect(warnings[0].eventType).toBe('approval.decision_shadow.failed');
+});
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),

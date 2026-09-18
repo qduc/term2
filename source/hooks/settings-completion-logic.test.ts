@@ -29,6 +29,8 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory(SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS).id).toBe('safety');
   expect(getSettingCategory(SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD).id).toBe('safety');
   expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL).id).toBe('safety');
+  expect(SETTING_DESCRIPTIONS[SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL]).toContain('comparison');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory(SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT).id).toBe('tools');
   expect(getSettingCategory('agent.mentorSamples').id).toBe('models');

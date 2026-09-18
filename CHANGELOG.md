@@ -1,3 +1,17 @@
+## [0.25.0] - 2026-09-18
+
+### Features
+- Added MCP server support: configure stdio, HTTP, and SSE servers; use their tools through `run_code`; authenticate OAuth-backed servers; and manage server state from an interactive menu.
+- Added opt-in OpenRouter Decisions shadow review for approval decisions, with a live model picker for selecting the reviewer.
+
+### Bug Fixes
+- Fixed Responses API tool names being lost in the UI.
+- Fixed malformed tool arguments crashing tool-label rendering.
+
+### Improvements
+- Nested read approvals now show the active workspace.
+- Tool status remains visible while commands run, and slow direct shell commands receive an acknowledgement.
+
 ## [0.24.1] - 2026-09-14
 
 ### Features

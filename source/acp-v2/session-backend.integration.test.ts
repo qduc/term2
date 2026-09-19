@@ -409,7 +409,7 @@ describe('ACP v2 permission bridge integration', () => {
   it('asks the client for permission and runs the approved shell call', async () => {
     await withBridgeSession(
       {
-        command: ({ workspaceFile }) => 'echo written > ' + workspaceFile,
+        command: () => 'echo written > probe.txt',
         permission: async () => ({ outcome: { outcome: 'selected', optionId: 'allow-once' } }),
       },
       async (session) => {

@@ -464,7 +464,7 @@ export class RuntimeFactory {
         toolLifecycle,
       ) => {
         this.#options.onAgentClientDeps?.({
-          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          readOnly: access.isReadOnly,
           sessionAccess: access,
         });
         return this.#options.createAgentClient({
@@ -489,7 +489,7 @@ export class RuntimeFactory {
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,
           gatewayMode: true,
-          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          readOnly: access.isReadOnly,
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
         });

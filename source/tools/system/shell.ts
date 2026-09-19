@@ -158,7 +158,6 @@ interface ShellCommandResult {
   stderr: string;
   outcome: { type: 'exit'; exitCode: number | null } | { type: 'timeout' };
 }
-
 /** The registry keeps the formatted output while retaining the process outcome separately. */
 export interface BackgroundShellExecutionResult {
   output: string;
@@ -1048,7 +1047,7 @@ export function createShellToolDefinition(deps: {
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 tmpDir: SANDBOX_TEMP_DIR,
-                allowWrite: readOnly ? false : undefined,
+                allowWrite: !readOnly,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
                 dockerSocketPath: dockerHostControl?.socketPath,

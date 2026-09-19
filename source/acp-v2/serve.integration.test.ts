@@ -301,7 +301,7 @@ const runAcpChild = async (
   const workspaceFile = path.join(workspace, 'probe.txt');
   disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
-  const mock = await startModelMock(['acp-mock-model'], { toolCommand: `echo written > ${workspaceFile}` });
+  const mock = await startModelMock(['acp-mock-model'], { toolCommand: 'echo written > probe.txt' });
   disposables.push(mock.close);
 
   const settingsDir = resolveSettingsDirectory({ homeDir: tempHome, env: { XDG_STATE_HOME: stateHome } });

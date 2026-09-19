@@ -58,8 +58,11 @@ const provider: ProviderDefinition = {
         return;
       }
       if (requestText.includes('read the file')) {
-        yield { type: 'text_delta' as const, text: 'read complete' };
-        yield { type: 'completion' as const, responseId: 'acp-response-1', output: [] };
+        yield {
+          type: 'completion' as const,
+          responseId: 'acp-response-1',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'read complete' }] }],
+        };
         return;
       }
       yield { type: 'completion' as const, responseId: `acp-response-${call}`, output: [] };
@@ -174,11 +177,11 @@ describe('ACP v2 production backend integration', () => {
           prompt: [{ type: 'text', text: 'write this' }],
         });
         await vi.waitFor(() =>
-          expect(updates).toContainEqual(
-            expect.objectContaining({
-              update: expect.objectContaining({ sessionUpdate: 'tool_call_update', status: 'failed' }),
-            }),
-          ),
+          expect(updates.at(-1)?.update).toEqual({
+            sessionUpdate: 'state_update',
+            state: 'idle',
+            stopReason: 'end_turn',
+          }),
         );
         expect(existsSync(path.join(workspace, 'blocked.txt'))).toBe(false);
         await context.request(acp.methods.agent.session.close, { sessionId: created.sessionId });
@@ -193,9 +196,11 @@ describe('ACP v2 production backend integration', () => {
           sessionId: created.sessionId,
           prompt: [{ type: 'text', text: 'after resume' }],
         });
-        await vi.waitFor(() =>
-          expect(providerRequests.some((request) => request.includes('read complete'))).toBe(true),
-        );
+        await vi.waitFor(() => {
+          const resumedRequest = providerRequests.at(-1) ?? '';
+          expect(resumedRequest).toContain('read the file');
+          expect(resumedRequest).toContain('read complete');
+        });
       });
     } finally {
       delete process.env.ACP_M1_WORKSPACE;

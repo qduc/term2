@@ -3,6 +3,7 @@ import { realpathSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import type { RunTerminationCause } from '../contracts/run-termination.js';
 import {
   getConversationsDir,
   listConversations,
@@ -33,6 +34,7 @@ type ActiveTurn = {
   emit: AcpV2EmitUpdate | null;
   resolve: ((outcome: { stopReason: acp.StopReason }) => void) | null;
   reject: ((error: unknown) => void) | null;
+  streamedAssistantLength: number;
 };
 
 export type AcpV2SessionBackendOptions = Readonly<{
@@ -84,15 +86,64 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   };
 
   const mapEvent = async (event: ConversationEvent, turn: ActiveTurn): Promise<void> => {
+    if (event.type === 'approval_required') {
+      const snapshot = turn.session.resources.runtime?.pendingInteraction.getSnapshot();
+      let answer = 'n';
+      let reason = 'Approval is not yet supported over ACP.';
+      let delivered = false;
+      try {
+        const decision = await decideApproval(
+          {
+            toolName: event.approval.toolName,
+            callId: event.approval.callId,
+            argumentsText: event.approval.argumentsText,
+          },
+          { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
+        );
+        answer = decision.answer;
+        reason = decision.reason ?? (answer === 'y' ? '' : 'Approval denied.');
+        if (turn.emit) {
+          await turn.emit({
+            sessionUpdate: 'tool_call_update',
+            toolCallId: event.approval.callId ?? `${turn.turnId}:approval`,
+            title: 'Approval required',
+            kind: toolKind(event.approval.toolName),
+            status: 'failed',
+            content: [{ type: 'content', content: { type: 'text', text: reason || 'Approval granted.' } }],
+          });
+          delivered = true;
+        }
+      } catch (error) {
+        reason = error instanceof Error ? error.message : 'Approval denied.';
+      } finally {
+        if (snapshot) {
+          try {
+            turn.session.resolvePendingInteraction({
+              expectedInteractionId: snapshot.interactionId,
+              answer: delivered ? answer : 'n',
+              rejectionReason: delivered && answer === 'y' ? undefined : reason,
+            });
+          } catch {
+            await turn.session.abort(turn.turnId).catch(() => undefined);
+          }
+        } else {
+          await turn.session.abort(turn.turnId).catch(() => undefined);
+        }
+      }
+      return;
+    }
     if (!turn.emit) return;
     switch (event.type) {
-      case 'text_delta':
+      case 'text_delta': {
+        const text = bound(event.delta, MAX_TEXT);
+        turn.streamedAssistantLength += text.length;
         await turn.emit({
           sessionUpdate: 'agent_message_chunk',
           messageId: `${turn.turnId}:assistant`,
-          content: { type: 'text', text: bound(event.delta, MAX_TEXT) },
+          content: { type: 'text', text },
         });
         return;
+      }
       case 'reasoning_delta':
         // ConversationEvent reasoning is already the sanitized presentation path.
         await turn.emit({
@@ -120,62 +171,27 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
           kind: toolKind(event.toolName),
           status: 'in_progress',
         });
-        if (toolKind(event.toolName) === 'edit') {
-          await turn.emit({
-            sessionUpdate: 'tool_call_update',
-            toolCallId: event.toolCallId,
-            status: 'failed',
-            content: [{ type: 'content', content: { type: 'text', text: 'Approval is not yet supported over ACP.' } }],
-          });
-        }
         return;
       case 'tool_call_streaming_delta':
-        if (event.toolName) {
+        if (event.toolName && (event as ConversationEvent & { toolCallId?: string }).toolCallId) {
           await turn.emit({
             sessionUpdate: 'tool_call_update',
-            toolCallId: `${turn.turnId}:tool`,
+            toolCallId: (event as ConversationEvent & { toolCallId: string }).toolCallId,
             name: bound(event.toolName, 256),
             status: 'in_progress',
             rawInput: { argumentCharCount: Math.min(event.argumentCharCount, MAX_ARGUMENTS) },
           });
         }
         return;
-      case 'approval_required': {
-        const snapshot = turn.session.resources.runtime?.pendingInteraction.getSnapshot();
-        const decision = await decideApproval(
-          {
-            toolName: event.approval.toolName,
-            callId: event.approval.callId,
-            argumentsText: event.approval.argumentsText,
-          },
-          { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
-        );
-        await turn.emit({
-          sessionUpdate: 'tool_call_update',
-          toolCallId: event.approval.callId ?? `${turn.turnId}:approval`,
-          title: 'Approval required',
-          kind: toolKind(event.approval.toolName),
-          status: 'failed',
-          content: [{ type: 'content', content: { type: 'text', text: decision.reason ?? 'Approval denied.' } }],
-        });
-        if (snapshot) {
-          turn.session.resolvePendingInteraction({
-            expectedInteractionId: snapshot.interactionId,
-            answer: decision.answer,
-            rejectionReason: decision.answer === 'y' ? undefined : decision.reason,
-          });
-        }
-        return;
-      }
       case 'final':
-        if (event.finalText) {
+        if (event.finalText.slice(turn.streamedAssistantLength)) {
           await turn.emit({
             sessionUpdate: 'agent_message_chunk',
             messageId: `${turn.turnId}:assistant`,
-            content: { type: 'text', text: bound(event.finalText, MAX_TEXT) },
+            content: { type: 'text', text: bound(event.finalText.slice(turn.streamedAssistantLength), MAX_TEXT) },
           });
         }
-        turn.resolve?.({ stopReason: 'end_turn' });
+        turn.resolve?.({ stopReason: stopReasonForTerminalCause(event.terminalCause) });
         return;
       case 'error':
         turn.reject?.(new Error(bound(event.message, MAX_TEXT)));
@@ -245,8 +261,14 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     },
     async resumeSession(request, emit) {
       const existing = sessions.get(request.sessionId);
+      if (existing) {
+        const requestedRoot = validateCwd(request.cwd);
+        if (requestedRoot !== existing.binding.canonicalRoot) {
+          invalid('cwd does not match the live session workspace');
+        }
+      }
+      const restored = load(request.sessionId, request.cwd);
       if (!existing) {
-        const restored = load(request.sessionId, request.cwd);
         if (!restored) missing(request.sessionId);
         const session = await create(request.cwd, request.sessionId);
         const restoredState = restored as RestoredState;
@@ -259,18 +281,20 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
           updatedAt: restoredState.updatedAt,
         });
       }
-      const restored = load(request.sessionId, request.cwd);
       if (restored && request.replayFrom) await replay(restored, emit);
       return {};
     },
     async closeSession(sessionId) {
       const session = sessions.get(sessionId);
       if (!session) return;
-      await session.dispose();
-      session.service.setLogSink(null);
-      await writers.get(sessionId)?.close();
-      writers.delete(sessionId);
-      sessions.delete(sessionId);
+      try {
+        await session.dispose();
+      } finally {
+        session.service.setLogSink(null);
+        await writers.get(sessionId)?.close();
+        writers.delete(sessionId);
+        sessions.delete(sessionId);
+      }
     },
     async preparePrompt(request): Promise<AcpV2PromptExecution> {
       const session = sessions.get(request.sessionId);
@@ -289,6 +313,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
             emit,
             resolve: null,
             reject: null,
+            streamedAssistantLength: 0,
           };
           active.set(request.sessionId, turn);
           const outcome = new Promise<{ stopReason: acp.StopReason }>((resolve, reject) => {
@@ -337,6 +362,10 @@ function toolKind(name: string): 'read' | 'edit' | 'execute' | 'think' | 'fetch'
   if (/shell|command|exec/i.test(name)) return 'execute';
   if (/web|fetch/i.test(name)) return 'fetch';
   return 'other';
+}
+
+function stopReasonForTerminalCause(cause: RunTerminationCause | undefined): acp.StopReason {
+  return cause === 'budget_exhausted' ? 'max_turn_requests' : 'end_turn';
 }
 
 function promptToTurn(blocks: acp.PromptRequest['prompt']): UserTurn {

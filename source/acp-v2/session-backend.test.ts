@@ -122,6 +122,73 @@ describe('ACP v2 production session backend', () => {
     }
   });
 
+  it('does not duplicate assistant text when final repeats streamed content', async () => {
+    const session = makeSession();
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: makeRuntime(session) as any,
+      createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
+    });
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    try {
+      await backend.createSession({ cwd });
+      const execution = await backend.preparePrompt({
+        sessionId: 'session-1',
+        prompt: [{ type: 'text', text: 'run' }],
+      });
+      const updates: any[] = [];
+      const run = execution.run(async (update) => {
+        updates.push(update);
+      }, new AbortController().signal);
+      await vi.waitFor(() => expect(session.commitMessage).toHaveBeenCalled());
+      await session.eventSink({ type: 'text_delta', delta: 'ab' });
+      await session.eventSink({ type: 'final', finalText: 'abc' });
+      await expect(run).resolves.toEqual({ stopReason: 'end_turn' });
+      expect(
+        updates
+          .filter((update) => update.sessionUpdate === 'agent_message_chunk')
+          .map((update) => update.content.text)
+          .join(''),
+      ).toBe('abc');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('denies approval even when the client update throws', async () => {
+    const session = makeSession();
+    session.resources.runtime = { pendingInteraction: { getSnapshot: () => ({ interactionId: 8 }) } };
+    session.resolvePendingInteraction = vi.fn();
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: makeRuntime(session) as any,
+      createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
+    });
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    try {
+      await backend.createSession({ cwd });
+      const execution = await backend.preparePrompt({
+        sessionId: 'session-1',
+        prompt: [{ type: 'text', text: 'run' }],
+      });
+      const run = execution.run(async () => {
+        throw new Error('client disconnected');
+      }, new AbortController().signal);
+      await vi.waitFor(() => expect(session.commitMessage).toHaveBeenCalled());
+      await expect(
+        session.eventSink({
+          type: 'approval_required',
+          approval: { toolName: 'shell', callId: 'tool-1', argumentsText: '{}' },
+        }),
+      ).resolves.toBeUndefined();
+      expect(session.resolvePendingInteraction).toHaveBeenCalledWith(expect.objectContaining({ answer: 'n' }));
+      expect(session.abort).not.toHaveBeenCalled();
+      void run;
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('uses an injected approval policy while the default remains denial', async () => {
     const session = makeSession();
     const resolvePendingInteraction = vi.fn();
@@ -191,6 +258,33 @@ describe('ACP v2 production session backend', () => {
       await expect(backend.resumeSession({ sessionId: 'session-1', cwd }, async () => {})).rejects.toMatchObject({
         code: -32009,
       });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('maps budget termination and treats unknown close as a no-op', async () => {
+    const session = makeSession();
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: makeRuntime(session) as any,
+      createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
+    });
+    await expect(backend.closeSession('missing')).resolves.toBeUndefined();
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    try {
+      await backend.createSession({ cwd });
+      const execution = await backend.preparePrompt({
+        sessionId: 'session-1',
+        prompt: [{ type: 'text', text: 'run' }],
+      });
+      let result!: Promise<unknown>;
+      result = execution.run(async () => {}, new AbortController().signal);
+      await vi.waitFor(() => expect(session.commitMessage).toHaveBeenCalled());
+      await session.eventSink({ type: 'final', finalText: '', terminalCause: 'budget_exhausted' });
+      await expect(result).resolves.toEqual({ stopReason: 'max_turn_requests' });
+      await expect(backend.closeSession('session-1')).resolves.toBeUndefined();
+      await expect(backend.closeSession('session-1')).resolves.toBeUndefined();
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

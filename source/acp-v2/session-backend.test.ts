@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createAcpV2SessionBackend } from './session-backend.js';
+import { LockConflictError } from '../services/logging/conversation-log-writer.js';
 
 const makeRuntime = (session: any) => ({
   create: vi.fn(async (_binding: unknown, options: any) => {
@@ -10,9 +11,19 @@ const makeRuntime = (session: any) => ({
   }),
 });
 
+const noopWriterFactory = () => ({
+  init: () => {},
+  append: () => {},
+  rotate: () => {},
+  flush: async () => {},
+  close: async () => {},
+});
+
 const makeSession = (): any => ({
   sessionId: 'session-1',
   binding: { canonicalRoot: '/tmp' },
+  settings: { modelId: 'test-model', providerId: 'test-provider' },
+  service: { setLogSink: vi.fn() },
   resources: { runtime: undefined },
   prepareMessage: vi.fn(async () => ({ kind: 'prepared', leaseId: 'lease-1', turnId: 'turn-1' })),
   commitMessage: vi.fn(async () => {}),
@@ -26,6 +37,7 @@ describe('ACP v2 production session backend', () => {
     const backend = createAcpV2SessionBackend({
       runtimeFactory: makeRuntime(session) as any,
       createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
     });
     await expect(backend.createSession({ cwd: 'relative' })).rejects.toMatchObject({ code: -32602 });
     await expect(backend.createSession({ cwd: '/definitely/missing' })).rejects.toMatchObject({ code: -32602 });
@@ -44,6 +56,7 @@ describe('ACP v2 production session backend', () => {
     const backend = createAcpV2SessionBackend({
       runtimeFactory: makeRuntime(session) as any,
       createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
     });
     const cwd = mkdtempSync('/tmp/acp-backend-');
     try {
@@ -75,6 +88,7 @@ describe('ACP v2 production session backend', () => {
     const backend = createAcpV2SessionBackend({
       runtimeFactory: makeRuntime(session) as any,
       createId: () => 'session-1',
+      writerFactory: noopWriterFactory as any,
     });
     const cwd = mkdtempSync('/tmp/acp-backend-');
     try {
@@ -120,6 +134,7 @@ describe('ACP v2 production session backend', () => {
       runtimeFactory: makeRuntime(session) as any,
       createId: () => 'session-1',
       decideApproval,
+      writerFactory: noopWriterFactory as any,
     });
     const cwd = mkdtempSync('/tmp/acp-backend-');
     try {
@@ -149,6 +164,33 @@ describe('ACP v2 production session backend', () => {
         rejectionReason: 'policy denied',
       });
       expect(updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', status: 'failed' }));
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects resume when the persisted conversation writer is locked', async () => {
+    const session = makeSession();
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: makeRuntime(session) as any,
+      writerFactory: () => {
+        throw new LockConflictError('session-1', '/tmp/session-1.lock', null);
+      },
+      load: () => ({
+        id: 'session-1',
+        createdAt: new Date().toISOString(),
+        previousResponseId: null,
+        messages: [],
+        history: [],
+        toolLedger: [],
+        replayWarnings: [],
+      }),
+    });
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    try {
+      await expect(backend.resumeSession({ sessionId: 'session-1', cwd }, async () => {})).rejects.toMatchObject({
+        code: -32009,
+      });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

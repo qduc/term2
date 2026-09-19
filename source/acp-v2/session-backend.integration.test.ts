@@ -14,6 +14,7 @@ const roots: string[] = [];
 let providerCall = 0;
 let releaseCancel: (() => void) | undefined;
 let writeIssued = false;
+const providerRequests: string[] = [];
 
 const provider: ProviderDefinition = {
   id: providerId,
@@ -23,6 +24,7 @@ const provider: ProviderDefinition = {
     stream: async function* (request: any) {
       const call = providerCall++;
       const requestText = JSON.stringify(request);
+      providerRequests.push(requestText);
       if (requestText.includes('cancel this')) {
         await new Promise<void>((resolve) => {
           releaseCancel = resolve;
@@ -86,6 +88,7 @@ afterEach(() => {
   providerCall = 0;
   releaseCancel = undefined;
   writeIssued = false;
+  providerRequests.length = 0;
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -180,10 +183,19 @@ describe('ACP v2 production backend integration', () => {
         expect(existsSync(path.join(workspace, 'blocked.txt'))).toBe(false);
         await context.request(acp.methods.agent.session.close, { sessionId: created.sessionId });
         const listed = await context.request(acp.methods.agent.session.list, { cwd: workspace });
-        // The existing RuntimeFactory composition persists to its own conversation
-        // logger path; this assertion documents the current gap until that path
-        // is made injectable by the runtime composition.
-        expect(listed.sessions.some((entry) => entry.sessionId === created.sessionId)).toBe(false);
+        expect(listed.sessions.some((entry) => entry.sessionId === created.sessionId)).toBe(true);
+        await context.request(acp.methods.agent.session.resume, {
+          sessionId: created.sessionId,
+          cwd: workspace,
+          replayFrom: { type: 'start' },
+        });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId: created.sessionId,
+          prompt: [{ type: 'text', text: 'after resume' }],
+        });
+        await vi.waitFor(() =>
+          expect(providerRequests.some((request) => request.includes('read complete'))).toBe(true),
+        );
       });
     } finally {
       delete process.env.ACP_M1_WORKSPACE;

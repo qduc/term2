@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import {
+  getConversationsDir,
   listConversations,
   loadConversation,
   type ConversationListEntry,
@@ -12,6 +13,13 @@ import {
 import type { UserTurn } from '../types/user-turn.js';
 import type { RuntimeFactory } from '../gateway/runtime-factory.js';
 import type { ServerSession } from '../gateway/server-session.js';
+import {
+  createConversationLogWriter,
+  LockConflictError,
+  type ConversationLogWriter,
+} from '../services/logging/conversation-log-writer.js';
+import { LoggingService } from '../services/logging/logging-service.js';
+import type { ILoggingService } from '../services/service-interfaces.js';
 import type { AcpV2EmitUpdate, AcpV2PromptExecution, AcpV2SessionBackend } from './agent.js';
 
 const MAX_TEXT = 16_384;
@@ -34,6 +42,8 @@ export type AcpV2SessionBackendOptions = Readonly<{
   load?: typeof loadConversation;
   ownerUserId?: string;
   pageSize?: number;
+  logger?: ILoggingService;
+  writerFactory?: (options: { sessionId: string; dir: string; logger: ILoggingService }) => ConversationLogWriter;
   decideApproval?: (
     request: { readonly toolName: string; readonly callId?: string; readonly argumentsText: string },
     context: { readonly sessionId: string; readonly cwd: string },
@@ -48,6 +58,9 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const load = options.load ?? loadConversation;
   const ownerUserId = options.ownerUserId ?? 'acp';
   const pageSize = options.pageSize ?? PAGE_SIZE;
+  const logger = options.logger ?? new LoggingService({ disableLogging: true, suppressConsoleOutput: true });
+  const writerFactory = options.writerFactory ?? createConversationLogWriter;
+  const writers = new Map<string, ConversationLogWriter>();
   const decideApproval =
     options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
 
@@ -188,6 +201,30 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
         if (turn) await mapEvent(event, turn);
       },
     });
+    if (!(created as ServerSession & { service?: unknown }).service) {
+      sessions.set(sessionId, created);
+      return created;
+    }
+    const settings = (created as ServerSession & { settings?: { modelId?: string; providerId?: string } }).settings;
+    let writer: ConversationLogWriter;
+    try {
+      writer = writerFactory({ sessionId, dir: getConversationsDir(), logger });
+      writer.init({
+        id: sessionId,
+        createdAt: new Date().toISOString(),
+        projectPath: root,
+        ...(settings?.modelId ? { model: settings.modelId } : {}),
+        ...(settings?.providerId ? { provider: settings.providerId } : {}),
+      });
+      created.service.setLogSink((event) => writer.append(event));
+    } catch (error) {
+      await created.dispose();
+      if (error instanceof LockConflictError) {
+        throw new acp.RequestError(-32009, `Conversation ${sessionId} is locked`);
+      }
+      throw error;
+    }
+    writers.set(sessionId, writer);
     sessions.set(sessionId, created);
     return created;
   };
@@ -211,7 +248,16 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       if (!existing) {
         const restored = load(request.sessionId, request.cwd);
         if (!restored) missing(request.sessionId);
-        await create(request.cwd, request.sessionId);
+        const session = await create(request.cwd, request.sessionId);
+        const restoredState = restored as RestoredState;
+        const providerMatches = !restoredState.provider || restoredState.provider === session.settings.providerId;
+        const modelMatches = !restoredState.model || restoredState.model === session.settings.modelId;
+        session.service.importState({
+          history: restoredState.history,
+          previousResponseId: providerMatches && modelMatches ? restoredState.previousResponseId : null,
+          toolLedger: restoredState.toolLedger,
+          updatedAt: restoredState.updatedAt,
+        });
       }
       const restored = load(request.sessionId, request.cwd);
       if (restored && request.replayFrom) await replay(restored, emit);
@@ -221,6 +267,9 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       const session = sessions.get(sessionId);
       if (!session) return;
       await session.dispose();
+      session.service.setLogSink(null);
+      await writers.get(sessionId)?.close();
+      writers.delete(sessionId);
       sessions.delete(sessionId);
     },
     async preparePrompt(request): Promise<AcpV2PromptExecution> {

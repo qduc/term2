@@ -279,7 +279,7 @@ export const AgentSettingsSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      'OpenRouter Decisions model shared by approval, tool-selection and failure-triage comparisons. Sends approval context plus each root request’s full input (conversation, tool outputs and file contents), tool catalog and failure evidence. Adds API charges; never controls execution',
+      'OpenRouter Decisions model shared by the approval fast path and tool-selection/failure-triage comparisons. For approval, only low/medium-risk, explicit/implied decisions at confidence 0.8 or higher can authorize execution; every other outcome falls back to the chore reviewer. Sends approval context plus each root request’s full input (conversation, tool outputs and file contents), tool catalog and failure evidence. Adds API charges',
     ),
   subagentExplorerModel: z
     .string()

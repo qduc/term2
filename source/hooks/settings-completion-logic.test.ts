@@ -30,7 +30,8 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory(SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD).id).toBe('safety');
   expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
   expect(getSettingCategory(SETTING_KEYS.AGENT_DECISION_MODEL).id).toBe('safety');
-  expect(SETTING_DESCRIPTIONS[SETTING_KEYS.AGENT_DECISION_MODEL]).toContain('never controls execution');
+  expect(SETTING_DESCRIPTIONS[SETTING_KEYS.AGENT_DECISION_MODEL]).toContain('approval fast path');
+  expect(SETTING_DESCRIPTIONS[SETTING_KEYS.AGENT_DECISION_MODEL]).toContain('falls back to the chore reviewer');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory(SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT).id).toBe('tools');
   expect(getSettingCategory('agent.mentorSamples').id).toBe('models');

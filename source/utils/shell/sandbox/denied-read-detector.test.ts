@@ -1,4 +1,4 @@
-import { it, expect, describe } from 'vitest';
+import { it, expect, describe, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -128,6 +128,14 @@ describe('isSensitiveReadPath', () => {
   it('marks broad config roots as sensitive', () => {
     expect(isSensitiveReadPath(path.join(home, '.config'))).toBe(true);
     expect(isSensitiveReadPath(path.join(home, '.local'))).toBe(true);
+  });
+
+  it('canonicalizes tilde and symlink aliases before classifying sensitive paths', () => {
+    expect(isSensitiveReadPath('~/.ssh/id_rsa')).toBe(true);
+
+    const realpath = vi.spyOn(fs, 'realpathSync').mockReturnValueOnce(path.join(home, '.ssh', 'id_rsa'));
+    expect(isSensitiveReadPath('/workspace/credential-alias')).toBe(true);
+    realpath.mockRestore();
   });
 
   it('does not mark package-manager stores as sensitive', () => {

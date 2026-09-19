@@ -114,7 +114,7 @@ it('does not call Jev for a system rejection and calls it before a reviewer fail
   expect(decisionShadow).toHaveBeenCalledTimes(1);
 });
 
-it('waits for opted-in shadow comparison when requested by a non-interactive caller', async () => {
+it('waits for the live decision result before returning', async () => {
   const settings = createMockSettings('advisory');
   settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
@@ -171,6 +171,91 @@ it('falls back for a high-risk Jev result', async () => {
   });
   expect(chat).toHaveBeenCalledTimes(1);
   expect(advisories.get('call')?.model).toBe('test-auto-model');
+});
+
+it.each([
+  { authorization: 'weak' as const, confidence: 1 },
+  { authorization: 'unknown' as const, confidence: 1 },
+  { authorization: 'explicit' as const, confidence: 0.79 },
+  { authorization: 'explicit' as const, confidence: Number.NaN },
+])('falls back for a non-authorizing Jev result: %o', async ({ authorization, confidence }) => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const chat = vi.fn(async () =>
+    JSON.stringify({
+      results: [{ reasoning: 'Fallback approves.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+    }),
+  );
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call', command: 'pwd' }],
+    history: [],
+    settingsService: settings as any,
+    agentClient: { chat } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow: async () => [{ riskLevel: 'low', authorization, confidence, wouldApprove: true }],
+  });
+  expect(chat).toHaveBeenCalledTimes(1);
+  expect(advisories.get('call')?.model).toBe('test-auto-model');
+});
+
+it('sends only unresolved commands to fallback and preserves batch order', async () => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const chat = vi.fn(async (prompt: string) => {
+    expect(prompt).not.toContain('pwd');
+    expect(prompt).toContain('ls source');
+    return JSON.stringify({
+      results: [{ reasoning: 'Fallback approves.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+    });
+  });
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [
+      { id: 'fast', command: 'pwd' },
+      { id: 'fallback', command: 'ls source' },
+    ],
+    history: [],
+    settingsService: settings as any,
+    agentClient: { chat } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow: async () => [
+      { riskLevel: 'low', authorization: 'explicit', confidence: 0.9, wouldApprove: true },
+      { riskLevel: 'low', authorization: 'weak', confidence: 0.9, wouldApprove: false },
+    ],
+  });
+  expect([...advisories.keys()]).toEqual(['fast', 'fallback']);
+  expect(advisories.get('fast')?.model).toBe('~typesafe/jev-latest');
+  expect(advisories.get('fallback')?.model).toBe('test-auto-model');
+});
+
+it.each(['malformed', 'error'] as const)('falls back when the decision request is %s', async (failure) => {
+  const settings = createMockSettings('advisory');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const chat = vi.fn(async () =>
+    JSON.stringify({
+      results: [{ reasoning: 'Fallback approves.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
+    }),
+  );
+  const decisionShadow =
+    failure === 'malformed'
+      ? async () => []
+      : async () => {
+          throw new Error('decision provider unavailable');
+        };
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call', command: 'pwd' }],
+    history: [],
+    settingsService: settings as any,
+    agentClient: { chat } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+  });
+  expect(chat).toHaveBeenCalledTimes(1);
 });
 
 it('falls back to the chore model when the decision model has no credentials', async () => {
@@ -1088,6 +1173,29 @@ it('evaluates file tool calls and flags sensitive credential paths as RED system
   expect(advisory?.approved).toBe(false);
   expect(advisory?.source).toBe('system');
   expect(advisory?.reasoning).toContain('Blocked by safety heuristics (RED): targets sensitive credential path');
+});
+
+it('blocks tilde-sensitive file paths before calling either approval model', async () => {
+  const settings = createMockSettings('auto');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
+  settings.set('agent.openrouter.apiKey', 'test-key');
+  const decisionShadow = vi.fn();
+  const chat = vi.fn(async () => {
+    throw new Error('fallback must not run');
+  });
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-ssh', toolName: 'read_file', targetPath: '~/.ssh/id_rsa' }],
+    history: [{ role: 'user', type: 'message', content: 'read my ssh key' }],
+    settingsService: settings as any,
+    agentClient: { chat } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+    decisionShadow,
+  });
+
+  expect(advisories.get('call-ssh')).toMatchObject({ approved: false, source: 'system' });
+  expect(decisionShadow).not.toHaveBeenCalled();
+  expect(chat).not.toHaveBeenCalled();
 });
 
 it('evaluates mixed batch of shell commands and file tools', async () => {

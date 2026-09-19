@@ -72,20 +72,23 @@ const SENSITIVE_REGEX_PREFIXES: readonly string[] = [
  * for which "allow and remember" must be suppressed.
  */
 export function isSensitiveReadPath(p: string): boolean {
-  const normalized = path.resolve(p);
+  const normalized = resolvePathSafely(p);
   // Carve-outs (package-manager caches) take precedence over the broad-root rule.
   for (const sub of NON_SENSITIVE_SUBPATHS) {
-    if (normalized === sub || normalized.startsWith(sub + path.sep)) {
+    const normalizedSub = resolvePathSafely(sub);
+    if (normalized === normalizedSub || normalized.startsWith(normalizedSub + path.sep)) {
       return false;
     }
   }
   for (const sub of SENSITIVE_SUBPATHS) {
-    if (normalized === sub || normalized.startsWith(sub + path.sep)) {
+    const normalizedSub = resolvePathSafely(sub);
+    if (normalized === normalizedSub || normalized.startsWith(normalizedSub + path.sep)) {
       return true;
     }
   }
   for (const prefix of SENSITIVE_REGEX_PREFIXES) {
-    if (normalized === prefix || normalized.startsWith(prefix + path.sep)) {
+    const normalizedPrefix = resolvePathSafely(prefix);
+    if (normalized === normalizedPrefix || normalized.startsWith(normalizedPrefix + path.sep)) {
       return true;
     }
   }
@@ -231,10 +234,11 @@ function extractLinuxHiddenExistingPath(stderr: string): string | null {
 
 function resolvePathSafely(p: string): string {
   const trimmed = p.trim().replace(/["']/g, '');
+  const expanded = trimmed === '~' || trimmed.startsWith(`~${path.sep}`) ? path.join(home, trimmed.slice(2)) : trimmed;
   try {
-    return fs.realpathSync(trimmed);
+    return fs.realpathSync(expanded);
   } catch {
-    return path.resolve(trimmed);
+    return path.resolve(expanded);
   }
 }
 

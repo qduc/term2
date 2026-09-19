@@ -6,6 +6,7 @@ describe('getProfileLabel', () => {
     ['builtin:standard', 'standard'],
     ['builtin:lite', 'lite'],
     ['builtin:plan', 'plan'],
+    ['builtin:pair', 'pair'],
     ['builtin:mentor', 'mentor'],
     ['builtin:orchestrator', 'orchestrator'],
   ])('maps %s to %s', (profileId, label) => {

@@ -20,6 +20,7 @@ const PROFILE_DETAILS: Record<string, string> = {
   standard: 'Default full-context mode',
   lite: 'Minimal prompt, no codebase context',
   plan: 'Read-only research/planning mode',
+  pair: 'Human-led coding, one approved step at a time',
   mentor: 'Collaborative mode with mentor model',
   orchestrator: 'Delegate all tool-backed work',
 };

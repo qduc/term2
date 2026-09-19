@@ -15,6 +15,8 @@ export function getProfileLabel(profileId: string): string {
   switch (profileId) {
     case LITE_PROFILE_ID:
       return 'lite';
+    case 'builtin:pair':
+      return 'pair';
     case PLAN_PROFILE_ID:
       return 'plan';
     case MENTOR_PROFILE_ID:

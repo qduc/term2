@@ -13,7 +13,7 @@ import type { ResolvedProfile } from './profiles/types.js';
  * The workflow body lives here, not in the instruction prefix, so a toggle
  * cannot change developer instructions on chained Responses-Lite HTTP turns.
  */
-const NOTICE_PROFILE_IDS = new Set(['builtin:plan', 'builtin:mentor', 'builtin:orchestrator']);
+const NOTICE_PROFILE_IDS = new Set(['builtin:plan', 'builtin:pair', 'builtin:mentor', 'builtin:orchestrator']);
 
 const resolveNoticeProfile = (profile: ResolvedProfile | string): ResolvedProfile | null => {
   if (typeof profile !== 'string') return profile;
@@ -46,6 +46,10 @@ export function profileEnterNotice(profile: ResolvedProfile | string): string | 
       workflow +
       '\n</system-notice>'
     );
+  if (resolved.identity.id === 'builtin:pair')
+    return (
+      '<system-notice>\nPair Mode is ON. Follow the human-led workflow below.\n\n' + workflow + '\n</system-notice>'
+    );
   if (resolved.identity.id === 'builtin:mentor')
     return (
       '<system-notice>\n' +
@@ -70,6 +74,8 @@ export function profileExitNotice(profileId: string): string | null;
 export function profileExitNotice(profile: ResolvedProfile | string): string | null {
   const resolved = resolveNoticeProfile(profile);
   if (!resolved) return null;
+  if (resolved.identity.id === 'builtin:pair')
+    return '<system-notice>\nPair Mode is now OFF. Return to the normal workflow; the Pair-specific approval and one-unit-per-turn instructions are no longer active.\n</system-notice>';
   if (resolved.identity.id === 'builtin:plan')
     return (
       '<system-notice>\n' +

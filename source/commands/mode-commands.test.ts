@@ -46,3 +46,12 @@ it('/profile with an id still switches directly', () => {
   expect(settings.get('app.activeProfileId')).toBe('builtin:plan');
   expect(replaceInput).not.toHaveBeenCalled();
 });
+
+it('selects Pair through /profile and returns to Standard', () => {
+  const { command, settings, messages } = createHarness();
+  command.action('pair');
+  expect(settings.get('app.activeProfileId')).toBe('builtin:pair');
+  command.action('standard');
+  expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
+  expect(messages).toEqual([]);
+});

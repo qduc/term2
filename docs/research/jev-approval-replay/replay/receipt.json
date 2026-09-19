@@ -10,23 +10,23 @@
     "fixture": "docs/research/jev-approval-replay/replay/fixtures/reconstruction.jsonl"
   },
   "sha256": {
-    "runner": "ed128198b8e9ba66fa437ef43eb4cf19c3c33968af809b00bf5c44b360591679",
+    "runner": "d33fe6ae0bdffff5efffbe93d070f51134732a0172fcf050114f79be7a5efe25",
     "analyze": "941a38770ad4a6f9f52f7d95bac44a51a63023ff789a03f4384c6d074e15ab0b",
-    "protocol": "dd02c69570abfa518a000edd105cb5a29030ac00c46bf4c834ac73d48a900d46",
-    "verify": "c5b61840de1071823678221fb1d98b26995f212aa3008bda9a0681b6daea3b37",
-    "fixture": "d25d1fd339cd3b374a8eb2af4494861f9133692a0d93dfc0db4a2ad3bd25b9db"
+    "protocol": "c554af9f70e6f959dd8bd6eb833553e548022a7789b3db4c67b5c3b33af7a884",
+    "verify": "9a375ebf149d84f5264e5b5c0a6ad58d9eb1cd7ac8eed1d57d151e2866d57369",
+    "fixture": "3c475c777b07f968307aa84e8549e658e07116580cbc9d34d95b56b62aa3d055"
   },
   "verification_argv": [
     "python3",
     "/home/qduc/term2/docs/research/jev-approval-replay/replay/verify.py"
   ],
   "verification_result": "PASS: cell isolation, append-only/idempotent behavior, no-call dry run, and paired calculations",
-  "fixture_dry_run_call_count": 4,
+  "fixture_dry_run_call_count": 8,
   "real_reconstruction_dry_run": {
     "input": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/dataset.jsonl",
     "input_sha256": "23186be0ee7418e41f5ff6b301f2bf497d514ed8b619e6b9a9e25e14b6d260ff",
-    "selected_unique_cases": 91,
-    "planned_call_count": 364,
+    "selected_unique_cases": 93,
+    "planned_call_count": 372,
     "provider_requests": 0
   },
   "live_provider_requests": 0,

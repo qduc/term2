@@ -29,7 +29,7 @@ def main() -> int:
     analyze = load("analyze")
     rows = runner.read_jsonl(FIXTURE)
     cohort = runner.select_cohort(rows)
-    assert [row["case_id"] for row in cohort] == ["case-001"]
+    assert [row["case_id"] for row in cohort] == ["case-001", "case-reviewer-auth"]
 
     cells = runner.materialize_cells(cohort[0])
     assert [cell["cell"] for cell in cells] == list(runner.CELLS)
@@ -52,7 +52,7 @@ def main() -> int:
             capture_output=True,
             text=True,
         )
-        assert "dry-run: 4 call(s); no provider request sent" in dry.stdout
+        assert "dry-run: 8 call(s); no provider request sent" in dry.stdout
         assert not results.exists()
         runner.append_record(results, {"case_id": "case-001", "cell": "compact_direct", "status": "transport_error"})
         pending = runner.pending_cells(cells, runner.read_jsonl(results))

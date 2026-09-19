@@ -6,8 +6,8 @@ This replay estimates two separable explanations for production Jev shadow
 denials: the compact conversation evidence delivered at the time, and the
 authorization-rubric wording. The input is the immutable reconstruction
 `dataset.jsonl`. A row enters the prespecified cohort when its join confidence
-is `exact` or `high`, its reviewer decision is approved, its production Jev
-authorization is `weak` or `unknown`, and its stable `case_id` occurs once
+is `exact` or `high`, its reviewer authorization is `explicit` or `implied`,
+its production Jev authorization is `weak` or `unknown`, and its stable `case_id` occurs once
 within that selected cohort. `ambiguous` and `unmatched` joins are excluded.
 
 The runner accepts the reconstruction's required fields: `case_id`,

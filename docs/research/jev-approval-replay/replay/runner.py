@@ -106,10 +106,11 @@ def normalize_case(row: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(case_id, str) or not case_id:
         raise ValueError("reconstruction row has no stable case_id")
     reviewer = approved(value_at(row, "reviewer_approved", "reviewer"))
+    reviewer_auth = value_at(row, "reviewer_authorization", "reviewer", "authorization")
     jev_auth = value_at(row, "jev_authorization", "jev", "authorization")
     join = row.get("join_confidence")
-    if reviewer is None or not isinstance(jev_auth, str) or not isinstance(join, str):
-        raise ValueError(f"{case_id}: missing reviewer decision, Jev authorization, or join confidence")
+    if not isinstance(reviewer_auth, str) or not isinstance(jev_auth, str) or not isinstance(join, str):
+        raise ValueError(f"{case_id}: missing reviewer authorization, Jev authorization, or join confidence")
     request = row.get("command_request", row.get("request"))
     if not isinstance(request, dict):
         request = {
@@ -133,6 +134,7 @@ def normalize_case(row: dict[str, Any]) -> dict[str, Any]:
         "case_id": case_id,
         "source_refs": row.get("source_refs", row.get("source_references", {})),
         "reviewer_approved": reviewer,
+        "reviewer_authorization": reviewer_auth,
         "jev_authorization": jev_auth,
         "join_confidence": join,
         "compact_context": required_text(row, ("compact_task_context", "compact_context"), case_id),
@@ -151,7 +153,10 @@ def select_cohort(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected: dict[str, dict[str, Any]] = {}
     for raw in rows:
         row = normalize_case(raw)
-        if not (row["reviewer_approved"] and row["jev_authorization"] in {"weak", "unknown"}):
+        if not (
+            row["reviewer_authorization"] in {"explicit", "implied"}
+            and row["jev_authorization"] in {"weak", "unknown"}
+        ):
             continue
         if row["join_confidence"] not in {"exact", "high"}:
             continue

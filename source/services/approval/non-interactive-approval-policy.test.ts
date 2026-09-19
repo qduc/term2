@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
 import {
   NonInteractiveApprovalPolicy,
@@ -39,7 +39,6 @@ const createPolicy = (
   input: {
     settings?: Record<string, unknown>;
     chat?: () => Promise<string>;
-    decisionShadow?: NonInteractiveApprovalPolicyDeps['decisionShadow'];
   } = {},
 ) =>
   new NonInteractiveApprovalPolicy({
@@ -60,7 +59,6 @@ const createPolicy = (
       : undefined,
     logger: createLogger(),
     sessionContextService: createSessionContextService(),
-    decisionShadow: input.decisionShadow,
   });
 
 it('rejects every tool when non-interactive auto-approval is disabled', async () => {
@@ -136,42 +134,6 @@ it('uses the evaluator decision for YELLOW shell commands', async () => {
     rejectionReason: 'LLM evaluation rejected the command: requires confirmation',
     reportRejection: true,
   });
-});
-
-it('waits for the optional shadow comparison before a non-interactive approval settles', async () => {
-  let finishShadow!: (
-    value: Array<{ riskLevel: 'low'; authorization: 'explicit'; confidence: number; wouldApprove: true }>,
-  ) => void;
-  const decisionShadow = vi.fn(
-    () =>
-      new Promise<Awaited<ReturnType<NonNullable<NonInteractiveApprovalPolicyDeps['decisionShadow']>>>>((resolve) => {
-        finishShadow = resolve;
-      }),
-  );
-  const policy = createPolicy({
-    settings: {
-      'shell.autoApproveMode': 'auto',
-      'agent.choreModel': 'reviewer',
-      'agent.decisionModel': '~typesafe/jev-latest',
-      'agent.openrouter.apiKey': 'test-key',
-    },
-    chat: async () =>
-      JSON.stringify({
-        results: [{ reasoning: 'Task aligned.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' }],
-      }),
-    decisionShadow,
-  });
-  let settled = false;
-  const pending = policy
-    .decide({ autoApprove: true, approval: createApproval('bash', 'npm install') })
-    .then((decision) => {
-      settled = true;
-      return decision;
-    });
-  await vi.waitFor(() => expect(decisionShadow).toHaveBeenCalledTimes(1));
-  expect(settled).toBe(false);
-  finishShadow([{ riskLevel: 'low', authorization: 'explicit', confidence: 1, wouldApprove: true }]);
-  expect(await pending).toEqual({ answer: 'y' });
 });
 
 it('fails closed with the evaluator error reason for YELLOW shell commands', async () => {

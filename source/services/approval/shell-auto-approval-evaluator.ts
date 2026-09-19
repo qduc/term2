@@ -18,7 +18,7 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../utils/shell/sandbox/denied-read-detector.js';
-import { evaluateDecisionShadow, type DecisionShadowEvidence, type DecisionShadowResult } from './decision-shadow.js';
+import { evaluateDecisionShadow, type DecisionShadowEvidence } from './decision-shadow.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -47,8 +47,6 @@ const MAX_MANUAL_DECISIONS = 10;
 const MAX_MANUAL_DECISION_COMMAND_CHARS = 200;
 const MAX_REASONING_CHARS = 1_000;
 const STRUCTURED_SUPPORT_CACHE_TTL_MS = 60 * 60 * 1_000;
-const MAX_ACTIVE_DECISION_SHADOWS = 4;
-let activeDecisionShadows = 0;
 
 type StructuredSupport = 'supported' | 'unsupported';
 
@@ -456,7 +454,6 @@ export async function evaluateShellAutoApprovalAdvisories({
   throwOnError = false,
   retryOptions,
   decisionShadow = evaluateDecisionShadow,
-  awaitDecisionShadow = false,
 }: {
   commands: ShellAutoApprovalCommand[];
   history: ProviderInputItem[];
@@ -473,8 +470,6 @@ export async function evaluateShellAutoApprovalAdvisories({
     random?: () => number;
   };
   decisionShadow?: typeof evaluateDecisionShadow;
-  /** Non-interactive callers wait for comparison telemetry before process exit. */
-  awaitDecisionShadow?: boolean;
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   void retryOptions;
   const out = new Map<string, ShellAutoApprovalAdvisory>();
@@ -487,7 +482,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   const autoApproveModel = getTierModelPool('chore', settingsService)[0] ?? choreModel.model;
   const autoApproveProvider = settingsService.get('agent.choreProvider') ?? choreModel.provider;
 
-  const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
+  let toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();
   let needsElevatedReasoning = false;
   for (const item of commands) {
@@ -523,75 +518,81 @@ export async function evaluateShellAutoApprovalAdvisories({
     }
   }
 
-  if (toEvaluateByLLM.length === 0) return out;
+  const systemAdvisories = buildInvalidEvaluationAdvisories({
+    commands: toEvaluateByLLM.filter(({ id }) => redSafetyDetails.has(id)),
+    redSafetyDetails,
+    model: autoApproveModel,
+    reasoning: '',
+  });
+  toEvaluateByLLM = toEvaluateByLLM.filter(({ id }) => !redSafetyDetails.has(id));
+  const mergeAdvisories = (advisories: Map<string, ShellAutoApprovalAdvisory>) =>
+    new Map(
+      commands.flatMap((command) => {
+        const advisory = systemAdvisories.get(command.id) ?? advisories.get(command.id);
+        return advisory ? [[command.id, advisory] as const] : [];
+      }),
+    );
+  if (toEvaluateByLLM.length === 0) return mergeAdvisories(out);
+
+  const decisionCandidates = toEvaluateByLLM;
+  const decisionModel = settingsService.get('agent.decisionModel');
+  const decisionAdvisories = new Map<string, ShellAutoApprovalAdvisory>();
+  let fallbackReason = decisionModel ? 'decision_abstained' : 'decision_not_configured';
+  if (decisionModel) {
+    const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY || '';
+    if (!apiKey) {
+      fallbackReason = 'decision_credentials_unavailable';
+    } else {
+      try {
+        const decisionResults = await decisionShadow({
+          model: decisionModel,
+          evidence: buildDecisionShadowEvidence(decisionCandidates, history, manualDecisions),
+          apiKey,
+          ...(settingsService.get('agent.openrouter.baseUrl')
+            ? { baseUrl: settingsService.get('agent.openrouter.baseUrl') }
+            : {}),
+        });
+        if (!Array.isArray(decisionResults) || decisionResults.length !== decisionCandidates.length) {
+          fallbackReason = 'decision_malformed';
+        } else {
+          for (const [index, decision] of decisionResults.entries()) {
+            if (
+              (decision.riskLevel === 'low' || decision.riskLevel === 'medium') &&
+              (decision.authorization === 'explicit' || decision.authorization === 'implied') &&
+              typeof decision.confidence === 'number' &&
+              Number.isFinite(decision.confidence) &&
+              decision.confidence >= 0.8
+            ) {
+              decisionAdvisories.set(decisionCandidates[index].id, {
+                model: decisionModel,
+                reasoning: 'Decision model approved this request.',
+                approved: true,
+                riskLevel: decision.riskLevel,
+                authorization: decision.authorization,
+                confidence: 'high',
+                source: 'llm',
+              });
+            }
+          }
+        }
+      } catch {
+        fallbackReason = 'decision_error';
+      }
+    }
+  }
+  toEvaluateByLLM = decisionCandidates.filter(({ id }) => !decisionAdvisories.has(id));
+  logger.info('Approval decision route', {
+    eventType: 'approval.decision_route',
+    fastPathCount: decisionAdvisories.size,
+    fallbackCount: toEvaluateByLLM.length,
+    fallbackReason: toEvaluateByLLM.length > 0 ? fallbackReason : undefined,
+    decisionModel: decisionModel ?? undefined,
+    fallbackModel: autoApproveModel,
+  });
+  if (toEvaluateByLLM.length === 0) return mergeAdvisories(decisionAdvisories);
 
   const instructions = SHELL_AUTO_APPROVAL_INSTRUCTIONS;
   const prompt = buildPrompt(toEvaluateByLLM, history, manualDecisions);
-  const recordShadow = async (advisories: Map<string, ShellAutoApprovalAdvisory>): Promise<void> => {
-    const shadowModel = settingsService.get('agent.decisionModel');
-    if (!shadowModel) return;
-    const comparable = toEvaluateByLLM.some(({ id }) => {
-      const reviewer = advisories.get(id);
-      return reviewer?.source === 'llm' && !!reviewer.riskLevel && !!reviewer.authorization;
-    });
-    if (!comparable) return;
-    if (activeDecisionShadows >= MAX_ACTIVE_DECISION_SHADOWS) {
-      logger.warn('Approval decision shadow skipped at capacity', {
-        eventType: 'approval.decision_shadow.saturated',
-        active: activeDecisionShadows,
-        limit: MAX_ACTIVE_DECISION_SHADOWS,
-      });
-      return;
-    }
-    const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY || '';
-    const baseUrl = settingsService.get('agent.openrouter.baseUrl');
-    activeDecisionShadows++;
-    const comparison = Promise.resolve()
-      .then(() =>
-        decisionShadow({
-          model: shadowModel,
-          evidence: buildDecisionShadowEvidence(toEvaluateByLLM, history, manualDecisions),
-          apiKey,
-          ...(baseUrl ? { baseUrl } : {}),
-        }),
-      )
-      .then((results: DecisionShadowResult[]) => {
-        for (const [index, item] of toEvaluateByLLM.entries()) {
-          const reviewer = advisories.get(item.id);
-          const shadow = results[index];
-          if (reviewer?.source !== 'llm' || !reviewer.riskLevel || !reviewer.authorization || !shadow) continue;
-          const reviewerEligible = reviewer.approved === true;
-          logger.info('Approval decision shadow comparison', {
-            eventType: 'approval.decision_shadow.compared',
-            requestIndex: index,
-            reviewerModel: autoApproveModel,
-            shadowModel,
-            reviewerRiskAuthorizationEligible: reviewerEligible,
-            reviewerRiskLevel: reviewer.riskLevel,
-            reviewerAuthorization: reviewer.authorization,
-            reviewerConfidence: reviewer.confidence,
-            shadowRiskAuthorizationEligible: shadow.wouldApprove,
-            shadowRiskLevel: shadow.riskLevel,
-            shadowAuthorization: shadow.authorization,
-            shadowConfidence: shadow.confidence,
-            classificationAgreement:
-              reviewer.riskLevel === shadow.riskLevel && reviewer.authorization === shadow.authorization,
-            riskAuthorizationAgreement: reviewerEligible === shadow.wouldApprove,
-          });
-        }
-      })
-      .catch((error: unknown) => {
-        logger.warn('Approval decision shadow evaluation failed', {
-          eventType: 'approval.decision_shadow.failed',
-          shadowModel,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      })
-      .finally(() => {
-        activeDecisionShadows--;
-      });
-    if (awaitDecisionShadow) await comparison;
-  };
   const configuredReasoningEffort = settingsService.get('agent.autoApproveReasoningEffort');
   const elevatedReasoningEffort: ReasoningEffortSetting = configuredReasoningEffort ?? 'low';
   const reasoningEffort: ReasoningEffortSetting = needsElevatedReasoning ? elevatedReasoningEffort : 'none';
@@ -750,8 +751,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     if (shouldTryStructured) {
       try {
         const advisories = await tryStructuredMode();
-        await recordShadow(advisories);
-        return advisories;
+        return mergeAdvisories(new Map([...decisionAdvisories, ...advisories]));
       } catch (error) {
         if (!isUnsupportedStructuredOutputError(error)) {
           throw error;
@@ -766,8 +766,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     }
 
     const advisories = await tryPromptMode();
-    await recordShadow(advisories);
-    return advisories;
+    return mergeAdvisories(new Map([...decisionAdvisories, ...advisories]));
   } catch (error) {
     logger.error('Batch auto-approval evaluation failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -784,8 +783,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       reasoning: 'LLM evaluation encountered an error.',
       isError: true,
     });
-    await recordShadow(advisories);
-    return advisories;
+    return mergeAdvisories(new Map([...decisionAdvisories, ...advisories]));
   }
 
   return out;

@@ -318,21 +318,12 @@ it('always mode bypasses editor approval prompts at the session boundary', async
   expect(chatCalls).toHaveLength(0);
 });
 
-it('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async () => {
+it('RED-classified shell command remains a system rejection without a model call', async () => {
   const initialStream = createInterruptedStream([createShellInterruption({ callId: 'call-red', command: 'rm -rf /' })]);
   const { bundle, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
-    chatImpl: async (prompt) => {
-      expect(prompt.includes('rm -rf /')).toBe(true);
-      return JSON.stringify({
-        results: [
-          {
-            id: 'call-red',
-            reasoning: 'This command recursively deletes files from the filesystem root.',
-            approved: false,
-          },
-        ],
-      });
+    chatImpl: async () => {
+      throw new Error('RED commands must not reach a model');
     },
   });
 
@@ -345,8 +336,8 @@ it('RED-classified shell command includes LLM rationale but remains a system rej
   expect(llmAdvisory?.model).toBe('test-auto-model');
   expect(llmAdvisory?.source).toBe('system');
   expect(llmAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
-  expect(llmAdvisory?.reasoning ?? '').toMatch(/Model advisory: This command recursively deletes files/);
-  expect(chatCalls.length).toBe(1);
+  expect(llmAdvisory?.reasoning ?? '').not.toMatch(/Model advisory:/);
+  expect(chatCalls.length).toBe(0);
 });
 
 it('single safe shell command calls the LLM once and attaches its advisory', async () => {
@@ -458,7 +449,7 @@ it('handleApprovalDecision forwards approval answers to the ask_user bridge', as
   expect(askUserAnswerCalls).toEqual([{ callId: 'call-ask-user', answer: 'Use option B' }]);
 });
 
-it('mixed RED and non-RED batch evaluates both while RED remains system rejected', async () => {
+it('mixed RED and non-RED batch evaluates only the non-RED command', async () => {
   const red = createShellInterruption({ callId: 'call-mixed-red', command: 'rm -rf /' });
   const safe = createShellInterruption({ callId: 'call-mixed-safe', command: 'ls source' });
 
@@ -469,19 +460,16 @@ it('mixed RED and non-RED batch evaluates both while RED remains system rejected
     startStreams: [initialStream],
     continuationStreams: [continuationStream],
     chatImpl: async (prompt) => {
-      expect(prompt.includes('rm -rf /')).toBe(true);
       expect(prompt.includes('ls source')).toBe(true);
+      expect(prompt.includes('rm -rf /')).toBe(false);
       return JSON.stringify({
         results: [
           {
-            id: 'call-mixed-red',
-            reasoning: 'Recursive forced deletion from root is destructive.',
-            approved: false,
-          },
-          {
             id: 'call-mixed-safe',
             reasoning: 'Listing source files is safe.',
-            approved: true,
+            riskLevel: 'low',
+            authorization: 'explicit',
+            confidence: 'high',
           },
         ],
       });
@@ -495,7 +483,7 @@ it('mixed RED and non-RED batch evaluates both while RED remains system rejected
   expect(mixedAdvisory?.model).toBe('test-auto-model');
   expect(mixedAdvisory?.source).toBe('system');
   expect(mixedAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
-  expect(mixedAdvisory?.reasoning ?? '').toMatch(/Model advisory: Recursive forced deletion from root/);
+  expect(mixedAdvisory?.reasoning ?? '').not.toMatch(/Model advisory:/);
   expect(chatCalls.length).toBe(1);
 
   const secondResult = await bundle.terminalAdapter.handleApprovalDecision('y');
@@ -503,6 +491,9 @@ it('mixed RED and non-RED batch evaluates both while RED remains system rejected
     model: 'test-auto-model',
     reasoning: 'Listing source files is safe.',
     approved: true,
+    riskLevel: 'low',
+    authorization: 'explicit',
+    confidence: 'high',
     source: 'llm',
   });
   expect(chatCalls.length).toBe(1);
@@ -814,22 +805,17 @@ it('auto mode: RED command (source=system) is never auto-approved', async () => 
   const { bundle, chatCalls } = createSessionHarness({
     settingsOverrides: { 'shell.autoApproveMode': 'auto' },
     startStreams: [initialStream],
-    chatImpl: async () =>
-      JSON.stringify({
-        results: [
-          { id: 'call-auto-red', reasoning: 'The model explanation should not auto-approve RED.', approved: true },
-        ],
-      }),
+    chatImpl: async () => {
+      throw new Error('RED commands must not reach a model');
+    },
   });
 
   const result = await bundle.terminalAdapter.sendMessage('clean the system');
   const approval = getApprovalResult(result).approval;
   expect(approval.llmAdvisory?.approved).toBe(false);
   expect(approval.llmAdvisory?.source).toBe('system');
-  expect(approval.llmAdvisory?.reasoning ?? '').toMatch(
-    /Model advisory: The model explanation should not auto-approve RED\./,
-  );
-  expect(chatCalls.length).toBe(1);
+  expect(approval.llmAdvisory?.reasoning ?? '').not.toMatch(/Model advisory:/);
+  expect(chatCalls.length).toBe(0);
 });
 
 it('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior preserved)', async () => {

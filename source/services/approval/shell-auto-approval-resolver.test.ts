@@ -123,8 +123,8 @@ it('forwards recorded manual decisions into the auto-approval evaluation', async
   resolver.recordManualDecision('rm -rf ./dist', 'approved');
 
   await resolver.resolveAdvisoryForInterruption({
-    interruption: { name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'rm -rf ./build' }) },
-    siblings: [{ name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'rm -rf ./build' }) }],
+    interruption: { name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'ls ./build' }) },
+    siblings: [{ name: 'shell', callId: 'call-1', arguments: JSON.stringify({ command: 'ls ./build' }) }],
   });
 
   expect(prompts.length).toBe(1);

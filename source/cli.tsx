@@ -221,6 +221,17 @@ const cli = meow(
       read_write workspace grants (workspace write access); without it every admitted root is
       read-only.
 
+    ACP launcher (term2 acp)
+      Serves the Agent Client Protocol v2 over stdio as newline-delimited JSON-RPC, so an editor
+      can drive real term2 sessions as an ACP agent. Runs until the client closes stdin or
+      SIGINT/SIGTERM. Stdout carries protocol traffic only; diagnostics go to stderr.
+
+      $ term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
+
+      Sessions are read-only and tool approvals stay fail-closed: there is no auto-approve flag,
+      and --auto-approve is rejected. --model is resolved against the model catalog
+      non-interactively, so it needs an exact model id or <provider>/<model>.
+
     Examples
       $ term2
       $ term2 "explain this function"
@@ -238,6 +249,7 @@ const cli = meow(
       $ term2 --codex-login
       $ term2 --list-models
       $ term2 --list-models gpt-5
+      $ term2 acp --provider openai --model gpt-5.4
       $ term2 --list-models --refresh
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
@@ -370,6 +382,19 @@ if (cli.input[0] === 'serve') {
   const serveIndex = argv.indexOf('serve');
   await runServe(serveIndex >= 0 ? argv.slice(serveIndex + 1) : []);
   process.exit(0);
+}
+
+// `acp` is the ACP v2 stdio launcher, another standalone errand: it composes
+// the real runtime and blocks until its client disconnects, so it dispatches
+// before any Ink render, session setup, home-directory guard, or positional
+// prompt handling. Its flags are parsed by acp-v2/serve-args.ts, and stdout is
+// reserved for the JSON-RPC protocol channel.
+if (cli.input[0] === 'acp') {
+  const { createStdioAcpIo, runAcp } = await import('./acp-v2/serve.js');
+  const argv = process.argv.slice(2);
+  const acpIndex = argv.indexOf('acp');
+  const exitCode = await runAcp(acpIndex >= 0 ? argv.slice(acpIndex + 1) : [], createStdioAcpIo());
+  process.exit(exitCode);
 }
 
 // Model listing is a standalone errand like the logins above: it prints and

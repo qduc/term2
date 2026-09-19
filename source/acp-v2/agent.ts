@@ -31,6 +31,8 @@ export interface AcpV2SessionBackend {
   closeSession(sessionId: acp.SessionId): Promise<void>;
   preparePrompt(request: acp.PromptRequest): Promise<AcpV2PromptExecution>;
   cancelSession(sessionId: acp.SessionId): Promise<void>;
+  setClient?(sessionId: acp.SessionId, client: acp.AgentContext, signal: AbortSignal): void;
+  clearClient?(sessionId: acp.SessionId): void;
 }
 
 export type CreateAcpV2AgentOptions = Readonly<{
@@ -100,17 +102,20 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
     }
     await active?.done;
     await options.backend.closeSession(params.sessionId);
+    options.backend.clearClient?.(params.sessionId);
     if (cancellationError !== undefined) throw cancellationError;
     return {};
   });
 
   app.onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const { active, settle } = reservePrompt(activePrompts, params.sessionId);
+    options.backend.setClient?.(params.sessionId, client, active.controller.signal);
     let execution: AcpV2PromptExecution;
     try {
       execution = await options.backend.preparePrompt(params);
     } catch (error) {
       activePrompts.delete(params.sessionId);
+      options.backend.clearClient?.(params.sessionId);
       settle();
       throw error;
     }
@@ -124,7 +129,10 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
           client,
           activePrompts,
           logger: options.logger,
-        }).finally(settle);
+        }).finally(() => {
+          options.backend.clearClient?.(params.sessionId);
+          settle();
+        });
       }, 0);
       return {};
     }
@@ -136,6 +144,7 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
       });
     } catch (error) {
       activePrompts.delete(params.sessionId);
+      options.backend.clearClient?.(params.sessionId);
       active.controller.abort();
       settle();
       await options.backend.cancelSession(params.sessionId);
@@ -150,7 +159,10 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
         client,
         activePrompts,
         logger: options.logger,
-      }).finally(settle);
+      }).finally(() => {
+        options.backend.clearClient?.(params.sessionId);
+        settle();
+      });
     }, 0);
     return {};
   });

@@ -109,4 +109,18 @@ describe('PendingInteractionState', () => {
       approval: { callId: 'ask-b' },
     });
   });
+
+  it('rejects a decision whose captured revision is stale', () => {
+    const state = new PendingInteractionState();
+    const interaction = state.present(askUserApproval);
+    state.goToNextQuestion();
+
+    expect(
+      state.resolve({
+        expectedInteractionId: interaction.interactionId,
+        expectedRevision: interaction.revision,
+        answer: 'y',
+      }),
+    ).toMatchObject({ kind: 'stale_interaction', expectedInteractionId: interaction.interactionId });
+  });
 });

@@ -158,7 +158,6 @@ interface ShellCommandResult {
   stderr: string;
   outcome: { type: 'exit'; exitCode: number | null } | { type: 'timeout' };
 }
-
 /** The registry keeps the formatted output while retaining the process outcome separately. */
 export interface BackgroundShellExecutionResult {
   output: string;
@@ -721,6 +720,8 @@ export function createShellToolDefinition(deps: {
   gatewayMode?: boolean;
   /** Explicit gateway posture; read-only sessions cannot write workspace files via shell. */
   readOnly?: boolean;
+  /** Whether this session may honor an approved unsandboxed request. */
+  allowUnsandboxed?: boolean;
 }): ShellToolDefinition {
   const {
     loggingService,
@@ -741,6 +742,7 @@ export function createShellToolDefinition(deps: {
     shellChildRegistry,
     gatewayMode = false,
     readOnly = false,
+    allowUnsandboxed = true,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -832,10 +834,19 @@ export function createShellToolDefinition(deps: {
       }
     },
     execute: async (
-      { command, timeout_ms, max_output_length, sandbox = 'default', background = false, monitor, check_in },
+      {
+        command,
+        timeout_ms,
+        max_output_length,
+        sandbox: requestedSandbox = 'default',
+        background = false,
+        monitor,
+        check_in,
+      },
       _context,
       details,
     ) => {
+      let sandbox = requestedSandbox;
       const toolCallId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
       // The application run loop owns turn cancellation on its typed context;
       // SDK details only identify the provider tool call.
@@ -843,6 +854,9 @@ export function createShellToolDefinition(deps: {
         (_context as ToolInvocationContext | undefined)?.signal ??
         (details as { signal?: AbortSignal } | undefined)?.signal;
       const cwd = executionContext?.getCwd() || process.cwd();
+      if (sandbox === 'unsandboxed' && !allowUnsandboxed) {
+        sandbox = 'default';
+      }
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
       const dockerHostControlRequested =
@@ -991,7 +1005,7 @@ export function createShellToolDefinition(deps: {
             : nestedCompatibility?.executionOverrides.consume(command) ?? null;
         if (postExecuteDeniedRead && typeof toolCallId === 'string') overrideByCallId.delete(toolCallId);
         if (override?.forceUnsandboxed) {
-          sandbox = 'unsandboxed';
+          if (allowUnsandboxed) sandbox = 'unsandboxed';
           loggingService.debug(
             'Shell executing unsandboxed by approved override',
             withExecutionCorrelation({ command: optimizedCommand.substring(0, 100) }),
@@ -1033,7 +1047,7 @@ export function createShellToolDefinition(deps: {
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
                 tmpDir: SANDBOX_TEMP_DIR,
-                allowWrite: readOnly ? false : undefined,
+                allowWrite: !readOnly,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
                 dockerSocketPath: dockerHostControl?.socketPath,

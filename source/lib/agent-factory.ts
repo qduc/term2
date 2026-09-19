@@ -74,6 +74,7 @@ export interface AgentFactoryDeps {
   sessionAccess?: SessionAccessState;
   /** Explicit gateway read-only posture; absent preserves CLI behavior. */
   readOnly?: boolean;
+  allowUnsandboxed?: boolean;
   /** Root-session-owned background shell capability. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer for background jobs. */
@@ -496,6 +497,7 @@ export function buildAgent(
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
       sessionAccess: deps.sessionAccess,
       readOnly: deps.readOnly,
+      allowUnsandboxed: deps.allowUnsandboxed,
       backgroundShellRegistry: deps.backgroundShellRegistry,
       backgroundShellOutput: deps.backgroundShellOutput,
       shellChildRegistry: deps.shellChildRegistry,

@@ -23,6 +23,8 @@ import { LoggingService } from '../services/logging/logging-service.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { AcpV2EmitUpdate, AcpV2PromptExecution, AcpV2SessionBackend } from './agent.js';
+import { projectPendingInteraction } from '../gateway/interaction-protocol.js';
+import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
 
 const MAX_TEXT = 16_384;
 const MAX_ARGUMENTS = 8_192;
@@ -37,6 +39,35 @@ type ActiveTurn = {
   reject: ((error: unknown) => void) | null;
   streamedAssistantLength: number;
 };
+
+type PermissionClient = { client: acp.AgentContext; signal: AbortSignal };
+
+type SessionPermissionGrant = {
+  toolName: string;
+  answer: string;
+  scopeKind: 'file' | 'folder';
+  scopePath: string;
+};
+
+const ACP_PERMISSION_KINDS: Readonly<Record<string, acp.PermissionOptionKind>> = {
+  approve: 'allow_once',
+  'allow-once': 'allow_once',
+  'allow-folder-session': 'allow_always',
+  'allow-edit-file-session': 'allow_always',
+  'allow-edit-folder-session': 'allow_always',
+  reject: 'reject_once',
+  deny: 'reject_once',
+};
+
+export function mapAcpPermissionChoices(choices: readonly { id: string; label: string }[]): Array<{
+  choice: { id: string; label: string };
+  option: { optionId: string; name: string; kind: acp.PermissionOptionKind };
+}> {
+  return choices.flatMap((choice) => {
+    const kind = ACP_PERMISSION_KINDS[choice.id];
+    return kind ? [{ choice, option: { optionId: choice.id, name: choice.label, kind } }] : [];
+  });
+}
 
 export type AcpV2SessionBackendOptions = Readonly<{
   runtimeFactory: RuntimeFactory;
@@ -75,8 +106,90 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const logger = options.logger ?? new LoggingService({ disableLogging: true, suppressConsoleOutput: true });
   const writerFactory = options.writerFactory ?? createConversationLogWriter;
   const writers = new Map<string, ConversationLogWriter>();
+  const permissionClients = new Map<string, PermissionClient>();
+  const sessionPermissionGrants = new Map<string, SessionPermissionGrant[]>();
   const decideApproval =
     options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
+
+  const requestPermission = async (
+    sessionId: string,
+    snapshot: PendingInteractionSnapshot,
+    toolCallId: string | undefined,
+  ): Promise<{ answer: string; reason?: string } | undefined> => {
+    const pending = permissionClients.get(sessionId);
+    if (!pending) return undefined;
+    if (snapshot.revision === undefined) return { answer: 'n', reason: 'Permission revision is unavailable.' };
+    const toolName = snapshot.approval.toolName;
+    const dto = projectPendingInteraction(snapshot.approval, String(snapshot.interactionId), snapshot.revision);
+    if (dto.kind !== 'tool_approval') return { answer: 'n', reason: 'This interaction cannot be approved over ACP.' };
+    const optionsById = mapAcpPermissionChoices(dto.choices);
+    const grants = sessionPermissionGrants.get(sessionId) ?? [];
+    const existingGrant = grants.find(
+      (grant) =>
+        grant.toolName === toolName &&
+        optionsById.some(({ option }) => option.optionId === grant.answer) &&
+        grantCovers(grant, snapshot.approval),
+    );
+    if (existingGrant) return { answer: existingGrant.answer };
+    try {
+      const response = await pending.client.request(
+        acp.methods.client.session.requestPermission,
+        {
+          sessionId,
+          title: dto.descriptor.toolName,
+          description: dto.descriptor.argumentsText,
+          subject: {
+            type: 'tool_call',
+            toolCall: {
+              toolCallId: toolCallId ?? dto.descriptor.callId ?? `${sessionId}:approval`,
+              title: dto.descriptor.toolName,
+              name: dto.descriptor.toolName,
+              status: 'pending',
+            },
+          },
+          options: optionsById.map(({ option }) => option),
+        },
+        { cancellationSignal: pending.signal },
+      );
+      const outcome = response?.outcome;
+      if (
+        !outcome ||
+        outcome.outcome !== 'selected' ||
+        !('optionId' in outcome) ||
+        typeof outcome.optionId !== 'string'
+      )
+        return { answer: 'n', reason: 'Permission request was cancelled.' };
+      const selected =
+        optionsById.find(({ option }) => option.optionId === outcome.optionId) ??
+        (outcome.optionId === 'allow-once' ? optionsById.find(({ choice }) => choice.id === 'approve') : undefined);
+      if (!selected) return { answer: 'n', reason: 'Client selected an unknown permission option.' };
+      const answer =
+        selected.option.kind === 'reject_once' || selected.option.kind === 'reject_always'
+          ? 'n'
+          : selected.choice.id === 'approve'
+          ? 'y'
+          : selected.choice.id === 'allow-once'
+          ? 'y'
+          : selected.choice.id;
+      if (selected.option.kind === 'allow_always') {
+        const scope = permissionScope(answer, snapshot.approval);
+        if (scope) {
+          const current = sessionPermissionGrants.get(sessionId) ?? [];
+          current.push({ toolName, answer, ...scope });
+          sessionPermissionGrants.set(sessionId, current);
+        }
+      }
+      return { answer, ...(answer === 'n' ? { reason: 'Permission denied by client.' } : {}) };
+    } catch (error) {
+      return {
+        answer: 'n',
+        reason:
+          error instanceof Error && error.message.includes('Method not found')
+            ? 'Approval is not yet supported over ACP.'
+            : 'Permission request failed.',
+      };
+    }
+  };
 
   const invalid = (message: string): never => {
     throw acp.RequestError.invalidParams(undefined, message);
@@ -99,22 +212,27 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
 
   const mapEvent = async (event: ConversationEvent, turn: ActiveTurn): Promise<void> => {
     if (event.type === 'approval_required') {
-      const snapshot = turn.session.resources.runtime?.pendingInteraction.getSnapshot();
+      const snapshot = turn.session.service.getPendingInteractionSnapshot?.() ?? null;
       let answer = 'n';
       let reason = 'Approval is not yet supported over ACP.';
-      let delivered = false;
+      let decisionReady = false;
       try {
-        const decision = await decideApproval(
-          {
-            toolName: event.approval.toolName,
-            callId: event.approval.callId,
-            argumentsText: event.approval.argumentsText,
-          },
-          { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
-        );
+        const permissionDecision = snapshot
+          ? await requestPermission(turn.session.sessionId, snapshot, event.approval.callId)
+          : undefined;
+        const decision =
+          permissionDecision ??
+          (await decideApproval(
+            {
+              toolName: event.approval.toolName,
+              callId: event.approval.callId,
+              argumentsText: event.approval.argumentsText,
+            },
+            { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
+          ));
         answer = decision.answer;
         reason = decision.reason ?? (answer === 'y' ? '' : 'Approval denied.');
-        if (turn.emit) {
+        if (turn.emit && answer !== 'y' && !answer.startsWith('allow-')) {
           await turn.emit({
             sessionUpdate: 'tool_call_update',
             toolCallId: event.approval.callId ?? `${turn.turnId}:approval`,
@@ -123,23 +241,36 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
             status: 'failed',
             content: [{ type: 'content', content: { type: 'text', text: reason || 'Approval granted.' } }],
           });
-          delivered = true;
         }
+        decisionReady = true;
       } catch (error) {
         reason = error instanceof Error ? error.message : 'Approval denied.';
       } finally {
         if (snapshot) {
           try {
-            turn.session.resolvePendingInteraction({
+            const resolution = turn.session.resolvePendingInteraction({
               expectedInteractionId: snapshot.interactionId,
-              answer: delivered ? answer : 'n',
-              rejectionReason: delivered && answer === 'y' ? undefined : reason,
+              ...(snapshot.revision === undefined ? {} : { expectedRevision: snapshot.revision }),
+              answer: decisionReady ? answer : 'n',
+              rejectionReason: decisionReady && (answer === 'y' || answer.startsWith('allow-')) ? undefined : reason,
             });
+            if ((!resolution || resolution.kind === 'resolved') && decisionReady) {
+              await turn.session.service.handleApprovalDecision(
+                answer,
+                answer === 'y' || answer.startsWith('allow-') ? undefined : reason,
+              );
+            }
           } catch {
             await turn.session.abort(turn.turnId).catch(() => undefined);
+            turn.resolve?.({ stopReason: 'cancelled' });
           }
         } else {
-          await turn.session.abort(turn.turnId).catch(() => undefined);
+          if (decisionReady) {
+            turn.resolve?.({ stopReason: 'end_turn' });
+          } else {
+            await turn.session.abort(turn.turnId).catch(() => undefined);
+            turn.resolve?.({ stopReason: 'cancelled' });
+          }
         }
       }
       return;
@@ -221,7 +352,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       workspaceId: root,
       grantVersion: 1,
       canonicalRoot: root,
-      access: 'read' as const,
+      access: 'read_write' as const,
     };
     const created = await options.runtimeFactory.create(binding, {
       eventSink: async (event) => {
@@ -276,6 +407,13 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   };
 
   return {
+    setClient(sessionId, client, signal) {
+      permissionClients.set(sessionId, { client, signal });
+    },
+    clearClient(sessionId) {
+      permissionClients.delete(sessionId);
+      sessionPermissionGrants.delete(sessionId);
+    },
     async createSession(request) {
       const session = await create(request.cwd);
       return { sessionId: session.sessionId };
@@ -386,6 +524,39 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
 }
 
 export const createProductionAcpV2SessionBackend = createAcpV2SessionBackend;
+
+function permissionScope(
+  answer: string,
+  approval: PendingInteractionSnapshot['approval'],
+): Pick<SessionPermissionGrant, 'scopeKind' | 'scopePath'> | undefined {
+  const scopeKind = answer === 'allow-edit-file-session' ? 'file' : 'folder';
+  const outside = approval.outsideWorkspaceEdit;
+  if (outside) return { scopeKind, scopePath: path.resolve(scopeKind === 'file' ? outside.path : outside.folder) };
+  const target = approvalPath(approval.argumentsText);
+  return target ? { scopeKind, scopePath: path.resolve(target) } : undefined;
+}
+
+function grantCovers(grant: SessionPermissionGrant, approval: PendingInteractionSnapshot['approval']): boolean {
+  const scope = permissionScope(grant.answer, approval);
+  if (!scope || scope.scopeKind !== grant.scopeKind) return false;
+  const target = path.resolve(scope.scopePath);
+  const granted = path.resolve(grant.scopePath);
+  return grant.scopeKind === 'file'
+    ? target === granted
+    : target === granted || target.startsWith(`${granted}${path.sep}`);
+}
+
+function approvalPath(argumentsText: string): string | undefined {
+  try {
+    const parsed = JSON.parse(argumentsText) as Record<string, unknown>;
+    for (const key of ['path', 'filePath', 'filepath', 'target']) {
+      if (typeof parsed[key] === 'string' && parsed[key]) return parsed[key];
+    }
+  } catch {
+    // A malformed or non-path approval cannot safely reuse a scoped grant.
+  }
+  return undefined;
+}
 
 function bound(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;

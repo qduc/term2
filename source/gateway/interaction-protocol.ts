@@ -3,7 +3,7 @@ import {
   ASK_USER_NO_ANSWER_RESULT,
   isAskUserTerminalAnswer,
 } from '../tools/agent/ask-user-constants.js';
-import { supportsFolderSessionRead } from '../contracts/conversation.js';
+import { supportsFolderSessionRead, type PendingApproval } from '../contracts/conversation.js';
 
 export type InteractionKind = 'tool_approval' | 'ask_user' | 'check_in';
 export type InteractionVariant =
@@ -142,26 +142,27 @@ function runBudgetEvidence(approval: Record<string, unknown>): Record<string, nu
 }
 
 export function projectPendingInteraction(
-  approval: Record<string, unknown>,
+  approval: PendingApproval | Record<string, unknown>,
   interactionId: string,
   revision: number,
   answers: readonly unknown[] = [],
   currentQuestionIndex = 0,
 ): PendingInteractionDto {
+  const input = approval as Record<string, unknown>;
   if (!OPAQUE_ID.test(interactionId) || !Number.isSafeInteger(revision) || revision < 1) {
     throw new InteractionProtocolError();
   }
-  const agentName = text(approval.agentName, 256, true);
-  const toolName = text(approval.toolName, 256, true);
-  const argumentsText = text(approval.argumentsText, MAX_TEXT, true);
+  const agentName = text(input.agentName, 256, true);
+  const toolName = text(input.toolName, 256, true);
+  const argumentsText = text(input.argumentsText, MAX_TEXT, true);
   const isAskUser = toolName === 'ask_user';
-  const checkIn = approval.checkIn === 'max_turns' || approval.checkIn === 'run_budget' ? approval.checkIn : undefined;
-  const deniedRead = approval.deniedRead;
+  const checkIn = input.checkIn === 'max_turns' || input.checkIn === 'run_budget' ? input.checkIn : undefined;
+  const deniedRead = input.deniedRead;
   const isDeniedRead = deniedRead && typeof deniedRead === 'object';
-  const outsideEdit = approval.outsideWorkspaceEdit && typeof approval.outsideWorkspaceEdit === 'object';
-  const isDocker = approval.dockerHostControl === true;
-  const isNetwork = approval.sandboxNetworkAccess === true || approval.networkAccess === true;
-  const isPostExecute = approval.postExecute && typeof approval.postExecute === 'object';
+  const outsideEdit = input.outsideWorkspaceEdit && typeof input.outsideWorkspaceEdit === 'object';
+  const isDocker = input.dockerHostControl === true;
+  const isNetwork = input.sandboxNetworkAccess === true || input.networkAccess === true;
+  const isPostExecute = input.postExecute && typeof input.postExecute === 'object';
   const variant: InteractionVariant = checkIn
     ? checkIn
     : isAskUser
@@ -181,7 +182,7 @@ export function projectPendingInteraction(
     : 'ordinary_tool';
 
   const descriptor: PendingInteractionDto['descriptor'] = { agentName, toolName, argumentsText: redact(argumentsText) };
-  if (typeof approval.callId === 'string' && OPAQUE_ID.test(approval.callId)) descriptor.callId = approval.callId;
+  if (typeof input.callId === 'string' && OPAQUE_ID.test(input.callId)) descriptor.callId = input.callId;
   if (checkIn) descriptor.checkIn = checkIn;
   if (isDeniedRead) {
     const value = deniedRead as Record<string, unknown>;
@@ -195,8 +196,8 @@ export function projectPendingInteraction(
   } else if (outsideEdit) {
     descriptor.display = { target: '<outside-workspace>', scope: '<outside-workspace>' };
   }
-  if (approval.llmAdvisory && typeof approval.llmAdvisory === 'object') {
-    const advisory = approval.llmAdvisory as Record<string, unknown>;
+  if (input.llmAdvisory && typeof input.llmAdvisory === 'object') {
+    const advisory = input.llmAdvisory as Record<string, unknown>;
     const reasoning = text(advisory.reasoning, 2_048, true);
     const model = text(advisory.model, 256, true);
     if (typeof advisory.approved !== 'boolean') throw new InteractionProtocolError();
@@ -207,7 +208,7 @@ export function projectPendingInteraction(
       ...(typeof advisory.riskLevel === 'string' ? { riskLevel: text(advisory.riskLevel, 32, true) } : {}),
     };
   }
-  const evidence = runBudgetEvidence(approval);
+  const evidence = runBudgetEvidence(input);
   if (evidence) descriptor.runBudgetEvidence = evidence;
 
   const questions = isAskUser ? parseAskUserQuestions(argumentsText) : undefined;

@@ -185,6 +185,8 @@ export function createProductionRuntimeFactory(input: {
   ) => {
     const local = createDefaultSettings(_defaults, sessionDir, input.policy?.maxParallelToolCalls ?? 1, snapshot);
     const authority = input.settingsAuthority;
+    const sandboxEnabled = authority.get('sandbox.enabled');
+    if (typeof sandboxEnabled === 'boolean') local.set('sandbox.enabled', sandboxEnabled, { persist: false });
     // SettingsService intentionally has no public clone operation. This
     // narrow overlay preserves launcher-owned credentials and defaults while
     // keeping mutable model/session choices isolated per gateway session.
@@ -258,6 +260,7 @@ export function createProductionRuntimeFactory(input: {
           skillsService,
           requestCapture,
           readOnly,
+          allowUnsandboxed: sessionSettingsSnapshot.effectiveToolPolicy.allowUnsandboxed === true,
         },
         toolOwnership,
         postExecutePauseCapability,
@@ -463,7 +466,7 @@ export class RuntimeFactory {
         toolLifecycle,
       ) => {
         this.#options.onAgentClientDeps?.({
-          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          readOnly: access.isReadOnly,
           sessionAccess: access,
         });
         return this.#options.createAgentClient({
@@ -488,7 +491,7 @@ export class RuntimeFactory {
           spawnOptions: composition.spawnOptions,
           policy: this.#policy,
           gatewayMode: true,
-          readOnly: binding.access === 'read' || sessionSettingsSnapshot?.effectiveToolPolicy.allowWrite !== true,
+          readOnly: access.isReadOnly,
           allowBackgroundShell: this.#policy.maxShellJobs > 0,
           maxToolOutputBytes: this.#policy.maxToolOutputBytes,
         });

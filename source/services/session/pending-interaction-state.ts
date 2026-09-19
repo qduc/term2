@@ -10,6 +10,7 @@ export type AskUserAnswer = string | string[];
  */
 export type PendingInteractionSnapshot = {
   readonly interactionId: number;
+  readonly revision?: number;
   readonly approval: PendingApproval;
   readonly askUserAnswers: readonly AskUserAnswer[];
   readonly currentAskUserQuestionIndex: number;
@@ -17,6 +18,7 @@ export type PendingInteractionSnapshot = {
 
 export type ResolvePendingInteractionRequest = {
   readonly expectedInteractionId: number;
+  readonly expectedRevision?: number;
   readonly answer: string;
   readonly rejectionReason?: string;
   readonly approvalAnswer?: string;
@@ -45,6 +47,7 @@ export type PendingInteractionResolution =
 
 type MutablePendingInteraction = {
   interactionId: number;
+  revision: number;
   approval: PendingApproval;
   askUserAnswers: AskUserAnswer[];
   currentAskUserQuestionIndex: number;
@@ -64,6 +67,7 @@ function getAskUserQuestions(approval: PendingApproval): AskUserQuestion[] {
 function cloneSnapshot(interaction: MutablePendingInteraction): PendingInteractionSnapshot {
   return {
     interactionId: interaction.interactionId,
+    revision: interaction.revision,
     approval: interaction.approval,
     askUserAnswers: interaction.askUserAnswers.map((answer) => (Array.isArray(answer) ? [...answer] : answer)),
     currentAskUserQuestionIndex: interaction.currentAskUserQuestionIndex,
@@ -81,6 +85,7 @@ function cloneSnapshot(interaction: MutablePendingInteraction): PendingInteracti
 export class PendingInteractionState {
   #current: MutablePendingInteraction | null = null;
   #nextInteractionId = 1;
+  #nextRevision = 1;
   #observer: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
 
   getSnapshot(): PendingInteractionSnapshot | null {
@@ -95,6 +100,7 @@ export class PendingInteractionState {
   present(approval: PendingApproval): PendingInteractionSnapshot {
     this.#current = {
       interactionId: this.#nextInteractionId++,
+      revision: this.#nextRevision++,
       approval,
       askUserAnswers: [],
       currentAskUserQuestionIndex: 0,
@@ -131,6 +137,13 @@ export class PendingInteractionState {
     const current = this.#current;
     if (!current) return { kind: 'none' };
     if (current.interactionId !== request.expectedInteractionId) {
+      return {
+        kind: 'stale_interaction',
+        expectedInteractionId: request.expectedInteractionId,
+        currentInteractionId: current.interactionId,
+      };
+    }
+    if (request.expectedRevision !== undefined && current.revision !== request.expectedRevision) {
       return {
         kind: 'stale_interaction',
         expectedInteractionId: request.expectedInteractionId,
@@ -184,6 +197,7 @@ export class PendingInteractionState {
   }
 
   #publish(): PendingInteractionSnapshot {
+    if (this.#current) this.#current.revision = this.#nextRevision++;
     const snapshot = this.getSnapshot();
     if (!snapshot) throw new Error('Cannot publish an absent pending interaction');
     this.#observer?.(snapshot);

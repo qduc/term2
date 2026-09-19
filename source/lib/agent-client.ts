@@ -633,6 +633,7 @@ export class AgentClient {
       requestCapture?: ProviderRequestCapture;
       /** Explicit gateway read-only posture; omitted for CLI sessions. */
       readOnly?: boolean;
+      allowUnsandboxed?: boolean;
       mcpToolSource?: import('../services/mcp/mcp-tool-source.js').McpToolSource;
     };
     /** Test seam: inject a pre-built SubagentBridge instead of creating one. */
@@ -684,6 +685,7 @@ export class AgentClient {
         postExecutePauseCapability,
         sessionAccess,
         readOnly: deps.readOnly,
+        allowUnsandboxed: deps.allowUnsandboxed,
         mcpToolSource: deps.mcpToolSource,
         backgroundShellRegistry: this.#backgroundShellRegistry,
         backgroundShellOutput: this.#backgroundShellOutput,

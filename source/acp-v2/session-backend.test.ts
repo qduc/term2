@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createAcpV2SessionBackend } from './session-backend.js';
+import { createAcpV2SessionBackend, mapAcpPermissionChoices } from './session-backend.js';
 import { createConversationLogWriter, LockConflictError } from '../services/logging/conversation-log-writer.js';
 
 const makeRuntime = (session: any) => ({
@@ -23,7 +23,11 @@ const makeSession = (sessionId = 'session-1'): any => ({
   sessionId,
   binding: { canonicalRoot: '/tmp' },
   settings: { modelId: 'test-model', providerId: 'test-provider' },
-  service: { setLogSink: vi.fn() },
+  service: {
+    setLogSink: vi.fn(),
+    getPendingInteractionSnapshot: () => undefined,
+    handleApprovalDecision: vi.fn(async () => null),
+  },
   resources: { runtime: undefined },
   prepareMessage: vi.fn(async () => ({ kind: 'prepared', leaseId: 'lease-1', turnId: 'turn-1' })),
   commitMessage: vi.fn(async () => {}),
@@ -32,6 +36,32 @@ const makeSession = (sessionId = 'session-1'): any => ({
 });
 
 describe('ACP v2 production session backend', () => {
+  it('offers only explicitly supported ACP permission choices', () => {
+    expect(
+      mapAcpPermissionChoices([
+        { id: 'allow-once', label: 'Allow once' },
+        { id: 'allow-folder-session', label: 'Allow folder for session' },
+        { id: 'allow-remember', label: 'Allow and remember' },
+        { id: 'unsandboxed-once', label: 'Run unsandboxed once' },
+        { id: 'reject', label: 'Reject' },
+        { id: 'future-choice', label: 'Future choice' },
+      ]),
+    ).toEqual([
+      {
+        choice: { id: 'allow-once', label: 'Allow once' },
+        option: { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+      },
+      {
+        choice: { id: 'allow-folder-session', label: 'Allow folder for session' },
+        option: { optionId: 'allow-folder-session', name: 'Allow folder for session', kind: 'allow_always' },
+      },
+      {
+        choice: { id: 'reject', label: 'Reject' },
+        option: { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+      },
+    ]);
+  });
+
   it('rejects relative, missing, and non-directory cwd values', async () => {
     const session = makeSession();
     const backend = createAcpV2SessionBackend({
@@ -157,7 +187,7 @@ describe('ACP v2 production session backend', () => {
 
   it('denies approval even when the client update throws', async () => {
     const session = makeSession();
-    session.resources.runtime = { pendingInteraction: { getSnapshot: () => ({ interactionId: 8 }) } };
+    session.service.getPendingInteractionSnapshot = () => ({ interactionId: 8 } as any);
     session.resolvePendingInteraction = vi.fn();
     const backend = createAcpV2SessionBackend({
       runtimeFactory: makeRuntime(session) as any,
@@ -192,9 +222,7 @@ describe('ACP v2 production session backend', () => {
   it('uses an injected approval policy while the default remains denial', async () => {
     const session = makeSession();
     const resolvePendingInteraction = vi.fn();
-    session.resources.runtime = {
-      pendingInteraction: { getSnapshot: () => ({ interactionId: 7 }) },
-    };
+    session.service.getPendingInteractionSnapshot = () => ({ interactionId: 7 } as any);
     session.resolvePendingInteraction = resolvePendingInteraction;
     const decideApproval = vi.fn(async () => ({ answer: 'n', reason: 'policy denied' }));
     const backend = createAcpV2SessionBackend({

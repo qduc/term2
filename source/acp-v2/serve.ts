@@ -31,10 +31,10 @@ import { getDefaultShellSandboxRunner } from '../utils/shell/sandbox/shell-sandb
  * injected `writeStderr` instead of calling `console.error` directly.
  *
  * Security posture is inherited, not configured: the runtime factory's session
- * snapshot forces `allowWrite:false`, `autoApprove:false` and
+ * snapshot forces `allowWrite:true`, `autoApprove:false` and
  * `allowUnsandboxed:false` for every session, and there is intentionally no
- * flag that relaxes it. Tool approvals stay fail-closed until the milestone
- * that adds `session/request_permission`.
+ * flag that relaxes it. Approval-required tools are mediated by the ACP
+ * `session/request_permission` bridge and remain fail-closed on every error.
  */
 
 export type AcpServeIo = Readonly<{
@@ -159,6 +159,7 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
       settingsAuthority,
       tmpDir: tempRoot,
       sandboxAvailable: true,
+      allowWrite: true,
       createLogger,
       createSessionContext,
     });

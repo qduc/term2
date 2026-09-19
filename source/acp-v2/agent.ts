@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
+import type { ILoggingService } from '../services/service-interfaces.js';
 
 export type AcpV2PromptOutcome = Readonly<{
   stopReason: acp.StopReason;
@@ -34,16 +35,18 @@ export interface AcpV2SessionBackend {
 
 export type CreateAcpV2AgentOptions = Readonly<{
   backend: AcpV2SessionBackend;
+  logger: Pick<ILoggingService, 'error'>;
   version: string;
 }>;
 
 type ActivePrompt = Readonly<{
   controller: AbortController;
   done: Promise<void>;
-  settle: () => void;
 }>;
 
-const unsupportedSessionExtensions = (
+const SESSION_BUSY_ERROR_CODE = -32000;
+
+const assertNoUnsupportedSessionExtensions = (
   request: Pick<acp.NewSessionRequest, 'additionalDirectories' | 'mcpServers'>,
 ): void => {
   if (request.additionalDirectories && request.additionalDirectories.length > 0) {
@@ -59,21 +62,21 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
   const activePrompts = new Map<acp.SessionId, ActivePrompt>();
   const app = acp.agent({ name: 'term2' });
 
-  app.onRequest(acp.methods.agent.initialize, ({ params }) => ({
-    protocolVersion: params.protocolVersion === acp.PROTOCOL_VERSION ? params.protocolVersion : acp.PROTOCOL_VERSION,
+  app.onRequest(acp.methods.agent.initialize, () => ({
+    protocolVersion: acp.PROTOCOL_VERSION,
     info: { name: 'term2', title: 'term2', version: options.version },
     capabilities: { session: {} },
   }));
 
   app.onRequest(acp.methods.agent.session.new, async ({ params }) => {
-    unsupportedSessionExtensions(params);
+    assertNoUnsupportedSessionExtensions(params);
     return await options.backend.createSession({ cwd: params.cwd });
   });
 
   app.onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
 
   app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
-    unsupportedSessionExtensions(params);
+    assertNoUnsupportedSessionExtensions(params);
     return await options.backend.resumeSession(
       {
         sessionId: params.sessionId,
@@ -89,25 +92,43 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
   app.onRequest(acp.methods.agent.session.close, async ({ params }) => {
     const active = activePrompts.get(params.sessionId);
     active?.controller.abort();
-    if (active) await options.backend.cancelSession(params.sessionId);
+    let cancellationError: unknown;
+    try {
+      if (active) await options.backend.cancelSession(params.sessionId);
+    } catch (error) {
+      cancellationError = error;
+    }
     await active?.done;
     await options.backend.closeSession(params.sessionId);
+    if (cancellationError !== undefined) throw cancellationError;
     return {};
   });
 
   app.onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
-    if (activePrompts.has(params.sessionId)) {
-      throw new acp.RequestError(-32000, 'Session is already processing foreground work');
+    const { active, settle } = reservePrompt(activePrompts, params.sessionId);
+    let execution: AcpV2PromptExecution;
+    try {
+      execution = await options.backend.preparePrompt(params);
+    } catch (error) {
+      activePrompts.delete(params.sessionId);
+      settle();
+      throw error;
     }
 
-    const execution = await options.backend.preparePrompt(params);
-    const controller = new AbortController();
-    let settle!: () => void;
-    const done = new Promise<void>((resolve) => {
-      settle = resolve;
-    });
-    const active = { controller, done, settle };
-    activePrompts.set(params.sessionId, active);
+    if (active.controller.signal.aborted) {
+      setTimeout(() => {
+        void runPrompt({
+          sessionId: params.sessionId,
+          execution,
+          controller: active.controller,
+          client,
+          activePrompts,
+          logger: options.logger,
+        }).finally(settle);
+      }, 0);
+      return {};
+    }
+
     try {
       await client.notify(acp.methods.client.session.update, {
         sessionId: params.sessionId,
@@ -115,7 +136,7 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
       });
     } catch (error) {
       activePrompts.delete(params.sessionId);
-      controller.abort();
+      active.controller.abort();
       settle();
       await options.backend.cancelSession(params.sessionId);
       throw error;
@@ -125,9 +146,10 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
       void runPrompt({
         sessionId: params.sessionId,
         execution,
-        controller,
+        controller: active.controller,
         client,
         activePrompts,
+        logger: options.logger,
       }).finally(settle);
     }, 0);
     return {};
@@ -141,12 +163,31 @@ export function createAcpV2Agent(options: CreateAcpV2AgentOptions): acp.AgentApp
   return app;
 }
 
+function reservePrompt(
+  activePrompts: Map<acp.SessionId, ActivePrompt>,
+  sessionId: acp.SessionId,
+): { active: ActivePrompt; settle: () => void } {
+  if (activePrompts.has(sessionId)) {
+    throw new acp.RequestError(SESSION_BUSY_ERROR_CODE, 'Session is already processing foreground work');
+  }
+
+  const controller = new AbortController();
+  let settle!: () => void;
+  const done = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  const active = { controller, done };
+  activePrompts.set(sessionId, active);
+  return { active, settle };
+}
+
 async function runPrompt(input: {
   sessionId: acp.SessionId;
   execution: AcpV2PromptExecution;
   controller: AbortController;
   client: acp.AgentContext;
   activePrompts: Map<acp.SessionId, ActivePrompt>;
+  logger: Pick<ILoggingService, 'error'>;
 }): Promise<void> {
   let stopReason: acp.StopReason = '_term2_error';
   try {
@@ -158,8 +199,16 @@ async function runPrompt(input: {
       }, input.controller.signal);
       stopReason = input.controller.signal.aborted ? 'cancelled' : result.stopReason;
     }
-  } catch {
-    if (input.controller.signal.aborted) stopReason = 'cancelled';
+  } catch (error) {
+    if (input.controller.signal.aborted) {
+      stopReason = 'cancelled';
+    } else {
+      input.logger.error('ACP prompt execution failed', {
+        eventType: 'acp.prompt.failed',
+        sessionId: input.sessionId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
   } finally {
     if (input.activePrompts.get(input.sessionId)?.controller === input.controller) {
       input.activePrompts.delete(input.sessionId);

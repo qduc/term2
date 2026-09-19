@@ -1,0 +1,39 @@
+{
+  "run_id": "jev-auth-replay-20260919",
+  "task_id": "replay-harness",
+  "worker": "harness-terra",
+  "artifact_paths": {
+    "runner": "docs/research/jev-approval-replay/replay/runner.py",
+    "analyze": "docs/research/jev-approval-replay/replay/analyze.py",
+    "protocol": "docs/research/jev-approval-replay/replay/protocol.md",
+    "verify": "docs/research/jev-approval-replay/replay/verify.py",
+    "fixture": "docs/research/jev-approval-replay/replay/fixtures/reconstruction.jsonl"
+  },
+  "sha256": {
+    "runner": "ed128198b8e9ba66fa437ef43eb4cf19c3c33968af809b00bf5c44b360591679",
+    "analyze": "941a38770ad4a6f9f52f7d95bac44a51a63023ff789a03f4384c6d074e15ab0b",
+    "protocol": "dd02c69570abfa518a000edd105cb5a29030ac00c46bf4c834ac73d48a900d46",
+    "verify": "c5b61840de1071823678221fb1d98b26995f212aa3008bda9a0681b6daea3b37",
+    "fixture": "d25d1fd339cd3b374a8eb2af4494861f9133692a0d93dfc0db4a2ad3bd25b9db"
+  },
+  "verification_argv": [
+    "python3",
+    "/home/qduc/term2/docs/research/jev-approval-replay/replay/verify.py"
+  ],
+  "verification_result": "PASS: cell isolation, append-only/idempotent behavior, no-call dry run, and paired calculations",
+  "fixture_dry_run_call_count": 4,
+  "real_reconstruction_dry_run": {
+    "input": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/dataset.jsonl",
+    "input_sha256": "23186be0ee7418e41f5ff6b301f2bf497d514ed8b619e6b9a9e25e14b6d260ff",
+    "selected_unique_cases": 91,
+    "planned_call_count": 364,
+    "provider_requests": 0
+  },
+  "live_provider_requests": 0,
+  "declared_children": [],
+  "unresolved_risks": [
+    "No live production cohort was replayed; the available reconstruction dataset was validated only through the no-call dry-run path, and frozen independent ambiguity labels remain unavailable.",
+    "Reconstructed fuller context and high-confidence joins may still be incomplete or incorrect.",
+    "The replay records the checked-out reviewer policy digest, but later source-prompt drift requires an explicitly preserved checkout to reproduce an earlier live run exactly."
+  ]
+}

@@ -8,13 +8,27 @@ term2 has an experimental adapter for version 2 of the
 protocol for connecting code editors and other interactive clients to coding
 agents.
 
-:::caution[Not yet a runnable endpoint]
-The current milestone implements and tests the protocol adapter, but it does
-not yet register an ACP launcher or a public CLI transport. A stock ACP client
-cannot launch term2 from a released command yet. This page documents the wire
-contract already implemented in `createAcpV2Agent`; the launch command will be
-documented when that integration is added.
-:::
+## Running the launcher
+
+`term2 acp` serves the adapter over stdio: JSON-RPC messages as
+newline-delimited UTF-8 JSON on stdout, diagnostics on stderr. The process runs
+until the client closes stdin or receives SIGINT/SIGTERM, then performs a
+bounded shutdown (`runAcp` in `source/acp-v2/serve.ts`).
+
+```sh
+term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
+```
+
+Those are the only flags (`parseAcpArgs` in `source/acp-v2/serve-args.ts`):
+any other flag is rejected as an unknown option, and any non-flag token as an
+unexpected argument. In particular `--auto-approve`
+exits with status 1, writes nothing to stdout, and prints a diagnostic to
+stderr. There is no flag that turns on auto-approve or unsandboxed execution;
+the security posture is inherited from the runtime factory, not configured.
+
+`--model` is resolved against the model catalog non-interactively, so it needs
+an exact model id or `<provider>/<model>`; an ambiguous pattern is refused
+rather than consuming protocol bytes from stdin.
 
 This is separate from the [private Web Gateway API](/term2/reference/gateway-api/).
 ACP targets editor and coding-agent integrations. The Web Gateway remains the
@@ -52,6 +66,11 @@ session configuration, MCP, or elicitation. In particular, it does not implement
 `auth/login`, `auth/logout`, `session/set_config_option`, `session/fork`,
 `session/delete`, or the ACP MCP and elicitation methods.
 
+`session/request_permission` is not part of this capability blob. It is an
+agent → client request sent while a prompt is running, so it requires no
+advertisement — but a client that cannot answer it will see every
+approval-requiring tool call fail closed.
+
 ## Implemented methods
 
 | Direction | Method | Parameters | Result |
@@ -64,6 +83,7 @@ session configuration, MCP, or elicitation. In particular, it does not implement
 | Client → agent notification | `session/cancel` | `sessionId` | No response |
 | Client → agent request | `session/close` | `sessionId` | Empty result after active work settles and backend resources close |
 | Agent → client notification | `session/update` | `sessionId`, ACP `update` | No response |
+| Agent → client request | `session/request_permission` | `sessionId`, tool-call subject, permission `options` | Client `outcome` with the selected `optionId` |
 
 `cwd` is an absolute path under the ACP schema. The adapter currently rejects a
 non-empty `additionalDirectories` or `mcpServers` array on `session/new` and
@@ -73,6 +93,81 @@ members or send empty arrays.
 `replayFrom` is passed to the session backend only when the client supplies it.
 Omitting it resumes without inventing a replay cursor. `{ "type": "start" }`
 requests replay from the start according to ACP v2 semantics.
+
+## Writable sessions and the sandbox
+
+ACP sessions are writable. Every session created through `session/new` binds
+the client-supplied `cwd` — validated and canonicalized with `realpathSync`
+by `validateCwd` in `source/acp-v2/session-backend.ts` — as the workspace
+root with `read_write` access, and the launcher builds its runtime factory
+with `allowWrite: true` (`runAcp` in `source/acp-v2/serve.ts`). Write and
+edit tools are registered for every ACP session. Sandboxed shell writes are
+rooted at the session `cwd`; file edits default to that root, and an edit
+target outside it requires an approval — `allow-edit-file-session` /
+`allow-edit-folder-session` extend edit access to the granted path or folder
+(see the mapping table below).
+
+`allowUnsandboxed` is false for every ACP session (the factory's session
+snapshot leaves it unset; see `createProductionRuntimeFactory` in
+`source/gateway/runtime-factory.ts`). A shell call that asks for
+`sandbox: "unsandboxed"` is silently downgraded to the sandboxed default
+(`source/tools/system/shell.ts`); if the sandbox itself is unavailable, the
+shell tool refuses the unsandboxed fallback and the call fails.
+
+## Tool approvals: `session/request_permission`
+
+Every tool call that would require interactive approval is sent to the client
+as an ACP v2 `session/request_permission` **request** — an agent-to-client
+request, not a notification and not an advertised session capability. The
+tool runs only if the client answers with an allow option, or if the session
+already holds a matching allow grant.
+
+The options offered are the term2 approval choices mapped by
+`ACP_PERMISSION_KINDS` in `source/acp-v2/session-backend.ts`; choices without
+an ACP kind are filtered out and never offered:
+
+| term2 choice | ACP kind | Resolution sent to the session |
+| --- | --- | --- |
+| `approve` / `allow-once` | `allow_once` | `y` |
+| `allow-folder-session` / `allow-edit-file-session` / `allow-edit-folder-session` | `allow_always` | The same choice id |
+| `reject` / `deny` | `reject_once` | `n` |
+
+The interactive-only choices `unsandboxed-once` and `allow-remember` are
+never offered over ACP, and the ACP `reject_always` kind is never used, so a
+client can never grant unsandboxed execution or a persistent approval.
+
+An `allow_always` answer is recorded as a session-scoped grant keyed to the
+granted file or folder (not to the tool name alone): a later call whose target
+resolves inside the granted scope is approved without another round trip. Two
+lifetimes are involved. The ACP bridge's short-circuit cache
+(`sessionPermissionGrants`) is discarded when the prompt settles
+(`clearClient`); the grant term2 itself applies
+(`SessionAccessState.allowEditFile` / `allowEditFolder` / `allowReadFolder`)
+lasts for the **session** and is consulted by the tools' `needsApproval` on
+later prompts, so an allowed call does not re-ask. That grant is cleared on
+session reset or close (`SessionLifecycle` clearing access state), not at
+prompt end.
+
+### Fail-closed behavior
+
+The tool does not run unless an explicit allow answer is resolved. These
+paths apply once the permission request settles; a client that never answers
+leaves the call pending until the turn is cancelled. All of the following
+deny the call:
+
+- the client cancels the permission request, or the outcome is missing,
+  malformed, or not `selected`;
+- the client selects an unknown `optionId`;
+- the transport fails or the client disconnects while the request is pending;
+- the turn is cancelled or the session closed while approval is pending;
+- the pending interaction has become stale and can no longer be resolved by
+  the recorded interaction id and revision;
+- a nested `run_code` approval fires without a resolvable session interaction
+  to project into a permission request.
+
+A call the client denies surfaces as a failed `tool_call_update`; the
+fail-closed paths that abort the turn instead settle the prompt with the
+`cancelled` stop reason.
 
 ## Prompt lifecycle
 

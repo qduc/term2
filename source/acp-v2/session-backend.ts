@@ -23,6 +23,8 @@ import { LoggingService } from '../services/logging/logging-service.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { AcpV2EmitUpdate, AcpV2PromptExecution, AcpV2SessionBackend } from './agent.js';
+import { projectPendingInteraction } from '../gateway/interaction-protocol.js';
+import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
 
 const MAX_TEXT = 16_384;
 const MAX_ARGUMENTS = 8_192;
@@ -37,6 +39,8 @@ type ActiveTurn = {
   reject: ((error: unknown) => void) | null;
   streamedAssistantLength: number;
 };
+
+type PermissionClient = { client: acp.AgentContext; signal: AbortSignal };
 
 export type AcpV2SessionBackendOptions = Readonly<{
   runtimeFactory: RuntimeFactory;
@@ -75,8 +79,73 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const logger = options.logger ?? new LoggingService({ disableLogging: true, suppressConsoleOutput: true });
   const writerFactory = options.writerFactory ?? createConversationLogWriter;
   const writers = new Map<string, ConversationLogWriter>();
+  const permissionClients = new Map<string, PermissionClient>();
   const decideApproval =
     options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
+
+  const requestPermission = async (
+    sessionId: string,
+    snapshot: PendingInteractionSnapshot,
+    toolCallId: string | undefined,
+  ): Promise<{ answer: string; reason?: string } | undefined> => {
+    const pending = permissionClients.get(sessionId);
+    if (!pending) return undefined;
+    const dto = projectPendingInteraction(
+      snapshot.approval as unknown as Record<string, unknown>,
+      String(snapshot.interactionId),
+      1,
+    );
+    if (dto.kind !== 'tool_approval') return { answer: 'n', reason: 'This interaction cannot be approved over ACP.' };
+    const optionsById = dto.choices.map((choice) => {
+      const kind: acp.PermissionOptionKind =
+        choice.id === 'reject' || choice.id === 'deny'
+          ? 'reject_once'
+          : choice.id.includes('session') || choice.id === 'allow-remember'
+          ? 'allow_always'
+          : 'allow_once';
+      return { choice, option: { optionId: choice.id, name: choice.label, kind } };
+    });
+    try {
+      const response = await pending.client.request(
+        acp.methods.client.session.requestPermission,
+        {
+          sessionId,
+          title: dto.descriptor.toolName,
+          description: dto.descriptor.argumentsText,
+          subject: {
+            type: 'tool_call',
+            toolCall: {
+              toolCallId: toolCallId ?? dto.descriptor.callId ?? `${sessionId}:approval`,
+              title: dto.descriptor.toolName,
+              name: dto.descriptor.toolName,
+              status: 'pending',
+            },
+          },
+          options: optionsById.map(({ option }) => option),
+        },
+        { cancellationSignal: pending.signal },
+      );
+      const outcome = response?.outcome;
+      if (
+        !outcome ||
+        outcome.outcome !== 'selected' ||
+        !('optionId' in outcome) ||
+        typeof outcome.optionId !== 'string'
+      )
+        return { answer: 'n', reason: 'Permission request was cancelled.' };
+      const selected = optionsById.find(({ option }) => option.optionId === outcome.optionId);
+      if (!selected) return { answer: 'n', reason: 'Client selected an unknown permission option.' };
+      const answer =
+        selected.option.kind === 'reject_once' || selected.option.kind === 'reject_always'
+          ? 'n'
+          : selected.choice.id === 'approve'
+          ? 'y'
+          : selected.choice.id;
+      return { answer, ...(answer === 'n' ? { reason: 'Permission denied by client.' } : {}) };
+    } catch {
+      return { answer: 'n', reason: 'Permission request failed.' };
+    }
+  };
 
   const invalid = (message: string): never => {
     throw acp.RequestError.invalidParams(undefined, message);
@@ -104,17 +173,22 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       let reason = 'Approval is not yet supported over ACP.';
       let delivered = false;
       try {
-        const decision = await decideApproval(
-          {
-            toolName: event.approval.toolName,
-            callId: event.approval.callId,
-            argumentsText: event.approval.argumentsText,
-          },
-          { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
-        );
+        const permissionDecision = snapshot
+          ? await requestPermission(turn.session.sessionId, snapshot, event.approval.callId)
+          : undefined;
+        const decision =
+          permissionDecision ??
+          (await decideApproval(
+            {
+              toolName: event.approval.toolName,
+              callId: event.approval.callId,
+              argumentsText: event.approval.argumentsText,
+            },
+            { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
+          ));
         answer = decision.answer;
         reason = decision.reason ?? (answer === 'y' ? '' : 'Approval denied.');
-        if (turn.emit) {
+        if (turn.emit && answer !== 'y' && !answer.startsWith('allow-')) {
           await turn.emit({
             sessionUpdate: 'tool_call_update',
             toolCallId: event.approval.callId ?? `${turn.turnId}:approval`,
@@ -221,7 +295,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       workspaceId: root,
       grantVersion: 1,
       canonicalRoot: root,
-      access: 'read' as const,
+      access: 'read_write' as const,
     };
     const created = await options.runtimeFactory.create(binding, {
       eventSink: async (event) => {
@@ -276,6 +350,12 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   };
 
   return {
+    setClient(sessionId, client, signal) {
+      permissionClients.set(sessionId, { client, signal });
+    },
+    clearClient(sessionId) {
+      permissionClients.delete(sessionId);
+    },
     async createSession(request) {
       const session = await create(request.cwd);
       return { sessionId: session.sessionId };

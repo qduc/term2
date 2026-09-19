@@ -1,12 +1,8 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import {
-  buildSettingValueSuggestions,
-  isStringSetting,
-  type SettingValueSuggestion,
-} from '../../utils/value-suggestions.js';
+import { isSecretSetting, isStringSetting, type SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
 type Props = {
   settingKey: string;
@@ -14,7 +10,14 @@ type Props = {
   selectedIndex: number;
   query: string;
   isNumericSettings?: boolean;
-  isFreeFormString?: boolean;
+  /** Current value, already formatted for display. */
+  currentText?: string;
+  /** Built-in default, already formatted for display. */
+  defaultText?: string;
+  /** What Enter would save right now, already formatted; omitted when nothing would be saved. */
+  previewText?: string;
+  /** Extra input shapes the setting accepts (e.g. `5m`, `$5`). */
+  unitHint?: string;
 };
 
 const SettingsValueSelectionMenu: FC<Props> = ({
@@ -23,73 +26,108 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   selectedIndex,
   query,
   isNumericSettings,
-  isFreeFormString,
+  currentText,
+  defaultText,
+  previewText,
+  unitHint,
 }) => {
   const acceptsAnyString = isStringSetting(settingKey);
-  const isFreeFormStringSetting =
-    isFreeFormString ?? (acceptsAnyString && buildSettingValueSuggestions(settingKey).length === 0);
-
-  // A string value is always settable by typing, so an empty list is an
-  // expected, neutral state — never a red picker error. Choices (enums,
-  // booleans) keep the red "No matching values" because Enter cannot apply
+  // Strings and numbers are settable by typing, so an empty list is a
+  // neutral state. Choices (enums, booleans) stay red: Enter cannot apply
   // text their schema does not accept.
-  const showNeutralEmpty = items.length === 0 && acceptsAnyString;
+  const acceptsTypedValue = acceptsAnyString || Boolean(isNumericSettings);
+  const showNeutralEmpty = items.length === 0 && acceptsTypedValue;
   const selectedItem = items[selectedIndex];
+  const canCopySuggestion = items.length > 0 && !isSecretSetting(settingKey);
+
+  const header = (currentText !== undefined || defaultText !== undefined || unitHint) && (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color={COLOR_TEXT_SUBTLE}>
+        {currentText !== undefined && (
+          <>
+            Current: <Text color={COLOR_TEXT}>{currentText}</Text>
+          </>
+        )}
+        {currentText !== undefined && defaultText !== undefined && ' · '}
+        {defaultText !== undefined && (
+          <>
+            Default: <Text color={COLOR_TEXT}>{defaultText}</Text>
+          </>
+        )}
+      </Text>
+      {unitHint && <Text color={COLOR_TEXT_SUBTLE}>{unitHint}</Text>}
+    </Box>
+  );
+
+  const typedHint = query ? 'Enter saves what you typed' : 'Type a value, then press Enter';
 
   return (
-    <MenuContainer
-      items={items}
-      selectedIndex={selectedIndex}
-      borderColor={items.length === 0 && !showNeutralEmpty ? COLOR_DANGER : COLOR_ACCENT}
-      fallbackText={
-        <Box flexDirection="column">
-          {showNeutralEmpty ? (
-            <Text color={COLOR_TEXT_SUBTLE}>Type a value</Text>
-          ) : (
-            <Text color={COLOR_DANGER} bold>
-              No matching values
-            </Text>
-          )}
-          <Text color={COLOR_TEXT_SUBTLE}>
-            {settingKey} ·{' '}
-            {showNeutralEmpty
-              ? isFreeFormStringSetting
-                ? 'No predefined values — type freely'
-                : `No value matches "${query || '*'}" — Enter applies the typed value`
-              : `No values match "${query || '*'}"`}
-          </Text>
-          {isNumericSettings && <Text color={COLOR_WARNING}>Note: This setting accepts numeric values.</Text>}
-          {showNeutralEmpty && <Text color={COLOR_WARNING}>Note: This setting accepts any string value.</Text>}
-          <Box marginTop={1}>
-            <Text color={COLOR_TEXT_SUBTLE}>Enter → apply typed value · Esc → cancel</Text>
-          </Box>
-        </Box>
-      }
-      footer={
-        <Box flexDirection="column">
-          {selectedItem?.description && (
-            <Box marginBottom={0}>
-              <Text color={COLOR_ACCENT} italic>
-                {selectedItem.description}
-              </Text>
+    <Box flexDirection="column">
+      {header}
+      <MenuContainer
+        items={items}
+        selectedIndex={selectedIndex}
+        borderColor={items.length === 0 && !showNeutralEmpty ? COLOR_DANGER : COLOR_ACCENT}
+        fallbackText={
+          showNeutralEmpty ? (
+            <Box flexDirection="column">
+              <Text color={COLOR_TEXT_SUBTLE}>{isNumericSettings ? 'Type a number' : 'Type a value'}</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>{query ? `No suggestion matches — ${typedHint}` : typedHint}</Text>
             </Box>
-          )}
-          <Text color={COLOR_TEXT_SUBTLE} dimColor>
-            <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate ·{' '}
-            <Text bold>Ctrl+D</Text> reset to default
-          </Text>
-        </Box>
-      }
-      footerOutsideBorder={false}
-      renderItem={(item, _index, isSelected) => (
-        <Box key={item.value}>
-          <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
-          <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
-            {item.value}
-          </Text>
-        </Box>
+          ) : (
+            <Box flexDirection="column">
+              <Text color={COLOR_DANGER} bold>
+                No option matches "{query}"
+              </Text>
+              <Text color={COLOR_TEXT_SUBTLE}>Backspace to see all options</Text>
+            </Box>
+          )
+        }
+        footer={
+          <Box flexDirection="column">
+            {selectedItem?.description && (
+              <Box marginBottom={0}>
+                <Text color={COLOR_ACCENT} italic>
+                  {selectedItem.description}
+                </Text>
+              </Box>
+            )}
+          </Box>
+        }
+        footerOutsideBorder={false}
+        renderItem={(item, _index, isSelected) => (
+          <Box key={item.value}>
+            <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
+            <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
+              {item.value}
+            </Text>
+          </Box>
+        )}
+      />
+      {/* Outside the container: MenuContainer drops its footer when the list
+          is empty, which is exactly when a typed value needs the preview. */}
+      {previewText !== undefined && (
+        <Text color={COLOR_TEXT_SUBTLE}>
+          Enter will set: <Text color={COLOR_SUCCESS}>{previewText}</Text>
+        </Text>
       )}
-    />
+      <Text color={COLOR_TEXT_SUBTLE} dimColor>
+        <Text bold>Enter</Text> apply · <Text bold>Esc</Text> back
+        {items.length > 0 && (
+          <>
+            {' '}
+            · <Text bold>↑↓</Text> choose
+          </>
+        )}
+        {canCopySuggestion && (
+          <>
+            {' '}
+            · <Text bold>Tab</Text> copy into field
+          </>
+        )}{' '}
+        · <Text bold>Ctrl+D</Text> reset{defaultText !== undefined ? ` to ${defaultText}` : ' to default'}
+      </Text>
+    </Box>
   );
 };
 

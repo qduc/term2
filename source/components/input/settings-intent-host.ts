@@ -4,6 +4,7 @@ import type {
   ConversationSettingChange,
 } from '../../services/runtime-setting-router.js';
 import type { IntentRequest, IntentResult } from './menu-types.js';
+import { formatSettingValueDetail } from '../menu/settings-value-formatter.js';
 
 export type SettingsIntentHostDeps = {
   settingsService: SettingsService;
@@ -40,7 +41,13 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
       }
       for (const change of intent.changes) {
         if (change.persistence === 'runtime') onSettingChange?.(change.key, change.value);
-        else onSystemMessage?.(`Saved ${change.key} = ${change.value}. This setting applies after restart.`);
+        else
+          onSystemMessage?.(
+            `Saved ${change.key} = ${formatSettingValueDetail(
+              change.key,
+              change.value,
+            )}. Restart term2 for it to take effect.`,
+          );
       }
     } catch (err) {
       for (const change of intent.changes) fieldErrors[change.key] = err instanceof Error ? err.message : String(err);

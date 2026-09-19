@@ -196,3 +196,40 @@ it.sequential(
     expect(output.includes('(inherits agent.model)')).toBe(true);
   },
 );
+
+it.sequential(
+  'SettingsSelectionMenu marks changed and restart-only settings and explains the selected one',
+  async () => {
+    const { lastFrame } = await renderInAct(
+      <SettingsSelectionMenu
+        items={[
+          { key: 'agent.model', currentValue: 'gpt-5', source: 'config', requiresRestart: false },
+          { key: 'agent.maxTurns', currentValue: 20, source: 'default', requiresRestart: true },
+        ]}
+        selectedIndex={0}
+        query=""
+        activeCategoryId={defaultTabs.activeCategoryId}
+        categories={defaultTabs.categories}
+      />,
+    );
+    const lines = (lastFrame() ?? '').split('\n');
+    expect(lines.find((line) => line.includes('agent.model') && line.includes('gpt-5'))).toContain('●');
+    const maxTurnsLine = lines.find((line) => line.includes('agent.maxTurns'));
+    expect(maxTurnsLine).not.toContain('●');
+    expect(maxTurnsLine).toContain('↻');
+    expect(lastFrame()).toContain('set in settings file · applies immediately');
+  },
+);
+
+it.sequential('SettingsSelectionMenu keeps the tail of keys too long for the column', async () => {
+  const { lastFrame } = await renderInAct(
+    <SettingsSelectionMenu
+      items={[{ key: 'agent.runBudget.warningHeadroomActiveTimeMs', currentValue: 900000 }]}
+      selectedIndex={0}
+      query=""
+      activeCategoryId={defaultTabs.activeCategoryId}
+      categories={defaultTabs.categories}
+    />,
+  );
+  expect(lastFrame()).toContain('…get.warningHeadroomActiveTimeMs');
+});

@@ -16,8 +16,7 @@ it.sequential('SettingsValueSelectionMenu renders empty state', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={[]} selectedIndex={0} query="zzz" />,
   );
-  expect(lastFrame()?.includes('No values match')).toBe(true);
-  expect(lastFrame()?.includes('zzz')).toBe(true);
+  expect(lastFrame()?.includes('No option matches "zzz"')).toBe(true);
 });
 
 it.sequential(
@@ -58,7 +57,8 @@ it.sequential('SettingsValueSelectionMenu shows numeric hint when applicable (em
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('This setting accepts numeric values')).toBe(true);
+  expect(output.includes('Type a number')).toBe(true);
+  expect(output.includes('No option matches')).toBe(false);
 });
 
 it.sequential('SettingsValueSelectionMenu renders footer', async () => {
@@ -73,8 +73,9 @@ it.sequential('SettingsValueSelectionMenu renders footer', async () => {
   );
   const output = lastFrame() ?? '';
   expect(output.includes('Zero')).toBe(true);
-  expect(output.includes('confirm')).toBe(true);
-  expect(output.includes('cancel')).toBe(true);
+  expect(output.includes('apply')).toBe(true);
+  expect(output.includes('back')).toBe(true);
+  expect(output.includes('Tab')).toBe(true);
 });
 it.sequential('SettingsValueSelectionMenu shows a neutral state for free-form string settings', async () => {
   const { lastFrame } = await renderInAct(
@@ -82,8 +83,8 @@ it.sequential('SettingsValueSelectionMenu shows a neutral state for free-form st
   );
   const output = lastFrame() ?? '';
   expect(output.includes('Type a value')).toBe(true);
-  expect(output.includes('No predefined values — type freely')).toBe(true);
-  expect(output.includes('No values match')).toBe(false);
+  expect(output.includes('Type a value, then press Enter')).toBe(true);
+  expect(output.includes('No option matches')).toBe(false);
 });
 
 it.sequential('SettingsValueSelectionMenu keeps curated string no-match neutral, not a red error', async () => {
@@ -92,8 +93,8 @@ it.sequential('SettingsValueSelectionMenu keeps curated string no-match neutral,
   );
   const output = lastFrame() ?? '';
   expect(output.includes('Type a value')).toBe(true);
-  expect(output.includes('Enter applies the typed value')).toBe(true);
-  expect(output.includes('No values match')).toBe(false);
+  expect(output.includes('No suggestion matches — Enter saves what you typed')).toBe(true);
+  expect(output.includes('No option matches')).toBe(false);
 });
 
 it.sequential('SettingsValueSelectionMenu keeps the red state for enum no-match (a real dead end)', async () => {
@@ -101,6 +102,6 @@ it.sequential('SettingsValueSelectionMenu keeps the red state for enum no-match 
     <SettingsValueSelectionMenu settingKey="logging.logLevel" items={[]} selectedIndex={0} query="banana" />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('No values match')).toBe(true);
+  expect(output.includes('No option matches "banana"')).toBe(true);
   expect(output.includes('Type a value')).toBe(false);
 });

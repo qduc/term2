@@ -433,3 +433,87 @@ it('a free-form string value round-trips verbatim and survives a Home cursor mov
     expect.objectContaining({ key: 'environment.nodeEnv', value: '3.0' }),
   ]);
 });
+
+const acceptActive = async (controller: MenuControllerImpl) => {
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
+it('accepts human duration units for a millisecond setting', async () => {
+  const intentHost = vi.fn(
+    ({ intentRequest }): IntentResult => ({
+      id: intentRequest.id,
+      sourceFrameId: intentRequest.sourceFrameId,
+      ok: true,
+    }),
+  );
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({ 'shell.timeout': 120000 });
+  const { lastFrame } = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings shell.timeout 3m', cursor: 26 });
+    await Promise.resolve();
+  });
+  expect(lastFrame()).toContain('Enter will set: 3m');
+
+  await acceptActive(controller);
+  expect(intentHost.mock.calls[0]?.[0].intentRequest.intent.changes[0]).toMatchObject({
+    key: 'shell.timeout',
+    value: 180000,
+  });
+});
+
+it('Enter on a choice with no matching option keeps the frame open and explains why', async () => {
+  const intentHost = vi.fn();
+  const controller = buildController(intentHost, ['direct-setting-value']);
+  const settingsService = createMockSettingsService({ 'agent.reasoningEffort': 'high' });
+  const { lastFrame } = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/effort zzz', cursor: 11 });
+    await Promise.resolve();
+  });
+  const child = controller.getSnapshot().stack.at(-1);
+  expect(child?.kind).toBe('settings_value');
+
+  await acceptActive(controller);
+  expect(intentHost).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().stack.at(-1)?.id).toBe(child?.id);
+  expect(lastFrame()).toContain('"zzz" is not one of the options');
+});
+
+it('shows the current and default value while editing', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({ 'shell.timeout': 60000 });
+  const { lastFrame } = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings shell.timeout ', cursor: 24 });
+    await Promise.resolve();
+  });
+  expect(lastFrame()).toContain('Current: 1m');
+  expect(lastFrame()).toContain('Default: 2m');
+});

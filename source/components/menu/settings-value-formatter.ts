@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
-import { isSecretSetting } from '../../services/settings/settings-ui-metadata.js';
+import {
+  isDurationSetting,
+  isSecretSetting,
+  isUsdMicrosSetting,
+} from '../../services/settings/settings-ui-metadata.js';
 import { getRtkBinaryPath } from '../../services/rtk-service.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
@@ -12,6 +16,20 @@ export interface FormattedSettingValue {
 export function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, Math.max(0, max - 1)) + '…';
+}
+
+/**
+ * Shorten a dotted setting key to `max` chars, keeping the first segment and
+ * as much of the tail as fits (`agent.…warningHeadroomActiveTimeMs`).
+ */
+export function truncateKeepingTail(key: string, max: number): string {
+  if (key.length <= max) return key;
+  const firstDot = key.indexOf('.');
+  const leaf = key.slice(key.lastIndexOf('.') + 1);
+  // Keep the first segment only when the whole leaf name still fits after it.
+  const head = firstDot > 0 && firstDot + 2 + leaf.length <= max ? key.slice(0, firstDot + 1) : '';
+  const tailLength = Math.max(0, max - head.length - 1);
+  return `${head}…${key.slice(key.length - tailLength)}`;
 }
 
 export function formatDurationMs(ms: number, isOptionalCeiling: boolean = false): string {
@@ -136,8 +154,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   }
 
   // 5. Durations / Timeouts (in milliseconds)
-  const isDurationKey =
-    key.endsWith('Ms') || key === SETTING_KEYS.SHELL_TIMEOUT || key === SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT;
+  const isDurationKey = isDurationSetting(key);
 
   if (isDurationKey && typeof value === 'number') {
     const isOptionalCeiling = key === SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS;
@@ -239,4 +256,24 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     text: truncate(str, 40),
     color: COLOR_ACCENT,
   };
+}
+
+/**
+ * Full, untruncated text for a setting value — used where there is room to
+ * show everything (the value editor header, save confirmations). Lists and
+ * maps render as JSON instead of an item count; secrets stay masked.
+ */
+export function formatSettingValueDetail(key: string, value: unknown): string {
+  if (isSecretSetting(key)) return value ? '********' : '<empty>';
+  if (Array.isArray(value) && value.length > 0 && key !== SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES) {
+    return JSON.stringify(value);
+  }
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string' && value !== '') return value;
+  if (isUsdMicrosSetting(key) && typeof value === 'number') {
+    return `${formatUsdMicros(value)} (${formatNumber(value)} micros)`;
+  }
+  return formatSettingDisplayValue(key, value).text;
 }

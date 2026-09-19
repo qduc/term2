@@ -7,8 +7,8 @@ import {
 } from '../../hooks/use-settings-completion.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
-import { formatSettingDisplayValue, truncate } from './settings-value-formatter.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { formatSettingDisplayValue, truncateKeepingTail } from './settings-value-formatter.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -21,6 +21,20 @@ type Props = {
 };
 
 const VISIBLE_COUNT = 10;
+
+const SOURCE_LABELS: Record<NonNullable<SettingCompletionItem['source']>, string> = {
+  default: 'default value',
+  config: 'set in settings file',
+  env: 'set by environment variable',
+  cli: 'set by command-line flag',
+};
+
+function describeSettingState(item: SettingCompletionItem): string {
+  const parts: string[] = [];
+  if (item.source) parts.push(SOURCE_LABELS[item.source]);
+  parts.push(item.requiresRestart ? 'applies after restart' : 'applies immediately');
+  return parts.join(' · ');
+}
 const KEY_COL_WIDTH = 32;
 
 const SettingsSelectionMenu: FC<Props> = ({
@@ -68,6 +82,11 @@ const SettingsSelectionMenu: FC<Props> = ({
         }
         footer={
           <Box flexDirection="column">
+            {selectedItem && (
+              <Text color={COLOR_TEXT} bold>
+                {selectedItem.key}
+              </Text>
+            )}
             {selectedItem?.description && (
               <Box marginBottom={0}>
                 <Text color={COLOR_ACCENT} italic>
@@ -75,8 +94,11 @@ const SettingsSelectionMenu: FC<Props> = ({
                 </Text>
               </Box>
             )}
+            {selectedItem && <Text color={COLOR_TEXT_SUBTLE}>{describeSettingState(selectedItem)}</Text>}
             <Text color={COLOR_TEXT_SUBTLE} dimColor>
-              Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
+              Type to search all sections · <Text bold>↑↓</Text> move · <Text bold>Enter</Text> edit ·{' '}
+              <Text bold>Esc</Text> close · <Text color={COLOR_WARNING}>●</Text> changed · <Text bold>↻</Text> needs
+              restart
             </Text>
           </Box>
         }
@@ -89,10 +111,9 @@ const SettingsSelectionMenu: FC<Props> = ({
           const showHeader = !isSearchingAll && (actualIndex === scrollOffset || category.id !== prevCategory?.id);
 
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
-          const paddedKey =
-            item.key.length > KEY_COL_WIDTH
-              ? truncate(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ')
-              : item.key.padEnd(KEY_COL_WIDTH, ' ');
+          // Keep the tail of long keys: the leaf name is what tells siblings apart.
+          const paddedKey = truncateKeepingTail(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ');
+          const isChanged = item.source !== undefined && item.source !== 'default';
 
           return (
             <Box key={item.key} flexDirection="column">
@@ -109,9 +130,13 @@ const SettingsSelectionMenu: FC<Props> = ({
                 <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
                   {paddedKey}
                 </Text>
+                <Text color={COLOR_WARNING}>{isChanged ? '● ' : '  '}</Text>
                 {valueObj && (
-                  <Text color={isSelected ? COLOR_TEXT : valueObj.color ?? COLOR_TEXT_SUBTLE}>{valueObj.text}</Text>
+                  <Text color={valueObj.color ?? COLOR_TEXT_SUBTLE} bold={isSelected}>
+                    {valueObj.text}
+                  </Text>
                 )}
+                {item.requiresRestart && <Text color={COLOR_TEXT_SUBTLE}> ↻</Text>}
               </Box>
             </Box>
           );

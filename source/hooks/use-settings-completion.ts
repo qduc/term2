@@ -29,6 +29,22 @@ function getCurrentSettingValue(settingsService: SettingsService, key: string): 
   }
 }
 
+function getSettingSource(settingsService: SettingsService, key: string): SettingCompletionItem['source'] {
+  try {
+    return settingsService.getSource(key);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRuntimeModifiable(settingsService: SettingsService, key: string): boolean {
+  try {
+    return settingsService.isRuntimeModifiable(key);
+  } catch {
+    return true;
+  }
+}
+
 export {
   SETTINGS_CATEGORIES,
   type SettingCompletionItem,
@@ -76,7 +92,11 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   const allSettings = useMemo(() => {
     return buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS, true, (key: string) =>
       getCurrentSettingValue(settingsService, key),
-    );
+    ).map((item) => ({
+      ...item,
+      source: getSettingSource(settingsService, item.key),
+      requiresRestart: !isRuntimeModifiable(settingsService, item.key),
+    }));
     // settingsVersion is a signal dep — incrementing it triggers re-computation
     // when an external setting changes.  Omitted from the dependency lint check
     // because it does not appear literally in the memo body.

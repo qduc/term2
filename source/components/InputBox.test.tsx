@@ -1355,7 +1355,7 @@ it.sequential('settings value completion shows restart notice for startup-only s
     (msgs) => msgs.length > 0,
   );
 
-  expect(systemMessages).toEqual(['Saved agent.maxTurns = 30. This setting applies after restart.']);
+  expect(systemMessages).toEqual(['Saved agent.maxTurns = 30. Restart term2 for it to take effect.']);
 });
 
 it.sequential('InputBox ignores focus sequences when not in text mode', async () => {

@@ -19,25 +19,33 @@ export type SettingUIMetadata = {
 const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.ENABLE_AGENT_WORKFLOW]:
     'Enable bounded JavaScript workflows that coordinate concurrent read-only agents (true|false)',
-  [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
+  [SETTING_KEYS.AGENT_MODEL]: 'The main chat model (e.g. gpt-5.1, claude-sonnet-5)',
   [SETTING_KEYS.AGENT_FAVORITE_MODELS]:
     'Favorited models as "provider/modelId" strings, matched fast by --model before any catalog loads (edit via ctrl+f in the model picker)',
   [SETTING_KEYS.AGENT_MODEL_NICKNAMES]:
     'Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (edit via ctrl+n in the model picker Favorites tab)',
-  [SETTING_KEYS.AGENT_SMART_MODEL]: 'Model for smart ancillary tasks (falls back to agent.model)',
-  [SETTING_KEYS.AGENT_SMART_PROVIDER]: 'Provider for smart ancillary tasks (falls back to agent.provider)',
+  [SETTING_KEYS.AGENT_SMART_MODEL]:
+    'Model for smart-tier helper agents (the hardest side tasks) (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_SMART_PROVIDER]:
+    'Provider for smart-tier helper agents (the hardest side tasks) (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_SMART_REASONING_EFFORT]:
-    'Reasoning effort for smart ancillary tasks (none|minimal|low|medium|high|xhigh|default)',
-  [SETTING_KEYS.AGENT_BALANCED_MODEL]: 'Model for balanced ancillary tasks (falls back to agent.model)',
-  [SETTING_KEYS.AGENT_BALANCED_PROVIDER]: 'Provider for balanced ancillary tasks (falls back to agent.provider)',
+    'Reasoning effort for smart-tier helper agents (the hardest side tasks) (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_BALANCED_MODEL]:
+    'Model for balanced-tier helper agents (everyday side tasks) (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_BALANCED_PROVIDER]:
+    'Provider for balanced-tier helper agents (everyday side tasks) (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT]:
-    'Reasoning effort for balanced ancillary tasks (none|minimal|low|medium|high|xhigh|default)',
-  [SETTING_KEYS.AGENT_CHEAP_MODEL]: 'Model for cheap ancillary tasks (falls back to agent.model)',
-  [SETTING_KEYS.AGENT_CHEAP_PROVIDER]: 'Provider for cheap ancillary tasks (falls back to agent.provider)',
+    'Reasoning effort for balanced-tier helper agents (everyday side tasks) (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_CHEAP_MODEL]:
+    'Model for cheap-tier helper agents (simple, high-volume side tasks) (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_CHEAP_PROVIDER]:
+    'Provider for cheap-tier helper agents (simple, high-volume side tasks) (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT]:
-    'Reasoning effort for cheap ancillary tasks (none|minimal|low|medium|high|xhigh|default)',
-  [SETTING_KEYS.AGENT_CHORE_MODEL]: 'Model for chore ancillary tasks (falls back to agent.model)',
-  [SETTING_KEYS.AGENT_CHORE_PROVIDER]: 'Provider for chore ancillary tasks (falls back to agent.provider)',
+    'Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks) (none|minimal|low|medium|high|xhigh|default)',
+  [SETTING_KEYS.AGENT_CHORE_MODEL]:
+    'Model for small background jobs like repairing failed file edits and reviewing shell auto-approvals (falls back to agent.model)',
+  [SETTING_KEYS.AGENT_CHORE_PROVIDER]:
+    'Provider for small background jobs like repairing failed file edits and reviewing shell auto-approvals (falls back to agent.provider)',
   [SETTING_KEYS.AGENT_EFFICIENT_MODEL]: 'Model for lower-tier workflow agents (falls back to agent.model)',
   [SETTING_KEYS.AGENT_CAPABLE_MODEL]: 'Model for higher-tier workflow agents (falls back to agent.model)',
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
@@ -365,4 +373,17 @@ export function getAllSettingDescriptions(): Record<string, string> {
     }
   }
   return result;
+}
+
+/** Numeric settings stored in milliseconds; the UI accepts `5m`, `30s`, `1h 30m`. */
+export function isDurationSetting(key: string): boolean {
+  return (
+    (key.endsWith('Ms') || key === SETTING_KEYS.SHELL_TIMEOUT || key === SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT) &&
+    isNumberSetting(key)
+  );
+}
+
+/** Numeric settings stored in USD micros (1,000,000 = $1); the UI accepts `$5`. */
+export function isUsdMicrosSetting(key: string): boolean {
+  return key.endsWith('UsdMicros') && isNumberSetting(key);
 }

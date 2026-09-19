@@ -517,3 +517,23 @@ it('setting agent.model accepts provider names with spaces', () => {
     unregisterProvider(providerId);
   }
 });
+
+it('parses human duration units for millisecond settings', () => {
+  expect(parseSettingValueForKey('agent.runBudget.maxActiveTimeMs', '5m')).toBe(300_000);
+  expect(parseSettingValueForKey('agent.runBudget.maxActiveTimeMs', '1h 30m')).toBe(5_400_000);
+  expect(parseSettingValueForKey('agent.runBudget.maxActiveTimeMs', '1.5s')).toBe(1_500);
+  expect(parseSettingValueForKey('agent.runBudget.maxActiveTimeMs', '250ms')).toBe(250);
+  expect(parseSettingValueForKey('shell.timeout', '2m')).toBe(120_000);
+  // A bare number keeps its millisecond meaning.
+  expect(parseSettingValueForKey('agent.runBudget.maxActiveTimeMs', '60000')).toBe(60_000);
+});
+
+it('parses dollar amounts for USD-micros settings', () => {
+  expect(parseSettingValueForKey('agent.runBudget.maxUsdMicros', '$5')).toBe(5_000_000);
+  expect(parseSettingValueForKey('agent.runBudget.maxUsdMicros', '$0.25')).toBe(250_000);
+  expect(parseSettingValueForKey('agent.runBudget.maxUsdMicros', '1000000')).toBe(1_000_000);
+});
+
+it('leaves unit-like text alone for settings that are not durations', () => {
+  expect(parseSettingValueForKey('agent.maxTurns', '5m')).toBe('5m');
+});

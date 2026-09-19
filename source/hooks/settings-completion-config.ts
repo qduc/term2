@@ -5,6 +5,10 @@ export type SettingCompletionItem = {
   key: string;
   description?: string;
   currentValue?: unknown;
+  /** Where the current value comes from; anything but 'default' is a user change. */
+  source?: 'cli' | 'env' | 'config' | 'default';
+  /** True when a change only takes effect after restarting term2. */
+  requiresRestart?: boolean;
 };
 
 export type SettingsCategory = {

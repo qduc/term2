@@ -41,7 +41,7 @@ const MOCK_SETTING_KEYS = {
 } as const;
 
 const MOCK_DESCRIPTIONS: Record<string, string> = {
-  'agent.model': 'The AI model to use (e.g. gpt-4, claude-3-opus)',
+  'agent.model': 'The main chat model (e.g. gpt-5.1, claude-sonnet-5)',
   'agent.reasoningEffort': 'Reasoning effort level (default, low, medium, high)',
   'agent.provider': 'AI provider (openai, openrouter)',
   'agent.maxTurns': 'Maximum conversation turns',

@@ -569,6 +569,15 @@ export class SettingsService {
   }
 
   /**
+   * Get the built-in default for a setting key (undefined when it has none)
+   */
+  getDefault(key: string): unknown {
+    let value: any = DEFAULT_SETTINGS;
+    for (const part of key.split('.')) value = value?.[part];
+    return value;
+  }
+
+  /**
    * Check if a setting is runtime-modifiable
    */
   isRuntimeModifiable(key: string): boolean {
@@ -907,12 +916,7 @@ export class SettingsService {
 
       // Reset to default
       const lastKey = keys[keys.length - 1];
-      const defaultKeys = key.split('.');
-      let defaultValue: any = DEFAULT_SETTINGS;
-
-      for (const k of defaultKeys) {
-        defaultValue = defaultValue[k];
-      }
+      const defaultValue = this.getDefault(key);
 
       const previousProviders = key === 'providers' ? this.settings.providers : undefined;
       obj[lastKey] = cloneSettingValue(defaultValue);

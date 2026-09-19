@@ -10,7 +10,12 @@ import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
 import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
-import { isArraySetting, isStringSetting } from '../services/settings/settings-ui-metadata.js';
+import {
+  isArraySetting,
+  isDurationSetting,
+  isStringSetting,
+  isUsdMicrosSetting,
+} from '../services/settings/settings-ui-metadata.js';
 
 /**
  * Render the durable settlement of a mutation truthfully. Only a `saved`
@@ -85,6 +90,17 @@ export function parseSettingValueForKey(key: string, raw: string): any {
   // named "true") impossible to set.
   if (isStringSetting(key)) return raw.trim();
 
+  // Millisecond and USD-micros settings are displayed as `5m` / `$5.00`, so
+  // accept the same shapes back. A bare number keeps its stored-unit meaning.
+  if (isDurationSetting(key)) {
+    const ms = parseDurationText(raw);
+    if (ms !== undefined) return ms;
+  }
+  if (isUsdMicrosSetting(key)) {
+    const dollars = /^\$\s*(\d+(?:\.\d+)?)$/.exec(raw.trim());
+    if (dollars) return Math.round(Number(dollars[1]) * 1_000_000);
+  }
+
   const value = parseSettingValue(raw);
   if (typeof value !== 'string' || !isArraySetting(key)) return value;
 
@@ -94,6 +110,19 @@ export function parseSettingValueForKey(key: string, raw: string): any {
     .filter((part) => part !== '');
   if (parts.length === 0) return value;
   return parts.map((part) => parseSettingValue(part));
+}
+
+const DURATION_UNIT_MS: Record<string, number> = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 };
+
+/** Parse `5m`, `1h 30m`, `1.5s`, `250ms`; returns undefined for anything else (including bare numbers). */
+export function parseDurationText(raw: string): number | undefined {
+  const text = raw.trim().toLowerCase();
+  if (!/^(\d+(?:\.\d+)?\s*(?:ms|s|m|h)\s*)+$/.test(text)) return undefined;
+  let total = 0;
+  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s*(ms|s|m|h)/g)) {
+    total += Number(match[1]) * DURATION_UNIT_MS[match[2]!]!;
+  }
+  return Math.round(total);
 }
 
 export function formatSettingsSummary(settings: SettingsWithSources): string {

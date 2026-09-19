@@ -69,7 +69,12 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     try {
       const currentValue = settingsService.getDynamic(resolvedSettingKey);
       if (currentValue !== undefined) {
-        const currentValueStr = String(currentValue);
+        // Lists and maps need JSON so accepting the suggestion round-trips;
+        // String() would produce "[object Object]".
+        const currentValueStr =
+          currentValue !== null && typeof currentValue === 'object'
+            ? JSON.stringify(currentValue)
+            : String(currentValue);
         if (!suggestions.some((s) => s.value === currentValueStr)) {
           suggestions.unshift({
             value: currentValueStr,
@@ -98,7 +103,9 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     if (!isControllerOpen || !resolvedSettingKey) return;
     try {
       const currentValue = settingsService.getDynamic(resolvedSettingKey);
-      const currentValueIndex = filteredEntries.findIndex((item) => item.value === String(currentValue));
+      const currentValueText =
+        currentValue !== null && typeof currentValue === 'object' ? JSON.stringify(currentValue) : String(currentValue);
+      const currentValueIndex = filteredEntries.findIndex((item) => item.value === currentValueText);
       setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0);
     } catch {
       setSelectedIndex(0);

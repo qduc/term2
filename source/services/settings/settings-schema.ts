@@ -45,49 +45,63 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .describe('Model for higher-tier workflow agents. Falls back to agent.model when unset.'),
   smartModel: tierModelPoolSchema(
-    'Models for smart ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
   ),
   smartProvider: z
     .string()
     .min(1)
     .optional()
-    .describe('Provider for smart ancillary tasks. Falls back to agent.provider when unset.'),
+    .describe(
+      'Provider for smart-tier helper agents (the hardest side tasks). Falls back to agent.provider when unset.',
+    ),
   smartReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
-    .describe('Reasoning effort for smart ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+    .describe(
+      'Reasoning effort for smart-tier helper agents (the hardest side tasks). Falls back to agent.reasoningEffort when unset.',
+    ),
   balancedModel: tierModelPoolSchema(
-    'Models for balanced ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
   ),
   balancedProvider: z
     .string()
     .min(1)
     .optional()
-    .describe('Provider for balanced ancillary tasks. Falls back to agent.provider when unset.'),
+    .describe(
+      'Provider for balanced-tier helper agents (everyday side tasks). Falls back to agent.provider when unset.',
+    ),
   balancedReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
-    .describe('Reasoning effort for balanced ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+    .describe(
+      'Reasoning effort for balanced-tier helper agents (everyday side tasks). Falls back to agent.reasoningEffort when unset.',
+    ),
   cheapModel: tierModelPoolSchema(
-    'Models for cheap ancillary tasks; subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
   ),
   cheapProvider: z
     .string()
     .min(1)
     .optional()
-    .describe('Provider for cheap ancillary tasks. Falls back to agent.provider when unset.'),
+    .describe(
+      'Provider for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.provider when unset.',
+    ),
   cheapReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
-    .describe('Reasoning effort for cheap ancillary tasks. Falls back to agent.reasoningEffort when unset.'),
+    .describe(
+      'Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset.',
+    ),
   choreModel: tierModelPoolSchema(
-    'Models for chore ancillary tasks (auto-approval reviews, edit healing). Falls back to agent.model when unset.',
+    'Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.model when unset.',
   ),
   choreProvider: z
     .string()
     .min(1)
     .optional()
-    .describe('Provider for chore ancillary tasks. Falls back to agent.provider when unset.'),
+    .describe(
+      'Provider for small background jobs like repairing failed file edits and reviewing shell auto-approvals. Falls back to agent.provider when unset.',
+    ),
   // 'default' signals we should *not* explicitly pass a reasoningEffort
   // to the API, allowing it to decide what to use.
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),

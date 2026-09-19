@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createAcpV2SessionBackend } from './session-backend.js';
-import { LockConflictError } from '../services/logging/conversation-log-writer.js';
+import { createConversationLogWriter, LockConflictError } from '../services/logging/conversation-log-writer.js';
 
 const makeRuntime = (session: any) => ({
   create: vi.fn(async (_binding: unknown, options: any) => {
@@ -19,8 +19,8 @@ const noopWriterFactory = () => ({
   close: async () => {},
 });
 
-const makeSession = (): any => ({
-  sessionId: 'session-1',
+const makeSession = (sessionId = 'session-1'): any => ({
+  sessionId,
   binding: { canonicalRoot: '/tmp' },
   settings: { modelId: 'test-model', providerId: 'test-provider' },
   service: { setLogSink: vi.fn() },
@@ -287,6 +287,58 @@ describe('ACP v2 production session backend', () => {
       await expect(backend.closeSession('session-1')).resolves.toBeUndefined();
     } finally {
       rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('closes every session and releases every lock when one cancellation rejects', async () => {
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    const writerDir = mkdtempSync('/tmp/acp-backend-logs-');
+    // `createId` hands the first two generated ids to the two session
+    // creations, and `createSession` reports the session object's own id, so the
+    // doubles carry the generated ids to address them by what the backend returns.
+    const sessions = [makeSession('acp-1'), makeSession('acp-2')];
+    // The session the shutdown cancels first cannot be aborted at all: the
+    // close pass must still run for it and for every other live session.
+    sessions[0]!.abort = vi.fn(async () => {
+      throw new Error('abort failed');
+    });
+    let createdCount = 0;
+    let idSequence = 0;
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: {
+        create: vi.fn(async (_binding: unknown, options: any) => {
+          const session = sessions[createdCount++];
+          session.eventSink = options.eventSink;
+          return session;
+        }),
+      } as any,
+      createId: () => `acp-${(idSequence += 1)}`,
+      writerFactory: ({ sessionId, logger }) =>
+        createConversationLogWriter({ sessionId, dir: writerDir, logger, saveLast: () => {} }),
+    });
+    const lockFor = (sessionId: string) => path.join(writerDir, `${sessionId}.lock`);
+    try {
+      const first = await backend.createSession({ cwd });
+      const second = await backend.createSession({ cwd });
+      // A live turn on the failing session is what makes the cancel pass reach it.
+      const execution = await backend.preparePrompt({
+        sessionId: first.sessionId,
+        prompt: [{ type: 'text', text: 'run' }],
+      });
+      void execution.run(async () => {}, new AbortController().signal);
+      await vi.waitFor(() => expect(sessions[0]!.commitMessage).toHaveBeenCalled());
+      expect(existsSync(lockFor(first.sessionId))).toBe(true);
+      expect(existsSync(lockFor(second.sessionId))).toBe(true);
+
+      await expect(backend.shutdown()).rejects.toThrow('abort failed');
+
+      expect(sessions[0]!.dispose).toHaveBeenCalledTimes(1);
+      expect(sessions[1]!.dispose).toHaveBeenCalledTimes(1);
+      expect(existsSync(lockFor(first.sessionId))).toBe(false);
+      expect(existsSync(lockFor(second.sessionId))).toBe(false);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(writerDir, { recursive: true, force: true });
     }
   });
 });

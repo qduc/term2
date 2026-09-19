@@ -21,6 +21,7 @@ import {
 } from '../services/logging/conversation-log-writer.js';
 import { LoggingService } from '../services/logging/logging-service.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
+import { describeError } from '../utils/error-helpers.js';
 import type { AcpV2EmitUpdate, AcpV2PromptExecution, AcpV2SessionBackend } from './agent.js';
 
 const MAX_TEXT = 16_384;
@@ -356,15 +357,30 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     /**
      * Cancel every in-flight turn, then close every live session. Closing is
      * what flushes the conversation log writer and releases its lock, so this
-     * is the flush boundary the launcher's bounded shutdown waits on. A
-     * failure propagates to the caller, which decides how long to keep waiting;
-     * every session is still attempted, because both passes start all their
-     * work before awaiting any of it.
+     * is the flush boundary the launcher's bounded shutdown waits on.
+     *
+     * Every step settles before the next pass starts: a rejected cancellation
+     * must not skip the close pass, because the sessions it never reached would
+     * keep their log writers open and their `.lock` files behind. Failures are
+     * aggregated and thrown once both passes are done, so the caller still
+     * learns about them instead of reading a clean shutdown.
      */
     async shutdown() {
       const sessionIds = [...sessions.keys()];
-      await Promise.all(sessionIds.map((sessionId) => cancelSession(sessionId)));
-      await Promise.all(sessionIds.map((sessionId) => closeSession(sessionId)));
+      const settlements = [
+        ...(await Promise.allSettled(sessionIds.map((sessionId) => cancelSession(sessionId)))),
+        ...(await Promise.allSettled(sessionIds.map((sessionId) => closeSession(sessionId)))),
+      ];
+      const failures = settlements.filter(
+        (settlement): settlement is PromiseRejectedResult => settlement.status === 'rejected',
+      );
+      if (failures.length === 0) return;
+      throw new AggregateError(
+        failures.map((failure) => failure.reason),
+        `shutdown failed for ${failures.length} of ${settlements.length} teardown step(s): ${failures
+          .map((failure) => describeError(failure.reason))
+          .join('; ')}`,
+      );
     },
   };
 }

@@ -172,7 +172,14 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
 
   // The CLI module registers global SIGINT/SIGTERM handlers that force-exit for
   // interactive sessions. An ACP shutdown is bounded and must be allowed to
-  // flush live conversations, so those listeners are replaced here.
+  // flush live conversations, so those listeners are parked for the run and put
+  // back in the `finally`. Restoring them matters because this launcher owns
+  // only its own two handlers: the parked ones belong to the CLI entrypoint, a
+  // test host, or an instrumenting module, and dropping them would change how
+  // the rest of the process reacts to a signal. The raw wrappers are parked so
+  // a `once` listener keeps its one-shot semantics when it comes back.
+  const parkedSigint = process.rawListeners('SIGINT');
+  const parkedSigterm = process.rawListeners('SIGTERM');
   process.removeAllListeners('SIGINT');
   process.removeAllListeners('SIGTERM');
   let requestShutdown: () => void = () => undefined;
@@ -198,6 +205,8 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
+    for (const listener of parkedSigint) process.on('SIGINT', listener as (signal: NodeJS.Signals) => void);
+    for (const listener of parkedSigterm) process.on('SIGTERM', listener as (signal: NodeJS.Signals) => void);
     rmSync(tempRoot, { recursive: true, force: true });
   }
 }

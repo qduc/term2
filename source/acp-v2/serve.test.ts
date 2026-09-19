@@ -228,4 +228,43 @@ describe('runAcp', () => {
       expect(JSON.parse(line), line).toMatchObject({ jsonrpc: '2.0' });
     }
   }, 30_000);
+
+  it('restores the signal listeners it parks for the duration of the run', async () => {
+    registerProvider(provider);
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'acp-m2-signals-')));
+    tempRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    const conversations = path.join(root, 'conversations');
+    const settingsDir = path.join(root, 'state', 'term2-nodejs');
+    mkdirSync(workspace);
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({ agent: { provider: providerId, model: modelId, retryAttempts: 0 } }),
+      'utf8',
+    );
+    isolateEnv({
+      XDG_STATE_HOME: path.join(root, 'state'),
+      TERM2_CONVERSATIONS_DIR: conversations,
+      TERM2_TEST_DB_DIR: conversations,
+      DISABLE_LOGGING: '1',
+    });
+
+    // A listener this launcher does not own — a test host's, or an
+    // instrumenting module's — must be back in place once the run returns.
+    const parked = vi.fn();
+    process.on('SIGINT', parked);
+    const listenersBefore = process.listeners('SIGINT');
+    try {
+      const harness = createHarness();
+      const runPromise = runAcp([], harness.io);
+      await harness.endStdin();
+      await expect(runPromise).resolves.toBe(0);
+
+      expect(process.listeners('SIGINT')).toContain(parked);
+      expect(process.listeners('SIGINT')).toEqual(listenersBefore);
+    } finally {
+      process.removeListener('SIGINT', parked);
+    }
+  }, 30_000);
 });

@@ -856,15 +856,7 @@ export function createShellToolDefinition(deps: {
         (details as { signal?: AbortSignal } | undefined)?.signal;
       const cwd = executionContext?.getCwd() || process.cwd();
       if (sandbox === 'unsandboxed' && !allowUnsandboxed) {
-        const absolutePaths = command.match(/(?:^|[\s"'=])(\/[^\s"'=;|&]+)/g) ?? [];
-        const workspacePrefix = path.resolve(cwd).endsWith(path.sep)
-          ? path.resolve(cwd)
-          : `${path.resolve(cwd)}${path.sep}`;
-        const escapesWorkspace = absolutePaths.some((match) => {
-          const candidate = match.trim().replace(/^["'=]/, '');
-          return !path.resolve(candidate).startsWith(workspacePrefix);
-        });
-        if (escapesWorkspace) sandbox = 'default';
+        sandbox = 'default';
       }
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
@@ -1014,7 +1006,7 @@ export function createShellToolDefinition(deps: {
             : nestedCompatibility?.executionOverrides.consume(command) ?? null;
         if (postExecuteDeniedRead && typeof toolCallId === 'string') overrideByCallId.delete(toolCallId);
         if (override?.forceUnsandboxed) {
-          sandbox = 'unsandboxed';
+          if (allowUnsandboxed) sandbox = 'unsandboxed';
           loggingService.debug(
             'Shell executing unsandboxed by approved override',
             withExecutionCorrelation({ command: optimizedCommand.substring(0, 100) }),

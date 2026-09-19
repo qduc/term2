@@ -42,6 +42,13 @@ type ActiveTurn = {
 
 type PermissionClient = { client: acp.AgentContext; signal: AbortSignal };
 
+type SessionPermissionGrant = {
+  toolName: string;
+  answer: string;
+  scopeKind: 'file' | 'folder';
+  scopePath: string;
+};
+
 const ACP_PERMISSION_KINDS: Readonly<Record<string, acp.PermissionOptionKind>> = {
   approve: 'allow_once',
   'allow-once': 'allow_once',
@@ -100,7 +107,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const writerFactory = options.writerFactory ?? createConversationLogWriter;
   const writers = new Map<string, ConversationLogWriter>();
   const permissionClients = new Map<string, PermissionClient>();
-  const sessionPermissionGrants = new Map<string, Set<string>>();
+  const sessionPermissionGrants = new Map<string, SessionPermissionGrant[]>();
   const decideApproval =
     options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
 
@@ -113,12 +120,17 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     if (!pending) return undefined;
     if (snapshot.revision === undefined) return { answer: 'n', reason: 'Permission revision is unavailable.' };
     const toolName = snapshot.approval.toolName;
-    const grants = sessionPermissionGrants.get(sessionId);
-    const existingGrant = grants && [...grants].find((grant) => grant.startsWith(`${toolName}:`));
-    if (existingGrant) return { answer: existingGrant.slice(toolName.length + 1) };
     const dto = projectPendingInteraction(snapshot.approval, String(snapshot.interactionId), snapshot.revision);
     if (dto.kind !== 'tool_approval') return { answer: 'n', reason: 'This interaction cannot be approved over ACP.' };
     const optionsById = mapAcpPermissionChoices(dto.choices);
+    const grants = sessionPermissionGrants.get(sessionId) ?? [];
+    const existingGrant = grants.find(
+      (grant) =>
+        grant.toolName === toolName &&
+        optionsById.some(({ option }) => option.optionId === grant.answer) &&
+        grantCovers(grant, snapshot.approval),
+    );
+    if (existingGrant) return { answer: existingGrant.answer };
     try {
       const response = await pending.client.request(
         acp.methods.client.session.requestPermission,
@@ -160,9 +172,12 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
           ? 'y'
           : selected.choice.id;
       if (selected.option.kind === 'allow_always') {
-        const current = sessionPermissionGrants.get(sessionId) ?? new Set<string>();
-        current.add(`${toolName}:${answer}`);
-        sessionPermissionGrants.set(sessionId, current);
+        const scope = permissionScope(answer, snapshot.approval);
+        if (scope) {
+          const current = sessionPermissionGrants.get(sessionId) ?? [];
+          current.push({ toolName, answer, ...scope });
+          sessionPermissionGrants.set(sessionId, current);
+        }
       }
       return { answer, ...(answer === 'n' ? { reason: 'Permission denied by client.' } : {}) };
     } catch (error) {
@@ -509,6 +524,39 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
 }
 
 export const createProductionAcpV2SessionBackend = createAcpV2SessionBackend;
+
+function permissionScope(
+  answer: string,
+  approval: PendingInteractionSnapshot['approval'],
+): Pick<SessionPermissionGrant, 'scopeKind' | 'scopePath'> | undefined {
+  const scopeKind = answer === 'allow-edit-file-session' ? 'file' : 'folder';
+  const outside = approval.outsideWorkspaceEdit;
+  if (outside) return { scopeKind, scopePath: path.resolve(scopeKind === 'file' ? outside.path : outside.folder) };
+  const target = approvalPath(approval.argumentsText);
+  return target ? { scopeKind, scopePath: path.resolve(target) } : undefined;
+}
+
+function grantCovers(grant: SessionPermissionGrant, approval: PendingInteractionSnapshot['approval']): boolean {
+  const scope = permissionScope(grant.answer, approval);
+  if (!scope || scope.scopeKind !== grant.scopeKind) return false;
+  const target = path.resolve(scope.scopePath);
+  const granted = path.resolve(grant.scopePath);
+  return grant.scopeKind === 'file'
+    ? target === granted
+    : target === granted || target.startsWith(`${granted}${path.sep}`);
+}
+
+function approvalPath(argumentsText: string): string | undefined {
+  try {
+    const parsed = JSON.parse(argumentsText) as Record<string, unknown>;
+    for (const key of ['path', 'filePath', 'filepath', 'target']) {
+      if (typeof parsed[key] === 'string' && parsed[key]) return parsed[key];
+    }
+  } catch {
+    // A malformed or non-path approval cannot safely reuse a scoped grant.
+  }
+  return undefined;
+}
 
 function bound(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;

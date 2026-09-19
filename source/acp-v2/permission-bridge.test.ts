@@ -415,6 +415,29 @@ describe('ACP permission bridge', () => {
     );
   });
 
+  it('does not replay a file session grant for a different outside-workspace file', async () => {
+    await withHarness(
+      { respond: () => ({ outcome: { outcome: 'selected', optionId: 'allow-edit-file-session' } }) },
+      async (h) => {
+        await h.present({
+          toolName: 'edit_file',
+          callId: 'tool-1',
+          argumentsText: '{"path":"/outside/a.txt"}',
+          outsideWorkspaceEdit: { path: '/outside/a.txt', folder: '/outside' },
+        });
+        await vi.waitFor(() => expect(h.requests).toHaveLength(1));
+
+        await h.present({
+          toolName: 'edit_file',
+          callId: 'tool-2',
+          argumentsText: '{"path":"/outside/b.txt"}',
+          outsideWorkspaceEdit: { path: '/outside/b.txt', folder: '/outside' },
+        });
+        expect(h.requests).toHaveLength(2);
+      },
+    );
+  });
+
   // DEFECT: the same `delivered` flag also breaks the pre-existing injected
   // `decideApproval` seam (M1's), not only the new client path: an injected
   // policy that allows resolves 'n' and the tool never runs.

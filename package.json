@@ -82,6 +82,7 @@
     "dist"
   ],
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
     "@ai-sdk/anthropic": "^3.0.76",
     "@ai-sdk/google": "^3.0.72",
     "@ai-sdk/provider": "^3.0.10",

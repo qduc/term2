@@ -185,6 +185,8 @@ export function createProductionRuntimeFactory(input: {
   ) => {
     const local = createDefaultSettings(_defaults, sessionDir, input.policy?.maxParallelToolCalls ?? 1, snapshot);
     const authority = input.settingsAuthority;
+    const sandboxEnabled = authority.get('sandbox.enabled');
+    if (typeof sandboxEnabled === 'boolean') local.set('sandbox.enabled', sandboxEnabled, { persist: false });
     // SettingsService intentionally has no public clone operation. This
     // narrow overlay preserves launcher-owned credentials and defaults while
     // keeping mutable model/session choices isolated per gateway session.

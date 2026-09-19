@@ -311,6 +311,7 @@ const runAcpChild = async (
     JSON.stringify(
       {
         agent: { provider: 'acpmock', model: 'acp-mock-model', retryAttempts: 0 },
+        sandbox: { enabled: false },
         providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
       },
       null,

@@ -8,6 +8,7 @@ import { SettingsService } from '../services/settings/settings-service.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import type { ProviderDefinition } from '../providers/registry.js';
 import { createProductionRuntimeFactory } from '../gateway/runtime-factory.js';
+import * as sandboxRunnerModule from '../utils/shell/sandbox/shell-sandbox-runner.js';
 
 const providerId = 'acp-m1-integration-provider';
 const roots: string[] = [];
@@ -246,6 +247,7 @@ const never = <T>(): Promise<T> => new Promise<T>(() => {});
 const withBridgeSession = async (
   options: {
     command: (paths: { workspaceFile: string; escapeFile: string }) => string;
+    sandboxRunner?: boolean;
     permission?: PermissionHandler;
   },
   body: (session: BridgeSession) => Promise<void>,
@@ -305,6 +307,14 @@ const withBridgeSession = async (
     policy: { maxActiveTurnMs: 30_000 },
   });
   const backend = createAcpV2SessionBackend({ runtimeFactory });
+  const realRunner = options.sandboxRunner ? sandboxRunnerModule.getDefaultShellSandboxRunner() : undefined;
+  const runnerSpy = realRunner
+    ? vi.spyOn(sandboxRunnerModule, 'getDefaultShellSandboxRunner').mockReturnValue({
+        ...realRunner,
+        availability: async () => ({ type: 'available' as const }),
+        wrap: async (command) => ({ command }),
+      })
+    : undefined;
 
   const updates: acp.UpdateSessionNotification[] = [];
   const permissionRequests: acp.RequestPermissionRequest[] = [];
@@ -392,6 +402,7 @@ const withBridgeSession = async (
       await body(session);
     });
   } finally {
+    runnerSpy?.mockRestore();
     unregisterProvider(bridgeProviderId);
     delete process.env.TERM2_CONVERSATIONS_DIR;
     delete process.env.TERM2_TEST_DB_DIR;
@@ -410,6 +421,7 @@ describe('ACP v2 permission bridge integration', () => {
     await withBridgeSession(
       {
         command: () => 'echo written > probe.txt',
+        sandboxRunner: true,
         permission: async () => ({ outcome: { outcome: 'selected', optionId: 'allow-once' } }),
       },
       async (session) => {

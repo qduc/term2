@@ -258,6 +258,7 @@ export function createProductionRuntimeFactory(input: {
           skillsService,
           requestCapture,
           readOnly,
+          allowUnsandboxed: sessionSettingsSnapshot.effectiveToolPolicy.allowUnsandboxed === true,
         },
         toolOwnership,
         postExecutePauseCapability,

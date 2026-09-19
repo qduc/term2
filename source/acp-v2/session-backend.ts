@@ -100,6 +100,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const writerFactory = options.writerFactory ?? createConversationLogWriter;
   const writers = new Map<string, ConversationLogWriter>();
   const permissionClients = new Map<string, PermissionClient>();
+  const sessionPermissionGrants = new Map<string, Set<string>>();
   const decideApproval =
     options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
 
@@ -111,6 +112,10 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     const pending = permissionClients.get(sessionId);
     if (!pending) return undefined;
     if (snapshot.revision === undefined) return { answer: 'n', reason: 'Permission revision is unavailable.' };
+    const toolName = snapshot.approval.toolName;
+    const grants = sessionPermissionGrants.get(sessionId);
+    const existingGrant = grants && [...grants].find((grant) => grant.startsWith(`${toolName}:`));
+    if (existingGrant) return { answer: existingGrant.slice(toolName.length + 1) };
     const dto = projectPendingInteraction(snapshot.approval, String(snapshot.interactionId), snapshot.revision);
     if (dto.kind !== 'tool_approval') return { answer: 'n', reason: 'This interaction cannot be approved over ACP.' };
     const optionsById = mapAcpPermissionChoices(dto.choices);
@@ -142,17 +147,32 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
         typeof outcome.optionId !== 'string'
       )
         return { answer: 'n', reason: 'Permission request was cancelled.' };
-      const selected = optionsById.find(({ option }) => option.optionId === outcome.optionId);
+      const selected =
+        optionsById.find(({ option }) => option.optionId === outcome.optionId) ??
+        (outcome.optionId === 'allow-once' ? optionsById.find(({ choice }) => choice.id === 'approve') : undefined);
       if (!selected) return { answer: 'n', reason: 'Client selected an unknown permission option.' };
       const answer =
         selected.option.kind === 'reject_once' || selected.option.kind === 'reject_always'
           ? 'n'
           : selected.choice.id === 'approve'
           ? 'y'
+          : selected.choice.id === 'allow-once'
+          ? 'y'
           : selected.choice.id;
+      if (selected.option.kind === 'allow_always') {
+        const current = sessionPermissionGrants.get(sessionId) ?? new Set<string>();
+        current.add(`${toolName}:${answer}`);
+        sessionPermissionGrants.set(sessionId, current);
+      }
       return { answer, ...(answer === 'n' ? { reason: 'Permission denied by client.' } : {}) };
-    } catch {
-      return { answer: 'n', reason: 'Permission request failed.' };
+    } catch (error) {
+      return {
+        answer: 'n',
+        reason:
+          error instanceof Error && error.message.includes('Method not found')
+            ? 'Approval is not yet supported over ACP.'
+            : 'Permission request failed.',
+      };
     }
   };
 
@@ -177,10 +197,10 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
 
   const mapEvent = async (event: ConversationEvent, turn: ActiveTurn): Promise<void> => {
     if (event.type === 'approval_required') {
-      const snapshot = turn.session.resources.runtime?.pendingInteraction.getSnapshot();
+      const snapshot = turn.session.service.getPendingInteractionSnapshot?.() ?? null;
       let answer = 'n';
       let reason = 'Approval is not yet supported over ACP.';
-      let delivered = false;
+      let decisionReady = false;
       try {
         const permissionDecision = snapshot
           ? await requestPermission(turn.session.sessionId, snapshot, event.approval.callId)
@@ -206,24 +226,36 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
             status: 'failed',
             content: [{ type: 'content', content: { type: 'text', text: reason || 'Approval granted.' } }],
           });
-          delivered = true;
         }
+        decisionReady = true;
       } catch (error) {
         reason = error instanceof Error ? error.message : 'Approval denied.';
       } finally {
         if (snapshot) {
           try {
-            turn.session.resolvePendingInteraction({
+            const resolution = turn.session.resolvePendingInteraction({
               expectedInteractionId: snapshot.interactionId,
               ...(snapshot.revision === undefined ? {} : { expectedRevision: snapshot.revision }),
-              answer: delivered ? answer : 'n',
-              rejectionReason: delivered && answer === 'y' ? undefined : reason,
+              answer: decisionReady ? answer : 'n',
+              rejectionReason: decisionReady && (answer === 'y' || answer.startsWith('allow-')) ? undefined : reason,
             });
+            if ((!resolution || resolution.kind === 'resolved') && decisionReady) {
+              await turn.session.service.handleApprovalDecision(
+                answer,
+                answer === 'y' || answer.startsWith('allow-') ? undefined : reason,
+              );
+            }
           } catch {
             await turn.session.abort(turn.turnId).catch(() => undefined);
+            turn.resolve?.({ stopReason: 'cancelled' });
           }
         } else {
-          await turn.session.abort(turn.turnId).catch(() => undefined);
+          if (decisionReady) {
+            turn.resolve?.({ stopReason: 'end_turn' });
+          } else {
+            await turn.session.abort(turn.turnId).catch(() => undefined);
+            turn.resolve?.({ stopReason: 'cancelled' });
+          }
         }
       }
       return;
@@ -365,6 +397,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     },
     clearClient(sessionId) {
       permissionClients.delete(sessionId);
+      sessionPermissionGrants.delete(sessionId);
     },
     async createSession(request) {
       const session = await create(request.cwd);

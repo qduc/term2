@@ -23,7 +23,11 @@ const makeSession = (sessionId = 'session-1'): any => ({
   sessionId,
   binding: { canonicalRoot: '/tmp' },
   settings: { modelId: 'test-model', providerId: 'test-provider' },
-  service: { setLogSink: vi.fn() },
+  service: {
+    setLogSink: vi.fn(),
+    getPendingInteractionSnapshot: () => undefined,
+    handleApprovalDecision: vi.fn(async () => null),
+  },
   resources: { runtime: undefined },
   prepareMessage: vi.fn(async () => ({ kind: 'prepared', leaseId: 'lease-1', turnId: 'turn-1' })),
   commitMessage: vi.fn(async () => {}),
@@ -183,7 +187,7 @@ describe('ACP v2 production session backend', () => {
 
   it('denies approval even when the client update throws', async () => {
     const session = makeSession();
-    session.resources.runtime = { pendingInteraction: { getSnapshot: () => ({ interactionId: 8 }) } };
+    session.service.getPendingInteractionSnapshot = () => ({ interactionId: 8 } as any);
     session.resolvePendingInteraction = vi.fn();
     const backend = createAcpV2SessionBackend({
       runtimeFactory: makeRuntime(session) as any,
@@ -218,9 +222,7 @@ describe('ACP v2 production session backend', () => {
   it('uses an injected approval policy while the default remains denial', async () => {
     const session = makeSession();
     const resolvePendingInteraction = vi.fn();
-    session.resources.runtime = {
-      pendingInteraction: { getSnapshot: () => ({ interactionId: 7 }) },
-    };
+    session.service.getPendingInteractionSnapshot = () => ({ interactionId: 7 } as any);
     session.resolvePendingInteraction = resolvePendingInteraction;
     const decideApproval = vi.fn(async () => ({ answer: 'n', reason: 'policy denied' }));
     const backend = createAcpV2SessionBackend({

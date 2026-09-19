@@ -63,8 +63,11 @@ const createHarness = (options: HarnessOptions) => {
     sessionId: 'session-1',
     binding: { canonicalRoot: '/tmp' },
     settings: {},
-    service: { setLogSink: vi.fn() },
-    resources: { runtime: { pendingInteraction: { getSnapshot: () => snapshot } } },
+    service: {
+      setLogSink: vi.fn(),
+      getPendingInteractionSnapshot: () => snapshot,
+      handleApprovalDecision: vi.fn(async () => null),
+    },
     prepareMessage: vi.fn(async () => ({ kind: 'prepared', leaseId: 'lease-1', turnId: 'turn-1' })),
     commitMessage: vi.fn(async () => {}),
     abort: vi.fn(async () => {}),
@@ -375,7 +378,7 @@ describe('ACP permission bridge', () => {
   // only set on the denial branch (the one that emits the failed update), so
   // every allow answer -- 'y' or a `*-session` choice -- is rewritten to 'n'
   // before it reaches the runtime. The client's allow is therefore never honored.
-  it.fails('resolves an approved tool call as the exact allow answer', async () => {
+  it('resolves an approved tool call as the exact allow answer', async () => {
     await withHarness({ respond: () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }) }, async (h) => {
       await h.present(shellApproval());
       await vi.waitFor(() => expect(h.requests).toHaveLength(1));
@@ -389,7 +392,7 @@ describe('ACP permission bridge', () => {
   // `approval-flow-coordinator.ts`) can honor it; the bridge currently rewrites
   // it to 'n', so the grant is never applied and the next identical call is
   // denied again instead of being covered by the session grant.
-  it.fails('passes an allow_always session choice through verbatim and never re-asks it', async () => {
+  it('passes an allow_always session choice through verbatim and never re-asks it', async () => {
     await withHarness(
       { respond: () => ({ outcome: { outcome: 'selected', optionId: 'allow-folder-session' } }) },
       async (h) => {
@@ -415,7 +418,7 @@ describe('ACP permission bridge', () => {
   // DEFECT: the same `delivered` flag also breaks the pre-existing injected
   // `decideApproval` seam (M1's), not only the new client path: an injected
   // policy that allows resolves 'n' and the tool never runs.
-  it.fails('resolves an injected approval policy allow through the same path', async () => {
+  it('resolves an injected approval policy allow through the same path', async () => {
     await withHarness(
       {
         withClient: false,

@@ -239,6 +239,7 @@ export const getAgentDefinition = (
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
     readOnly?: boolean;
+    allowUnsandboxed?: boolean;
     /** Root-session-only capability. Nested/subagent factories do not receive it. */
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
     /** Root-session-only output store + watch layer for background jobs. */
@@ -436,6 +437,7 @@ export const getAgentDefinition = (
     configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
     readOnly,
+    allowUnsandboxed: deps.allowUnsandboxed,
   });
   const tools: AnyToolDefinition[] = [];
   if (hasCapability('shell')) tools.push(shellTool);

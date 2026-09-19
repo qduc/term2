@@ -406,7 +406,7 @@ describe('ACP v2 permission bridge integration', () => {
   // `createProductionRuntimeFactory` (see the note on `createRuntime` in
   // source/gateway/worker-boundary.ts); the bridge therefore always falls back
   // to the M1 denial and no client allow can ever be honored.
-  it.fails('[DEFECT asks the client for permission and runs the approved shell call', async () => {
+  it('asks the client for permission and runs the approved shell call', async () => {
     await withBridgeSession(
       {
         command: ({ workspaceFile }) => 'echo written > ' + workspaceFile,
@@ -439,7 +439,7 @@ describe('ACP v2 permission bridge integration', () => {
   // DEFECT: same missing snapshot as above; on top of that the denial path never
   // reaches a terminal state_update (`session.abort` on a turn parked on an
   // approval it cannot resolve), so the prompt hangs.
-  it.fails('[DEFECT a client rejection denies the call and still ends the turn', async () => {
+  it('a client rejection denies the call and still ends the turn', async () => {
     await withBridgeSession(
       {
         command: ({ workspaceFile }) => 'echo written > ' + workspaceFile,
@@ -462,7 +462,7 @@ describe('ACP v2 permission bridge integration', () => {
 
   // DEFECT: unreachable while no permission request reaches the client; the
   // cancel behaviour itself is asserted for the fixed bridge.
-  it.fails('[DEFECT session/cancel while the permission request is pending cancels the turn', async () => {
+  it('session/cancel while the permission request is pending cancels the turn', async () => {
     await withBridgeSession(
       {
         command: ({ workspaceFile }) => 'echo written > ' + workspaceFile,
@@ -486,7 +486,7 @@ describe('ACP v2 permission bridge integration', () => {
   // turn. `session.abort` on a turn parked on an unresolved approval never
   // settles, so the launcher leaves the client waiting forever -- this also
   // affects the M1 path already merged on main.
-  it.fails('[DEFECT] a fallback-denied approval still ends the turn', async () => {
+  it('a fallback-denied approval still ends the turn', async () => {
     await withBridgeSession({ command: ({ workspaceFile }) => 'echo written > ' + workspaceFile }, async (session) => {
       await session.prompt();
       const terminal = await session.waitForTerminal(5_000);
@@ -506,7 +506,7 @@ describe('ACP v2 permission bridge integration', () => {
   // ACP allow must not turn into an unsandboxed escape. `createProductionRuntimeFactory`
   // here is configured exactly like `term2 acp` (allowWrite: true, no
   // allowUnsandboxed, so the snapshot keeps the launcher's false).
-  it.fails('[DEFECT an allowed unsandboxed shell call never escapes the workspace', async () => {
+  it('an allowed unsandboxed shell call never escapes the workspace', async () => {
     await withBridgeSession(
       {
         command: ({ escapeFile }) => 'echo escaped > ' + escapeFile,

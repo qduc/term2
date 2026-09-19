@@ -46,6 +46,7 @@ export interface AgentConfigurationDeps {
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;
   readOnly?: boolean;
+  allowUnsandboxed?: boolean;
   /** Root-session-owned shell registry; nested clients omit it. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer; nested clients omit it. */
@@ -92,6 +93,7 @@ export class AgentConfiguration implements AgentSource {
   #postExecutePauseCapability?: PostExecutePauseCapability;
   #sessionAccess?: SessionAccessState;
   #readOnly: boolean;
+  #allowUnsandboxed: boolean;
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
@@ -135,6 +137,7 @@ export class AgentConfiguration implements AgentSource {
     this.#postExecutePauseCapability = deps.postExecutePauseCapability;
     this.#sessionAccess = deps.sessionAccess;
     this.#readOnly = deps.readOnly ?? false;
+    this.#allowUnsandboxed = deps.allowUnsandboxed ?? true;
     this.#backgroundShellRegistry = deps.backgroundShellRegistry;
     this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#shellChildRegistry = deps.shellChildRegistry;
@@ -270,6 +273,7 @@ export class AgentConfiguration implements AgentSource {
       postExecutePauseCapability: this.#postExecutePauseCapability,
       sessionAccess: this.#sessionAccess,
       readOnly: this.#readOnly,
+      allowUnsandboxed: this.#allowUnsandboxed,
       backgroundShellRegistry: this.#backgroundShellRegistry,
       backgroundShellOutput: this.#backgroundShellOutput,
       shellChildRegistry: this.#shellChildRegistry,

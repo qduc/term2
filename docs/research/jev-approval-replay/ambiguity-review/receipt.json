@@ -1,0 +1,65 @@
+{
+  "task_id": "ambiguity-review-93",
+  "provider_model_route": {
+    "provider": "Codex",
+    "model": "gpt-5.6-sol",
+    "effort": "high",
+    "display": "Codex/gpt-5.6-sol high"
+  },
+  "blind_freeze": {
+    "row_count": 93,
+    "labels_sha256": "6c1adfa01dffb3048160e5aa919eb3c2e1617611c5900ca32dd97af359acb374",
+    "label_counts": {
+      "genuine_ambiguity": 3,
+      "not_ambiguous": 90,
+      "unresolved": 0
+    }
+  },
+  "artifact_hashes": {
+    "blind_cases.jsonl": "ea306d1326021fa25c0f9d82961ff407399ef2638317623a04299ce1bd04450e",
+    "labels.jsonl": "6c1adfa01dffb3048160e5aa919eb3c2e1617611c5900ca32dd97af359acb374",
+    "blind-freeze.json": "c893f367202a8a55bb97ae3b2832984aef78c3dc144397b8f14780ce464a8a0b",
+    "replay-analysis.json": "849fa0aafcb04df025fabc3c86c6765a3d94e37b05a6fae26b596944358271c0",
+    "audit.md": "7eee80513d06df5534630e7856f47a28a7de468a39e41715492db5e074d144d8"
+  },
+  "audited_input_hashes": {
+    "reconstruction/dataset.jsonl": "23186be0ee7418e41f5ff6b301f2bf497d514ed8b619e6b9a9e25e14b6d260ff",
+    "reconstruction/join-report.json": "974c9787724c340bfa2d7c09faea4b5c7be7c090fd401b795e4d83c62a03a0b5",
+    "replay/results.jsonl": "947985fe57d85311d4abb11397edb1b6a6957facd1a421bb16ddf51571f47356",
+    "replay/analysis.json": "849fa0aafcb04df025fabc3c86c6765a3d94e37b05a6fae26b596944358271c0",
+    "replay/protocol.md": "c554af9f70e6f959dd8bd6eb833553e548022a7789b3db4c67b5c3b33af7a884"
+  },
+  "commands_used": [
+    "git status --short -- docs/research/jev-approval-replay/ambiguity-review && ls -la docs/research/jev-approval-replay/ambiguity-review",
+    "jq -s '{row_count:length,unique_ids:(map(.case_id)|unique|length),labels:(group_by(.label)|map({label:.[0].label,count:length})),allowed:(all(.[]; ((.label==\"genuine_ambiguity\") or (.label==\"not_ambiguous\") or (.label==\"unresolved\")) and (.confidence>=0 and .confidence<=1)))}' docs/research/jev-approval-replay/ambiguity-review/labels.jsonl",
+    "sha256sum docs/research/jev-approval-replay/ambiguity-review/labels.jsonl",
+    "python3 docs/research/jev-approval-replay/reconstruction/verify.py",
+    "python3 docs/research/jev-approval-replay/replay/verify.py",
+    "python3 docs/research/jev-approval-replay/replay/analyze.py --results docs/research/jev-approval-replay/replay/results.jsonl --ambiguity docs/research/jev-approval-replay/ambiguity-review/labels.jsonl --output docs/research/jev-approval-replay/ambiguity-review/replay-analysis.json",
+    "jq -c 'select(.case_id!=\"reconstruct-184-008\" and .case_id!=\"reconstruct-184-025\")' docs/research/jev-approval-replay/replay/results.jsonl | python3 docs/research/jev-approval-replay/replay/analyze.py --results /dev/stdin --ambiguity docs/research/jev-approval-replay/ambiguity-review/labels.jsonl --output /dev/null",
+    "cmp -s docs/research/jev-approval-replay/ambiguity-review/replay-analysis.json docs/research/jev-approval-replay/replay/analysis.json",
+    "sha256sum docs/research/jev-approval-replay/ambiguity-review/blind-cases.jsonl docs/research/jev-approval-replay/ambiguity-review/labels.jsonl docs/research/jev-approval-replay/ambiguity-review/blind-freeze.json docs/research/jev-approval-replay/ambiguity-review/replay-analysis.json docs/research/jev-approval-replay/ambiguity-review/audit.md docs/research/jev-approval-replay/reconstruction/dataset.jsonl docs/research/jev-approval-replay/reconstruction/join-report.json docs/research/jev-approval-replay/replay/results.jsonl docs/research/jev-approval-replay/replay/analysis.json docs/research/jev-approval-replay/replay/protocol.md"
+  ],
+  "diagnostic_queries_performed": [
+    "jq result completeness, per-cell status, transition, and HTTP-error cross-tabs over replay/results.jsonl",
+    "jq cohort, current-command leakage, multi-request-batch, and later-request exposure counts over reconstruction/dataset.jsonl",
+    "jq joins of reconstruction/dataset.jsonl with replay/results.jsonl for compact-control fidelity, context-length-dependent failures, and session clustering",
+    "targeted jq inspection of reconstructed full-context tails and the two reviewer-denied cohort rows"
+  ],
+  "verification_results": {
+    "blind_labels": "PASS: 93 rows, 93 unique IDs, allowed labels and confidence range, freeze hash matches",
+    "reconstruction": "PASS: 184 rows; all joins high; frozen aggregate verified",
+    "replay_harness": "PASS: fixture cell isolation, append-only/idempotent behavior, no-call dry run, paired calculations",
+    "replay_results": "PASS structural checks: 372 unique attempts, 93 cases, four cells per case, no duplicate keys; 350 successes and 22 HTTP 400 records",
+    "analysis_reproduction": "PASS: independent output is byte-identical to replay/analysis.json"
+  },
+  "declared_children": [],
+  "unresolved_risks": [
+    "Full-context cells leak current approval-batch tool_started entries; the replay must be rerun with a pre-command boundary before making a missing-context causal claim.",
+    "The compact-direct control matches only 49 of 93 production final decisions, and exact historical Jev request payloads were not frozen.",
+    "The 11 longest contexts fail in both full cells with HTTP 400, creating a treatment-dependent complete-case denominator of 82.",
+    "Row-level bootstrap intervals ignore clustering across only 10 complete-case sessions.",
+    "All reconstruction joins are high-confidence time/vector joins rather than exact shared-ID joins.",
+    "No separate live-run receipt freezes the completed results, analysis, invocation, and completion time; this receipt hashes the artifacts as observed during audit."
+  ]
+}

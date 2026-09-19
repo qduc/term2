@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createAcpV2SessionBackend } from './session-backend.js';
+import { createAcpV2SessionBackend, mapAcpPermissionChoices } from './session-backend.js';
 import { createConversationLogWriter, LockConflictError } from '../services/logging/conversation-log-writer.js';
 
 const makeRuntime = (session: any) => ({
@@ -32,6 +32,32 @@ const makeSession = (sessionId = 'session-1'): any => ({
 });
 
 describe('ACP v2 production session backend', () => {
+  it('offers only explicitly supported ACP permission choices', () => {
+    expect(
+      mapAcpPermissionChoices([
+        { id: 'allow-once', label: 'Allow once' },
+        { id: 'allow-folder-session', label: 'Allow folder for session' },
+        { id: 'allow-remember', label: 'Allow and remember' },
+        { id: 'unsandboxed-once', label: 'Run unsandboxed once' },
+        { id: 'reject', label: 'Reject' },
+        { id: 'future-choice', label: 'Future choice' },
+      ]),
+    ).toEqual([
+      {
+        choice: { id: 'allow-once', label: 'Allow once' },
+        option: { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+      },
+      {
+        choice: { id: 'allow-folder-session', label: 'Allow folder for session' },
+        option: { optionId: 'allow-folder-session', name: 'Allow folder for session', kind: 'allow_always' },
+      },
+      {
+        choice: { id: 'reject', label: 'Reject' },
+        option: { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+      },
+    ]);
+  });
+
   it('rejects relative, missing, and non-directory cwd values', async () => {
     const session = makeSession();
     const backend = createAcpV2SessionBackend({

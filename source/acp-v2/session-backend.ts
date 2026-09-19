@@ -42,6 +42,26 @@ type ActiveTurn = {
 
 type PermissionClient = { client: acp.AgentContext; signal: AbortSignal };
 
+const ACP_PERMISSION_KINDS: Readonly<Record<string, acp.PermissionOptionKind>> = {
+  approve: 'allow_once',
+  'allow-once': 'allow_once',
+  'allow-folder-session': 'allow_always',
+  'allow-edit-file-session': 'allow_always',
+  'allow-edit-folder-session': 'allow_always',
+  reject: 'reject_once',
+  deny: 'reject_once',
+};
+
+export function mapAcpPermissionChoices(choices: readonly { id: string; label: string }[]): Array<{
+  choice: { id: string; label: string };
+  option: { optionId: string; name: string; kind: acp.PermissionOptionKind };
+}> {
+  return choices.flatMap((choice) => {
+    const kind = ACP_PERMISSION_KINDS[choice.id];
+    return kind ? [{ choice, option: { optionId: choice.id, name: choice.label, kind } }] : [];
+  });
+}
+
 export type AcpV2SessionBackendOptions = Readonly<{
   runtimeFactory: RuntimeFactory;
   createId?: () => string;
@@ -90,21 +110,10 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   ): Promise<{ answer: string; reason?: string } | undefined> => {
     const pending = permissionClients.get(sessionId);
     if (!pending) return undefined;
-    const dto = projectPendingInteraction(
-      snapshot.approval as unknown as Record<string, unknown>,
-      String(snapshot.interactionId),
-      1,
-    );
+    if (snapshot.revision === undefined) return { answer: 'n', reason: 'Permission revision is unavailable.' };
+    const dto = projectPendingInteraction(snapshot.approval, String(snapshot.interactionId), snapshot.revision);
     if (dto.kind !== 'tool_approval') return { answer: 'n', reason: 'This interaction cannot be approved over ACP.' };
-    const optionsById = dto.choices.map((choice) => {
-      const kind: acp.PermissionOptionKind =
-        choice.id === 'reject' || choice.id === 'deny'
-          ? 'reject_once'
-          : choice.id.includes('session') || choice.id === 'allow-remember'
-          ? 'allow_always'
-          : 'allow_once';
-      return { choice, option: { optionId: choice.id, name: choice.label, kind } };
-    });
+    const optionsById = mapAcpPermissionChoices(dto.choices);
     try {
       const response = await pending.client.request(
         acp.methods.client.session.requestPermission,
@@ -206,6 +215,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
           try {
             turn.session.resolvePendingInteraction({
               expectedInteractionId: snapshot.interactionId,
+              ...(snapshot.revision === undefined ? {} : { expectedRevision: snapshot.revision }),
               answer: delivered ? answer : 'n',
               rejectionReason: delivered && answer === 'y' ? undefined : reason,
             });

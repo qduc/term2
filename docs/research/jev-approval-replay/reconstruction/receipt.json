@@ -1,0 +1,35 @@
+{
+  "run_id": "jev-auth-replay-20260919",
+  "task_id": "reconstruct-184",
+  "worker": "reconstruct-terra",
+  "artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/dataset.jsonl",
+      "sha256": "23186be0ee7418e41f5ff6b301f2bf497d514ed8b619e6b9a9e25e14b6d260ff"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/join-report.json",
+      "sha256": "974c9787724c340bfa2d7c09faea4b5c7be7c090fd401b795e4d83c62a03a0b5"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/README.md",
+      "sha256": "8dc635bd296e36a433251f781bce1a1bb0bbf06d09b8f96474cd8a1137b9d875"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/reconstruct.py",
+      "sha256": "c627f82b9332291fcff691e7112357e98e25cbe1259e5de372750f504ae70865"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/verify.py",
+      "sha256": "02997d24b779ffdd8a5b31b69f2c754b7667534f3c8187411f2257da55b648fb"
+    }
+  ],
+  "receipt_digest_note": "receipt.json is intentionally excluded from its own digest manifest to avoid a self-referential hash; all other delivered artifacts are embedded and verified.",
+  "verification_argv": ["python3", "/home/qduc/term2/docs/research/jev-approval-replay/reconstruction/verify.py"],
+  "declared_children": [],
+  "unresolved_risks": [
+    "The app log does not provide evaluator request/session metadata for every old comparison, so joins are high-confidence time/vector joins rather than exact metadata joins.",
+    "The source app log remains live; the source digest covers only the frozen 184 comparison records, while later comparison events are explicitly excluded.",
+    "Fuller contexts contain only persisted user, assistant-text, and tool-request events recoverable before the evaluator request; unpersisted provider state cannot be reconstructed."
+  ]
+}

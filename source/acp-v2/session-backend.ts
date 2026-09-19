@@ -34,6 +34,10 @@ export type AcpV2SessionBackendOptions = Readonly<{
   load?: typeof loadConversation;
   ownerUserId?: string;
   pageSize?: number;
+  decideApproval?: (
+    request: { readonly toolName: string; readonly callId?: string; readonly argumentsText: string },
+    context: { readonly sessionId: string; readonly cwd: string },
+  ) => Promise<{ readonly answer: string; readonly reason?: string }>;
 }>;
 
 export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): AcpV2SessionBackend {
@@ -44,6 +48,8 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   const load = options.load ?? loadConversation;
   const ownerUserId = options.ownerUserId ?? 'acp';
   const pageSize = options.pageSize ?? PAGE_SIZE;
+  const decideApproval =
+    options.decideApproval ?? (async () => ({ answer: 'n', reason: 'Approval is not yet supported over ACP.' }));
 
   const invalid = (message: string): never => {
     throw acp.RequestError.invalidParams(undefined, message);
@@ -101,6 +107,14 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
           kind: toolKind(event.toolName),
           status: 'in_progress',
         });
+        if (toolKind(event.toolName) === 'edit') {
+          await turn.emit({
+            sessionUpdate: 'tool_call_update',
+            toolCallId: event.toolCallId,
+            status: 'failed',
+            content: [{ type: 'content', content: { type: 'text', text: 'Approval is not yet supported over ACP.' } }],
+          });
+        }
         return;
       case 'tool_call_streaming_delta':
         if (event.toolName) {
@@ -115,19 +129,27 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
         return;
       case 'approval_required': {
         const snapshot = turn.session.resources.runtime?.pendingInteraction.getSnapshot();
+        const decision = await decideApproval(
+          {
+            toolName: event.approval.toolName,
+            callId: event.approval.callId,
+            argumentsText: event.approval.argumentsText,
+          },
+          { sessionId: turn.session.sessionId, cwd: turn.session.binding.canonicalRoot },
+        );
         await turn.emit({
           sessionUpdate: 'tool_call_update',
           toolCallId: event.approval.callId ?? `${turn.turnId}:approval`,
           title: 'Approval required',
           kind: toolKind(event.approval.toolName),
           status: 'failed',
-          content: [{ type: 'content', content: { type: 'text', text: 'Approval is not yet supported over ACP.' } }],
+          content: [{ type: 'content', content: { type: 'text', text: decision.reason ?? 'Approval denied.' } }],
         });
         if (snapshot) {
           turn.session.resolvePendingInteraction({
             expectedInteractionId: snapshot.interactionId,
-            answer: 'n',
-            rejectionReason: 'Approval is not yet supported over ACP.',
+            answer: decision.answer,
+            rejectionReason: decision.answer === 'y' ? undefined : decision.reason,
           });
         }
         return;

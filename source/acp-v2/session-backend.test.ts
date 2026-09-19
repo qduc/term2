@@ -12,6 +12,7 @@ const makeRuntime = (session: any) => ({
 
 const makeSession = (): any => ({
   sessionId: 'session-1',
+  binding: { canonicalRoot: '/tmp' },
   resources: { runtime: undefined },
   prepareMessage: vi.fn(async () => ({ kind: 'prepared', leaseId: 'lease-1', turnId: 'turn-1' })),
   commitMessage: vi.fn(async () => {}),
@@ -102,6 +103,52 @@ describe('ACP v2 production session backend', () => {
         expect.objectContaining({ sessionUpdate: 'agent_thought_chunk' }),
         expect.objectContaining({ sessionUpdate: 'tool_call' }),
       ]);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('uses an injected approval policy while the default remains denial', async () => {
+    const session = makeSession();
+    const resolvePendingInteraction = vi.fn();
+    session.resources.runtime = {
+      pendingInteraction: { getSnapshot: () => ({ interactionId: 7 }) },
+    };
+    session.resolvePendingInteraction = resolvePendingInteraction;
+    const decideApproval = vi.fn(async () => ({ answer: 'n', reason: 'policy denied' }));
+    const backend = createAcpV2SessionBackend({
+      runtimeFactory: makeRuntime(session) as any,
+      createId: () => 'session-1',
+      decideApproval,
+    });
+    const cwd = mkdtempSync('/tmp/acp-backend-');
+    try {
+      await backend.createSession({ cwd });
+      const execution = await backend.preparePrompt({
+        sessionId: 'session-1',
+        prompt: [{ type: 'text', text: 'run' }],
+      });
+      const updates: unknown[] = [];
+      const run = execution.run(async (update) => {
+        updates.push(update);
+      }, new AbortController().signal);
+      await vi.waitFor(() => expect(session.commitMessage).toHaveBeenCalled());
+      await session.eventSink({
+        type: 'approval_required',
+        approval: { toolName: 'apply_patch', callId: 'tool-1', argumentsText: '{}' },
+      });
+      await session.eventSink({ type: 'final', finalText: '' });
+      await expect(run).resolves.toEqual({ stopReason: 'end_turn' });
+      expect(decideApproval).toHaveBeenCalledWith(
+        { toolName: 'apply_patch', callId: 'tool-1', argumentsText: '{}' },
+        { sessionId: 'session-1', cwd: '/tmp' },
+      );
+      expect(resolvePendingInteraction).toHaveBeenCalledWith({
+        expectedInteractionId: 7,
+        answer: 'n',
+        rejectionReason: 'policy denied',
+      });
+      expect(updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', status: 'failed' }));
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

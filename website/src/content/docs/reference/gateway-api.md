@@ -84,7 +84,7 @@ The body must contain exactly those two strings; the public key is at most 16,38
 characters. A successful `200` response is:
 
 ```json
-{"kid":"paired-key-id","fingerprint":"sha256-fingerprint"}
+{"paired":true,"kid":"paired-key-id","fingerprint":"sha256-fingerprint"}
 ```
 
 Persist the returned `kid` and the matching private key. Pairing is not available
@@ -236,12 +236,19 @@ are `403 settings_forbidden`.
 
 Credential IDs are `openai`, `openrouter`, `tavily`, and `exa` in the current
 implementation. `POST /credentials/:credentialId` accepts `{"value":"..."}` and
-returns `{status:"saved",configured,source}`. `DELETE` returns
-`{status:"deleted",configured:false}` (the exact configured/source status is
-provider-dependent). The value is never echoed.
+returns `{status:"saved",configured,source}`. `DELETE` returns one of these exact
+secret-free shapes:
+
+```json
+{"status":"deleted","configured":false}
+{"status":"unchanged","configured":true,"source":"environment"}
+```
+
+Environment-owned credentials cannot be deleted by the gateway, so the second shape
+is returned with `source:"environment"`. The value is never echoed.
 
 For OAuth, `:provider` is `codex` or `grok`. Login is a `POST` with a null body and
-returns `{status:"completed",configured:true}` when accounts are configured or
+returns either `{status:"completed",configured:<boolean>}` or
 `{status:"not_completed"}` when the provider login did not finish. Select accepts
 `{"accountId":"..."}` and returns `{ok,isSelected,isInUse}`. Delete an account with
 the `DELETE` route; it returns `{ok}`.
@@ -378,7 +385,10 @@ If the cursor was compacted, the initial HTTP response is `410 cursor_compacted`
 `retryable:true`, `details.reloadRequired:true`, `details.latestSequence`, and a
 fresh `details.session` projection. Other journal/generation failures return
 `503 gateway_unavailable` with the same reload hint. Reload the session projection,
-then reconnect from its `earliestReplayableSequence` (or omit `after`).
+then reconnect from that projection's `projectionSequence`. This cursor is the
+projection-covered boundary and avoids replaying events already represented by the
+reloaded projection. Omitting `after` means start live from the current high-water
+mark; it does not mean “replay from the retention floor”.
 
 ### Frozen event types and payloads
 
@@ -411,7 +421,7 @@ version, so ignore fields you do not need.
 | `subagent_approval_required` | `turnId`, `agentId`, `role`, `interaction` |
 | `subagent_completed` | `turnId`, `agentId`, `name?`, `role`, `status`, `finalText`, `finalTextTruncated?`, `toolsUsed`, `usage?`, `error?`, `terminalCause?`, `async?` |
 | `subagent_interrupted` | `turnId`, `agentId`, `role`, `finalText` |
-| `subagent_question` | `turnId`, `agentId`, `runId`, `messageId`, `role`, `name?`, `question`, `async`, `interaction?` |
+| `subagent_question` | `turnId`, `agentId`, `runId`, `messageId`, `role`, `name?`, `question`, `async`, `interaction` (required `PendingInteractionDto`) |
 | `context_compaction_started` | `turnId`, `provider`, `sessionId`, `inputTokensBefore?`, `strategy?` |
 | `context_compaction_completed` | `turnId`, `provider`, `sessionId`, `inputTokensBefore?`, `inputTokensAfter?`, `durationMs`, `strategy?` |
 | `context_compaction_failed` | `turnId`, `provider`, `sessionId`, `errorCategory`, `durationMs`, `strategy?` |
@@ -437,12 +447,15 @@ replay; do not treat them as raw provider transcripts. Terminal event types are
 | `409 session_busy` / `session_not_admitting` | Wait for the current turn or refresh session state. |
 | `409 idempotency_conflict` | Reused a request ID with a different body; use a new ID only when the original result is not desired. |
 | `409 stale_interaction`, `interaction_not_resolvable`, `interaction_already_resolved` | Refresh the projection/SSE state; do not replay the old answer. |
+| `409 retry_failed` | A replayed retry command already failed; this is non-retryable. |
 | `409 provider_unavailable` | The selected provider cannot be started; choose an available model/provider. |
 | `409 settings_conflict` | Reload the projection and retry with its revision. |
 | `413 request_too_large` / `415 unsupported_media_type` | Correct the HTTP body/content type. |
 | `422 command_not_allowed`, `model_selection_deferred`, `attachments_not_enabled` | The operation is outside the current v1 contract. |
 | `429 queue_full`, `resource_exhausted`, `candidate_registry_full` | Back off and retry when `retryable:true`; the latter two are capacity limits. |
 | `410 cursor_compacted` | Reload the session projection before reconnecting to SSE. |
+| `500 compact_invalid_state` | A persisted compaction result has an unknown state; this is non-retryable. |
+| `500 session_snapshot_invalid` | A persisted session settings snapshot is unreadable or malformed; this is non-retryable. |
 | `503 gateway_unavailable`, `persistence_unavailable`, `settings_unavailable`, `snapshot_unwritable`, `model_catalog_unavailable`, `pairing_unavailable` | Transient gateway/dependency failure when `retryable:true`; back off and retry. |
 
 Messages and commands are idempotent only when the same client request ID is used

@@ -58,7 +58,11 @@ import {
   type BackgroundSubagentNotificationPort,
   type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
-import { BackgroundTaskControl, type BackgroundTaskControlPort } from './background-task-control.js';
+import {
+  BackgroundTaskControl,
+  type BackgroundTaskControlDetails,
+  type BackgroundTaskControlPort,
+} from './background-task-control.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import {
@@ -68,6 +72,7 @@ import {
   type PostExecutePendingSnapshot,
 } from './post-execute-pending-registry.js';
 import type { PostExecutePauseCapability } from './post-execute-pause-capability.js';
+import type { SessionStatus } from './turn-status-machine.js';
 import type { SessionAccessState } from './session-access-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
@@ -344,6 +349,61 @@ export type SessionRuntime = {
   /** Validate rollover admission and return its synchronous commit. */
   prepareRollover: (newSessionId: string, sessionStartedAt?: string) => () => void;
 };
+
+export type PublicStatusInputs = {
+  readonly foregroundStatus: SessionStatus;
+  readonly foregroundApprovalKind?: 'ask_user' | 'approval';
+  readonly backgroundApprovalPending: boolean;
+  readonly backgroundDetails: readonly BackgroundTaskControlDetails[];
+};
+
+/**
+ * Projects session-owned work into the coarse public lifecycle state.
+ * Waiting interactions take precedence over unrelated active work: a caller
+ * must never observe `working` while an approval is waiting for input.
+ */
+export function computePublicStatus({
+  foregroundStatus,
+  foregroundApprovalKind,
+  backgroundApprovalPending,
+  backgroundDetails,
+}: PublicStatusInputs): import('../hooks/hook-contracts.js').Term2Status {
+  if (foregroundStatus === 'awaiting_approval') {
+    return foregroundApprovalKind === 'ask_user' ? 'waiting_for_user' : 'waiting_for_approval';
+  }
+  if (backgroundApprovalPending) {
+    return 'waiting_for_approval';
+  }
+  let backgroundQuestionPending = false;
+  let backgroundWorkPending = false;
+  for (const detail of backgroundDetails) {
+    if (detail.kind === 'subagent') {
+      if (detail.status === 'awaiting_approval') {
+        return 'waiting_for_approval';
+      }
+      if (detail.status === 'waiting_for_answer') {
+        backgroundQuestionPending = true;
+      }
+      if (detail.status === 'running' || detail.status === 'cancelling') {
+        backgroundWorkPending = true;
+      }
+    } else if (detail.kind === 'shell') {
+      if (detail.status === 'running' || detail.status === 'cancelling') {
+        backgroundWorkPending = true;
+      }
+    }
+  }
+  if (backgroundQuestionPending) {
+    return 'waiting_for_user';
+  }
+  if (foregroundStatus !== 'idle') {
+    return 'working';
+  }
+  if (backgroundWorkPending) {
+    return 'working';
+  }
+  return 'idle';
+}
 
 // ── Composition factory ───────────────────────────────────────────
 
@@ -649,43 +709,25 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   let publicStatus: import('../hooks/hook-contracts.js').Term2Status = 'idle';
-  const computePublicStatus = (): import('../hooks/hook-contracts.js').Term2Status => {
-    const current = appState.statusMachine.current;
-    if (current === 'awaiting_approval') {
-      const pending = approvalFlow.getPending();
-      const pendingTool = pending ? getToolInfoFromInterruption(pending.interruption).toolName : undefined;
-      return pendingTool === 'ask_user' ? 'waiting_for_user' : 'waiting_for_approval';
-    }
-    if (current !== 'idle') {
-      return 'working';
-    }
-    if (backgroundSubagentApprovals.getSnapshot().pendingCount > 0) {
-      return 'waiting_for_approval';
-    }
-    const backgroundDetails = backgroundTaskControl.listDetails();
-    for (const detail of backgroundDetails) {
-      if (detail.kind === 'subagent') {
-        if (detail.status === 'awaiting_approval') {
-          return 'waiting_for_approval';
-        }
-        if (detail.status === 'waiting_for_answer') {
-          return 'waiting_for_user';
-        }
-        if (detail.status === 'running' || detail.status === 'cancelling') {
-          return 'working';
-        }
-      } else if (detail.kind === 'shell') {
-        if (detail.status === 'running' || detail.status === 'cancelling') {
-          return 'working';
-        }
-      }
-    }
-    return 'idle';
+  const getPublicStatus = (): import('../hooks/hook-contracts.js').Term2Status => {
+    const pending = approvalFlow.getPending();
+    const pendingTool = pending ? getToolInfoFromInterruption(pending.interruption).toolName : undefined;
+    return computePublicStatus({
+      foregroundStatus: appState.statusMachine.current,
+      foregroundApprovalKind:
+        appState.statusMachine.current === 'awaiting_approval'
+          ? pendingTool === 'ask_user'
+            ? 'ask_user'
+            : 'approval'
+          : undefined,
+      backgroundApprovalPending: backgroundSubagentApprovals.getSnapshot().pendingCount > 0,
+      backgroundDetails: backgroundTaskControl.listDetails(),
+    });
   };
 
   syncPublicStatus = (): void => {
     if (disposed || !hookLifecycle || !hookEvents) return;
-    const next = computePublicStatus();
+    const next = getPublicStatus();
     if (next === publicStatus) return;
     const previous = publicStatus;
     publicStatus = next;
@@ -694,7 +736,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         previous,
         current: next,
         reason:
-          next === 'waiting_for_user'
+          previous === 'waiting_for_approval' && next === 'working'
+            ? 'approval_resolved'
+            : next === 'waiting_for_user'
             ? 'ask_user'
             : next === 'waiting_for_approval'
             ? 'approval_requested'

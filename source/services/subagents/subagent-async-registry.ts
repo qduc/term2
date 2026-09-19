@@ -678,6 +678,7 @@ export class SubagentAsyncRegistry {
       if (pending.messageId !== replyTo) return { ok: false, code: 'question_mismatch', target };
       if (!run.control.answer(replyTo, message)) return { ok: false, code: 'question_not_pending', target };
       run.status = 'running';
+      safeEmit(this.#logger, this.#onEvent, { type: 'subagent_question_answered', agentId: run.runId });
       return { ok: true, runId: run.runId, status: 'running', delivery: 'answered' };
     }
     // Steering cannot reach a waiting `ask_orchestrator` call: it is queued behind a

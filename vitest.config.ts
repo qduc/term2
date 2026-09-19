@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['source/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.ts'],
+    include: ['source/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.ts', 'docs/**/*.test.ts'],
     // The default suite is the unit tier only. The other tiers own their
     // commands: `pnpm test:e2e` (vitest.e2e.config.ts),
     // `pnpm test:integration` (vitest.integration.config.ts), and

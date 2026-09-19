@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSessionRuntime as createProductionSessionRuntime } from './session-composition.js';
+import { computePublicStatus, createSessionRuntime as createProductionSessionRuntime } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -74,6 +74,49 @@ const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
   } as unknown as ConversationAgentClient);
 
 describe('session-composition public hook status with background tasks', () => {
+  it('reports a pending background approval while foreground work is active', () => {
+    expect(
+      computePublicStatus({
+        foregroundStatus: 'streaming',
+        backgroundApprovalPending: true,
+        backgroundDetails: [],
+      }),
+    ).toBe('waiting_for_approval');
+  });
+
+  it('prioritizes a background question over an earlier running task', () => {
+    expect(
+      computePublicStatus({
+        foregroundStatus: 'idle',
+        backgroundApprovalPending: false,
+        backgroundDetails: [
+          {
+            kind: 'subagent',
+            id: 'running',
+            role: 'worker',
+            task: 'run checks',
+            taskPreview: 'run checks',
+            status: 'running',
+            startedAt: 1,
+            elapsedMs: 1,
+            toolCounts: {},
+          },
+          {
+            kind: 'subagent',
+            id: 'question',
+            role: 'worker',
+            task: 'ask a question',
+            taskPreview: 'ask a question',
+            status: 'waiting_for_answer',
+            startedAt: 1,
+            elapsedMs: 1,
+            toolCounts: {},
+          },
+        ],
+      }),
+    ).toBe('waiting_for_user');
+  });
+
   it('keeps public status working when foreground turn finishes but background subagent is running', async () => {
     const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
     let subagentStatuses: SubagentRunStatus[] = [
@@ -315,7 +358,7 @@ describe('session-composition public hook status with background tasks', () => {
     expect(statusChangesAfterResolve[2]).toMatchObject({
       previous: 'waiting_for_approval',
       current: 'working',
-      reason: 'turn_started',
+      reason: 'approval_resolved',
     });
 
     runtime.dispose();

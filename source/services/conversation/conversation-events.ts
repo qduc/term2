@@ -35,6 +35,7 @@ export type ConversationEvent =
   | SubagentInterruptedEvent
   | SubagentTransferredEvent
   | SubagentQuestionEvent
+  | SubagentQuestionAnsweredEvent
   | BackgroundShellStartedEvent
   | BackgroundShellCompletedEvent
   | BackgroundShellOutputEvent
@@ -321,6 +322,12 @@ export interface SubagentQuestionEvent {
   name?: string;
   role: string;
   question: string;
+}
+
+/** A background subagent question was answered and execution resumed. */
+export interface SubagentQuestionAnsweredEvent {
+  type: 'subagent_question_answered';
+  agentId: string;
 }
 
 /** Budget/stall evidence from a child, routed through the existing subagent lane. */

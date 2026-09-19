@@ -19,8 +19,9 @@ bounded shutdown (`runAcp` in `source/acp-v2/serve.ts`).
 term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
 ```
 
-Those are the only flags (`parseAcpArgs` in `source/acp-v2/serve-args.ts`);
-anything else is rejected as an unknown option. In particular `--auto-approve`
+Those are the only flags (`parseAcpArgs` in `source/acp-v2/serve-args.ts`):
+any other flag is rejected as an unknown option, and any non-flag token as an
+unexpected argument. In particular `--auto-approve`
 exits with status 1, writes nothing to stdout, and prints a diagnostic to
 stderr. There is no flag that turns on auto-approve or unsandboxed execution;
 the security posture is inherited from the runtime factory, not configured.
@@ -100,8 +101,11 @@ the client-supplied `cwd` — validated and canonicalized with `realpathSync`
 by `validateCwd` in `source/acp-v2/session-backend.ts` — as the workspace
 root with `read_write` access, and the launcher builds its runtime factory
 with `allowWrite: true` (`runAcp` in `source/acp-v2/serve.ts`). Write and
-edit tools are registered for every ACP session, and writes are confined to
-that workspace root.
+edit tools are registered for every ACP session. Sandboxed shell writes are
+rooted at the session `cwd`; file edits default to that root, and an edit
+target outside it requires an approval — `allow-edit-file-session` /
+`allow-edit-folder-session` extend edit access to the granted path or folder
+(see the mapping table below).
 
 `allowUnsandboxed` is false for every ACP session (the factory's session
 snapshot leaves it unset; see `createProductionRuntimeFactory` in
@@ -128,20 +132,28 @@ an ACP kind are filtered out and never offered:
 | `allow-folder-session` / `allow-edit-file-session` / `allow-edit-folder-session` | `allow_always` | The same choice id |
 | `reject` / `deny` | `reject_once` | `n` |
 
-The interactive-only choices `unsandboxed-once`, `allow-remember`, and
-`reject_always` are never offered over ACP, so a client can never grant
-unsandboxed execution or a persistent approval.
+The interactive-only choices `unsandboxed-once` and `allow-remember` are
+never offered over ACP, and the ACP `reject_always` kind is never used, so a
+client can never grant unsandboxed execution or a persistent approval.
 
 An `allow_always` answer is recorded as a session-scoped grant keyed to the
 granted file or folder (not to the tool name alone): a later call whose target
-resolves inside the granted scope is approved without another round trip. The
-grant is prompt-scoped — grants are cleared when the prompt finishes
-(`clearClient`), so a new prompt starts with no remembered approvals.
+resolves inside the granted scope is approved without another round trip. Two
+lifetimes are involved. The ACP bridge's short-circuit cache
+(`sessionPermissionGrants`) is discarded when the prompt settles
+(`clearClient`); the grant term2 itself applies
+(`SessionAccessState.allowEditFile` / `allowEditFolder` / `allowReadFolder`)
+lasts for the **session** and is consulted by the tools' `needsApproval` on
+later prompts, so an allowed call does not re-ask. That grant is cleared on
+session reset or close (`SessionLifecycle` clearing access state), not at
+prompt end.
 
 ### Fail-closed behavior
 
-The tool does not run unless an explicit allow answer is resolved. All of the
-following deny the call:
+The tool does not run unless an explicit allow answer is resolved. These
+paths apply once the permission request settles; a client that never answers
+leaves the call pending until the turn is cancelled. All of the following
+deny the call:
 
 - the client cancels the permission request, or the outcome is missing,
   malformed, or not `selected`;

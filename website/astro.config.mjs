@@ -8,6 +8,13 @@ export default defineConfig({
     starlight({
       title: 'term2',
       description: 'Terminal-based AI assistant and autonomous agent runtime',
+      logo: { light: './src/assets/logo-light.svg', dark: './src/assets/logo-dark.svg', replacesTitle: true },
+      favicon: '/favicon.svg',
+      customCss: ['./src/styles/custom.css'],
+      expressiveCode: {
+        themes: ['github-dark-dimmed', 'github-light'],
+        styleOverrides: { borderRadius: '0.5rem', frames: { editorActiveTabIndicatorTopColor: '#3ddc97' } },
+      },
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/qduc/term2' }],
       sidebar: [
         {

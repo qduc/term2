@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+/* Dark mode: phosphor green on near-black. */
+:root {
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sl-color-accent-low: #0c2e22;
+  --sl-color-accent: #3ddc97;
+  --sl-color-accent-high: #b8f5d9;
+  --term2-glow: rgba(61, 220, 151, 0.18);
+}
+:root[data-theme='dark'] {
+  --sl-color-black: #0b0f14;
+  --sl-color-gray-6: #121821;
+}
+
+/* Light mode: deeper green for contrast on white. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d3f5e5;
+  --sl-color-accent: #0f7a4d;
+  --sl-color-accent-high: #0a3d28;
+  --term2-glow: rgba(15, 122, 77, 0.12);
+}
+
+h1,
+h2,
+h3,
+.site-title,
+starlight-tabs [role='tab'] {
+  font-family: var(--sl-font-mono);
+  letter-spacing: -0.02em;
+}
+
+.site-title img {
+  height: 1.6rem;
+}
+
+/* Hero: soft glow plus a faint terminal grid. */
+.hero {
+  position: relative;
+  isolation: isolate;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -4rem -50vw;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 50% 60% at 50% 40%, var(--term2-glow), transparent 70%),
+    linear-gradient(var(--sl-color-hairline) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, var(--sl-color-hairline) 1px, transparent 1px) 0 0 / 32px 32px;
+  mask-image: radial-gradient(ellipse 60% 70% at 50% 40%, #000 30%, transparent 75%);
+}
+.hero h1 {
+  font-size: clamp(2.8rem, 8vw, 4.5rem);
+  color: var(--sl-color-white);
+}
+.hero h1::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.85em;
+  margin-left: 0.12em;
+  vertical-align: -0.08em;
+  background: var(--sl-color-accent);
+  animation: term2-blink 1.1s steps(1) infinite;
+}
+@keyframes term2-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero h1::after {
+    animation: none;
+  }
+}
+
+/* Cards: accent top border and lift on hover. */
+.card {
+  border-top: 2px solid var(--sl-color-accent);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--term2-glow);
+}
+
+/* Homepage section labels. */
+.term2-eyebrow {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0;
+}
+.term2-eyebrow + h2 {
+  margin-top: 0.25rem;
+}
+
+/* "Works with" provider row. */
+.term2-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 0;
+  list-style: none;
+}
+.term2-providers li {
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 999px;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-2);
+}
+
+/* Cards: terminal prompt before each title. */
+.card .title::before {
+  content: '>';
+  margin-right: 0.5em;
+  color: var(--sl-color-accent);
+  font-family: var(--sl-font-mono);
+  font-weight: 700;
+}

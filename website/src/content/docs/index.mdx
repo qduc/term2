@@ -17,28 +17,64 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-## Key Features
+```bash title="Install"
+npm install --global @qduc/term2
+```
 
-<CardGrid stagger>
-  <Card title="Universal Provider Support" icon="puzzle">
-    Connect to built-in providers (OpenAI, ChatGPT/Codex OAuth, xAI Grok OAuth, OpenRouter), custom Anthropic and Google Gemini adapters, and local OpenAI-compatible endpoints (Ollama, llama.cpp).
-  </Card>
-  <Card title="Execution Safety & Sandboxing" icon="shield">
+<ul class="term2-providers" aria-label="Supported providers">
+  <li>OpenAI</li>
+  <li>ChatGPT / Codex</li>
+  <li>Anthropic</li>
+  <li>Google Gemini</li>
+  <li>xAI Grok</li>
+  <li>OpenRouter</li>
+  <li>Ollama</li>
+  <li>llama.cpp</li>
+</ul>
+
+<p class="term2-eyebrow">Safe by default</p>
+
+## You stay in control
+
+<CardGrid>
+  <Card title="Execution Safety & Sandboxing">
     Sandboxed shell execution with configurable read/write boundaries (`standard` and `strict`), interactive diff previews, smart auto-approvals, and run budgets.
   </Card>
-  <Card title="Five Operating Modes" icon="list-format">
-    Standard, Plan, Lite, Mentor, and Orchestrator modes adapted to research, planning, full development, collaborative second-opinions, and delegated orchestration.
-  </Card>
-  <Card title="Multi-Agent Swarms" icon="setting">
-    Deploy specialized subagents (Explorer, Worker, Mentor, Librarian, and Reviewer) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`) in foreground or background with `Ctrl+G` task management.
-  </Card>
-  <Card title="Scriptable Tool Workflows" icon="seti:javascript">
+  <Card title="Scriptable Tool Workflows">
     Use `run_code` to coordinate tool calls in a sandboxed JavaScript runtime with nested approvals, structured results, and explicit return contracts.
   </Card>
-  <Card title="Native Remote Development" icon="laptop">
+</CardGrid>
+
+<p class="term2-eyebrow">Built for real work</p>
+
+## One agent, many ways to work
+
+| Mode         | Use it for                                  |
+| ------------ | ------------------------------------------- |
+| Standard     | Full development: read, edit, run           |
+| Plan         | Read-only research, design, and review      |
+| Lite         | Quick shell, DevOps, and admin tasks        |
+| Mentor       | A collaborative second opinion              |
+| Orchestrator | Delegating work to subagents                |
+
+<CardGrid>
+  <Card title="Multi-Agent Swarms">
+    Deploy specialized subagents (Explorer, Worker, Mentor, Librarian, and Reviewer) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`) in foreground or background with `Ctrl+G` task management.
+  </Card>
+  <Card title="Universal Provider Support">
+    Connect to built-in providers (OpenAI, ChatGPT/Codex OAuth, xAI Grok OAuth, OpenRouter), custom Anthropic and Google Gemini adapters, and local OpenAI-compatible endpoints (Ollama, llama.cpp).
+  </Card>
+</CardGrid>
+
+<p class="term2-eyebrow">Run it anywhere</p>
+
+## Local, remote, or headless
+
+<CardGrid>
+  <Card title="Native Remote Development">
     Connect directly to remote servers over SSH with local SSH agent authentication and run full or lightweight agent sessions remotely.
   </Card>
-  <Card title="Private Web Gateway" icon="open-book">
+  <Card title="Private Web Gateway">
     Launch `term2 serve` to expose an authenticated, audited Unix socket or TLS gateway for programmatic control and external clients.
   </Card>
 </CardGrid>

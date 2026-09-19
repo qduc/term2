@@ -115,6 +115,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.autoApproveReasoningEffort',
     'agent.autoApproveDecisionShadowModel',
   ],
+  'Decision shadow pilot — next root turn/failure': ['agent.decisionShadowModel'],
   'Subagent launch/retention — next child run or registry operation': [
     'agent.subagentExplorerModel',
     'agent.subagentExplorerProvider',

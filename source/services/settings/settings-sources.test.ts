@@ -118,3 +118,14 @@ it('reports individual sources for run-budget policy settings', () => {
     source: 'default',
   });
 });
+
+it('reports the configured decision pilot model and its source', () => {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    agent: { ...DEFAULT_SETTINGS.agent, decisionShadowModel: 'typesafe/jev-1.13' },
+  };
+  const result = buildSettingsWithSources(settings, (key) =>
+    key === 'agent.decisionShadowModel' ? 'config' : 'default',
+  );
+  expect(result.agent.decisionShadowModel).toEqual({ value: 'typesafe/jev-1.13', source: 'config' });
+});

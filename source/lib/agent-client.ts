@@ -80,6 +80,8 @@ import { projectConversationMessage } from '../services/conversation/conversatio
 import { isLocalContextSummary } from '../contracts/provider-input.js';
 import { classifyProviderFailure } from '../services/retry/provider-failure-classification.js';
 import { ContextMilestoneReminder } from '../services/agent-runtime/context-compaction/context-milestone-reminder.js';
+import { createOpenRouterDecisionClient } from '../services/decision-shadow/decision-client.js';
+import { DecisionShadowPilot } from '../services/decision-shadow/decision-shadow-pilot.js';
 import type {
   PendingSessionRolloverRequest,
   SessionRolloverConsumption,
@@ -707,8 +709,22 @@ export class AgentClient {
     this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
     this.#retryAttempts = retryAttempts ?? 2;
     this.#requestCapture = deps.requestCapture;
+    const decisionShadowObserver = agentOverride
+      ? undefined
+      : new DecisionShadowPilot({
+          client: createOpenRouterDecisionClient({
+            resolveTransport: () => {
+              const apiKey = deps.settings.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY || '';
+              const baseUrl = deps.settings.get('agent.openrouter.baseUrl');
+              return { apiKey, ...(baseUrl ? { baseUrl } : {}) };
+            },
+          }),
+          resolveModel: () => deps.settings.get('agent.decisionShadowModel'),
+          logger: deps.logger,
+        });
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
+      ...(decisionShadowObserver ? { decisionShadowObserver } : {}),
       getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
       resolveMaxParallelToolCalls: () => deps.settings.get('agent.maxParallelToolCalls'),

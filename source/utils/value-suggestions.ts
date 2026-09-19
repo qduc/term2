@@ -99,6 +99,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
     { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
   ],
+  'agent.decisionShadowModel': [
+    { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
+    { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
+  ],
   'agent.temperature': [
     { value: '0', description: 'Deterministic' },
     { value: '0.2' },

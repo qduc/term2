@@ -1,3 +1,8 @@
+import {
+  RUN_CODE_EXPOSED_TOOLS,
+  getRunCodeExecutionResult,
+  RUN_CODE_EXECUTION_RESULT,
+} from '../tools/system/run-code/run-code.js';
 import path from 'path';
 import { z } from 'zod';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
@@ -229,11 +234,22 @@ export function buildAgentTools({
           if (definition.preserveSerializedOutput) {
             return String(finalResult ?? '');
           }
-          const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
+          const execution = getRunCodeExecutionResult(finalResult);
+          const trimmedResult = trimToolOutput(
+            execution && !Array.isArray(finalResult) ? String(finalResult) : finalResult,
+            undefined,
+            maxOutputLengthValue ?? undefined,
+          );
           // Structured content-part results (read_file images) carry no single
           // text slot for the run-budget advisory; deliver them unmodified so
           // the image reaches the provider converter.
-          return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, _context) : trimmedResult;
+          const delivered =
+            typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, _context) : trimmedResult;
+          // Presentation transforms must retain run_code's application-owned
+          // execution evidence for settlement and logical-tool observations.
+          if (execution)
+            return Object.defineProperty(Object(delivered), RUN_CODE_EXECUTION_RESULT, { value: execution });
+          return delivered;
         },
       };
       // Validate arguments against the tool's own schema before execute, the
@@ -258,8 +274,10 @@ export function buildAgentTools({
       // Object spread evaluates accessors. Preserve run_code's late-bound
       // description accessor so the model receives the generated namespace
       // header after the complete wrapped registry is bound below.
-      const description = Object.getOwnPropertyDescriptor(definition, 'description');
-      if (description?.get) Object.defineProperty(result, 'description', description);
+      for (const key of ['description', RUN_CODE_EXPOSED_TOOLS]) {
+        const descriptor = Object.getOwnPropertyDescriptor(definition, key);
+        if (descriptor?.get) Object.defineProperty(result, key, descriptor);
+      }
       return result;
     });
 

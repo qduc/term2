@@ -86,6 +86,7 @@ export const SETTINGS_SOURCE_KEYS = {
     autoApproveProvider: 'agent.autoApproveProvider',
     autoApproveReasoningEffort: 'agent.autoApproveReasoningEffort',
     autoApproveDecisionShadowModel: 'agent.autoApproveDecisionShadowModel',
+    decisionShadowModel: 'agent.decisionShadowModel',
     subagentExplorerModel: 'agent.subagentExplorerModel',
     subagentExplorerProvider: 'agent.subagentExplorerProvider',
     subagentExplorerReasoningEffort: 'agent.subagentExplorerReasoningEffort',

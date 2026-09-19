@@ -53,6 +53,11 @@ import {
   type GenerationGuardOptions,
 } from './generation-guard.js';
 import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';
+import { buildFailureObservation } from '../decision-shadow/failure-observation.js';
+import type {
+  DecisionShadowObserver,
+  ToolSelectionOutcomeObservation,
+} from '../decision-shadow/decision-shadow-observer.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
 
 /**
@@ -208,6 +213,8 @@ export class MaxTurnsExceededError extends Error {
 
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
+  /** Root-only optional observation. It returns no policy; the run loop never awaits a Decisions response. */
+  readonly decisionShadowObserver?: DecisionShadowObserver;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
   /**
    * Called when a tool body is about to run. Used by the session tool ledger to
@@ -429,6 +436,46 @@ export class ApplicationRunLoop {
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
     this.#contextCompactionSessionState = deps.contextCompactionSessionState ?? { disabled: false };
+  }
+
+  #observeToolSelectionRequest(
+    observation: Parameters<DecisionShadowObserver['observeToolSelectionRequest']>[0],
+  ): void {
+    this.#observeDecisionShadow('tool_selection_request', () =>
+      this.#deps.decisionShadowObserver?.observeToolSelectionRequest(observation),
+    );
+  }
+
+  #observeToolSelectionOutcome(observation: ToolSelectionOutcomeObservation): void {
+    this.#observeDecisionShadow('tool_selection_outcome', () =>
+      this.#deps.decisionShadowObserver?.observeToolSelectionOutcome(observation),
+    );
+  }
+
+  #observeTerminalFailure(
+    error: unknown,
+    request: { requestId: string; provider?: string; model: string; tier: ServiceTier },
+  ): void {
+    this.#observeDecisionShadow('failure_triage', () => {
+      this.#deps.decisionShadowObserver?.observeTerminalFailure(buildFailureObservation(error, request));
+    });
+  }
+
+  #observeDecisionShadow(kind: string, observe: () => void): void {
+    if (!this.#deps.decisionShadowObserver) return;
+    try {
+      observe();
+    } catch (error) {
+      try {
+        this.#deps.logDiagnostic?.(
+          'Decision shadow observer failed synchronously',
+          { kind, error: error instanceof Error ? error.message : String(error) },
+          { severity: 'debug', eventType: 'decision_shadow.observer_failed' },
+        );
+      } catch {
+        // Observation and its diagnostics must never affect the run.
+      }
+    }
   }
 
   /**
@@ -1180,6 +1227,15 @@ export class ApplicationRunLoop {
         };
         const dispatch = async (): Promise<void> => {
           state.requestPreparation?.prepare(request);
+          this.#observeToolSelectionRequest({
+            requestId,
+            provider: state.currentProviderId,
+            model: state.agent.model,
+            tier: resolveServiceTier(request),
+            chaining: request.previousResponseId !== undefined,
+            input: request.input,
+            tools: criticalWrapUp ? [] : state.agent.tools,
+          });
           await consume();
         };
         try {
@@ -1191,6 +1247,16 @@ export class ApplicationRunLoop {
 
           const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
             previousResponseId: activeRequest?.previousResponseId,
+          });
+          this.#observeToolSelectionOutcome({
+            requestId,
+            outcome:
+              options.signal?.aborted || (error instanceof Error && error.name === 'AbortError')
+                ? 'cancelled'
+                : decision.retryable
+                ? 'retried'
+                : 'failed',
+            selections: [],
           });
           const rollbackProvisionalAttempt = (): void => {
             stream.output.splice(outputLengthBefore);
@@ -1253,6 +1319,12 @@ export class ApplicationRunLoop {
           // restored history item.
           queue.push({ type: 'cost_update', record });
           this.#evaluateRunBudget(state, stream, queue);
+          this.#observeTerminalFailure(error, {
+            requestId,
+            provider: state.currentProviderId,
+            model: state.agent.model,
+            tier: resolveServiceTier(request),
+          });
           throw error;
         }
       }
@@ -1263,9 +1335,33 @@ export class ApplicationRunLoop {
         // as the continuation boundary. Preserve that contract while routing
         // the calls through the same ordered dispatcher. An empty stream still
         // fails closed as an incomplete model turn.
-        if (streamedToolCalls.length === 0) throw new Error('Application model turn ended without completion');
-        if (criticalWrapUp) return finish(stream, state, queue);
-        await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
+        if (streamedToolCalls.length === 0) {
+          const error = new Error('Application model turn ended without completion');
+          this.#observeToolSelectionOutcome({ requestId: activeRequestId, outcome: 'failed', selections: [] });
+          this.#observeTerminalFailure(error, {
+            requestId: activeRequestId,
+            provider: state.currentProviderId,
+            model: state.agent.model,
+            tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
+          });
+          throw error;
+        }
+        if (criticalWrapUp) {
+          this.#observeToolSelectionOutcome({
+            requestId: activeRequestId,
+            outcome: 'tools',
+            selections: streamedToolCalls.map((call) => ({ name: call.name, callPath: 'direct' })),
+          });
+          return finish(stream, state, queue);
+        }
+        await this.#dispatchToolCallsWithObservation(
+          state,
+          stream,
+          queue,
+          streamedToolCalls,
+          toolContext,
+          activeRequestId,
+        );
         if (state.terminateAfterToolExecution) return finish(stream, state, queue);
         if (state.pendingApprovals && state.pendingApprovals.length > 0) {
           stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
@@ -1423,7 +1519,15 @@ export class ApplicationRunLoop {
       // request ended with a bare assistant message. Models read that as a
       // turn truncated mid-sentence and restart instead of progressing.
       if (!state.criticalWrapUpPending && toolCalls.length > 0) {
-        await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
+        await this.#dispatchToolCallsWithObservation(state, stream, queue, toolCalls, toolContext, activeRequestId);
+      } else if (toolCalls.length === 0) {
+        this.#observeToolSelectionOutcome({ requestId: activeRequestId, outcome: 'text_only', selections: [] });
+      } else {
+        this.#observeToolSelectionOutcome({
+          requestId: activeRequestId,
+          outcome: 'tools',
+          selections: toolCalls.map((call) => ({ name: call.name, callPath: 'direct' })),
+        });
       }
 
       if (state.terminateAfterToolExecution) return finish(stream, state, queue);
@@ -1455,6 +1559,7 @@ export class ApplicationRunLoop {
     queue: EventQueue,
     events: readonly Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[],
     toolContext: ToolInvocationContext,
+    requestId: string,
   ): Promise<void> {
     const plan: ToolPlanEntry[] = events.map((event): ToolPlanEntry => {
       const definition = state.agent.tools.find((tool) => tool.name === event.name);
@@ -1563,6 +1668,27 @@ export class ApplicationRunLoop {
     // calls, but do not execute one more tool while human judgement is pending.
     if (!state.pendingRunBudgetInteraction) {
       await this.#settleToolPlan(state, stream, queue, toolContext);
+    }
+    this.#observeToolSelectionOutcome({
+      requestId,
+      outcome: 'tools',
+      selections: logicalToolSelections(plan),
+    });
+  }
+
+  async #dispatchToolCallsWithObservation(
+    state: RunState,
+    stream: AgentStream,
+    queue: EventQueue,
+    events: readonly Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[],
+    toolContext: ToolInvocationContext,
+    requestId: string,
+  ): Promise<void> {
+    try {
+      await this.#dispatchToolCalls(state, stream, queue, events, toolContext, requestId);
+    } catch (error) {
+      this.#observeToolSelectionOutcome({ requestId, outcome: 'failed', selections: [] });
+      throw error;
     }
   }
 
@@ -1880,6 +2006,30 @@ function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRun
   stream.output.push(item);
   if (stream.newItems !== stream.output) stream.newItems.push(item);
   queue.push(item);
+}
+
+function logicalToolSelections(
+  plan: readonly ToolPlanEntry[],
+): Array<{ name: string; callPath: 'direct' | 'run_code' }> {
+  const selections: Array<{ name: string; callPath: 'direct' | 'run_code' }> = [];
+  for (const entry of plan) {
+    if (entry.event.name !== 'run_code') {
+      selections.push({ name: entry.event.name, callPath: 'direct' });
+      continue;
+    }
+    const nested = getRunCodeExecutionResult(entry.result)?.calls.filter((call) => call.outcome !== 'describe') ?? [];
+    if (nested.length === 0) {
+      selections.push({ name: entry.event.name, callPath: 'direct' });
+      continue;
+    }
+    selections.push(...nested.map((call) => ({ name: call.tool, callPath: 'run_code' as const })));
+  }
+  return selections.filter(
+    (selection, index) =>
+      selections.findIndex(
+        (candidate) => candidate.name === selection.name && candidate.callPath === selection.callPath,
+      ) === index,
+  );
 }
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {

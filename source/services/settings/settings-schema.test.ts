@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(146);
-  expect(new Set(exportedKeys).size).toBe(146);
+  expect(exportedKeys).toHaveLength(147);
+  expect(new Set(exportedKeys).size).toBe(147);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -529,4 +529,14 @@ it('treats a zero total request deadline as "off" rather than coercing it to a d
   expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
   expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 45_000 }).maxModelRequestDurationMs).toBe(45_000);
   expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
+});
+
+it('decision pilot is opt-in and runtime modifiable', () => {
+  expect(AgentSettingsSchema.parse({}).decisionShadowModel).toBeUndefined();
+  expect(DEFAULT_SETTINGS.agent.decisionShadowModel).toBeUndefined();
+  expect(AgentSettingsSchema.parse({ decisionShadowModel: 'typesafe/jev-1.13' }).decisionShadowModel).toBe(
+    'typesafe/jev-1.13',
+  );
+  expect(() => AgentSettingsSchema.parse({ decisionShadowModel: '' })).toThrow();
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_DECISION_SHADOW_MODEL)).toBe(true);
 });

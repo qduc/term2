@@ -4,7 +4,10 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { buildToolSelectionReplayFixture } from '../services/decision-shadow/replay-fixtures.js';
+import { snapshotCallableToolCatalog } from '../services/decision-shadow/callable-tool-catalog.js';
+import { getRunCodeExecutionResult } from '../tools/system/run-code/run-code-execution.js';
 import { z } from 'zod';
 import path from 'path';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
@@ -220,6 +223,7 @@ it.sequential('keeps every registered tool reachable across direct and script pa
     expect(exposedToolNames.includes(tool.name)).toBe(!RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
     expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
   }
+  expect(new Set(snapshotCallableToolCatalog(built).map((entry) => entry.name))).toEqual(new Set(rawNames));
   expect(direct).toContain('run_code');
   expect(exposedToolNames).not.toContain('run_code');
 });
@@ -1208,3 +1212,68 @@ it.sequential(
     expect(rows[1]?.error).toContain('Signature: tools.specimen(');
   },
 );
+
+it.sequential('preserves nested execution evidence through factory trimming and run-loop observation', async () => {
+  const { deps } = createDeps({ settingsValues: { 'shell.autoApproveMode': 'always' } });
+  const lookup: AnyToolDefinition = {
+    name: 'fixture_lookup',
+    description: 'Return a fixture value',
+    parameters: z.object({}),
+    canRequireApproval: false,
+    needsApproval: () => false,
+    execute: () => 'found',
+    formatCommandMessage: () => [],
+  };
+  const runCode = createRunCodeToolDefinition({
+    loggingService: deps.logger,
+    approvalPolicyRegistry: deps.approvalPolicyRegistry,
+  });
+  const tools = buildAgentTools({
+    toolDefinitions: [lookup, runCode],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+  const fixture = buildToolSelectionReplayFixture(
+    'factory-root',
+    { requestId: 'fixture', model: 'gpt-4o', tier: 'standard', chaining: false, input: ['lookup'], tools },
+    'run_code:fixture_lookup',
+  );
+  expect(fixture.evidence.tools).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 'run_code:fixture_lookup' })]),
+  );
+  const args = { code: 'return await tools.fixture_lookup({});', description: 'lookup fixture', timeout_ms: 60_000 };
+  const result = await tools
+    .find((tool) => tool.name === 'run_code')!
+    .execute(args, undefined, { toolCall: { callId: 'boundary' } });
+  expect(getRunCodeExecutionResult(result)?.calls).toEqual(
+    expect.arrayContaining([expect.objectContaining({ tool: 'fixture_lookup', outcome: 'ok' })]),
+  );
+  const observer = {
+    observeToolSelectionRequest: vi.fn(),
+    observeToolSelectionOutcome: vi.fn(),
+    observeTerminalFailure: vi.fn(),
+  };
+  let calls = 0;
+  const loop = new ApplicationRunLoop({
+    decisionShadowObserver: observer,
+    resolveModel: () => ({
+      async *stream() {
+        if (calls++ === 0)
+          yield { type: 'tool_call' as const, id: 'nested-call', name: 'run_code', arguments: JSON.stringify(args) };
+        yield {
+          type: 'completion' as const,
+          responseId: `response-${calls}`,
+          output: calls === 1 ? [] : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+        };
+      },
+    }),
+  });
+  const stream = loop.startStream({ name: 'root', instructions: 'help', model: 'gpt-4o', tools }, 'lookup');
+  await stream.completed;
+
+  expect(observer.observeToolSelectionOutcome).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ outcome: 'tools', selections: [{ name: 'fixture_lookup', callPath: 'run_code' }] }),
+  );
+});

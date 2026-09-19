@@ -1,5 +1,9 @@
 import { beforeEach, it, expect } from 'vitest';
-import { clearDecisionModelListCache, fetchDecisionModels } from './decision-model-listing.js';
+import {
+  clearDecisionModelListCache,
+  fetchDecisionModels,
+  isDecisionShadowModelKey,
+} from './decision-model-listing.js';
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -95,4 +99,10 @@ it('returns null when the payload has no model array', async () => {
   const models = await fetchDecisionModels({ fetchImpl });
 
   expect(models).toBeNull();
+});
+
+it('routes both shadow model settings to the Decisions catalog', () => {
+  expect(isDecisionShadowModelKey('agent.decisionShadowModel')).toBe(true);
+  expect(isDecisionShadowModelKey('agent.autoApproveDecisionShadowModel')).toBe(true);
+  expect(isDecisionShadowModelKey('agent.model')).toBe(false);
 });

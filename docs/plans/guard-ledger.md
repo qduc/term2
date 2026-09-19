@@ -2142,6 +2142,74 @@ Ordinary resetWithNewId/clear/shutdown disposal semantics are unchanged.
 Status: implementation in progress; focused/typecheck gates currently pass.
 ```
 
+### ACP v2 per-session prompt admission
+
+The experimental ACP v2 adapter permits one admitted foreground prompt per
+session. Admission is reserved synchronously, before asynchronous prompt
+preparation, so a concurrent prompt cannot cross a check/await/set window and
+so cancellation and close can always find work that the adapter has accepted.
+Different sessions remain independent.
+
+```text
+Harm prevented: duplicate foreground execution and prompt work missed by
+  cancellation or close while preparation is pending.
+Scope: createAcpV2Agent session/prompt, session/cancel, and session/close.
+Guard class: per-session admission limit with lifecycle settlement.
+Enforcement owner: reservePrompt in source/acp-v2/agent.ts.
+Recovery owner: the cancel and close handlers plus runPrompt.
+Signal: exact session-id membership in the in-memory active-prompt map; direct,
+  deterministic, and local to the adapter connection.
+Legitimate work affected: a second prompt for the same session is rejected
+  before backend preparation; prompts for other sessions are unaffected.
+Configuration: none; the invariant is one foreground prompt per session.
+Action: reject duplicate admission with JSON-RPC code -32000. Cancellation and
+  close abort the admitted controller, request backend cancellation, and await
+  the prompt's settlement. Close still closes the backend session if backend
+  cancellation fails, then reports that failure.
+Partial-work settlement: every admitted prompt reaches an idle terminal update;
+  cancellation reports cancelled, while an execution failure reports the
+  adapter-private _term2_error reason and is logged without prompt content.
+Retry, fallback, and replay semantics: none; the adapter does not replay a
+  prompt or invent a resume cursor.
+Observability fields: acp.prompt.failed, sessionId, and errorMessage.
+Rollback boundary: the ACP v2 adapter and its focused contract tests.
+Implementation commit: 6800d5c1.
+```
+
+Red proof before the production repair:
+
+```text
+NODE_ENV=test pnpm test source/acp-v2/agent.test.ts
+FAIL 2 tests: a duplicate prompt was admitted while preparation was pending;
+  close skipped prompt settlement and backend close when cancellation failed.
+```
+
+The detection gap was the absence of a deliberately suspended preparation
+boundary: earlier tests began cancellation only after execution had started.
+The regression test now holds preparation pending while issuing a second prompt
+and cancellation. A second test makes backend cancellation fail and verifies
+that prompt settlement and backend close still occur.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/acp-v2/agent.test.ts
+PASS 1 file, 12 tests
+
+pnpm test:related ./source/acp-v2/agent.ts
+PASS 1 file, 12 tests
+
+pnpm test:changed
+PASS 1 file, 12 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check source/acp-v2/agent.ts \
+  source/acp-v2/agent.test.ts docs/plans/guard-ledger.md
+PASS
+```
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

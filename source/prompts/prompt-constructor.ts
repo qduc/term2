@@ -109,6 +109,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     // mode notices so a toggle cannot change the instruction prefix (prompt
     // cache + chained Responses-Lite HTTP omit developer instructions).
     fragmentFiles.push('plan-mode-stub.md');
+    fragmentFiles.push('pair-mode-stub.md');
     fragmentFiles.push('mentor-mode-stub.md');
     fragmentFiles.push('orchestrator-mode-stub.md');
   }

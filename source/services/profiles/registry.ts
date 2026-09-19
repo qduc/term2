@@ -90,6 +90,10 @@ export const builtinBlocks: readonly RegisteredBlock[] = [
     kind: 'instructions',
     workflow: { content: prompt('plan-mode-info.md') },
   }),
+  builtinInstructionBlock('builtin:instructions/pair', {
+    kind: 'instructions',
+    workflow: { content: prompt('pair-mode.md') },
+  }),
   builtinInstructionBlock('builtin:instructions/mentor', {
     kind: 'instructions',
     workflow: { content: prompt('mentor-addon.md') },
@@ -153,6 +157,14 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
       instructions: { kind: 'instructions', workflow: { use: 'builtin:instructions/plan' } },
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[1]] },
       presentation: { kind: 'presentation', displayName: 'Plan', label: 'PLAN', color: 'yellow' },
+    },
+    'builtin:standard',
+  ),
+  builtinProfile(
+    'pair',
+    {
+      instructions: { kind: 'instructions', workflow: { use: 'builtin:instructions/pair' } },
+      presentation: { kind: 'presentation', displayName: 'Pair', label: 'PAIR', color: 'green' },
     },
     'builtin:standard',
   ),

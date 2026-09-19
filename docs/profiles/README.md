@@ -55,3 +55,14 @@ The architecture is successful only when built-in Profiles travel through the
 same definition, resolution, and consumption path intended for future custom
 Profiles. A descriptive Profile registry layered beside mode booleans does not
 satisfy this specification.
+
+## Pair profile
+
+Use `/profile pair` (or choose Pair in the profile picker) for human-led coding.
+The assistant orients you in the code, asks about unresolved decisions, requests
+approval for one small change, implements and verifies it, then returns control.
+Interfaces and consequential design decisions remain yours to author.
+
+Pair is instruction-only: it inherits Standard's tools and enforcement. Approval
+and step size are model instructions, not additional runtime restrictions. Switch
+back with `/profile standard`. The workflow is restored with the saved profile.

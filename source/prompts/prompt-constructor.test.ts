@@ -198,6 +198,7 @@ it('buildPromptSpec composes file fragments in stable order', () => {
     'approval-model.md',
     'worktree-hygiene.md',
     'plan-mode-stub.md',
+    'pair-mode-stub.md',
     'mentor-mode-stub.md',
     'orchestrator-mode-stub.md',
   ]);

@@ -25,6 +25,7 @@ export function legacyModeFromProfileId(profileId: string): SavedAppMode {
       return { orchestratorMode: false, liteMode: false, planMode: true, mentorMode: false };
     case MENTOR_PROFILE_ID:
       return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: true };
+    case 'builtin:pair':
     case STANDARD_PROFILE_ID:
       return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false };
     default:

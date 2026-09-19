@@ -62,6 +62,11 @@ export function classifyProfileTransition(current: ResolvedProfile, target: Reso
   const planInvolved = isProfile(current, 'builtin:plan') || isProfile(target, 'builtin:plan');
   if (planInvolved) return 'notice-only';
 
+  const pairNoticeOnly = [current, target].every((profile) =>
+    ['builtin:standard', 'builtin:pair'].includes(profile.identity.id),
+  );
+  if (pairNoticeOnly) return 'notice-only';
+
   // A non-built-in Profile cannot be assumed to have a stable prompt/tool
   // shape. Rebuild it conservatively rather than allowing stale composition.
   return 'agent-rebuild';

@@ -125,6 +125,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.choreModel.source,
     },
     {
+      key: SETTING_KEYS.AGENT_DECISION_MODEL,
+      value: settings.agent.decisionModel.value,
+      source: settings.agent.decisionModel.source,
+    },
+    {
       key: SETTING_KEYS.AGENT_REASONING_EFFORT,
       value: settings.agent.reasoningEffort.value,
       source: settings.agent.reasoningEffort.source,

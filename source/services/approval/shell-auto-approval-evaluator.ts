@@ -528,7 +528,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   const instructions = SHELL_AUTO_APPROVAL_INSTRUCTIONS;
   const prompt = buildPrompt(toEvaluateByLLM, history, manualDecisions);
   const recordShadow = async (advisories: Map<string, ShellAutoApprovalAdvisory>): Promise<void> => {
-    const shadowModel = settingsService.get('agent.autoApproveDecisionShadowModel');
+    const shadowModel = settingsService.get('agent.decisionModel');
     if (!shadowModel) return;
     const comparable = toEvaluateByLLM.some(({ id }) => {
       const reviewer = advisories.get(id);

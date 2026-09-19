@@ -35,6 +35,10 @@ const MIGRATIONS: Migration[] = [
   },
   { target: 'agent.choreModel', legacy: ['agent.autoApproveModel', 'tools.editHealingModel'] },
   { target: 'agent.choreProvider', legacy: ['agent.autoApproveProvider', 'tools.editHealingProvider'] },
+  {
+    target: 'agent.decisionModel',
+    legacy: ['agent.decisionShadowModel', 'agent.autoApproveDecisionShadowModel'],
+  },
 ];
 
 // Tier model settings are model pools; a migrated legacy string value

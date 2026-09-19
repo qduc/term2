@@ -4,7 +4,7 @@ This module compares a Decisions model's predictions with two root-agent observa
 
 ## Opt in
 
-Set `agent.decisionShadowModel` to an OpenRouter Decisions model. It is unset by default and read on every observation. Clearing it stops new requests; already admitted requests may finish.
+Set `agent.decisionModel` to an OpenRouter Decisions model. It is unset by default and shared by the root-agent pilot and approval comparisons. It is read on every observation; clearing it stops new requests, while already admitted requests may finish.
 
 The root `AgentClient` uses `agent.openrouter.apiKey`, falling back to `OPENROUTER_API_KEY`, and the optional `agent.openrouter.baseUrl`. Agent-override clients used by subagents do not create the pilot. Enabling this incurs additional API charges, including when the main agent uses another provider. Shadow charges are recorded in comparison logs, not added to the foreground cost footer.
 

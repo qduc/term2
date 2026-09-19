@@ -69,7 +69,7 @@ term2 settings can be configured via:
 | `agent.autoApproveModel` | `string` | `"gpt-4o-mini"` | ✓ Yes | — | Faster model to use for auto-approval evaluation |
 | `agent.autoApproveProvider` | `string` | — | ✓ Yes | — | Provider to use for the auto-approval model (defaults to agent.provider when unset) |
 | `agent.autoApproveReasoningEffort` | `none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"low"` | ✓ Yes | — | Reasoning effort for risky shell auto-approval reviews |
-| `agent.autoApproveDecisionShadowModel` | `string` | — | ✓ Yes | — | Send approval context to this OpenRouter Decisions model for comparison; never controls approval |
+| `agent.decisionModel` | `string` | — | ✓ Yes | — | OpenRouter Decisions model shared by approval, tool-selection and failure-triage comparisons. Sends approval context plus each root request’s full input (conversation, tool outputs and file contents), tool catalog and failure evidence. Adds API charges; never controls execution |
 
 ## Run Budget & Safeguards
 

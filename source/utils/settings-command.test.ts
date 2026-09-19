@@ -19,6 +19,7 @@ const baseSettings = {
     balancedModel: { value: 'gpt-5-mini', source: 'config' },
     cheapModel: { value: undefined, source: 'default' },
     choreModel: { value: undefined, source: 'default' },
+    decisionModel: { value: '~typesafe/jev-latest', source: 'config' },
     efficientModel: { value: 'gpt-5-mini', source: 'config' },
     capableModel: { value: undefined, source: 'default' },
     reasoningEffort: { value: 'default', source: 'default' },
@@ -146,6 +147,7 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.balancedModel: gpt-5-mini (config)')).toBe(true);
   expect(summary.includes('agent.cheapModel: undefined (default)')).toBe(true);
   expect(summary.includes('agent.choreModel: undefined (default)')).toBe(true);
+  expect(summary.includes('agent.decisionModel: ~typesafe/jev-latest (config)')).toBe(true);
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
   expect(summary.includes('shell.backgroundTimeout: 1800000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);

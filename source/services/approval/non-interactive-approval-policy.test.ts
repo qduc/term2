@@ -152,7 +152,7 @@ it('waits for the optional shadow comparison before a non-interactive approval s
     settings: {
       'shell.autoApproveMode': 'auto',
       'agent.choreModel': 'reviewer',
-      'agent.autoApproveDecisionShadowModel': '~typesafe/jev-latest',
+      'agent.decisionModel': '~typesafe/jev-latest',
       'agent.openrouter.apiKey': 'test-key',
     },
     chat: async () =>

@@ -17,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(147);
-  expect(new Set(exportedKeys).size).toBe(147);
+  expect(exportedKeys).toHaveLength(146);
+  expect(new Set(exportedKeys).size).toBe(146);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -239,8 +239,6 @@ it('auto-approval reasoning effort defaults to low and is runtime modifiable', (
   expect(AgentSettingsSchema.parse({}).autoApproveReasoningEffort).toBe('low');
   expect(DEFAULT_SETTINGS.agent.autoApproveReasoningEffort).toBe('low');
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT)).toBe(true);
-  expect(AgentSettingsSchema.parse({}).autoApproveDecisionShadowModel).toBeUndefined();
-  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL)).toBe(true);
   expect(() => AgentSettingsSchema.parse({ autoApproveReasoningEffort: 'default' })).toThrow();
 });
 
@@ -531,12 +529,10 @@ it('treats a zero total request deadline as "off" rather than coercing it to a d
   expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
 });
 
-it('decision pilot is opt-in and runtime modifiable', () => {
-  expect(AgentSettingsSchema.parse({}).decisionShadowModel).toBeUndefined();
-  expect(DEFAULT_SETTINGS.agent.decisionShadowModel).toBeUndefined();
-  expect(AgentSettingsSchema.parse({ decisionShadowModel: 'typesafe/jev-1.13' }).decisionShadowModel).toBe(
-    'typesafe/jev-1.13',
-  );
-  expect(() => AgentSettingsSchema.parse({ decisionShadowModel: '' })).toThrow();
-  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_DECISION_SHADOW_MODEL)).toBe(true);
+it('shared decision model is opt-in and runtime modifiable', () => {
+  expect(AgentSettingsSchema.parse({}).decisionModel).toBeUndefined();
+  expect(DEFAULT_SETTINGS.agent.decisionModel).toBeUndefined();
+  expect(AgentSettingsSchema.parse({ decisionModel: 'typesafe/jev-1.13' }).decisionModel).toBe('typesafe/jev-1.13');
+  expect(() => AgentSettingsSchema.parse({ decisionModel: '' })).toThrow();
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_DECISION_MODEL)).toBe(true);
 });

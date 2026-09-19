@@ -74,15 +74,13 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(codex.websocketInterFrameTimeoutMs.source).toBe('default');
 });
 
-it('reports the configured approval decision shadow model and its source', () => {
+it('reports the configured shared decision model and its source', () => {
   const settings = {
     ...DEFAULT_SETTINGS,
-    agent: { ...DEFAULT_SETTINGS.agent, autoApproveDecisionShadowModel: '~typesafe/jev-latest' },
+    agent: { ...DEFAULT_SETTINGS.agent, decisionModel: '~typesafe/jev-latest' },
   };
-  const result = buildSettingsWithSources(settings, (key) =>
-    key === 'agent.autoApproveDecisionShadowModel' ? 'config' : 'default',
-  );
-  expect(result.agent.autoApproveDecisionShadowModel).toEqual({ value: '~typesafe/jev-latest', source: 'config' });
+  const result = buildSettingsWithSources(settings, (key) => (key === 'agent.decisionModel' ? 'config' : 'default'));
+  expect(result.agent.decisionModel).toEqual({ value: '~typesafe/jev-latest', source: 'config' });
   expect(result.agent.disabledProviders).toEqual({ value: settings.agent.disabledProviders, source: 'default' });
 });
 
@@ -117,15 +115,4 @@ it('reports individual sources for run-budget policy settings', () => {
     value: 3,
     source: 'default',
   });
-});
-
-it('reports the configured decision pilot model and its source', () => {
-  const settings = {
-    ...DEFAULT_SETTINGS,
-    agent: { ...DEFAULT_SETTINGS.agent, decisionShadowModel: 'typesafe/jev-1.13' },
-  };
-  const result = buildSettingsWithSources(settings, (key) =>
-    key === 'agent.decisionShadowModel' ? 'config' : 'default',
-  );
-  expect(result.agent.decisionShadowModel).toEqual({ value: 'typesafe/jev-1.13', source: 'config' });
 });

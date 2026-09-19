@@ -5,7 +5,7 @@ import { SETTING_KEYS } from '../settings/settings-schema.js';
  * (`output_modalities` contains `decisions`). Chat models on
  * `/api/v1/chat/completions` are NOT valid here: the Decisions endpoint only
  * answers typed questions about a state, so the catalog filter — not the
- * chat-model catalog — defines what the decision shadow model settings
+ * chat-model catalog — defines what the decision model setting
  * may be set to. The endpoint is public and needs no API key.
  */
 
@@ -75,9 +75,7 @@ export async function fetchDecisionModels(opts?: {
   return models;
 }
 
-/** Settings whose pickers are populated from the decisions catalog. */
-export function isDecisionShadowModelKey(key: string): boolean {
-  return (
-    key === SETTING_KEYS.AGENT_AUTO_APPROVE_DECISION_SHADOW_MODEL || key === SETTING_KEYS.AGENT_DECISION_SHADOW_MODEL
-  );
+/** Whether a setting's picker is populated from the Decisions catalog. */
+export function isDecisionModelKey(key: string): boolean {
+  return key === SETTING_KEYS.AGENT_DECISION_MODEL;
 }

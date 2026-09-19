@@ -86,8 +86,8 @@ beforeEach(() => {
   clearDecisionModelListCache();
 });
 
-it('has a non-empty curated fallback for the decision shadow model key', () => {
-  const suggestions = buildSettingValueSuggestions('agent.autoApproveDecisionShadowModel');
+it('has a non-empty curated fallback for the shared decision model key', () => {
+  const suggestions = buildSettingValueSuggestions('agent.decisionModel');
   expect(suggestions.length).toBeGreaterThan(0);
   expect(suggestions.map((s) => s.value)).toContain('~typesafe/jev-latest');
 });
@@ -109,7 +109,7 @@ it('fetchLiveSettingValueSuggestions maps the decision-model listing to suggesti
       { status: 200 },
     )) as typeof fetch;
 
-  const suggestions = await fetchLiveSettingValueSuggestions('agent.autoApproveDecisionShadowModel', { fetchImpl });
+  const suggestions = await fetchLiveSettingValueSuggestions('agent.decisionModel', { fetchImpl });
 
   expect(suggestions).toEqual([
     { value: '~typesafe/jev-latest', description: 'TypeSafe: Jev Latest' },
@@ -120,7 +120,7 @@ it('fetchLiveSettingValueSuggestions maps the decision-model listing to suggesti
 it('fetchLiveSettingValueSuggestions returns null when the live fetch fails', async () => {
   const fetchImpl = (async () => new Response('boom', { status: 500 })) as typeof fetch;
 
-  const suggestions = await fetchLiveSettingValueSuggestions('agent.autoApproveDecisionShadowModel', { fetchImpl });
+  const suggestions = await fetchLiveSettingValueSuggestions('agent.decisionModel', { fetchImpl });
 
   expect(suggestions).toBeNull();
 });

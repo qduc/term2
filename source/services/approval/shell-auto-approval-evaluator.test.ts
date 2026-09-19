@@ -6,7 +6,7 @@ import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evalu
 it('records Jev shadow disagreement without changing the chore model approval', async () => {
   const events: Array<{ message: string; details: any }> = [];
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-safe', command: 'ls source' }],
@@ -41,7 +41,7 @@ it('records Jev shadow disagreement without changing the chore model approval', 
 
 it('gives the shadow the latest user request even when recent tool traffic buries it', async () => {
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
   const decisionShadow = vi.fn(async () => [
     { riskLevel: 'low' as const, authorization: 'implied' as const, confidence: 0.8, wouldApprove: true },
@@ -76,7 +76,7 @@ it('gives the shadow the latest user request even when recent tool traffic burie
 
 it('does not compare Jev against a system rejection or a failed reviewer', async () => {
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
   const decisionShadow = vi.fn(async () => [
     { riskLevel: 'low' as const, authorization: 'explicit' as const, confidence: 1, wouldApprove: true },
@@ -112,7 +112,7 @@ it('does not compare Jev against a system rejection or a failed reviewer', async
 
 it('waits for opted-in shadow comparison when requested by a non-interactive caller', async () => {
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
   let finishShadow!: (
     value: Array<{ riskLevel: 'low'; authorization: 'explicit'; confidence: number; wouldApprove: true }>,
@@ -150,7 +150,7 @@ it('waits for opted-in shadow comparison when requested by a non-interactive cal
 
 it('bounds outstanding shadow comparisons without delaying approval', async () => {
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   settings.set('agent.openrouter.apiKey', 'test-key');
   const finishers: Array<
     (value: Awaited<ReturnType<typeof import('./decision-shadow.js').evaluateDecisionShadow>>) => void
@@ -196,7 +196,7 @@ it('bounds outstanding shadow comparisons without delaying approval', async () =
 it('keeps the chore model result when the optional decision shadow fails', async () => {
   const warnings: Array<Record<string, unknown>> = [];
   const settings = createMockSettings('advisory');
-  settings.set('agent.autoApproveDecisionShadowModel', '~typesafe/jev-latest');
+  settings.set('agent.decisionModel', '~typesafe/jev-latest');
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-safe', command: 'ls source' }],
     history: [],

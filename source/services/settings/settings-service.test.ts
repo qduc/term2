@@ -659,6 +659,63 @@ it.sequential('startup persists migrated ancillary tier settings', async () => {
   });
 });
 
+it('migrates both legacy decision-shadow settings into one shared decision model', () => {
+  const settingsDir = getTestSettingsDir();
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    getSettingsFilePath(settingsDir),
+    JSON.stringify({
+      agent: {
+        autoApproveDecisionShadowModel: '~typesafe/jev-latest',
+        decisionShadowModel: 'typesafe/jev-1.13',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
+
+  expect(service.get('agent.decisionModel')).toBe('typesafe/jev-1.13');
+});
+
+it('does not overwrite an explicitly configured shared decision model during migration', () => {
+  const settingsDir = getTestSettingsDir();
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    getSettingsFilePath(settingsDir),
+    JSON.stringify({
+      agent: {
+        decisionModel: 'typesafe/jev-current',
+        decisionShadowModel: 'typesafe/jev-legacy',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
+
+  expect(service.get('agent.decisionModel')).toBe('typesafe/jev-current');
+});
+
+it.sequential('startup persists the shared decision model migrated from a legacy key', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const settingsFile = getSettingsFilePath(settingsDir);
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({ agent: { autoApproveDecisionShadowModel: '~typesafe/jev-latest' } }),
+      'utf-8',
+    );
+
+    new SettingsService({ settingsDir, disableLogging: true });
+
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    expect(persisted.agent.decisionModel).toBe('~typesafe/jev-latest');
+    expect(persisted.agent.autoApproveDecisionShadowModel).toBeUndefined();
+  });
+});
+
 it('set() modifies runtime-modifiable settings', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({

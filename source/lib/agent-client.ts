@@ -719,7 +719,7 @@ export class AgentClient {
               return { apiKey, ...(baseUrl ? { baseUrl } : {}) };
             },
           }),
-          resolveModel: () => deps.settings.get('agent.decisionShadowModel'),
+          resolveModel: () => deps.settings.get('agent.decisionModel'),
           logger: deps.logger,
         });
     this.#applicationRunLoop = new ApplicationRunLoop({

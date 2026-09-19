@@ -8,7 +8,7 @@ import {
 import { getProvider, getProviderIds } from '../providers/index.js';
 import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
 import { KNOWN_CUSTOM_PROVIDER_TYPES } from '../services/settings/settings-schema.js';
-import { fetchDecisionModels, isDecisionShadowModelKey } from '../services/models/decision-model-listing.js';
+import { fetchDecisionModels, isDecisionModelKey } from '../services/models/decision-model-listing.js';
 
 export { isSecretSetting, isStringSetting, isNumberSetting };
 
@@ -95,11 +95,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   ],
   // Fallback while the live decisions-catalog fetch (see
   // fetchLiveSettingValueSuggestions) is in flight or fails.
-  'agent.autoApproveDecisionShadowModel': [
-    { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
-    { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
-  ],
-  'agent.decisionShadowModel': [
+  'agent.decisionModel': [
     { value: '~typesafe/jev-latest', description: 'OpenRouter Jev (tracks latest)' },
     { value: 'typesafe/jev-1.13', description: 'OpenRouter Jev 1.13 (pinned)' },
   ],
@@ -279,7 +275,7 @@ export async function fetchLiveSettingValueSuggestions(
   key: string,
   opts?: { fetchImpl?: typeof fetch },
 ): Promise<SettingValueSuggestion[] | null> {
-  if (!isDecisionShadowModelKey(key)) return null;
+  if (!isDecisionModelKey(key)) return null;
   const models = await fetchDecisionModels(opts?.fetchImpl ? { fetchImpl: opts.fetchImpl } : undefined);
   if (models === null) return null;
   return models.map((m) => ({ value: m.id, ...(m.name ? { description: m.name } : {}) }));

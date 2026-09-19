@@ -71,6 +71,7 @@ export default defineConfig({
             { label: 'Slash Commands', link: '/reference/slash-commands/' },
             { label: 'CLI Flags', link: '/reference/cli-flags/' },
             { label: 'Settings Reference', link: '/reference/settings/' },
+            { label: 'Web Gateway API', link: '/reference/gateway-api/' },
           ],
         },
         {

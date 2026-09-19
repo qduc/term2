@@ -65,3 +65,5 @@ term2 serve \
 ```
 
 With `--bff-key`, the browser must not pair and must not call the gateway directly: the backend-for-frontend (BFF) holds the key and makes gateway requests. BFF-key clients may assert `--local-owner`. Do not combine `--pairing` with `--allow-remote`.
+
+For the complete client contract, see the [Web Gateway API Reference](/term2/reference/gateway-api/).

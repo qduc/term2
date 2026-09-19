@@ -52,7 +52,18 @@ export type AcpV2SessionBackendOptions = Readonly<{
   ) => Promise<{ readonly answer: string; readonly reason?: string }>;
 }>;
 
-export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): AcpV2SessionBackend {
+/**
+ * The production backend a launcher process owns: the adapter's protocol
+ * surface plus a process-lifecycle method that cancels active turns and closes
+ * every live session. `AcpV2SessionBackend` deliberately stays free of
+ * lifecycle concerns (the adapter has no shutdown concept), so the launcher's
+ * teardown is expressed additively here rather than in the adapter contract.
+ */
+export type AcpV2ProductionSessionBackend = AcpV2SessionBackend & {
+  shutdown(): Promise<void>;
+};
+
+export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): AcpV2ProductionSessionBackend {
   const sessions = new Map<string, ServerSession>();
   const active = new Map<string, ActiveTurn>();
   const createId = options.createId ?? randomUUID;
@@ -245,6 +256,24 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
     return created;
   };
 
+  const cancelSession = async (sessionId: string): Promise<void> => {
+    const turn = active.get(sessionId);
+    if (turn) await turn.session.abort(turn.turnId);
+  };
+
+  const closeSession = async (sessionId: string): Promise<void> => {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+    try {
+      await session.dispose();
+    } finally {
+      session.service.setLogSink(null);
+      await writers.get(sessionId)?.close();
+      writers.delete(sessionId);
+      sessions.delete(sessionId);
+    }
+  };
+
   return {
     async createSession(request) {
       const session = await create(request.cwd);
@@ -284,18 +313,7 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
       if (restored && request.replayFrom) await replay(restored, emit);
       return {};
     },
-    async closeSession(sessionId) {
-      const session = sessions.get(sessionId);
-      if (!session) return;
-      try {
-        await session.dispose();
-      } finally {
-        session.service.setLogSink(null);
-        await writers.get(sessionId)?.close();
-        writers.delete(sessionId);
-        sessions.delete(sessionId);
-      }
-    },
+    closeSession,
     async preparePrompt(request): Promise<AcpV2PromptExecution> {
       const session = sessions.get(request.sessionId);
       if (!session) missing(request.sessionId);
@@ -334,9 +352,19 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
         },
       };
     },
-    async cancelSession(sessionId) {
-      const turn = active.get(sessionId);
-      if (turn) await turn.session.abort(turn.turnId);
+    cancelSession,
+    /**
+     * Cancel every in-flight turn, then close every live session. Closing is
+     * what flushes the conversation log writer and releases its lock, so this
+     * is the flush boundary the launcher's bounded shutdown waits on. A
+     * failure propagates to the caller, which decides how long to keep waiting;
+     * every session is still attempted, because both passes start all their
+     * work before awaiting any of it.
+     */
+    async shutdown() {
+      const sessionIds = [...sessions.keys()];
+      await Promise.all(sessionIds.map((sessionId) => cancelSession(sessionId)));
+      await Promise.all(sessionIds.map((sessionId) => closeSession(sessionId)));
     },
   };
 }

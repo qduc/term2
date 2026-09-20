@@ -5,7 +5,7 @@ import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
-import type { RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
+import type { ClassifiedFailure, RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
 import type { ContinuationState } from './continuation-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
@@ -14,7 +14,7 @@ import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
 
 export type ContinuationRecoveryHandlerDeps = {
-  breakChaining?: () => void;
+  breakChaining?: (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']) => void;
   logger: ILoggingService;
   sessionId: SessionIdSource;
   generationGuard: GenerationGuard;
@@ -60,7 +60,7 @@ export class ContinuationRecoveryHandler {
     });
 
     if (classified.kind === 'chain_recovery') {
-      this.deps.breakChaining?.();
+      this.deps.breakChaining?.(classified.cause);
     }
 
     if (classified.kind === 'unrecoverable') {

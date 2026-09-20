@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { OpenRouterDecisionError } from '../../providers/openrouter-decisions.js';
 import type { DecisionClient } from './decision-client.js';
 import { FAILURE_TRIAGE_REPLAY_FIXTURES, TOOL_SELECTION_REPLAY_FIXTURES } from './replay-fixtures.js';
 import { evaluateReplayFixtures } from './replay-evaluator.js';
@@ -123,5 +124,23 @@ it('counts replay request and parse errors explicitly instead of omitting them',
       correct: false,
       error: { name: 'DecisionEvaluationError', code: 'invalid_choice' },
     }),
+  ]);
+});
+
+it('retains HTTP status in replay failure diagnostics', async () => {
+  const result = await evaluateReplayFixtures({
+    client: {
+      decide: async () => {
+        throw new OpenRouterDecisionError('OpenRouter Decisions returned HTTP 503', 'http_error', { status: 503 });
+      },
+    },
+    model: 'jev',
+    toolSelection: TOOL_SELECTION_REPLAY_FIXTURES.slice(0, 1),
+    failureTriage: FAILURE_TRIAGE_REPLAY_FIXTURES.slice(0, 1),
+  });
+
+  expect(result.cases).toEqual([
+    expect.objectContaining({ error: { name: 'OpenRouterDecisionError', code: 'http_error', httpStatus: 503 } }),
+    expect.objectContaining({ error: { name: 'OpenRouterDecisionError', code: 'http_error', httpStatus: 503 } }),
   ]);
 });

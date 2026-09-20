@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createOpenRouterDecisionClient } from './decision-client.js';
 import { z } from 'zod';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { DecisionClient } from './decision-client.js';
@@ -365,6 +366,30 @@ describe('DecisionShadowPilot', () => {
       ),
     );
     expect(JSON.stringify(testLogger.warn.mock.calls)).not.toContain('raw provider response');
+  });
+
+  it('logs an HTTP failure category and status without its response body', async () => {
+    const testLogger = logger();
+    const client = createOpenRouterDecisionClient({
+      resolveTransport: () => ({ apiKey: 'test-key' }),
+      fetchImpl: vi.fn(async () => new Response('private provider response', { status: 401 })),
+    });
+    const pilot = new DecisionShadowPilot({ client, resolveModel: () => 'jev', logger: testLogger });
+
+    pilot.observeTerminalFailure(terminalFailure('http-failure'));
+
+    await vi.waitFor(() =>
+      expect(testLogger.warn).toHaveBeenCalledWith(
+        'Decision shadow observation failed',
+        expect.objectContaining({
+          requestId: 'http-failure',
+          errorType: 'OpenRouterDecisionError',
+          errorCode: 'http_error',
+          httpStatus: 401,
+        }),
+      ),
+    );
+    expect(JSON.stringify(testLogger.warn.mock.calls)).not.toContain('private provider response');
   });
 });
 

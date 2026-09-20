@@ -35,7 +35,7 @@ describe('requestOpenRouterDecisions', () => {
     const fetchImpl = vi.fn();
     await expect(
       requestOpenRouterDecisions({ model: 'jev', state: {}, questions: {}, apiKey: '', fetchImpl }),
-    ).rejects.toThrow('API key');
+    ).rejects.toMatchObject({ name: 'OpenRouterDecisionError', code: 'configuration_error' });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -55,11 +55,35 @@ describe('requestOpenRouterDecisions', () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://proxy.example/openrouter/api/alpha/decisions');
   });
 
+  it('classifies an invalid base URL before contacting the provider', async () => {
+    const fetchImpl = vi.fn();
+
+    const error = await requestOpenRouterDecisions({
+      model: 'jev',
+      state: {},
+      questions: {},
+      apiKey: 'test-key',
+      baseUrl: 'not a URL',
+      fetchImpl,
+    }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ name: 'OpenRouterDecisionError', code: 'configuration_error' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('rejects failed HTTP responses without returning decisions', async () => {
-    const fetchImpl = vi.fn(async () => new Response('upstream detail', { status: 503 }));
+    const fetchImpl = vi.fn(async () => new Response('sensitive upstream detail', { status: 503 }));
     await expect(
       requestOpenRouterDecisions({ model: 'jev', state: {}, questions: {}, apiKey: 'test-key', fetchImpl }),
-    ).rejects.toThrow('503');
+    ).rejects.toMatchObject({
+      name: 'OpenRouterDecisionError',
+      code: 'http_error',
+      status: 503,
+      message: 'OpenRouter Decisions returned HTTP 503',
+    });
+    await expect(
+      requestOpenRouterDecisions({ model: 'jev', state: {}, questions: {}, apiKey: 'test-key', fetchImpl }),
+    ).rejects.not.toThrow('sensitive upstream detail');
   });
 
   it('aborts a stalled decision request at its deadline', async () => {
@@ -79,7 +103,10 @@ describe('requestOpenRouterDecisions', () => {
         fetchImpl,
         timeoutMs: 20,
       });
-      const rejected = expect(pending).rejects.toThrow('aborted');
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: 'OpenRouterDecisionError',
+        code: 'timeout',
+      });
       await vi.advanceTimersByTimeAsync(19);
       expect(fetchImpl.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
@@ -87,5 +114,108 @@ describe('requestOpenRouterDecisions', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('classifies fetch failures without retaining their messages', async () => {
+    const fetchImpl = vi.fn(async () => Promise.reject(new Error('request contained a secret')));
+
+    const error = await requestOpenRouterDecisions({
+      model: 'jev',
+      state: {},
+      questions: {},
+      apiKey: 'test-key',
+      fetchImpl,
+    }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ name: 'OpenRouterDecisionError', code: 'network_error' });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('secret');
+  });
+
+  it('classifies invalid JSON without retaining response content', async () => {
+    const fetchImpl = vi.fn(async () => new Response('private invalid response', { status: 200 }));
+
+    const error = await requestOpenRouterDecisions({
+      model: 'jev',
+      state: {},
+      questions: {},
+      apiKey: 'test-key',
+      fetchImpl,
+    }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ name: 'OpenRouterDecisionError', code: 'invalid_json' });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('private invalid response');
+  });
+
+  it('classifies a body read interrupted by the deadline as a timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const body = new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener('abort', () => controller.error(new Error('body contained a secret')));
+          },
+        });
+        return new Response(body, { status: 200 });
+      });
+      const pending = requestOpenRouterDecisions({
+        model: 'jev',
+        state: {},
+        questions: {},
+        apiKey: 'test-key',
+        fetchImpl,
+        timeoutMs: 20,
+      });
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: 'OpenRouterDecisionError',
+        code: 'timeout',
+      });
+
+      await vi.advanceTimersByTimeAsync(20);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('distinguishes response stream failures from invalid JSON', async () => {
+    const fetchImpl = vi.fn(async () => {
+      const body = new ReadableStream({
+        start(controller) {
+          controller.error(new Error('body contained a secret'));
+        },
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const error = await requestOpenRouterDecisions({
+      model: 'jev',
+      state: {},
+      questions: {},
+      apiKey: 'test-key',
+      fetchImpl,
+    }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ name: 'OpenRouterDecisionError', code: 'response_read_error' });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain('secret');
+  });
+
+  it('classifies request serialization before contacting the provider', async () => {
+    const fetchImpl = vi.fn();
+    const state: { self?: unknown } = {};
+    state.self = state;
+
+    const error = await requestOpenRouterDecisions({
+      model: 'jev',
+      state,
+      questions: {},
+      apiKey: 'test-key',
+      fetchImpl,
+    }).catch((cause) => cause);
+
+    expect(error).toMatchObject({ name: 'OpenRouterDecisionError', code: 'request_serialization' });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

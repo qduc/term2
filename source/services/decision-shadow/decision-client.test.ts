@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createOpenRouterDecisionClient } from './decision-client.js';
+import { createOpenRouterDecisionClient, readDecisionErrorMetadata } from './decision-client.js';
 
 describe('OpenRouter decision client', () => {
   it('normalizes answers, resolved model, and a provider-reported cost', async () => {
@@ -59,5 +59,21 @@ describe('OpenRouter decision client', () => {
       resolvedModel: 'typesafe/jev-1.13',
       costUsdMicros: 4,
     });
+  });
+
+  it('retains safe transport diagnostics from a failed HTTP response', async () => {
+    const client = createOpenRouterDecisionClient({
+      resolveTransport: () => ({ apiKey: 'test-key' }),
+      fetchImpl: vi.fn(async () => new Response('credential-shaped secret', { status: 429 })),
+    });
+
+    const error = await client.decide({ model: 'jev', state: {}, questions: {} }).catch((cause) => cause);
+
+    expect(readDecisionErrorMetadata(error)).toEqual({
+      errorType: 'OpenRouterDecisionError',
+      errorCode: 'http_error',
+      httpStatus: 429,
+    });
+    expect(JSON.stringify(readDecisionErrorMetadata(error))).not.toContain('credential-shaped secret');
   });
 });

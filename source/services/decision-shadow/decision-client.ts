@@ -1,4 +1,9 @@
-import { requestOpenRouterDecisions, type DecisionQuestion } from '../../providers/openrouter-decisions.js';
+import {
+  OpenRouterDecisionError,
+  requestOpenRouterDecisions,
+  type DecisionQuestion,
+  type OpenRouterDecisionErrorCode,
+} from '../../providers/openrouter-decisions.js';
 import { parseUsdMicros } from '../cost/model-cost.js';
 
 export type DecisionClientRequest = {
@@ -90,7 +95,8 @@ export function readDecisionErrorMetadata(error: unknown): {
   readonly resolvedModel?: string;
   readonly costUsdMicros?: number;
   readonly errorType: string;
-  readonly errorCode?: DecisionEvaluationErrorCode;
+  readonly errorCode?: DecisionEvaluationErrorCode | OpenRouterDecisionErrorCode;
+  readonly httpStatus?: number;
 } {
   if (error instanceof DecisionEvaluationError) {
     return {
@@ -98,6 +104,13 @@ export function readDecisionErrorMetadata(error: unknown): {
       ...(error.costUsdMicros !== undefined ? { costUsdMicros: error.costUsdMicros } : {}),
       errorType: error.name,
       errorCode: error.code,
+    };
+  }
+  if (error instanceof OpenRouterDecisionError) {
+    return {
+      errorType: error.name,
+      errorCode: error.code,
+      ...(error.status !== undefined ? { httpStatus: error.status } : {}),
     };
   }
   return { errorType: error instanceof Error ? error.name : 'UnknownError' };

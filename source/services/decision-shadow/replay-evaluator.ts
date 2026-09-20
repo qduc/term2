@@ -3,7 +3,7 @@ import { evaluateFailureTriage, FAILURE_TRIAGE_PROMPT_VERSION } from './failure-
 import type { FailureTriageReplayFixture, ToolSelectionReplayFixture } from './replay-fixtures.js';
 import { evaluateToolSelection, TOOL_SELECTION_PROMPT_VERSION } from './tool-selection.js';
 
-type ReplayError = { readonly name: string; readonly code?: string };
+type ReplayError = { readonly name: string; readonly code?: string; readonly httpStatus?: number };
 
 export type ReplayCaseResult =
   | {
@@ -83,6 +83,7 @@ export async function evaluateReplayFixtures(input: {
         error: {
           name: metadata.errorType,
           ...(metadata.errorCode ? { code: metadata.errorCode } : {}),
+          ...(metadata.httpStatus !== undefined ? { httpStatus: metadata.httpStatus } : {}),
         },
         correct: false,
       });
@@ -131,6 +132,7 @@ export async function evaluateReplayFixtures(input: {
         error: {
           name: metadata.errorType,
           ...(metadata.errorCode ? { code: metadata.errorCode } : {}),
+          ...(metadata.httpStatus !== undefined ? { httpStatus: metadata.httpStatus } : {}),
         },
         correct: false,
       });

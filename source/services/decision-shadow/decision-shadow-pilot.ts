@@ -33,6 +33,7 @@ type DecisionFailureTelemetry = {
   readonly costUsdMicros?: number;
   readonly errorType: string;
   readonly errorCode?: string;
+  readonly httpStatus?: number;
 };
 
 type ObservationKind = 'tool_selection' | 'failure_triage';
@@ -243,6 +244,7 @@ export class DecisionShadowPilot implements DecisionShadowObserver {
           ...(metadata.costUsdMicros !== undefined ? { costUsdMicros: metadata.costUsdMicros } : {}),
           errorType: metadata.errorType,
           ...(metadata.errorCode ? { errorCode: metadata.errorCode } : {}),
+          ...(metadata.httpStatus !== undefined ? { httpStatus: metadata.httpStatus } : {}),
         };
         this.#log('warn', 'Decision shadow observation failed', {
           eventType: 'decision_shadow.failed',
@@ -255,6 +257,7 @@ export class DecisionShadowPilot implements DecisionShadowObserver {
           cost: failure.costUsdMicros ?? 'unknown',
           errorType: failure.errorType,
           ...(failure.errorCode ? { errorCode: failure.errorCode } : {}),
+          ...(failure.httpStatus !== undefined ? { httpStatus: failure.httpStatus } : {}),
         });
         options.onFailure?.(failure);
       })
@@ -280,6 +283,7 @@ export class DecisionShadowPilot implements DecisionShadowObserver {
         predictionStatus: 'invalid',
         errorType: pending.failure.errorType,
         ...(pending.failure.errorCode ? { errorCode: pending.failure.errorCode } : {}),
+        ...(pending.failure.httpStatus !== undefined ? { httpStatus: pending.failure.httpStatus } : {}),
         observedOutcome: pending.outcome.outcome,
         observedSelections: pending.outcome.selections,
       });

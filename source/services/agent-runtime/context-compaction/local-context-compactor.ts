@@ -34,10 +34,12 @@ export class ContextCompactionHardFitError extends Error {
   readonly reason: 'single_turn_too_large' | 'result_still_too_large';
 
   constructor(reason: 'single_turn_too_large' | 'result_still_too_large') {
-    super(
+    const cause =
       reason === 'single_turn_too_large'
         ? 'The protected recent conversation is too large to fit the configured context window'
-        : 'The compacted conversation is still too large to fit the configured context window',
+        : 'The compacted conversation is still too large to fit the configured context window';
+    super(
+      `${cause}. Compaction did not reduce the existing context. In the interactive app, if this session has a finalized assistant reply, /handoff can copy that latest completed reply into a fresh session. Otherwise, start a fresh session and include the current session ID plus a short summary of the unfinished request.`,
     );
     this.name = 'ContextCompactionHardFitError';
     this.reason = reason;

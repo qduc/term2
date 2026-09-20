@@ -173,8 +173,10 @@ function makeUsageAccumulator(): UsageAccumulator {
 
 function makeConfig(overrides: Partial<ConversationOrchestratorConfig> = {}): ConversationOrchestratorConfig {
   const approvedContext: { current: ApprovedToolContext | null } = { current: null };
+  const conversationService = mockConversationService();
+  Object.defineProperty(conversationService, 'sessionId', { get: () => 'test-session' });
   return {
-    conversationService: mockConversationService(),
+    conversationService,
     loggingService: mockLoggingService(),
     messages: makeMessagePort(),
     ui: makeUIPort(),
@@ -251,6 +253,13 @@ describe('ConversationOrchestrator', () => {
     const bots = cfg.messages.getMessages().filter((m) => m.sender === 'bot');
     expect(bots.map((m) => m.text)).toContain('Partial answer');
     expect(bots.every((m) => m.status !== 'streaming')).toBe(true);
+    expect(cfg.loggingService.warn).toHaveBeenCalledWith(
+      'Streaming rows left live at turn end; finalizing them',
+      expect.objectContaining({
+        sessionId: 'test-session',
+        rows: [expect.objectContaining({ sender: 'bot', status: 'streaming', settlement: 'finalize' })],
+      }),
+    );
   });
 
   it('finalizes the live reasoning message when the turn ends in a user cancellation', async () => {

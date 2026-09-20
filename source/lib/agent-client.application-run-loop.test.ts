@@ -565,7 +565,10 @@ describe('AgentClient application-run-loop execution', () => {
       { role: 'user', type: 'message', content: `protected-${'x'.repeat(5_000)}` },
     ] as any);
 
-    await expect(stream.completed).rejects.toMatchObject({ code: 'context_compaction_hard_fit' });
+    await expect(stream.completed).rejects.toMatchObject({
+      code: 'context_compaction_hard_fit',
+      message: expect.stringMatching(/\/handoff.*start a fresh session/s),
+    });
     expect(requests).toBe(0);
     instance.dispose();
   });

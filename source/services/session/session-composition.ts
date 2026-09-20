@@ -42,6 +42,7 @@ import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
+import type { ClassifiedFailure } from '../retry/retry-contracts.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
@@ -152,7 +153,7 @@ export type SessionRuntimeInternals = {
   prepareRollover: (newSessionId: string, sessionStartedAt?: string) => () => void;
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
-  breakChaining: () => void;
+  breakChaining: (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']) => void;
   compactContext: (options?: {
     signal?: AbortSignal;
     onStarted?: () => void | Promise<void>;
@@ -770,13 +771,16 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolCallMarkers,
   });
 
-  const breakChaining = (): void => {
+  const breakChaining = (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']): void => {
     providerContinuity.breakChaining();
-    logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
+    const configuredTransport = settingsService?.get('agent.transport');
+    logger.warn('Provider continuity invalidated; rebuilding from full history', {
       eventType: 'conversation.chaining_broken',
       category: 'provider',
-      phase: 'post_stream',
-      sessionId: id,
+      phase: 'retry',
+      sessionId: identity.current,
+      reason,
+      ...(configuredTransport ? { configuredTransport } : {}),
     });
   };
 

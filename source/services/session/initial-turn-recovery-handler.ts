@@ -7,7 +7,7 @@ import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy
 import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
-import type { NextRunInstruction, RecoveryState } from '../retry/retry-contracts.js';
+import type { ClassifiedFailure, NextRunInstruction, RecoveryState } from '../retry/retry-contracts.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
 import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
@@ -24,7 +24,7 @@ export type InitialTurnRecoveryResult =
   | { kind: 'stale' };
 
 export type InitialTurnRecoveryHandlerDeps = {
-  breakChaining?: () => void;
+  breakChaining?: (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']) => void;
   conversationStore: ConversationStore;
   freshStartRetriesAllowed: boolean;
   generationGuard: GenerationGuard;
@@ -169,7 +169,7 @@ export class InitialTurnRecoveryHandler {
     }
 
     if (classified.kind === 'chain_recovery') {
-      this.deps.breakChaining?.();
+      this.deps.breakChaining?.(classified.cause);
     }
 
     // model_retry (hallucination/parsing/behavior detection) is a distinct,

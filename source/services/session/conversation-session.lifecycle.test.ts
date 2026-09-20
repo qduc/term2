@@ -823,6 +823,13 @@ it('rebuilds full history instead of retrying a chained delta after Invalid prev
   recoveredStream.lastResponseId = 'resp-2';
 
   const calls: { input: unknown; opts?: any }[] = [];
+  const warnings: Array<{ message: string; fields: Record<string, unknown> }> = [];
+  const recoveryLogger = {
+    ...mockLogger,
+    warn(message: string, fields: Record<string, unknown>) {
+      warnings.push({ message, fields });
+    },
+  };
   const mockClient = createMockAgentClient({
     getProvider() {
       return 'codex';
@@ -848,12 +855,17 @@ it('rebuilds full history instead of retrying a chained delta after Invalid prev
     sessionId: 's1',
     agentClient: mockClient,
     deps: {
-      logger: mockLogger,
+      logger: recoveryLogger,
       sessionContextService,
-      settingsService: createMockSettingsService([['agent.retryAttempts', 2]]),
+      settingsService: createMockSettingsService([
+        ['agent.retryAttempts', 2],
+        ['agent.transport', 'websocket'],
+      ]),
     },
   });
   const { turnCoordinator } = bundle;
+
+  bundle.rollover('s1-after-rollover');
 
   for await (const _ of turnCoordinator.start('First message')) {
   }
@@ -868,6 +880,17 @@ it('rebuilds full history instead of retrying a chained delta after Invalid prev
   expect(Array.isArray(calls[2].input)).toBe(true);
   expect(JSON.stringify(calls[2].input)).toContain('First message');
   expect(JSON.stringify(calls[2].input)).toContain('no, you got it in reverse');
+  expect(warnings).toContainEqual({
+    message: 'Provider continuity invalidated; rebuilding from full history',
+    fields: {
+      eventType: 'conversation.chaining_broken',
+      category: 'provider',
+      phase: 'retry',
+      sessionId: 's1-after-rollover',
+      reason: 'provider_state_rejected',
+      configuredTransport: 'websocket',
+    },
+  });
 });
 
 it('aborting a streaming turn clears provider continuity and forces full history replay on the next turn', async () => {

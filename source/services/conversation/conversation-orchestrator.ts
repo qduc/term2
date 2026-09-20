@@ -1120,6 +1120,14 @@ export class ConversationOrchestrator {
       stranded.filter((entry) => entry.settlement === 'finalize').map((entry) => entry.message.id),
     );
     if (finalizeIds.size > 0) {
+      const rows = stranded
+        .filter((entry) => entry.settlement === 'finalize')
+        .map(({ message, settlement }) => ({
+          id: message.id,
+          sender: message.sender,
+          status: 'status' in message ? message.status : undefined,
+          settlement,
+        }));
       this.config.messages.setMessages((messages) =>
         messages.map((message) =>
           finalizeIds.has(message.id) ? ({ ...message, status: 'finalized' } as Message) : message,
@@ -1127,6 +1135,8 @@ export class ConversationOrchestrator {
       );
       this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
         ids: [...finalizeIds],
+        sessionId: this.config.conversationService.sessionId,
+        rows,
       });
     }
 

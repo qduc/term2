@@ -382,10 +382,11 @@ it.sequential(
 
 // Regression: each row used to render the id, provider, nickname, and
 // display name as sibling Text fields that shrank and wrapped
-// independently — at 40 cols `claude-sonnet-4-20250514 (anthropic) — Claude
-// Sonnet 4` lost the `p` in the provider and scrambled reading order, and
-// favorites/nicknames broke the row even at 80. The row is now one
-// paragraph, so wrapping can never drop characters or reorder segments.
+// independently — at 40 cols `claude-sonnet-4-20250514 (anthropic)` lost the
+// `p` in the provider and scrambled reading order, and favorites/nicknames
+// broke the row even at 80. The row is now one paragraph, so wrapping can
+// never drop characters or reorder segments. The display name is the
+// highlighted row's description, rendered at the bottom of the menu.
 const wrappingModel: ModelInfo = { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic' };
 
 for (const width of [80, 40, 24]) {
@@ -407,9 +408,9 @@ for (const width of [80, 40, 24]) {
     // Stable two-cell marker gutter on the row.
     expect(lines.some((line) => /❯ claude-sonnet/.test(line))).toBe(true);
 
-    // No dropped characters anywhere on the row: strip window chrome and
-    // all whitespace (line breaks included) and require each segment
-    // verbatim, in order.
+    // No dropped characters anywhere: strip window chrome and all
+    // whitespace (line breaks included) and require the row's segments
+    // verbatim, in order, followed by the bottom description line.
     const compacted = frame.replace(/[│╭╮╰╯─]/g, '').replace(/\s+/g, '');
     const idIdx = compacted.indexOf('claude-sonnet-4-20250514');
     const providerIdx = compacted.indexOf('(anthropic)');
@@ -447,11 +448,37 @@ it.sequential('keeps a favorited, nicknamed row on one ordered line at 80 cols',
   expect(row).toContain('★');
   expect(row).toContain('aka "sonny"');
   expect(row).toContain('(anthropic)');
-  expect(row).toContain('Claude Sonnet 4');
-  const order = ['❯', '★', 'claude-sonnet-4-20250514', 'aka "sonny"', '(anthropic)', 'Claude Sonnet 4'].map((s) =>
-    row!.indexOf(s),
-  );
+  // The display name is no longer inline on the row.
+  expect(row).not.toContain('Claude Sonnet 4');
+  const order = ['❯', '★', 'claude-sonnet-4-20250514', 'aka "sonny"', '(anthropic)'].map((s) => row!.indexOf(s));
   expect(order).toEqual([...order].sort((a, b) => a - b));
+
+  // It is the highlighted row's description, rendered at the bottom.
+  const descriptionLine = frame.split('\n').find((line) => line.trim() === 'Claude Sonnet 4');
+  expect(descriptionLine).toBeDefined();
+});
+
+it.sequential('renders the highlighted model name as a bottom description and updates it with selection', async () => {
+  const renderAt = async (selectedIndex: number) => {
+    const { lastFrame } = await renderInAct(
+      <ModelSelectionMenu
+        settingsService={createMockSettingsService()}
+        items={mockModels}
+        selectedIndex={selectedIndex}
+        query=""
+        modelTab="all"
+      />,
+    );
+    return toVisibleText(lastFrame()!);
+  };
+
+  const first = await renderAt(0);
+  expect(first.split('\n').some((line) => line.trim() === 'GPT-4o')).toBe(true);
+  expect(first.split('\n').some((line) => line.trim() === 'GPT-4 Turbo')).toBe(false);
+
+  const second = await renderAt(1);
+  expect(second.split('\n').some((line) => line.trim() === 'GPT-4 Turbo')).toBe(true);
+  expect(second.split('\n').some((line) => line.trim() === 'GPT-4o')).toBe(false);
 });
 
 it.sequential('does not render the nickname editor row on provider tabs', async () => {

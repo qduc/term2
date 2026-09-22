@@ -45,9 +45,6 @@ export {
 } from './run-code-runtime.js';
 export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
 
-/** Exact wrapped built-in and ready, collision-filtered MCP tools callable from the current run_code turn. */
-export const RUN_CODE_EXPOSED_TOOLS = Symbol.for('term2.run_code.exposedTools');
-
 const DEFAULT_TIMEOUT_MS = 120_000;
 /** Node `setTimeout` wraps delays above `2**31-1` to ~1 ms. */
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -431,11 +428,6 @@ export function createRunCodeToolDefinition(
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
-
-  Object.defineProperty(definition, RUN_CODE_EXPOSED_TOOLS, {
-    enumerable: false,
-    get: () => exposedTools(),
-  });
 
   (definition as AnyToolDefinition as RegistryBindable)[REGISTRY_BINDER] = (registry) => {
     boundRegistry = registry;

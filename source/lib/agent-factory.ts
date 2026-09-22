@@ -1,8 +1,4 @@
-import {
-  RUN_CODE_EXPOSED_TOOLS,
-  getRunCodeExecutionResult,
-  RUN_CODE_EXECUTION_RESULT,
-} from '../tools/system/run-code/run-code.js';
+import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
 import path from 'path';
 import { z } from 'zod';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
@@ -275,10 +271,8 @@ export function buildAgentTools({
       // Object spread evaluates accessors. Preserve run_code's late-bound
       // description accessor so the model receives the generated namespace
       // header after the complete wrapped registry is bound below.
-      for (const key of ['description', RUN_CODE_EXPOSED_TOOLS]) {
-        const descriptor = Object.getOwnPropertyDescriptor(definition, key);
-        if (descriptor?.get) Object.defineProperty(result, key, descriptor);
-      }
+      const descriptionDescriptor = Object.getOwnPropertyDescriptor(definition, 'description');
+      if (descriptionDescriptor?.get) Object.defineProperty(result, 'description', descriptionDescriptor);
       return result;
     });
 

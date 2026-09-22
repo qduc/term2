@@ -1,12 +1,11 @@
 import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import type { DecisionShadowObserver } from '../services/decision-shadow/decision-shadow-observer.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
 import { it, expect, vi } from 'vitest';
-import { buildToolSelectionReplayFixture } from '../services/decision-shadow/replay-fixtures.js';
-import { snapshotCallableToolCatalog } from '../services/decision-shadow/callable-tool-catalog.js';
 import { getRunCodeExecutionResult } from '../tools/system/run-code/run-code-execution.js';
 import { z } from 'zod';
 import path from 'path';
@@ -223,7 +222,6 @@ it.sequential('keeps every registered tool reachable across direct and script pa
     expect(exposedToolNames.includes(tool.name)).toBe(!RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
     expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
   }
-  expect(new Set(snapshotCallableToolCatalog(built).map((entry) => entry.name))).toEqual(new Set(rawNames));
   expect(direct).toContain('run_code');
   expect(exposedToolNames).not.toContain('run_code');
 });
@@ -1234,14 +1232,6 @@ it.sequential('preserves nested execution evidence through factory trimming and 
     shouldUseNativePatchTool: false,
     deps,
   });
-  const fixture = buildToolSelectionReplayFixture(
-    'factory-root',
-    { requestId: 'fixture', model: 'gpt-4o', tier: 'standard', chaining: false, input: ['lookup'], tools },
-    'run_code:fixture_lookup',
-  );
-  expect(fixture.evidence.tools).toEqual(
-    expect.arrayContaining([expect.objectContaining({ id: 'run_code:fixture_lookup' })]),
-  );
   const args = { code: 'return await tools.fixture_lookup({});', description: 'lookup fixture', timeout_ms: 60_000 };
   const result = await tools
     .find((tool) => tool.name === 'run_code')!
@@ -1249,9 +1239,7 @@ it.sequential('preserves nested execution evidence through factory trimming and 
   expect(getRunCodeExecutionResult(result)?.calls).toEqual(
     expect.arrayContaining([expect.objectContaining({ tool: 'fixture_lookup', outcome: 'ok' })]),
   );
-  const observer = {
-    observeToolSelectionRequest: vi.fn(),
-    observeToolSelectionOutcome: vi.fn(),
+  const observer: DecisionShadowObserver = {
     observeTerminalFailure: vi.fn(),
   };
   let calls = 0;
@@ -1272,8 +1260,6 @@ it.sequential('preserves nested execution evidence through factory trimming and 
   const stream = loop.startStream({ name: 'root', instructions: 'help', model: 'gpt-4o', tools }, 'lookup');
   await stream.completed;
 
-  expect(observer.observeToolSelectionOutcome).toHaveBeenNthCalledWith(
-    1,
-    expect.objectContaining({ outcome: 'tools', selections: [{ name: 'fixture_lookup', callPath: 'run_code' }] }),
-  );
+  expect(stream.finalOutput).toBe('done');
+  expect(observer.observeTerminalFailure).not.toHaveBeenCalled();
 });

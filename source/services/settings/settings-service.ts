@@ -296,14 +296,11 @@ export class SettingsService {
     this.registerRuntimeProviders();
 
     // Migrate legacy selected provider values (for example values with spaces)
-    // to the normalized provider id form before validation fallback runs. The
-    // normalization is recorded as a startup migration so the durable file is
-    // rewritten with the normalized identity and a fresh service restart sees it.
+    // to the normalized provider id form. The normalization is recorded as a
+    // startup migration so the durable file is rewritten with the normalized
+    // identity and a fresh service restart sees it. Values that name no
+    // registered provider are left untouched (fail loudly at first stream).
     const normalizedSelectedProviderId = this.migrateSelectedProviderId();
-
-    // Validate selected provider and fall back if invalid (without rejecting the
-    // entire settings file).
-    this.validateSelectedProvider();
 
     // Apply logging level from settings to the logging service so it respects settings
     try {
@@ -496,6 +493,11 @@ export class SettingsService {
     }
 
     if (!getProvider(normalized)) {
+      // The value is not a registered provider and not an alias of one. Keep
+      // it untouched: erasing it would hide a legitimately invalid selection
+      // (and any warning would be noise, since the real guard is the agent
+      // failing loudly at first stream with "Provider '<id>' does not expose an
+      // application streamed model").
       return false;
     }
 
@@ -506,20 +508,6 @@ export class SettingsService {
     // rewrite instead of living only in memory.
     this.startupMigrations.push(['agent.provider', normalized]);
     return true;
-  }
-
-  private validateSelectedProvider(): void {
-    const current = this.settings?.agent?.provider || 'openai';
-    if (getProvider(current)) return;
-
-    if (!this.disableLogging) {
-      this.loggingService.warn('Configured agent.provider is not registered; falling back to openai', {
-        provider: current,
-      });
-    }
-
-    this.settings.agent.provider = 'openai';
-    this.sources.set('agent.provider', 'default');
   }
 
   /**
@@ -615,7 +603,6 @@ export class SettingsService {
     }
 
     this.settings = result.data as SettingsData;
-    this.validateSelectedProvider();
   }
 
   private normalizeProfileSelection(key: string, value: unknown): void {

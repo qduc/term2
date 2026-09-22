@@ -129,11 +129,19 @@ export const useConversation = ({
   /** Optional notifier to fire desktop notifications on approval/completion events. */
   notifier?: ConversationNotifier;
 }) => {
-  const { messages, setMessages, trimMessages, appendMessages, addSystemMessage, addShellMessage, getUserMessages } =
-    useConversationMessages({
-      initialMessages,
-      maxMessageCount: MAX_MESSAGE_COUNT,
-    });
+  const {
+    messages,
+    setMessages,
+    trimMessages,
+    appendMessages,
+    addSystemMessage,
+    addDividerMessage,
+    addShellMessage,
+    getUserMessages,
+  } = useConversationMessages({
+    initialMessages,
+    maxMessageCount: MAX_MESSAGE_COUNT,
+  });
 
   const { setModel, setReasoningEffort, setTemperature } = useConversationSettings({
     conversationService,
@@ -703,6 +711,7 @@ export const useConversation = ({
     setReasoningEffort,
     setTemperature,
     addSystemMessage,
+    addDividerMessage,
     addShellMessage,
     getSubagentUsage,
     getCostSummary,

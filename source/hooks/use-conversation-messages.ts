@@ -53,6 +53,17 @@ export function useConversationMessages({
     [appendMessages],
   );
 
+  const addDividerMessage = useCallback(() => {
+    appendMessages([
+      {
+        id: createMessageId(),
+        sender: 'system',
+        text: '',
+        presentation: 'rule',
+      },
+    ]);
+  }, [appendMessages]);
+
   const addShellMessage = useCallback(
     (command: string, output: string, exitCode: number | null, timedOut: boolean) => {
       const success = !timedOut && exitCode === 0;
@@ -90,6 +101,7 @@ export function useConversationMessages({
     trimMessages,
     appendMessages,
     addSystemMessage,
+    addDividerMessage,
     addShellMessage,
     getUserMessages,
   };

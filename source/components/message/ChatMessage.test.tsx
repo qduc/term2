@@ -5,16 +5,16 @@ import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import chalk from 'chalk';
 import ChatMessage from './ChatMessage.js';
-import { COLOR_USER_BACKGROUND } from '../theme.js';
+import { COLOR_BORDER, COLOR_USER_BACKGROUND } from '../theme.js';
 
 const stripAnsi = (s: string) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
-const hexToRgbEscape = (hex: string) => {
+const hexToRgbEscape = (hex: string, code: 38 | 48 = 48) => {
   const value = hex.replace('#', '');
   const r = parseInt(value.slice(0, 2), 16);
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
-  return `\u001B[48;2;${r};${g};${b}m`;
+  return `\u001B[${code};2;${r};${g};${b}m`;
 };
 
 it('ChatMessage renders reasoning messages with Markdown formatting', async () => {
@@ -71,6 +71,72 @@ it('ChatMessage renders user messages with prompt marker', async () => {
   await act(async () => {
     unmount();
   });
+});
+
+it('ChatMessage renders a rule presentation system message as a divider', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
+
+  await act(async () => {
+    const result = render(
+      <ChatMessage
+        msg={{
+          id: 'rule-1',
+          sender: 'system',
+          text: '',
+          presentation: 'rule',
+        }}
+      />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  const frame = stripAnsi(lastFrame() || '');
+  // A divider is geometry, not text: only box-drawing characters, no prose.
+  expect(frame.trim()).toMatch(/^─+$/);
+  expect(frame.includes('─'.repeat(20))).toBe(true);
+
+  await act(async () => {
+    unmount();
+  });
+});
+
+it('ChatMessage renders rule presentation using the border color token', async () => {
+  // ink-testing-library's mock stdout disables colors at import time; raise
+  // chalk's level so the frame carries the real ANSI attributes. Level 3 keeps
+  // truecolor escapes, which the assertion below matches on.
+  const originalLevel = chalk.level;
+  chalk.level = 3;
+
+  try {
+    let lastFrame!: () => string | undefined;
+    let unmount!: () => void;
+
+    await act(async () => {
+      const result = render(
+        <ChatMessage
+          msg={{
+            id: 'rule-2',
+            sender: 'system',
+            text: '',
+            presentation: 'rule',
+          }}
+        />,
+      );
+      lastFrame = result.lastFrame;
+      unmount = result.unmount;
+    });
+
+    // Dividers are structural; they must not introduce a new color.
+    expect((lastFrame() || '').includes(hexToRgbEscape(COLOR_BORDER, 38))).toBe(true);
+
+    await act(async () => {
+      unmount();
+    });
+  } finally {
+    chalk.level = originalLevel;
+  }
 });
 
 it('ChatMessage renders user messages on a background band', async () => {

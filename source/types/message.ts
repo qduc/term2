@@ -34,6 +34,8 @@ export interface SystemMessage {
   id: string;
   sender: 'system';
   text: string;
+  /** Transcript presentation only; empty text renders as a divider rule. */
+  presentation?: 'rule';
 }
 
 export interface ReasoningMessage {

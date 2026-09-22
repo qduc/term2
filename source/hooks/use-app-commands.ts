@@ -40,6 +40,8 @@ interface UseAppCommandsProps {
   settingsService: SettingsService;
   transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
+  /** Appends a horizontal rule message; used by /retry-turn to mark a new attempt. */
+  addDividerMessage?: () => void;
   applyRuntimeSetting: (key: string, value: any) => void;
   replaceInput: (input: string) => void;
   clearConversation: () => void | Promise<void>;
@@ -86,6 +88,7 @@ export const useAppCommands = ({
   settingsService,
   transitionService,
   addSystemMessage,
+  addDividerMessage = () => undefined,
   applyRuntimeSetting,
   replaceInput,
   clearConversation,
@@ -179,7 +182,7 @@ export const useAppCommands = ({
         }),
       ),
       guardBusyTurn(createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage })),
-      guardBusyTurn(createRetryFailedTurnSlashCommand({ retryLastFailedTurn, addSystemMessage })),
+      guardBusyTurn(createRetryFailedTurnSlashCommand({ retryLastFailedTurn, addSystemMessage, addDividerMessage })),
       guardBusyTurn(createCompactSlashCommand({ compactContext, addSystemMessage })),
       createModeToggleCommand(
         'lite',

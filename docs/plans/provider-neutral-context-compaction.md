@@ -400,10 +400,17 @@ milestone without evidence that the existing estimate is unsafe.
 - Chunk at complete-turn boundaries. Each summarizer request, including the
   running summary, must remain below 50% of the compactor model's usable input
   window. For an uncatalogued model with a configured raw threshold, define
-  `fallbackUsableWindow = min(compactThresholdTokens, 64_000)` and size both
-  chunks and summary-output caps from it. This is a bound, not a claim about the
-  provider's actual limit; a rejected summary request leaves the original
-  history unchanged.
+`fallbackUsableWindow = compactThresholdTokens` and size both chunks and
+summary-output caps from it. This is a bound, not a claim about the provider's
+actual limit; a rejected summary request leaves the original history unchanged.
+The threshold is the user's own statement of the model's scale, so it is used
+directly: an earlier `min(…, 64_000)` cap shrank the plan budget below any
+realistic protected hot tail, making a `single_turn_too_large` hard-fit
+refusal the only reachable outcome once compaction triggered (observed
+2026-09-22 with `deepseek/deepseek-v4.1-flash` via a gateway and
+`compactThresholdTokens: 300000`; regression test in
+`local-context-compactor.test.ts`, "sizes the uncatalogued-model fallback
+window from the full raw-token threshold").
 - Cap each summary response. Re-estimate checkpoint + hot tail before commit;
   one bounded final reduction is allowed, then return `blocked` if it still
   does not fit.

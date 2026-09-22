@@ -538,6 +538,28 @@ it.sequential('durably normalizes the selected provider when provider records al
   });
 });
 
+it.sequential('keeps an unregistered agent.provider instead of rewriting it to openai', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    if (!fs.existsSync(settingsDir)) {
+      fs.mkdirSync(settingsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(configFile, JSON.stringify({ agent: { provider: 'not-a-real-provider' } }), 'utf-8');
+
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+
+    // The unregistered value survives: the agent fails loudly at first stream
+    // instead of having its persisted selection silently erased.
+    expect(service.get('agent.provider')).toBe('not-a-real-provider');
+
+    const untouched = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+    expect(untouched.agent.provider).toBe('not-a-real-provider');
+  });
+});
+
 it.sequential('setDynamic returns a saved settlement and a fresh service sees the durable value', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();

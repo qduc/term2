@@ -136,10 +136,27 @@ describe('parseAcpArgs', () => {
 
 describe('runAcp', () => {
   it('reports a startup failure on stderr and writes nothing to stdout', async () => {
+    // Isolate the launcher's ambient state. runAcp constructs the operator's
+    // real SettingsService (against XDG_STATE_HOME), so an invalid --provider
+    // CLI override must not touch the operator's settings/logs. Mirrors the
+    // isolation the succeeding integration test applies.
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'acp-m2-unit-')));
+    tempRoots.push(root);
+    isolateEnv({
+      XDG_STATE_HOME: path.join(root, 'state'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+    });
+
     const unknownProvider = inertIo();
     await expect(runAcp(['--provider', 'not-a-real-provider'], unknownProvider.io)).resolves.toBe(1);
     expect(unknownProvider.stderrLines.join('\n')).toContain('term2 acp: unknown provider "not-a-real-provider".');
     expect(unknownProvider.stdoutChunks).toEqual([]);
+
+    // The launcher is rejected before touching any settings persistence: no
+    // settings.json may be created in the isolated (nor the operator's real)
+    // state dir from this invalid-flag path.
+    expect(existsSync(path.join(root, 'state', 'term2-nodejs', 'settings.json'))).toBe(false);
 
     const rejectedFlag = inertIo();
     await expect(runAcp(['--auto-approve'], rejectedFlag.io)).resolves.toBe(1);

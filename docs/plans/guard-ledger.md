@@ -2223,7 +2223,7 @@ Owned by other plans — do not repair independently:
 | Interactive / runtime / role `maxTurns` | `agent.maxTurns=100`; AgentRuntime fallback `20`; roles 200 or 1 | run-budget-stall-escalation |
 | `ExecutionBudget.maxTokens` | opt-in; aborts the shared tree | run-budget-stall-escalation |
 | Identical tool failure evidence | third identical `(tool,args,error)` gets advisory text; cumulative, not consecutive; does not block execution | run-budget-stall-escalation |
-| Context compaction thresholds | ratio 0.8; optional raw-token threshold | provider-neutral-compaction |
+| Context compaction thresholds | ratio 0.8; optional raw-token threshold; uncatalogued-model fallback window = the raw threshold itself (the former `min(…, 64_000)` cap forced hard-fit refusal on any large threshold) | provider-neutral-compaction |
 | Provider stream contract throws | `ai-sdk-streamed-model.ts`, `openai-responses-model.ts`, `codex-turn-converter.ts`, etc. | tool-output-and-effect-safety, chain-settlement |
 
 Catalogued, no hypothesized failure mode:

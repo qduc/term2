@@ -381,3 +381,30 @@ it('does not trigger automatic compaction when lastCompletedInputTokens is below
   expect(outcome.kind).toBe('not_needed');
   expect(generate).not.toHaveBeenCalled();
 });
+
+it('sizes the uncatalogued-model fallback window from the full raw-token threshold', async () => {
+  // Regression: the old fallback min(compactThresholdTokens, 64_000) shrank the
+  // plan budget below any realistic hot tail, so an uncatalogued model with a
+  // large configured threshold could only ever fail with single_turn_too_large.
+  // The two-turn hot tail here (~240k serialized bytes = ~60k estimated tokens)
+  // exceeds the old capped budget (64_000 - 1_000 - reserve = 56_600 tokens)
+  // but fits the uncapped budget (300_000 - 1_000 - reserve = 269_000 tokens).
+  const generate = vi.fn().mockResolvedValue({ text: 'summary', usage: { inputTokens: 10, outputTokens: 2 } });
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: turns(4, 120_000),
+    provider: 'orca',
+    model: 'deepseek/deepseek-v4.1-flash',
+    sourceRevision: 1,
+    contextWindow: undefined,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: 300_000,
+    manual: false,
+    automaticCompactionsThisRun: 0,
+    hasCompleteNewUserTurn: true,
+    lastCompletedInputTokens: 300_000,
+  });
+
+  expect(outcome.kind).toBe('compacted');
+  expect(generate).toHaveBeenCalledTimes(1);
+});

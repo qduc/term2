@@ -245,8 +245,11 @@ export class LocalContextCompactor {
       if (deferred) return { kind: 'deferred', reason: deferred, estimate };
     }
 
-    const usableWindow =
-      input.contextWindow ?? Math.min(input.compactThresholdTokens ?? threshold.effectiveThreshold, 64_000);
+    // For an uncatalogued model the raw-token threshold is the user's own
+    // statement of the model's scale, so use it directly as the fallback
+    // window; capping it (previously at 64_000) made hard-fit refusal the
+    // only reachable outcome once the trigger fired.
+    const usableWindow = input.contextWindow ?? input.compactThresholdTokens ?? threshold.effectiveThreshold;
     const usableInputTokens = Math.max(
       1_000,
       usableWindow - (input.maxOutputTokens ?? 0) - Math.ceil(usableWindow * 0.1),

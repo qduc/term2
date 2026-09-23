@@ -14,6 +14,7 @@ import {
   MODEL_MENU_BINDINGS,
   MODEL_MENU_PROVIDER_TAB_BINDINGS,
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
+  MODEL_MENU_NICKNAME_REPLACE_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
   bindingHints,
 } from './menu-bindings.js';
@@ -111,6 +112,31 @@ it.sequential('ModelSelectionMenu swaps to the draft bindings while a nickname d
   // and must not be advertised.
   expect(output).not.toContain('Tab/←→ tab');
   expect(output).not.toContain('ctrl+n nickname');
+});
+
+it.sequential('ModelSelectionMenu offers replacement when the typed name belongs to another model', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={mockModels}
+      selectedIndex={0}
+      query=""
+      modelTab="all"
+      nicknameDraft={{
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        text: 'op',
+        error: 'Nickname "op" already names anthropic/claude-opus-4. Press Enter to use it here instead.',
+        pendingReplace: { nickname: 'op', provider: 'anthropic', modelId: 'claude-opus-4' },
+      }}
+    />,
+  );
+  const output = toVisibleText(lastFrame()!);
+  expect(output).toContain('already names anthropic/claude-opus-4');
+  for (const [key, action] of bindingHints(MODEL_MENU_NICKNAME_REPLACE_BINDINGS)) {
+    expect(output).toContain(`${key} ${action}`);
+  }
+  expect(output).not.toContain('save nickname');
 });
 
 it.sequential(

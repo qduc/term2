@@ -25,6 +25,7 @@ import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model
 import { MODEL_TAB_LABELS, MODEL_TABS, type ModelTab } from '../../services/models/model-tabs.js';
 import {
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
+  MODEL_MENU_NICKNAME_REPLACE_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
   bindingHints,
   modelMenuFooterBindings,
@@ -82,7 +83,9 @@ const ModelSelectionMenu: FC<Props> = ({
   // hint cannot drift from the behavior the owning session implements. While
   // a nickname draft is open the draft editor owns the input row and only the
   // draft bindings are advertised.
-  const footerBindings = nicknameDraft
+  const footerBindings = nicknameDraft?.pendingReplace
+    ? MODEL_MENU_NICKNAME_REPLACE_BINDINGS
+    : nicknameDraft
     ? MODEL_MENU_NICKNAME_DRAFT_BINDINGS
     : modelMenuFooterBindings({
         tabDimension: modelTab != null,
@@ -280,7 +283,9 @@ const ModelSelectionMenu: FC<Props> = ({
             <Text color={COLOR_TEXT}> {nicknameDraft.text}</Text>
             <Text color={COLOR_ACCENT}>▏</Text>
           </Box>
-          {nicknameDraft.error && <Text color={COLOR_DANGER}>{nicknameDraft.error}</Text>}
+          {nicknameDraft.error && (
+            <Text color={nicknameDraft.pendingReplace ? COLOR_WARNING : COLOR_DANGER}>{nicknameDraft.error}</Text>
+          )}
         </Box>
       )}
       {!isUnified && (error || (items.length === 0 && !loading)) && (

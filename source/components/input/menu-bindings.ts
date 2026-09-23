@@ -139,6 +139,12 @@ export const MODEL_MENU_NICKNAME_REPLACE_BINDINGS: MenuBindingTable = [
   { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
 ];
 
+/** Existing nickname cleared in the editor: Enter removes it. */
+export const MODEL_MENU_NICKNAME_DELETE_BINDINGS: MenuBindingTable = [
+  { key: '⏎', action: 'remove nickname', commands: ['accept'] },
+  { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
+];
+
 /** Model picker error/empty fallback under a legacy per-provider tab. */
 export const MODEL_MENU_PROVIDER_FALLBACK_BINDINGS: MenuBindingTable = [
   { key: '←→', action: 'switch provider', commands: ['left', 'right'] },
@@ -156,7 +162,7 @@ export const modelMenuFooterBindings = (dims: {
   tabDimension: boolean;
   /** The frame renders a legacy per-provider tab bar. */
   providerDimension: boolean;
-  /** The highlighted row can be nicknamed (Favorites or unified view). */
+  /** The highlighted row can be nicknamed (Favorites, Nicknames, or unified view). */
   nicknameAvailable: boolean;
 }): MenuBindingTable => [
   ...MODEL_MENU_CORE_BINDINGS,

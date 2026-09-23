@@ -8,12 +8,7 @@ import {
 } from '../services/models/model-catalog-session.js';
 import { getProviderIds } from '../providers/index.js';
 import { resolveProviderCredentials } from '../utils/ai/provider-credentials.js';
-import {
-  getFavoriteModelInfos,
-  isFavoriteModel,
-  serializeFavorite,
-  toggleFavoriteModel,
-} from '../services/models/model-favorites.js';
+import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../services/models/model-favorites.js';
 import {
   commitNicknameEdit,
   getNicknameEntries,
@@ -253,13 +248,15 @@ export const useStandaloneModelPicker = (deps: {
 
   useEffect(() => {
     if (!nicknameDraft) return;
+    const modelKey = serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId);
+    const stillEligible = !nicknameDraft.existingNickname || nicknameKeys.has(modelKey);
     const stillListed =
-      favoriteKeys.has(serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId)) &&
+      stillEligible &&
       filteredModels.some(
         (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
       );
     if (!stillListed) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [favoriteKeys, filteredModels, nicknameDraft]);
+  }, [filteredModels, nicknameDraft, nicknameKeys]);
 
   const typeQuery = useCallback((text: string) => {
     if (!text) return;
@@ -331,7 +328,6 @@ export const useStandaloneModelPicker = (deps: {
   const startNicknameEdit = useCallback(() => {
     const selected = getSelectedItem();
     if (!selected) return;
-    if (!isFavoriteModel(settingsService, selected.provider, selected.id)) return;
     const existing = getNicknameEntries(settingsService).find(
       (entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id,
     );
@@ -339,6 +335,7 @@ export const useStandaloneModelPicker = (deps: {
       provider: selected.provider,
       modelId: selected.id,
       text: existing?.nickname ?? '',
+      existingNickname: existing != null,
       error: null,
       pendingReplace: null,
     });

@@ -853,10 +853,14 @@ const App: FC<AppProps> = ({
     [addSystemMessage],
   );
 
-  // /clear and /quit reset the UI, so the typed command must leave the composer first.
+  // /clear, /quit and /resume reset the UI, so the typed command must leave the composer first.
   const clearConversationFromCommand = useMemo(
     () => clearInputBeforeReset({ replaceInput, waitUntilRenderFlush }, clearConversationAndRefreshBanner),
     [replaceInput, waitUntilRenderFlush, clearConversationAndRefreshBanner],
+  );
+  const resumeConversationFromUi = useMemo(
+    () => clearInputBeforeReset({ replaceInput, waitUntilRenderFlush }, resumeConversation),
+    [replaceInput, waitUntilRenderFlush, resumeConversation],
   );
   const exitFromCommand = useMemo(
     () => clearInputBeforeReset({ replaceInput, waitUntilRenderFlush }, exitWithUsage),
@@ -906,7 +910,7 @@ const App: FC<AppProps> = ({
     requestModeSwitchConfirm: setPendingModeSwitch,
     turnInFlight: isProcessing,
     listConversations: listSavedConversations,
-    resumeConversation,
+    resumeConversation: resumeConversationFromUi,
     mcpManager,
     mcpOAuthStore,
     mcpUserConfigPath,
@@ -1416,7 +1420,7 @@ const App: FC<AppProps> = ({
             onSkillSelected={handleSkillSelected}
             onCopySelection={handleCopySelection}
             listConversations={listSavedConversations}
-            resumeConversation={resumeConversation}
+            resumeConversation={resumeConversationFromUi}
             mcpManager={mcpManager ?? undefined}
             mcpConfigController={mcpConfigController}
             onSettingChange={handleSettingChange}

@@ -314,7 +314,7 @@ it.sequential('accepting /settings opens the settings successor menu', async () 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+  expect(lastFrame()).toContain('Type to search all sections');
 });
 
 it.sequential('accepting a /settings prefix opens the settings successor menu', async () => {
@@ -327,7 +327,7 @@ it.sequential('accepting a /settings prefix opens the settings successor menu', 
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+  expect(lastFrame()).toContain('Type to search all sections');
 });
 
 it.sequential('typing the /settings autocomplete trigger opens the settings menu', async () => {
@@ -338,7 +338,7 @@ it.sequential('typing the /settings autocomplete trigger opens the settings menu
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
 
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
-  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+  expect(lastFrame()).toContain('Type to search all sections');
 });
 
 it.sequential('shows the typed settings query above the filtered menu', async () => {

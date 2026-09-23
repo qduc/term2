@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Allow a failed tag-triggered release to be retried after its blocker is
+  # fixed, without moving or recreating the already-pushed release tag.
+  workflow_dispatch:
 
 # npm Trusted Publishing exchanges a short-lived OIDC token for publish
 # authentication. No npm token secret is needed.

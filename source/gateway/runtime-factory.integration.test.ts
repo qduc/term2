@@ -143,7 +143,7 @@ describe('production gateway runtime factory', () => {
     settings.set('agent.model', 'm1-scripted-model', { persist: false });
     settings.set('agent.openai.apiKey', 'launcher-secret', { persist: false });
     settings.set('shell.autoApproveMode', 'always', { persist: false });
-    settings.set('sandbox.enabled', false, { persist: false });
+    settings.set('sandbox.enabled', true, { persist: false });
     const workspace = tempRoot('m1-workspace-');
     const factory = createProductionRuntimeFactory({
       settingsAuthority: settings,

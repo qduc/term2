@@ -42,4 +42,20 @@ describe('clearInputBeforeReset', () => {
     await pending;
     expect(resetRan).toBe(true);
   });
+  it('lets the synchronous caller finish its own input handling before clearing', async () => {
+    const calls: string[] = [];
+    const reset = clearInputBeforeReset(
+      {
+        replaceInput: () => calls.push('replaceInput'),
+        waitUntilRenderFlush: async () => undefined,
+      },
+      () => undefined,
+    );
+
+    const pending = reset();
+    calls.push('caller-continues');
+    await pending;
+
+    expect(calls).toEqual(['caller-continues', 'replaceInput']);
+  });
 });

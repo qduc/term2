@@ -262,18 +262,14 @@ const modelParityOutcomes: Record<string, (api: ModelApi) => Promise<void>> = {
     });
   },
   'Tab/←→': async ({ controller, view }) => {
-    for (const command of ['tab', 'left', 'right'] as const) {
-      await dispatch(controller, { type: 'command', command });
-      // Every one of the three advertised keys advances one tab and never
-      // inserts the model id into the composer. From All that is Favorites,
-      // then Nicknames, then All again.
-      expect(view.lastFrame()).toContain('No favorites yet');
-      expect(controller.getSnapshot().editor.text).toBe('/model ');
-      await dispatch(controller, { type: 'command', command });
-      expect(view.lastFrame()).toContain('No nicknames yet');
-      await dispatch(controller, { type: 'command', command });
-      expect(view.lastFrame()).toMatch(/gpt-test/);
-    }
+    await dispatch(controller, { type: 'command', command: 'left' });
+    expect(view.lastFrame()).toContain('No nicknames yet');
+    expect(controller.getSnapshot().editor.text).toBe('/model ');
+
+    await dispatch(controller, { type: 'command', command: 'right' });
+    expect(view.lastFrame()).toMatch(/gpt-test/);
+    await dispatch(controller, { type: 'command', command: 'tab' });
+    expect(view.lastFrame()).toContain('No favorites yet');
   },
   'ctrl+n': async ({ controller, view }) => {
     await dispatch(controller, { type: 'command', command: 'nickname' });

@@ -429,6 +429,30 @@ it('a second Tab lands on the Nicknames tab', async () => {
   expect(frame).not.toContain('gpt-test');
 });
 
+it('the left arrow moves to the previous model tab', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+  expect(view.lastFrame()).toContain('All');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'left' });
+    await Promise.resolve();
+  });
+
+  expect(view.lastFrame()).toContain('Nicknames');
+  expect(view.lastFrame()).toContain('No nicknames yet');
+});
+
 it('Tab does not complete a model id into a settings-model frame', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);

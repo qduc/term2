@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelInfo } from '../model-service.js';
-import { nextModelTab, pinnedModelsForTab, selectModelsForTab } from './model-tabs.js';
+import { nextModelTab, previousModelTab, pinnedModelsForTab, selectModelsForTab } from './model-tabs.js';
 
 const favorite: ModelInfo = { id: 'fav', provider: 'openai' };
 const named: ModelInfo = { id: 'named', provider: 'openai' };
@@ -16,6 +16,14 @@ describe('nextModelTab', () => {
     expect(nextModelTab('favorites')).toBe('nicknames');
     expect(nextModelTab('nicknames')).toBe('all');
     expect(nextModelTab('all')).toBe('favorites');
+  });
+});
+
+describe('previousModelTab', () => {
+  it('moves All, then Nicknames, then Favorites, then wraps', () => {
+    expect(previousModelTab('all')).toBe('nicknames');
+    expect(previousModelTab('nicknames')).toBe('favorites');
+    expect(previousModelTab('favorites')).toBe('all');
   });
 });
 

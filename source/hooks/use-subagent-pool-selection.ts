@@ -13,7 +13,12 @@ import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unif
 import { getProviderIds } from '../providers/index.js';
 import { getFavoriteModelInfos, serializeFavorite } from '../services/models/model-favorites.js';
 import { getNicknameLabels, getNicknameModelInfos } from '../services/models/model-nicknames.js';
-import { nextModelTab, pinnedModelsForTab, selectModelsForTab } from '../services/models/model-tabs.js';
+import {
+  nextModelTab,
+  pinnedModelsForTab,
+  previousModelTab,
+  selectModelsForTab,
+} from '../services/models/model-tabs.js';
 import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
 
 export const SUBAGENT_POOL_REASONING_EFFORTS = [
@@ -675,8 +680,8 @@ export function useSubagentPoolSelection(
     setModelRefreshKey((key) => key + 1);
   }, [catalogSession, providerIds]);
 
-  const switchModelTab = useCallback(() => {
-    setModelTab((tab) => nextModelTab(tab));
+  const switchModelTab = useCallback((direction: 'previous' | 'next' = 'next') => {
+    setModelTab((tab) => (direction === 'previous' ? previousModelTab(tab) : nextModelTab(tab)));
     setModelSelectedIndex(0);
     setModelScrollOffset(0);
   }, []);

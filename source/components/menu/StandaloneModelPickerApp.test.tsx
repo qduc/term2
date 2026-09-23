@@ -237,7 +237,7 @@ it('toggling a favorite with ctrl+f persists it to settings', async () => {
   expect(settingsService.get('agent.favoriteModels')).toEqual([`${providerId}/gpt-5.4`]);
 });
 
-it('switches between All and Favorites with the horizontal arrows', async () => {
+it('Right advances and Left moves backward between model tabs', async () => {
   const settingsService = createMockSettingsService({
     'agent.provider': providerId,
     'agent.favoriteModels': [`${providerId}/gpt-5.4`],
@@ -253,11 +253,16 @@ it('switches between All and Favorites with the horizontal arrows', async () => 
   expect(lastFrame()).toContain('All');
   expect(lastFrame()).toContain('gpt-5.4-mini');
 
-  await send(stdin, '\x1b[D');
+  await send(stdin, '\x1b[C');
 
   expect(lastFrame()).toContain('Favorites');
   expect(lastFrame()).toContain('gpt-5.4');
   expect(lastFrame()).not.toContain('gpt-5.4-mini');
+
+  await send(stdin, '\x1b[D');
+
+  expect(lastFrame()).toContain('All');
+  expect(lastFrame()).toContain('gpt-5.4-mini');
 });
 
 it('does not select an item flagged unavailable', async () => {

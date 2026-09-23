@@ -99,7 +99,7 @@ export function StandaloneModelPickerApp({
     } else if ((key as { end?: boolean }).end) {
       models.moveEnd();
     } else if (key.tab || key.leftArrow || key.rightArrow) {
-      // Tab and the arrows all switch the Favorites/All tab; Tab never
+      // Tab and the arrows all advance the Favorites/Nicknames/All tab; Tab never
       // completes a model id into a buffer here.
       models.switchModelTab();
     } else if (key.ctrl && input === 'r') {

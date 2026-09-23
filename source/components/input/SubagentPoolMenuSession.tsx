@@ -54,7 +54,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
         }
 
         const editingModel = pool.phase === 'edit_model';
-        // The pool's model picker uses the unified Favorites/All model view.
+        // The pool's model picker uses the unified Favorites/Nicknames/All model view.
         // Provider is taken from the selected row rather than from a provider tab.
         if (editingModel && applyMenuEditorEvent(controller, event, { horizontal: false })) {
           return keep();
@@ -121,6 +121,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
         selectedIndex={pool.modelSelectedIndex}
         query={pool.modelQuery}
         modelTab={pool.modelTab}
+        nicknameLabels={pool.nicknameLabels}
         loading={pool.modelLoading}
         error={pool.modelError}
         scrollOffset={pool.modelScrollOffset}

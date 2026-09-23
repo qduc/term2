@@ -90,7 +90,8 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           }
         }
 
-        // Tab and the horizontal arrows all switch the Favorites/All tab. Tab
+        // Tab and the horizontal arrows all advance the Favorites/Nicknames/All
+        // tab. Tab
         // deliberately does not complete the highlighted model id into the
         // composer: it is the user's key for moving between tabs, and Enter
         // already selects.

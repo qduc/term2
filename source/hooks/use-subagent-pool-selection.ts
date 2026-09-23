@@ -12,6 +12,8 @@ import type { MenuEffect } from '../components/input/menu-types.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import { getProviderIds } from '../providers/index.js';
 import { getFavoriteModelInfos, serializeFavorite } from '../services/models/model-favorites.js';
+import { getNicknameLabels, getNicknameModelInfos } from '../services/models/model-nicknames.js';
+import { nextModelTab, pinnedModelsForTab, selectModelsForTab } from '../services/models/model-tabs.js';
 import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
 
 export const SUBAGENT_POOL_REASONING_EFFORTS = [
@@ -234,7 +236,7 @@ export function useSubagentPoolSelection(
   const [modelSelectedIndex, setModelSelectedIndex] = useState(0);
   const [modelScrollOffset, setModelScrollOffset] = useState(0);
   const [modelRefreshKey, setModelRefreshKey] = useState(0);
-  const [modelTab, setModelTab] = useState<'favorites' | 'all'>('all');
+  const [modelTab, setModelTab] = useState<'favorites' | 'nicknames' | 'all'>('all');
   const [browsingProvider, setBrowsingProvider] = useState<string | null>(null);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
@@ -256,25 +258,29 @@ export function useSubagentPoolSelection(
     () => new Set(favoriteModels.map((model) => serializeFavorite(model.provider, model.id))),
     [favoriteModels],
   );
+  const nicknameModels = useMemo(() => getNicknameModelInfos(settingsService), [settingsService, modelRefreshKey]);
+  const nicknameKeys = useMemo(
+    () => new Set(nicknameModels.map((model) => serializeFavorite(model.provider, model.id))),
+    [nicknameModels],
+  );
+  const nicknameLabels = useMemo(() => getNicknameLabels(settingsService), [settingsService, modelRefreshKey]);
   const modelItems = useMemo(() => {
-    const unified = mergeUnifiedModels(providerIds, catalogs, favoriteModels);
+    const unified = mergeUnifiedModels(
+      providerIds,
+      catalogs,
+      pinnedModelsForTab(modelTab, favoriteModels, nicknameModels),
+    );
     return mergeSubagentPoolModels({
       catalogModels: unified,
       entries,
       provider: fallbackModelProvider,
       currentModel: draft?.model ?? '',
     });
-  }, [catalogs, draft?.model, entries, fallbackModelProvider, favoriteModels, providerIds]);
+  }, [catalogs, draft?.model, entries, fallbackModelProvider, favoriteModels, modelTab, nicknameModels, providerIds]);
   const filteredModels = useMemo(
     () =>
-      filterUnifiedModels(
-        modelTab === 'favorites'
-          ? modelItems.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
-          : modelItems,
-        input,
-        undefined,
-      ),
-    [favoriteKeys, input, modelItems, modelTab],
+      filterUnifiedModels(selectModelsForTab(modelItems, modelTab, { favoriteKeys, nicknameKeys }), input, undefined),
+    [favoriteKeys, input, modelItems, modelTab, nicknameKeys],
   );
 
   const activeItems = useMemo<SubagentPoolMenuItem[]>(() => {
@@ -670,7 +676,7 @@ export function useSubagentPoolSelection(
   }, [catalogSession, providerIds]);
 
   const switchModelTab = useCallback(() => {
-    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setModelTab((tab) => nextModelTab(tab));
     setModelSelectedIndex(0);
     setModelScrollOffset(0);
   }, []);
@@ -753,6 +759,7 @@ export function useSubagentPoolSelection(
     fieldErrors,
     modelProvider,
     modelTab,
+    nicknameLabels,
     modelQuery: input,
     filteredModels,
     modelLoading,

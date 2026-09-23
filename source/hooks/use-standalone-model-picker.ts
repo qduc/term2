@@ -14,11 +14,15 @@ import {
   serializeFavorite,
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
-import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../services/models/model-nicknames.js';
+import {
+  getNicknameEntries,
+  getNicknameLabels,
+  getNicknameModelInfos,
+  setNicknameTarget,
+} from '../services/models/model-nicknames.js';
+import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import type { NicknameDraftState } from './use-model-selection.js';
-
-type ModelTab = 'favorites' | 'all';
 
 /**
  * Drives `ModelSelectionMenu` outside the composer's autocomplete machinery
@@ -81,6 +85,15 @@ export const useStandaloneModelPicker = (deps: {
     () => getNicknameLabels(settingsService),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [settingsService, nicknamesRevision],
+  );
+  const nicknameModelInfos = useMemo(
+    () => getNicknameModelInfos(settingsService),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision],
+  );
+  const nicknameKeys = useMemo(
+    () => new Set(nicknameModelInfos.map((model) => serializeFavorite(model.provider, model.id))),
+    [nicknameModelInfos],
   );
 
   useEffect(() => {
@@ -171,14 +184,24 @@ export const useStandaloneModelPicker = (deps: {
     const source = mergeUnifiedModels(
       providerIds,
       catalogs,
-      lockProvider ? [] : [...favoriteModelInfos, ...unavailableConfigured],
+      lockProvider
+        ? []
+        : [...pinnedModelsForTab(modelTab, favoriteModelInfos, nicknameModelInfos), ...unavailableConfigured],
     );
-    const tabModels =
-      modelTab === 'favorites' && !lockProvider
-        ? source.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
-        : source;
+    const tabModels = lockProvider ? source : selectModelsForTab(source, modelTab, { favoriteKeys, nicknameKeys });
     return filterUnifiedModels(tabModels, query);
-  }, [providerIds, catalogs, lockProvider, favoriteModelInfos, favoriteKeys, modelTab, query, settingsService]);
+  }, [
+    providerIds,
+    catalogs,
+    lockProvider,
+    favoriteModelInfos,
+    nicknameModelInfos,
+    favoriteKeys,
+    nicknameKeys,
+    modelTab,
+    query,
+    settingsService,
+  ]);
   const filteredModelsRef = useRef(filteredModels);
   const selectedIndexRef = useRef(selectedIndex);
   filteredModelsRef.current = filteredModels;
@@ -258,7 +281,7 @@ export const useStandaloneModelPicker = (deps: {
   const switchModelTab = useCallback(() => {
     if (lockProvider) return;
     shouldPreselectRef.current = false;
-    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setModelTab((tab) => nextModelTab(tab));
     setSelectedIndex(0);
     setScrollOffset(0);
   }, [lockProvider]);

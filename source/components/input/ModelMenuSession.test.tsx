@@ -393,6 +393,42 @@ it('Tab switches the Favorites/All tab instead of inserting the model id', async
   expect(view.lastFrame()).toContain('No favorites yet');
 });
 
+it('a second Tab lands on the Nicknames tab', async () => {
+  const intentHost = vi.fn();
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({
+    'agent.provider': providerId,
+    'agent.modelNicknames': { op: `${providerId}/offline-named` },
+  });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().editor.text).toBe('/model ');
+  expect(intentHost).not.toHaveBeenCalled();
+  const frame = view.lastFrame() ?? '';
+  expect(frame).toContain('offline-named');
+  expect(frame).toContain('aka "op"');
+  expect(frame).not.toContain('gpt-test');
+});
+
 it('Tab does not complete a model id into a settings-model frame', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);

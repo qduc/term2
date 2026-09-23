@@ -85,7 +85,7 @@ export const SLASH_MENU_BINDINGS: MenuBindingTable = [
 /**
  * Model picker list-footer segments, in advertised order. Owned by
  * ModelMenuSession's interaction while no nickname draft is open;
- * MODEL_MENU_BINDINGS is the unified (Favorites/All) composition.
+ * MODEL_MENU_BINDINGS is the unified (Favorites/Nicknames/All) composition.
  */
 const MODEL_MENU_CORE_BINDINGS: MenuBindingTable = [
   { key: '↑↓', action: 'navigate', commands: ['move'] },
@@ -98,7 +98,7 @@ const MODEL_MENU_TAB_BINDINGS: MenuBindingTable = [
     action: 'tab',
     commands: ['tab', 'left', 'right'],
     rationale:
-      'User decision f106ddd1 (2026-09-11): Tab switches the Favorites/All tab and never completes the highlighted model id into the composer; Enter is the only selection key.',
+      'User decision f106ddd1 (2026-09-11): Tab switches model-picker tabs and never completes the highlighted model id into the composer; Enter is the only selection key. The tabs are Favorites, Nicknames, and All.',
   },
 ];
 
@@ -146,7 +146,7 @@ export const MODEL_MENU_PROVIDER_FALLBACK_BINDINGS: MenuBindingTable = [
  * MODEL_MENU_NICKNAME_DRAFT_BINDINGS instead and does not call this.
  */
 export const modelMenuFooterBindings = (dims: {
-  /** The frame renders the Favorites/All tab switcher (unified mode). */
+  /** The frame renders the Favorites/Nicknames/All tab switcher (unified mode). */
   tabDimension: boolean;
   /** The frame renders a legacy per-provider tab bar. */
   providerDimension: boolean;

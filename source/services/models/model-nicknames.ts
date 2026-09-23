@@ -1,3 +1,4 @@
+import type { ModelInfo } from '../model-service.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import { parseFavoriteEntry, serializeFavorite, FAVORITES_TAB_ID } from './model-favorites.js';
 import { stripReasoningEffortSuffix, type ModelSettingsReasoningEffort } from './reasoning-effort.js';
@@ -91,6 +92,24 @@ export function getNicknameLabels(settingsService: ISettingsService): Map<string
     labels.set(serializeFavorite(entry.provider, entry.modelId), entry.nickname);
   }
   return labels;
+}
+
+/**
+ * Nickname targets as model rows (id + home provider only), one per model,
+ * in settings order. Two names for the same model collapse to the first.
+ * Reads settings only: no catalog fetch. The Nicknames tab uses these rows
+ * the same way the Favorites tab uses `getFavoriteModelInfos`.
+ */
+export function getNicknameModelInfos(settingsService: ISettingsService): ModelInfo[] {
+  const seen = new Set<string>();
+  const models: ModelInfo[] = [];
+  for (const entry of getNicknameEntries(settingsService)) {
+    const key = serializeFavorite(entry.provider, entry.modelId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    models.push({ id: entry.modelId, provider: entry.provider });
+  }
+  return models;
 }
 
 export type NicknameValidation = { ok: true; nickname: string } | { ok: false; error: string };

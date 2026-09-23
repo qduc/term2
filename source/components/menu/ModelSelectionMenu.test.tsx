@@ -71,7 +71,7 @@ it.sequential('ModelSelectionMenu renders the All tab and a unified list with th
   );
   const output = lastFrame();
   expect(output?.includes('gpt-4o')).toBe(true);
-  expect(output?.includes('GPT-4o')).toBe(true);
+  expect(output?.includes('GPT-4o')).toBe(false);
   expect(output?.includes('gpt-4-turbo')).toBe(true);
   expect(output?.includes('claude-3-opus')).toBe(true);
   expect(output?.includes('(openai)')).toBe(true);
@@ -440,16 +440,14 @@ for (const width of [80, 40, 24]) {
 
     // No dropped characters anywhere: strip window chrome and all
     // whitespace (line breaks included) and require the row's segments
-    // verbatim, in order, followed by the bottom description line.
+    // verbatim, in order, without appending the model description.
     const compacted = frame.replace(/[│╭╮╰╯─]/g, '').replace(/\s+/g, '');
     const idIdx = compacted.indexOf('claude-sonnet-4-20250514');
     const providerIdx = compacted.indexOf('(anthropic)');
-    const nameIdx = compacted.indexOf('ClaudeSonnet4');
     expect(idIdx).toBeGreaterThanOrEqual(0);
     expect(providerIdx).toBeGreaterThanOrEqual(0);
-    expect(nameIdx).toBeGreaterThanOrEqual(0);
     expect(providerIdx).toBeGreaterThan(idIdx);
-    expect(nameIdx).toBeGreaterThan(providerIdx);
+    expect(frame).not.toContain('Claude Sonnet 4');
 
     for (const line of lines) {
       expect(line.length).toBeLessThanOrEqual(width);
@@ -483,12 +481,10 @@ it.sequential('keeps a favorited, nicknamed row on one ordered line at 80 cols',
   const order = ['❯', '★', 'claude-sonnet-4-20250514', 'aka "sonny"', '(anthropic)'].map((s) => row!.indexOf(s));
   expect(order).toEqual([...order].sort((a, b) => a - b));
 
-  // It is the highlighted row's description, rendered at the bottom.
-  const descriptionLine = frame.split('\n').find((line) => line.trim() === 'Claude Sonnet 4');
-  expect(descriptionLine).toBeDefined();
+  expect(frame).not.toContain('Claude Sonnet 4');
 });
 
-it.sequential('renders the highlighted model name as a bottom description and updates it with selection', async () => {
+it.sequential('does not render model descriptions when selection changes', async () => {
   const renderAt = async (selectedIndex: number) => {
     const { lastFrame } = await renderInAct(
       <ModelSelectionMenu
@@ -503,12 +499,12 @@ it.sequential('renders the highlighted model name as a bottom description and up
   };
 
   const first = await renderAt(0);
-  expect(first.split('\n').some((line) => line.trim() === 'GPT-4o')).toBe(true);
-  expect(first.split('\n').some((line) => line.trim() === 'GPT-4 Turbo')).toBe(false);
+  expect(first).not.toContain('GPT-4o');
+  expect(first).not.toContain('GPT-4 Turbo');
 
   const second = await renderAt(1);
-  expect(second.split('\n').some((line) => line.trim() === 'GPT-4 Turbo')).toBe(true);
-  expect(second.split('\n').some((line) => line.trim() === 'GPT-4o')).toBe(false);
+  expect(second).not.toContain('GPT-4 Turbo');
+  expect(second).not.toContain('GPT-4o');
 });
 
 it.sequential('does not render the nickname editor row on provider tabs', async () => {

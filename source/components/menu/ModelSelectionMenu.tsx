@@ -92,7 +92,6 @@ const ModelSelectionMenu: FC<Props> = ({
         providerDimension: !isUnified,
         nicknameAvailable: isFavoritesTab || isUnified,
       });
-  const selectedItem = items[selectedIndex];
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
@@ -220,16 +219,7 @@ const ModelSelectionMenu: FC<Props> = ({
             <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>
           )
         }
-        footer={
-          <Box flexDirection="column">
-            {selectedItem?.name && (
-              <Text color={COLOR_ACCENT} italic>
-                {selectedItem.name}
-              </Text>
-            )}
-            <MenuFooter hints={bindingHints(footerBindings)} />
-          </Box>
-        }
+        footer={<MenuFooter hints={bindingHints(footerBindings)} />}
         footerOutsideBorder={true}
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => {
           const isFavorited = favoriteKeys.has(serializeFavorite(item.provider, item.id));

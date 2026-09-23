@@ -1188,7 +1188,7 @@ it.sequential(
     await flush();
 
     expect(hook!.phase).toBe('wizard_key');
-    expect(inputVal, 'input should be populated with current apiKey').toBe('secret-key');
+    expect(inputVal, 'API key input should start blank').toBe('');
 
     await act(async () => {
       renderer.unmount();
@@ -1196,7 +1196,7 @@ it.sequential(
   },
 );
 
-it.sequential('useProviderSelection - editing a field populates input and moves cursor to end', async () => {
+it.sequential('useProviderSelection - editing fields populates non-secret input and leaves API key blank', async () => {
   const customProviders = [
     { name: 'my-provider', type: 'openai-compatible', baseUrl: 'http://example.com/v1', apiKey: 'secret-key' },
   ];
@@ -1302,8 +1302,8 @@ it.sequential('useProviderSelection - editing a field populates input and moves 
   });
   await flush();
   expect(hook!.phase).toBe('wizard_key');
-  expect(inputVal).toBe('secret-key');
-  expect(cursorVal, 'cursor should be at end of apiKey').toBe('secret-key'.length);
+  expect(inputVal, 'API key input should start blank').toBe('');
+  expect(cursorVal, 'cursor should start at the beginning of the blank API key input').toBe(0);
 
   await act(async () => {
     renderer.unmount();

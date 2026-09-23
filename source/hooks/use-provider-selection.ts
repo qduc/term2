@@ -377,7 +377,7 @@ export const useProviderSelection = (
           if (!provider.hasCredentials) {
             setPhase('wizard_key');
             setSelectedIndex(0);
-            replaceInput(storedKey);
+            replaceInput('');
           } else {
             setPhase('edit_fields');
             setSelectedIndex(0);
@@ -401,7 +401,7 @@ export const useProviderSelection = (
           if (!provider.hasCredentials) {
             setPhase('wizard_key');
             setSelectedIndex(0);
-            replaceInput(storedKey);
+            replaceInput('');
           } else {
             setPhase('edit_fields');
             setSelectedIndex(2);
@@ -457,7 +457,7 @@ export const useProviderSelection = (
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
-          replaceInput(draft.apiKey || '');
+          replaceInput('');
         } else if (index === 3) {
           toggleEditingProviderDisabled();
         } else if (index === 4) {
@@ -497,7 +497,7 @@ export const useProviderSelection = (
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
-          replaceInput(draft.apiKey || '');
+          replaceInput('');
         } else if (index === 4) {
           toggleEditingProviderDisabled();
         } else if (index === 5) {

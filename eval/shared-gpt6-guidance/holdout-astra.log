@@ -1,0 +1,4 @@
+Already up to date
+Done in 423ms using pnpm v11.7.0
+{"type":"wire-request","model":"gpt-6-astra","reasoning":{"effort":"low"},"inputItems":5,"instructionChars":11317}
+{"model":"gpt-6-astra","provider":"codex","case":"skill-conflict","error":"Error: Connection error.","elapsedMs":584}

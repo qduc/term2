@@ -3,7 +3,8 @@ import { stripSteeringNotice, withSteeringNotice } from './steering-notice.js';
 
 it('steering distinguishes side questions, added constraints, replacement, and queued tasks', () => {
   const text = withSteeringNotice('How far along are you?');
-  expect(text).toContain('answer briefly, then resume the active task');
+  expect(text).toContain('before your next tool call');
+  expect(text).toContain('continue the pending work in the same response');
   expect(text).toContain('Incorporate corrections and new constraints');
   expect(text).toContain('pauses, cancels, or replaces');
   expect(text).toContain('unrelated task');
@@ -24,4 +25,12 @@ it('still strips the original notice from saved conversation messages', () => {
 
 it('leaves ordinary user messages unchanged', () => {
   expect(stripSteeringNotice('No steering notice here.')).toBe('No steering notice here.');
+});
+
+it('strips the previous status-aware notice from saved conversation messages', () => {
+  const previous = `[Steering message: the user sent this while you were working, so it arrives mid-turn rather than as a new turn.
+- For status or side questions, answer briefly, then resume the active task.
+- Incorporate corrections and new constraints while preserving the active objective, unless the user explicitly pauses, cancels, or replaces it. Drop only superseded work.
+- For an unrelated task, acknowledge it, finish the active task, then handle it unless the user explicitly changes priority.]`;
+  expect(stripSteeringNotice(`${previous}\n\nWhat is done so far?`)).toBe('What is done so far?');
 });

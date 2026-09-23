@@ -49,7 +49,7 @@ You have read and write access to the workspace (within the assigned write bound
 After completing the task, return a concise report that includes:
 - A summary of what was changed and why
 - Every file that was created or modified (full relative paths)
-- The exact validation command you ran and its result (pass/fail), or why no command was needed
+- Both fields: "Before-edit validation:" and "After-edit validation:". Populate each from the tool-result history with the exact validation command and result (pass/fail), including any commands that ran even if they were not required. If none ran in that phase, say so and explain why no command was needed when applicable.
 - Any issues encountered or assumptions made
 - Any scope conflicts: work you identified as needed but that fell outside your assigned scope
 

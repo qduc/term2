@@ -1,0 +1,180 @@
+[
+  {
+    "log": "baseline-astra-repeat.log",
+    "completed": 17,
+    "accepted": 17,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 84.409,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "baseline-astra.log",
+    "completed": 3,
+    "accepted": 3,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 23.438,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "baseline-luna-repeat.log",
+    "completed": 5,
+    "accepted": 3,
+    "manualFailures": [
+      {
+        "round": 1,
+        "case": "skill-conflict",
+        "reason": "wrong tool or redundant permission"
+      },
+      {
+        "round": 1,
+        "case": "status-continues-task",
+        "reason": "missing status answer"
+      }
+    ],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 15.148,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "baseline-luna.log",
+    "completed": 0,
+    "accepted": 0,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 0.606,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "baseline-sol.log",
+    "completed": 24,
+    "accepted": 24,
+    "manualFailures": [],
+    "connectionErrors": 0,
+    "summedRequestSeconds": 114.574,
+    "exitCode": 0,
+    "timedOut": false
+  },
+  {
+    "log": "candidate-astra-repeat.log",
+    "completed": 9,
+    "accepted": 9,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 42.091,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "candidate-astra.log",
+    "completed": 5,
+    "accepted": 5,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 23.722,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "candidate-luna-repeat.log",
+    "completed": 24,
+    "accepted": 24,
+    "manualFailures": [],
+    "connectionErrors": 0,
+    "summedRequestSeconds": 74.112,
+    "exitCode": 0,
+    "timedOut": false
+  },
+  {
+    "log": "candidate-luna.log",
+    "completed": 0,
+    "accepted": 0,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 0.61,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "candidate-sol.log",
+    "completed": 24,
+    "accepted": 24,
+    "manualFailures": [],
+    "connectionErrors": 0,
+    "summedRequestSeconds": 128.125,
+    "exitCode": 0,
+    "timedOut": false
+  },
+  {
+    "log": "holdout-astra-repeat.log",
+    "completed": 8,
+    "accepted": 8,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 43.169,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "holdout-astra.log",
+    "completed": 0,
+    "accepted": 0,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 0.584,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "holdout-luna-repeat.log",
+    "completed": 9,
+    "accepted": 7,
+    "manualFailures": [
+      {
+        "round": 1,
+        "case": "skill-conflict",
+        "reason": "wrong tool or redundant permission"
+      },
+      {
+        "round": 3,
+        "case": "skill-conflict",
+        "reason": "wrong tool or redundant permission"
+      }
+    ],
+    "connectionErrors": 0,
+    "summedRequestSeconds": 42.498,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "holdout-luna.log",
+    "completed": 1,
+    "accepted": 0,
+    "manualFailures": [
+      {
+        "round": 1,
+        "case": "skill-conflict",
+        "reason": "wrong tool or redundant permission"
+      }
+    ],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 3.868,
+    "exitCode": 1,
+    "timedOut": false
+  },
+  {
+    "log": "holdout-sol.log",
+    "completed": 6,
+    "accepted": 6,
+    "manualFailures": [],
+    "connectionErrors": 1,
+    "summedRequestSeconds": 27.613,
+    "exitCode": 1,
+    "timedOut": false
+  }
+]

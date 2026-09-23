@@ -110,9 +110,8 @@ it.each(promptCases)('execution subagent prompt selects the $title base profile 
   expect(constructedAgent.instructions.includes(c.roleOpener)).toBe(true);
   expect(constructedAgent.instructions.includes('## Worktree Hygiene')).toBe(true);
   expect(constructedAgent.instructions.includes('## Available Tool Guidance')).toBe(true);
-  expect(constructedAgent.instructions).toContain(
-    "The user's explicit instructions take precedence over guidelines in skills",
-  );
+  expect(constructedAgent.instructions).toContain('Explicit user instructions override conflicting skill instructions');
+  expect(constructedAgent.instructions).toContain('skills phrased as mandatory requirements');
   expect(constructedAgent.instructions).toContain('report to the parent agent');
   expect(constructedAgent.instructions).toContain('quote the relevant instruction');
   expect(constructedAgent.instructions).toContain('does not override harness safety rules');

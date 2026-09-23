@@ -22,6 +22,13 @@ it('worker prompt notes that validation and diff stat are auto-captured', () => 
   expect(lower).toContain('do not need to paste the full output');
 });
 
+it('worker report distinguishes recorded checks before and after the edit', () => {
+  expect(workerPrompt).toContain('Before-edit validation:');
+  expect(workerPrompt).toContain('After-edit validation:');
+  expect(workerPrompt).toContain('tool-result history');
+  expect(workerPrompt).toContain('even if they were not required');
+});
+
 it('worker prompt mentions that shell-driven edits may not appear in diff stat', () => {
   const lower = workerPrompt.toLowerCase();
   expect(lower).toContain('shell-driven edits');

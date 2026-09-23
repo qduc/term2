@@ -1,3 +1,22 @@
+## [0.26.0] - 2026-09-23
+
+### Features
+- Added an experimental ACP v2 adapter and `term2 acp` stdio launcher, including persistent sessions, permission requests, and writable-session support.
+- Added a human-led Pair profile and opt-in approval-decision shadow review.
+- Model pickers now support nicknames, including managing and moving nicknames between models.
+
+### Bug Fixes
+- Improved ACP permission enforcement, session persistence, and teardown reliability.
+- Fixed settings being rewritten to use the OpenAI provider when an unregistered provider was configured.
+- Improved recovery guidance for context hard-fit and reporting of provider continuity recovery.
+- Removed the 64K cap on compaction fallback windows for uncatalogued models.
+- Fixed composer text being retained across `/clear`, `/quit`, and `/resume`.
+
+### Improvements
+- Improved model-picker descriptions, directional tab navigation, and `/retry-turn` output.
+- Improved decision-shadow failure diagnostics and live approval routing.
+- Added `term2 acp` and Web Gateway API documentation.
+
 ## [0.25.0] - 2026-09-18
 
 ### Features

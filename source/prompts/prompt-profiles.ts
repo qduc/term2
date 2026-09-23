@@ -14,10 +14,10 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     matches: ({ liteMode }) => liteMode,
   },
   {
-    id: 'gpt-6-astra',
+    id: 'gpt-6',
     basePromptFile: 'gpt-5.6.md',
-    fragmentFiles: ['fragments/gpt-6-astra.md'],
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-6-astra'),
+    fragmentFiles: ['fragments/gpt-6.md', 'fragments/skill-instruction-conflicts.md'],
+    matches: ({ normalizedModel }) => /gpt-6-(astra|sol|luna)(?:$|[-:])/.test(normalizedModel),
   },
   {
     id: 'anthropic',

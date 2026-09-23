@@ -5,9 +5,14 @@ import { it, expect } from 'vitest';
 const workerPrompt = fs.readFileSync(path.join(import.meta.dirname, 'worker.md'), 'utf-8');
 const explorerPrompt = fs.readFileSync(path.join(import.meta.dirname, 'explorer.md'), 'utf-8');
 
-it('worker prompt still requires running a validation command', () => {
+it('worker prompt scales validation to behavioral impact while retaining required checks', () => {
   const lower = workerPrompt.toLowerCase();
   expect(lower).toContain('validation command');
+  expect(lower).toContain('project-required checks');
+  expect(lower).toContain('for inert changes such as docs or comments');
+  expect(lower).toContain('diff review is sufficient');
+  expect(lower).toContain('why no command was needed');
+  expect(lower).not.toContain('you still need to run a validation command');
 });
 
 it('worker prompt notes that validation and diff stat are auto-captured', () => {

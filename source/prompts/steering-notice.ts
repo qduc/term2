@@ -4,11 +4,17 @@
  *
  * Without it the model reads an unannounced user message between a tool result
  * and its next action, and cannot tell whether it has been redirected or simply
- * handed the next task. The notice states both readings and what to do with
- * each. It is stripped from the message before the app displays or rewinds to
+ * handed a side question or the next task. The notice preserves the active
+ * objective unless explicitly replaced. It is stripped before the app displays or rewinds to
  * that turn, so only the user's own words are ever shown back to them.
  */
 export const STEERING_NOTICE = `[Steering message: the user sent this while you were working, so it arrives mid-turn rather than as a new turn.
+- For status or side questions, answer briefly, then resume the active task.
+- Incorporate corrections and new constraints while preserving the active objective, unless the user explicitly pauses, cancels, or replaces it. Drop only superseded work.
+- For an unrelated task, acknowledge it, finish the active task, then handle it unless the user explicitly changes priority.]`;
+
+// Saved conversations can still contain the original notice.
+const LEGACY_STEERING_NOTICE = `[Steering message: the user sent this while you were working, so it arrives mid-turn rather than as a new turn.
 - If it changes what you should be doing, change direction now and drop the superseded plan.
 - If it does not bear on the work in progress, treat it as the next task rather than an interruption: acknowledge it, finish what you are doing, and handle it after.]`;
 
@@ -19,6 +25,6 @@ export function withSteeringNotice(text: string): string {
 
 /** Recover the user's own words from a steering message, if it is one. */
 export function stripSteeringNotice(text: string): string {
-  if (!text.startsWith(STEERING_NOTICE)) return text;
-  return text.slice(STEERING_NOTICE.length).replace(/^\n+/, '');
+  const notice = [STEERING_NOTICE, LEGACY_STEERING_NOTICE].find((prefix) => text.startsWith(prefix));
+  return notice ? text.slice(notice.length).replace(/^\n+/, '') : text;
 }

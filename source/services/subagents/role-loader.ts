@@ -246,6 +246,7 @@ export function buildInstructions(
 
   return [
     modelPrompt,
+    resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
     worktreeHygiene,
     definition.instructions,
     memoryCapability.guidance,

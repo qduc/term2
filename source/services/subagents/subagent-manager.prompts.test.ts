@@ -64,9 +64,18 @@ const promptCases: PromptCase[] = [
     title: 'gpt-5-family explorer',
     model: 'gpt-5',
     role: 'explorer',
-    familyMarker: 'nested GPT-5-family subagent',
+    familyMarker: 'nested GPT-family subagent',
     roleOpener: 'You are an explorer subagent.',
   },
+  ...['gpt-6-astra', 'gpt-6-sol', 'openai/gpt-6-luna'].map(
+    (model): PromptCase => ({
+      title: `${model} worker`,
+      model,
+      role: 'worker',
+      familyMarker: 'nested GPT-family subagent',
+      roleOpener: 'You are a worker subagent.',
+    }),
+  ),
 ];
 
 it.each(promptCases)('execution subagent prompt selects the $title base profile and role instructions', async (c) => {
@@ -101,6 +110,12 @@ it.each(promptCases)('execution subagent prompt selects the $title base profile 
   expect(constructedAgent.instructions.includes(c.roleOpener)).toBe(true);
   expect(constructedAgent.instructions.includes('## Worktree Hygiene')).toBe(true);
   expect(constructedAgent.instructions.includes('## Available Tool Guidance')).toBe(true);
+  expect(constructedAgent.instructions).toContain(
+    "The user's explicit instructions take precedence over guidelines in skills",
+  );
+  expect(constructedAgent.instructions).toContain('report to the parent agent');
+  expect(constructedAgent.instructions).toContain('quote the relevant instruction');
+  expect(constructedAgent.instructions).toContain('does not override harness safety rules');
 
   const familyIdx = constructedAgent.instructions.indexOf(c.familyMarker);
   const roleIdx = constructedAgent.instructions.indexOf(c.roleOpener);

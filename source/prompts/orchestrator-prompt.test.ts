@@ -80,11 +80,14 @@ it('orchestrator prompt instructs checking structured evidence (validation/diffS
   expect(lower).toContain('before trusting');
 });
 
-it('orchestrator prompt says to ask the worker to run validation when it is absent', () => {
+it('orchestrator requires missing validation only for behavioral changes or project requirements', () => {
   const lower = orchestratorPrompt.toLowerCase();
 
-  expect(lower).toContain('is absent');
+  expect(lower).toContain('when validation is required and');
   expect(lower).toContain('ask it to run one');
+  expect(lower).toContain('project-required checks');
+  expect(lower).toContain('for inert changes such as docs or comments, the diff/commit is sufficient');
+  expect(lower).not.toContain('if `validation` is absent,');
 });
 
 it('orchestrator prompt gives bounded, honest steering and cancellation guidance', () => {

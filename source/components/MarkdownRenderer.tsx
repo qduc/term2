@@ -93,10 +93,97 @@ const TABLE_TERMINAL_WRAP_SLACK = 1;
 const makeLine = (widths: number[], char: string, joiner: string, left = '', right = ''): string =>
   left + widths.map((w) => char.repeat(w)).join(joiner) + right;
 
+// Cell text flattened to per-character styles, so wrapping and sizing can work
+// on the rendered text while each wrapped line keeps its inline formatting.
+interface CellStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  color?: string;
+  backgroundColor?: string;
+}
+
+interface StyledChar {
+  char: string;
+  style: CellStyle;
+}
+
+interface StyledCell {
+  text: string;
+  chars: StyledChar[];
+}
+
+const flattenInlineTokens = (tokens: any[] | undefined, style: CellStyle, out: StyledChar[]): void => {
+  const push = (text: string, charStyle: CellStyle) => {
+    for (const char of text) {
+      out.push({ char, style: charStyle });
+    }
+  };
+
+  for (const token of tokens ?? []) {
+    switch (token.type) {
+      case 'text':
+      case 'escape':
+        if (token.tokens) {
+          flattenInlineTokens(token.tokens, style, out);
+        } else {
+          push(token.text, style);
+        }
+        break;
+      case 'strong':
+        flattenInlineTokens(token.tokens, { ...style, bold: true }, out);
+        break;
+      case 'em':
+        flattenInlineTokens(token.tokens, { ...style, italic: true }, out);
+        break;
+      case 'del':
+        flattenInlineTokens(token.tokens, { ...style, strikethrough: true }, out);
+        break;
+      case 'codespan':
+        push(token.text, { ...style, color: COLOR_WARNING, backgroundColor: COLOR_CODE_BACKGROUND });
+        break;
+      case 'link':
+        push(token.text, { ...style, color: COLOR_ACCENT, underline: true });
+        break;
+      case 'image':
+        push(`[Image: ${token.text}]`, { ...style, color: COLOR_TEXT_SUBTLE });
+        break;
+      case 'br':
+        push(' ', style);
+        break;
+      default:
+        push(token.raw ?? '', style);
+    }
+  }
+};
+
+// Collapse whitespace runs to one space and trim, mirroring how cell text wraps.
+const toStyledCell = (cell: TableCell | undefined): StyledCell => {
+  const flat: StyledChar[] = [];
+  flattenInlineTokens(cell?.tokens, {}, flat);
+
+  const chars: StyledChar[] = [];
+  for (const styled of flat) {
+    if (/\s/.test(styled.char)) {
+      if (chars.length > 0 && chars.at(-1)!.char !== ' ') {
+        chars.push({ char: ' ', style: styled.style });
+      }
+    } else {
+      chars.push(styled);
+    }
+  }
+  if (chars.at(-1)?.char === ' ') {
+    chars.pop();
+  }
+
+  return { text: chars.map((styled) => styled.char).join(''), chars };
+};
+
 // Calculate column widths based on content
 const calculateColumnWidths = (
-  header: TableCell[],
-  rows: TableCell[][],
+  header: StyledCell[],
+  rows: StyledCell[][],
   padding = TABLE_CELL_PADDING,
   maxTableWidth = TABLE_MAX_WIDTH,
 ): number[] => {
@@ -166,22 +253,18 @@ const calculateColumnWidths = (
   return cappedWidths;
 };
 
-// Pad content based on alignment
-const padContent = (content: string, width: number, align: string): string => {
-  const contentLength = content.length;
-  const padding = width - contentLength;
-
+// Split free space into [left, right] padding based on alignment
+const getAlignmentPadding = (padding: number, align: string): [number, number] => {
   switch (align) {
     case 'center': {
       const leftPad = Math.floor(padding / 2);
-      const rightPad = padding - leftPad;
-      return ' '.repeat(leftPad) + content + ' '.repeat(rightPad);
+      return [leftPad, padding - leftPad];
     }
     case 'right':
-      return ' '.repeat(padding) + content;
+      return [padding, 0];
     case 'left':
     default:
-      return content + ' '.repeat(padding);
+      return [0, padding];
   }
 };
 
@@ -232,26 +315,73 @@ const wrapCellText = (content: string, width: number): string[] => {
   return lines;
 };
 
-const getCellTextLines = (cell: TableCell | undefined, width: number): string[] => {
+// Wrap on the plain text, then map each line back onto the styled characters.
+// Normalized text has single spaces and lines never start with one, so each
+// line is the next slice after skipping at most one break space.
+const getCellStyledLines = (cell: StyledCell | undefined, width: number): StyledChar[][] => {
   const contentWidth = Math.max(1, width - TABLE_CELL_PADDING * 2);
-  return wrapCellText(cell?.text || '', contentWidth);
+  if (!cell) {
+    return [[]];
+  }
+
+  let cursor = 0;
+  return wrapCellText(cell.text, contentWidth).map((line) => {
+    if (cell.text[cursor] === ' ') {
+      cursor += 1;
+    }
+    const slice = cell.chars.slice(cursor, cursor + line.length);
+    cursor += line.length;
+    return slice;
+  });
 };
+
+const sameStyle = (a: CellStyle, b: CellStyle): boolean =>
+  a.bold === b.bold &&
+  a.italic === b.italic &&
+  a.underline === b.underline &&
+  a.strikethrough === b.strikethrough &&
+  a.color === b.color &&
+  a.backgroundColor === b.backgroundColor;
 
 // Render cell content with inline formatting
 const renderCellContent = (
-  content: string,
+  line: StyledChar[],
   width: number,
   align: string,
   isHeader = false,
   options: MarkdownRenderOptions = {},
 ): React.ReactNode => {
   const contentWidth = Math.max(1, width - TABLE_CELL_PADDING * 2);
-  const paddedContent = padContent(content, contentWidth, align);
+  const [leftPad, rightPad] = getAlignmentPadding(Math.max(0, contentWidth - line.length), align);
+
+  const runs: Array<{ text: string; style: CellStyle }> = [];
+  for (const { char, style } of line) {
+    const last = runs.at(-1);
+    if (last && sameStyle(last.style, style)) {
+      last.text += char;
+    } else {
+      runs.push({ text: char, style });
+    }
+  }
+
   return (
     <Text bold={isHeader} color={options.defaultColor} dimColor={options.dimColor}>
-      {' '.repeat(TABLE_CELL_PADDING)}
-      {paddedContent}
-      {' '.repeat(TABLE_CELL_PADDING)}
+      {' '.repeat(TABLE_CELL_PADDING + leftPad)}
+      {runs.map((run, index) => (
+        <Text
+          key={index}
+          bold={run.style.bold || isHeader}
+          italic={run.style.italic}
+          underline={run.style.underline}
+          strikethrough={run.style.strikethrough}
+          color={run.style.color ?? options.defaultColor}
+          backgroundColor={run.style.backgroundColor}
+          dimColor={options.dimColor}
+        >
+          {run.text}
+        </Text>
+      ))}
+      {' '.repeat(TABLE_CELL_PADDING + rightPad)}
     </Text>
   );
 };
@@ -296,8 +426,10 @@ interface TableRendererProps {
   maxWidth?: number;
 }
 
-const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: TableRendererProps) => {
-  const { header, rows, align } = token;
+const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: TableRendererProps) => {
+  const header = token.header.map(toStyledCell);
+  const rows = token.rows.map((row) => row.map(toStyledCell));
+  const { align } = token;
   const numCols = header.length;
   const { stdout } = useStdout();
 
@@ -336,8 +468,8 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
 
   const vertical = getVerticalBorder();
 
-  const renderTableRow = (row: TableCell[], rowKey: string, isHeader = false) => {
-    const wrappedCells = columnWidths.map((width, index) => getCellTextLines(row[index], width));
+  const renderTableRow = (row: StyledCell[], rowKey: string, isHeader = false) => {
+    const wrappedCells = columnWidths.map((width, index) => getCellStyledLines(row[index], width));
     const lineCount = Math.max(...wrappedCells.map((lines) => lines.length));
 
     return Array.from({ length: lineCount }, (_, lineIndex) => (
@@ -348,7 +480,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
           </Text>
         ) : null}
         {columnWidths.map((width, index) => {
-          const content = wrappedCells[index][lineIndex] || '';
+          const content = wrappedCells[index][lineIndex] ?? [];
           const cell = (
             <Box width={width}>
               {renderCellContent(content, width, columnAlignment[index] || 'left', isHeader, options)}

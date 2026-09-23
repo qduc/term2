@@ -2,6 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React from 'react';
+import chalk from 'chalk';
 import { renderInAct, rerenderInAct } from '../test-helpers/ink-testing.js';
 // Import the built component (tests run against compiled files)
 import MarkdownRenderer from './MarkdownRenderer.js';
@@ -251,7 +252,7 @@ it.sequential('keeps table header labels intact when reserving column widths', a
   const lines = frame.split('\n').map(rstrip).filter(Boolean);
   const headerLines = lines.slice(
     0,
-    lines.findIndex((line, index) => index > 0 && line.trimStart().startsWith('+')),
+    lines.findIndex((line, index) => index > 0 && line.trimStart().startsWith('├')),
   );
 
   expect(headerLines.some((line) => line.includes('Availability'))).toBe(true);
@@ -266,22 +267,64 @@ it.sequential('renders table borders and header separator with the same width as
   const frame = stripAnsi(lastFrame());
   const lines = frame.split('\n').map(rstrip).filter(Boolean);
 
-  // ASCII style is the default.
-  const borderLines = lines.filter((line) => line.trimStart().startsWith('+'));
+  // Unicode box-drawing style is the default.
+  const borderLines = lines.filter((line) => /^[┌├└]/.test(line.trimStart()));
   expect(borderLines.length).toBe(3);
 
   const [top, middle, bottom] = borderLines;
+  expect(top.trimStart().startsWith('┌')).toBe(true);
+  expect(middle.trimStart().startsWith('├')).toBe(true);
+  expect(bottom.trimStart().startsWith('└')).toBe(true);
+  expect(frame.includes('-')).toBe(false);
   expect(top.length).toBe(middle.length);
   expect(top.length).toBe(bottom.length);
 
   // Pick the first header row line and first data row line and ensure they match border width.
-  const headerLine = lines.find((line) => line.trimStart().startsWith('|')) ?? '';
+  const headerLine = lines.find((line) => line.trimStart().startsWith('│')) ?? '';
   expect(headerLine.length > 0).toBe(true);
   expect(headerLine.length).toBe(top.length);
 
-  const dataLine = [...lines].reverse().find((line) => line.trimStart().startsWith('|')) ?? '';
+  const dataLine = [...lines].reverse().find((line) => line.trimStart().startsWith('│')) ?? '';
   expect(dataLine.length > 0).toBe(true);
   expect(dataLine.length).toBe(top.length);
+});
+
+it.sequential('renders inline markdown formatting inside table cells', async () => {
+  const markdown = `| Name | Notes |
+| --- | --- |
+| **alpha** | uses \`code\` and *emphasis* |`;
+
+  // ink-testing-library disables colors at import time; raise chalk's level so
+  // the frame carries the bold/italic escapes asserted below.
+  const originalLevel = chalk.level;
+  chalk.level = 3;
+  let rawFrame: string;
+  try {
+    const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
+    rawFrame = lastFrame() ?? '';
+  } finally {
+    chalk.level = originalLevel;
+  }
+  const frame = stripAnsi(rawFrame);
+
+  expect(frame).toContain('alpha');
+  expect(frame).not.toContain('**');
+  expect(frame).not.toContain('`');
+  expect(frame).toContain('uses code and emphasis');
+  expect(rawFrame).toMatch(/\u001B\[1m[^\u001B]*alpha/);
+  expect(rawFrame).toMatch(/\u001B\[3m[^\u001B]*emphasis/);
+});
+
+it.sequential('sizes table columns by rendered text rather than markdown source', async () => {
+  const markdown = `| A | B |
+| --- | --- |
+| **bold** | x |`;
+
+  const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, markdown));
+  const lines = stripAnsi(lastFrame()).split('\n').map(rstrip).filter(Boolean);
+  const dataLine = lines.find((line) => line.includes('bold')) ?? '';
+
+  expect(dataLine.trimStart()).toBe('│ bold │ x │');
 });
 
 // --- Complex markdown ---

@@ -16,7 +16,7 @@ const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 const firstTableBorder = (text: string) =>
   stripAnsi(text)
     .split('\n')
-    .find((line) => line.trimStart().startsWith('+')) ?? '';
+    .find((line) => line.trimStart().startsWith('┌')) ?? '';
 const renderedLines = (text: string) => stripAnsi(text).trim().split('\n');
 
 it.sequential('MessageList renders user and bot messages', async () => {
@@ -358,7 +358,7 @@ it.sequential('MessageList renders active and static markdown tables with the sa
   );
   const staticBorder = firstTableBorder(renderer.lastFrame() ?? '');
 
-  expect(activeBorder).toMatch(/^ {2,}\+/);
+  expect(activeBorder).toMatch(/^ {2,}┌/);
   expect(staticBorder).toBe(activeBorder);
 });
 

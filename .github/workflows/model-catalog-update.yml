@@ -1,9 +1,9 @@
 name: Update model catalog
 
-# Weekly refresh of the vendored model catalog. Downloads the latest
-# @earendil-works/pi-ai package into a throwaway directory (npm pack; no
-# dependency changes), points PI_AI_DATA_DIR at its dist/providers/data,
-# regenerates source/providers/model-catalog/catalog.generated.ts via
+# Weekly refresh of the vendored model catalog. Checks out the latest pi-ai
+# source from the upstream main branch, generates provider data into a
+# throwaway directory, points PI_AI_DATA_DIR at it, and regenerates
+# source/providers/model-catalog/catalog.generated.ts via
 # `pnpm catalog:update`, runs the focused catalog/pricing tests, and opens or
 # force-updates one predictable automation PR. The job exits cleanly (green
 # no-op) when a run produces no catalog changes.
@@ -45,24 +45,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # pi-ai is never added as a dependency: it requires Node >= 22.19 while
-      # this repo supports Node >= 20, and it would pull hundreds of unrelated
-      # lockfile lines just to power this CI-only task. Instead, pack the
-      # latest published tarball into a temp directory and point PI_AI_DATA_DIR
-      # at its dist/providers/data; catalog:update reads it without installing.
-      - name: Download latest pi-ai package
+      # Generate only pi-ai's provider JSON: no dependency install or lockfile
+      # changes are needed. Node 24 can run the upstream TypeScript generator.
+      - name: Generate provider data from pi-ai main
         id: pi-ai
         run: |
           set -euo pipefail
           TMP_DIR="$(mktemp -d "$RUNNER_TEMP/pi-ai.XXXXXX")"
-          # Run npm outside the checkout: npm otherwise enforces this repo's
-          # pnpm-only devEngines contract before it can fetch the tarball.
-          cd "$TMP_DIR"
-          TARBALL="$(npm pack @earendil-works/pi-ai --pack-destination "$TMP_DIR")"
-          tar -xzf "$TMP_DIR/$TARBALL" -C "$TMP_DIR"
-          PI_AI_VERSION="$(node -p "require('$TMP_DIR/package/package.json').version")"
-          echo "PI_AI_DATA_DIR=$TMP_DIR/package/dist/providers/data" >> "$GITHUB_ENV"
-          echo "pi-ai-version=$PI_AI_VERSION" >> "$GITHUB_OUTPUT"
+          git clone --depth 1 --branch main https://github.com/earendil-works/pi.git "$TMP_DIR/repo"
+          PI_AI_SHA="$(git -C "$TMP_DIR/repo" rev-parse HEAD)"
+          cd "$TMP_DIR/repo/packages/ai"
+          node scripts/generate-models.ts --strict --data-only
+          echo "PI_AI_DATA_DIR=$TMP_DIR/repo/packages/ai/src/providers/data" >> "$GITHUB_ENV"
+          echo "pi-ai-ref=$PI_AI_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Regenerate the model catalog
         run: pnpm catalog:update
@@ -95,13 +90,13 @@ jobs:
 
           BRANCH="chore/model-catalog-update"
           BASE="${GITHUB_REF_NAME}"
-          PI_AI_VERSION="${{ steps.pi-ai.outputs.pi-ai-version }}"
-          PR_TITLE="chore: update model catalog (pi-ai ${PI_AI_VERSION})"
+          PI_AI_REF="${{ steps.pi-ai.outputs.pi-ai-ref }}"
+          PR_TITLE="chore: update model catalog (pi-ai ${PI_AI_REF:0:7})"
           PR_BODY="Automated weekly model-catalog refresh.
 
           Regenerates \`source/providers/model-catalog/catalog.generated.ts\` from the
-          latest published \`@earendil-works/pi-ai\` (\`${PI_AI_VERSION}\`) via
-          \`pnpm catalog:update\`. Focused catalog/pricing tests ran in the
+          pi-ai \`main\` at commit \`${PI_AI_REF}\` via its strict data-only
+          model generator and \`pnpm catalog:update\`. Focused catalog/pricing tests ran in the
           \`Update model catalog\` workflow."
 
           git config user.name "github-actions[bot]"

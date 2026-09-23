@@ -102,7 +102,7 @@ const CONCURRENT_REACT_ROOT = 1;
 
 vi.mock('ink', () => ({
   Box: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useApp: () => ({ exit: mocks.exit }),
+  useApp: () => ({ exit: mocks.exit, waitUntilRenderFlush: async () => undefined }),
   useStdout: () => ({ stdout: { write: mocks.stdoutWrite } }),
   useInput: (handler: (input: string, key: Record<string, boolean>) => void) => {
     mocks.useInputHandler = handler;

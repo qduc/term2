@@ -26,6 +26,7 @@ import { ConversationConfigurationService } from './services/runtime-setting-rou
 import { useShellMode } from './hooks/use-shell-mode.js';
 import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
+import { clearInputBeforeReset } from './utils/clear-input-before-reset.js';
 import type { PendingModeSwitch } from './commands/mode-commands.js';
 import { ProfileTransitionService } from './services/profiles/profile-transition.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
@@ -176,7 +177,7 @@ const App: FC<AppProps> = ({
   mcpUserConfigPath,
   mcpConfigController,
 }) => {
-  const { exit } = useApp();
+  const { exit, waitUntilRenderFlush } = useApp();
   const { stdout } = useStdout();
   const { setInput, replaceInput, setImages } = useInputActions();
   const { input, mode, images: _images, controller } = useInputState();
@@ -852,6 +853,16 @@ const App: FC<AppProps> = ({
     [addSystemMessage],
   );
 
+  // /clear and /quit reset the UI, so the typed command must leave the composer first.
+  const clearConversationFromCommand = useMemo(
+    () => clearInputBeforeReset({ replaceInput, waitUntilRenderFlush }, clearConversationAndRefreshBanner),
+    [replaceInput, waitUntilRenderFlush, clearConversationAndRefreshBanner],
+  );
+  const exitFromCommand = useMemo(
+    () => clearInputBeforeReset({ replaceInput, waitUntilRenderFlush }, exitWithUsage),
+    [replaceInput, waitUntilRenderFlush, exitWithUsage],
+  );
+
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     transitionService: profileTransitionService,
@@ -859,13 +870,13 @@ const App: FC<AppProps> = ({
     addDividerMessage,
     applyRuntimeSetting,
     replaceInput,
-    clearConversation: clearConversationAndRefreshBanner,
+    clearConversation: clearConversationFromCommand,
     getSessionUsage,
     refreshProviderUsage: () => {
       grokCreditUsage.refresh();
       openCodeGoUsage.refresh();
     },
-    exit: exitWithUsage,
+    exit: exitFromCommand,
     messages,
     setModel,
     getRewindItems: openRewindPickerItems,

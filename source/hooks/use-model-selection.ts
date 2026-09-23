@@ -15,12 +15,7 @@ import {
   getProviderIdForCredentialSettingKey,
   resolveProviderCredentials,
 } from '../utils/ai/provider-credentials.js';
-import {
-  getFavoriteModelInfos,
-  isFavoriteModel,
-  serializeFavorite,
-  toggleFavoriteModel,
-} from '../services/models/model-favorites.js';
+import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../services/models/model-favorites.js';
 import {
   commitNicknameEdit,
   getNicknameEntries,
@@ -32,8 +27,8 @@ import { SETTING_KEYS } from '../services/settings/settings-schema.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 
 /**
- * Authoritative state of a favorited row's inline nickname editor. The
- * draft is bound to one row identity (provider + model id) and owns its own
+ * Authoritative state of a model row's inline nickname editor. The
+ * draft is bound to one visible row identity (provider + model id) and owns its own
  * text buffer — the filter query is never borrowed for naming, so cancelling
  * restores the previous filter text and cursor by construction.
  */
@@ -41,6 +36,7 @@ export type NicknameDraftState = Readonly<{
   provider: string;
   modelId: string;
   text: string;
+  existingNickname: boolean;
   error: string | null;
   /**
    * Set when the typed name already belongs to another model. Enter commits
@@ -302,16 +298,18 @@ export const useModelSelection = (deps: {
     }
   }, [selectedIndex, scrollOffset]);
 
-  // The editor is bound to one visible favorite row.
+  // Keep an editor open only while its model remains visible in the current tab.
   useEffect(() => {
     if (!nicknameDraft) return;
+    const modelKey = serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId);
+    const stillEligible = !nicknameDraft.existingNickname || nicknameKeys.has(modelKey);
     const stillListed =
-      favoriteKeys.has(serializeFavorite(nicknameDraft.provider, nicknameDraft.modelId)) &&
+      stillEligible &&
       filteredModels.some(
         (m) => m.provider.toLowerCase() === nicknameDraft.provider.toLowerCase() && m.id === nicknameDraft.modelId,
       );
     if (!stillListed) setNicknameDraft(null); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [favoriteKeys, filteredModels, nicknameDraft]);
+  }, [filteredModels, nicknameDraft, nicknameKeys]);
 
   // Never leak an open editor into the next menu session.
   useEffect(() => {
@@ -398,7 +396,6 @@ export const useModelSelection = (deps: {
   const startNicknameEdit = useCallback(() => {
     const selected = getSelectedItem();
     if (!selected) return;
-    if (!isFavoriteModel(settingsService, selected.provider, selected.id)) return;
     const existing = getNicknameEntries(settingsService).find(
       (entry) => entry.provider.toLowerCase() === selected.provider.toLowerCase() && entry.modelId === selected.id,
     );
@@ -406,6 +403,7 @@ export const useModelSelection = (deps: {
       provider: selected.provider,
       modelId: selected.id,
       text: existing?.nickname ?? '',
+      existingNickname: existing != null,
       error: null,
       pendingReplace: null,
     });

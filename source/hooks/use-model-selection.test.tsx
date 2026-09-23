@@ -242,27 +242,31 @@ it.sequential('pins favorites and toggles the highlighted model without changing
   picker.renderer.unmount();
 });
 
-it.sequential('edits nicknames only for favorited rows and closes when the favorite is removed', async () => {
-  const provider = `nickname-${Math.random()}`;
-  registerTestProvider(provider);
-  const settings = createMockSettingsService({
-    'agent.provider': provider,
-    'agent.model': 'favorite',
-    'agent.favoriteModels': [`${provider}/favorite`],
-  });
-  const picker = await renderPicker({
-    settings,
-    fetcher: async (id) => (id === provider ? [{ id: 'favorite' }, { id: 'ordinary' }] : []),
-  });
+it.sequential(
+  'creates nicknames for favorites and keeps existing nickname edits when a favorite is removed',
+  async () => {
+    const provider = `nickname-${Math.random()}`;
+    registerTestProvider(provider);
+    const settings = createMockSettingsService({
+      'agent.provider': provider,
+      'agent.model': 'favorite',
+      'agent.favoriteModels': [`${provider}/favorite`],
+    });
+    const picker = await renderPicker({
+      settings,
+      fetcher: async (id) => (id === provider ? [{ id: 'favorite' }, { id: 'ordinary' }] : []),
+    });
 
-  await flush(() => picker.state.startNicknameEdit());
-  expect(picker.state.nicknameDraft).toMatchObject({ provider, modelId: 'favorite' });
-  await flush(() => picker.state.typeNicknameDraft('fav'));
-  await flush(() => picker.state.commitNicknameDraft());
-  expect(settings.get('agent.modelNicknames')).toEqual({ fav: `${provider}/favorite` });
+    await flush(() => picker.state.startNicknameEdit());
+    expect(picker.state.nicknameDraft).toMatchObject({ provider, modelId: 'favorite' });
+    await flush(() => picker.state.typeNicknameDraft('fav'));
+    await flush(() => picker.state.commitNicknameDraft());
+    expect(settings.get('agent.modelNicknames')).toEqual({ fav: `${provider}/favorite` });
 
-  await flush(() => picker.state.startNicknameEdit());
-  await flush(() => picker.state.toggleFavorite());
-  expect(picker.state.nicknameDraft).toBeNull();
-  picker.renderer.unmount();
-});
+    await flush(() => picker.state.startNicknameEdit());
+    await flush(() => picker.state.toggleFavorite());
+    expect(picker.state.nicknameDraft).toMatchObject({ provider, modelId: 'favorite', text: 'fav' });
+    await flush(() => picker.state.cancelNicknameDraft());
+    picker.renderer.unmount();
+  },
+);

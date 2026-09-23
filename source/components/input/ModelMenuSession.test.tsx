@@ -701,7 +701,7 @@ it('Enter commits a valid nickname, persists it, and keeps the menu open with th
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
 });
 
-it('nickname command is a no-op on a non-favorited row', async () => {
+it('creates a nickname directly from All for a non-favorited row', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({ 'agent.provider': providerId });
 
@@ -726,6 +726,80 @@ it('nickname command is a no-op on a non-favorited row', async () => {
     await Promise.resolve();
   });
 
-  expect(lastFrame() ?? '').not.toContain('Nickname for');
+  expect(lastFrame() ?? '').toContain('Nickname for gpt-test:');
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'input', text: 'alias' });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+  expect(settingsService.get('agent.modelNicknames')).toEqual({ alias: `${providerId}/gpt-test` });
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+});
+
+it('edits and removes a non-favorited model nickname directly from the Nicknames tab', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({
+    'agent.provider': providerId,
+    'agent.modelNicknames': { testAlias: `${providerId}/gpt-test` },
+  });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+    controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+    await Promise.resolve();
+  });
+  expect(view.lastFrame()).toContain('Nicknames');
+  expect(view.lastFrame()).toContain('ctrl+n');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
+    await Promise.resolve();
+  });
+  expect(view.lastFrame()).toContain('Nickname for gpt-test:');
+  expect(view.lastFrame()).toContain('testAlias');
+
+  await act(async () => {
+    for (let i = 0; i < 'testAlias'.length; i += 1) {
+      controller.dispatchActiveEvent({ type: 'command', command: 'backspace' });
+    }
+    await Promise.resolve();
+  });
+  expect(view.lastFrame()).toContain('remove nickname');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  expect(settingsService.get('agent.modelNicknames')).toEqual({});
+  expect(view.lastFrame()).not.toContain('Nickname for');
 });

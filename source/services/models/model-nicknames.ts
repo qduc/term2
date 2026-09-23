@@ -233,6 +233,22 @@ export function setNicknameTarget(
   return { ok: true };
 }
 
+/** Removes all nickname aliases attached to one model. */
+export function removeNicknameTarget(
+  settingsService: ISettingsService,
+  target: Pick<ParsedNicknameTarget, 'provider' | 'modelId'>,
+): boolean {
+  const entries = getNicknameEntries(settingsService);
+  const remaining = entries.filter(
+    (entry) => entry.provider.toLowerCase() !== target.provider.toLowerCase() || entry.modelId !== target.modelId,
+  );
+  if (remaining.length === entries.length) return false;
+  const next: Record<string, string> = {};
+  for (const entry of remaining) next[entry.nickname] = serializeNicknameTarget(entry);
+  settingsService.setPersistent('agent.modelNicknames', next);
+  return true;
+}
+
 /**
  * Applies one Enter in the nickname editor. A pending replacement commits
  * only while the text still matches that name; otherwise this is an ordinary
@@ -245,9 +261,14 @@ export function commitNicknameEdit(
     provider: string;
     modelId: string;
     pendingReplace?: NicknameConflict | null;
+    existingNickname?: boolean;
   },
   providerIds?: readonly string[],
 ): { saved: true } | { saved: false; error: string; pendingReplace: NicknameConflict | null } {
+  if (draft.existingNickname && !draft.text.trim()) {
+    removeNicknameTarget(settingsService, draft);
+    return { saved: true };
+  }
   const replace =
     draft.pendingReplace != null && draft.pendingReplace.nickname.toLowerCase() === draft.text.trim().toLowerCase();
   const result = setNicknameTarget(

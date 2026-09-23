@@ -399,6 +399,7 @@ it.sequential(
           provider: 'openai',
           modelId: 'gpt-fav',
           text: 'op',
+          existingNickname: true,
           error: 'Nickname "op" is already in use.',
         }}
       />,
@@ -409,6 +410,27 @@ it.sequential(
     expect(output).toContain('Nickname "op" is already in use.');
   },
 );
+
+it.sequential('renders nickname editing and removal hints on the Nicknames tab', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-named', name: 'GPT Named', provider: 'openai' }]}
+      selectedIndex={0}
+      query=""
+      modelTab="nicknames"
+      nicknameDraft={{
+        provider: 'openai',
+        modelId: 'gpt-named',
+        text: '',
+        existingNickname: true,
+        error: null,
+      }}
+    />,
+  );
+  expect(lastFrame()).toContain('Nickname for gpt-named:');
+  expect(lastFrame()).toContain('remove nickname');
+});
 
 // Regression: each row used to render the id, provider, nickname, and
 // display name as sibling Text fields that shrank and wrapped

@@ -25,6 +25,7 @@ import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model
 import { MODEL_TAB_LABELS, MODEL_TABS, type ModelTab } from '../../services/models/model-tabs.js';
 import {
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
+  MODEL_MENU_NICKNAME_DELETE_BINDINGS,
   MODEL_MENU_NICKNAME_REPLACE_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
   bindingHints,
@@ -85,12 +86,14 @@ const ModelSelectionMenu: FC<Props> = ({
   // draft bindings are advertised.
   const footerBindings = nicknameDraft?.pendingReplace
     ? MODEL_MENU_NICKNAME_REPLACE_BINDINGS
+    : nicknameDraft?.existingNickname && !nicknameDraft.text.trim()
+    ? MODEL_MENU_NICKNAME_DELETE_BINDINGS
     : nicknameDraft
     ? MODEL_MENU_NICKNAME_DRAFT_BINDINGS
     : modelMenuFooterBindings({
         tabDimension: modelTab != null,
         providerDimension: !isUnified,
-        nicknameAvailable: isFavoritesTab || isUnified,
+        nicknameAvailable: isFavoritesTab || isNicknamesTab || isUnified,
       });
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
@@ -212,7 +215,9 @@ const ModelSelectionMenu: FC<Props> = ({
         error={error ? `Unable to load models: ${error}` : null}
         fallbackText={
           isNicknamesTab && !query ? (
-            <Text color={COLOR_TEXT_SUBTLE}>No nicknames yet — press ctrl+n on a favorite to name it.</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>
+              No nicknames yet — switch to All and press ctrl+n on a model to name it.
+            </Text>
           ) : isFavoritesTab && !query ? (
             <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press ctrl+f on a model to add one.</Text>
           ) : (
@@ -264,7 +269,7 @@ const ModelSelectionMenu: FC<Props> = ({
           );
         }}
       />
-      {(isFavoritesTab || isUnified) && nicknameDraft && (
+      {nicknameDraft && (
         <Box flexDirection="column">
           <Box>
             <Text color={COLOR_ACCENT} bold>

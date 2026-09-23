@@ -101,7 +101,7 @@ it.sequential('ModelSelectionMenu swaps to the draft bindings while a nickname d
       selectedIndex={0}
       query=""
       modelTab="all"
-      nicknameDraft={{ provider: 'openai', modelId: 'gpt-4o', text: 'four', error: null }}
+      nicknameDraft={{ provider: 'openai', modelId: 'gpt-4o', text: 'four', existingNickname: true, error: null }}
     />,
   );
   const output = toVisibleText(lastFrame()!);
@@ -126,6 +126,7 @@ it.sequential('ModelSelectionMenu offers replacement when the typed name belongs
         provider: 'openai',
         modelId: 'gpt-4o',
         text: 'op',
+        existingNickname: true,
         error: 'Nickname "op" already names anthropic/claude-opus-4. Press Enter to use it here instead.',
         pendingReplace: { nickname: 'op', provider: 'anthropic', modelId: 'claude-opus-4' },
       }}

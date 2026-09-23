@@ -9,6 +9,7 @@ import {
   commitNicknameEdit,
   getNicknameModelInfos,
   parseNicknameTargetEntry,
+  removeNicknameTarget,
   serializeNicknameTarget,
   setNicknameTarget,
   validateNicknameName,
@@ -352,6 +353,30 @@ describe('setNicknameTarget', () => {
     const result = setNicknameTarget(settingsService, 'op', { provider: 'openai', modelId: 'gpt-5.4' });
     expect(result).toEqual({ ok: true });
     expect(settingsService.get('agent.modelNicknames')).toEqual({ op: 'openai/gpt-5.4' });
+  });
+});
+
+describe('removeNicknameTarget', () => {
+  it('removes nickname entries for one model while preserving other targets', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': {
+        op: 'openai/gpt-5.4',
+        alias: 'openai/gpt-5.4',
+        sonnet: 'anthropic/claude-sonnet-4',
+      },
+    });
+
+    expect(removeNicknameTarget(settingsService, { provider: 'openai', modelId: 'gpt-5.4' })).toBe(true);
+    expect(settingsService.get('agent.modelNicknames')).toEqual({ sonnet: 'anthropic/claude-sonnet-4' });
+  });
+
+  it('does not write when the model has no nickname', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': { sonnet: 'anthropic/claude-sonnet-4' },
+    });
+
+    expect(removeNicknameTarget(settingsService, { provider: 'openai', modelId: 'gpt-5.4' })).toBe(false);
+    expect(settingsService.get('agent.modelNicknames')).toEqual({ sonnet: 'anthropic/claude-sonnet-4' });
   });
 });
 

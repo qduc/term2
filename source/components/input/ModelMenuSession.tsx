@@ -90,7 +90,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           }
         }
 
-        // Tab and the horizontal arrows all advance the Favorites/Nicknames/All
+        // Tab and Right advance; Left moves backward through Favorites/Nicknames/All.
         // tab. Tab
         // deliberately does not complete the highlighted model id into the
         // composer: it is the user's key for moving between tabs, and Enter
@@ -99,7 +99,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           event.type === 'command' &&
           (event.command === 'tab' || event.command === 'left' || event.command === 'right')
         ) {
-          models.switchModelTab();
+          models.switchModelTab(event.command === 'left' ? 'previous' : 'next');
           return keep();
         }
 

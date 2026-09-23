@@ -15,7 +15,13 @@ import {
   getNicknameLabels,
   getNicknameModelInfos,
 } from '../services/models/model-nicknames.js';
-import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
+import {
+  nextModelTab,
+  pinnedModelsForTab,
+  previousModelTab,
+  selectModelsForTab,
+  type ModelTab,
+} from '../services/models/model-tabs.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 import type { NicknameDraftState } from './use-model-selection.js';
 
@@ -275,13 +281,16 @@ export const useStandaloneModelPicker = (deps: {
     });
   }, [filteredModels.length]);
 
-  const switchModelTab = useCallback(() => {
-    if (lockProvider) return;
-    shouldPreselectRef.current = false;
-    setModelTab((tab) => nextModelTab(tab));
-    setSelectedIndex(0);
-    setScrollOffset(0);
-  }, [lockProvider]);
+  const switchModelTab = useCallback(
+    (direction: 'previous' | 'next' = 'next') => {
+      if (lockProvider) return;
+      shouldPreselectRef.current = false;
+      setModelTab((tab) => (direction === 'previous' ? previousModelTab(tab) : nextModelTab(tab)));
+      setSelectedIndex(0);
+      setScrollOffset(0);
+    },
+    [lockProvider],
+  );
 
   const moveDown = useCallback(() => {
     shouldPreselectRef.current = false;

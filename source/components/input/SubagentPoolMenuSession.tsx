@@ -78,7 +78,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
             return keep();
           case 'command':
             if (editingModel && (event.command === 'tab' || event.command === 'left' || event.command === 'right')) {
-              pool.switchModelTab();
+              pool.switchModelTab(event.command === 'left' ? 'previous' : 'next');
             } else if (editingModel && event.command === 'refresh') {
               pool.refreshModels();
             } else if (event.command === 'delete') {

@@ -99,9 +99,9 @@ export function StandaloneModelPickerApp({
     } else if ((key as { end?: boolean }).end) {
       models.moveEnd();
     } else if (key.tab || key.leftArrow || key.rightArrow) {
-      // Tab and the arrows all advance the Favorites/Nicknames/All tab; Tab never
+      // Tab and Right advance; Left moves backward through Favorites/Nicknames/All. Tab never
       // completes a model id into a buffer here.
-      models.switchModelTab();
+      models.switchModelTab(key.leftArrow ? 'previous' : 'next');
     } else if (key.ctrl && input === 'r') {
       models.refresh();
     } else if (key.ctrl && input.toLowerCase() === 'f') {

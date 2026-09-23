@@ -22,7 +22,13 @@ import {
   getNicknameLabels,
   getNicknameModelInfos,
 } from '../services/models/model-nicknames.js';
-import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
+import {
+  nextModelTab,
+  pinnedModelsForTab,
+  previousModelTab,
+  selectModelsForTab,
+  type ModelTab,
+} from '../services/models/model-tabs.js';
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
 
@@ -344,9 +350,9 @@ export const useModelSelection = (deps: {
     });
   }, [filteredModels.length]);
 
-  const switchModelTab = useCallback(() => {
+  const switchModelTab = useCallback((direction: 'previous' | 'next' = 'next') => {
     shouldPreselectRef.current = false;
-    setModelTab((tab) => nextModelTab(tab));
+    setModelTab((tab) => (direction === 'previous' ? previousModelTab(tab) : nextModelTab(tab)));
     setSelectedIndex(0);
     setScrollOffset(0);
   }, []);

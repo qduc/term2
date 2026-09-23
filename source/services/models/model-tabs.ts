@@ -2,8 +2,8 @@ import type { ModelInfo } from '../model-service.js';
 import { serializeFavorite } from './model-favorites.js';
 
 /**
- * Unified model-picker tabs, left to right. Tab and the horizontal arrows
- * advance one step and wrap, so the first step from All lands on Favorites.
+ * Unified model-picker tabs, left to right. Tab and Right advance one step;
+ * Left moves one step backward. Both directions wrap at the ends.
  */
 export const MODEL_TABS = ['favorites', 'nicknames', 'all'] as const;
 
@@ -18,6 +18,11 @@ export const MODEL_TAB_LABELS: Record<ModelTab, string> = {
 export function nextModelTab(tab: ModelTab): ModelTab {
   const index = MODEL_TABS.indexOf(tab);
   return MODEL_TABS[(index + 1) % MODEL_TABS.length]!;
+}
+
+export function previousModelTab(tab: ModelTab): ModelTab {
+  const index = MODEL_TABS.indexOf(tab);
+  return MODEL_TABS[(index - 1 + MODEL_TABS.length) % MODEL_TABS.length]!;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   findNicknameMatch,
   getNicknameEntries,
   getNicknameLabels,
+  getNicknameModelInfos,
   parseNicknameTargetEntry,
   serializeNicknameTarget,
   setNicknameTarget,
@@ -113,6 +114,23 @@ describe('getNicknameLabels', () => {
       'agent.modelNicknames': { op: 'openrouter/anthropic/claude-3.5-sonnet' },
     });
     expect(getNicknameLabels(settingsService).get('openrouter/anthropic/claude-3.5-sonnet')).toBe('op');
+  });
+});
+
+describe('getNicknameModelInfos', () => {
+  it('returns one row per model in settings order, collapsing two names for the same model', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': {
+        op: 'openai/gpt-5.4',
+        alias: 'openai/gpt-5.4',
+        luna: 'codex/gpt-5.6-luna:high',
+        broken: 'not-a-target',
+      },
+    });
+    expect(getNicknameModelInfos(settingsService)).toEqual([
+      { id: 'gpt-5.4', provider: 'openai' },
+      { id: 'gpt-5.6-luna', provider: 'codex' },
+    ]);
   });
 });
 

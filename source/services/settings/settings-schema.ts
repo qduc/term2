@@ -200,7 +200,7 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .default({})
     .describe(
-      'Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads',
+      'Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads. Browse them on the model picker Nicknames tab',
     ),
   disabledProviders: z
     .array(z.string())

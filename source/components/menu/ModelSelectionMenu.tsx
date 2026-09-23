@@ -22,6 +22,7 @@ import {
   GLYPH_WARNING,
 } from '../theme.js';
 import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model-favorites.js';
+import { MODEL_TAB_LABELS, MODEL_TABS, type ModelTab } from '../../services/models/model-tabs.js';
 import {
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
@@ -37,7 +38,7 @@ type Props = {
   query: string;
   provider?: string | null;
   /** Top-level cross-provider view. Omit for legacy provider-tab callers. */
-  modelTab?: 'favorites' | 'all';
+  modelTab?: ModelTab;
   loading?: boolean;
   error?: string | null;
   warning?: string | null;
@@ -75,6 +76,7 @@ const ModelSelectionMenu: FC<Props> = ({
   nicknameDraft = null,
 }) => {
   const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
+  const isNicknamesTab = modelTab === 'nicknames';
   const isUnified = provider == null;
   // The footer renders from declared binding tables (menu-bindings.ts), so a
   // hint cannot drift from the behavior the owning session implements. While
@@ -154,10 +156,7 @@ const ModelSelectionMenu: FC<Props> = ({
 
   const modelTabBar = modelTab && (
     <ScrollableTabBar
-      items={[
-        { id: 'favorites', label: 'Favorites' },
-        { id: 'all', label: 'All' },
-      ]}
+      items={MODEL_TABS.map((id) => ({ id, label: MODEL_TAB_LABELS[id] }))}
       activeItemId={modelTab}
       getItemWidth={(tab) => tab.label.length + 2}
       renderTab={(tab, isActive) => (
@@ -210,7 +209,9 @@ const ModelSelectionMenu: FC<Props> = ({
         }
         error={error ? `Unable to load models: ${error}` : null}
         fallbackText={
-          isFavoritesTab && !query ? (
+          isNicknamesTab && !query ? (
+            <Text color={COLOR_TEXT_SUBTLE}>No nicknames yet — press ctrl+n on a favorite to name it.</Text>
+          ) : isFavoritesTab && !query ? (
             <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press ctrl+f on a model to add one.</Text>
           ) : (
             <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>

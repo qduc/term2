@@ -23,7 +23,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_FAVORITE_MODELS]:
     'Favorited models as "provider/modelId" strings, matched fast by --model before any catalog loads (edit via ctrl+f in the model picker)',
   [SETTING_KEYS.AGENT_MODEL_NICKNAMES]:
-    'Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (edit via ctrl+n in the model picker Favorites tab)',
+    'Short names for models as a nickname -> "provider/modelId" map, matched exactly by --model before any catalog loads (browse on the model picker Nicknames tab; edit via ctrl+n on a favorite)',
   [SETTING_KEYS.AGENT_SMART_MODEL]:
     'Model for smart-tier helper agents (the hardest side tasks) (falls back to agent.model)',
   [SETTING_KEYS.AGENT_SMART_PROVIDER]:

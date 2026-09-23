@@ -73,6 +73,35 @@ const TestComponent = ({
   return <Text>picker</Text>;
 };
 
+it('lists a nicknamed model on the Nicknames tab without pinning it onto All', async () => {
+  const testProvider = `test-nick-${Math.random().toString(36).slice(2)}`;
+  registerTestProvider({
+    id: testProvider,
+    label: testProvider,
+    fetchModels: (async () => [{ id: 'catalog' }]) as any,
+  });
+  const settingsService = createMockSettingsService({
+    'agent.provider': testProvider,
+    'agent.modelNicknames': { op: `${testProvider}/offline-named` },
+  });
+
+  let captured: any;
+  await flush(() => {
+    render(<TestComponent settingsService={settingsService} onResults={(r) => (captured = r)} />);
+  });
+  await waitForIdle(() => captured);
+
+  expect(captured.modelTab).toBe('all');
+  expect(captured.filteredModels.map((model: { id: string }) => model.id)).not.toContain('offline-named');
+
+  await flush(() => captured.switchModelTab());
+  expect(captured.modelTab).toBe('favorites');
+
+  await flush(() => captured.switchModelTab());
+  expect(captured.modelTab).toBe('nicknames');
+  expect(captured.filteredModels).toEqual([{ id: 'offline-named', provider: testProvider }]);
+});
+
 it('pins favorites at the top of the unified list', async () => {
   const testProvider = `test-fav-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => []) as any });

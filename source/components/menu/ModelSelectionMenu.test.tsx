@@ -77,6 +77,7 @@ it.sequential('ModelSelectionMenu renders the All tab and a unified list with th
   expect(output?.includes('(openai)')).toBe(true);
   expect(output?.includes('(openrouter)')).toBe(true);
   expect(output).toContain('Favorites');
+  expect(output).toContain('Nicknames');
   expect(output).toContain('All');
 });
 
@@ -93,6 +94,7 @@ it.sequential('ModelSelectionMenu renders the Favorites tab as active when reque
 
   const output = lastFrame() ?? '';
   expect(output).toContain('Favorites');
+  expect(output).toContain('Nicknames');
   expect(output).toContain('All');
   expect(output).toContain('Tab/←→ tab');
 });
@@ -280,6 +282,34 @@ it.sequential('ModelSelectionMenu shows a "how to add" empty state on the Favori
   );
   expect(lastFrame()).toContain('No favorites yet');
   expect(lastFrame()).toContain('ctrl+f');
+});
+
+it.sequential('ModelSelectionMenu shows a "how to add" empty state on the Nicknames tab with no query', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[]}
+      selectedIndex={0}
+      query=""
+      modelTab="nicknames"
+    />,
+  );
+  expect(lastFrame()).toContain('No nicknames yet');
+  expect(lastFrame()).toContain('ctrl+n');
+});
+
+it.sequential('ModelSelectionMenu shows the ordinary no-match message on the Nicknames tab with a query', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[]}
+      selectedIndex={0}
+      query="xyz"
+      modelTab="nicknames"
+    />,
+  );
+  expect(lastFrame()).toContain('No models match "xyz"');
+  expect(lastFrame()).not.toContain('No nicknames yet');
 });
 
 it.sequential('ModelSelectionMenu shows the ordinary no-match message on the Favorites tab with a query', async () => {

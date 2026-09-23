@@ -21,11 +21,15 @@ import {
   serializeFavorite,
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
-import { getNicknameEntries, getNicknameLabels, setNicknameTarget } from '../services/models/model-nicknames.js';
+import {
+  getNicknameEntries,
+  getNicknameLabels,
+  getNicknameModelInfos,
+  setNicknameTarget,
+} from '../services/models/model-nicknames.js';
+import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
-
-type ModelTab = 'favorites' | 'all';
 
 /**
  * Authoritative state of a favorited row's inline nickname editor. The
@@ -86,6 +90,15 @@ export const useModelSelection = (deps: {
     () => getNicknameLabels(settingsService),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [settingsService, nicknamesRevision],
+  );
+  const nicknameModelInfos = useMemo(
+    () => getNicknameModelInfos(settingsService),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settingsService, nicknamesRevision],
+  );
+  const nicknameKeys = useMemo(
+    () => new Set(nicknameModelInfos.map((model) => serializeFavorite(model.provider, model.id))),
+    [nicknameModelInfos],
   );
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
@@ -211,18 +224,20 @@ export const useModelSelection = (deps: {
   }, [isOpen, providerIds, catalogSession]);
 
   const filteredModels = useMemo(() => {
-    const source = mergeUnifiedModels(providerIds, catalogs, [...favoriteModelInfos, ...unavailableConfiguredModels]);
-    const tabModels =
-      modelTab === 'favorites'
-        ? source.filter((model) => favoriteKeys.has(serializeFavorite(model.provider, model.id)))
-        : source;
+    const source = mergeUnifiedModels(providerIds, catalogs, [
+      ...pinnedModelsForTab(modelTab, favoriteModelInfos, nicknameModelInfos),
+      ...unavailableConfiguredModels,
+    ]);
+    const tabModels = selectModelsForTab(source, modelTab, { favoriteKeys, nicknameKeys });
     return filterUnifiedModels(tabModels, query, parsedQuery.provider);
   }, [
     providerIds,
     catalogs,
     favoriteModelInfos,
+    nicknameModelInfos,
     unavailableConfiguredModels,
     favoriteKeys,
+    nicknameKeys,
     modelTab,
     query,
     parsedQuery.provider,
@@ -328,7 +343,7 @@ export const useModelSelection = (deps: {
 
   const switchModelTab = useCallback(() => {
     shouldPreselectRef.current = false;
-    setModelTab((tab) => (tab === 'all' ? 'favorites' : 'all'));
+    setModelTab((tab) => nextModelTab(tab));
     setSelectedIndex(0);
     setScrollOffset(0);
   }, []);

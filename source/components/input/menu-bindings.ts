@@ -30,6 +30,7 @@ export const MENU_COMMAND_VOCABULARY = [
   'left',
   'right',
   'backspace',
+  'delete',
   'refresh',
   'favorite',
   'nickname',
@@ -44,6 +45,7 @@ export type MenuCommandId =
   | 'left'
   | 'right'
   | 'backspace'
+  | 'delete'
   | 'refresh'
   | 'favorite'
   | 'nickname';
@@ -133,15 +135,16 @@ export const MODEL_MENU_NICKNAME_DRAFT_BINDINGS: MenuBindingTable = [
   { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
 ];
 
-/** Same editor once Enter has offered to move a name off another model. */
-export const MODEL_MENU_NICKNAME_REPLACE_BINDINGS: MenuBindingTable = [
-  { key: '⏎', action: 'replace nickname', commands: ['accept'] },
+/** Existing nickname draft: Delete removes it without clearing the text. */
+export const MODEL_MENU_NICKNAME_EDIT_BINDINGS: MenuBindingTable = [
+  { key: '⏎', action: 'save nickname', commands: ['accept'] },
+  { key: 'Delete', action: 'remove nickname', commands: ['delete'] },
   { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
 ];
 
-/** Existing nickname cleared in the editor: Enter removes it. */
-export const MODEL_MENU_NICKNAME_DELETE_BINDINGS: MenuBindingTable = [
-  { key: '⏎', action: 'remove nickname', commands: ['accept'] },
+/** Same editor once Enter has offered to move a name off another model. */
+export const MODEL_MENU_NICKNAME_REPLACE_BINDINGS: MenuBindingTable = [
+  { key: '⏎', action: 'replace nickname', commands: ['accept'] },
   { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
 ];
 

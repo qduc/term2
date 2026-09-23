@@ -25,7 +25,7 @@ import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model
 import { MODEL_TAB_LABELS, MODEL_TABS, type ModelTab } from '../../services/models/model-tabs.js';
 import {
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
-  MODEL_MENU_NICKNAME_DELETE_BINDINGS,
+  MODEL_MENU_NICKNAME_EDIT_BINDINGS,
   MODEL_MENU_NICKNAME_REPLACE_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
   bindingHints,
@@ -86,8 +86,8 @@ const ModelSelectionMenu: FC<Props> = ({
   // draft bindings are advertised.
   const footerBindings = nicknameDraft?.pendingReplace
     ? MODEL_MENU_NICKNAME_REPLACE_BINDINGS
-    : nicknameDraft?.existingNickname && !nicknameDraft.text.trim()
-    ? MODEL_MENU_NICKNAME_DELETE_BINDINGS
+    : nicknameDraft?.existingNickname
+    ? MODEL_MENU_NICKNAME_EDIT_BINDINGS
     : nicknameDraft
     ? MODEL_MENU_NICKNAME_DRAFT_BINDINGS
     : modelMenuFooterBindings({

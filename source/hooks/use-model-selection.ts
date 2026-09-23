@@ -21,6 +21,7 @@ import {
   getNicknameEntries,
   getNicknameLabels,
   getNicknameModelInfos,
+  removeNicknameTarget,
 } from '../services/models/model-nicknames.js';
 import {
   nextModelTab,
@@ -446,6 +447,13 @@ export const useModelSelection = (deps: {
 
   const cancelNicknameDraft = useCallback(() => setNicknameDraft(null), []);
 
+  const removeNicknameDraft = useCallback(() => {
+    if (!nicknameDraft?.existingNickname) return;
+    removeNicknameTarget(settingsService, nicknameDraft);
+    setNicknameDraft(null);
+    setNicknamesRevision((revision) => revision + 1);
+  }, [nicknameDraft, settingsService]);
+
   return {
     isOpen,
     triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
@@ -477,6 +485,7 @@ export const useModelSelection = (deps: {
     backspaceNicknameDraft,
     commitNicknameDraft,
     cancelNicknameDraft,
+    removeNicknameDraft,
     refresh,
     modelSettingConfig,
     credentialRevision,

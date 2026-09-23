@@ -802,25 +802,10 @@ it('edits and removes a non-favorited model nickname directly from the Nicknames
   });
   expect(view.lastFrame()).toContain('Nickname for gpt-test:');
   expect(view.lastFrame()).toContain('testAlias');
-
-  await act(async () => {
-    for (let i = 0; i < 'testAlias'.length; i += 1) {
-      controller.dispatchActiveEvent({ type: 'command', command: 'backspace' });
-    }
-    await Promise.resolve();
-  });
   expect(view.lastFrame()).toContain('remove nickname');
 
   await act(async () => {
-    controller.dispatchActiveEvent({
-      type: 'accept',
-      input: {
-        kind: 'composer',
-        text: controller.getSnapshot().editor.text,
-        cursor: controller.getSnapshot().editor.cursor,
-      },
-      selected: undefined,
-    });
+    controller.dispatchActiveEvent({ type: 'command', command: 'delete' });
     await Promise.resolve();
   });
 

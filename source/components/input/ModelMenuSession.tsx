@@ -76,6 +76,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             case 'command':
               if (event.command === 'backspace') models.backspaceNicknameDraft();
               else if (event.command === 'favorite') models.toggleFavorite();
+              else if (event.command === 'delete') models.removeNicknameDraft();
               return keep();
             case 'move':
               return keep();

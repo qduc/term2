@@ -13,6 +13,7 @@ import {
   SLASH_MENU_BINDINGS,
   MODEL_MENU_BINDINGS,
   MODEL_MENU_PROVIDER_TAB_BINDINGS,
+  MODEL_MENU_NICKNAME_EDIT_BINDINGS,
   MODEL_MENU_NICKNAME_DRAFT_BINDINGS,
   MODEL_MENU_NICKNAME_REPLACE_BINDINGS,
   MODEL_MENU_PROVIDER_FALLBACK_BINDINGS,
@@ -112,6 +113,29 @@ it.sequential('ModelSelectionMenu swaps to the draft bindings while a nickname d
   // and must not be advertised.
   expect(output).not.toContain('Tab/←→ tab');
   expect(output).not.toContain('ctrl+n nickname');
+});
+
+it.sequential('ModelSelectionMenu advertises Delete for an existing nickname draft', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={mockModels}
+      selectedIndex={0}
+      query=""
+      modelTab="nicknames"
+      nicknameDraft={{
+        provider: 'openai',
+        modelId: 'gpt-4o',
+        text: 'four',
+        existingNickname: true,
+        error: null,
+      }}
+    />,
+  );
+  const output = toVisibleText(lastFrame()!);
+  for (const [key, action] of bindingHints(MODEL_MENU_NICKNAME_EDIT_BINDINGS)) {
+    expect(output).toContain(`${key} ${action}`);
+  }
 });
 
 it.sequential('ModelSelectionMenu offers replacement when the typed name belongs to another model', async () => {

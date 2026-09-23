@@ -261,14 +261,9 @@ export function commitNicknameEdit(
     provider: string;
     modelId: string;
     pendingReplace?: NicknameConflict | null;
-    existingNickname?: boolean;
   },
   providerIds?: readonly string[],
 ): { saved: true } | { saved: false; error: string; pendingReplace: NicknameConflict | null } {
-  if (draft.existingNickname && !draft.text.trim()) {
-    removeNicknameTarget(settingsService, draft);
-    return { saved: true };
-  }
   const replace =
     draft.pendingReplace != null && draft.pendingReplace.nickname.toLowerCase() === draft.text.trim().toLowerCase();
   const result = setNicknameTarget(

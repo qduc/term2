@@ -74,6 +74,8 @@ export function StandaloneModelPickerApp({
         models.cancelNicknameDraft();
       } else if (key.backspace) {
         models.backspaceNicknameDraft();
+      } else if (key.delete) {
+        models.removeNicknameDraft();
       } else if (key.ctrl && input.toLowerCase() === 'f') {
         models.toggleFavorite();
       } else if (input && !key.ctrl && !key.meta && !key.tab) {

@@ -6,6 +6,7 @@ import {
   findNicknameMatch,
   getNicknameEntries,
   getNicknameLabels,
+  commitNicknameEdit,
   getNicknameModelInfos,
   parseNicknameTargetEntry,
   serializeNicknameTarget,
@@ -243,17 +244,87 @@ describe('setNicknameTarget', () => {
     });
   });
 
-  it('rejects re-pointing a live name at a different target (no silent nickname stealing)', () => {
+  it('offers to replace a live name instead of moving it on the first attempt', () => {
     const settingsService = createMockSettingsService({
       'agent.modelNicknames': { op: 'openai/gpt-5.4', other: 'anthropic/claude-sonnet-4' },
     });
     const result = setNicknameTarget(settingsService, 'op', { provider: 'anthropic', modelId: 'claude-opus-4' });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('already in use');
+    if (!result.ok) {
+      expect(result.error).toContain('already names openai/gpt-5.4');
+      expect(result.error).toContain('Press Enter to use it here instead');
+      expect(result.conflict).toEqual({ nickname: 'op', provider: 'openai', modelId: 'gpt-5.4' });
+    }
     expect(settingsService.get('agent.modelNicknames')).toEqual({
       op: 'openai/gpt-5.4',
       other: 'anthropic/claude-sonnet-4',
     });
+  });
+
+  it('moves a live name onto the new target when replacement is confirmed', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': {
+        op: 'openai/gpt-5.4',
+        mine: 'anthropic/claude-opus-4',
+        other: 'anthropic/claude-sonnet-4',
+      },
+    });
+    const result = setNicknameTarget(
+      settingsService,
+      'OP',
+      { provider: 'anthropic', modelId: 'claude-opus-4' },
+      { replace: true },
+    );
+    expect(result).toEqual({ ok: true });
+    expect(settingsService.get('agent.modelNicknames')).toEqual({
+      OP: 'anthropic/claude-opus-4',
+      other: 'anthropic/claude-sonnet-4',
+    });
+  });
+
+  it('commits a pending replacement only while the text still matches that name', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': { op: 'openai/gpt-5.4' },
+    });
+    const pending = { nickname: 'op', provider: 'openai', modelId: 'gpt-5.4' };
+    const moved = commitNicknameEdit(settingsService, {
+      text: 'OP',
+      provider: 'anthropic',
+      modelId: 'claude-opus-4',
+      pendingReplace: pending,
+    });
+    expect(moved).toEqual({ saved: true });
+    expect(settingsService.get('agent.modelNicknames')).toEqual({ OP: 'anthropic/claude-opus-4' });
+
+    const settingsAgain = createMockSettingsService({
+      'agent.modelNicknames': { op: 'openai/gpt-5.4' },
+    });
+    const changed = commitNicknameEdit(settingsAgain, {
+      text: 'opus',
+      provider: 'anthropic',
+      modelId: 'claude-opus-4',
+      pendingReplace: pending,
+    });
+    expect(changed).toEqual({ saved: true });
+    expect(settingsAgain.get('agent.modelNicknames')).toEqual({
+      op: 'openai/gpt-5.4',
+      opus: 'anthropic/claude-opus-4',
+    });
+  });
+
+  it('does not offer replacement for a provider-id collision', () => {
+    const settingsService = createMockSettingsService({
+      'agent.modelNicknames': { openai: 'anthropic/claude-opus-4' },
+    });
+    const result = setNicknameTarget(
+      settingsService,
+      'openai',
+      { provider: 'openai', modelId: 'gpt-5.4' },
+      { providerIds: ['openai'], replace: true },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.conflict).toBeUndefined();
+    expect(settingsService.get('agent.modelNicknames')).toEqual({ openai: 'anthropic/claude-opus-4' });
   });
 
   it('rejects a case-variant of a live name pointed at a different target', () => {

@@ -592,6 +592,65 @@ it('ctrl+n opens the inline nickname editor on a favorited row; typed keys fill 
   expect(controller.getSnapshot().editor.text).toBe('/model ');
 });
 
+it('Enter on a name owned by another model offers replacement, and the next Enter moves it', async () => {
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({
+    'agent.provider': providerId,
+    'agent.favoriteModels': [providerId + '/gpt-test'],
+    'agent.modelNicknames': { op: 'anthropic/claude-opus-4' },
+  });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  const accept = async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  };
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'command', command: 'nickname' });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'input', text: 'op' });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await accept();
+  });
+
+  expect(settingsService.get('agent.modelNicknames')).toEqual({ op: 'anthropic/claude-opus-4' });
+  expect(view.lastFrame()).toContain('already names anthropic/claude-opus-4');
+  expect(view.lastFrame()).toContain('replace nickname');
+
+  await act(async () => {
+    await accept();
+  });
+
+  expect(settingsService.get('agent.modelNicknames')).toEqual({ op: providerId + '/gpt-test' });
+  expect(view.lastFrame()).not.toContain('Nickname for');
+});
+
 it('Enter commits a valid nickname, persists it, and keeps the menu open with the editor closed', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({

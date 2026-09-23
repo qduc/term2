@@ -159,36 +159,58 @@ export function validateNicknameName(
   return { ok: true, nickname };
 }
 
-export type SetNicknameResult = { ok: true } | { ok: false; error: string };
+/** The model that currently owns a nickname the user asked to reuse. */
+export type NicknameConflict = {
+  nickname: string;
+  provider: string;
+  modelId: string;
+};
+
+export type SetNicknameResult = { ok: true } | { ok: false; error: string; conflict?: NicknameConflict };
 
 /**
  * Validates and persists one nickname -> target mapping. Rejected input
  * returns the reason and writes nothing, so an editor can keep the user in
  * place. Renaming (the target already mapped under another name) removes the
- * old key; re-pointing a name at a new target just overwrites it. Committing
- * an unchanged mapping writes nothing.
+ * old key. A name already used by a different model is not moved unless
+ * `replace` is set — the first attempt returns that model as `conflict` so
+ * the editor can ask. Committing an unchanged mapping writes nothing.
  */
 export function setNicknameTarget(
   settingsService: ISettingsService,
   rawNickname: string,
   target: ParsedNicknameTarget,
-  options: { providerIds?: readonly string[] } = {},
+  options: { providerIds?: readonly string[]; replace?: boolean } = {},
 ): SetNicknameResult {
   const entries = getNicknameEntries(settingsService);
   const existingForTarget = entries.find(
     (entry) => entry.provider.toLowerCase() === target.provider.toLowerCase() && entry.modelId === target.modelId,
   );
   const lower = rawNickname.trim().toLowerCase();
+  const taken = entries.find((entry) => entry !== existingForTarget && entry.nickname.toLowerCase() === lower);
   const validation = validateNicknameName(rawNickname, {
     providerIds: options.providerIds,
-    // Only the entry being renamed away is exempt; every other live name —
-    // including a case-different variant — is a conflict. Re-pointing a name
-    // at a different model is deliberately NOT an operation here: silently
-    // stealing another model's nickname is never what a typo-ing user wants,
-    // and a lookup keyed case-insensitively could not tell them apart anyway.
-    existingNicknames: entries.filter((entry) => entry !== existingForTarget).map((entry) => entry.nickname),
+    // The colliding name is reported below as a replacement offer instead of a
+    // plain uniqueness error. Every other live name still conflicts.
+    existingNicknames: entries
+      .filter((entry) => entry !== existingForTarget && entry !== taken)
+      .map((entry) => entry.nickname),
   });
   if (!validation.ok) return validation;
+  if (taken && !options.replace) {
+    return {
+      ok: false,
+      error:
+        'Nickname "' +
+        taken.nickname +
+        '" already names ' +
+        taken.provider +
+        '/' +
+        taken.modelId +
+        '. Press Enter to use it here instead.',
+      conflict: { nickname: taken.nickname, provider: taken.provider, modelId: taken.modelId },
+    };
+  }
   const nickname = validation.nickname;
   const serialized = serializeNicknameTarget(target);
 
@@ -209,6 +231,33 @@ export function setNicknameTarget(
   next[nickname] = serialized;
   settingsService.setPersistent('agent.modelNicknames', next);
   return { ok: true };
+}
+
+/**
+ * Applies one Enter in the nickname editor. A pending replacement commits
+ * only while the text still matches that name; otherwise this is an ordinary
+ * save, and a collision comes back as a new pending replacement.
+ */
+export function commitNicknameEdit(
+  settingsService: ISettingsService,
+  draft: {
+    text: string;
+    provider: string;
+    modelId: string;
+    pendingReplace?: NicknameConflict | null;
+  },
+  providerIds?: readonly string[],
+): { saved: true } | { saved: false; error: string; pendingReplace: NicknameConflict | null } {
+  const replace =
+    draft.pendingReplace != null && draft.pendingReplace.nickname.toLowerCase() === draft.text.trim().toLowerCase();
+  const result = setNicknameTarget(
+    settingsService,
+    draft.text,
+    { provider: draft.provider, modelId: draft.modelId },
+    { providerIds, replace },
+  );
+  if (result.ok) return { saved: true };
+  return { saved: false, error: result.error, pendingReplace: result.conflict ?? null };
 }
 
 /**

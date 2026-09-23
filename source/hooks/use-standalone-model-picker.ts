@@ -15,10 +15,10 @@ import {
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
 import {
+  commitNicknameEdit,
   getNicknameEntries,
   getNicknameLabels,
   getNicknameModelInfos,
-  setNicknameTarget,
 } from '../services/models/model-nicknames.js';
 import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
 import { filterUnifiedModels, mergeUnifiedModels } from '../services/models/unified-model-catalog.js';
@@ -340,28 +340,28 @@ export const useStandaloneModelPicker = (deps: {
       modelId: selected.id,
       text: existing?.nickname ?? '',
       error: null,
+      pendingReplace: null,
     });
   }, [getSelectedItem, settingsService]);
 
   const typeNicknameDraft = useCallback((text: string) => {
     if (!text) return;
-    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text + text, error: null } : draft));
+    setNicknameDraft((draft) =>
+      draft ? { ...draft, text: draft.text + text, error: null, pendingReplace: null } : draft,
+    );
   }, []);
 
   const backspaceNicknameDraft = useCallback(() => {
-    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text.slice(0, -1), error: null } : draft));
+    setNicknameDraft((draft) =>
+      draft ? { ...draft, text: draft.text.slice(0, -1), error: null, pendingReplace: null } : draft,
+    );
   }, []);
 
   const commitNicknameDraft = useCallback(() => {
     if (!nicknameDraft) return;
-    const result = setNicknameTarget(
-      settingsService,
-      nicknameDraft.text,
-      { provider: nicknameDraft.provider, modelId: nicknameDraft.modelId },
-      { providerIds: getProviderIds() },
-    );
-    if (!result.ok) {
-      setNicknameDraft({ ...nicknameDraft, error: result.error });
+    const result = commitNicknameEdit(settingsService, nicknameDraft, getProviderIds());
+    if (!result.saved) {
+      setNicknameDraft({ ...nicknameDraft, error: result.error, pendingReplace: result.pendingReplace });
       return;
     }
     setNicknameDraft(null);

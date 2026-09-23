@@ -22,10 +22,10 @@ import {
   toggleFavoriteModel,
 } from '../services/models/model-favorites.js';
 import {
+  commitNicknameEdit,
   getNicknameEntries,
   getNicknameLabels,
   getNicknameModelInfos,
-  setNicknameTarget,
 } from '../services/models/model-nicknames.js';
 import { nextModelTab, pinnedModelsForTab, selectModelsForTab, type ModelTab } from '../services/models/model-tabs.js';
 import { SETTING_KEYS } from '../services/settings/settings-schema.js';
@@ -42,6 +42,11 @@ export type NicknameDraftState = Readonly<{
   modelId: string;
   text: string;
   error: string | null;
+  /**
+   * Set when the typed name already belongs to another model. Enter commits
+   * only while the text still matches this name; any edit clears it.
+   */
+  pendingReplace?: { nickname: string; provider: string; modelId: string } | null;
 }>;
 
 export const useModelSelection = (deps: {
@@ -402,6 +407,7 @@ export const useModelSelection = (deps: {
       modelId: selected.id,
       text: existing?.nickname ?? '',
       error: null,
+      pendingReplace: null,
     });
   }, [getSelectedItem, settingsService]);
 
@@ -410,24 +416,24 @@ export const useModelSelection = (deps: {
   // part of this editor.
   const typeNicknameDraft = useCallback((text: string) => {
     if (!text) return;
-    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text + text, error: null } : draft));
+    setNicknameDraft((draft) =>
+      draft ? { ...draft, text: draft.text + text, error: null, pendingReplace: null } : draft,
+    );
   }, []);
 
   const backspaceNicknameDraft = useCallback(() => {
-    setNicknameDraft((draft) => (draft ? { ...draft, text: draft.text.slice(0, -1), error: null } : draft));
+    setNicknameDraft((draft) =>
+      draft ? { ...draft, text: draft.text.slice(0, -1), error: null, pendingReplace: null } : draft,
+    );
   }, []);
 
   const commitNicknameDraft = useCallback(() => {
     if (!nicknameDraft) return;
-    const result = setNicknameTarget(
-      settingsService,
-      nicknameDraft.text,
-      { provider: nicknameDraft.provider, modelId: nicknameDraft.modelId },
-      { providerIds: getProviderIds() },
-    );
-    if (!result.ok) {
+    const result = commitNicknameEdit(settingsService, nicknameDraft, getProviderIds());
+    if (!result.saved) {
       // Rejected input keeps the user in the editor with the reason shown.
-      setNicknameDraft({ ...nicknameDraft, error: result.error });
+      // A name owned by another model stays uncommitted until the next Enter.
+      setNicknameDraft({ ...nicknameDraft, error: result.error, pendingReplace: result.pendingReplace });
       return;
     }
     setNicknameDraft(null);

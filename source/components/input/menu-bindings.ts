@@ -133,6 +133,12 @@ export const MODEL_MENU_NICKNAME_DRAFT_BINDINGS: MenuBindingTable = [
   { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
 ];
 
+/** Same editor once Enter has offered to move a name off another model. */
+export const MODEL_MENU_NICKNAME_REPLACE_BINDINGS: MenuBindingTable = [
+  { key: '⏎', action: 'replace nickname', commands: ['accept'] },
+  { key: 'esc', action: 'cancel nickname', commands: ['escape'] },
+];
+
 /** Model picker error/empty fallback under a legacy per-provider tab. */
 export const MODEL_MENU_PROVIDER_FALLBACK_BINDINGS: MenuBindingTable = [
   { key: '←→', action: 'switch provider', commands: ['left', 'right'] },

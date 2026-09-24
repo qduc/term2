@@ -303,7 +303,7 @@ describe('MemoryCapabilityBuilder', () => {
         id: 'policy',
         summary: 'newprotocol',
         content: 'newprotocol',
-        supersede: { sessionId: 'session-1', reason: 'User correction' },
+        supersede: { reason: 'User correction' },
       });
     expect(await builder.contextForTurn('obsoleteprotocol')).toBe('');
     expect((await builder.selectForTurn('newprotocol')).memories).toMatchObject([{ id: 'policy' }]);

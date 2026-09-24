@@ -57,11 +57,15 @@ it('supersedes a correction with session provenance and keeps old facts out of c
   const original = await store();
   await original.create({ ...input, summary: 'obsoleteprotocol', content: 'Disable socket chaining.' });
   const later = new FileMemoryStore({ root: roots[0], now: () => new Date('2026-07-13T00:00:00.000Z') });
-  const corrected = await later.update(input.id, {
-    summary: 'New socket policy',
-    content: 'Keep socket chaining.',
-    supersede: { sessionId: 'session-123', reason: 'User corrected the earlier advice.' },
-  });
+  const corrected = await later.update(
+    input.id,
+    {
+      summary: 'New socket policy',
+      content: 'Keep socket chaining.',
+      supersede: { reason: 'User corrected the earlier advice.' },
+    },
+    { sessionId: 'session-123' },
+  );
   expect(corrected.provenance).toEqual({
     at: '2026-07-13T00:00:00.000Z',
     sessionId: 'session-123',
@@ -116,11 +120,19 @@ it('reads a version-1 index and plain Markdown item without provenance or migrat
 it('retains each correction in order with its own provenance', async () => {
   const memory = await store();
   await memory.create({ ...input, content: 'Original' });
-  await memory.update(input.id, { content: 'First fix', supersede: { sessionId: 'one', reason: 'First correction' } });
-  await memory.update(input.id, {
-    content: 'Second fix',
-    supersede: { sessionId: 'two', reason: 'Second correction' },
-  });
+  await memory.update(
+    input.id,
+    { content: 'First fix', supersede: { reason: 'First correction' } },
+    { sessionId: 'one' },
+  );
+  await memory.update(
+    input.id,
+    {
+      content: 'Second fix',
+      supersede: { reason: 'Second correction' },
+    },
+    { sessionId: 'two' },
+  );
   const history = await memory.history(input.id);
   expect(history.map((entry) => entry.content)).toEqual(['Original', 'First fix']);
   expect(history.map((entry) => entry.supersededBy.sessionId)).toEqual(['one', 'two']);
@@ -131,10 +143,22 @@ it('retains each correction in order with its own provenance', async () => {
 it('rejects missing correction provenance before changing current content', async () => {
   const memory = await store();
   await memory.create(input);
-  await expect(
-    memory.update(input.id, { content: 'New', supersede: { sessionId: ' ', reason: 'corrected' } }),
-  ).rejects.toBeInstanceOf(InvalidMemoryError);
+  await expect(memory.update(input.id, { content: 'New', supersede: { reason: ' ' } })).rejects.toBeInstanceOf(
+    InvalidMemoryError,
+  );
   expect((await memory.get(input.id))?.content).toBe(input.content);
+});
+
+it('preserves correction history without inventing a session when no context is available', async () => {
+  const memory = await store();
+  await memory.create(input);
+  const corrected = await memory.update(input.id, {
+    content: 'New fact',
+    supersede: { reason: 'Earlier fact was wrong' },
+  });
+  expect(corrected.provenance).toEqual({ at: corrected.updatedAt, reason: 'Earlier fact was wrong' });
+  expect((await memory.history(input.id))[0].supersededBy).toEqual(corrected.provenance);
+  expect((await new FileMemoryStore({ root: roots[0] }).get(input.id))?.provenance).toEqual(corrected.provenance);
 });
 
 it('rejects updates that do not change any memory fields', async () => {

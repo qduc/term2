@@ -7,7 +7,7 @@ import { queryTerms, scoreMemorySearch } from './memory-search.js';
 export type MemoryId = string;
 export interface MemoryProvenance {
   at: string;
-  sessionId: string;
+  sessionId?: string;
   reason: string;
 }
 export interface MemoryMetadata {
@@ -35,7 +35,7 @@ export interface UpdateMemoryInput {
   content?: string;
   tags?: string[];
   /** Correction of a fact rather than a cosmetic edit; preserves the prior version. */
-  supersede?: { sessionId: string; reason: string };
+  supersede?: { reason: string };
 }
 export interface MemoryHistoryEntry extends Memory {
   supersededBy: MemoryProvenance;
@@ -55,7 +55,7 @@ export interface MemoryStore {
   search(query: string, options?: { limit?: number }): Promise<MemorySearchResult[]>;
   searchLimits?(): { defaultLimit: number; maxLimit: number };
   create(input: CreateMemoryInput): Promise<Memory>;
-  update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory>;
+  update(id: MemoryId, input: UpdateMemoryInput, context?: { sessionId?: string }): Promise<Memory>;
   history?(id: MemoryId): Promise<MemoryHistoryEntry[]>;
   remove(id: MemoryId): Promise<boolean>;
 }
@@ -278,11 +278,11 @@ export class FileMemoryStore implements MemoryStore {
       return memory;
     });
   }
-  async update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory> {
+  async update(id: MemoryId, input: UpdateMemoryInput, context?: { sessionId?: string }): Promise<Memory> {
     if (!Object.entries(input).some(([key, value]) => key !== 'supersede' && value !== undefined))
       throw new InvalidMemoryError('At least one field must be provided for a memory update.');
-    if (input.supersede && (!input.supersede.sessionId?.trim() || !input.supersede.reason?.trim()))
-      throw new InvalidMemoryError('A correction requires a session ID and a reason.');
+    if (input.supersede && !input.supersede.reason?.trim())
+      throw new InvalidMemoryError('A correction requires a reason.');
     return this.mutate(async () => {
       validateId(id);
       const index = await this.load();
@@ -294,7 +294,7 @@ export class FileMemoryStore implements MemoryStore {
       const timestamp = this.now().toISOString();
       const provenance = input.supersede && {
         at: timestamp,
-        sessionId: input.supersede.sessionId.trim(),
+        ...(context?.sessionId?.trim() ? { sessionId: context.sessionId.trim() } : {}),
         reason: input.supersede.reason.trim(),
       };
       const memory = { ...next, updatedAt: timestamp, ...(provenance ? { provenance } : {}) };
@@ -532,8 +532,8 @@ function validProvenance(value: unknown): value is MemoryProvenance {
   return (
     !!provenance &&
     isUtcTimestamp(provenance.at) &&
-    typeof provenance.sessionId === 'string' &&
-    !!provenance.sessionId.trim() &&
+    (provenance.sessionId === undefined ||
+      (typeof provenance.sessionId === 'string' && !!provenance.sessionId.trim())) &&
     typeof provenance.reason === 'string' &&
     !!provenance.reason.trim()
   );

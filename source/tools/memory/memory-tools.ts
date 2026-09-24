@@ -121,7 +121,7 @@ const MEMORY_SCRIPTED_RETURN_SHAPES: Record<string, string> = {
     'JSON string (JSON.parse first): { memories: { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt } }[], unavailableIds: { scope, id }[], omittedIds: { scope, id }[], omittedIdCount: number, unavailableIdCount: number, charsUsed: number }',
   memory_create: 'JSON string (JSON.parse first): { scope, memory }',
   memory_update:
-    'JSON string (JSON.parse first): { scope, memory }; supersede requires sessionId and reason and retains the old version',
+    'JSON string (JSON.parse first): { scope, memory }; supersede requires a reason and retains the old version with runtime session provenance when available',
   memory_delete: 'JSON string (JSON.parse first): { scope, deleted: boolean }',
 };
 const fields = {
@@ -155,7 +155,7 @@ function definition<S extends z.ZodObject<any>>(
   name: string,
   description: string,
   parameters: S,
-  execute: (params: z.infer<S>) => Promise<unknown>,
+  execute: (params: z.infer<S>, context?: unknown) => Promise<unknown>,
   needsApproval: boolean | (() => boolean) = false,
 ): SchemaToolDefinition<S> {
   return {
@@ -165,8 +165,8 @@ function definition<S extends z.ZodObject<any>>(
     parameters,
     preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
     needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
-    execute: (params: z.infer<S>) =>
-      safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
+    execute: (params: z.infer<S>, context?: unknown) =>
+      safe(() => execute(params, context), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
     formatCommandMessage: makeFormat(name),
   };
 }
@@ -404,13 +404,16 @@ export function createMemoryToolDefinitions(
     ),
     definition(
       'memory_update',
-      'Update a memory in the selected scope. For a factual correction, provide supersede with the current sessionId and a short reason; this retains the prior version for memory_get.',
+      'Update a memory in the selected scope. For a factual correction, provide supersede with a short reason; this retains the prior version for memory_get and records the runtime session ID when available.',
       z
         .object({
           scope,
           id,
           ...fields,
-          supersede: z.object({ sessionId: z.string().trim().min(1), reason: z.string().trim().min(1) }).optional(),
+          supersede: z
+            .object({ reason: z.string().trim().min(1) })
+            .strict()
+            .optional(),
         })
         .refine(
           ({ id: _, scope: __, supersede: ___, ...input }) => Object.values(input).some((value) => value !== undefined),
@@ -418,8 +421,14 @@ export function createMemoryToolDefinitions(
             message: 'At least one field must be provided for a memory update.',
           },
         ),
-      async ({ scope, id, ...input }) => {
-        const memory = await stores[scope].update(id, input);
+      async ({ scope, id, ...input }, context) => {
+        const runContext =
+          context && typeof context === 'object' ? (context as { context?: unknown }).context : undefined;
+        const sessionId =
+          runContext && typeof runContext === 'object' ? (runContext as { sessionId?: unknown }).sessionId : undefined;
+        const memory = await stores[scope].update(id, input, {
+          sessionId: typeof sessionId === 'string' && sessionId.trim() ? sessionId : undefined,
+        });
         return { scope, memory };
       },
       () => {

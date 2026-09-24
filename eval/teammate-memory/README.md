@@ -11,8 +11,9 @@ uses the preserved recency renderer (`memory-store.ts` is unchanged between
 `657b5425` and `91b58452`); it does **not** run the A agent binary or replay
 sessions. The planned cost limits in the manifest are not enforced. No paid
 request should start from the original three-session protocol until a faithful
-multi-session runner and an enforcing billing guard are in place. The B implementation replaces root-agent
-recency injection with task-relevant local search at turn start; A still requires
+multi-session runner and an enforcing billing guard are in place. The B
+implementation replaces root-agent recency injection with task-relevant local
+search at turn start; A still requires
 an isolated build of the earlier implementation. C has not been implemented.
 This follows [the teammate-memory research](../../docs/research/teammate-like-memory-direction.md).
 It tests whether Term2 behaves more like a continuing teammate at an acceptable
@@ -34,7 +35,9 @@ it is not a representative effectiveness estimate. Score outputs against the
 R1 private oracle outside the candidate workspaces, blinded to arm labels.
 
 The probe admits at most 32,000 bytes of text per arm, sets both SDK and Term2
-retries to zero, uses an unchained HTTP request with no tools, and reserves
+retries to zero, uses a fresh unchained WebSocket request with no tools or
+`tool_choice`, includes `reasoning.encrypted_content`, closes each model after
+the stream, and aborts an arm after 120 seconds. It reserves
 128,000 output tokens per request from the provider's published physical model
 limit. At the GPT-6 Luna standard API list rate this is under $0.07 equivalent
 per arm (including a 1,024-token envelope allowance); the two-call reference
@@ -56,6 +59,15 @@ known. `checkpoint-run/` is one-shot and must not be reused. Do not automaticall
 retry a request with unknown charge or treat this attempt as a behavioral score.
 The script now prints only the HTTP status on provider failure: SDK errors may
 contain response headers, which must not be dumped to terminal logs.
+An offline comparison against a successful `gpt-6-luna` provider-traffic entry
+from 2026-09-24 showed the ordinary turn used WebSocket, had no `tool_choice`,
+and included `reasoning.encrypted_content` and transport-generated
+`client_metadata`. The failed probe had forced HTTP with `tool_choice: "none"`
+and omitted those fields. The updated probe uses the observed WebSocket path;
+the account's specific 400 cause remains unproven. Successful ordinary turns
+also advertised tools and a prompt-cache key, which the tool-free checkpoint
+intentionally does not reproduce. The failed one-shot directory stays closed;
+offline alignment is not an efficacy result or license to blindly replay it.
 
 ## What to compare
 

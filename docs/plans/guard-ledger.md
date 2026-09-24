@@ -92,8 +92,12 @@ unbounded Codex requests or being reported as a $0.50/arm billing guarantee.
 Scope: `scripts/teammate-memory/checkpoint.ts` only; the original multi-session
 pilot remains blocked. Class: admission limit with fail-closed settlement.
 Enforcement and recovery owner: the checkpoint script, not the application run
-loop. It admits exactly one unchained tool-free HTTP model stream per arm,
-serially, using SDK and Term2 retryAttempts=0 and no compaction method.
+loop. It admits exactly one unchained tool-free WebSocket model stream per arm,
+serially, using SDK and Term2 retryAttempts=0 and no compaction method. No
+session context or previous-response ID is supplied, so the Codex server-history
+fallback does not apply. Each stream has its own 120-second abort signal and
+closes its model before the next arm; a timeout leaves its charge unknown and
+cannot be scored.
 Measured signal: UTF-8 bytes of the text instructions plus user question before
 dispatch (32,000 maximum), one physical stream per arm, terminal token usage.
 The 1,024-token protocol allowance and provider-published 128,000 maximum output

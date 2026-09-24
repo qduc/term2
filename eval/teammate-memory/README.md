@@ -1,7 +1,16 @@
 # Returning-session teammate-memory pilot: fixture and scoring contract
 
-Status: **authored fixtures and deterministic R1 retrieval preflight; no paid
-model runs or efficacy result.** The B implementation replaces root-agent
+Status: **authored fixtures and isolated offline R1 preparation; no paid
+model runs or efficacy result.** Run
+`pnpm exec tsx scripts/teammate-memory/preflight.ts <new-output-directory>`
+to archive the frozen repository separately for A and B, seed identical
+per-arm R1 memories, and write `preflight.json` outside both candidate
+workspaces. The script refuses an existing output directory. Its A index check
+uses the preserved recency renderer (`memory-store.ts` is unchanged between
+`657b5425` and `91b58452`); it does **not** run the A agent binary or replay
+sessions. The planned cost limits in the manifest are not enforced. No paid
+request should start until a real multi-session runner and an enforcing cost
+guard are in place. The B implementation replaces root-agent
 recency injection with task-relevant local search at turn start; A still requires
 an isolated build of the earlier implementation. C has not been implemented.
 This follows [the teammate-memory research](../../docs/research/teammate-like-memory-direction.md).

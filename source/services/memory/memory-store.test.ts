@@ -53,6 +53,90 @@ it('updates partial fields, changes timestamp, and removes broken entries', asyn
   expect(await memory.remove(input.id)).toBe(false);
 });
 
+it('supersedes a correction with session provenance and keeps old facts out of current retrieval', async () => {
+  const original = await store();
+  await original.create({ ...input, summary: 'obsoleteprotocol', content: 'Disable socket chaining.' });
+  const later = new FileMemoryStore({ root: roots[0], now: () => new Date('2026-07-13T00:00:00.000Z') });
+  const corrected = await later.update(input.id, {
+    summary: 'New socket policy',
+    content: 'Keep socket chaining.',
+    supersede: { sessionId: 'session-123', reason: 'User corrected the earlier advice.' },
+  });
+  expect(corrected.provenance).toEqual({
+    at: '2026-07-13T00:00:00.000Z',
+    sessionId: 'session-123',
+    reason: 'User corrected the earlier advice.',
+  });
+  expect((await later.get(input.id))?.content).toBe('Keep socket chaining.');
+  expect(await later.history(input.id)).toMatchObject([
+    {
+      content: 'Disable socket chaining.',
+      summary: 'obsoleteprotocol',
+      supersededBy: {
+        at: '2026-07-13T00:00:00.000Z',
+        sessionId: 'session-123',
+        reason: 'User corrected the earlier advice.',
+      },
+    },
+  ]);
+  expect(await later.search('obsoleteprotocol')).toEqual([]);
+  expect(await later.context(1000)).not.toContain('obsoleteprotocol');
+  expect(later.contextSync(1000)).not.toContain('obsoleteprotocol');
+  expect((await later.list())[0].summary).toBe('New socket policy');
+  expect(await new FileMemoryStore({ root: roots[0] }).history(input.id)).toHaveLength(1);
+  await later.remove(input.id);
+  expect(await later.history(input.id)).toEqual([]);
+});
+
+it('reads a version-1 index and plain Markdown item without provenance or migration', async () => {
+  const memory = await store();
+  await memory.list();
+  await writeFile(
+    join(roots[0], 'index.json'),
+    JSON.stringify({
+      version: 1,
+      memories: [
+        {
+          id: input.id,
+          title: input.title,
+          summary: input.summary,
+          tags: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    }),
+  );
+  await writeFile(join(roots[0], 'items', `${input.id}.md`), input.content);
+  expect(await memory.get(input.id)).toMatchObject({ content: input.content, summary: input.summary });
+  expect((await memory.get(input.id))?.provenance).toBeUndefined();
+  expect(await memory.history(input.id)).toEqual([]);
+});
+
+it('retains each correction in order with its own provenance', async () => {
+  const memory = await store();
+  await memory.create({ ...input, content: 'Original' });
+  await memory.update(input.id, { content: 'First fix', supersede: { sessionId: 'one', reason: 'First correction' } });
+  await memory.update(input.id, {
+    content: 'Second fix',
+    supersede: { sessionId: 'two', reason: 'Second correction' },
+  });
+  const history = await memory.history(input.id);
+  expect(history.map((entry) => entry.content)).toEqual(['Original', 'First fix']);
+  expect(history.map((entry) => entry.supersededBy.sessionId)).toEqual(['one', 'two']);
+  expect(history[1].provenance).toMatchObject({ sessionId: 'one', reason: 'First correction' });
+  expect((await memory.get(input.id))?.provenance).toMatchObject({ sessionId: 'two', reason: 'Second correction' });
+});
+
+it('rejects missing correction provenance before changing current content', async () => {
+  const memory = await store();
+  await memory.create(input);
+  await expect(
+    memory.update(input.id, { content: 'New', supersede: { sessionId: ' ', reason: 'corrected' } }),
+  ).rejects.toBeInstanceOf(InvalidMemoryError);
+  expect((await memory.get(input.id))?.content).toBe(input.content);
+});
+
 it('rejects updates that do not change any memory fields', async () => {
   const memory = await store();
   await memory.create(input);

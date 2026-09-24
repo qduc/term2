@@ -5,6 +5,11 @@ import { join, resolve } from 'node:path';
 import { queryTerms, scoreMemorySearch } from './memory-search.js';
 
 export type MemoryId = string;
+export interface MemoryProvenance {
+  at: string;
+  sessionId: string;
+  reason: string;
+}
 export interface MemoryMetadata {
   id: MemoryId;
   title: string;
@@ -12,6 +17,7 @@ export interface MemoryMetadata {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  provenance?: MemoryProvenance;
 }
 export interface Memory extends MemoryMetadata {
   content: string;
@@ -28,6 +34,11 @@ export interface UpdateMemoryInput {
   summary?: string;
   content?: string;
   tags?: string[];
+  /** Correction of a fact rather than a cosmetic edit; preserves the prior version. */
+  supersede?: { sessionId: string; reason: string };
+}
+export interface MemoryHistoryEntry extends Memory {
+  supersededBy: MemoryProvenance;
 }
 export interface MemorySearchResult {
   memory: MemoryMetadata;
@@ -45,6 +56,7 @@ export interface MemoryStore {
   searchLimits?(): { defaultLimit: number; maxLimit: number };
   create(input: CreateMemoryInput): Promise<Memory>;
   update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory>;
+  history?(id: MemoryId): Promise<MemoryHistoryEntry[]>;
   remove(id: MemoryId): Promise<boolean>;
 }
 
@@ -211,6 +223,18 @@ export class FileMemoryStore implements MemoryStore {
       throw new MemoryStorageError(`Memory content is unavailable for '${id}'.`);
     }
   }
+  async history(id: MemoryId): Promise<MemoryHistoryEntry[]> {
+    validateId(id);
+    if (!(await this.load()).memories.some((entry) => entry.id === id)) return [];
+    try {
+      const entries: unknown = JSON.parse(await readFile(this.historyPath(id), 'utf8'));
+      if (!Array.isArray(entries) || !entries.every(validHistoryEntry)) throw new Error();
+      return entries;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw new MemoryStorageError(`Memory history is unavailable for '${id}'.`);
+    }
+  }
   async search(query: string, options: { limit?: number } = {}): Promise<MemorySearchResult[]> {
     const terms = queryTerms(query);
     if (!terms.length) throw new InvalidMemoryError('Search query must not be empty.');
@@ -255,8 +279,10 @@ export class FileMemoryStore implements MemoryStore {
     });
   }
   async update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory> {
-    if (!Object.values(input).some((value) => value !== undefined))
+    if (!Object.entries(input).some(([key, value]) => key !== 'supersede' && value !== undefined))
       throw new InvalidMemoryError('At least one field must be provided for a memory update.');
+    if (input.supersede && (!input.supersede.sessionId?.trim() || !input.supersede.reason?.trim()))
+      throw new InvalidMemoryError('A correction requires a session ID and a reason.');
     return this.mutate(async () => {
       validateId(id);
       const index = await this.load();
@@ -265,9 +291,22 @@ export class FileMemoryStore implements MemoryStore {
       const old = await this.get(id);
       if (!old) throw new MemoryNotFoundError(id);
       const next = normalizeUpdate(old, input);
-      const memory = { ...next, updatedAt: this.now().toISOString() };
+      const timestamp = this.now().toISOString();
+      const provenance = input.supersede && {
+        at: timestamp,
+        sessionId: input.supersede.sessionId.trim(),
+        reason: input.supersede.reason.trim(),
+      };
+      const memory = { ...next, updatedAt: timestamp, ...(provenance ? { provenance } : {}) };
+      if (provenance) {
+        const history = await this.history(id);
+        await this.writeFileAtomically(
+          this.historyPath(id),
+          `${JSON.stringify([...history, { ...old, supersededBy: provenance }], null, 2)}\n`,
+        );
+      }
       if (input.content !== undefined && input.content !== old.content)
-        await writeFile(this.itemPath(id), memory.content, 'utf8');
+        await this.writeFileAtomically(this.itemPath(id), memory.content);
       await this.writeIndex({
         version: 1,
         memories: index.memories.map((entry) => (entry.id === id ? metadata(memory) : entry)),
@@ -283,6 +322,9 @@ export class FileMemoryStore implements MemoryStore {
       await this.writeIndex({ version: 1, memories: index.memories.filter((entry) => entry.id !== id) });
       await unlink(this.itemPath(id)).catch((error: NodeJS.ErrnoException) => {
         if (error.code !== 'ENOENT') throw new MemoryStorageError('Unable to remove memory content.');
+      });
+      await unlink(this.historyPath(id)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw new MemoryStorageError('Unable to remove memory history.');
       });
       return true;
     });
@@ -303,6 +345,10 @@ export class FileMemoryStore implements MemoryStore {
   private itemPath(id: string) {
     validateId(id);
     return join(this.itemsPath, `${id}.md`);
+  }
+  private historyPath(id: string) {
+    validateId(id);
+    return join(this.itemsPath, `${id}.history.json`);
   }
   private async load(): Promise<Index> {
     await this.initialize();
@@ -469,7 +515,8 @@ function validateIndex(value: unknown): Index {
         !Array.isArray(entry.tags) ||
         entry.tags.some((tag) => typeof tag !== 'string') ||
         !isUtcTimestamp(entry.createdAt) ||
-        !isUtcTimestamp(entry.updatedAt)
+        !isUtcTimestamp(entry.updatedAt) ||
+        (entry.provenance !== undefined && !validProvenance(entry.provenance))
       )
         throw new Error();
       ids.add(entry.id);
@@ -478,6 +525,29 @@ function validateIndex(value: unknown): Index {
     }
   }
   return index;
+}
+
+function validProvenance(value: unknown): value is MemoryProvenance {
+  const provenance = value as MemoryProvenance;
+  return (
+    !!provenance &&
+    isUtcTimestamp(provenance.at) &&
+    typeof provenance.sessionId === 'string' &&
+    !!provenance.sessionId.trim() &&
+    typeof provenance.reason === 'string' &&
+    !!provenance.reason.trim()
+  );
+}
+
+function validHistoryEntry(value: unknown): value is MemoryHistoryEntry {
+  const entry = value as MemoryHistoryEntry;
+  if (!entry || typeof entry.content !== 'string' || !validProvenance(entry.supersededBy)) return false;
+  try {
+    validateIndex({ version: 1, memories: [metadata(entry)] });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isUtcTimestamp(value: unknown): value is string {

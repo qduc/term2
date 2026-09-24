@@ -283,6 +283,32 @@ describe('MemoryCapabilityBuilder', () => {
     ).toBe('');
   });
 
+  it('never injects a superseded summary from a corrected memory', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const tools = builder.build({ kind: 'main' }).tools;
+    await tools
+      .find((tool) => tool.name === 'memory_create')!
+      .execute({
+        scope: 'global',
+        id: 'policy',
+        title: 'Rule',
+        summary: 'obsoleteprotocol',
+        content: 'obsoleteprotocol',
+      });
+    await tools
+      .find((tool) => tool.name === 'memory_update')!
+      .execute({
+        scope: 'global',
+        id: 'policy',
+        summary: 'newprotocol',
+        content: 'newprotocol',
+        supersede: { sessionId: 'session-1', reason: 'User correction' },
+      });
+    expect(await builder.contextForTurn('obsoleteprotocol')).toBe('');
+    expect((await builder.selectForTurn('newprotocol')).memories).toMatchObject([{ id: 'policy' }]);
+  });
+
   it('fails open and warns when the memory index cannot be read', async () => {
     const directory = makeTempDir();
     writeFileSync(join(directory, 'index.json'), '{ malformed');

@@ -1,9 +1,6 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const packageJson: { version: string } = require('../../../package.json');
+import { installationVersion } from '../../providers/fetch/logging-middleware.js';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -82,7 +79,7 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
             <Badge mode="MENTOR" />
           </>
         )}
-        <Text color={COLOR_TEXT_MUTED}> v{packageJson.version}</Text>
+        <Text color={COLOR_TEXT_MUTED}> v{installationVersion}</Text>
       </Box>
 
       <Box>

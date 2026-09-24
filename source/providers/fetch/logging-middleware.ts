@@ -9,12 +9,21 @@ import type { FetchMiddleware } from './compose.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export let installationVersion = '0.6.1';
+export let installationVersion = '0.26.1';
 try {
-  const packageJsonPath = join(__dirname, '../../../package.json');
-  const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-  if (pkg && typeof pkg.version === 'string') {
-    installationVersion = pkg.version;
+  let dir = __dirname;
+  while (dir && dir !== dirname(dir)) {
+    try {
+      const packageJsonPath = join(dir, 'package.json');
+      const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+      if (pkg && typeof pkg.version === 'string' && pkg.name === '@qduc/term2') {
+        installationVersion = pkg.version;
+        break;
+      }
+    } catch {
+      // continue walking up
+    }
+    dir = dirname(dir);
   }
 } catch {
   // fallback

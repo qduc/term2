@@ -2759,11 +2759,13 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
   }
 });
 
-it('CodexResponsesWSModel isolates nested websocket identity while retaining the root prompt cache key', async () => {
+it('CodexResponsesWSModel isolates nested websocket identity without sending the root prompt cache key', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   let seenRequest: any;
-  transport.fetchResponse = async function (request: any) {
+  let seenBody: any;
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData: any) {
     seenRequest = request;
+    seenBody = requestData;
     return makeStream([
       { type: 'response.completed', response: { id: 'resp_nested_identity', output: [], usage: {} } },
     ]);
@@ -2790,13 +2792,13 @@ it('CodexResponsesWSModel isolates nested websocket identity while retaining the
       providerHistoryKey: 'parent-session:subagent:call-explorer-1',
       promptCacheKey: 'parent-session-cache',
     },
-    () => collect(model.stream({ input: [], tools: [], codex: { promptCacheKey: 'parent-session-cache' } })),
+    () => collect(model.stream({ input: [], tools: [] })),
   );
 
   expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session:subagent:call-explorer-1');
   expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session:subagent:call-explorer-1');
   expect(seenRequest.providerOptions.client_metadata.session_id).toBe('parent-session:subagent:call-explorer-1');
-  expect(seenRequest.codex.promptCacheKey).toBe('parent-session-cache');
+  expect(seenBody.prompt_cache_key).toBeUndefined();
 });
 
 it('CodexResponsesWSModel isolates implicit response history for logical runs sharing a foreground session', async () => {

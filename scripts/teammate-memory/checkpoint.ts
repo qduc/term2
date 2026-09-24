@@ -8,6 +8,7 @@ import type {
   StreamedModelTurnRequest,
   StreamedModelUsage,
 } from '../../source/contracts/streamed-model-turn.js';
+import type { ProviderDefinition } from '../../source/providers/registry.js';
 
 type Arm = 'A' | 'B';
 type Preflight = {
@@ -67,7 +68,13 @@ export function buildCheckpointPair(preflight: Preflight): [CheckpointRequest, C
     if (bytes > MAX_INPUT_BYTES) throw new Error('Checkpoint input exceeds the admission bound');
     return {
       arm,
-      request: { instructions, input, tools: [], toolChoice: 'none', reasoning: { effort: 'medium' } },
+      request: {
+        instructions,
+        input,
+        tools: [],
+        reasoning: { effort: 'medium' },
+        codex: { include: ['reasoning.encrypted_content'] },
+      },
       // This is an API-list-price equivalent, NOT a guarantee of Codex subscription billing.
       maxReferenceUsd:
         ((MAX_INPUT_BYTES + TOKEN_OVERHEAD) * INPUT_PRICE_PER_M + MAX_OUTPUT_TOKENS * OUTPUT_PRICE_PER_M) / 1_000_000,
@@ -77,59 +84,84 @@ export function buildCheckpointPair(preflight: Preflight): [CheckpointRequest, C
   return [make('A', preflight.aContext), make('B', preflight.bContext)];
 }
 
+export async function createCheckpointModel(provider: Pick<ProviderDefinition, 'createStreamedModel'>) {
+  if (!provider.createStreamedModel) throw new Error('Codex provider unavailable');
+  const settings = {
+    get: (key: string) =>
+      ((
+        { 'agent.model': 'gpt-6-luna', 'agent.transport': 'websocket', 'agent.retryAttempts': 0 } as Record<
+          string,
+          unknown
+        >
+      )[key]),
+  } as Parameters<NonNullable<ProviderDefinition['createStreamedModel']>>[1]['settingsService'];
+  const logger = { info() {}, warn() {}, error() {}, debug() {}, security() {} } as Parameters<
+    NonNullable<ProviderDefinition['createStreamedModel']>
+  >[1]['loggingService'];
+  return provider.createStreamedModel('gpt-6-luna', {
+    settingsService: settings,
+    loggingService: logger,
+    retryAttempts: 0,
+  });
+}
+
 export async function runCheckpointPair(
   pair: [CheckpointRequest, CheckpointRequest],
   deps: {
-    createModel: (arm: Arm) => Promise<Pick<StreamedModelTurn, 'stream'>>;
+    createModel: (arm: Arm) => Promise<Pick<StreamedModelTurn, 'stream'> & { close?: () => Promise<void> | void }>;
     persist: (result: CheckpointResult) => Promise<void>;
   },
 ): Promise<CheckpointResult[]> {
   const results: CheckpointResult[] = [];
   for (const { arm, request, maxReferenceUsd, promptSha256 } of pair) {
     const model = await deps.createModel(arm);
-    let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
-    for await (const event of model.stream(request)) {
-      if (event.type === 'tool_call') throw new Error('Unexpected tool call: checkpoint cannot continue safely');
-      if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
-        throw new Error('Unexpected compaction: checkpoint cannot continue safely');
+    try {
+      let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
+      for await (const event of model.stream({ ...request, signal: AbortSignal.timeout(120_000) })) {
+        if (event.type === 'tool_call') throw new Error('Unexpected tool call: checkpoint cannot continue safely');
+        if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
+          throw new Error('Unexpected compaction: checkpoint cannot continue safely');
+        }
+        if (event.type === 'completion') {
+          if (completion) throw new Error('Multiple completions: checkpoint cannot continue safely');
+          completion = event;
+        }
       }
-      if (event.type === 'completion') {
-        if (completion) throw new Error('Multiple completions: checkpoint cannot continue safely');
-        completion = event;
+      if (
+        !completion ||
+        !completion.usage ||
+        !Number.isSafeInteger(completion.usage.inputTokens) ||
+        !Number.isSafeInteger(completion.usage.outputTokens) ||
+        completion.usage.inputTokens! < 0 ||
+        completion.usage.outputTokens! < 0
+      ) {
+        throw new Error('Missing or invalid provider usage: stop before another request');
       }
+      if (
+        completion.usage.inputTokens! > MAX_INPUT_BYTES + TOKEN_OVERHEAD ||
+        completion.usage.outputTokens! > MAX_OUTPUT_TOKENS
+      ) {
+        throw new Error('Provider usage exceeded the reserved envelope: stop before another request');
+      }
+      const text = completion.output
+        .flatMap((item) => (item.type === 'message' ? item.content.map((part) => part.text) : []))
+        .join('');
+      if (!text.trim() || completion.output.some((item) => item.type === 'tool_call')) {
+        throw new Error('No final answer or unexpected tool call: stop before another request');
+      }
+      const result = {
+        arm,
+        promptSha256,
+        text,
+        usage: completion.usage,
+        responseId: completion.responseId,
+        maxReferenceUsd,
+      };
+      await deps.persist(result);
+      results.push(result);
+    } finally {
+      await model.close?.();
     }
-    if (
-      !completion ||
-      !completion.usage ||
-      !Number.isSafeInteger(completion.usage.inputTokens) ||
-      !Number.isSafeInteger(completion.usage.outputTokens) ||
-      completion.usage.inputTokens! < 0 ||
-      completion.usage.outputTokens! < 0
-    ) {
-      throw new Error('Missing or invalid provider usage: stop before another request');
-    }
-    if (
-      completion.usage.inputTokens! > MAX_INPUT_BYTES + TOKEN_OVERHEAD ||
-      completion.usage.outputTokens! > MAX_OUTPUT_TOKENS
-    ) {
-      throw new Error('Provider usage exceeded the reserved envelope: stop before another request');
-    }
-    const text = completion.output
-      .flatMap((item) => (item.type === 'message' ? item.content.map((part) => part.text) : []))
-      .join('');
-    if (!text.trim() || completion.output.some((item) => item.type === 'tool_call')) {
-      throw new Error('No final answer or unexpected tool call: stop before another request');
-    }
-    const result = {
-      arm,
-      promptSha256,
-      text,
-      usage: completion.usage,
-      responseId: completion.responseId,
-      maxReferenceUsd,
-    };
-    await deps.persist(result);
-    results.push(result);
   }
   return results;
 }
@@ -156,24 +188,10 @@ async function main() {
   await mkdir(output); // One-shot: a partial or complete run must never be overwritten or replayed.
   const { getProvider } = await import('../../source/providers/registry.js');
   await import('../../source/providers/index.js');
-  const settings = {
-    get: (key: string) =>
-      ((
-        { 'agent.model': 'gpt-6-luna', 'agent.transport': 'http', 'agent.retryAttempts': 0 } as Record<string, unknown>
-      )[key]),
-  } as Parameters<NonNullable<ReturnType<typeof getProvider>['createStreamedModel']>>[1]['settingsService'];
-  const logger = { info() {}, warn() {}, error() {}, debug() {}, security() {} } as Parameters<
-    NonNullable<ReturnType<typeof getProvider>['createStreamedModel']>
-  >[1]['loggingService'];
   const provider = getProvider('codex');
-  if (!provider?.createStreamedModel) throw new Error('Codex provider unavailable');
+  if (!provider) throw new Error('Codex provider unavailable');
   const results = await runCheckpointPair(pair, {
-    createModel: async () =>
-      provider.createStreamedModel!('gpt-6-luna', {
-        settingsService: settings,
-        loggingService: logger,
-        retryAttempts: 0,
-      }),
+    createModel: async () => createCheckpointModel(provider),
     persist: async (result) =>
       writeFile(join(output, `${result.arm}.json`), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' }),
   });

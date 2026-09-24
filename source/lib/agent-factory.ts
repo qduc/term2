@@ -471,6 +471,7 @@ export function buildAgent(
   const {
     name,
     instructions,
+    memoryContextEnabled,
     tools: toolDefinitions,
   } = getAgentDefinition(
     {
@@ -543,6 +544,7 @@ export function buildAgent(
     model: resolvedModel,
     ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
     instructions,
+    memoryContextEnabled,
     tools,
   };
 

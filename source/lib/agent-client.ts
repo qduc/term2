@@ -13,6 +13,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import { AgentConfiguration } from './agent-configuration.js';
+import { MemoryCapabilityBuilder } from '../services/memory/memory-capabilities.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
@@ -145,6 +146,8 @@ export class AgentClient {
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #memoryCapabilityBuilder: MemoryCapabilityBuilder;
+  #executionContext?: ExecutionContext;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #subagentBridge: SubagentBridge | null = null;
@@ -662,6 +665,10 @@ export class AgentClient {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
+    this.#executionContext = deps.executionContext;
+    this.#memoryCapabilityBuilder = new MemoryCapabilityBuilder(deps.settings, {
+      onWarning: (message) => deps.logger.warn(message),
+    });
     this.#sessionContextService = deps.sessionContextService;
     this.#toolLifecycle = toolLifecycle;
     this.#hookScope = hookScope ?? 'root';
@@ -1333,7 +1340,20 @@ export class AgentClient {
       const provider = this.#agentConfig.getProvider();
       this.#agentConfig.beginTurn();
       const supportsChaining = this.supportsConversationChaining();
-      const agent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
+      const baseAgent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
+      let agent = baseAgent;
+      if (baseAgent.memoryContextEnabled && options.memoryQuery) {
+        const memoryContext = await this.#memoryCapabilityBuilder.contextForTurn(options.memoryQuery, {
+          projectPath: this.#executionContext?.getCwd() ?? process.cwd(),
+        });
+        if (startController.signal.aborted) {
+          throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+        }
+        if (memoryContext) {
+          agent = { ...baseAgent, instructions: `${baseAgent.instructions}\n\n${memoryContext}` };
+          this.#logger.debug('Task-relevant memory context selected', { chars: memoryContext.length });
+        }
+      }
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
       const runBudget = this.#runBudgetPolicy();

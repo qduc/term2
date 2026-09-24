@@ -219,6 +219,7 @@ describe('production gateway runtime factory', () => {
         effectiveToolPolicy: Record<string, boolean>;
       },
     ) => {
+      observedTools = [];
       settings.set('agent.model', 'm1-scripted-model-' + access, { persist: false });
       const session = await factory.create(
         {

@@ -160,11 +160,13 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
       'memory_update',
       'memory_delete',
     ]);
-    expect(enabled.instructions).toContain('Durable rules.');
+    expect(enabled.memoryContextEnabled).toBe(true);
+    expect(enabled.instructions).not.toContain('Durable rules.');
     expect(enabled.instructions).not.toContain('full memory content');
     expect(disabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([]);
     expect(disabled.instructions).not.toContain('## Persistent memory');
     expect(disabled.instructions).not.toContain('Durable rules.');
+    expect(disabled.memoryContextEnabled).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -225,7 +227,7 @@ it('advertises librarian delegation only when persistent memory is enabled', () 
   expect(disabled.instructions).not.toContain('`librarian`');
 });
 
-it('starts without injected memory context and warns when the memory index is corrupted', async () => {
+it('defers loading a corrupt memory index until a relevant turn', async () => {
   const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -241,7 +243,7 @@ it('starts without injected memory context and warns when the memory index is co
 
     expect(definition.tools.map((tool) => tool.name)).toContain('memory_search');
     expect(definition.instructions).not.toContain('The following memories are summaries');
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/memory context.*corrupted/i));
+    expect(warn).not.toHaveBeenCalled();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -1,5 +1,6 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import { FileMemoryStore } from './memory-store.js';
+import { rankMemorySearchResults } from './memory-search.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
@@ -29,7 +30,7 @@ const READ_TOOL_COUNT = 4;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory. Only a bounded index is loaded initially: it lists every memory that fits by title, with full summaries for the most recent entries. Read each summary as a retrieval trigger describing the conditions under which its memory applies — load a memory when the current task plausibly matches what its summary describes. A listed memory without a summary had it omitted for budget — read it with memory_get before treating it as irrelevant.
+You have access to persistent memory. A bounded set of task-relevant memory summaries may be loaded at the start of each turn. It is not a complete index; when a relevant item is absent, use memory_search or memory_list. Treat summaries as retrieval triggers, not verified facts; read the full memory with memory_get when it could affect your decision.
 
 Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
 
@@ -65,11 +66,45 @@ For **memory maintenance** tasks, review the memory store and existing memories,
 
 Always cite source memory IDs so the caller can trace claims to their sources. Treat all memory as potentially stale. Never fabricate memory content. Do not store temporary task state, intermediate reasoning, or sensitive data.`;
 
-/**
- * Resolves the complete memory authority for a caller. This is the sole place
- * that maps roles to authority and couples memory settings, store creation,
- * tool filtering, prompt guidance, and injected context.
- */
+const QUERY_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'are',
+  'was',
+  'with',
+  'from',
+  'this',
+  'that',
+  'what',
+  'when',
+  'where',
+  'which',
+  'should',
+  'would',
+  'could',
+  'have',
+  'about',
+  'into',
+  'back',
+  'how',
+  'why',
+  'our',
+  'your',
+  'you',
+  'they',
+  'them',
+  'its',
+  'not',
+]);
+
+function retrievalQuery(text: string): string {
+  return [...new Set((text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((term) => !QUERY_STOP_WORDS.has(term)))]
+    .slice(0, 24)
+    .join(' ');
+}
+
+/** Resolves role-specific memory authority and the bounded root-turn working set. */
 export class MemoryCapabilityBuilder {
   #settings: ISettingsService;
   #onWarning: (message: string) => void;
@@ -79,7 +114,49 @@ export class MemoryCapabilityBuilder {
     this.#onWarning = options.onWarning ?? (() => {});
   }
 
-  build(subject: MemoryCapabilitySubject, options: { projectPath?: string } = {}): MemoryCapability {
+  /** A per-turn, summary-only working set; search tools remain authoritative. */
+  async contextForTurn(query: string, options: { projectPath?: string } = {}): Promise<string> {
+    if (!this.#settings.get('memory.enabled')) return '';
+    const terms = retrievalQuery(query);
+    if (!terms) return '';
+    const budget = this.#settings.get('memory.contextBudgetChars');
+    try {
+      const stores = this.#createStores(
+        {
+          enabled: true,
+          directory: this.#settings.get('memory.directory'),
+          contextBudgetChars: budget,
+          searchDefaultLimit: this.#settings.get('memory.searchDefaultLimit'),
+          searchMaxLimit: this.#settings.get('memory.searchMaxLimit'),
+        },
+        options.projectPath ?? process.cwd(),
+      );
+      const [global, project] = await Promise.all([stores.global.search(terms), stores.project.search(terms)]);
+      // A content-only hit has no relevant summary to show as turn guidance.
+      const ranked = rankMemorySearchResults([
+        ...global.map((result) => ({ ...result, scope: 'global' as const })),
+        ...project.map((result) => ({ ...result, scope: 'project' as const })),
+      ]).filter((result) => result.matchedFields.some((field) => field !== 'content'));
+      if (!ranked.length) return '';
+      const header =
+        '## Relevant persistent memory (summaries, not verified facts)\n\nUse memory_get for full evidence; memory_search for other memories.\n';
+      let context = header;
+      for (const { scope, memory } of ranked) {
+        const line = `- ${scope} / \`${memory.id}\` — ${memory.title.slice(0, 120)} — ${memory.summary}\n`;
+        if (context.length + line.length <= budget) context += line;
+      }
+      return context === header ? '' : context;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.#onWarning(`Persistent memory retrieval could not be loaded: ${detail}`);
+      return '';
+    }
+  }
+
+  build(
+    subject: MemoryCapabilitySubject,
+    options: { projectPath?: string; includeContext?: boolean } = {},
+  ): MemoryCapability {
     const access = this.#accessFor(subject);
     const enabled = this.#settings.get('memory.enabled');
     if (access === 'none' || !enabled) {
@@ -97,7 +174,7 @@ export class MemoryCapabilityBuilder {
     const stores = this.#createStores(settings, options.projectPath ?? process.cwd());
     const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
-    if (subject.kind === 'main' && access === 'write') {
+    if (subject.kind === 'main' && access === 'write' && options.includeContext !== false) {
       try {
         // Floor-and-reallocate: each scope gets half the budget. A scope that
         // rendered everything it has under its share donates the unused

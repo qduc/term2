@@ -11,6 +11,11 @@ import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
+import { MemoryCapabilityBuilder } from '../services/memory/memory-capabilities.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const providers = new Set<string>();
 const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
@@ -66,6 +71,101 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('selects fresh task-relevant memory per root turn without changing the cached base agent', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'term2-memory-turn-'));
+    const provider = 'memory-turn-provider';
+    providers.add(provider);
+    const requests: any[] = [];
+    const agent = {
+      name: 'root',
+      model: 'test-model',
+      instructions: 'stable base',
+      tools: [],
+      memoryContextEnabled: true,
+    };
+    try {
+      const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+      const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+      await create.execute({
+        scope: 'global',
+        id: 'socket',
+        title: 'Nested socket incident',
+        summary: 'Keep child socket identity distinct.',
+        content: 'private socket notes',
+      });
+      await create.execute({
+        scope: 'global',
+        id: 'release',
+        title: 'Release calendar',
+        summary: 'Ship release notes weekly.',
+        content: 'private release notes',
+      });
+      registerProvider({
+        id: provider,
+        label: 'Memory turn test provider',
+        createStreamedModel: () => ({
+          async *stream(request: any) {
+            requests.push(request);
+            yield { type: 'completion' as const, responseId: 'memory-response', output: [] };
+          },
+        }),
+        fetchModels: async () => [],
+      });
+      const instance = client(
+        provider,
+        { agentOverride: agent },
+        {
+          'memory.enabled': true,
+          'memory.directory': directory,
+          'memory.contextBudgetChars': 900,
+          'memory.searchDefaultLimit': 10,
+          'memory.searchMaxLimit': 50,
+        },
+      );
+      await (
+        await instance.startStream('first', { memoryQuery: 'nested socket issue' })
+      ).completed;
+      await (
+        await instance.startStream('second', { memoryQuery: 'release calendar' })
+      ).completed;
+      expect(requests).toHaveLength(2);
+      expect(requests[0].instructions).toContain('Keep child socket identity distinct.');
+      expect(requests[0].instructions).not.toContain('Ship release notes weekly.');
+      expect(requests[1].instructions).toContain('Ship release notes weekly.');
+      expect(requests[1].instructions).not.toContain('Keep child socket identity distinct.');
+      expect(requests[0].instructions).not.toContain('private socket notes');
+      expect(agent.instructions).toBe('stable base');
+      instance.dispose();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not inject memory for an agent without the root memory context capability', async () => {
+    const provider = 'memory-disabled-provider';
+    providers.add(provider);
+    const requests: any[] = [];
+    registerProvider({
+      id: provider,
+      label: 'Memory disabled test provider',
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          requests.push(request);
+          yield { type: 'completion' as const, responseId: 'disabled-response', output: [] };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(provider, {
+      agentOverride: { name: 'transient', model: 'test-model', instructions: 'no memory', tools: [] },
+    });
+    await (
+      await instance.startStream('text', { memoryQuery: 'nested socket issue' })
+    ).completed;
+    expect(requests[0].instructions).toBe('no memory');
+    instance.dispose();
+  });
+
   it('accepts session rollover while background work is live', () => {
     const instance = client('rollover-background-guard', {
       agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },

@@ -215,9 +215,76 @@ describe('MemoryCapabilityBuilder', () => {
       role: 'explorer',
     });
 
-    expect(main.guidance).toContain('had it omitted for budget');
-    expect(main.guidance).toContain('read it with memory_get before treating it as irrelevant');
+    expect(main.guidance).toContain('bounded set of task-relevant memory summaries');
+    expect(main.guidance).toContain('not a complete index');
+    expect(main.guidance).toContain('read the full memory with memory_get');
     expect(explorer.guidance).not.toContain('concise index');
+  });
+
+  it('selects an older task-relevant decision ahead of newer unrelated memories without leaking content', async () => {
+    const directory = makeTempDir();
+    const settings = createMockSettingsService({ 'memory.directory': directory, 'memory.contextBudgetChars': 800 });
+    const builder = new MemoryCapabilityBuilder(settings);
+    const create = builder
+      .build({ kind: 'main' }, { projectPath: '/workspace/recall' })
+      .tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'project',
+      id: 'nested-chain',
+      title: 'Codex nested-chain incident',
+      summary: 'Child runs need distinct physical WebSocket identity; preserve root cache affinity and chaining.',
+      content: 'Do not disable chaining.',
+    });
+    for (let i = 0; i < 25; i++) {
+      await create.execute({
+        scope: 'project',
+        id: `release-${i}`,
+        title: 'Release notes',
+        summary: 'Unrelated release-note work.',
+        content: 'No socket decision.',
+      });
+    }
+    const recencyIndex = builder.build({ kind: 'main' }, { projectPath: '/workspace/recall' }).context;
+    expect(recencyIndex).not.toContain('distinct physical WebSocket identity');
+    const selected = await builder.contextForTurn('The nested Codex 400s are back. What should we avoid?', {
+      projectPath: '/workspace/recall',
+    });
+    expect(selected).toContain('distinct physical WebSocket identity');
+    expect(selected).not.toContain('Unrelated release-note work');
+    expect(selected).not.toContain('Do not disable chaining.');
+    expect(selected.length).toBeLessThanOrEqual(800);
+  });
+
+  it('does not inject an unrelated lexical match or memories when disabled', async () => {
+    const directory = makeTempDir();
+    const enabled = createMockSettingsService({ 'memory.directory': directory });
+    const builder = new MemoryCapabilityBuilder(enabled);
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'global',
+      id: 'cost-policy',
+      title: 'Cost policy',
+      summary: 'Always report experiment costs.',
+      content: 'Include costs.',
+    });
+    expect(await builder.contextForTurn('The cost of this?')).toContain('Always report experiment costs.');
+    expect(await builder.contextForTurn('How is the socket?')).toBe('');
+    expect(
+      await new MemoryCapabilityBuilder(
+        createMockSettingsService({ 'memory.directory': directory, 'memory.enabled': false }),
+      ).contextForTurn('cost'),
+    ).toBe('');
+  });
+
+  it('fails open and warns when the memory index cannot be read', async () => {
+    const directory = makeTempDir();
+    writeFileSync(join(directory, 'index.json'), '{ malformed');
+    const warnings: string[] = [];
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }), {
+      onWarning: (warning) => warnings.push(warning),
+    });
+    expect(await builder.contextForTurn('release notes')).toBe('');
+    expect(warnings).toEqual([expect.stringMatching(/memory retrieval could not be loaded/i)]);
   });
 
   it('donates unused global scope budget to a project scope that exceeds its fair share', async () => {

@@ -25,6 +25,8 @@ import type {
 } from '../contracts/session-rollover.js';
 
 export type AgentClientRunOptions = {
+  /** Latest user turn text, not the provider's accumulated history. */
+  memoryQuery?: string;
   /** Shared automatic retry/recovery capability for this logical turn. */
   recoveryBudget?: RetryRecoveryBudget;
   previousResponseId?: string | null;

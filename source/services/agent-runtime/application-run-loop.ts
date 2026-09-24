@@ -101,6 +101,7 @@ export interface ApplicationAgent {
   readonly name: string;
   readonly instructions: string;
   readonly model: string;
+  readonly memoryContextEnabled?: boolean;
   modelSettings?: AgentModelSettings;
   defaultRunOptions?: any;
   outputType?: JsonSchemaDefinition | 'text';

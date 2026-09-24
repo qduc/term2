@@ -40,10 +40,30 @@ async function archiveInto(ref: string, directory: string): Promise<void> {
   });
 }
 
+export function isSnapshotAvailable(): boolean {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${SNAPSHOT}^{commit}`], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function prepareR1(outputDirectory: string) {
-  const parent = execFileSync('git', ['rev-parse', 'eb38e6f7^'], { encoding: 'utf8' }).trim();
-  const snapshotCommit = execFileSync('git', ['rev-parse', SNAPSHOT], { encoding: 'utf8' }).trim();
-  if (parent !== snapshotCommit) throw new Error('R1 snapshot no longer matches the recorded parent');
+  let parent: string | null = null;
+  try {
+    parent = execFileSync('git', ['rev-parse', '--verify', 'eb38e6f7^'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    // Parent commit may be truncated in shallow checkouts.
+  }
+  const snapshotCommit = execFileSync('git', ['rev-parse', '--verify', `${SNAPSHOT}^{commit}`], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+  if (parent && parent !== snapshotCommit) throw new Error('R1 snapshot no longer matches the recorded parent');
   const output = resolve(outputDirectory);
   await mkdir(output); // Never overwrite or reset a prior run.
   const projectIds: Record<'A' | 'B', string> = { A: '', B: '' };

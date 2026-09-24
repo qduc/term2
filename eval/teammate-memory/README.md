@@ -1,7 +1,8 @@
 # Returning-session teammate-memory pilot: fixture and scoring contract
 
-Status: **authored fixtures and isolated offline R1 preparation; no paid
-model runs or efficacy result.** Run
+Status: **authored fixtures, isolated offline R1 preparation, and a smaller
+single-turn checkpoint probe; one attempted Codex A request returned HTTP 400,
+no B request or efficacy result.** Run
 `pnpm exec tsx scripts/teammate-memory/preflight.ts <new-output-directory>`
 to archive the frozen repository separately for A and B, seed identical
 per-arm R1 memories, and write `preflight.json` outside both candidate
@@ -9,14 +10,52 @@ workspaces. The script refuses an existing output directory. Its A index check
 uses the preserved recency renderer (`memory-store.ts` is unchanged between
 `657b5425` and `91b58452`); it does **not** run the A agent binary or replay
 sessions. The planned cost limits in the manifest are not enforced. No paid
-request should start until a real multi-session runner and an enforcing cost
-guard are in place. The B implementation replaces root-agent
+request should start from the original three-session protocol until a faithful
+multi-session runner and an enforcing billing guard are in place. The B implementation replaces root-agent
 recency injection with task-relevant local search at turn start; A still requires
 an isolated build of the earlier implementation. C has not been implemented.
 This follows [the teammate-memory research](../../docs/research/teammate-like-memory-direction.md).
 It tests whether Term2 behaves more like a continuing teammate at an acceptable
 incremental cost, not whether it can save many memories. These are authored
 pilot cells, not a representative sample or evidence that any arm works.
+
+### Smaller R1 checkpoint (not the three-session pilot)
+
+`pnpm exec tsx scripts/teammate-memory/checkpoint.ts <preflight-directory>` is a
+network-free dry run. The `--go` variant is a **two-request live probe**, not a
+session replay: it freezes the R1 preflight's identical seeded store, assembles
+the same neutral instructions and returning question for both arms, and replaces
+only the injected memory material. There are no tools, session history, memory
+writes, or compaction requests. It can show whether the B-selected summary
+changes a single answer relative to A's recency index. It cannot measure
+model-directed saving, reuse over real sessions, initiative to search memory,
+or sustained teammate behavior. R1 is deliberately selected for A/B divergence;
+it is not a representative effectiveness estimate. Score outputs against the
+R1 private oracle outside the candidate workspaces, blinded to arm labels.
+
+The probe admits at most 32,000 bytes of text per arm, sets both SDK and Term2
+retries to zero, uses an unchained HTTP request with no tools, and reserves
+128,000 output tokens per request from the provider's published physical model
+limit. At the GPT-6 Luna standard API list rate this is under $0.07 equivalent
+per arm (including a 1,024-token envelope allowance); the two-call reference
+bound is under $0.14. **Codex ChatGPT-plan credits are not API dollars.** The
+script records usage but cannot certify actual billed USD or prevent other
+processes using the same account. A missing/invalid terminal usage record,
+unexpected compaction/tool call, or oversized response stops before the next
+arm; it never replays a partially sent request. The `checkpoint-run/` directory
+is created exclusively and records partial results. These conditions are a
+small exploratory probe guard, not an enforcement of the original manifest's
+12-request/$0.50-per-arm plan.
+
+The first `--go` attempt at `/tmp/term2-teammate-r1-preflight-20260924` reached
+the Codex HTTP endpoint but arm A returned **400 without a response body**. No
+terminal usage or A result was recorded, and the serial runner did not dispatch
+B. The account's read-only Codex model list does contain `gpt-6-luna`, so a
+missing model listing is not the explanation; the rejected wire field is not
+known. `checkpoint-run/` is one-shot and must not be reused. Do not automatically
+retry a request with unknown charge or treat this attempt as a behavioral score.
+The script now prints only the HTTP status on provider failure: SDK errors may
+contain response headers, which must not be dumped to terminal logs.
 
 ## What to compare
 

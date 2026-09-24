@@ -85,7 +85,7 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
   expect(result.usage?.prompt_tokens).toBe(21);
   expect(result.usage?.completion_tokens).toBe(6);
   expect(received).toContainEqual({
-    type: 'usage_update',
+    type: 'subagent_usage_update',
     agentId: 'mentor-run',
     usage: { prompt_tokens: 21, completion_tokens: 6, total_tokens: 27 },
   });

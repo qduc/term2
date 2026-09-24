@@ -411,7 +411,7 @@ version, so ignore fields you do not need.
 | `interaction_updated` | `turnId`, `interaction` (`PendingInteractionDto`) |
 | `interaction_resolved` | `turnId`, `interactionId`, `outcome`, `variant` |
 | `interaction_recovered` | `turnId`, `interaction` (`PendingInteractionDto`), `reason` |
-| `usage_update` | `turnId`, `inputTokens`, `outputTokens`, `totalTokens`, `usage` with the same three fields |
+| `usage_update` | `turnId`, `inputTokens`, `outputTokens`, `totalTokens`, `usage` with the same three fields. Root-turn requests only; subagent usage is not published |
 | `retry` | `turnId`, `agentId?`, `toolName`, `attempt`, `maxRetries`, `errorMessage`, `retryType?`, `errorKind?`, `delayMs?`, `retryAfterMs?` |
 | `retry_exhausted` | `turnId`, `provider?`, `errorKind`, `attempts`, `maxAttempts`, `message`, `canRetry` |
 | `subagent_started` | `turnId`, `agentId`, `name?`, `role`, `task`, `async?` |

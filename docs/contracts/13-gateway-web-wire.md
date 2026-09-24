@@ -179,7 +179,7 @@ destroys the SSE response.
 | `interaction_updated` | gateway — `#resolveInteraction` ask_user follow-up | `{ turnId, interaction }` | handled (rejects a stale id or non-increasing revision) |
 | `interaction_resolved` | gateway — `#resolveInteraction` settlement | `{ turnId, interactionId, outcome, variant }` | handled |
 | `interaction_recovered` | gateway — `interaction-checkpoint.ts` `recover()` on startup | `{ turnId, interaction, reason }`, reason limited to `daemon_restart`, `forced_shutdown`, `persistence_recovery` | handled |
-| `usage_update` | `mapConversationEvent` ← `usage_update` | `{ turnId, inputTokens, outputTokens, totalTokens, usage }` | fixed by M4 |
+| `usage_update` | `mapConversationEvent` ← `usage_update` (root turn only; `subagent_usage_update` is not published) | `{ turnId, inputTokens, outputTokens, totalTokens, usage }` | fixed by M4 |
 | `turn_completed` | `mapConversationEvent` ← `final` | `{ turnId, outcome: 'completed', text }` (bounded 16384) | handled |
 | `turn_failed` | `mapConversationEvent` ← `error`; also gateway-originated in `#recordContinuationFailure` | `{ turnId, outcome: 'failed', reason, finalText? }` | fixed by M4 |
 | `turn_aborted` | gateway — `#abortSession` | `{ turnId, outcome: 'aborted' }` | handled |

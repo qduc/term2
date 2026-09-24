@@ -220,6 +220,53 @@ it('final event does not overwrite the per-turn footer usage with the run-cumula
   expect(calls.debugMessages.some((m) => m.startsWith('UI keeping last streamed turn usage'))).toBe(true);
 });
 
+it('keeps subagent usage out of the root turn footer', () => {
+  // Foreground subagent events share the root turn's event sink. A subagent's
+  // usage describes a different model's requests; showing it in the footer
+  // misreports the root context gauge, and latching it as the turn's usage
+  // would make the root final's own usage look already-settled.
+  const lastUsageHistory: any[] = [];
+  const speeds: any[] = [];
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: (usage) => lastUsageHistory.push(usage),
+      setStreamingSpeed: (speed) => speeds.push(speed),
+      reasoningThrottleMs: 200,
+      now: () => 1000,
+      createStreamingUpdateCoordinator: () => ({ push: () => {}, cancel: () => {}, flush: () => {} }),
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  session.applyConversationEvent({
+    type: 'subagent_usage_update',
+    agentId: 'sub-1',
+    usage: { prompt_tokens: 50_000, completion_tokens: 4000, total_tokens: 54_000 },
+  });
+  expect(lastUsageHistory).toEqual([]);
+  expect(speeds).toEqual([]);
+  expect(session.streamingState.latestUsage).toBeFalsy();
+
+  const rootUsage = { prompt_tokens: 1200, completion_tokens: 30, total_tokens: 1230 };
+  session.applyConversationEvent({ type: 'final', finalText: 'Done.', usage: rootUsage } as const);
+  expect(lastUsageHistory).toEqual([rootUsage]);
+});
+
 it('botResponseUpdater creates and updates streaming bot messages', () => {
   let messages: any[] = [];
 

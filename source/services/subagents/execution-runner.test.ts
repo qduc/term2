@@ -111,7 +111,7 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
     expect(committedEvents(received)).toContainEqual({
-      type: 'retry',
+      type: 'subagent_retry',
       agentId: 'run-1',
       toolName: 'model',
       attempt: 1,
@@ -243,7 +243,7 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
 
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
-    expect(received).toContainEqual({ type: 'usage_update', agentId: 'run-1', usage });
+    expect(received).toContainEqual({ type: 'subagent_usage_update', agentId: 'run-1', usage });
   });
 
   it('forwards final usage when the stream has no separate usage update', async () => {
@@ -252,6 +252,6 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
 
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
-    expect(received).toContainEqual({ type: 'usage_update', agentId: 'run-1', usage });
+    expect(received).toContainEqual({ type: 'subagent_usage_update', agentId: 'run-1', usage });
   });
 });

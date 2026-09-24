@@ -140,9 +140,13 @@ describe('background observations', () => {
       lastObservation: { kind: 'request_dispatched', at: 1_000 },
       model: { provider: 'openai', id: 'gpt-4o' },
     });
-    registry.handleSubagentEvent({ type: 'usage_update', agentId: handle.runId, usage: { prompt_tokens: 12_300 } });
     registry.handleSubagentEvent({
-      type: 'retry',
+      type: 'subagent_usage_update',
+      agentId: handle.runId,
+      usage: { prompt_tokens: 12_300 },
+    });
+    registry.handleSubagentEvent({
+      type: 'subagent_retry',
       agentId: handle.runId,
       toolName: 'model',
       attempt: 1,
@@ -252,7 +256,7 @@ describe('background observations', () => {
     registry.cancelRun(handle.runId);
     registry.handleSubagentEvent({ type: 'subagent_streaming_text', agentId: handle.runId, text: 'buffered' });
     registry.handleSubagentEvent({
-      type: 'retry',
+      type: 'subagent_retry',
       agentId: handle.runId,
       toolName: 'model',
       attempt: 1,
@@ -288,7 +292,7 @@ describe('background observations', () => {
     text('one two three');
     expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'text_received' } });
     registry.handleSubagentEvent({
-      type: 'retry',
+      type: 'subagent_retry',
       agentId: handle.runId,
       toolName: 'model',
       attempt: 1,

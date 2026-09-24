@@ -132,10 +132,12 @@ export function aggregateContextToolUsage(
   return Object.entries(toolCounts).map(([toolName, count]) => ({ toolName, count }));
 }
 
-export async function safeEmit(
+export async function safeEmit<E>(
   logger: any,
-  onEvent: ((event: any) => void | PromiseLike<void>) | undefined,
-  event: any,
+  onEvent: ((event: E) => void | PromiseLike<void>) | undefined,
+  // NoInfer: the sink decides the event type, so a malformed literal is a
+  // type error instead of silently widening E.
+  event: NoInfer<E>,
   options: { propagate?: boolean } = {},
 ): Promise<void> {
   try {

@@ -294,8 +294,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       return this.#recordToolActivity(event);
     }
 
-    if (event.type === 'usage_update') {
-      if (!event.agentId) return false;
+    if (event.type === 'subagent_usage_update') {
       const task = this.#tasks.get(event.agentId);
       if (!task || task.kind !== 'subagent' || task.status !== 'running') return false;
       this.#tasks.set(event.agentId, { ...task, usage: event.usage });

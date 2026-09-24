@@ -393,7 +393,7 @@ export class ExecutionSubagentRunner {
                 await safeEmit(
                   this.#logger,
                   onEvent,
-                  { type: 'usage_update', agentId, usage: event.usage },
+                  { type: 'subagent_usage_update', agentId, usage: event.usage },
                   { propagate: true },
                 );
                 emittedUsageUpdate = true;
@@ -407,7 +407,7 @@ export class ExecutionSubagentRunner {
               this.#logger,
               onEvent,
               {
-                type: 'usage_update',
+                type: 'subagent_usage_update',
                 agentId,
                 usage: event.usage,
               },
@@ -443,7 +443,7 @@ export class ExecutionSubagentRunner {
               this.#logger,
               onEvent,
               {
-                type: 'retry',
+                type: 'subagent_retry',
                 toolName: event.toolName,
                 attempt: event.attempt,
                 maxRetries: event.maxRetries,
@@ -467,7 +467,7 @@ export class ExecutionSubagentRunner {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
       if (usage && !emittedUsageUpdate) {
-        await safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
+        await safeEmit(this.#logger, onEvent, { type: 'subagent_usage_update', agentId, usage }, { propagate: true });
       }
     } finally {
       try {

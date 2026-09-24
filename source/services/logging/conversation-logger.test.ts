@@ -185,6 +185,31 @@ it('dispatchEventToLog accumulates turn items and logs the final assistant turn'
   ]);
 });
 
+it('dispatchEventToLog keeps subagent usage out of the persisted root turn display usage', () => {
+  // Subagent events share the root turn's sink. The persisted displayUsage
+  // restores the footer on resume, so a child's usage must never land in it.
+  const sinkEvents: any[] = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger: makeLoggingService().logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
+  });
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  const rootUsage = { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 };
+  conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'hello' });
+  conversationLogger.dispatchEventToLog({ type: 'usage_update', usage: rootUsage });
+  conversationLogger.dispatchEventToLog({
+    type: 'subagent_usage_update',
+    agentId: 'sub-1',
+    usage: { prompt_tokens: 50_000, completion_tokens: 4000, total_tokens: 54_000 },
+  });
+  conversationLogger.dispatchEventToLog({ type: 'error', message: 'aborted' });
+
+  expect(sinkEvents[0]).toMatchObject({ type: 'assistant_turn', displayUsage: rootUsage });
+});
+
 it('dispatchEventToLog persists background shell lifecycle events without adding them to the foreground turn', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];

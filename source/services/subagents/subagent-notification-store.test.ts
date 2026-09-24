@@ -419,7 +419,7 @@ it('updates the live background task projection from a usage event', () => {
   store.recordLifecycle(started());
 
   const changed = store.recordLifecycle({
-    type: 'usage_update',
+    type: 'subagent_usage_update',
     agentId: 'run-1',
     usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
   } as ConversationEvent);

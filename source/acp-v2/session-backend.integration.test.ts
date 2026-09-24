@@ -436,7 +436,6 @@ describe('ACP v2 permission bridge integration', () => {
         expect(session.permissionRequests[0]!.options.map((option) => option.optionId)).not.toContain(
           'unsandboxed-once',
         );
-        await session.unwind();
         expect(await session.waitForTerminal(5_000)).toBe('end_turn');
         expect(existsSync(session.workspaceFile)).toBe(true);
         expect(session.updates).not.toContainEqual(
@@ -444,6 +443,7 @@ describe('ACP v2 permission bridge integration', () => {
             update: expect.objectContaining({ sessionUpdate: 'tool_call_update', status: 'failed' }),
           }),
         );
+        await session.unwind();
       },
     );
   });
@@ -460,7 +460,6 @@ describe('ACP v2 permission bridge integration', () => {
       async (session) => {
         await session.prompt();
         const terminal = await session.waitForTerminal(5_000);
-        await session.unwind();
         expect(session.updates).toContainEqual(
           expect.objectContaining({
             update: expect.objectContaining({ sessionUpdate: 'tool_call_update', status: 'failed' }),
@@ -468,6 +467,7 @@ describe('ACP v2 permission bridge integration', () => {
         );
         expect(existsSync(session.workspaceFile)).toBe(false);
         expect(terminal, 'DEFECT: a denied approval never reaches a terminal state_update').toBe('end_turn');
+        await session.unwind();
       },
     );
   });
@@ -534,6 +534,7 @@ describe('ACP v2 permission bridge integration', () => {
         const offered = session.permissionRequests[0]!.options.map((option) => option.optionId);
         expect(offered).not.toContain('unsandboxed-once');
         expect(offered).not.toContain('allow-remember');
+        expect(await session.waitForTerminal(5_000)).toBe('end_turn');
         await session.unwind();
         expect(existsSync(session.escapeFile)).toBe(false);
         expect(existsSync(session.workspaceFile)).toBe(false);

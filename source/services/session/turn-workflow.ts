@@ -877,12 +877,13 @@ export class TurnWorkflow {
     const sessionId = resolveSessionId(this.deps.sessionId);
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const startOptions: AgentClientRunOptions = {
+      memoryQuery: attempt.turn.text,
       recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId,
       ...(promptCacheKey !== sessionId ? { promptCacheKey } : {}),
       providerHistorySnapshot: attempt.providerHistorySnapshot,
-      hookTurnId: this.#hookTurnId,
+      ...(this.#hookTurnId ? { hookTurnId: this.#hookTurnId } : {}),
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
     };
     Object.defineProperty(startOptions, 'providerContinuityLineage', {

@@ -90,6 +90,7 @@ it('executes initial turn successfully', async () => {
   stream.finalOutput = 'hello response';
   let receivedProviderHistorySnapshot: unknown;
   let receivedLineage: unknown;
+  let receivedMemoryQuery: unknown;
 
   const mockClient: any = {
     getProvider() {
@@ -97,10 +98,11 @@ it('executes initial turn successfully', async () => {
     },
     async startStream(
       _input: unknown,
-      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown },
+      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown; memoryQuery?: string },
     ) {
       receivedProviderHistorySnapshot = options.providerHistorySnapshot;
       receivedLineage = options.providerContinuityLineage;
+      receivedMemoryQuery = options.memoryQuery;
       return stream;
     },
   };
@@ -135,6 +137,7 @@ it('executes initial turn successfully', async () => {
   expect(attempt.closed).toBe(true);
   expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
+  expect(receivedMemoryQuery).toBe('hello');
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 

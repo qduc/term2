@@ -161,6 +161,8 @@ export interface AgentDefinition {
   instructions: string;
   tools: ToolRegistry;
   model: string;
+  /** Enable task-relevant memory injection only for profiles exposing root memory context. */
+  memoryContextEnabled: boolean;
 }
 
 type SubagentResultLike = Pick<SubagentResult, 'finalText'> & Partial<NestedSubagentResult>;
@@ -368,7 +370,7 @@ export const getAgentDefinition = (
   const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
-  }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
+  }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd(), includeContext: false });
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     profile,
@@ -398,10 +400,6 @@ export const getAgentDefinition = (
 
   for (const inlineSection of promptSpec.inlineSections) {
     prompt = `${prompt}\n\n${inlineSection}`;
-  }
-
-  if (memoryContextEnabled && memoryCapability.context) {
-    prompt = `${prompt}\n\n${memoryCapability.context}`;
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();
@@ -657,6 +655,7 @@ export const getAgentDefinition = (
 
   return {
     name: 'Terminal Assistant',
+    memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     instructions: `${prompt}\n\n${
       environmentEnabled ? `Environment: ${envInfo}` : ''
     }${agentsInstructions}${skillsInstructions}`,

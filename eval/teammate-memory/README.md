@@ -1,8 +1,9 @@
 # Returning-session teammate-memory pilot: fixture and scoring contract
 
-Status: **authored fixtures, isolated offline R1 preparation, and a smaller
-single-turn checkpoint probe; one attempted Codex A request returned HTTP 400,
-no B request or efficacy result.** Run
+Status: **authored fixtures, isolated offline R1 preparation, and a completed
+two-arm single-turn R1 checkpoint: A missed the older decision; B applied it.
+This is not a multi-session efficacy result.** An earlier HTTP attempt returned
+400 on A without dispatching B; the later WebSocket run completed both arms. Run
 `pnpm exec tsx scripts/teammate-memory/preflight.ts <new-output-directory>`
 to archive the frozen repository separately for A and B, seed identical
 per-arm R1 memories, and write `preflight.json` outside both candidate
@@ -68,6 +69,31 @@ the account's specific 400 cause remains unproven. Successful ordinary turns
 also advertised tools and a prompt-cache key, which the tool-free checkpoint
 intentionally does not reproduce. The failed one-shot directory stays closed;
 offline alignment is not an efficacy result or license to blindly replay it.
+
+The fresh WebSocket run at
+`/tmp/term2-teammate-r1-preflight-ws-20260924-87bf433e/checkpoint-run/`
+completed A and B once, serially, on `codex/gpt-6-luna` at medium effort with
+no retries or tools. Its new preflight reproduced the frozen `a1142650` snapshot;
+both stores had the same 26 seeded records, while A's injected recency index
+omitted the older decision and B's selected summary included it. The prior
+failed `checkpoint-run/` was not reused. Raw answers and terminal usage are in
+`A.json` and `B.json` at that path.
+
+| Checkpoint arm | R1 oracle | Applied earlier decision? | Observed answer and usage |
+| --- | --- | --- | --- |
+| A | Fail | No | Said it had no supported earlier decision; recommended a generic sanitized 400 capture without the child-socket/root-affinity or chaining constraint. 333 input, 287 output tokens; 0 cached input. |
+| B | Pass | Yes | Cited the distinct physical child WebSocket identity, preserved root cache affinity and chaining, and proposed comparing root/child identities in one failing nested run; identified the decision as memory, not fresh wire evidence. 160 input, 288 output tokens; 0 cached input. |
+
+Neither arm asked for re-explanation, but this tool-free single turn had no
+facilitator interaction; do not treat that as a measured re-explanation rate.
+Neither answer made a consequential contradicted claim. There were no memory
+writes or reflection operations in this checkpoint. The input-token difference
+reflects different injected memory payload lengths, not a general cost saving;
+the whole CLI invocation took about 20 seconds, without per-arm latency
+instrumentation. Codex ran under a subscription for this probe: the script's
+API-list-price dollar figures are notional equivalents, not measured spend.
+This selected, seeded R1 contrast is evidence of one-answer recall only, not
+model-directed saving, real-session search initiative, or a general A/B win.
 
 ## What to compare
 

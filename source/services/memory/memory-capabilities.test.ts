@@ -253,6 +253,13 @@ describe('MemoryCapabilityBuilder', () => {
     expect(selected).not.toContain('Unrelated release-note work');
     expect(selected).not.toContain('Do not disable chaining.');
     expect(selected.length).toBeLessThanOrEqual(800);
+    expect(
+      (
+        await builder.selectForTurn('The nested Codex 400s are back. What should we avoid?', {
+          projectPath: '/workspace/recall',
+        })
+      ).memories,
+    ).toEqual([{ scope: 'project', id: 'nested-chain', title: 'Codex nested-chain incident' }]);
   });
 
   it('does not inject an unrelated lexical match or memories when disabled', async () => {

@@ -4,6 +4,7 @@
  */
 
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';
+import { formatMemoryReceipt } from '../../services/conversation/conversation-events.js';
 import type {
   BotMessage,
   CommandMessage,
@@ -757,6 +758,16 @@ export function createConversationEventHandler(
       // order is `[compaction, message, compaction]`), so `started` fires more than once per
       // turn. Only the last item becomes history, so a second `started` supersedes the first
       // rather than stacking — otherwise one compaction would print several notices.
+      case 'memory_injected': {
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text: formatMemoryReceipt(event.memories),
+        };
+        setMessages((prev) => [...prev, systemMessage]);
+        return;
+      }
+
       case 'context_compaction_started': {
         const previousId = state.contextCompactionMessageId;
         const systemMessage: SystemMessage = {

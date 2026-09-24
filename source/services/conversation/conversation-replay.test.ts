@@ -33,6 +33,18 @@ it('replayEvents: empty log produces empty state with no warnings', () => {
   expect(restored.replayWarnings).toEqual([]);
 });
 
+it('replays a memory receipt from the persisted event without adding it to provider history', () => {
+  const record = env({
+    type: 'memory_injected',
+    turnId: 'turn-1',
+    memories: [{ scope: 'global', id: 'rule', title: 'Rule' }],
+  });
+  expect(decodeLogEnvelope(record)).toBeDefined();
+  const restored = replayEvents([record]);
+  expect(restored.messages).toMatchObject([{ sender: 'system', text: 'Loaded 1 memory: global / rule — Rule' }]);
+  expect(restored.history).toEqual([]);
+});
+
 it('replayEvents: session_init populates session metadata', () => {
   const envelopes: LogEnvelope[] = [
     env({

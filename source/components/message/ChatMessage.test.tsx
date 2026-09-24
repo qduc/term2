@@ -102,6 +102,22 @@ it('ChatMessage renders a rule presentation system message as a divider', async 
   });
 });
 
+it('ChatMessage displays a memory injection receipt in the transcript', async () => {
+  let frame = '';
+  let unmount!: () => void;
+  await act(async () => {
+    const rendered = render(
+      <ChatMessage
+        msg={{ id: 'memory-1', sender: 'system', text: 'Loaded 1 memory: project / rule — Project rule' }}
+      />,
+    );
+    frame = stripAnsi(rendered.lastFrame() || '');
+    unmount = rendered.unmount;
+  });
+  expect(frame).toContain('Loaded 1 memory: project / rule — Project rule');
+  await act(async () => unmount());
+});
+
 it('ChatMessage renders rule presentation using the border color token', async () => {
   // ink-testing-library's mock stdout disables colors at import time; raise
   // chalk's level so the frame carries the real ANSI attributes. Level 3 keeps

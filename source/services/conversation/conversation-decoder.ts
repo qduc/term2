@@ -68,6 +68,17 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return hasString(event, 'turnId') && hasNumber(event, 'seq') && isAssistantItem(event['item']);
     case 'tool_started':
       return hasString(event, 'toolCallId') && hasString(event, 'toolName');
+    case 'memory_injected':
+      return (
+        Array.isArray(event['memories']) &&
+        event['memories'].every(
+          (memory) =>
+            isObject(memory) &&
+            isOneOf(memory['scope'], ['global', 'project']) &&
+            hasString(memory, 'id') &&
+            hasString(memory, 'title'),
+        )
+      );
     case 'tool_result':
       return (
         hasString(event, 'callId') &&

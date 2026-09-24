@@ -1343,15 +1343,16 @@ export class AgentClient {
       const baseAgent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
       let agent = baseAgent;
       if (baseAgent.memoryContextEnabled && options.memoryQuery) {
-        const memoryContext = await this.#memoryCapabilityBuilder.contextForTurn(options.memoryQuery, {
+        const selection = await this.#memoryCapabilityBuilder.selectForTurn(options.memoryQuery, {
           projectPath: this.#executionContext?.getCwd() ?? process.cwd(),
         });
         if (startController.signal.aborted) {
           throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
         }
-        if (memoryContext) {
-          agent = { ...baseAgent, instructions: `${baseAgent.instructions}\n\n${memoryContext}` };
-          this.#logger.debug('Task-relevant memory context selected', { chars: memoryContext.length });
+        if (selection.text) {
+          agent = { ...baseAgent, instructions: `${baseAgent.instructions}\n\n${selection.text}` };
+          this.#logger.debug('Task-relevant memory context selected', { chars: selection.text.length });
+          options.onMemoryInjected?.(selection.memories);
         }
       }
       const requestPreparation = this.#openAIRequestPreparation(options);

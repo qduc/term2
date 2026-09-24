@@ -342,6 +342,7 @@ it('writes parent and subagent tool summaries to stderr only', async () => {
 
   const session: any = {
     async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'memory_injected', memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] });
       onEvent?.({
         type: 'tool_started',
         toolCallId: 'call-1',
@@ -386,6 +387,7 @@ it('writes parent and subagent tool summaries to stderr only', async () => {
   expect(stdout.getOutput()).toBe('OK\n');
 
   const err = stderr.getOutput();
+  expect(err).toContain('[memory] Loaded 1: project/rule (Project rule)');
   expect(err).toContain('[tool] bash: ls');
   expect(err).toContain('[subagent: worker] bash: pwd');
   expect(err.includes('command_message')).toBe(false);
@@ -431,6 +433,7 @@ it('streams NDJSON events to stdout in json mode and emits completed event', asy
 
   const session: any = {
     async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'memory_injected', memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] });
       onEvent?.({ type: 'reasoning_delta', delta: 'thinking' });
       onEvent?.({
         type: 'tool_started',
@@ -464,6 +467,7 @@ it('streams NDJSON events to stdout in json mode and emits completed event', asy
     .split('\n')
     .map((l) => JSON.parse(l));
   expect(lines).toEqual([
+    { type: 'memory_injected', memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] },
     { type: 'reasoning_delta', delta: 'thinking' },
     { type: 'tool_started', toolCallId: 'call-1', toolName: 'bash', arguments: { command: 'ls' } },
     { type: 'text_delta', delta: 'hello' },

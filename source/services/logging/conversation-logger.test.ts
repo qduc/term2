@@ -60,6 +60,25 @@ it('setLogSink updates the sink used by log', () => {
   ]);
 });
 
+it('persists an injection receipt with its turn identity', () => {
+  const events: any[] = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger: makeLoggingService().logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    getCurrentTurnId: () => 'turn-1',
+    journal: makeJournal(),
+  });
+  conversationLogger.setLogSink((event) => events.push(event));
+  conversationLogger.dispatchEventToLog({
+    type: 'memory_injected',
+    memories: [{ scope: 'global', id: 'rule', title: 'Rule' }],
+  });
+  expect(events).toEqual([
+    { type: 'memory_injected', turnId: 'turn-1', memories: [{ scope: 'global', id: 'rule', title: 'Rule' }] },
+  ]);
+});
+
 it('log is a no-op when the sink is null', () => {
   const { logger, warnings } = makeLoggingService();
   const conversationLogger = new ConversationLogger({

@@ -218,7 +218,7 @@ The evidence supports a narrow, specific role for a background agent:
 
 ### 3.0 The distinction that decides it
 
-A background memory agent is justified only when **all** hold:
+A background memory agent is worth testing when **all** hold:
 
 1. the knowledge is class (c) — present in interaction history and not
    recoverable by reading the repo;
@@ -307,36 +307,40 @@ missing is enforcement and visibility, not instruction.
 
 ### 4.4 The trust posture this implies
 
-1. **Explicit user rules** ("always use pnpm in this repo") may become active
-   immediately, with an undo receipt.
+1. **Explicit, durable user rules** ("always use pnpm in this repo") may become
+   active immediately with an undo receipt only when grounded in an actual
+   user-authored instruction. Quotes, tool output, or repository content that
+   merely *claim* to be user instructions are not enough.
 2. **Inferred or repository-derived claims** are candidates until a cited source
    is checked; they must not silently steer behavior.
 3. **Every durable record carries provenance** (session id and, where relevant,
    a commit/blob or file anchor), so a stale record can be revalidated rather
    than merely age out.
 4. **Retrieval applies a bounded occupancy cap** on unverified memory, per §4.1.
-5. **A background writer never shares the foreground session's context** and its
-   output is reviewable before promotion, per §4.2.
+5. **A background reflection run never shares the foreground session's context
+   or memory-write tools**; it returns proposals to the owner for review and
+   promotion, per §4.2.
 
 ## 5. Does "always running" add value, or only expense?
 
-**Conclusion: always-running is the wrong default. It adds expense and risk in
-proportion to the time the user is *not* producing new evidence, and its upside
-is already captured by boundary triggers.** The reasoning is falsifiable and
-cheap to test.
+**Conclusion: periodic model calls without new evidence are the wrong default.**
+An idle agent process need not incur token charges; the expense and risk come
+from repeated reflection calls, not from remaining available to run. Boundary
+triggers can capture the same new evidence without paying to reread it on a
+clock. This distinction is falsifiable and cheap to test.
 
 Three independent arguments:
 
-1. **No new evidence, no information gain.** Memory extraction is a function of
-   the transcript delta plus existing memory. On an idle boundary there is no
-   delta; a pass re-reads the same context and can only churn. Sleep-time
-   compute's own finding is that its efficacy tracks query predictability and
-   that the win comes from *amortizing across related queries* — i.e., from
-   precomputing for queries that will actually arrive. Continuous execution
-   spends tokens whether or not a related query ever arrives.
-2. **Cost scales with wall-clock, not with work.** A reflection pass costs
-   roughly what the agent spends reading one additional ~20k-token chunk on the
-   same model tier (§6). Running hourly is ~24 passes/day regardless of whether
+1. **Repeated work needs a measured payoff.** A second pass over unchanged
+   context might uncover a useful insight, but it has no new transcript
+   evidence. Sleep-time compute's own finding is that its efficacy tracks query
+   predictability and that the win comes from *amortizing across related
+   queries* — i.e., from precomputing for queries that will actually arrive.
+   Periodic execution spends tokens whether or not a related query arrives;
+   its incremental value must be measured against one boundary-triggered pass.
+2. **Clock-triggered cost scales with wall-clock, not with work.** A reflection
+   pass costs roughly what the agent spends reading one additional ~30k-token
+   chunk at the stated uncached rates (§6). Running hourly is ~24 passes/day regardless of whether
    the user wrote code that day.
 3. **Risk scales with exposure.** Every background pass is an ingestion and
    promotion opportunity. HEARTBEAT's pollution rates (§4.2) are highest exactly
@@ -358,9 +362,9 @@ same boundary-triggered shape proposed here, and it is noteworthy that even a
 stateful-agent product chose boundaries over continuous execution.
 
 The disanalogy to test: Term2 could be run "always" in the sense of *a process
-that is always available to be triggered*, which is different from *a process
-that always runs*. The former is what the existing background-subagent and
-check-in machinery already supports; the latter buys nothing.
+that is always available to be triggered*, which is different from *repeated
+model calls on a timer*. The former can be nearly free while idle; it is the
+latter that needs a measured benefit.
 
 **Conditions that would reverse this conclusion** (state them before running the
 experiment so the result is falsifiable): the measure of predictability is high
@@ -413,18 +417,26 @@ memories + instructions), **2,000 output tokens** (structured operations).
 
 Two observations fall out of the arithmetic:
 
-- **Output dominates on the cheap tier** (output is 5x input price), so the
-  strongest cost lever is bounding reflection *output*, not input.
-- **Model tier spans 20x** ($0.0030 → $0.0600) for identical work. Model choice,
-  not the pass count, is the first-order cost decision.
+- **Output is expensive per token** (5x input price), but input still accounts
+  for two-thirds of the example pass cost at a 20k:2k token mix. Bound both
+  transcript input and structured-operation output; measure their actual mix.
+- **Model tier spans 20x** ($0.0030 → $0.0600) for identical work. Model choice
+  and trigger frequency both matter; neither is a substitute for measuring
+  whether the pass helps.
 
-**Break-even anchor (model-agnostic).** On any tier, one pass costs about what
-the agent spends reading one additional ~20–22k-token chunk on that same tier.
+**Cost-equivalence anchor (model-agnostic, uncached rates).** At these 5:1
+output-to-input price ratios, 20k input plus 2k output costs about the same as
+**30k additional input tokens** on the same tier. This is not a break-even
+claim: avoiding that many input tokens would still have to produce a useful
+outcome, and cache hits, model choice, and different request shapes change the
+comparison.
 That is the honest scale of the cost: it is *not* free, and it is *not*
-catastrophic. It is roughly "one extra small read per trigger."
+catastrophic. It is roughly "one extra medium read per trigger" at the stated
+uncached rates.
 
-Batch pricing halves every number above; a pass that can wait (e.g., end-of-day
-consolidation) should use it.
+Where the chosen model and API support the cited batch discount, an eligible
+uncached pass can cost about half as much; compare the resulting latency and
+cache behavior before choosing it for end-of-day consolidation.
 
 ### 6.3 Frequency, the thing "always running" changes
 
@@ -432,12 +444,12 @@ Monthly cost at 30 days, using the per-pass figures above:
 
 | Passes/day | `gpt-6-luna` | Haiku 4.5 | `gpt-6-sol`/Sonnet 5 |
 | ---: | ---: | ---: | ---: |
-| 4 (a few sessions/week) | $0.36 | $3.60 | $7.20 |
+| 4 (several completed tasks/day) | $0.36 | $3.60 | $7.20 |
 | 8 (a working day) | $0.72 | $7.20 | $14.40 |
 | 24 (always running, hourly) | $2.16 | $21.60 | $43.20 |
 
-The bottom row is the "always running" delta. On the cheap tier it is ~$2/month
-and arguably tolerable; on a frontier tier it is $43/month for passes that, per
+The bottom row is the hourly-reflection example. On the cheap tier it is
+~$2/month and arguably tolerable; on the mid tier it is $43/month for passes that, per
 §5, mostly have no new evidence to process. The decision is therefore not "can we
 afford it" but "does the marginal pass produce anything," and the published
 sleep-time-compute analysis says it produces something only when queries are
@@ -455,8 +467,10 @@ The recency index is present in *every* request of a session. At the default
 | `gpt-6-astra` (frontier) | $0.020 | $0.0020 |
 
 At 9,000 requests/month that is $1.80/month on the cheap tier, $36/month on the
-mid tier, $180/month on the frontier tier — *for injecting memory whether or not
-it is relevant*. **[Hypothesis]** A related mechanism deserves measurement rather
+mid tier, $180/month on the frontier tier **if every request incurs the full
+uncached cost** — *for injecting memory whether or not it is relevant*. Real
+usage must measure cache hits and actual index size rather than adopting these
+upper-bound examples as bills. **[Hypothesis]** A related mechanism deserves measurement rather
 than assumption: caching reuses a *prefix*, so inserting dynamically-retrieved
 memories early in the prompt breaks reuse of everything after the insertion
 point, while inserting them after the stable prefix preserves it. Admission-time
@@ -468,8 +482,10 @@ the retrieved block is placed is a first-class design variable, not a detail.
 - **In-path extraction** adds a serial model round trip to the turn that
   triggered it. In Term2 terms this is the difference between the user waiting
   for the assistant and the assistant finishing.
-- **Background reflection** adds ~zero user-visible latency (it runs off the
-  critical path), at the cost of a slot and, if not isolated, of pollution risk
+- **Background reflection** avoids an additional serial request on the user's
+  critical path, though provider contention or a late result can still delay
+  useful memory for the next task; it also consumes a slot and, if not isolated,
+  adds pollution risk
   (§4.2).
 - Retrieval *quality* also has a latency cost at scale: LME-V2's best variant is
   the slowest [LME-V2], and AMV-L's whole thesis is that an unbounded retrieval
@@ -526,7 +542,7 @@ Three arms, same repeated-session task cells:
 | Arm | Memory behaviour | What it tests |
 | --- | --- | --- |
 | **A — control** | Current passive memory (recency index + model-directed tools) | Baseline |
-| **B — retrieval only** | A: plus deterministic admission-time retrieval from the existing lexical scorer, bounded to a small ranked set with stable IDs | Whether the gap is retrieval, with **zero** marginal model cost |
+| **B — retrieval only** | A: replace the recency index with deterministic admission-time retrieval from the existing lexical scorer, bounded to a similarly sized ranked set with stable IDs; keep model-directed memory tools | Whether relevance beats recency without an extra model call; prompt-token and cache costs still count |
 | **C — retrieval + bounded reflection** | B: plus a debounced, boundary-triggered reflection pass returning structured `create/update/supersede/ignore` operations, applied only after the owner validates them | Whether the background agent adds anything beyond B |
 
 Arm B is the load-bearing arm. If B closes the gap, the background agent's
@@ -536,6 +552,10 @@ justification fails, and that is a *good* result for a cost-justified feature.
 sessions, containing (i) a durable project decision, (ii) a correction the user
 issues mid-way, and (iii) a dead-end the user should not be sent back into.
 Fixtures do not exist today; building them is the first work item.
+Use isolated copies of the memory store per arm/cell so C's writes cannot leak
+into A or B, and hold model/provider, task materials, and allowable context
+budget constant. Measure any change in prompt-token and cache cost rather than
+assuming B is free because it makes no additional model call.
 
 **Triggers for C** (not a clock): completed task with settled tool activity,
 explicit correction, rollover, compaction, and N settled turns — debounced.
@@ -562,16 +582,21 @@ file anchor where applicable) per §4.
 
 ### 7.3 Success / failure / stop criteria (pre-registered)
 
-- **Success:** C reduces re-explanation and mistaken-assumption events relative
-  to A with no acceptance regression and no guardrail breach; **B recovers at
-  least half of C's benefit at near-zero marginal cost**; incremental cost per
-  cell is within the budget implied by the §6 break-even anchor.
+- **Success for C:** C improves on B in re-explanation or mistaken-assumption
+  events without worsening the other, task acceptance, or pre-registered cost,
+  latency, write-precision, and review-burden limits. A–B separately measures
+  whether retrieval alone helps. Set numeric thresholds and the incremental
+  dollars the user is willing to spend per avoided re-explanation or corrected
+  mistake using the baseline before examining arm results; the §6 arithmetic
+  is a cost estimate, not a value threshold.
 - **Failure:** no measurable reduction in re-explanation or mistaken assumptions
   in C over A; or acceptance regresses; or added in-path latency exceeds budget;
   or incremental cost exceeds the budget with no quality gain.
 - **Stop / pivot:**
-  - B alone closes ≥ half the gap → **do not ship the background agent** for
-    this goal; keep the retrieval step and revisit only if new evidence appears.
+  - B meets the pre-registered user-outcome target, and C adds no worthwhile
+    incremental improvement within its cost and review budget → **do not ship
+    the background agent** for this goal; keep retrieval and revisit only if
+    new evidence appears.
   - Applied-write precision below the floor → reflection stays propose-only
     (never auto-apply).
   - Any pollution or untrusted-content-influenced write observed → **disable the
@@ -586,15 +611,15 @@ file anchor where applicable) per §4.
 
 | Approach | When it wins | Added runtime | Trust risk | Latency | Fit to Term2 |
 | --- | --- | --- | --- | --- | --- |
-| **A. Status quo (passive)** | Nothing; it is the baseline | None | Low | None | Present |
+| **A. Status quo (passive)** | A memory feature has no demonstrated incremental benefit | None | Existing staleness and write risk | None | Present |
 | **B. On-task extraction only** (agent writes while the turn is live) | Class (c) knowledge is noticed in the moment | None beyond the turn | Low–medium (write precision unmeasured) | None extra | Supported by existing tools; needs a write-precision gate |
 | **C. Deterministic admission-time retrieval** (existing lexical scorer; optional index later) | Knowledge is in the store and the query shares vocabulary | None | Low (no new writer) | Small in-path step | Fits the existing store; no new storage stack required |
 | **D. C + bounded, review-gated reflection** | Knowledge is class (c) and surfaces only at a boundary | One scheduled pass per trigger | Medium unless review-gated and isolated | Off-path | Reuses the existing subagent/background machinery and `librarian` API |
 | **E. Always-running background agent** | Only if query predictability and query rate are both high (§5) | Continuous | **High** (§4.2) | Off-path, but continuous | Not justified by this evidence |
 | **F. External memory engine** (Letta/Mem0/Zep as the core) | A team wants a managed memory platform and accepts a second runtime | A second stateful system | Depends; see §4.1 on provenance limits | Vendor claims vs full-context (Mem0: 91% lower p95 latency; Zep: 90% latency reduction) | Couples Term2's provider-neutral loop to a competing platform; the prior technology report already argues against it |
 
-Recommended shape, matching the goal and the cost model: **C + D**, with B kept
-as the zero-runtime default for explicit corrections. Vector/graph indexes and
+Candidate shape, *only if the experiment justifies it*: **C + D**, with B kept
+as the no-extra-background-run default for explicit corrections. Vector/graph indexes and
 external engines stay out of scope for this goal until the experiment shows a
 retrieval-quality gap that the existing scorer cannot close — which is a
 measurement, not a preference.
@@ -661,6 +686,20 @@ Primary sources fetched and read for this report (2026-09-24):
 - [Anthropic — Batch processing](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing)
 - [Google — Gemini API context caching](https://ai.google.dev/gemini-api/docs/caching)
 - [Letta — Memory & dreaming](https://docs.letta.com/letta-code/memory)
+
+Reference links used in the findings and cost arithmetic:
+
+[LME-V2]: https://arxiv.org/abs/2605.12493
+[AMV-L]: https://arxiv.org/abs/2603.04443
+[Memory as Infrastructure]: https://arxiv.org/abs/2609.05510
+[OpenAI pricing]: https://platform.openai.com/docs/pricing
+[Anthropic pricing]: https://www.anthropic.com/pricing
+[OpenAI prompt caching]: https://platform.openai.com/docs/guides/prompt-caching
+[Anthropic prompt caching]: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+[Gemini context caching]: https://ai.google.dev/gemini-api/docs/caching
+[OpenAI batch]: https://platform.openai.com/docs/guides/batch
+[Anthropic batch]: https://docs.anthropic.com/en/docs/build-with-claude/batch-processing
+[Letta memory]: https://docs.letta.com/letta-code/memory
 
 Referenced but not re-fetched here (covered in
 `docs/research/active-project-memory-technology.md`): MemFS, LangMem, Graphiti,

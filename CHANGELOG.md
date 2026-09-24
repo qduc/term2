@@ -1,3 +1,17 @@
+## [0.26.1] - 2026-09-24
+
+### Features
+- Added version badge display to the startup banner.
+- Added task-relevant teammate memory retrieval at root turn start.
+
+### Bug Fixes
+- Fixed nested Codex response chains sharing sockets and omitted parent wire cache key in child requests.
+- Repaired release integration gate fixtures.
+
+### Improvements
+- Refined GPT-6 prompt guidance for proactive follow-through and outcome-driven execution.
+- Added product, cost, and architecture research on teammate-like memory and active project memory.
+
 ## [0.26.0] - 2026-09-23
 
 ### Features

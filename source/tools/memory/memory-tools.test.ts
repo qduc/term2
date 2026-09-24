@@ -145,6 +145,106 @@ it('requires scope only on write tools', async () => {
   expect(remove.parameters.safeParse({ scope: 'global', id: memory.id }).success).toBe(true);
 });
 
+it('memory_update retains corrected history for memory_get without exposing it to search or retrieve', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'term2-memory-tool-'));
+  tempDirs.push(root);
+  const actual = new FileMemoryStore({ root, now: () => new Date('2026-07-13T00:00:00.000Z') });
+  const tools = createMemoryToolDefinitions(actual);
+  const call = async (name: string, args: Record<string, unknown>, context?: unknown) =>
+    JSON.parse((await readTool(tools, name).execute(args, context)) as string);
+  await call('memory_create', {
+    scope: 'project',
+    id: 'policy',
+    title: 'Policy',
+    summary: 'obsoleteprotocol',
+    content: 'Never chain',
+  });
+  const updated = await call(
+    'memory_update',
+    {
+      scope: 'project',
+      id: 'policy',
+      summary: 'Current policy',
+      content: 'Keep chaining',
+      supersede: { reason: 'User correction' },
+    },
+    { context: { sessionId: 'session-abc' } },
+  );
+  expect(updated.memory.provenance).toMatchObject({ sessionId: 'session-abc', reason: 'User correction' });
+  const current = await call('memory_get', { id: 'policy' });
+  expect(current.historyCount).toBe(1);
+  expect(current.memory.content).toBe('Keep chaining');
+  const historical = await call('memory_get', { id: 'policy', version: 1 });
+  expect(historical.memory.content).toBe('Never chain');
+  expect(historical.memory.supersededBy).toMatchObject({ sessionId: 'session-abc', reason: 'User correction' });
+  expect((await call('memory_search', { query: 'obsoleteprotocol' })).results).toEqual([]);
+  expect((await call('memory_retrieve', { query: 'obsoleteprotocol' })).memories).toEqual([]);
+  expect((await call('memory_list', {})).project[0].summary).toBe('Current policy');
+});
+
+it('rejects a model-supplied correction session ID and works without a runtime session', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'term2-memory-tool-'));
+  tempDirs.push(root);
+  const tools = createMemoryToolDefinitions(new FileMemoryStore({ root }));
+  const update = readTool(tools, 'memory_update');
+  expect(
+    update.parameters.safeParse({
+      scope: 'global',
+      id: 'rule',
+      content: 'New',
+      supersede: { sessionId: 'fabricated', reason: 'Correction' },
+    }).success,
+  ).toBe(false);
+  const call = async (name: string, args: Record<string, unknown>) =>
+    JSON.parse((await readTool(tools, name).execute(args)) as string);
+  await call('memory_create', { scope: 'global', id: 'rule', title: 'Rule', summary: 'Old', content: 'Old' });
+  const result = await call('memory_update', {
+    scope: 'global',
+    id: 'rule',
+    content: 'New',
+    supersede: { reason: 'Correction' },
+  });
+  expect(result.memory.provenance).toEqual({ at: result.memory.updatedAt, reason: 'Correction' });
+  expect((await call('memory_get', { id: 'rule', version: 1 })).memory.supersededBy).toEqual(result.memory.provenance);
+});
+
+it('pages a superseded version and does not accept its cursor for the current version', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'term2-memory-tool-'));
+  tempDirs.push(root);
+  const tools = createMemoryToolDefinitions(new FileMemoryStore({ root }));
+  const call = async (name: string, args: Record<string, unknown>) =>
+    JSON.parse((await readTool(tools, name).execute(args)) as string);
+  const oldContent = 'x'.repeat(2_000);
+  await call('memory_create', { scope: 'global', id: 'rule', title: 'Rule', summary: 'Old', content: oldContent });
+  await call('memory_update', {
+    scope: 'global',
+    id: 'rule',
+    content: 'Corrected',
+    summary: 'New',
+    supersede: { reason: 'Correction' },
+  });
+  const first = await call('memory_get', { id: 'rule', version: 1, maxChars: 1024 });
+  expect(first.version).toBe(1);
+  expect(first.historyCount).toBe(1);
+  expect(first.content.nextCursor).toBeDefined();
+  expect(await call('memory_get', { id: 'rule', cursor: first.content.nextCursor })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+  const pages = [first.content.text];
+  let cursor = first.content.nextCursor;
+  while (cursor) {
+    const page = await call('memory_get', { id: 'rule', version: 1, cursor, maxChars: 1024 });
+    expect(page.error).toBeUndefined();
+    expect(page.version).toBe(1);
+    pages.push(page.content.text);
+    cursor = page.content.nextCursor;
+  }
+  expect(pages.join('')).toBe(oldContent);
+  expect(await call('memory_get', { id: 'rule', version: 2 })).toMatchObject({
+    error: { code: 'invalid_memory' },
+  });
+});
+
 it('retrieves other memories when one result becomes unavailable', async () => {
   const unavailable = { ...memory, id: 'missing-memory' };
   const tools = createMemoryToolDefinitions({

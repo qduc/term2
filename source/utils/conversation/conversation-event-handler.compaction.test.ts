@@ -12,6 +12,15 @@ const runOne = (event: ConversationEvent) => {
   return deps.calls.setMessagesCalls[0]!([]);
 };
 
+it('renders an injected-memory receipt as a compact system message', () => {
+  const result = runOne({
+    type: 'memory_injected',
+    memories: [{ scope: 'project', id: 'coding-rule', title: 'Coding rule' }],
+  });
+  expect(result).toMatchObject([{ sender: 'system', text: expect.stringContaining('coding-rule — Coding rule') }]);
+  expect(result[0].text).toContain('Loaded 1 memory');
+});
+
 it('context_compaction_started: adds a system message announcing the compaction', () => {
   const result = runOne({
     type: 'context_compaction_started',

@@ -141,6 +141,25 @@ it('executes initial turn successfully', async () => {
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
+it('emits the selected memory receipt before the streamed model response', async () => {
+  const stream = new MockStream([{ type: 'text_delta', text: 'answer' }]);
+  stream.finalOutput = 'answer';
+  const { workflow } = setupWorkflow({
+    getProvider: () => 'openai',
+    startStream: async (_input: unknown, options: any) => {
+      options.onMemoryInjected([{ scope: 'project', id: 'rule', title: 'Project rule' }]);
+      return stream;
+    },
+  });
+  const events: any[] = [];
+  for await (const event of workflow.executeInitial('question')) events.push(event);
+  expect(events[0]).toEqual({
+    type: 'memory_injected',
+    memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
+  });
+  expect(events.some((event) => event.type === 'text_delta')).toBe(true);
+});
+
 it('logs an aborted initial stream as cancellation and does not emit an error event', async () => {
   const logger = { ...mockLogger, debug: vi.fn(), error: vi.fn() };
   const abortError = Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });

@@ -13,6 +13,7 @@ import {
   MemoryNotFoundError,
   MemoryStorageError,
   type Memory,
+  type MemoryHistoryEntry,
   type MemoryMetadata,
   type MemoryStore,
 } from '../../services/memory/memory-store.js';
@@ -57,6 +58,8 @@ function metadata(memory: MemoryMetadata): MemoryMetadata {
     tags: memory.tags,
     createdAt: memory.createdAt,
     updatedAt: memory.updatedAt,
+    ...(memory.provenance ? { provenance: memory.provenance } : {}),
+    ...('supersededBy' in memory ? { supersededBy: memory.supersededBy } : {}),
   };
 }
 
@@ -111,13 +114,14 @@ const MEMORY_SCRIPTED_RETURN_SHAPES: Record<string, string> = {
   memory_list:
     'JSON string (JSON.parse first): { scope: "all", global: { id, title, summary, tags, createdAt, updatedAt }[], project: { id, title, summary, tags, createdAt, updatedAt }[], omitted: { global: number, project: number }, charsUsed: number }',
   memory_get:
-    'JSON string (JSON.parse first): { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt }, charsUsed: number }; oversized content pages instead carry content: { offset, totalChars, text, nextCursor? } beside memory metadata',
+    'JSON string (JSON.parse first): { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt, provenance? }, historyCount?, version?, charsUsed }; version 1..historyCount loads a superseded version with supersededBy; oversized content pages carry content: { offset, totalChars, text, nextCursor? } beside memory metadata',
   memory_search:
     'JSON string (JSON.parse first): { results: { scope, memory: { id, title, summary, tags, createdAt, updatedAt }, matchedFields: string[], available: boolean, contentSnippet?: string }[], omitted: number, charsUsed: number }',
   memory_retrieve:
     'JSON string (JSON.parse first): { memories: { scope, memory: { id, title, summary, content, tags, createdAt, updatedAt } }[], unavailableIds: { scope, id }[], omittedIds: { scope, id }[], omittedIdCount: number, unavailableIdCount: number, charsUsed: number }',
   memory_create: 'JSON string (JSON.parse first): { scope, memory }',
-  memory_update: 'JSON string (JSON.parse first): { scope, memory }',
+  memory_update:
+    'JSON string (JSON.parse first): { scope, memory }; supersede requires a reason and retains the old version with runtime session provenance when available',
   memory_delete: 'JSON string (JSON.parse first): { scope, deleted: boolean }',
 };
 const fields = {
@@ -151,7 +155,7 @@ function definition<S extends z.ZodObject<any>>(
   name: string,
   description: string,
   parameters: S,
-  execute: (params: z.infer<S>) => Promise<unknown>,
+  execute: (params: z.infer<S>, context?: unknown) => Promise<unknown>,
   needsApproval: boolean | (() => boolean) = false,
 ): SchemaToolDefinition<S> {
   return {
@@ -161,8 +165,8 @@ function definition<S extends z.ZodObject<any>>(
     parameters,
     preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
     needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
-    execute: (params: z.infer<S>) =>
-      safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
+    execute: (params: z.infer<S>, context?: unknown) =>
+      safe(() => execute(params, context), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
     formatCommandMessage: makeFormat(name),
   };
 }
@@ -234,18 +238,27 @@ export function createMemoryToolDefinitions(
     ),
     definition(
       'memory_get',
-      'Load one memory by ID, checking both the global and project scopes.',
-      z.object({ id, cursor: z.string().optional(), maxChars }).strict(),
-      async ({ id, cursor, maxChars: requestedMaxChars }) => {
+      'Load a current memory by ID, or inspect a superseded version using version (1-based).',
+      z.object({ id, version: z.number().int().min(1).optional(), cursor: z.string().optional(), maxChars }).strict(),
+      async ({ id, version, cursor, maxChars: requestedMaxChars }) => {
         const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
         for (const scope of ['global', 'project'] as const) {
-          const memory = await stores[scope].get(id);
-          if (!memory) continue;
-          const offset = cursor ? decodeMemoryCursor(cursor, id, scope, memory) : 0;
-          if (cursor) return memoryPage(scope, memory, offset, budget);
-          const complete = fitSerializedEnvelope((charsUsed) => ({ scope, memory, charsUsed }), { maxChars: budget });
+          const current = await stores[scope].get(id);
+          if (!current) continue;
+          const history = (await stores[scope].history?.(id)) ?? [];
+          const memory: Memory | MemoryHistoryEntry = version === undefined ? current : history[version - 1];
+          if (!memory) throw new InvalidMemoryError('Requested memory version does not exist.');
+          const extra = {
+            ...(history.length ? { historyCount: history.length } : {}),
+            ...(version ? { version } : {}),
+          };
+          const offset = cursor ? decodeMemoryCursor(cursor, id, scope, memory, version) : 0;
+          if (cursor) return memoryPage(scope, memory, offset, budget, extra, version);
+          const complete = fitSerializedEnvelope((charsUsed) => ({ scope, memory, ...extra, charsUsed }), {
+            maxChars: budget,
+          });
           if (complete) return complete.value;
-          return memoryPage(scope, memory, offset, budget);
+          return memoryPage(scope, memory, offset, budget, extra, version);
         }
         throw new MemoryNotFoundError(id);
       },
@@ -391,14 +404,31 @@ export function createMemoryToolDefinitions(
     ),
     definition(
       'memory_update',
-      'Update a memory in the selected global or project scope; its ID cannot change.',
+      'Update a memory in the selected scope. For a factual correction, provide supersede with a short reason; this retains the prior version for memory_get and records the runtime session ID when available.',
       z
-        .object({ scope, id, ...fields })
-        .refine(({ id: _, scope: __, ...input }) => Object.values(input).some((value) => value !== undefined), {
-          message: 'At least one field must be provided for a memory update.',
-        }),
-      async ({ scope, id, ...input }) => {
-        const memory = await stores[scope].update(id, input);
+        .object({
+          scope,
+          id,
+          ...fields,
+          supersede: z
+            .object({ reason: z.string().trim().min(1) })
+            .strict()
+            .optional(),
+        })
+        .refine(
+          ({ id: _, scope: __, supersede: ___, ...input }) => Object.values(input).some((value) => value !== undefined),
+          {
+            message: 'At least one field must be provided for a memory update.',
+          },
+        ),
+      async ({ scope, id, ...input }, context) => {
+        const runContext =
+          context && typeof context === 'object' ? (context as { context?: unknown }).context : undefined;
+        const sessionId =
+          runContext && typeof runContext === 'object' ? (runContext as { sessionId?: unknown }).sessionId : undefined;
+        const memory = await stores[scope].update(id, input, {
+          sessionId: typeof sessionId === 'string' && sessionId.trim() ? sessionId : undefined,
+        });
         return { scope, memory };
       },
       () => {
@@ -422,9 +452,9 @@ export function createMemoryToolDefinitions(
   ];
 }
 
-type MemoryCursor = { v: 1; scope: MemoryScope; id: string; updatedAt: string; nextOffset: number };
+type MemoryCursor = { v: 1; scope: MemoryScope; id: string; updatedAt: string; nextOffset: number; version?: number };
 
-function decodeMemoryCursor(cursor: string, id: string, scope: MemoryScope, memory: Memory): number {
+function decodeMemoryCursor(cursor: string, id: string, scope: MemoryScope, memory: Memory, version?: number): number {
   if (!/^[A-Za-z0-9_-]+$/.test(cursor)) throw new MemoryCursorError();
   let decoded: string;
   let value: unknown;
@@ -445,7 +475,9 @@ function decodeMemoryCursor(cursor: string, id: string, scope: MemoryScope, memo
     typeof parsed.nextOffset !== 'number' ||
     !Number.isSafeInteger(parsed.nextOffset) ||
     parsed.nextOffset < 0 ||
-    Object.keys(parsed).join(',') !== 'v,scope,id,updatedAt,nextOffset' ||
+    Object.keys(parsed).join(',') !==
+      (version === undefined ? 'v,scope,id,updatedAt,nextOffset' : 'v,scope,id,updatedAt,nextOffset,version') ||
+    parsed.version !== version ||
     JSON.stringify(parsed) !== decoded
   )
     throw new MemoryCursorError();
@@ -466,7 +498,14 @@ function decodeMemoryCursor(cursor: string, id: string, scope: MemoryScope, memo
   return validated.nextOffset;
 }
 
-function memoryPage(scope: MemoryScope, memory: Memory, offset: number, maxChars: number) {
+function memoryPage(
+  scope: MemoryScope,
+  memory: Memory | MemoryHistoryEntry,
+  offset: number,
+  maxChars: number,
+  extra: Record<string, number> = {},
+  version?: number,
+) {
   const totalChars = memory.content.length;
   const page = (end: number) => {
     const text = safePageSlice(memory.content, offset, end);
@@ -477,10 +516,19 @@ function memoryPage(scope: MemoryScope, memory: Memory, offset: number, maxChars
       totalChars,
       text,
       ...(nextOffset < totalChars
-        ? { nextCursor: encodeMemoryCursor({ v: 1, scope, id: memory.id, updatedAt: memory.updatedAt, nextOffset }) }
+        ? {
+            nextCursor: encodeMemoryCursor({
+              v: 1,
+              scope,
+              id: memory.id,
+              updatedAt: memory.updatedAt,
+              nextOffset,
+              ...(version ? { version } : {}),
+            }),
+          }
         : {}),
     };
-    return fitSerializedEnvelope((charsUsed) => ({ scope, memory: metadata(memory), content, charsUsed }), {
+    return fitSerializedEnvelope((charsUsed) => ({ scope, memory: metadata(memory), content, ...extra, charsUsed }), {
       maxChars,
     });
   };

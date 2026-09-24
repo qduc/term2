@@ -61,6 +61,7 @@ it('sessions do not share previousResponseId', async () => {
       text: 'A1',
       options: {
         memoryQuery: 'A1',
+        onMemoryInjected: expect.any(Function),
         previousResponseId: null,
         sessionId: 'A',
         recoveryBudget: expect.any(Object),
@@ -74,6 +75,7 @@ it('sessions do not share previousResponseId', async () => {
       text: 'B1',
       options: {
         memoryQuery: 'B1',
+        onMemoryInjected: expect.any(Function),
         previousResponseId: null,
         sessionId: 'B',
         recoveryBudget: expect.any(Object),
@@ -87,6 +89,7 @@ it('sessions do not share previousResponseId', async () => {
       text: 'A2',
       options: {
         memoryQuery: 'A2',
+        onMemoryInjected: expect.any(Function),
         previousResponseId: 'resp-A1',
         sessionId: 'A',
         recoveryBudget: expect.any(Object),

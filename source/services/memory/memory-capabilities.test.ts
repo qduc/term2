@@ -253,6 +253,13 @@ describe('MemoryCapabilityBuilder', () => {
     expect(selected).not.toContain('Unrelated release-note work');
     expect(selected).not.toContain('Do not disable chaining.');
     expect(selected.length).toBeLessThanOrEqual(800);
+    expect(
+      (
+        await builder.selectForTurn('The nested Codex 400s are back. What should we avoid?', {
+          projectPath: '/workspace/recall',
+        })
+      ).memories,
+    ).toEqual([{ scope: 'project', id: 'nested-chain', title: 'Codex nested-chain incident' }]);
   });
 
   it('does not inject an unrelated lexical match or memories when disabled', async () => {
@@ -274,6 +281,32 @@ describe('MemoryCapabilityBuilder', () => {
         createMockSettingsService({ 'memory.directory': directory, 'memory.enabled': false }),
       ).contextForTurn('cost'),
     ).toBe('');
+  });
+
+  it('never injects a superseded summary from a corrected memory', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const tools = builder.build({ kind: 'main' }).tools;
+    await tools
+      .find((tool) => tool.name === 'memory_create')!
+      .execute({
+        scope: 'global',
+        id: 'policy',
+        title: 'Rule',
+        summary: 'obsoleteprotocol',
+        content: 'obsoleteprotocol',
+      });
+    await tools
+      .find((tool) => tool.name === 'memory_update')!
+      .execute({
+        scope: 'global',
+        id: 'policy',
+        summary: 'newprotocol',
+        content: 'newprotocol',
+        supersede: { reason: 'User correction' },
+      });
+    expect(await builder.contextForTurn('obsoleteprotocol')).toBe('');
+    expect((await builder.selectForTurn('newprotocol')).memories).toMatchObject([{ id: 'policy' }]);
   });
 
   it('fails open and warns when the memory index cannot be read', async () => {

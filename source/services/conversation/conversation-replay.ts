@@ -11,6 +11,7 @@ import type {
   StateSnapshot,
 } from '../logging/conversation-log-events.js';
 import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
+import { formatMemoryReceipt } from './conversation-events.js';
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../types/message.js';
 import type {
@@ -726,6 +727,14 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           };
         }
         return msg;
+      });
+      return;
+    }
+    case 'memory_injected': {
+      state.messages.push({
+        id: `memory-receipt-${state.messages.length}`,
+        sender: 'system',
+        text: formatMemoryReceipt(event.memories),
       });
       return;
     }

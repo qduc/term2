@@ -160,6 +160,10 @@ const formatEventForStderr = (event: ConversationEvent, quiet = false): string |
     return null;
   }
   switch (event.type) {
+    case 'memory_injected':
+      return `[memory] Loaded ${event.memories.length}: ${event.memories
+        .map(({ scope, id, title }) => `${scope}/${id} (${title})`)
+        .join(', ')}\n`;
     case 'tool_started':
       return `${formatToolSummary(event.toolName, event.arguments)}\n`;
     case 'subagent_tool_started':

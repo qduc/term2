@@ -590,13 +590,17 @@ export class TurnWorkflow {
     const runId = `${this.deps.sessionId}:live:${++this.#nextLiveRunId}`;
     this.deps.setActivePostExecuteRunId?.(runId);
     let stream: AgentStream;
+    let injected: Extract<ConversationEvent, { type: 'memory_injected' }> | undefined;
     try {
-      stream = await this.#startInitialStream(attempt, options);
+      stream = await this.#startInitialStream(attempt, options, (memories) => {
+        injected = { type: 'memory_injected', memories };
+      });
     } catch (error) {
       this.deps.setActivePostExecuteRunId?.(null);
       throw error;
     }
     attempt.attachStream(stream);
+    if (injected) yield injected;
 
     const liveRun = new LiveRun<ConversationEvent, LiveRunResult>(runId, this.deps.postExecutePending, async (emit) => {
       try {
@@ -828,6 +832,7 @@ export class TurnWorkflow {
       disableChainingForAttempt?: boolean;
       observeOpenAIRootSelectorParity: boolean;
     },
+    onMemoryInjected: NonNullable<AgentClientRunOptions['onMemoryInjected']>,
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
       const resumeOptions: AgentClientRunOptions = {
@@ -878,6 +883,7 @@ export class TurnWorkflow {
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const startOptions: AgentClientRunOptions = {
       memoryQuery: attempt.turn.text,
+      onMemoryInjected,
       recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId,

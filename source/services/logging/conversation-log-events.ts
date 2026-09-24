@@ -10,6 +10,13 @@ import type {
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
 import type { ModelRequestCost } from '../cost/model-cost.js';
+import type { InjectedMemory } from '../memory/memory-capabilities.js';
+
+export interface MemoryInjectedLogEvent {
+  type: 'memory_injected';
+  memories: InjectedMemory[];
+  turnId?: string;
+}
 
 export const LOG_ENVELOPE_VERSION = 3;
 
@@ -339,6 +346,7 @@ export type SessionRolloverEvent =
     };
 
 export type LogEvent =
+  | MemoryInjectedLogEvent
   | SessionInitEvent
   | SettingsChangedEvent
   | UserMessageEvent

@@ -122,13 +122,18 @@ describe('AgentClient application-run-loop execution', () => {
           'memory.searchMaxLimit': 50,
         },
       );
+      const receipts: unknown[] = [];
       await (
-        await instance.startStream('first', { memoryQuery: 'nested socket issue' })
+        await instance.startStream('first', {
+          memoryQuery: 'nested socket issue',
+          onMemoryInjected: (items) => receipts.push(items),
+        })
       ).completed;
       await (
         await instance.startStream('second', { memoryQuery: 'release calendar' })
       ).completed;
       expect(requests).toHaveLength(2);
+      expect(receipts).toEqual([[{ scope: 'global', id: 'socket', title: 'Nested socket incident' }]]);
       expect(requests[0].instructions).toContain('Keep child socket identity distinct.');
       expect(requests[0].instructions).not.toContain('Ship release notes weekly.');
       expect(requests[1].instructions).toContain('Ship release notes weekly.');

@@ -18,6 +18,9 @@ export type MemoryCapability = {
   context: string;
 };
 
+export type InjectedMemory = { scope: 'global' | 'project'; id: string; title: string };
+export type TurnMemorySelection = { text: string; memories: InjectedMemory[] };
+
 type MemorySettings = {
   enabled: boolean;
   directory: string;
@@ -116,9 +119,14 @@ export class MemoryCapabilityBuilder {
 
   /** A per-turn, summary-only working set; search tools remain authoritative. */
   async contextForTurn(query: string, options: { projectPath?: string } = {}): Promise<string> {
-    if (!this.#settings.get('memory.enabled')) return '';
+    return (await this.selectForTurn(query, options)).text;
+  }
+
+  async selectForTurn(query: string, options: { projectPath?: string } = {}): Promise<TurnMemorySelection> {
+    const empty = (): TurnMemorySelection => ({ text: '', memories: [] });
+    if (!this.#settings.get('memory.enabled')) return empty();
     const terms = retrievalQuery(query);
-    if (!terms) return '';
+    if (!terms) return empty();
     const budget = this.#settings.get('memory.contextBudgetChars');
     try {
       const stores = this.#createStores(
@@ -137,19 +145,23 @@ export class MemoryCapabilityBuilder {
         ...global.map((result) => ({ ...result, scope: 'global' as const })),
         ...project.map((result) => ({ ...result, scope: 'project' as const })),
       ]).filter((result) => result.matchedFields.some((field) => field !== 'content'));
-      if (!ranked.length) return '';
+      if (!ranked.length) return empty();
       const header =
         '## Relevant persistent memory (summaries, not verified facts)\n\nUse memory_get for full evidence; memory_search for other memories.\n';
       let context = header;
+      const memories: InjectedMemory[] = [];
       for (const { scope, memory } of ranked) {
         const line = `- ${scope} / \`${memory.id}\` — ${memory.title.slice(0, 120)} — ${memory.summary}\n`;
-        if (context.length + line.length <= budget) context += line;
+        if (context.length + line.length <= budget) {
+          context += line;
+          memories.push({ scope, id: memory.id, title: memory.title.slice(0, 120) });
+        }
       }
-      return context === header ? '' : context;
+      return memories.length ? { text: context, memories } : empty();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.#onWarning(`Persistent memory retrieval could not be loaded: ${detail}`);
-      return '';
+      return empty();
     }
   }
 

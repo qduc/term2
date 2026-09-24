@@ -3,6 +3,7 @@ import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
+import type { InjectedMemory } from './memory/memory-capabilities.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 import type { SteerOutcome } from './agent-runtime/application-run-loop.js';
@@ -27,6 +28,8 @@ import type {
 export type AgentClientRunOptions = {
   /** Latest user turn text, not the provider's accumulated history. */
   memoryQuery?: string;
+  /** Reports the exact bounded working set used for this model request. */
+  onMemoryInjected?: (memories: InjectedMemory[]) => void;
   /** Shared automatic retry/recovery capability for this logical turn. */
   recoveryBudget?: RetryRecoveryBudget;
   previousResponseId?: string | null;

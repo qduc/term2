@@ -85,6 +85,37 @@ Open work, in order:
 
 ## Guard classes
 
+### Teammate-memory single-turn checkpoint admission (pilot-only)
+
+Harm prevented: a two-call experimental probe silently expanding into
+unbounded Codex requests or being reported as a $0.50/arm billing guarantee.
+Scope: `scripts/teammate-memory/checkpoint.ts` only; the original multi-session
+pilot remains blocked. Class: admission limit with fail-closed settlement.
+Enforcement and recovery owner: the checkpoint script, not the application run
+loop. It admits exactly one unchained tool-free HTTP model stream per arm,
+serially, using SDK and Term2 retryAttempts=0 and no compaction method.
+Measured signal: UTF-8 bytes of the text instructions plus user question before
+dispatch (32,000 maximum), one physical stream per arm, terminal token usage.
+The 1,024-token protocol allowance and provider-published 128,000 maximum output
+tokens are conservative reservation assumptions; bytes are a proxy for text
+tokens, not a tokenizer result. The action is to reject oversized input before
+dispatch and stop before the next arm when usage or stream settlement is
+ambiguous, without replaying an already-dispatched request. A long valid answer
+may use the full physical output allowance; no client-side truncation changes
+the experimental answer. There are no configurable sources, persisted setting
+changes, fallback, or autonomous recovery. The experiment saves each settled
+arm in a one-shot output directory; an uncertain arm is not labeled success.
+Observability: prompt digest, arm, usage, response, and API-list-price-equivalent
+reservation; actual Codex-plan credits/USD are unknown. Rollback: remove the
+checkpoint script and its fixture instructions without changing product guards.
+`checkpoint.test.ts` covers isolation, admission, terminal usage, unexpected
+tool settlement, and suppression of provider error headers. A first live arm A
+attempt returned HTTP 400 without a body, left no success artifact, and did not
+dispatch B; a read-only Codex model-list request confirmed `gpt-6-luna` is
+listed, but the invalid wire field remains unknown. Do not replay that attempt
+as if its charge were zero. This guard does **not** authorize paid calls for the
+multi-session pilot.
+
 ### Sandboxed source-and-input admission bound
 
 Harm prevented: a `run_code` payload bypassing the existing bounded source

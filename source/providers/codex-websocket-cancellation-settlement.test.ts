@@ -159,3 +159,35 @@ it('releases a terminal socket before yielding the terminal frame to the caller'
   expect(acquisitions).toEqual([expect.objectContaining({ reused: false }), expect.objectContaining({ reused: true })]);
   transport.close();
 });
+
+it('retains separate sockets for sibling histories sharing a prompt cache key', async () => {
+  fakeStream = () => ({
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ok' } } };
+    },
+  });
+  socketCreateCalls = 0;
+  const acquisitions: Array<{ connectionId: string; reused: boolean }> = [];
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-luna', true);
+  const request = (history: string) =>
+    ({
+      input: [],
+      tools: [],
+      codex: { promptCacheKey: 'parent-cache' },
+      providerOptions: { extraHeaders: { 'session-id': history, authorization: 'token' } },
+    } as any);
+
+  for (const history of ['child-a', 'child-b', 'child-a']) {
+    const stream = await transport.fetchResponse(
+      request(history),
+      true,
+      { model: 'gpt-5.6-luna' },
+      { onConnectionAcquired: (details) => acquisitions.push(details) },
+    );
+    await stream[Symbol.asyncIterator]().next();
+  }
+
+  expect(socketCreateCalls).toBe(2);
+  expect(acquisitions[2]).toMatchObject({ connectionId: acquisitions[0]!.connectionId, reused: true });
+  transport.close();
+});

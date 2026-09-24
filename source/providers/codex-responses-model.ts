@@ -225,9 +225,9 @@ export class CodexResponsesTransport {
         }
         const headers = request.providerOptions?.extraHeaders as Record<string, string> | undefined;
         const affinityKey =
-          typeof request.codex?.promptCacheKey === 'string' && request.codex.promptCacheKey.length > 0
-            ? request.codex.promptCacheKey
-            : undefined;
+          typeof headers?.['session-id'] === 'string' && headers['session-id'].length > 0
+            ? headers['session-id']
+            : request.codex?.promptCacheKey;
         const acquisition = this.#sessions.acquireWithMetadata(headers, { affinityKey });
         const socket = acquisition.socket;
         requestContext?.onConnectionAcquired?.({
@@ -1800,12 +1800,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     const sessionContext = this.sessionContextService?.getContext();
     const logicalSessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
-    // WebSocket handshake headers cannot change after a socket is opened. Use
-    // the root cache affinity for that physical identity, while the per-frame
-    // client metadata below continues to identify the current logical scope.
-    // The backend's treatment of these two identity channels is not assumed;
-    // the distinction is kept explicit in tests and telemetry.
-    const transportSessionId = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
+    // A nested run must not reuse a sibling's socket: chained responses may
+    // be rejected when their IDs are continued on a different connection.
+    // Root rollovers still retain their physical cache affinity.
+    const cacheAffinity = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
+    const transportSessionId =
+      sessionContext?.providerHistoryKey && sessionContext.providerHistoryKey !== sessionContext.sessionId
+        ? logicalSessionId
+        : cacheAffinity;
     const threadId = logicalSessionId;
     const hasPreviousResponseId =
       typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
@@ -2097,12 +2099,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     // transport's private fetch path. Capture it without changing the
     // prepared request or wire state.
     captureProviderRequest(this.requestCapture, { provider: 'codex', transport: 'websocket', requestData });
+    const affinityKey =
+      extraHeaders['session-id'] ??
+      request.codex?.promptCacheKey ??
+      this.sessionContextService?.getContext()?.promptCacheKey;
     const transportDiagnostics: ProviderTransportDiagnostics = {
-      ...(request.codex?.promptCacheKey ?? this.sessionContextService?.getContext()?.promptCacheKey
-        ? {
-            affinityKey: request.codex?.promptCacheKey ?? this.sessionContextService?.getContext()?.promptCacheKey,
-          }
-        : {}),
+      ...(affinityKey ? { affinityKey } : {}),
       ...(this.#getCodexServerHistoryKey() ? { logicalHistoryKey: this.#getCodexServerHistoryKey()! } : {}),
     };
     this.#logTrafficStarted(requestId, requestData, extraHeaders, transportDiagnostics);

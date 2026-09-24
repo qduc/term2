@@ -162,7 +162,7 @@ it.each(retryCases)('$title', async (c) => {
     expect(result.error!.includes(c.expected.errorIncludes)).toBe(true);
   }
   expect(runCount).toBe(c.expected.runCount);
-  const retryEvents = events.filter((e) => e.type === 'retry');
+  const retryEvents = events.filter((e) => e.type === 'subagent_retry');
   expect(retryEvents.length).toBe(c.expected.retryEvents);
 
   if (c.retryEvent) {
@@ -274,7 +274,7 @@ it('run() retries a mid-stream transport drop instead of failing the subagent', 
   expect(result.status).toBe('completed');
   expect(result.finalText).toBe('Recovered after transport drop');
   expect(runCount).toBe(2);
-  const retryEvent = events.find((e) => e.type === 'retry');
+  const retryEvent = events.find((e) => e.type === 'subagent_retry');
   expect(retryEvent?.retryType).toBe('upstream');
 });
 
@@ -322,6 +322,6 @@ it('run() recovers an incomplete chat stream inside the application loop without
   expect(result.status).toBe('completed');
   expect(result.finalText).toBe('Recovered after incomplete stream');
   expect(runCount).toBe(2);
-  const retryEvent = events.find((e) => e.type === 'retry');
+  const retryEvent = events.find((e) => e.type === 'subagent_retry');
   expect(retryEvent).toBeUndefined();
 });

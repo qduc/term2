@@ -3422,13 +3422,20 @@ export function mapConversationEvent(
         },
       };
     }
+    // Subagent usage is not the turn's usage; the public `usage_update` stays
+    // root-only until the wire grows an explicitly subagent-scoped event.
+    case 'subagent_usage_update':
+      return null;
+    // The public `retry` already carries an optional `agentId`, so both root
+    // and subagent retries keep their existing wire shape.
     case 'retry':
+    case 'subagent_retry':
       return {
         ...base,
         type: 'retry',
         payload: {
           turnId,
-          ...(event.agentId ? { agentId: boundedText(event.agentId, 256) } : {}),
+          ...(event.type === 'subagent_retry' ? { agentId: boundedText(event.agentId, 256) } : {}),
           toolName: boundedText(event.toolName, 256),
           attempt: boundedInteger(event.attempt, 512),
           maxRetries: boundedInteger(event.maxRetries, 512),

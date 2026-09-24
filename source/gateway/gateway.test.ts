@@ -124,6 +124,26 @@ describe('M4 conversation event projections', () => {
     ).toMatchObject({ type: 'context_compaction_completed', payload: { durationMs: 4 } });
   });
 
+  it('keeps subagent usage off the turn usage stream and attributes subagent retries', () => {
+    // Subagent events share the root turn's sink; public `usage_update` is the
+    // turn's own usage, so a child's usage must not be published as it.
+    expect(
+      map({ type: 'subagent_usage_update', agentId: 'agent-1', usage: { prompt_tokens: 9, completion_tokens: 1 } }),
+    ).toBeNull();
+    const retry = map({
+      type: 'subagent_retry',
+      agentId: 'agent-1',
+      toolName: 'model',
+      attempt: 1,
+      maxRetries: 2,
+      errorMessage: 'wait',
+    });
+    expect(retry).toMatchObject({ type: 'retry', payload: { agentId: 'agent-1', attempt: 1 } });
+    expect(
+      map({ type: 'retry', toolName: 'model', attempt: 1, maxRetries: 2, errorMessage: 'wait' })?.payload,
+    ).not.toHaveProperty('agentId');
+  });
+
   it('maps error kinds to bounded reasons without stack data', () => {
     expect(map({ type: 'error', kind: 'rate_limit', message: 'provider body', finalText: 'partial' })).toMatchObject({
       type: 'turn_failed',

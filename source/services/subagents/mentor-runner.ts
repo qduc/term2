@@ -104,7 +104,12 @@ export class MentorRunner {
         const usage = normalizeAgentRunUsage(error?.usage) ?? extractUsage(error);
         if (slot && usage) childBudget!.recordUsage(usage);
         if (usage)
-          await safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
+          await safeEmit(
+            this.#logger,
+            this.#onEvent,
+            { type: 'subagent_usage_update', agentId, usage },
+            { propagate: true },
+          );
         return {
           agentId,
           role: 'mentor',
@@ -330,7 +335,12 @@ export class MentorRunner {
 
     const usage = normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream);
     if (usage)
-      await safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
+      await safeEmit(
+        this.#logger,
+        this.#onEvent,
+        { type: 'subagent_usage_update', agentId, usage },
+        { propagate: true },
+      );
 
     return {
       agentId,

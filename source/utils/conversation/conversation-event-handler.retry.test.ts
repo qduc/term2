@@ -94,3 +94,21 @@ it('retry_exhausted: does not suggest retrying when canRetry is false', () => {
   expect(result[0].text).toBe('Authentication failed.');
   expect(result[0].text).not.toContain('/retry-turn');
 });
+
+it('subagent_retry: names the owning subagent so it does not read as the root turn retrying', () => {
+  const deps = createMockDeps();
+  const handler = createConversationEventHandler(deps, createStreamingState());
+
+  handler({
+    type: 'subagent_retry',
+    agentId: 'sub-1',
+    toolName: 'conversation',
+    attempt: 1,
+    maxRetries: 3,
+    errorMessage: 'socket closed',
+    retryType: 'connection_interrupted',
+  });
+
+  const result = deps.calls.setMessagesCalls[0]!([]);
+  expect(result[0].text).toMatch(/^Subagent sub-1: Connection was interrupted/);
+});

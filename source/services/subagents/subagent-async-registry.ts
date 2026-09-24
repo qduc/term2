@@ -512,13 +512,12 @@ export class SubagentAsyncRegistry {
       event.type !== 'subagent_streaming_tool' &&
       event.type !== 'subagent_command_message' &&
       event.type !== 'subagent_approval_required' &&
-      event.type !== 'usage_update' &&
-      event.type !== 'retry' &&
+      event.type !== 'subagent_usage_update' &&
+      event.type !== 'subagent_retry' &&
       event.type !== 'subagent_question'
     )
       return;
     const agentId = event.type === 'subagent_question' ? event.runId : event.agentId;
-    if (agentId === undefined) return;
     const run = this.#runs.get(agentId);
     if (!run || !isActiveStatus(run.status)) return;
 
@@ -527,12 +526,12 @@ export class SubagentAsyncRegistry {
       return;
     }
 
-    if (event.type === 'usage_update') {
+    if (event.type === 'subagent_usage_update') {
       run.latestUsage = { ...event.usage };
       return;
     }
 
-    if (event.type === 'retry') {
+    if (event.type === 'subagent_retry') {
       run.responseInStream = false;
       run.streamingTool = undefined;
       this.#observe(

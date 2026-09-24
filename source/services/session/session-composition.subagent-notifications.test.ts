@@ -199,7 +199,7 @@ it('projects background starts, tool activity, and completions to task observers
   ]);
 
   sinks.background?.({
-    type: 'usage_update',
+    type: 'subagent_usage_update',
     agentId: 'run-task',
     usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
   });

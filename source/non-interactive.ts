@@ -176,6 +176,8 @@ const formatEventForStderr = (event: ConversationEvent, quiet = false): string |
         return `[retry] service_tier: ${event.errorMessage}\n`;
       }
       return `[retry] ${event.toolName} (${event.attempt}/${event.maxRetries}): ${event.errorMessage}\n`;
+    case 'subagent_retry':
+      return `[subagent ${event.agentId} retry] ${event.toolName} (${event.attempt}/${event.maxRetries}): ${event.errorMessage}\n`;
     default:
       return null;
   }

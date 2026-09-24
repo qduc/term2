@@ -22,6 +22,8 @@ export type ConversationEvent =
   | FinalResponseEvent
   | ErrorEvent
   | RetryEvent
+  | SubagentUsageUpdateEvent
+  | SubagentRetryEvent
   | RetryExhaustedEvent
   | ToolRecoveryEvent
   | SubagentStartedEvent
@@ -56,10 +58,13 @@ export type ConversationEvent =
  */
 export type ConversationEventSink = (event: ConversationEvent) => void | PromiseLike<void>;
 
+/**
+ * A root-turn retry. Subagent retries are {@link SubagentRetryEvent}: both share
+ * the root turn's event sink, and a separate type keeps root-only consumers
+ * from presenting a child's retry as the root's.
+ */
 export interface RetryEvent {
   type: 'retry';
-  /** Present when an async subagent owns this retry; root retries remain valid without it. */
-  agentId?: string;
   toolName: string;
   attempt: number;
   maxRetries: number;
@@ -75,6 +80,11 @@ export interface RetryEvent {
   errorKind?: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
   delayMs?: number;
   retryAfterMs?: number;
+}
+
+export interface SubagentRetryEvent extends Omit<RetryEvent, 'type'> {
+  type: 'subagent_retry';
+  agentId: string;
 }
 
 export interface RetryExhaustedEvent {
@@ -162,11 +172,22 @@ export interface ApprovalRequiredEvent {
 /**
  * Emitted when token usage information is received during streaming.
  * Allows UI to display token usage in real-time rather than waiting for final response.
+ * Root-turn usage only; subagent usage is {@link SubagentUsageUpdateEvent}.
  */
 export interface UsageUpdateEvent {
   type: 'usage_update';
-  /** Present for usage emitted by a subagent rather than the root turn. */
-  agentId?: string;
+  usage: NormalizedUsage;
+}
+
+/**
+ * Token usage from a subagent's model requests. It shares the root turn's
+ * event sink but describes another model's context, so it must never reach
+ * root-turn usage consumers (footer, persisted display usage, gateway turn
+ * usage) as if it were a `usage_update`.
+ */
+export interface SubagentUsageUpdateEvent {
+  type: 'subagent_usage_update';
+  agentId: string;
   usage: NormalizedUsage;
 }
 
@@ -466,6 +487,7 @@ export interface ContextCompactionFailedEvent {
  */
 const BOOKKEEPING_ONLY_EVENT_TYPES: ReadonlySet<ConversationEvent['type']> = new Set([
   'usage_update',
+  'subagent_usage_update',
   'cost_update',
   'run_budget',
   'subagent_run_budget',

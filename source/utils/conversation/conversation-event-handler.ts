@@ -644,7 +644,8 @@ export function createConversationEventHandler(
         return;
       }
 
-      case 'retry': {
+      case 'retry':
+      case 'subagent_retry': {
         let text: string;
         if (event.retryType === 'flex_service_tier') {
           text = 'Flex service tier timed out. Falling back to standard service tier and retrying...';
@@ -672,6 +673,9 @@ export function createConversationEventHandler(
         } else {
           text = `Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         }
+        // A foreground subagent's retry shares this turn's sink; name the
+        // owner so it does not read as the root turn retrying.
+        if (event.type === 'subagent_retry') text = `Subagent ${event.agentId}: ${text}`;
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',

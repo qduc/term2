@@ -35,7 +35,7 @@ import {
   loadLastConversation,
   forkConversation,
   isConversationLocked,
-  listConversations,
+  listRecentConversations,
   deleteConversation,
   hasConversationContent,
   type RestoredState,
@@ -457,7 +457,7 @@ if (resumeRequested && cli.input.length > 1) {
 }
 
 if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
-  const conversations = listConversations(resumeProjectPath, expectedSshHost).slice(0, 10);
+  const conversations = await listRecentConversations(resumeProjectPath, expectedSshHost, 10);
   const formatted = formatResumeList(conversations);
   console.log(formatted);
   process.exit(0);

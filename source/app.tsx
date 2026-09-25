@@ -67,7 +67,7 @@ import { copyToClipboard } from './utils/clipboard.js';
 import type { CopySelection } from './utils/copy-selections.js';
 import {
   isConversationLocked,
-  listConversations,
+  listRecentConversations,
   loadConversationForProject,
   loadLastConversation,
   type ConversationListEntry,
@@ -612,8 +612,8 @@ const App: FC<AppProps> = ({
 
   const resumeProjectPath = sshInfo?.remoteDir ?? process.cwd();
   const resumeSshHost = sshInfo?.host;
-  const listSavedConversations = useCallback<() => ConversationListEntry[]>(
-    () => listConversations(resumeProjectPath, resumeSshHost).slice(0, 10),
+  const listSavedConversations = useCallback<() => Promise<ConversationListEntry[]>>(
+    () => listRecentConversations(resumeProjectPath, resumeSshHost, 10),
     [resumeProjectPath, resumeSshHost],
   );
 

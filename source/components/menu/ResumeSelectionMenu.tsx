@@ -12,6 +12,8 @@ type Props = {
   selectedIndex: number;
   scrollOffset?: number;
   query: string;
+  loading?: boolean;
+  error?: boolean;
 };
 
 function formatDate(dateString: string): string {
@@ -37,12 +39,20 @@ function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string
   return getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode));
 }
 
-const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
-  if (items.length === 0) {
+const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query, loading, error }) => {
+  if (loading || error || items.length === 0) {
     return (
       <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
         <Text color={COLOR_TEXT_SUBTLE}>Resume Conversation</Text>
-        <Text color={COLOR_TEXT_SUBTLE}>{query ? 'No matching conversations' : 'No saved conversations found'}</Text>
+        <Text color={COLOR_TEXT_SUBTLE}>
+          {loading
+            ? 'Loading conversations...'
+            : error
+            ? 'Could not load conversations'
+            : query
+            ? 'No matching conversations'
+            : 'No saved conversations found'}
+        </Text>
       </Box>
     );
   }

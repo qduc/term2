@@ -118,7 +118,9 @@ const renderSurface = async (
     onSkillSelected?: (skill: SkillInfo) => void;
     onSystemMessage?: (text: string) => void;
     onCopySelection?: (selection: CopySelection) => void;
-    listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
+    listConversations?: () => Promise<
+      import('../../services/conversation/conversation-persistence.js').ConversationListEntry[]
+    >;
     resumeConversation?: (target?: string) => void | Promise<void>;
     settingsService?: ReturnType<typeof createMockSettingsService>;
     mcpManager?: McpConnectionManager;
@@ -601,7 +603,7 @@ it.sequential('accepting a conversation from /resume resumes it and clears the b
   const resumeConversation = vi.fn(async () => {});
   const controller = new MenuControllerImpl();
   const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, resumeCommand], undefined, {
-    listConversations: () => [
+    listConversations: async () => [
       { id: 'session-abc-123', updatedAt: '2026-08-30T12:00:00.000Z', firstUserMessage: 'Test task' },
     ],
     resumeConversation,
@@ -609,10 +611,80 @@ it.sequential('accepting a conversation from /resume resumes it and clears the b
 
   await writeInput(stdin, '/resume ');
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'resume');
+  await waitFor(() => (lastFrame() ?? '').includes('session-abc-123'));
   await writeInput(stdin, '\r');
   await waitFor(() => controller.getSnapshot().stack.length === 0);
 
   expect(resumeConversation).toHaveBeenCalledWith('session-abc-123');
   expect(controller.getSnapshot().editor).toMatchObject({ text: '', cursor: 0 });
   expect(lastFrame()).not.toContain('/resume');
+});
+
+it.sequential('keeps the resume menu responsive while its list loads', async () => {
+  let resolveList!: (
+    value: import('../../services/conversation/conversation-persistence.js').ConversationListEntry[],
+  ) => void;
+  const listConversations = vi.fn(
+    () =>
+      new Promise<import('../../services/conversation/conversation-persistence.js').ConversationListEntry[]>(
+        (resolve) => {
+          resolveList = resolve;
+        },
+      ),
+  );
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, resumeCommand], undefined, {
+    listConversations,
+  });
+
+  await writeInput(stdin, '/resume ');
+  await waitFor(() => (lastFrame() ?? '').includes('Loading conversations'));
+  expect(listConversations).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    resolveList([{ id: 'session-ready', updatedAt: '2026-08-30T12:00:00.000Z' }]);
+  });
+  await waitFor(() => (lastFrame() ?? '').includes('session-ready'));
+});
+
+it.sequential('ignores a result from a previous opening of the resume menu', async () => {
+  const resolvers: Array<
+    (entries: import('../../services/conversation/conversation-persistence.js').ConversationListEntry[]) => void
+  > = [];
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, resumeCommand], undefined, {
+    listConversations: () =>
+      new Promise((resolve) => {
+        resolvers.push(resolve);
+      }),
+  });
+
+  await writeInput(stdin, '/resume ');
+  await waitFor(() => resolvers.length === 1);
+  await writeInput(stdin, '\u001b');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+  act(() => {
+    controller.replaceText('', 0);
+  });
+  await writeInput(stdin, '/resume ');
+  await waitFor(() => resolvers.length === 2);
+  await act(async () => {
+    resolvers[0]!([{ id: 'stale-session', updatedAt: '2026-08-30T12:00:00.000Z' }]);
+  });
+  expect(lastFrame()).not.toContain('stale-session');
+  await act(async () => {
+    resolvers[1]!([{ id: 'current-session', updatedAt: '2026-08-30T12:00:00.000Z' }]);
+  });
+  await waitFor(() => (lastFrame() ?? '').includes('current-session'));
+});
+
+it.sequential('shows a list failure instead of an empty-list claim', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, resumeCommand], undefined, {
+    listConversations: async () => {
+      throw new Error('unavailable');
+    },
+  });
+  await writeInput(stdin, '/resume ');
+  await waitFor(() => (lastFrame() ?? '').includes('Could not load conversations'));
+  expect(lastFrame()).not.toContain('No saved conversations found');
 });

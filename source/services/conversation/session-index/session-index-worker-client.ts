@@ -11,6 +11,7 @@ import type {
   IndexedSearchResult,
   ReconcileResult,
 } from './session-index-database.js';
+import type { ConversationListEntry } from '../conversation-persistence.js';
 import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
 
 export interface SessionIndexWorkerClientOptions {
@@ -67,7 +68,12 @@ export class SessionIndexWorkerClient {
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
   >();
 
-  constructor(dbPath: string, sourceDirectory: string, options?: SessionIndexWorkerClientOptions) {
+  /**
+   * `dbPath`/`sourceDirectory` are optional so the same worker client can host
+   * requests that never touch the SQLite index (see `listConversationsInDirectory`).
+   * The index is initialized only when both are supplied.
+   */
+  constructor(dbPath?: string, sourceDirectory?: string, options?: SessionIndexWorkerClientOptions) {
     this.#timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
     const workerFile = resolveWorkerFile();
     this.#worker = options?.workerFactory?.(workerFile) ?? createDefaultWorker(workerFile);
@@ -97,9 +103,11 @@ export class SessionIndexWorkerClient {
     });
 
     // Send init request synchronously on creation; catch errors so failures surface gracefully on probe/reconcile
-    void this.#send({ type: 'init', dbPath, sourceDirectory }).catch(() => {
-      // Ignored: initialization failure is captured and reported on subsequent requests
-    });
+    if (dbPath !== undefined && sourceDirectory !== undefined) {
+      void this.#send({ type: 'init', dbPath, sourceDirectory }).catch(() => {
+        // Ignored: initialization failure is captured and reported on subsequent requests
+      });
+    }
   }
 
   #drainPending(error: Error): void {
@@ -144,6 +152,18 @@ export class SessionIndexWorkerClient {
 
   async list(options: { projectPath: string; sshHost?: string }): Promise<IndexedListResult> {
     return this.#send<IndexedListResult>({ type: 'list', options });
+  }
+
+  /**
+   * Canonical resume-listing parse in the worker thread. Independent of the
+   * index database, so it succeeds even when the index is unavailable.
+   */
+  async listConversationsInDirectory(
+    conversationsDir: string,
+    projectPath?: string,
+    sshHost?: string,
+  ): Promise<ConversationListEntry[]> {
+    return this.#send<ConversationListEntry[]>({ type: 'list_conversations', conversationsDir, projectPath, sshHost });
   }
 
   async resolveReference(

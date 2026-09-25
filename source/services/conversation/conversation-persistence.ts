@@ -645,7 +645,24 @@ export interface ConversationListEntry {
 
 export function listConversations(expectedProjectPath?: string, expectedSshHost?: string): ConversationListEntry[] {
   ensureConversationsDir();
-  const dir = getConversationsDir();
+  return listConversationsInDirectory(getConversationsDir(), expectedProjectPath, expectedSshHost);
+}
+
+/**
+ * Canonical resume-listing parse over an explicit conversations directory.
+ *
+ * This is the synchronous parse the session-index worker runs so the heavy
+ * JSONL replay stays off the main thread; `listConversations` is the
+ * process-default wrapper around it. Keeping the directory explicit lets a
+ * worker (a separate module instance that does not inherit the in-process
+ * test override) list the same directory the caller listed without relying on
+ * `process.env`.
+ */
+export function listConversationsInDirectory(
+  dir: string,
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+): ConversationListEntry[] {
   try {
     if (!fs.existsSync(dir)) {
       return [];

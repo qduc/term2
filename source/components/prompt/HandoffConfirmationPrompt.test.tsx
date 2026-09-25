@@ -19,7 +19,8 @@ it.sequential('HandoffConfirmationPrompt renders question and choices with Yes s
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('📋 Change model?')).toBe(true);
+  expect(output.includes('Change model?')).toBe(true);
+  expect(output.includes('📋')).toBe(false);
   expect(output.includes('❯ Yes')).toBe(true); // Default selection is Yes
   expect(output.includes('No')).toBe(true);
 

@@ -613,7 +613,7 @@ it.sequential('BottomArea shows handoff confirmation prompt when handoffState is
     },
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('📋 Change model?')).toBe(true);
+  expect(output.includes('Change model?')).toBe(true);
   expect(output.includes('Yes')).toBe(true);
   expect(output.includes('No')).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
@@ -767,7 +767,7 @@ it.sequential(
       },
     });
     const output = lastFrame() ?? '';
-    expect(output.includes('📋 Switch to standard mode?')).toBe(true);
+    expect(output.includes('Switch to standard mode?')).toBe(true);
     expect(output.includes('Yes')).toBe(true);
     expect(output.includes('No')).toBe(true);
     act(() => {

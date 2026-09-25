@@ -12,6 +12,7 @@ export type WorkerRequestPayload =
       conversationsDir: string;
       projectPath?: string;
       sshHost?: string;
+      limit?: number;
     }
   | {
       type: 'resolve';
@@ -84,7 +85,11 @@ export function runSessionIndexWorker(): void {
             msg.projectPath,
             msg.sshHost,
           );
-          parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
+          parentPort!.postMessage({
+            id: msg.id,
+            ok: true,
+            result: Number.isFinite(msg.limit) ? result.slice(0, Math.max(0, Math.floor(msg.limit!))) : result,
+          } satisfies WorkerResponse);
           break;
         }
 

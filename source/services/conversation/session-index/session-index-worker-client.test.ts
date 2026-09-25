@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { Worker } from 'node:worker_threads';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +47,22 @@ function writeSession(id: string, projectPath: string, text = 'hello', rolloverF
 }
 
 describe('SessionIndexWorkerClient', () => {
+  it('closes promptly after an unexpected worker exit', async () => {
+    const worker = Object.assign(new EventEmitter(), {
+      postMessage: vi.fn(),
+      terminate: vi.fn(async () => 1),
+    });
+    const client = new SessionIndexWorkerClient(undefined, undefined, {
+      workerFactory: () => worker as unknown as Worker,
+    });
+    const listing = client.listConversationsInDirectory(convDir);
+    worker.emit('exit', 1);
+    await expect(listing).rejects.toThrow('stopped');
+    await client.close();
+    expect(worker.terminate).toHaveBeenCalledOnce();
+    expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  });
+
   it('executes capability probe, reconciliation, list, and reference resolution in worker thread', async () => {
     writeSession('session-1', '/project', 'first message');
     writeSession('session-2', '/project', 'second message', 'session-1');

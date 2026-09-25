@@ -67,7 +67,7 @@ interface UseAppCommandsProps {
   requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
   /** True while an agent turn is in flight; gates conversation-mutating commands. */
   turnInFlight?: boolean;
-  listConversations: () => ConversationListEntry[];
+  listConversations: () => Promise<ConversationListEntry[]>;
   resumeConversation: (target?: string) => void | Promise<void>;
   /** Null when this session configured no MCP servers. Drives /mcp-login. */
   mcpManager?: McpConnectionManager | null;

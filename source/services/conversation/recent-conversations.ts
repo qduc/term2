@@ -40,7 +40,7 @@ export async function listRecentConversations(
   limit: number = DEFAULT_RECENT_CONVERSATIONS_LIMIT,
   options?: RecentConversationsOptions,
 ): Promise<ConversationListEntry[]> {
-  const entries = await listConversationsOffMainThread(projectPath, sshHost, options);
+  const entries = await listConversationsOffMainThread(projectPath, sshHost, limit, options);
   if (!Number.isFinite(limit)) return entries;
   return entries.slice(0, Math.max(0, Math.floor(limit)));
 }
@@ -48,6 +48,7 @@ export async function listRecentConversations(
 async function listConversationsOffMainThread(
   projectPath: string | undefined,
   sshHost: string | undefined,
+  limit: number,
   options: RecentConversationsOptions | undefined,
 ): Promise<ConversationListEntry[]> {
   const createClient =
@@ -55,10 +56,12 @@ async function listConversationsOffMainThread(
     (() => new SessionIndexWorkerClient(undefined, undefined, { timeoutMs: options?.workerTimeoutMs }));
 
   let client: SessionIndexWorkerClient | null = null;
+  let failed = false;
   try {
     client = createClient();
-    return await client.listConversationsInDirectory(getConversationsDir(), projectPath, sshHost);
+    return await client.listConversationsInDirectory(getConversationsDir(), projectPath, sshHost, limit);
   } catch (error) {
+    failed = true;
     options?.onFallback?.(error instanceof Error ? error.message : String(error));
     // Last resort only: the worker thread itself is unusable (for example the
     // runtime forbids worker threads). Parsing in-process keeps the listing
@@ -66,6 +69,6 @@ async function listConversationsOffMainThread(
     // a misleadingly empty list.
     return listConversations(projectPath, sshHost);
   } finally {
-    await client?.close().catch(() => {});
+    await client?.close({ force: failed }).catch(() => {});
   }
 }

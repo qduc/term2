@@ -228,7 +228,7 @@ const TestHookWrapper = ({
     onSkillSelected: () => {},
     requestModeSwitchConfirm,
     turnInFlight,
-    listConversations: () => [],
+    listConversations: async () => [],
     resumeConversation: () => {},
   });
 
@@ -754,7 +754,7 @@ it.sequential(
         retryLastToolOutput: async () => false,
         skillsService: { getAvailableSkills: () => [] } as any,
         onSkillSelected: () => {},
-        listConversations: () => [],
+        listConversations: async () => [],
         resumeConversation: () => {},
       });
       return null;

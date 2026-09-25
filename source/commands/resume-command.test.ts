@@ -25,7 +25,7 @@ function createHarness() {
   const resumeConversation = vi.fn();
   const messages: string[] = [];
   const command = createResumeSlashCommand({
-    listConversations: () => mockConversations,
+    listConversations: async () => mockConversations,
     resumeConversation,
     addSystemMessage: (message) => messages.push(message),
     replaceInput,

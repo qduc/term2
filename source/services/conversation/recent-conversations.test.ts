@@ -1,4 +1,4 @@
-import { it, describe, expect, beforeEach, afterEach } from 'vitest';
+import { it, describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -178,8 +178,9 @@ describe('listRecentConversations', () => {
       id: `session-${index}`,
       updatedAt: '2026-01-01T00:00:00.000Z',
     }));
+    const listInWorker = vi.fn(async () => many);
     const options: RecentConversationsOptions = {
-      createClient: () => fakeClient({ listConversationsInDirectory: async () => many }),
+      createClient: () => fakeClient({ listConversationsInDirectory: listInWorker }),
     };
 
     const result = await listRecentConversations('/workspace/p1', undefined, undefined, options);
@@ -187,6 +188,38 @@ describe('listRecentConversations', () => {
     expect(DEFAULT_RECENT_CONVERSATIONS_LIMIT).toBe(10);
     expect(result).toHaveLength(DEFAULT_RECENT_CONVERSATIONS_LIMIT);
     expect(result).toEqual(many.slice(0, DEFAULT_RECENT_CONVERSATIONS_LIMIT));
+    expect(listInWorker).toHaveBeenCalledWith(testDir, '/workspace/p1', undefined, DEFAULT_RECENT_CONVERSATIONS_LIMIT);
+  });
+
+  it.sequential('migrates legacy logs before listing through the worker', async () => {
+    const dbDir = path.join(testDir, 'data');
+    const logDir = path.join(testDir, 'legacy');
+    fs.mkdirSync(logDir);
+    const oldDb = process.env['TERM2_TEST_DB_DIR'];
+    const oldLog = process.env['TERM2_TEST_LOG_DIR'];
+    const oldConversations = process.env['TERM2_CONVERSATIONS_DIR'];
+    const id = 'abababab-abab-4aba-8aba-abababababab';
+    await writeSession(id, '/workspace/p1');
+    fs.renameSync(path.join(testDir, `${id}.jsonl`), path.join(logDir, `${id}.jsonl`));
+    persistence.setConversationsDirForTest(null);
+    process.env['TERM2_TEST_DB_DIR'] = dbDir;
+    process.env['TERM2_TEST_LOG_DIR'] = logDir;
+    process.env['TERM2_CONVERSATIONS_DIR'] = dbDir;
+    try {
+      const listed = await listRecentConversations('/workspace/p1');
+      expect(listed.map((entry) => entry.id)).toEqual([id]);
+      expect(fs.existsSync(path.join(dbDir, '.migrated-from-log'))).toBe(true);
+    } finally {
+      persistence.setConversationsDirForTest(testDir);
+      for (const [key, oldValue] of [
+        ['TERM2_TEST_DB_DIR', oldDb],
+        ['TERM2_TEST_LOG_DIR', oldLog],
+        ['TERM2_CONVERSATIONS_DIR', oldConversations],
+      ] as const) {
+        if (oldValue === undefined) delete process.env[key];
+        else process.env[key] = oldValue;
+      }
+    }
   });
 
   it.sequential('falls back to in-process canonical listing when the worker is unavailable', async () => {
@@ -201,14 +234,19 @@ describe('listRecentConversations', () => {
     });
     expect(whenFactoryThrows).toEqual(expected);
 
+    let forcedClose = false;
     const whenRequestRejects = await listRecentConversations('/workspace/p1', undefined, 100, {
       createClient: () =>
         fakeClient({
           listConversationsInDirectory: async () => {
             throw new Error('worker request failed');
           },
+          close: async (options) => {
+            forcedClose = options?.force === true;
+          },
         }),
     });
     expect(whenRequestRejects).toEqual(expected);
+    expect(forcedClose).toBe(true);
   });
 });

@@ -35,11 +35,11 @@ import {
   loadLastConversation,
   forkConversation,
   isConversationLocked,
-  listRecentConversations,
   deleteConversation,
   hasConversationContent,
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
+import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { formatResumeList } from './utils/resume-list.js';
 import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';

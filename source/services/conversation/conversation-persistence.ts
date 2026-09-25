@@ -70,8 +70,7 @@ export function setPidAlivenessCheckForTest(check: ((pid: number) => boolean) | 
   pidAlivenessOverride = check;
 }
 
-function ensureConversationsDir(): string {
-  const dir = getConversationsDir();
+function ensureConversationsDir(dir = getConversationsDir()): string {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -663,6 +662,9 @@ export function listConversationsInDirectory(
   expectedProjectPath?: string,
   expectedSshHost?: string,
 ): ConversationListEntry[] {
+  // The worker receives an explicit directory rather than the caller's
+  // in-process override. Preserve the default-path legacy migration there.
+  if (dir === (process.env['TERM2_TEST_DB_DIR'] || CONVERSATIONS_DIR)) ensureConversationsDir(dir);
   try {
     if (!fs.existsSync(dir)) {
       return [];

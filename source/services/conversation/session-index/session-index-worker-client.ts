@@ -63,6 +63,7 @@ export class SessionIndexWorkerClient {
   readonly #timeoutMs: number;
   #nextRequestId = 1;
   #closed = false;
+  #unavailable = false;
   readonly #pending = new Map<
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
@@ -93,11 +94,13 @@ export class SessionIndexWorkerClient {
     });
 
     this.#worker.on('error', (err: Error) => {
+      this.#unavailable = true;
       this.#drainPending(err);
     });
 
     this.#worker.on('exit', (code: number) => {
       if (!this.#closed) {
+        this.#unavailable = true;
         this.#drainPending(new Error(`Session index worker stopped with exit code ${code}`));
       }
     });
@@ -122,6 +125,7 @@ export class SessionIndexWorkerClient {
     if (this.#closed) {
       return Promise.reject(new Error('SessionIndexWorkerClient is closed'));
     }
+    if (this.#unavailable) return Promise.reject(new Error('Session index worker is unavailable'));
 
     const id = this.#nextRequestId++;
     const payload: WorkerRequest = { id, ...req };
@@ -162,8 +166,15 @@ export class SessionIndexWorkerClient {
     conversationsDir: string,
     projectPath?: string,
     sshHost?: string,
+    limit?: number,
   ): Promise<ConversationListEntry[]> {
-    return this.#send<ConversationListEntry[]>({ type: 'list_conversations', conversationsDir, projectPath, sshHost });
+    return this.#send<ConversationListEntry[]>({
+      type: 'list_conversations',
+      conversationsDir,
+      projectPath,
+      sshHost,
+      limit,
+    });
   }
 
   async resolveReference(
@@ -188,10 +199,10 @@ export class SessionIndexWorkerClient {
     return this.#send<IndexedSearchResult>({ type: 'search', options });
   }
 
-  async close(): Promise<void> {
+  async close(options?: { force?: boolean }): Promise<void> {
     if (this.#closed) return;
     try {
-      await this.#send({ type: 'close' });
+      if (!options?.force && !this.#unavailable) await this.#send({ type: 'close' });
     } catch {
       // Ignore errors on close
     } finally {

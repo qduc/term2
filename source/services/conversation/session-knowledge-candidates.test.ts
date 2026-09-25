@@ -97,4 +97,36 @@ describe('historical knowledge candidates', () => {
       },
     ]);
   });
+
+  it('finds future-facing instructions and direct corrections from real user phrasing', () => {
+    session('historical', '/project', [
+      'for future agent spawning, always confirm with me provider-model before dispatching',
+      'note: when reuse an existing agent, clear its context if new task is unrelated to the old one',
+      'muse on opencode is true, on grok is wrong, can you check again',
+      'I often ask an agent to release for me so they can write the changelog too instead of rely on the release script',
+      'I like the memory idea, like term2 grows with the project',
+      'do not read anything here',
+      'we will rollover',
+      'from now on, do not save memories without review',
+    ]);
+    expect(
+      scanSessionKnowledgeCandidates('/project').candidates.map(({ category, quote }) => ({ category, quote })),
+    ).toEqual([
+      {
+        category: 'preference',
+        quote: 'for future agent spawning, always confirm with me provider-model before dispatching',
+      },
+      {
+        category: 'preference',
+        quote: 'note: when reuse an existing agent, clear its context if new task is unrelated to the old one',
+      },
+      { category: 'correction', quote: 'muse on opencode is true, on grok is wrong, can you check again' },
+      {
+        category: 'preference',
+        quote:
+          'I often ask an agent to release for me so they can write the changelog too instead of rely on the release script',
+      },
+      { category: 'preference', quote: 'from now on, do not save memories without review' },
+    ]);
+  });
 });

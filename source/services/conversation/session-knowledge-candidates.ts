@@ -14,9 +14,15 @@ export type KnowledgeCandidate = {
 // High-precision *leads*, not facts. Short standalone first-person statements
 // avoid matching quoted transcripts, code fences and assistant/tool instructions.
 function categoryFor(text: string): Exclude<KnowledgeCandidate['category'], 'topic_match'> | null {
-  if (text.length > 280 || text !== text.trim() || /[\r\n`]/.test(text) || text.includes('?')) return null;
+  if (text.length > 280 || text !== text.trim() || /[\r\n`]/.test(text)) return null;
+  if (/\b(?:is|was) (?:wrong|incorrect)\b/i.test(text) && /, (?:can|could) you\b/i.test(text)) return 'correction';
+  if (text.includes('?')) return null;
   if (/^(?:Actually,? |No,? )(?:I prefer|we decided|I meant)\b/i.test(text)) return 'correction';
-  if (/^(?:I prefer|I like|I always|I never|Please (?:always|never|don't|do not))\b/i.test(text)) return 'preference';
+  if (/^for future\b.*\b(?:always|never)\b/i.test(text)) return 'preference';
+  if (/^note: when\b[^,]*, (?:clear|use|keep|avoid|confirm|ask|ensure|do not|don't)\b/i.test(text)) return 'preference';
+  if (/^from now on,? (?:always|never|do not|don't)\b/i.test(text)) return 'preference';
+  if (/^I often\b/i.test(text)) return 'preference';
+  if (/^(?:I prefer|I always|I never|Please (?:always|never|don't|do not))\b/i.test(text)) return 'preference';
   if (/^(?:We decided (?:to|on|that)|The decision is)\b/i.test(text)) return 'decision';
   return null;
 }

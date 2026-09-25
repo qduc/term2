@@ -688,8 +688,6 @@ it('passes previous response ids into subsequent runs', async () => {
     {
       text: 'first',
       options: {
-        memoryQuery: 'first',
-        onMemoryInjected: expect.any(Function),
         previousResponseId: null,
         sessionId: 'default',
         recoveryBudget: expect.any(Object),
@@ -702,8 +700,6 @@ it('passes previous response ids into subsequent runs', async () => {
     {
       text: 'second',
       options: {
-        memoryQuery: 'second',
-        onMemoryInjected: expect.any(Function),
         previousResponseId: 'resp-1',
         sessionId: 'default',
         recoveryBudget: expect.any(Object),

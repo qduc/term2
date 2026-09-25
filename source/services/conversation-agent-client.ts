@@ -3,7 +3,7 @@ import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
-import type { InjectedMemory } from './memory/memory-capabilities.js';
+import type { TurnMemorySelection } from './memory/memory-capabilities.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 import type { SteerOutcome } from './agent-runtime/application-run-loop.js';
@@ -26,10 +26,6 @@ import type {
 } from '../contracts/session-rollover.js';
 
 export type AgentClientRunOptions = {
-  /** Latest user turn text, not the provider's accumulated history. */
-  memoryQuery?: string;
-  /** Reports the exact bounded working set used for this model request. */
-  onMemoryInjected?: (memories: InjectedMemory[]) => void;
   /** Shared automatic retry/recovery capability for this logical turn. */
   recoveryBudget?: RetryRecoveryBudget;
   previousResponseId?: string | null;
@@ -105,6 +101,11 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
   startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
+  /**
+   * Memory summaries relevant to a user message, as a block for the user turn.
+   * `exclude` lists `recallKey`s already in the conversation.
+   */
+  selectMemoryForTurn?(query: string, options: { exclude: ReadonlySet<string> }): Promise<TurnMemorySelection>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
   /**

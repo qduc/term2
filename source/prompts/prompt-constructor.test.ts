@@ -378,12 +378,13 @@ it('adds persistent-memory guidance only when memory tools are enabled', () => {
   ).not.toContain('memory.md');
 });
 
-it('memory.md fragment keeps the index omission contract', () => {
+it('memory.md fragment describes per-turn recall, not a session-start index', () => {
   const fragment = readFileSync(join(import.meta.dirname, 'memory.md'), 'utf8');
 
-  expect(fragment).toContain('a listed memory without a summary had it omitted for budget');
-  expect(fragment).toContain('read it with `tools.memory_get(...)` before treating it as irrelevant');
-  expect(fragment).not.toContain('Only a concise index is loaded initially');
+  expect(fragment).toContain('`<memory-recall>` block ahead of that message');
+  expect(fragment).toContain('not a complete index');
+  expect(fragment).toContain('read the full memory with `tools.memory_get(...)`');
+  expect(fragment).not.toContain('The initial index lists');
 });
 
 it('buildPromptSpec includes unified background delegation guidance when background execution is enabled', () => {

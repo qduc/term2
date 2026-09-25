@@ -13,7 +13,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import { AgentConfiguration } from './agent-configuration.js';
-import { MemoryCapabilityBuilder } from '../services/memory/memory-capabilities.js';
+import { MemoryCapabilityBuilder, type TurnMemorySelection } from '../services/memory/memory-capabilities.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
@@ -1319,6 +1319,16 @@ export class AgentClient {
     };
   }
 
+  async selectMemoryForTurn(query: string, options: { exclude: ReadonlySet<string> }): Promise<TurnMemorySelection> {
+    if (!this.#agentConfig.getApplicationAgent().memoryContextEnabled) return { text: '', memories: [] };
+    const selection = await this.#memoryCapabilityBuilder.selectForTurn(query, {
+      projectPath: this.#executionContext?.getCwd() ?? process.cwd(),
+      exclude: options.exclude,
+    });
+    if (selection.text) this.#logger.debug('Task-relevant memory recalled', { chars: selection.text.length });
+    return selection;
+  }
+
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
     // Stop whatever is streaming without judging the turn's fate: a retry
@@ -1341,20 +1351,7 @@ export class AgentClient {
       this.#agentConfig.beginTurn();
       const supportsChaining = this.supportsConversationChaining();
       const baseAgent = this.#agentConfig.getApplicationAgent(options.sessionId, options.promptCacheKey);
-      let agent = baseAgent;
-      if (baseAgent.memoryContextEnabled && options.memoryQuery) {
-        const selection = await this.#memoryCapabilityBuilder.selectForTurn(options.memoryQuery, {
-          projectPath: this.#executionContext?.getCwd() ?? process.cwd(),
-        });
-        if (startController.signal.aborted) {
-          throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
-        }
-        if (selection.text) {
-          agent = { ...baseAgent, instructions: `${baseAgent.instructions}\n\n${selection.text}` };
-          this.#logger.debug('Task-relevant memory context selected', { chars: selection.text.length });
-          options.onMemoryInjected?.(selection.memories);
-        }
-      }
+      const agent = baseAgent;
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
       const runBudget = this.#runBudgetPolicy();

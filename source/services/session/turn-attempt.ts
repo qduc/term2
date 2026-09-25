@@ -9,7 +9,7 @@ import type { ProviderHistorySnapshot } from '../conversation/conversation-store
 import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export class TurnAttempt {
-  readonly #turn: UserTurn;
+  #turn: UserTurn;
   readonly #submittedTurn: UserTurn;
   readonly #token: GenerationToken;
   readonly #initialRetryCounts: RetryCounts;
@@ -72,6 +72,15 @@ export class TurnAttempt {
 
   get turn(): UserTurn {
     return this.#turn;
+  }
+
+  /**
+   * Put harness-owned model context ahead of the turn text. Only valid before
+   * the turn enters history, so every later request replays the same bytes.
+   */
+  prependToTurnText(text: string): void {
+    if (this.#addedUserMessage) throw new Error('Cannot change a turn already added to history.');
+    this.#turn = { ...this.#turn, text: this.#turn.text ? `${text}\n\n${this.#turn.text}` : text };
   }
 
   get submittedTurn(): UserTurn {

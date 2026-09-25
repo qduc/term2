@@ -569,6 +569,7 @@ export class ConversationAdapter {
         hallucinationRetryCount,
         inputSurgeApproval,
         replayFromHistory,
+        suppressUserMessageDisplay,
       }).then(async (result) => {
         await this.#recordPendingInteraction(result);
         return result;
@@ -920,6 +921,7 @@ export class ConversationAdapter {
       hallucinationRetryCount = 0,
       inputSurgeApproval,
       replayFromHistory,
+      suppressUserMessageDisplay,
     }: SendMessageOptions = {},
     requestId?: string | null,
   ): Promise<ConversationTerminal> {
@@ -950,6 +952,10 @@ export class ConversationAdapter {
         }
         if (replayFromHistory) {
           startOptions.replayFromHistory = true;
+        }
+        if (suppressUserMessageDisplay) {
+          // Model-only input (background notifications) carries no user intent to recall against.
+          startOptions.skipMemoryRecall = true;
         }
         result = await this.#collectTerminalResult(
           this.#turnFlow.start(input, startOptions),

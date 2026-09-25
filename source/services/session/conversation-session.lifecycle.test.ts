@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { renderMemoryRecall, renderRecallLine } from '../../prompts/memory-recall-notice.js';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import { createConversationSession } from '../../test-helpers/conversation-session-with-adapter.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -372,6 +373,35 @@ it('run() yields an error event carrying droppedUserMessage when startStream fai
   // And the store should have rolled back the user turn so /undo state is clean.
   expect(stateFacade.listUserTurns().length).toBe(0);
   expect(thrown).toBeTruthy();
+});
+
+it('returns the user words, not the recalled memory, when a recalled turn is dropped pre-stream', async () => {
+  const mockClient = createMockAgentClient({
+    async selectMemoryForTurn() {
+      return {
+        text: renderMemoryRecall([renderRecallLine({ scope: 'project', id: 'r', title: 'Rule', summary: 'Do it.' })]),
+        memories: [{ scope: 'project' as const, id: 'r', title: 'Rule' }],
+      };
+    },
+    async startStream() {
+      throw new Error('upstream 500');
+    },
+  });
+  const { turnCoordinator } = createConversationSession({
+    sessionId: 's1',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const emitted: ConversationEvent[] = [];
+  try {
+    for await (const ev of turnCoordinator.start('hello')) emitted.push(ev);
+  } catch {
+    // The drop signal on the error event is what matters.
+  }
+
+  const errorEvent = emitted.find((e: ConversationEvent) => e.type === 'error');
+  expect(errorEvent?.type === 'error' && errorEvent.droppedUserMessage?.text).toBe('hello');
 });
 
 it('run() omits droppedUserMessage when no user turn was added (skipUserMessage)', async () => {

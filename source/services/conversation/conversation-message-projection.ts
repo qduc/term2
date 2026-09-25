@@ -1,4 +1,5 @@
 import { stripSteeringNotice } from '../../prompts/steering-notice.js';
+import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
 import { isLocalContextSummary } from '../../contracts/provider-input.js';
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
@@ -52,7 +53,7 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
     // Everything the app shows or rewinds to must be the user's own words.
     return {
       role: message.role,
-      text: message.role === 'user' ? stripSteeringNotice(content) : content,
+      text: message.role === 'user' ? stripMemoryRecall(stripSteeringNotice(content)) : content,
       allText: content,
       images: [],
       imageCount: 0,
@@ -70,7 +71,7 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
     .filter((part) => (part.type === 'input_text' || part.type === 'output_text') && typeof part.text === 'string')
     .map((part) => part.text as string)
     .join('');
-  const text = message.role === 'user' ? stripSteeringNotice(joinedText) : joinedText;
+  const text = message.role === 'user' ? stripMemoryRecall(stripSteeringNotice(joinedText)) : joinedText;
   const allText = parts
     .filter((part) => typeof part.text === 'string')
     .map((part) => part.text as string)

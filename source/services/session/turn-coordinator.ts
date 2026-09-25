@@ -26,6 +26,7 @@ export type TurnStartOptions = Pick<
   | 'resumeState'
   | 'resumePreviousResponseId'
   | 'inputSurgeApproval'
+  | 'skipMemoryRecall'
 > & { origin?: 'user' | 'queued' };
 
 export interface TurnCoordinatorDeps {

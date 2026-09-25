@@ -1,4 +1,5 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { AgentStream } from '../agent-stream.js';
@@ -94,7 +95,7 @@ export class InitialTurnRecoveryHandler {
             providerFailure.errorKind !== 'cancelled'));
       const droppedUserMessage =
         attempt.addedUserMessage && !stream
-          ? { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 }
+          ? { text: stripMemoryRecall(attempt.turn.text), imageCount: attempt.turn.images?.length ?? 0 }
           : undefined;
       const plan = this.deps.recoveryPolicy.plan({
         failure: classified,

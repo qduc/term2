@@ -1,7 +1,15 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import {
+  GLYPH_WARNING,
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_SUCCESS,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from '../theme.js';
 
 export interface McpMenuItem {
   id: string;
@@ -28,7 +36,11 @@ export function McpSelectionMenu({
       <Text color={COLOR_ACCENT} bold underline>
         {title}
       </Text>
-      {error ? <Text color={COLOR_DANGER}>⚠ {error}</Text> : null}
+      {error ? (
+        <Text color={COLOR_DANGER}>
+          {GLYPH_WARNING} {error}
+        </Text>
+      ) : null}
       {editing ? <Text color={COLOR_TEXT_SUBTLE}>Enter a value below. Escape cancels.</Text> : null}
       {!editing ? (
         <MenuContainer

@@ -31,3 +31,33 @@ it('PathSelectionMenu renders a warning above the menu when the workspace is tru
     unmount();
   });
 });
+
+it('PathSelectionMenu marks directories with a trailing slash instead of emoji icons', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
+
+  await act(async () => {
+    const result = render(
+      <PathSelectionMenu
+        items={[
+          { path: 'source', type: 'directory' },
+          { path: 'source/app.ts', type: 'file' },
+        ]}
+        selectedIndex={0}
+        query="so"
+      />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  const frame = lastFrame() ?? '';
+  expect(frame).toContain('source/');
+  expect(frame).toContain('source/app.ts');
+  expect(frame).not.toMatch(/📁|📄/);
+  expect(frame).toContain('↑↓ navigate │ ⏎ insert │ Tab insert w/o space │ esc cancel');
+
+  await act(async () => {
+    unmount();
+  });
+});

@@ -1,7 +1,15 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import {
+  GLYPH_WARNING,
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_SUCCESS,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from '../theme.js';
 import {
   formatSubagentPoolProvider,
   formatSubagentPoolReasoning,
@@ -66,7 +74,11 @@ export function SubagentPoolSelectionMenu({
         </Text>
         <Text color={COLOR_TEXT_SUBTLE}>Type the model ID below and press Enter.</Text>
         <Text color={COLOR_WARNING}>Current value: {draft?.model || '<empty>'}</Text>
-        {errorMessage && <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>}
+        {errorMessage && (
+          <Text color={COLOR_DANGER}>
+            {GLYPH_WARNING} {errorMessage}
+          </Text>
+        )}
         <Text color={COLOR_TEXT_SUBTLE} dimColor>
           Esc → go back
         </Text>
@@ -114,9 +126,17 @@ export function SubagentPoolSelectionMenu({
           )}
         </Box>
       )}
-      {phase === 'confirm_delete' && <Text color={COLOR_DANGER}>⚠ This entry will be removed from the pool.</Text>}
-      {phase === 'confirm_discard' && <Text color={COLOR_WARNING}>⚠ You have unsaved changes. Discard them?</Text>}
-      {errorMessage && <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>}
+      {phase === 'confirm_delete' && (
+        <Text color={COLOR_DANGER}>{GLYPH_WARNING} This entry will be removed from the pool.</Text>
+      )}
+      {phase === 'confirm_discard' && (
+        <Text color={COLOR_WARNING}>{GLYPH_WARNING} You have unsaved changes. Discard them?</Text>
+      )}
+      {errorMessage && (
+        <Text color={COLOR_DANGER}>
+          {GLYPH_WARNING} {errorMessage}
+        </Text>
+      )}
       <MenuContainer
         items={activeItems}
         selectedIndex={selectedIndex}
@@ -162,7 +182,12 @@ export function SubagentPoolSelectionMenu({
                   </Text>
                 ) : null}
               </Box>
-              {field && <Text color={COLOR_DANGER}> ⚠ {field}</Text>}
+              {field && (
+                <Text color={COLOR_DANGER}>
+                  {' '}
+                  {GLYPH_WARNING} {field}
+                </Text>
+              )}
             </Box>
           );
         }}

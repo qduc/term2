@@ -36,7 +36,7 @@ it.sequential('ErrorBoundary catches errors and displays fallback UI', async () 
     );
 
     const output = lastFrame();
-    expect(output!.includes('⚠ Application Error')).toBe(true);
+    expect(output!.includes('▲ Application Error')).toBe(true);
     expect(output!.includes('Test error from component')).toBe(true);
     expect(output!.includes('Recovery options:')).toBe(true);
     expect(output!.includes('/clear')).toBe(true);

@@ -6,7 +6,15 @@ import type {
   ProviderSelectionMenuItem,
 } from '../../hooks/use-provider-selection.js';
 import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import {
+  GLYPH_WARNING,
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_SUCCESS,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from '../theme.js';
 
 type Props = {
   phase: ProviderSelectionPhase;
@@ -114,7 +122,9 @@ const ProviderSelectionMenu: FC<Props> = ({
           )}
           {errorMessage && (
             <Box marginTop={1}>
-              <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
+              <Text color={COLOR_DANGER}>
+                {GLYPH_WARNING} {errorMessage}
+              </Text>
             </Box>
           )}
         </Box>
@@ -167,20 +177,22 @@ const ProviderSelectionMenu: FC<Props> = ({
       {phase === 'confirm_delete' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color={COLOR_DANGER} bold>
-            ⚠ WARNING: Are you sure you want to delete this provider? This action cannot be undone.
+            {GLYPH_WARNING} WARNING: Are you sure you want to delete this provider? This action cannot be undone.
           </Text>
         </Box>
       )}
       {phase === 'confirm_discard' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color={COLOR_WARNING} bold>
-            ⚠ You have unsaved changes. Discard them?
+            {GLYPH_WARNING} You have unsaved changes. Discard them?
           </Text>
         </Box>
       )}
       {errorMessage && phase !== 'edit_fields' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
+          <Text color={COLOR_DANGER}>
+            {GLYPH_WARNING} {errorMessage}
+          </Text>
         </Box>
       )}
       <MenuContainer
@@ -289,7 +301,9 @@ const ProviderSelectionMenu: FC<Props> = ({
                 </Box>
                 {error ? (
                   <Box marginLeft={4}>
-                    <Text color={COLOR_DANGER}>⚠ {error}</Text>
+                    <Text color={COLOR_DANGER}>
+                      {GLYPH_WARNING} {error}
+                    </Text>
                   </Box>
                 ) : null}
               </Box>

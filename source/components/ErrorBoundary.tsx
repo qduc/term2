@@ -1,7 +1,7 @@
 import React, { Component, ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import type { LoggingService } from '../services/logging/logging-service.js';
-import { COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
+import { GLYPH_WARNING, COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -65,7 +65,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <Box flexDirection="column" padding={1}>
           <Box marginBottom={1}>
             <Text color={COLOR_DANGER} bold>
-              ⚠ Application Error
+              {GLYPH_WARNING} Application Error
             </Text>
           </Box>
 

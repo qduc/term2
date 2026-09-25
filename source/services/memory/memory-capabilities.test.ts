@@ -283,6 +283,88 @@ describe('MemoryCapabilityBuilder', () => {
     ).toBe('');
   });
 
+  it('does not inject memories for a context-dependent follow-up with no topical query', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'project',
+      id: 'provider-feature',
+      title: 'Provider feature',
+      summary: 'The feature was implemented and merged.',
+      content: 'One feature was changed.',
+    });
+    expect((await builder.selectForTurn('Refine that feature.')).memories).toEqual([]);
+    expect((await builder.selectForTurn('What were we doing?')).memories).toEqual([]);
+  });
+
+  it('requires an exact topical match instead of substring or generic wording noise', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'project',
+      id: 'memory-index',
+      title: 'Memory index',
+      summary: 'Memory index budget was changed.',
+      content: 'The index has a larger budget.',
+    });
+    await create.execute({
+      scope: 'project',
+      id: 'injection-relevance',
+      title: 'Memory injection relevance',
+      summary: 'Only inject memories with evidence for the current question.',
+      content: 'Generic words are not enough.',
+    });
+    await create.execute({
+      scope: 'project',
+      id: 'feature-showcase',
+      title: 'Feature showcase',
+      summary: 'A showcase of an unrelated memory feature.',
+      content: 'Only a generic term matches.',
+    });
+
+    const selected = await builder.selectForTurn('Can you reduce memory injection noise?', {
+      projectPath: process.cwd(),
+    });
+    expect(selected.memories.map((memory) => memory.id)).toEqual(['injection-relevance']);
+    expect(selected.text).not.toContain('Memory index budget');
+    expect((await builder.selectForTurn('Show the memory-index decision')).memories.map((memory) => memory.id)).toEqual(
+      ['memory-index'],
+    );
+  });
+
+  it('keeps a one-topic summary match despite conversational padding', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'project',
+      id: 'transport-rule',
+      title: 'Transport rule',
+      summary: 'The WebSocket needs a distinct physical child identity.',
+      content: 'Preserve root affinity.',
+    });
+    const direct = await builder.selectForTurn('WebSocket?');
+    const conversational = await builder.selectForTurn('What did we decide about WebSocket?');
+    expect(conversational.memories).toEqual(direct.memories);
+    expect(conversational.memories.map((memory) => memory.id)).toEqual(['transport-rule']);
+  });
+
+  it('does not inject memories on a UI follow-up whose only matches are generic wording', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'project',
+      id: 'unrelated-fix',
+      title: 'Unrelated fix',
+      summary: 'The fix was a little noisy in the old UI.',
+      content: 'No relevant decision.',
+    });
+    expect((await builder.selectForTurn('It is a little noisy in the UI, can you fix that?')).memories).toEqual([]);
+  });
+
   it('never injects a superseded summary from a corrected memory', async () => {
     const directory = makeTempDir();
     const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));

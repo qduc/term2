@@ -71,6 +71,33 @@ Always cite source memory IDs so the caller can trace claims to their sources. T
 
 const QUERY_STOP_WORDS = new Set([
   'the',
+  'can',
+  'we',
+  'were',
+  'doing',
+  'these',
+  'those',
+  'refine',
+  'feature',
+  'memory',
+  'memories',
+  'session',
+  'project',
+  'did',
+  'it',
+  'decide',
+  'decision',
+  'see',
+  'message',
+  'little',
+  'noisy',
+  'fix',
+  'please',
+  'help',
+  'show',
+  'tell',
+  'know',
+  'remember',
   'and',
   'for',
   'are',
@@ -127,6 +154,7 @@ export class MemoryCapabilityBuilder {
     if (!this.#settings.get('memory.enabled')) return empty();
     const terms = retrievalQuery(query);
     if (!terms) return empty();
+    const queryWords = terms.split(' ');
     const budget = this.#settings.get('memory.contextBudgetChars');
     try {
       const stores = this.#createStores(
@@ -144,7 +172,18 @@ export class MemoryCapabilityBuilder {
       const ranked = rankMemorySearchResults([
         ...global.map((result) => ({ ...result, scope: 'global' as const })),
         ...project.map((result) => ({ ...result, scope: 'project' as const })),
-      ]).filter((result) => result.matchedFields.some((field) => field !== 'content'));
+      ]).filter(({ memory }) => {
+        // Require evidence in the injected metadata, not a substring hit in full content.
+        // Known conversational padding cannot make a topical match more or less eligible.
+        // Ambiguous follow-ups can still use memory tools instead of a guessed summary.
+        const words = new Set(
+          [memory.id, memory.title, ...memory.tags, memory.summary]
+            .join(' ')
+            .toLowerCase()
+            .match(/[a-z0-9]+/g) ?? [],
+        );
+        return queryWords.some((word) => words.has(word));
+      });
       if (!ranked.length) return empty();
       const header =
         '## Relevant persistent memory (summaries, not verified facts)\n\nUse memory_get for full evidence; memory_search for other memories.\n';

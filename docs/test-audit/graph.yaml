@@ -6323,8 +6323,8 @@ contracts:
   - session-a-risk-resource-leak
   - session-a-risk-post-execute
 - id: session-a-contract-hook-status
-  statement: Public hook status stays working while foreground or any background task remains active,
-    reports approval waiting distinctly, and becomes idle only after all background work settles.
+  statement: Public hook status stays working while foreground or background shell jobs remain active,
+    and becomes idle when foreground and background shell work settle, while subagent lifecycle events and approvals remain isolated from public hook status.
   seamIds:
   - session-a-hook-status
   - session-a-background-control
@@ -23741,16 +23741,16 @@ decisions:
   recommendation: keep
   confidence: high
   reason: Runtime hook coverage verifies status remains working through foreground completion while background
-    work exists, distinguishes approval waiting, and idles only after all tasks settle.
+    shell work exists, while subagent lifecycle events and approvals remain isolated from public hook status.
   evidence:
-  - source/services/session/session-composition.hooks.test.ts:71-159 asserts a running subagent suppresses
-    idle and completion transitions to idle.
-  - source/services/session/session-composition.hooks.test.ts:161-235 asserts the equivalent background-shell
-    lifecycle.
-  - source/services/session/session-composition.hooks.test.ts:237-317 asserts waiting_for_approval and
-    return to working around approval resolution.
-  - source/services/session/session-composition.hooks.test.ts:319-426 asserts multiple tasks keep status
-    working until both settle.
+  - source/services/session/session-composition.hooks.test.ts:76-208 asserts computePublicStatus and foreground
+    completion isolate subagent lifecycle events from public hook status.
+  - source/services/session/session-composition.hooks.test.ts:210-291 asserts background-shell jobs keep public
+    status working and transition to idle when completed.
+  - source/services/session/session-composition.hooks.test.ts:293-366 asserts background subagent approval pauses
+    do not leak into public hook status.
+  - source/services/session/session-composition.hooks.test.ts:368-479 asserts background shell jobs drive public
+    hook status concurrently with subagents, idling only when shell settles.
   replacementTestIds: []
   status: proposed
 - id: session-session-composition-runtime-boundary-test-session-a-m3
@@ -31953,19 +31953,19 @@ decisions:
   recommendation: keep
   confidence: high
   reason: Coordinator decision of record after source verification. Runtime hook coverage verifies status
-    remains working through foreground completion while background work exists, distinguishes approval
-    waiting, and idles only after all tasks settle.
+    remains working through foreground completion while background shell work exists, while subagent lifecycle
+    events and approvals remain isolated from public hook status.
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/session/session-composition.hooks.test.ts:71-159 asserts a running subagent suppresses
-    idle and completion transitions to idle.
-  - source/services/session/session-composition.hooks.test.ts:161-235 asserts the equivalent background-shell
-    lifecycle.
-  - source/services/session/session-composition.hooks.test.ts:237-317 asserts waiting_for_approval and
-    return to working around approval resolution.
-  - source/services/session/session-composition.hooks.test.ts:319-426 asserts multiple tasks keep status
-    working until both settle.
+  - source/services/session/session-composition.hooks.test.ts:76-208 asserts computePublicStatus and foreground
+    completion isolate subagent lifecycle events from public hook status.
+  - source/services/session/session-composition.hooks.test.ts:210-291 asserts background-shell jobs keep public
+    status working and transition to idle when completed.
+  - source/services/session/session-composition.hooks.test.ts:293-366 asserts background subagent approval pauses
+    do not leak into public hook status.
+  - source/services/session/session-composition.hooks.test.ts:368-479 asserts background shell jobs drive public
+    hook status concurrently with subagents, idling only when shell settles.
   replacementTestIds: []
   status: reviewed
 - id: session-session-composition-runtime-boundary-test-primary

@@ -5,6 +5,7 @@ import { QueueController } from '../queue/queue-controller.js';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { UserTurn } from '../../types/user-turn.js';
+import type { TurnStartOptions } from '../session/turn-coordinator.js';
 import { issueInputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
@@ -624,6 +625,37 @@ it('ConversationAdapter marks system-initiated queue turns so the UI does not re
 
   expect(startCalls).toContainEqual(expect.objectContaining({ suppressUserMessageDisplay: true }));
 });
+
+it.each([true, false])(
+  'skips memory recall only for model-only turns (queued foreground: %s)',
+  async (queueForeground) => {
+    const startOptions: Array<TurnStartOptions | undefined> = [];
+    const adapter = new ConversationAdapter({
+      sessionId: 'session-1',
+      startedAt: new Date().toISOString(),
+      logger,
+      sessionContextService,
+      userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+      logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+      approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+      turnFlow: {
+        async *start(_input: unknown, options?: TurnStartOptions) {
+          startOptions.push(options);
+          yield { type: 'final' as const, finalText: 'done' };
+        },
+        async *continueAfterApproval() {
+          yield { type: 'final' as const, finalText: 'done' };
+        },
+      },
+      queueForeground,
+    });
+
+    await adapter.sendMessage('automatic notification', { suppressUserMessageDisplay: true });
+    await adapter.sendMessage('a user question');
+
+    expect(startOptions.map((options) => options?.skipMemoryRecall === true)).toEqual([true, false]);
+  },
+);
 
 it('delivers a steer into the running turn instead of queueing it', async () => {
   let releaseActive!: () => void;

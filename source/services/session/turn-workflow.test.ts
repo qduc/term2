@@ -10,6 +10,7 @@ import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-reg
 import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
 import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
+import { renderMemoryRecall, renderRecallLine } from '../../prompts/memory-recall-notice.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
@@ -90,7 +91,7 @@ it('executes initial turn successfully', async () => {
   stream.finalOutput = 'hello response';
   let receivedProviderHistorySnapshot: unknown;
   let receivedLineage: unknown;
-  let receivedMemoryQuery: unknown;
+  let receivedOptions: Record<string, unknown> = {};
 
   const mockClient: any = {
     getProvider() {
@@ -98,11 +99,11 @@ it('executes initial turn successfully', async () => {
     },
     async startStream(
       _input: unknown,
-      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown; memoryQuery?: string },
+      options: { providerHistorySnapshot?: unknown; providerContinuityLineage?: unknown },
     ) {
       receivedProviderHistorySnapshot = options.providerHistorySnapshot;
       receivedLineage = options.providerContinuityLineage;
-      receivedMemoryQuery = options.memoryQuery;
+      receivedOptions = options;
       return stream;
     },
   };
@@ -137,27 +138,82 @@ it('executes initial turn successfully', async () => {
   expect(attempt.closed).toBe(true);
   expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
-  expect(receivedMemoryQuery).toBe('hello');
+  expect(receivedOptions).not.toHaveProperty('memoryQuery');
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
-it('emits the selected memory receipt before the streamed model response', async () => {
-  const stream = new MockStream([{ type: 'text_delta', text: 'answer' }]);
-  stream.finalOutput = 'answer';
-  const { workflow } = setupWorkflow({
-    getProvider: () => 'openai',
-    startStream: async (_input: unknown, options: any) => {
-      options.onMemoryInjected([{ scope: 'project', id: 'rule', title: 'Project rule' }]);
-      return stream;
+const recallBlock = renderMemoryRecall([
+  renderRecallLine({ scope: 'project', id: 'rule', title: 'Project rule', summary: 'Follow the rule.' }),
+]);
+
+function recallingClient(select: (query: string, exclude: ReadonlySet<string>) => unknown) {
+  const inputs: unknown[] = [];
+  return {
+    inputs,
+    client: {
+      getProvider: () => 'openai',
+      selectMemoryForTurn: async (query: string, options: { exclude: ReadonlySet<string> }) =>
+        select(query, options.exclude),
+      startStream: async (input: unknown) => {
+        inputs.push(input);
+        const stream = new MockStream([{ type: 'text_delta', text: 'answer' }]);
+        stream.finalOutput = 'answer';
+        return stream;
+      },
     },
+  };
+}
+
+it('recalls memory on the user turn, not the instructions, and reports it before the response', async () => {
+  const queries: string[] = [];
+  const { client, inputs } = recallingClient((query) => {
+    queries.push(query);
+    return { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
   });
+  const { workflow, composition } = setupWorkflow(client);
   const events: any[] = [];
   for await (const event of workflow.executeInitial('question')) events.push(event);
+
+  expect(queries).toEqual(['question']);
   expect(events[0]).toEqual({
     type: 'memory_injected',
     memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
   });
   expect(events.some((event) => event.type === 'text_delta')).toBe(true);
+  // The block is part of the persisted user turn, so later requests replay the
+  // same bytes and keep the prefix cached.
+  const userItem = composition.conversationStore.getHistory().find((item: any) => item.role === 'user') as any;
+  expect(userItem.content).toBe(`${recallBlock}\n\nquestion`);
+  expect(JSON.stringify(inputs[0])).toContain('<memory-recall>');
+  expect(composition.conversationStore.getLastUserMessage()).toBe('question');
+});
+
+it('does not recall a memory that is already in the conversation', async () => {
+  const excludes: string[][] = [];
+  const { client } = recallingClient((_query, exclude) => {
+    excludes.push([...exclude]);
+    return exclude.has('project:rule')
+      ? { text: '', memories: [] }
+      : { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
+  });
+  const { workflow } = setupWorkflow(client);
+  const second: any[] = [];
+  for await (const _event of workflow.executeInitial('first')) void _event;
+  for await (const event of workflow.executeInitial('second')) second.push(event);
+
+  expect(excludes).toEqual([[], ['project:rule']]);
+  expect(second.some((event) => event.type === 'memory_injected')).toBe(false);
+});
+
+it('skips recall for a turn that no user message started', async () => {
+  const select = vi.fn(() => ({ text: recallBlock, memories: [] }));
+  const { client, inputs } = recallingClient(select);
+  const { workflow } = setupWorkflow(client);
+  for await (const _event of workflow.executeInitial('Background subagent finished.', { skipMemoryRecall: true }))
+    void _event;
+
+  expect(select).not.toHaveBeenCalled();
+  expect(JSON.stringify(inputs[0])).not.toContain('<memory-recall>');
 });
 
 it('logs an aborted initial stream as cancellation and does not emit an error event', async () => {

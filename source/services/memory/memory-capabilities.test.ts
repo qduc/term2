@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it, afterEach } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+import { MEMORY_RECALL_CLOSE, MEMORY_RECALL_OPEN, recalledMemoryKeys } from '../../prompts/memory-recall-notice.js';
 
 const tempDirs: string[] = [];
 function makeTempDir(): string {
@@ -208,14 +209,14 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.guidance).toContain('memory librarian');
   });
 
-  it('states the omission contract in the main guidance and the on-demand contract for subagents', () => {
+  it('states the recall contract in the main guidance and the on-demand contract for subagents', () => {
     const main = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
     const explorer = new MemoryCapabilityBuilder(createMockSettingsService()).build({
       kind: 'subagent',
       role: 'explorer',
     });
 
-    expect(main.guidance).toContain('bounded set of task-relevant memory summaries');
+    expect(main.guidance).toContain('<memory-recall> block ahead of that message');
     expect(main.guidance).toContain('not a complete index');
     expect(main.guidance).toContain('read the full memory with memory_get');
     expect(explorer.guidance).not.toContain('concise index');
@@ -260,6 +261,37 @@ describe('MemoryCapabilityBuilder', () => {
         })
       ).memories,
     ).toEqual([{ scope: 'project', id: 'nested-chain', title: 'Codex nested-chain incident' }]);
+  });
+
+  it('renders a bounded recall block for the user turn and skips already-recalled memories', async () => {
+    const directory = makeTempDir();
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    for (const id of ['socket-a', 'socket-b', 'socket-c', 'socket-d', 'socket-e']) {
+      await create.execute({
+        scope: 'project',
+        id,
+        title: `Socket rule ${id}`,
+        summary: `Socket guidance ${id}.`,
+        content: 'details',
+      });
+    }
+
+    const first = await builder.selectForTurn('socket');
+    expect(first.memories).toHaveLength(3);
+    expect(first.text.startsWith(MEMORY_RECALL_OPEN)).toBe(true);
+    expect(first.text.endsWith(MEMORY_RECALL_CLOSE)).toBe(true);
+    expect([...recalledMemoryKeys([first.text])]).toEqual(
+      first.memories.map((memory) => `${memory.scope}:${memory.id}`),
+    );
+
+    const second = await builder.selectForTurn('socket', { exclude: recalledMemoryKeys([first.text]) });
+    expect(second.memories).toHaveLength(2);
+    expect(second.memories.map((memory) => memory.id)).not.toContain(first.memories[0]!.id);
+    const third = await builder.selectForTurn('socket', {
+      exclude: recalledMemoryKeys([first.text, second.text]),
+    });
+    expect(third).toEqual({ text: '', memories: [] });
   });
 
   it('does not inject an unrelated lexical match or memories when disabled', async () => {

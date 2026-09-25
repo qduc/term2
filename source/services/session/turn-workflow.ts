@@ -9,6 +9,8 @@ import type { AgentClientRunOptions, ConversationAgentClient } from '../conversa
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
+import { recalledMemoryKeys } from '../../prompts/memory-recall-notice.js';
+import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { getMethod, getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import { issueInputSurgeApproval } from '../input-surge-approval.js';
@@ -387,6 +389,18 @@ export class TurnWorkflow {
         return { kind: 'stale' };
       }
       attempt = creation.attempt;
+      if (
+        !options.skipUserMessage &&
+        !options.replayFromHistory &&
+        !options.abortedContext &&
+        !options.skipMemoryRecall
+      ) {
+        const injected = await this.#recallMemory(attempt);
+        if (!this.deps.generationGuard.isCurrent(attempt.token)) {
+          return { kind: 'stale' };
+        }
+        if (injected) yield injected;
+      }
     }
     // Continuation attempts driven from within this same logical turn (tool
     // approvals, abort resolution) reuse this budget instead of getting their
@@ -590,17 +604,13 @@ export class TurnWorkflow {
     const runId = `${this.deps.sessionId}:live:${++this.#nextLiveRunId}`;
     this.deps.setActivePostExecuteRunId?.(runId);
     let stream: AgentStream;
-    let injected: Extract<ConversationEvent, { type: 'memory_injected' }> | undefined;
     try {
-      stream = await this.#startInitialStream(attempt, options, (memories) => {
-        injected = { type: 'memory_injected', memories };
-      });
+      stream = await this.#startInitialStream(attempt, options);
     } catch (error) {
       this.deps.setActivePostExecuteRunId?.(null);
       throw error;
     }
     attempt.attachStream(stream);
-    if (injected) yield injected;
 
     const liveRun = new LiveRun<ConversationEvent, LiveRunResult>(runId, this.deps.postExecutePending, async (emit) => {
       try {
@@ -824,6 +834,34 @@ export class TurnWorkflow {
     });
   }
 
+  /**
+   * Adds relevant memory summaries to a new user turn before it enters
+   * history. Recall rides on the turn, never on the instructions: changing
+   * instructions per turn discards the provider's cached prefix.
+   */
+  async #recallMemory(attempt: TurnAttempt): Promise<Extract<ConversationEvent, { type: 'memory_injected' }> | null> {
+    const select = this.deps.agentClient.selectMemoryForTurn;
+    const query = attempt.submittedTurn.text;
+    if (typeof select !== 'function' || !query.trim()) return null;
+    const exclude = recalledMemoryKeys(
+      this.deps.conversationStore
+        .getHistory()
+        .map((item) => projectConversationMessage(item))
+        .filter((message) => message?.role === 'user')
+        .map((message) => message!.allText),
+    );
+    try {
+      const selection = await select.call(this.deps.agentClient, query, { exclude });
+      if (!selection.text) return null;
+      attempt.prependToTurnText(selection.text);
+      return { type: 'memory_injected', memories: selection.memories };
+    } catch (error) {
+      // Recall is advisory; the turn proceeds without it.
+      this.deps.logger.warn('Memory recall failed', { error: describeError(error) });
+      return null;
+    }
+  }
+
   async #startInitialStream(
     attempt: TurnAttempt,
     options: {
@@ -832,7 +870,6 @@ export class TurnWorkflow {
       disableChainingForAttempt?: boolean;
       observeOpenAIRootSelectorParity: boolean;
     },
-    onMemoryInjected: NonNullable<AgentClientRunOptions['onMemoryInjected']>,
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
       const resumeOptions: AgentClientRunOptions = {
@@ -882,8 +919,6 @@ export class TurnWorkflow {
     const sessionId = resolveSessionId(this.deps.sessionId);
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const startOptions: AgentClientRunOptions = {
-      memoryQuery: attempt.turn.text,
-      onMemoryInjected,
       recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId,

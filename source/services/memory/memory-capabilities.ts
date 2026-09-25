@@ -6,6 +6,12 @@ import type { ToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
+import {
+  MEMORY_RECALL_OVERHEAD,
+  recallKey,
+  renderMemoryRecall,
+  renderRecallLine,
+} from '../../prompts/memory-recall-notice.js';
 
 export type MemoryAccess = 'none' | 'read' | 'write';
 
@@ -31,9 +37,16 @@ type MemorySettings = {
 
 const READ_TOOL_COUNT = 4;
 
+/**
+ * Per-turn recall now stays in history, so every recalled line is paid for on
+ * every later request of the session. Keep it to the few best matches.
+ */
+const TURN_RECALL_MAX_MEMORIES = 3;
+const TURN_RECALL_MAX_CHARS = 1500;
+
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory. A bounded set of task-relevant memory summaries may be loaded at the start of each turn. It is not a complete index; when a relevant item is absent, use memory_search or memory_list. Treat summaries as retrieval triggers, not verified facts; read the full memory with memory_get when it could affect your decision.
+You have access to persistent memory. When memories look relevant to a user message, the harness adds their summaries in a <memory-recall> block ahead of that message; the user did not write it. Each memory is recalled at most once per conversation, and the block is not a complete index; when a relevant item is absent, use memory_search or memory_list. Treat summaries as retrieval triggers, not verified facts; read the full memory with memory_get when it could affect your decision.
 
 Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
 
@@ -149,13 +162,20 @@ export class MemoryCapabilityBuilder {
     return (await this.selectForTurn(query, options)).text;
   }
 
-  async selectForTurn(query: string, options: { projectPath?: string } = {}): Promise<TurnMemorySelection> {
+  /**
+   * The recall block for one user turn. `exclude` holds `recallKey`s already
+   * recalled into this conversation, so a memory is sent at most once.
+   */
+  async selectForTurn(
+    query: string,
+    options: { projectPath?: string; exclude?: ReadonlySet<string> } = {},
+  ): Promise<TurnMemorySelection> {
     const empty = (): TurnMemorySelection => ({ text: '', memories: [] });
     if (!this.#settings.get('memory.enabled')) return empty();
     const terms = retrievalQuery(query);
     if (!terms) return empty();
     const queryWords = terms.split(' ');
-    const budget = this.#settings.get('memory.contextBudgetChars');
+    const budget = Math.min(this.#settings.get('memory.contextBudgetChars'), TURN_RECALL_MAX_CHARS);
     try {
       const stores = this.#createStores(
         {
@@ -167,12 +187,18 @@ export class MemoryCapabilityBuilder {
         },
         options.projectPath ?? process.cwd(),
       );
-      const [global, project] = await Promise.all([stores.global.search(terms), stores.project.search(terms)]);
+      // Search wide: already-recalled memories are filtered out after ranking and
+      // must not use up the result window.
+      const limit = this.#settings.get('memory.searchMaxLimit');
+      const [global, project] = await Promise.all([
+        stores.global.search(terms, { limit }),
+        stores.project.search(terms, { limit }),
+      ]);
       // A content-only hit has no relevant summary to show as turn guidance.
       const ranked = rankMemorySearchResults([
         ...global.map((result) => ({ ...result, scope: 'global' as const })),
         ...project.map((result) => ({ ...result, scope: 'project' as const })),
-      ]).filter(({ memory }) => {
+      ]).filter(({ scope, memory }) => {
         // Require evidence in the injected metadata, not a substring hit in full content.
         // Known conversational padding cannot make a topical match more or less eligible.
         // Ambiguous follow-ups can still use memory tools instead of a guessed summary.
@@ -182,21 +208,22 @@ export class MemoryCapabilityBuilder {
             .toLowerCase()
             .match(/[a-z0-9]+/g) ?? [],
         );
-        return queryWords.some((word) => words.has(word));
+        return queryWords.some((word) => words.has(word)) && !options.exclude?.has(recallKey(scope, memory.id));
       });
-      if (!ranked.length) return empty();
-      const header =
-        '## Relevant persistent memory (summaries, not verified facts)\n\nUse memory_get for full evidence; memory_search for other memories.\n';
-      let context = header;
+      let used = MEMORY_RECALL_OVERHEAD;
+      const lines: string[] = [];
       const memories: InjectedMemory[] = [];
       for (const { scope, memory } of ranked) {
-        const line = `- ${scope} / \`${memory.id}\` — ${memory.title.slice(0, 120)} — ${memory.summary}\n`;
-        if (context.length + line.length <= budget) {
-          context += line;
-          memories.push({ scope, id: memory.id, title: memory.title.slice(0, 120) });
+        if (memories.length >= TURN_RECALL_MAX_MEMORIES) break;
+        const title = memory.title.slice(0, 120);
+        const line = renderRecallLine({ scope, id: memory.id, title, summary: memory.summary });
+        if (used + line.length + 1 <= budget) {
+          used += line.length + 1;
+          lines.push(line);
+          memories.push({ scope, id: memory.id, title });
         }
       }
-      return memories.length ? { text: context, memories } : empty();
+      return memories.length ? { text: renderMemoryRecall(lines), memories } : empty();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.#onWarning(`Persistent memory retrieval could not be loaded: ${detail}`);

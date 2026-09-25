@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
-  it('selects fresh task-relevant memory per root turn without changing the cached base agent', async () => {
+  it('recalls task-relevant memory for the user turn while instructions stay byte-identical', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'term2-memory-turn-'));
     const provider = 'memory-turn-provider';
     providers.add(provider);
@@ -122,23 +122,25 @@ describe('AgentClient application-run-loop execution', () => {
           'memory.searchMaxLimit': 50,
         },
       );
-      const receipts: unknown[] = [];
+      const socket = await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set() });
+      const release = await instance.selectMemoryForTurn('release calendar', { exclude: new Set() });
+      expect(socket.memories).toEqual([{ scope: 'global', id: 'socket', title: 'Nested socket incident' }]);
+      expect(socket.text).toContain('Keep child socket identity distinct.');
+      expect(socket.text).not.toContain('private socket notes');
+      expect(release.text).toContain('Ship release notes weekly.');
+      expect(
+        (await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set(['global:socket']) })).memories,
+      ).toEqual([]);
       await (
-        await instance.startStream('first', {
-          memoryQuery: 'nested socket issue',
-          onMemoryInjected: (items) => receipts.push(items),
-        })
+        await instance.startStream('first')
       ).completed;
       await (
-        await instance.startStream('second', { memoryQuery: 'release calendar' })
+        await instance.startStream('second')
       ).completed;
       expect(requests).toHaveLength(2);
-      expect(receipts).toEqual([[{ scope: 'global', id: 'socket', title: 'Nested socket incident' }]]);
-      expect(requests[0].instructions).toContain('Keep child socket identity distinct.');
-      expect(requests[0].instructions).not.toContain('Ship release notes weekly.');
-      expect(requests[1].instructions).toContain('Ship release notes weekly.');
-      expect(requests[1].instructions).not.toContain('Keep child socket identity distinct.');
-      expect(requests[0].instructions).not.toContain('private socket notes');
+      // Per-turn recall must never reach the cached prefix.
+      expect(requests[0].instructions).toBe('stable base');
+      expect(requests[1].instructions).toBe('stable base');
       expect(agent.instructions).toBe('stable base');
       instance.dispose();
     } finally {
@@ -164,8 +166,12 @@ describe('AgentClient application-run-loop execution', () => {
     const instance = client(provider, {
       agentOverride: { name: 'transient', model: 'test-model', instructions: 'no memory', tools: [] },
     });
+    expect(await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set() })).toEqual({
+      text: '',
+      memories: [],
+    });
     await (
-      await instance.startStream('text', { memoryQuery: 'nested socket issue' })
+      await instance.startStream('text')
     ).completed;
     expect(requests[0].instructions).toBe('no memory');
     instance.dispose();

@@ -8,6 +8,7 @@ import type { TurnAttempt } from './turn-attempt.js';
 import { consumeInputSurgeApproval, type InputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
+import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
 
 type InputSurgeErrorEvent = Extract<ConversationEvent, { type: 'error' }>;
 
@@ -50,7 +51,10 @@ export class InitialInputPreparer {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
       if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
         this.deps.conversationStore.removeLastUserMessage();
-        droppedUserMessage = { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 };
+        droppedUserMessage = {
+          text: stripMemoryRecall(attempt.turn.text),
+          imageCount: attempt.turn.images?.length ?? 0,
+        };
       }
 
       this.deps.logger.warn('Input surge guard blocked provider request', {

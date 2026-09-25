@@ -9,6 +9,7 @@ import ModeSwitchConfirmationPrompt from '../prompt/ModeSwitchConfirmationPrompt
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
+import Divider from '../common/Divider.js';
 import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
@@ -328,6 +329,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
+        {/* The one structural split on screen: printed history above, live controls below. */}
+        <Divider />
         {firstRunSetup?.active && firstRunSetup.phase && (
           <FirstRunSetupPrompt phase={firstRunSetup.phase} provider={firstRunSetup.provider} />
         )}

@@ -125,6 +125,25 @@ it('ChatMessage shows only the count while retaining the exact memory receipt', 
   await act(async () => unmount());
 });
 
+it('ChatMessage sizes a rule to the available width instead of a fixed 80 columns', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
+
+  await act(async () => {
+    const result = render(
+      <ChatMessage msg={{ id: 'rule-3', sender: 'system', text: '', presentation: 'rule' }} maxWidth={50} />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  expect(stripAnsi(lastFrame() || '').trim()).toBe('─'.repeat(50));
+
+  await act(async () => {
+    unmount();
+  });
+});
+
 it('ChatMessage renders rule presentation using the border color token', async () => {
   // ink-testing-library's mock stdout disables colors at import time; raise
   // chalk's level so the frame carries the real ANSI attributes. Level 3 keeps

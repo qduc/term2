@@ -903,3 +903,17 @@ it.sequential('BottomArea renders live streaming speed during processing, thinki
   expect(frame3() ?? '').toContain('Calling read_file (42 chars · 60.2 tok/s)');
   act(() => unmount3());
 });
+
+it.sequential('BottomArea separates the live controls from the transcript with a full-width divider', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    pendingQueuedMessages: [{ id: 'q-1', text: 'queued above the input', delivery: 'follow_up', queuedAt: 1 }],
+  });
+  const lines = (lastFrame() ?? '').split('\n');
+  const dividerIndex = lines.findIndex((line) => /^─{20,}$/.test(line.trimEnd()));
+  const queueIndex = lines.findIndex((line) => line.includes('queued above the input'));
+  expect(dividerIndex).toBeGreaterThanOrEqual(0);
+  expect(dividerIndex).toBeLessThan(queueIndex);
+  act(() => {
+    unmount();
+  });
+});

@@ -31,6 +31,13 @@ describe('memory recall notice', () => {
     expect(recalledMemoryKeys([quoted]).size).toBe(0);
   });
 
+  it('preserves a user-authored block with the same tag but no harness header', () => {
+    const userText = '<memory-recall>\nMy own note\n</memory-recall>\n\nplease explain it';
+    expect(stripMemoryRecall(userText)).toBe(userText);
+    expect([...recalledMemoryKeys([userText])]).toEqual([]);
+    expect(projectConversationMessage({ role: 'user', type: 'message', content: userText })?.text).toBe(userText);
+  });
+
   it('shows and rewinds to the user words, not the recall block', () => {
     const projected = projectConversationMessage({
       role: 'user',

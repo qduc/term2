@@ -15,6 +15,12 @@ const MEMORY_RECALL_HEADER =
 const MEMORY_RECALL_PREFIX = /^<memory-recall>\n[\s\S]*?\n<\/memory-recall>\n*/;
 const RECALLED_MEMORY_LINE = /^- (global|project) \/ `([^`]+)`/gm;
 
+function recallPrefix(text: string): string | undefined {
+  // Tags alone are not proof that a user turn contains harness-owned context.
+  if (!text.startsWith(`${MEMORY_RECALL_OPEN}\n${MEMORY_RECALL_HEADER}\n`)) return undefined;
+  return text.match(MEMORY_RECALL_PREFIX)?.[0];
+}
+
 export type RecallLine = { scope: 'global' | 'project'; id: string; title: string; summary: string };
 
 /** Stable identity of a memory across both scopes. */
@@ -45,14 +51,15 @@ export function withMemoryRecall(recall: string, text: string): string {
 
 /** Recover the user's own words from a turn that carries a recall block. */
 export function stripMemoryRecall(text: string): string {
-  return text.startsWith(MEMORY_RECALL_OPEN) ? text.replace(MEMORY_RECALL_PREFIX, '') : text;
+  const prefix = recallPrefix(text);
+  return prefix ? text.slice(prefix.length) : text;
 }
 
 /** Keys of memories already recalled into the given user-turn texts. */
 export function recalledMemoryKeys(texts: Iterable<string>): Set<string> {
   const keys = new Set<string>();
   for (const text of texts) {
-    const block = text.startsWith(MEMORY_RECALL_OPEN) ? text.match(MEMORY_RECALL_PREFIX)?.[0] : undefined;
+    const block = recallPrefix(text);
     if (!block) continue;
     for (const match of block.matchAll(RECALLED_MEMORY_LINE)) {
       keys.add(recallKey(match[1] as 'global' | 'project', match[2]!));

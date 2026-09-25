@@ -250,8 +250,9 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('▸ second queued');
-  expect(lastFrame()).not.toContain('▸ first queued');
+  expect(lastFrame()).toContain('❯ second queued');
+  expect(lastFrame()).not.toContain('❯ first queued');
+  expect(lastFrame()).toContain('↑↓ navigate │ e edit │ d delete │ esc back');
 
   await writeInput(stdin, 'e');
   expect(lastFrame()).toContain('edit queued ▸');
@@ -281,10 +282,10 @@ it.sequential('up past the top queued item reaches input history', async () => {
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('▸ waiting steer');
+  expect(lastFrame()).toContain('❯ waiting steer');
   await writeInput(stdin, '\u001B[A');
   expect(lastFrame()).toMatch(/s\s*e\s*n\s*t\s*e\s*a\s*r\s*l\s*i\s*e\s*r/);
-  expect(lastFrame()).not.toContain('▸ waiting steer');
+  expect(lastFrame()).not.toContain('❯ waiting steer');
 });
 
 it.sequential('queued selector moves in displayed order with steers grouped above follow-ups', async () => {
@@ -302,10 +303,10 @@ it.sequential('queued selector moves in displayed order with steers grouped abov
   expect(frame.indexOf('urgent steer')).toBeLessThan(frame.indexOf('later follow-up'));
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('▸ later follow-up');
+  expect(lastFrame()).toContain('❯ later follow-up');
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('▸ urgent steer');
-  expect(lastFrame()).not.toContain('▸ later follow-up');
+  expect(lastFrame()).toContain('❯ urgent steer');
+  expect(lastFrame()).not.toContain('❯ later follow-up');
 });
 
 it.sequential('InputBox shows the shell prompt when in shell mode', async () => {

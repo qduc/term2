@@ -1,13 +1,16 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
+import { MenuFooter } from '../common/MenuContainer.js';
 import {
   COLOR_ACCENT,
   COLOR_ACCENT_ALT,
   COLOR_BORDER,
+  COLOR_BORDER_ACTIVE,
   COLOR_TEXT,
   COLOR_TEXT_MUTED,
   COLOR_TEXT_SUBTLE,
   COLOR_WARNING,
+  GLYPH_SELECTED,
 } from '../theme.js';
 
 export type PendingQueueDelivery = 'steer' | 'follow_up';
@@ -27,9 +30,17 @@ type Props = {
   notice: string | null;
 };
 
+// Group colors match the Enter Steer / Alt+Enter Queue hints under the input.
 const GROUPS: ReadonlyArray<{ delivery: PendingQueueDelivery; label: string; timing: string; color: string }> = [
-  { delivery: 'steer', label: 'steer', timing: 'mid-turn', color: COLOR_WARNING },
+  { delivery: 'steer', label: 'steer', timing: 'mid-turn', color: COLOR_ACCENT },
   { delivery: 'follow_up', label: 'queued', timing: 'after this turn', color: COLOR_ACCENT_ALT },
+];
+
+const SELECTING_HINTS: ReadonlyArray<[key: string, action: string]> = [
+  ['↑↓', 'navigate'],
+  ['e', 'edit'],
+  ['d', 'delete'],
+  ['esc', 'back'],
 ];
 
 /**
@@ -48,17 +59,15 @@ export const orderPendingQueueMessages = (
  */
 const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notice }) => {
   const selecting = selectedIndex !== null;
-  const hasSteer = messages.some((message) => message.delivery === 'steer');
-  const borderColor = selecting ? COLOR_ACCENT : hasSteer ? COLOR_WARNING : COLOR_BORDER;
 
   return (
     <Box
       flexDirection="column"
-      borderStyle="bold"
+      borderStyle="single"
       borderTop={false}
       borderRight={false}
       borderBottom={false}
-      borderColor={borderColor}
+      borderColor={selecting ? COLOR_BORDER_ACTIVE : COLOR_BORDER}
       paddingLeft={1}
     >
       {GROUPS.map((group) => {
@@ -78,7 +87,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
                 <Box key={message.id} flexDirection="row">
                   <Box flexShrink={0}>
                     <Text color={COLOR_ACCENT} bold>
-                      {selected ? '▸ ' : '  '}
+                      {selected ? `${GLYPH_SELECTED} ` : '  '}
                     </Text>
                   </Box>
                   <Text
@@ -95,16 +104,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
           </Box>
         );
       })}
-      {notice ? (
-        <Text color={COLOR_WARNING}>{notice}</Text>
-      ) : (
-        selecting && (
-          <Text color={COLOR_TEXT_SUBTLE}>
-            <Text color={COLOR_TEXT_MUTED}>↑↓</Text> move · <Text color={COLOR_TEXT_MUTED}>e</Text> edit ·{' '}
-            <Text color={COLOR_TEXT_MUTED}>d</Text> delete · <Text color={COLOR_TEXT_MUTED}>esc</Text> done
-          </Text>
-        )
-      )}
+      {notice ? <Text color={COLOR_WARNING}>{notice}</Text> : selecting && <MenuFooter hints={SELECTING_HINTS} />}
     </Box>
   );
 };

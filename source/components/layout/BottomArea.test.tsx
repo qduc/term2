@@ -833,23 +833,25 @@ it.sequential('BottomArea renders the queued message above the input box', async
     ],
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('⏳ Queued 1.')).toBe(true);
+  expect(output.includes('queued · after this turn')).toBe(true);
   expect(output.includes('Follow-up question about the previous answer')).toBe(true);
   act(() => {
     unmount();
   });
 });
 
-it.sequential('BottomArea truncates queued previews longer than 80 characters', async () => {
+it.sequential('BottomArea truncates unselected queued previews to a single line', async () => {
   const longText = 'a'.repeat(120);
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingQueuedMessages: [{ id: 'q-1', text: longText, delivery: 'follow_up', queuedAt: 1000 }],
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('⏳ Queued 1.')).toBe(true);
-  expect(output.includes('a'.repeat(80) + '…')).toBe(true);
-  expect(output.includes('a'.repeat(81))).toBe(false);
+  expect(output.includes('queued · after this turn')).toBe(true);
+  const previewLines = output.split('\n').filter((line) => line.includes('aaaa'));
+  expect(previewLines).toHaveLength(1);
+  expect(previewLines[0]!.trimEnd().endsWith('…')).toBe(true);
+  expect(previewLines[0]!.includes('a'.repeat(120))).toBe(false);
   act(() => {
     unmount();
   });

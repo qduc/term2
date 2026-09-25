@@ -250,10 +250,11 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('> ⏳ Queued 2. second queued');
+  expect(lastFrame()).toContain('▸ second queued');
+  expect(lastFrame()).not.toContain('▸ first queued');
 
   await writeInput(stdin, 'e');
-  expect(lastFrame()).toContain('edit 2 ▸');
+  expect(lastFrame()).toContain('edit queued ▸');
   await writeInput(stdin, ' updated');
   await writeInput(stdin, '\r');
 
@@ -280,10 +281,31 @@ it.sequential('up past the top queued item reaches input history', async () => {
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('> ⏳ Steering 1. waiting steer');
+  expect(lastFrame()).toContain('▸ waiting steer');
   await writeInput(stdin, '\u001B[A');
   expect(lastFrame()).toMatch(/s\s*e\s*n\s*t\s*e\s*a\s*r\s*l\s*i\s*e\s*r/);
-  expect(lastFrame()).not.toContain('> ⏳ Steering');
+  expect(lastFrame()).not.toContain('▸ waiting steer');
+});
+
+it.sequential('queued selector moves in displayed order with steers grouped above follow-ups', async () => {
+  const { lastFrame, stdin } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      pendingQueuedMessages={[
+        { id: 'q-1', text: 'later follow-up', delivery: 'follow_up', queuedAt: 1 },
+        { id: 'q-2', text: 'urgent steer', delivery: 'steer', queuedAt: 2 },
+      ]}
+    />,
+  );
+
+  const frame = lastFrame() ?? '';
+  expect(frame.indexOf('urgent steer')).toBeLessThan(frame.indexOf('later follow-up'));
+
+  await writeInput(stdin, '\u001B[A');
+  expect(lastFrame()).toContain('▸ later follow-up');
+  await writeInput(stdin, '\u001B[A');
+  expect(lastFrame()).toContain('▸ urgent steer');
+  expect(lastFrame()).not.toContain('▸ later follow-up');
 });
 
 it.sequential('InputBox shows the shell prompt when in shell mode', async () => {
@@ -1583,7 +1605,7 @@ it.sequential('shows Queue vs Steer guidance and model/effort shortcuts when tur
   expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
 });
 
-it.sequential('shows Steering label for pending steer submissions', async () => {
+it.sequential('groups pending steer submissions under a steer header only', async () => {
   const { lastFrame } = await renderAndFlush(
     <TestInputBox
       {...defaultProps}
@@ -1592,8 +1614,9 @@ it.sequential('shows Steering label for pending steer submissions', async () => 
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('⏳ Steering 1.')).toBe(true);
-  expect(output.includes('⏳ Queued 1.')).toBe(false);
+  expect(output.includes('steer · mid-turn')).toBe(true);
+  expect(output.includes('change direction')).toBe(true);
+  expect(output.includes('queued · after this turn')).toBe(false);
 });
 
 it.sequential(

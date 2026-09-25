@@ -2150,6 +2150,41 @@ load-bearing retrieval triggers, and past roughly 100 entries per scope the
 counted tail is the contract — enforced store pruning remains a separate
 store-policy decision.
 
+### Root-turn automatic memory selection precision
+
+User-visible incident (2026-09-25): short turns such as "What were we doing?",
+"It is a little noisy in the UI, can you fix that?", and "Refine that feature"
+injected unrelated project summaries (up to seven in a recorded turn). The
+root-turn `MemoryCapabilityBuilder.selectForTurn()` searched on generic words
+and accepted any substring hit in the ID, title, tags, or summary. This is a
+context admission filter, not a store-retention or model-run termination guard.
+
+Harm prevented: unnecessary prompt tokens and irrelevant or misleading
+project claims on conversational follow-ups. Scope and enforcement owner:
+automatic main-agent per-turn summary selection in
+`MemoryCapabilityBuilder.selectForTurn`; `memory_search`, `memory_retrieve`,
+and `memory_get` keep their original query semantics. Recovery owner: those
+on-demand memory tools plus session retrieval for referential follow-ups.
+Signal: exact whole-word topic matches in indexed metadata after removing
+common conversational and broad memory-domain words. A single concrete topic
+can qualify; full-content and substring-only hits cannot. This is a lexical
+proxy for relevance: a legitimate memory can be omitted if the user paraphrases
+its title/summary or the topic appears only in its full content. Those cases
+remain retrievable by tool; the root guidance says the injected set is not a
+complete index. No budget, settings precedence, persisted store, provider
+continuity, retry, or fallback behavior changes. The structured
+`memory_injected` receipt still names exactly which summaries were selected;
+empty selection emits no receipt. Rollback: selector terms and metadata
+eligibility in `memory-capabilities.ts` only.
+
+Red proof: two tests in `memory-capabilities.test.ts` failed for the generic
+follow-up and one-term substring noise; the older Codex decision test remained
+green. Final focused test: 30 passed. Related and changed gates each passed 52
+files / 1,055 tests (1 expected fail); full unit passed 653 files / 8,960 tests
+(3 expected fail, 3 skipped); integration passed 12 files / 94 tests (1 file
+skipped); `pnpm typecheck` and `git diff --check` passed. The filter is a
+precision-biased heuristic, not a measured gain in teammate-memory efficacy.
+
 ### Session rollover live-work retention
 
 The previously attempted live-work transfer was reverted: it disposed the

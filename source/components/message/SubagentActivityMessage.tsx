@@ -2,14 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
-import {
-  COLOR_DANGER,
-  COLOR_MUTED,
-  COLOR_SUCCESS,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  TOOL_STATUS_GLYPH,
-} from '../theme.js';
+import { COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING, TOOL_STATUS_GLYPH } from '../theme.js';
 import type { CommandMessage as CommandMessageType } from '../../types/message.js';
 
 type SubagentToolEntry = string | CommandMessageType;
@@ -127,7 +120,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         {statusSuffix}
       </Text>
       {msg.status === 'completed' && msg.finalText ? (
-        <Text color={COLOR_MUTED}>{getFirstParagraph(msg.finalText, 500)}</Text>
+        <Text color={COLOR_TEXT_SUBTLE}>{getFirstParagraph(msg.finalText, 500)}</Text>
       ) : (
         tools.map((tool, index) => {
           if (tool && typeof tool === 'object') {
@@ -151,7 +144,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
             );
           }
           return (
-            <Text key={`${tool}-${index}`} color={COLOR_MUTED}>
+            <Text key={`${tool}-${index}`} color={COLOR_TEXT_SUBTLE}>
               {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
             </Text>
           );

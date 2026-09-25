@@ -169,8 +169,8 @@ it('preselects the current thinking effort in the value menu', async () => {
   });
 
   const frame = lastFrame();
-  expect(frame).toContain('▶ high');
-  expect(frame).not.toContain('▶ default');
+  expect(frame).toContain('❯ high');
+  expect(frame).not.toContain('❯ default');
 });
 
 it('a field-error IntentResult keeps the frame open and reports the error without reopening or reconstructing it', async () => {

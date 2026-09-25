@@ -114,12 +114,12 @@ it.sequential('SettingsSelectionMenu marks the selected item', async () => {
   // Rows carry ANSI styling around the gutter marker, so strip it and check
   // which row actually holds the arrow (shell.timeout is selectedIndex 1).
   const plain = output.replace(/\u001b\[[0-9;]*m/g, '');
-  const markedRows = plain.split('\n').filter((line) => line.includes('▶'));
+  const markedRows = plain.split('\n').filter((line) => line.includes('❯'));
   expect(markedRows).toHaveLength(1);
   expect(markedRows[0]).toContain('shell.timeout');
   expect(markedRows[0]).not.toContain('agent.model');
   const unmarkedRow = plain.split('\n').find((line) => line.includes('agent.model')) ?? '';
-  expect(unmarkedRow.includes('▶')).toBe(false);
+  expect(unmarkedRow.includes('❯')).toBe(false);
 });
 
 it.sequential('SettingsSelectionMenu displays highlighted item description at the bottom footer', async () => {

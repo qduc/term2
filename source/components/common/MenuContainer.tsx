@@ -34,12 +34,15 @@ export const SelectionMarker: React.FC<{ selected: boolean }> = ({ selected }) =
  * and the same format, so the reader learns the shape once. Menus used to each
  * invent their own wording, separator, and arrow glyph.
  */
-export const MenuFooter: React.FC<{ hints: ReadonlyArray<[key: string, action: string]> }> = ({ hints }) => (
+/** A key, what it does, and an optional color when the key names a colored concept (e.g. steer vs queue). */
+export type MenuHint = readonly [key: string, action: string, keyColor?: string];
+
+export const MenuFooter: React.FC<{ hints: ReadonlyArray<MenuHint> }> = ({ hints }) => (
   <Text color={COLOR_TEXT_SUBTLE}>
-    {hints.map(([key, action], index) => (
+    {hints.map(([key, action, keyColor], index) => (
       <React.Fragment key={key}>
         {index > 0 ? ` ${GLYPH_SEPARATOR} ` : ''}
-        {key} {action}
+        {keyColor ? <Text color={keyColor}>{key}</Text> : key} {action}
       </React.Fragment>
     ))}
   </Text>

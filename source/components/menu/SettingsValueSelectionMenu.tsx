@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { isSecretSetting, isStringSetting, type SettingValueSuggestion } from '../../utils/value-suggestions.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
 type Props = {
@@ -97,8 +97,8 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         footerOutsideBorder={false}
         renderItem={(item, _index, isSelected) => (
           <Box key={item.value}>
-            <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
-            <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
+            <SelectionMarker selected={isSelected} />
+            <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT} bold={isSelected}>
               {item.value}
             </Text>
           </Box>
@@ -111,22 +111,15 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           Enter will set: <Text color={COLOR_SUCCESS}>{previewText}</Text>
         </Text>
       )}
-      <Text color={COLOR_TEXT_SUBTLE} dimColor>
-        <Text bold>Enter</Text> apply · <Text bold>Esc</Text> back
-        {items.length > 0 && (
-          <>
-            {' '}
-            · <Text bold>↑↓</Text> choose
-          </>
-        )}
-        {canCopySuggestion && (
-          <>
-            {' '}
-            · <Text bold>Tab</Text> copy into field
-          </>
-        )}{' '}
-        · <Text bold>Ctrl+D</Text> reset{defaultText !== undefined ? ` to ${defaultText}` : ' to default'}
-      </Text>
+      <MenuFooter
+        hints={[
+          ...(items.length > 0 ? [['↑↓', 'choose'] as const] : []),
+          ['⏎', 'apply'],
+          ...(canCopySuggestion ? [['Tab', 'copy into field'] as const] : []),
+          ['Ctrl+D', `reset ${defaultText !== undefined ? `to ${defaultText}` : 'to default'}`],
+          ['esc', 'back'],
+        ]}
+      />
     </Box>
   );
 };

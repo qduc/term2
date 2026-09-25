@@ -40,7 +40,7 @@ it.sequential('SettingsValueSelectionMenu marks the selected value and updates b
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={2} query="" />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('▶')).toBe(true);
+  expect(output.includes('❯')).toBe(true);
   expect(output.includes('high')).toBe(true);
   expect(output.includes('Highest reasoning')).toBe(true);
   expect(output.includes('Lower reasoning cost')).toBe(false);

@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
-import { MenuContainer, MenuFooter } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_WARNING } from '../theme.js';
 
 type Props = {
@@ -53,7 +53,8 @@ const PathSelectionMenu: FC<Props> = ({
           const label = item.type === 'directory' && !item.path.endsWith('/') ? `${item.path}/` : item.path;
           return (
             <Box key={item.path}>
-              <Text color={isSelected ? COLOR_ACCENT : undefined} inverse={isSelected}>
+              <SelectionMarker selected={isSelected} />
+              <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
                 {label}
               </Text>
             </Box>

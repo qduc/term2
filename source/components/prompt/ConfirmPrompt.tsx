@@ -1,14 +1,7 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { MenuFooter } from '../common/MenuContainer.js';
-import {
-  COLOR_ACCENT,
-  COLOR_BORDER_ACTIVE,
-  COLOR_TEXT_MUTED,
-  COLOR_WARNING,
-  GLYPH_SELECTED,
-  GLYPH_WARNING,
-} from '../theme.js';
+import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
+import { COLOR_ACCENT, COLOR_BORDER_ACTIVE, COLOR_TEXT_MUTED, COLOR_WARNING, GLYPH_WARNING } from '../theme.js';
 
 export interface ConfirmPromptProps {
   question: string;
@@ -80,10 +73,12 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
         {options.map((label, index) => {
           const selected = index === selectedIndex;
           return (
-            <Text key={label} color={selected ? COLOR_ACCENT : COLOR_TEXT_MUTED} bold={selected}>
-              {selected ? `${GLYPH_SELECTED} ` : '  '}
-              {label}
-            </Text>
+            <Box key={label}>
+              <SelectionMarker selected={selected} />
+              <Text color={selected ? COLOR_ACCENT : COLOR_TEXT_MUTED} bold={selected}>
+                {label}
+              </Text>
+            </Box>
           );
         })}
       </Box>

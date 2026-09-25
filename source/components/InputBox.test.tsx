@@ -230,7 +230,7 @@ it.sequential('InputBox shows the input prompt and idle shortcut hints', async (
   const output = lastFrame();
   // Should show the prompt character
   expect(output!.includes('❯')).toBe(true);
-  expect(output!.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
+  expect(output!.includes('Ctrl+O model │ Ctrl+T effort')).toBe(true);
 });
 
 it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {
@@ -883,7 +883,7 @@ it.sequential('settings-backed model selection restores settings menu after subm
   expect(settingsService.get('agent.model')).toBe('gpt-test');
   expect(settingsService.get('agent.provider')).toBe(mockProviderId);
   expect(visibleFrame.includes('Input:/settings ')).toBe(true);
-  expect(visibleFrame.includes('▶ agent.model')).toBe(true);
+  expect(visibleFrame.includes('❯ agent.model')).toBe(true);
 
   // Cleanup after test
   clearModelCache();
@@ -1200,7 +1200,7 @@ it.sequential('settings value completion saves setting and reopens settings menu
 
   // The menu should be restored targeting 'shell.timeout'
   expect(visibleFrame.includes('Input:/settings')).toBe(true);
-  expect(visibleFrame.includes('▶ shell.timeout')).toBe(true);
+  expect(visibleFrame.includes('❯ shell.timeout')).toBe(true);
 });
 
 it.sequential('settings key insertion advances cursor before reopening value completion', async () => {
@@ -1258,7 +1258,7 @@ it.sequential(
 
     // The menu should be restored targeting 'shell.timeout'
     expect(visibleFrame.includes('Input:/settings')).toBe(true);
-    expect(visibleFrame.includes('▶ shell.timeout')).toBe(true);
+    expect(visibleFrame.includes('❯ shell.timeout')).toBe(true);
   },
 );
 
@@ -1471,7 +1471,7 @@ it.sequential('settings value completion shows current custom settings value in 
     const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
     const visibleFrame = toVisibleText(frame);
 
-    expect(visibleFrame).toMatch(/▶\s+35/);
+    expect(visibleFrame).toMatch(/❯\s+35/);
     expect(visibleFrame).toContain('Current value');
   } finally {
     process.stdout.columns = originalColumns;
@@ -1601,9 +1601,9 @@ it.sequential('backspace works after committing a setting value and returning to
 it.sequential('shows Queue vs Steer guidance and model/effort shortcuts when turnInFlight is active', async () => {
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} turnInFlight={true} />);
   const output = lastFrame() ?? '';
-  expect(output.includes('Enter Steer')).toBe(true);
-  expect(output.includes('Alt+Enter Queue')).toBe(true);
-  expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
+  expect(output.includes('⏎ steer')).toBe(true);
+  expect(output.includes('Alt+⏎ queue')).toBe(true);
+  expect(output.includes('Ctrl+O model │ Ctrl+T effort')).toBe(true);
 });
 
 it.sequential('groups pending steer submissions under a steer header only', async () => {
@@ -1631,9 +1631,9 @@ it.sequential(
       />,
     );
     const output = lastFrame() ?? '';
-    expect(output.includes('select queued')).toBe(true);
-    expect(output.includes('Enter Steer')).toBe(true);
-    expect(output.includes('Alt+Enter Queue')).toBe(true);
-    expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
+    expect(output.includes('↑ select queued │ ⏎ steer')).toBe(true);
+    expect(output.includes('⏎ steer')).toBe(true);
+    expect(output.includes('Alt+⏎ queue')).toBe(true);
+    expect(output.includes('Ctrl+O model │ Ctrl+T effort')).toBe(true);
   },
 );

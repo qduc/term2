@@ -1,6 +1,6 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
-import { MenuFooter } from '../common/MenuContainer.js';
+import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import {
   COLOR_ACCENT,
   COLOR_ACCENT_ALT,
@@ -10,7 +10,6 @@ import {
   COLOR_TEXT_MUTED,
   COLOR_TEXT_SUBTLE,
   COLOR_WARNING,
-  GLYPH_SELECTED,
 } from '../theme.js';
 
 export type PendingQueueDelivery = 'steer' | 'follow_up';
@@ -85,11 +84,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
               const editing = message.id === editingId;
               return (
                 <Box key={message.id} flexDirection="row">
-                  <Box flexShrink={0}>
-                    <Text color={COLOR_ACCENT} bold>
-                      {selected ? `${GLYPH_SELECTED} ` : '  '}
-                    </Text>
-                  </Box>
+                  <SelectionMarker selected={selected} />
                   <Text
                     color={selected ? COLOR_TEXT : COLOR_TEXT_MUTED}
                     bold={selected}

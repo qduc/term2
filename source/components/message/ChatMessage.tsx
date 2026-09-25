@@ -26,6 +26,10 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
         </Box>
       ) : msg.sender === 'system' && msg.presentation === 'rule' ? (
         <Text color={COLOR_BORDER}>{'─'.repeat(80)}</Text>
+      ) : msg.sender === 'system' && msg.memoryReceiptCount !== undefined ? (
+        <Text color={COLOR_REASONING}>
+          Loaded {msg.memoryReceiptCount} {msg.memoryReceiptCount === 1 ? 'memory' : 'memories'}
+        </Text>
       ) : msg.sender === 'system' ? (
         <Text color={COLOR_REASONING}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (

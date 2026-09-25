@@ -36,6 +36,8 @@ export interface SystemMessage {
   text: string;
   /** Transcript presentation only; empty text renders as a divider rule. */
   presentation?: 'rule';
+  /** Keep the exact receipt in text; render only this count in the terminal. */
+  memoryReceiptCount?: number;
 }
 
 export interface ReasoningMessage {

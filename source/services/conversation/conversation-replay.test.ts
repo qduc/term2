@@ -41,7 +41,9 @@ it('replays a memory receipt from the persisted event without adding it to provi
   });
   expect(decodeLogEnvelope(record)).toBeDefined();
   const restored = replayEvents([record]);
-  expect(restored.messages).toMatchObject([{ sender: 'system', text: 'Loaded 1 memory: global / rule — Rule' }]);
+  expect(restored.messages).toMatchObject([
+    { sender: 'system', text: 'Loaded 1 memory: global / rule — Rule', memoryReceiptCount: 1 },
+  ]);
   expect(restored.history).toEqual([]);
 });
 

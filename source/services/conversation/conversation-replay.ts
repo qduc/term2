@@ -735,6 +735,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         id: `memory-receipt-${state.messages.length}`,
         sender: 'system',
         text: formatMemoryReceipt(event.memories),
+        memoryReceiptCount: event.memories.length,
       });
       return;
     }

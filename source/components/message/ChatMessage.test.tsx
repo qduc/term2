@@ -102,19 +102,26 @@ it('ChatMessage renders a rule presentation system message as a divider', async 
   });
 });
 
-it('ChatMessage displays a memory injection receipt in the transcript', async () => {
+it('ChatMessage shows only the count while retaining the exact memory receipt', async () => {
   let frame = '';
   let unmount!: () => void;
   await act(async () => {
     const rendered = render(
       <ChatMessage
-        msg={{ id: 'memory-1', sender: 'system', text: 'Loaded 1 memory: project / rule — Project rule' }}
+        msg={{
+          id: 'memory-1',
+          sender: 'system',
+          text: 'Loaded 7 memories: project / rule — Project rule; global / note — Another note',
+          memoryReceiptCount: 7,
+        }}
       />,
     );
     frame = stripAnsi(rendered.lastFrame() || '');
     unmount = rendered.unmount;
   });
-  expect(frame).toContain('Loaded 1 memory: project / rule — Project rule');
+  expect(frame).toContain('Loaded 7 memories');
+  expect(frame).not.toContain('project / rule');
+  expect(frame).not.toContain('Another note');
   await act(async () => unmount());
 });
 

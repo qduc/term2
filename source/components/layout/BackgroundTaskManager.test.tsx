@@ -91,7 +91,7 @@ it.sequential('opens with Ctrl+G and exposes retained tasks without replacing th
   expect(output).toContain('Manage background tasks');
   expect(output).toContain('repo_scan');
   expect(output).toContain('pnpm test -- source/services');
-  expect(output).toContain('Enter details');
+  expect(output).toContain('↑↓ navigate │ ⏎ details');
   expect(onOpenChange).toHaveBeenCalledWith(true);
 });
 
@@ -219,7 +219,7 @@ it.sequential('keeps quiet work visibly running and stoppable without calling it
 
   await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').toContain('quiet');
-  expect(view.lastFrame() ?? '').toContain('[x] Force stop');
+  expect(view.lastFrame() ?? '').toContain('x force stop');
   expect(view.lastFrame() ?? '').not.toContain('hung');
   await writeInput(view.stdin, 'x');
   await writeInput(view.stdin, '\r');
@@ -346,7 +346,7 @@ it.sequential('does not offer force stop for settled work and Escape restores th
   );
 
   await writeInput(view.stdin, '\x07');
-  expect(view.lastFrame() ?? '').not.toContain('[x] Force stop');
+  expect(view.lastFrame() ?? '').not.toContain('x force stop');
   await writeInput(view.stdin, '\u001B');
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -373,7 +373,7 @@ it.sequential('opens for a foreground shell and requires confirmation before mov
 
   await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').toContain('pnpm test:provider-black-box');
-  expect(view.lastFrame() ?? '').toContain('[b] Put in background');
+  expect(view.lastFrame() ?? '').toContain('b background');
 
   await writeInput(view.stdin, 'b');
   expect(view.lastFrame() ?? '').toContain('Press Enter to put this shell in the background');

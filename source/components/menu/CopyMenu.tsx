@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { CopySelection } from '../../utils/copy-selections.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
 type Props = {
@@ -21,15 +21,24 @@ const CopyMenu: FC<Props> = ({ items, selectedIndex }) => (
     items={items}
     selectedIndex={selectedIndex}
     borderColor={COLOR_ACCENT}
-    footer="⏎ copy · esc cancel · ↑↓ navigate"
+    footer={
+      <MenuFooter
+        hints={[
+          ['↑↓', 'navigate'],
+          ['⏎', 'copy'],
+          ['esc', 'cancel'],
+        ]}
+      />
+    }
     renderItem={(item, index, isSelected) => {
       const isCodeBlock = item.label !== 'Full response';
       const preview = isCodeBlock ? getCodePreview(item.text) : '';
 
       return (
         <Box key={`${item.label}-${index}`}>
-          <Text inverse={isSelected} color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
-            {`${isSelected ? '▸' : ' '} ${index + 1}. ${item.label}`}
+          <SelectionMarker selected={isSelected} />
+          <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
+            {`${index + 1}. ${item.label}`}
           </Text>
           {preview ? (
             <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT_SUBTLE} dimColor={!isSelected}>

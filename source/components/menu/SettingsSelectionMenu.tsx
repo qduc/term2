@@ -5,9 +5,9 @@ import {
   type SettingCompletionItem,
   type SettingsCategory,
 } from '../../hooks/use-settings-completion.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 import { formatSettingDisplayValue, truncateKeepingTail } from './settings-value-formatter.js';
 
 type Props = {
@@ -95,11 +95,16 @@ const SettingsSelectionMenu: FC<Props> = ({
               </Box>
             )}
             {selectedItem && <Text color={COLOR_TEXT_SUBTLE}>{describeSettingState(selectedItem)}</Text>}
-            <Text color={COLOR_TEXT_SUBTLE} dimColor>
-              Type to search all sections · <Text bold>↑↓</Text> move · <Text bold>Enter</Text> edit ·{' '}
-              <Text bold>Esc</Text> close · <Text color={COLOR_WARNING}>●</Text> changed · <Text bold>↻</Text> needs
-              restart
-            </Text>
+            <MenuFooter
+              hints={[
+                ['type', 'to search all sections'],
+                ['↑↓', 'navigate'],
+                ['⏎', 'edit'],
+                ['esc', 'close'],
+                ['●', 'changed', COLOR_WARNING],
+                ['↻', 'needs restart'],
+              ]}
+            />
           </Box>
         }
         footerOutsideBorder={false}
@@ -126,8 +131,8 @@ const SettingsSelectionMenu: FC<Props> = ({
               )}
 
               <Box>
-                <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
-                <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
+                <SelectionMarker selected={isSelected} />
+                <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT} bold={isSelected}>
                   {paddedKey}
                 </Text>
                 <Text color={COLOR_WARNING}>{isChanged ? '● ' : '  '}</Text>

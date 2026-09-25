@@ -15,7 +15,11 @@
 
 /** The single interactive accent: prompts, selection, user identity, focus. */
 export const COLOR_ACCENT = '#22d3ee';
-/** Secondary accent. Reserved for the mentor/second-model lane only. */
+/**
+ * Secondary accent: work that runs outside the foreground turn — the mentor
+ * lane, background tasks, and queued follow-ups (plus the Alt+Enter key that
+ * creates them). Not a general-purpose second highlight.
+ */
 export const COLOR_ACCENT_ALT = '#a78bfa';
 
 // --- Status ----------------------------------------------------------------
@@ -54,8 +58,6 @@ export const COLOR_USER_BACKGROUND = COLOR_BORDER;
 export const COLOR_REASONING = COLOR_TEXT_SUBTLE;
 /** Tool stdout and rendered tool results. */
 export const COLOR_TOOL_OUTPUT = COLOR_TEXT_MUTED;
-/** @deprecated Use COLOR_TEXT_SUBTLE (hints, labels) or COLOR_BORDER (rules). */
-export const COLOR_MUTED = COLOR_TEXT_SUBTLE;
 
 // --- Shared glyphs ---------------------------------------------------------
 // Single-width on purpose. Emoji such as ⚠️ are double-width in most terminals

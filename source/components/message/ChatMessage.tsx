@@ -1,7 +1,8 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
-import { COLOR_ACCENT, COLOR_BORDER, COLOR_REASONING, COLOR_USER_BACKGROUND } from '../theme.js';
+import Divider from '../common/Divider.js';
+import { COLOR_ACCENT, COLOR_REASONING, COLOR_USER_BACKGROUND } from '../theme.js';
 import type { Message } from '../../types/message.js';
 
 type Props = {
@@ -25,7 +26,7 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
           </Text>
         </Box>
       ) : msg.sender === 'system' && msg.presentation === 'rule' ? (
-        <Text color={COLOR_BORDER}>{'─'.repeat(80)}</Text>
+        <Divider width={maxWidth} />
       ) : msg.sender === 'system' && msg.memoryReceiptCount !== undefined ? (
         <Text color={COLOR_REASONING}>
           Loaded {msg.memoryReceiptCount} {msg.memoryReceiptCount === 1 ? 'memory' : 'memories'}

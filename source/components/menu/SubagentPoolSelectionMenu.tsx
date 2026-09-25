@@ -1,7 +1,15 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { MenuContainer, MenuFooter } from '../common/MenuContainer.js';
+import {
+  GLYPH_WARNING,
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+  GLYPH_SELECTED,
+} from '../theme.js';
 import {
   formatSubagentPoolProvider,
   formatSubagentPoolReasoning,
@@ -66,20 +74,40 @@ export function SubagentPoolSelectionMenu({
         </Text>
         <Text color={COLOR_TEXT_SUBTLE}>Type the model ID below and press Enter.</Text>
         <Text color={COLOR_WARNING}>Current value: {draft?.model || '<empty>'}</Text>
-        {errorMessage && <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>}
-        <Text color={COLOR_TEXT_SUBTLE} dimColor>
-          Esc → go back
-        </Text>
+        {errorMessage && (
+          <Text color={COLOR_DANGER}>
+            {GLYPH_WARNING} {errorMessage}
+          </Text>
+        )}
+        <MenuFooter hints={[['esc', 'back']]} />
       </Box>
     );
   }
 
-  const footer =
-    phase === 'list'
-      ? 'Enter → select · Del → delete · Esc → save & close · ↑↓ → navigate'
-      : phase === 'edit_fields'
-      ? 'Enter → edit field / save · Esc → cancel · ↑↓ → navigate'
-      : 'Enter → select · Esc → go back · ↑↓ → navigate';
+  const footer = (
+    <MenuFooter
+      hints={
+        phase === 'list'
+          ? [
+              ['↑↓', 'navigate'],
+              ['⏎', 'select'],
+              ['Del', 'delete'],
+              ['esc', 'save & close'],
+            ]
+          : phase === 'edit_fields'
+          ? [
+              ['↑↓', 'navigate'],
+              ['⏎', 'edit field / save'],
+              ['esc', 'cancel'],
+            ]
+          : [
+              ['↑↓', 'navigate'],
+              ['⏎', 'select'],
+              ['esc', 'back'],
+            ]
+      }
+    />
+  );
 
   const entryCount = activeItems.filter((item) => item.kind === 'entry').length;
   const isListEmpty = phase === 'list' && entryCount === 0;
@@ -114,9 +142,17 @@ export function SubagentPoolSelectionMenu({
           )}
         </Box>
       )}
-      {phase === 'confirm_delete' && <Text color={COLOR_DANGER}>⚠ This entry will be removed from the pool.</Text>}
-      {phase === 'confirm_discard' && <Text color={COLOR_WARNING}>⚠ You have unsaved changes. Discard them?</Text>}
-      {errorMessage && <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>}
+      {phase === 'confirm_delete' && (
+        <Text color={COLOR_DANGER}>{GLYPH_WARNING} This entry will be removed from the pool.</Text>
+      )}
+      {phase === 'confirm_discard' && (
+        <Text color={COLOR_WARNING}>{GLYPH_WARNING} You have unsaved changes. Discard them?</Text>
+      )}
+      {errorMessage && (
+        <Text color={COLOR_DANGER}>
+          {GLYPH_WARNING} {errorMessage}
+        </Text>
+      )}
       <MenuContainer
         items={activeItems}
         selectedIndex={selectedIndex}
@@ -126,8 +162,8 @@ export function SubagentPoolSelectionMenu({
         footer={footer}
         renderItem={(item, index, selected, inactive) => {
           let label = item.label;
-          let prefix = selected ? '▶ ' : '  ';
-          let color = selected ? COLOR_SUCCESS : COLOR_TEXT;
+          let prefix = selected ? `${GLYPH_SELECTED} ` : '  ';
+          let color = selected ? COLOR_ACCENT : COLOR_TEXT;
           if (item.kind === 'action') {
             prefix = item.action === 'add' ? '+ ' : item.action === 'save' ? '✓ ' : prefix;
             color =
@@ -136,15 +172,15 @@ export function SubagentPoolSelectionMenu({
                 : item.action === 'add'
                 ? COLOR_WARNING
                 : selected
-                ? COLOR_SUCCESS
+                ? COLOR_ACCENT
                 : COLOR_TEXT;
           } else if (item.kind === 'field') {
             label = `${item.label}: ${item.detail}`;
-            color = selected ? COLOR_SUCCESS : COLOR_TEXT;
+            color = selected ? COLOR_ACCENT : COLOR_TEXT;
           } else if (item.kind === 'entry') {
             label = `${item.index + 1}. ${item.entry.model}`;
           } else if (item.kind === 'provider' || item.kind === 'reasoning') {
-            color = selected ? COLOR_SUCCESS : COLOR_TEXT;
+            color = selected ? COLOR_ACCENT : COLOR_TEXT;
           }
           if (inactive) color = COLOR_TEXT_SUBTLE;
           const field = item.kind === 'field' ? fieldErrors[item.field] : undefined;
@@ -162,7 +198,12 @@ export function SubagentPoolSelectionMenu({
                   </Text>
                 ) : null}
               </Box>
-              {field && <Text color={COLOR_DANGER}> ⚠ {field}</Text>}
+              {field && (
+                <Text color={COLOR_DANGER}>
+                  {' '}
+                  {GLYPH_WARNING} {field}
+                </Text>
+              )}
             </Box>
           );
         }}

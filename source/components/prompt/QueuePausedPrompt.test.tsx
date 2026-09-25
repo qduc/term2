@@ -12,8 +12,8 @@ it.sequential('QueuePausedPrompt renders queue count and resume/discard options'
 
   const output = lastFrame() ?? '';
   expect(output.includes('Queue paused: 3 item(s) pending.')).toBe(true);
-  expect(output.includes('[R]esume')).toBe(true);
-  expect(output.includes('[D]iscard')).toBe(true);
+  expect(output.includes('r resume │ d discard │ esc discard')).toBe(true);
+  expect(output.includes('⏸')).toBe(false);
   act(() => {
     unmount();
   });

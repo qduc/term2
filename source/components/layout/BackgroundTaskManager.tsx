@@ -12,6 +12,7 @@ import type {
 import { sanitizeBackgroundTaskToolLabel } from '../../services/background-task-activity.js';
 import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
+import { MenuFooter } from '../common/MenuContainer.js';
 import { COLOR_ACCENT_ALT, COLOR_DANGER_SOFT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 export type BackgroundTaskManagerProps = {
@@ -383,11 +384,15 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           {feedback}
         </Text>
       )}
-      <Text color={COLOR_TEXT_SUBTLE}>
-        ↑↓ select · Enter details
-        {selectedForeground ? ' · [b] Put in background' : ''}
-        {selected && isActive(selected) ? ' · [x] Force stop' : ''} · Esc close
-      </Text>
+      <MenuFooter
+        hints={[
+          ['↑↓', 'navigate'],
+          ['⏎', 'details'],
+          ...(selectedForeground ? [['b', 'background'] as const] : []),
+          ...(selected && isActive(selected) ? [['x', 'force stop'] as const] : []),
+          ['esc', 'close'],
+        ]}
+      />
     </Box>
   );
 };

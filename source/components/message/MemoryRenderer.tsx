@@ -1,7 +1,14 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseMemoryOutput } from './command-message-helpers.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_MUTED, COLOR_TEXT, COLOR_TOOL_OUTPUT } from '../theme.js';
+import {
+  COLOR_ACCENT,
+  COLOR_BORDER,
+  COLOR_DANGER,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_TOOL_OUTPUT,
+} from '../theme.js';
 
 type Props = {
   output: string;
@@ -38,7 +45,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box flexDirection="column" paddingLeft={2}>
-          <Text color={COLOR_MUTED} dimColor>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor>
             {total} memor{total === 1 ? 'y' : 'ies'} found
             {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
             {parsed.unavailable ? `; ${parsed.unavailable} unavailable` : ''}
@@ -49,7 +56,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
                 {label}
               </Text>
               {memories.length === 0 ? (
-                <Text color={COLOR_MUTED} dimColor>
+                <Text color={COLOR_TEXT_SUBTLE} dimColor>
                   none
                 </Text>
               ) : (
@@ -59,17 +66,17 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
                       {m.title || m.id}
                     </Text>
                     {m.summary ? (
-                      <Text color={COLOR_MUTED} dimColor>
+                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
                         {truncate(m.summary, 140)}
                       </Text>
                     ) : null}
                     {m.tags && m.tags.length > 0 ? (
-                      <Text color={COLOR_MUTED} dimColor>
+                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
                         tags: {m.tags.join(', ')}
                       </Text>
                     ) : null}
                     {m.scope ? (
-                      <Text color={COLOR_MUTED} dimColor>
+                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
                         scope: {m.scope}
                       </Text>
                     ) : null}
@@ -114,17 +121,17 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
-        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
+        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_BORDER} paddingX={1} marginTop={1}>
           <Text color={COLOR_TEXT} bold>
             {m.title || m.id}
           </Text>
           {m.summary ? (
-            <Text color={COLOR_MUTED} dimColor>
+            <Text color={COLOR_TEXT_SUBTLE} dimColor>
               {m.summary}
             </Text>
           ) : null}
           {m.tags && m.tags.length > 0 ? (
-            <Text color={COLOR_MUTED} dimColor>
+            <Text color={COLOR_TEXT_SUBTLE} dimColor>
               tags: {m.tags.join(', ')}
             </Text>
           ) : null}
@@ -144,7 +151,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box paddingLeft={2}>
-          <Text color={COLOR_MUTED} dimColor>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor>
             {results.length} result{results.length === 1 ? '' : 's'}
             {query ? ` for "${query}"` : ''}
             {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
@@ -156,7 +163,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
               <Text color={COLOR_ACCENT} bold>
                 {r.memory?.title || r.memory?.id}
               </Text>
-              <Text color={COLOR_MUTED} dimColor>
+              <Text color={COLOR_TEXT_SUBTLE} dimColor>
                 [{r.scope || 'all'}] matched: {(r.matchedFields || []).join(', ') || 'n/a'}
               </Text>
               {r.memory?.summary ? <Text color={COLOR_TOOL_OUTPUT}>{truncate(r.memory.summary, 140)}</Text> : null}

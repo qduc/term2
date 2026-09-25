@@ -137,8 +137,8 @@ it.sequential('ProviderSelectionMenu renders inline field errors in edit_fields'
   );
 
   const frame = lastFrame()!;
-  expect(frame.includes('⚠ Name must start with a letter or number')).toBe(true);
-  expect(frame.includes("⚠ Base URL is required for provider type 'openai-compatible'.")).toBe(true);
+  expect(frame.includes('▲ Name must start with a letter or number')).toBe(true);
+  expect(frame.includes("▲ Base URL is required for provider type 'openai-compatible'.")).toBe(true);
 });
 
 it.sequential('ProviderSelectionMenu marks disabled providers and their re-enable route', async () => {
@@ -188,6 +188,6 @@ it.sequential('ProviderSelectionMenu renders the confirm discard warning', async
 
   const frame = lastFrame()!;
   expect(frame.includes('Discard Changes?')).toBe(true);
-  expect(frame.includes('⚠ You have unsaved changes. Discard them?')).toBe(true);
+  expect(frame.includes('▲ You have unsaved changes. Discard them?')).toBe(true);
   expect(frame.includes('No, keep editing')).toBe(true);
 });

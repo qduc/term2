@@ -14,15 +14,9 @@ import type { LoggingService } from '../services/logging/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
+import { MenuFooter, type MenuHint } from './common/MenuContainer.js';
 import PendingQueueList, { orderPendingQueueMessages, type PendingQueueMessage } from './input/PendingQueueList.js';
-import {
-  COLOR_ACCENT,
-  COLOR_ACCENT_ALT,
-  COLOR_DANGER,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-} from './theme.js';
+import { COLOR_ACCENT, COLOR_ACCENT_ALT, COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
 
 export { calculateInputWidth };
 
@@ -69,6 +63,18 @@ const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
 
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
+
+const MODEL_HINTS: ReadonlyArray<MenuHint> = [
+  ['Ctrl+O', 'model'],
+  ['Ctrl+T', 'effort'],
+];
+
+// Steer/queue key colors match the pending-queue group headers they create.
+const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
+  ['⏎', 'steer', COLOR_ACCENT],
+  ['Alt+⏎', 'queue', COLOR_ACCENT_ALT],
+  ...MODEL_HINTS,
+];
 
 const InputBox: FC<Props> = ({
   onSubmit,
@@ -428,8 +434,8 @@ const InputBox: FC<Props> = ({
           }}
         />
       </Box>
-      {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press ESC again to clear input</Text>}
-      {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or ESC to cancel)</Text>}
+      {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press Esc again to clear input</Text>}
+      {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or Esc to cancel)</Text>}
       {!turnInFlight &&
         !waitingForRejectionReason &&
         !escHintVisible &&
@@ -437,27 +443,18 @@ const InputBox: FC<Props> = ({
         value === '' &&
         !activePromptLabel && (
           <Box marginTop={1}>
-            <Text color={COLOR_TEXT_SUBTLE}>
-              <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text> model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
-            </Text>
+            <MenuFooter hints={MODEL_HINTS} />
           </Box>
         )}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
         <Box marginTop={1}>
-          <Text color={COLOR_TEXT_SUBTLE}>
-            {(pendingQueuedMessages?.length ?? 0) > 0 && value === '' ? (
-              <>
-                <Text color={COLOR_TEXT_MUTED}>↑</Text> select queued · <Text color={COLOR_ACCENT}>Enter</Text> Steer ·{' '}
-                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue · <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text>{' '}
-                model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
-              </>
-            ) : (
-              <>
-                <Text color={COLOR_ACCENT}>Enter</Text> Steer · <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue ·{' '}
-                <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text> model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
-              </>
-            )}
-          </Text>
+          <MenuFooter
+            hints={
+              (pendingQueuedMessages?.length ?? 0) > 0 && value === ''
+                ? [['↑', 'select queued'], ...TURN_IN_FLIGHT_HINTS]
+                : TURN_IN_FLIGHT_HINTS
+            }
+          />
         </Box>
       )}
     </Box>

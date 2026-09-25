@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_WARNING } from '../theme.js';
 
 type Props = {
@@ -38,14 +38,24 @@ const PathSelectionMenu: FC<Props> = ({
         loadingText="Loading project paths…"
         error={error ? `Unable to load paths: ${error}` : null}
         fallbackText={`No matches for "@${query}"`}
-        footer="Enter → insert with space · Tab → insert w/o trailing space · Esc → cancel · ↑↓ → scroll"
+        footer={
+          <MenuFooter
+            hints={[
+              ['↑↓', 'navigate'],
+              ['⏎', 'insert'],
+              ['Tab', 'insert w/o space'],
+              ['esc', 'cancel'],
+            ]}
+          />
+        }
         footerOutsideBorder={true}
         renderItem={(item, _index, isSelected) => {
-          const icon = item.type === 'directory' ? '📁' : '📄';
+          const label = item.type === 'directory' && !item.path.endsWith('/') ? `${item.path}/` : item.path;
           return (
             <Box key={item.path}>
-              <Text color={isSelected ? COLOR_ACCENT : undefined} inverse={isSelected}>
-                {icon} {item.path}
+              <SelectionMarker selected={isSelected} />
+              <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
+                {label}
               </Text>
             </Box>
           );

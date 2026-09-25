@@ -5,8 +5,16 @@ import type {
   CustomProviderDraft,
   ProviderSelectionMenuItem,
 } from '../../hooks/use-provider-selection.js';
-import { MenuContainer } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { MenuContainer, MenuFooter, type MenuHint, SelectionMarker } from '../common/MenuContainer.js';
+import {
+  GLYPH_WARNING,
+  COLOR_ACCENT,
+  COLOR_DANGER,
+  COLOR_SUCCESS,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from '../theme.js';
 
 type Props = {
   phase: ProviderSelectionPhase;
@@ -57,24 +65,53 @@ const ProviderSelectionMenu: FC<Props> = ({
   };
 
   const getFooter = () => {
+    let hints: MenuHint[];
     switch (phase) {
       case 'list':
-        return 'Enter → Edit provider (enable/disable, API key) · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
+        hints = [
+          ['↑↓', 'navigate'],
+          ['⏎', 'edit provider (enable/disable, API key)'],
+          ['Del', 'delete custom provider'],
+          ['esc', 'close'],
+        ];
+        break;
       case 'accounts':
-        return 'Enter → Use from next session · Del → Sign out · Esc → Back · ↑↓ → Navigate';
+        hints = [
+          ['↑↓', 'navigate'],
+          ['⏎', 'use from next session'],
+          ['Del', 'sign out'],
+          ['esc', 'back'],
+        ];
+        break;
       case 'confirm_delete':
       case 'confirm_discard':
       case 'wizard_type':
-        return 'Enter → Select · Esc → Go Back · ↑↓ → Navigate';
+        hints = [
+          ['↑↓', 'navigate'],
+          ['⏎', 'select'],
+          ['esc', 'back'],
+        ];
+        break;
       case 'edit_fields':
-        return 'Enter → Modify field / Save · Esc → Cancel · ↑↓ → Navigate';
+        hints = [
+          ['↑↓', 'navigate'],
+          ['⏎', 'modify field / save'],
+          ['esc', 'cancel'],
+        ];
+        break;
       case 'wizard_name':
       case 'wizard_url':
       case 'wizard_key':
-        return 'Type value below and press Enter · Esc → Go Back';
+        hints = [
+          ['type', 'value below'],
+          ['⏎', 'confirm'],
+          ['esc', 'back'],
+        ];
+        break;
       default:
-        return '';
+        return null;
     }
+    return <MenuFooter hints={hints} />;
   };
 
   const getBorderColor = () => {
@@ -114,7 +151,9 @@ const ProviderSelectionMenu: FC<Props> = ({
           )}
           {errorMessage && (
             <Box marginTop={1}>
-              <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
+              <Text color={COLOR_DANGER}>
+                {GLYPH_WARNING} {errorMessage}
+              </Text>
             </Box>
           )}
         </Box>
@@ -127,9 +166,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           borderRight={false}
           borderColor={COLOR_TEXT_SUBTLE}
         >
-          <Text color={COLOR_TEXT_SUBTLE} dimColor>
-            {getFooter()}
-          </Text>
+          {getFooter()}
         </Box>
       </Box>
     );
@@ -167,20 +204,22 @@ const ProviderSelectionMenu: FC<Props> = ({
       {phase === 'confirm_delete' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color={COLOR_DANGER} bold>
-            ⚠ WARNING: Are you sure you want to delete this provider? This action cannot be undone.
+            {GLYPH_WARNING} WARNING: Are you sure you want to delete this provider? This action cannot be undone.
           </Text>
         </Box>
       )}
       {phase === 'confirm_discard' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color={COLOR_WARNING} bold>
-            ⚠ You have unsaved changes. Discard them?
+            {GLYPH_WARNING} You have unsaved changes. Discard them?
           </Text>
         </Box>
       )}
       {errorMessage && phase !== 'edit_fields' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
+          <Text color={COLOR_DANGER}>
+            {GLYPH_WARNING} {errorMessage}
+          </Text>
         </Box>
       )}
       <MenuContainer
@@ -194,7 +233,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           let label = item.label;
           let prefix = '  ';
           let suffix = '';
-          let color = isSelected ? COLOR_SUCCESS : COLOR_TEXT;
+          let color = isSelected ? COLOR_ACCENT : COLOR_TEXT;
           let bold = isSelected;
 
           if (item.kind === 'provider') {
@@ -208,7 +247,7 @@ const ProviderSelectionMenu: FC<Props> = ({
               : unavailable
               ? COLOR_WARNING
               : isSelected
-              ? COLOR_SUCCESS
+              ? COLOR_ACCENT
               : COLOR_TEXT;
             if (item.id === 'codex') {
               suffix = unavailable
@@ -222,12 +261,12 @@ const ProviderSelectionMenu: FC<Props> = ({
             if (disabled) {
               // Disable state wins the suffix: it explains why the provider is
               // missing from model pickers even though credentials are fine.
-              color = isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE;
+              color = isSelected ? COLOR_ACCENT : COLOR_TEXT_SUBTLE;
               suffix = 'Disabled · hidden from model pickers · Enter to edit and re-enable';
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
-            color = isSelected ? COLOR_SUCCESS : COLOR_WARNING;
+            color = isSelected ? COLOR_ACCENT : COLOR_WARNING;
           } else if (item.kind === 'action') {
             prefix = item.tone === 'destructive' ? '× ' : '  ';
             color =
@@ -236,7 +275,7 @@ const ProviderSelectionMenu: FC<Props> = ({
                   ? COLOR_DANGER
                   : COLOR_DANGER
                 : isSelected
-                ? COLOR_SUCCESS
+                ? COLOR_ACCENT
                 : COLOR_TEXT;
             bold = isSelected || item.tone === 'destructive';
           } else if (item.kind === 'field' || item.kind === 'type') {
@@ -253,7 +292,7 @@ const ProviderSelectionMenu: FC<Props> = ({
               : item.isSelected
               ? COLOR_ACCENT
               : isSelected
-              ? COLOR_SUCCESS
+              ? COLOR_ACCENT
               : COLOR_TEXT;
             bold = item.isInUse;
             suffix = item.isInUse
@@ -278,7 +317,7 @@ const ProviderSelectionMenu: FC<Props> = ({
             return (
               <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="column">
                 <Box flexDirection="row">
-                  <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
+                  <SelectionMarker selected={isSelected} />
                   <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
                     <Text color={color} bold={bold}>
                       {prefix}
@@ -289,7 +328,9 @@ const ProviderSelectionMenu: FC<Props> = ({
                 </Box>
                 {error ? (
                   <Box marginLeft={4}>
-                    <Text color={COLOR_DANGER}>⚠ {error}</Text>
+                    <Text color={COLOR_DANGER}>
+                      {GLYPH_WARNING} {error}
+                    </Text>
                   </Box>
                 ) : null}
               </Box>
@@ -298,7 +339,7 @@ const ProviderSelectionMenu: FC<Props> = ({
 
           return (
             <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="row">
-              <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
+              <SelectionMarker selected={isSelected} />
               <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
                 <Text color={color} bold={bold}>
                   {prefix}

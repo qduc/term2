@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { REWIND_MENU_VISIBLE_ITEMS } from '../../hooks/use-rewind-selection.js';
 import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
@@ -69,10 +69,16 @@ const RewindMenu: FC<Props> = ({
   scrollOffset = 0,
   maxHeight = MAX_VISIBLE_ITEMS,
 }) => {
-  const footer =
-    disposition === 'edit'
-      ? '⏎ rewind & edit · ⇥ resend instead · esc cancel · ↑↓ navigate'
-      : '⏎ rewind & resend · ⇥ edit instead · esc cancel · ↑↓ navigate';
+  const footer = (
+    <MenuFooter
+      hints={[
+        ['↑↓', 'navigate'],
+        ['⏎', disposition === 'edit' ? 'rewind & edit' : 'rewind & resend'],
+        ['⇥', disposition === 'edit' ? 'resend instead' : 'edit instead'],
+        ['esc', 'cancel'],
+      ]}
+    />
+  );
 
   return (
     <MenuContainer
@@ -89,12 +95,13 @@ const RewindMenu: FC<Props> = ({
         const isLast = index === items.length - 1;
         return (
           <Box key={item.targetId} flexDirection="column">
-            <Text inverse={isSelected} color={isSelected ? COLOR_WARNING : undefined} bold={isSelected}>
-              {`${isSelected ? '▸' : ' '} ${String(index + 1).padStart(2)}. ${truncate(
-                item.text,
-                TRUNCATE_LENGTH,
-              )}${images}`}
-            </Text>
+            <Box>
+              <SelectionMarker selected={isSelected} />
+              {/* Warning, not accent: the selected row is the rewind target that discards what follows. */}
+              <Text color={isSelected ? COLOR_WARNING : undefined} bold={isSelected}>
+                {`${String(index + 1).padStart(2)}. ${truncate(item.text, TRUNCATE_LENGTH)}${images}`}
+              </Text>
+            </Box>
             <Text color={isSelected ? COLOR_WARNING : COLOR_TEXT_SUBTLE} dimColor={!isSelected}>
               {`      ↳ ${describeDiscards(item)}`}
             </Text>

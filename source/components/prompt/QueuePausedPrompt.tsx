@@ -1,7 +1,8 @@
 import React, { FC } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
-import { COLOR_DANGER, COLOR_DANGER_SOFT, COLOR_SUCCESS, COLOR_WARNING } from '../theme.js';
+import { MenuFooter } from '../common/MenuContainer.js';
+import { COLOR_BORDER_ACTIVE, COLOR_WARNING, GLYPH_WARNING } from '../theme.js';
 
 export interface QueuePausedPromptProps {
   queueLength: number;
@@ -29,17 +30,18 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
   });
 
   return (
-    <Box flexDirection="column" marginY={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1}>
       <Text color={COLOR_WARNING}>
-        ⏸ Queue paused: {queueLength} item(s) pending.
-        {pauseReason === 'failure' ? ' Last turn failed.' : ''}{' '}
-        <Text color={COLOR_SUCCESS} bold>
-          [<Text color={COLOR_SUCCESS}>R</Text>]esume
-        </Text>{' '}
-        <Text color={COLOR_DANGER} bold>
-          [<Text color={COLOR_DANGER_SOFT}>D</Text>]iscard
-        </Text>
+        {GLYPH_WARNING} Queue paused: {queueLength} item(s) pending.
+        {pauseReason === 'failure' ? ' Last turn failed.' : ''}
       </Text>
+      <MenuFooter
+        hints={[
+          ['r', 'resume'],
+          ['d', 'discard'],
+          ['esc', 'discard'],
+        ]}
+      />
     </Box>
   );
 };

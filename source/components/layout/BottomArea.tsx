@@ -130,7 +130,9 @@ export type BottomAreaProps = {
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
   onCopySelection?: (selection: CopySelection) => void;
-  listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
+  listConversations?: () => Promise<
+    import('../../services/conversation/conversation-persistence.js').ConversationListEntry[]
+  >;
   resumeConversation?: (target?: string) => void | Promise<void>;
   mcpManager?: McpConnectionManager;
   mcpConfigController?: McpConfigController;

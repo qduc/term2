@@ -51,11 +51,13 @@ export type ApplicationInputSurfaceProps = {
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
   onCopySelection?: (selection: CopySelection) => void;
-  listConversations?: () => ConversationListEntry[];
+  listConversations?: () => Promise<ConversationListEntry[]>;
   resumeConversation?: (target?: string) => void | Promise<void>;
   mcpManager?: McpConnectionManager;
   mcpConfigController?: McpConfigController;
 };
+
+const emptyConversations = async (): Promise<ConversationListEntry[]> => [];
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
   const enabled = props.enabled ?? true;
@@ -69,7 +71,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     skillsService: props.skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
   });
   const resume = useResumeSelection({
-    listConversations: props.listConversations ?? (() => []),
+    listConversations: props.listConversations ?? emptyConversations,
   });
   const profiles = useProfileSelection({ settingsService: props.settingsService });
 

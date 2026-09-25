@@ -1,11 +1,19 @@
 import { parentPort } from 'node:worker_threads';
 import { SessionIndexDatabase } from './session-index-database.js';
+import { listConversationsInDirectory, type ConversationListEntry } from '../conversation-persistence.js';
 
 export type WorkerRequestPayload =
   | { type: 'init'; dbPath: string; sourceDirectory: string }
   | { type: 'probe' }
   | { type: 'reconcile' }
   | { type: 'list'; options: { projectPath: string; sshHost?: string } }
+  | {
+      type: 'list_conversations';
+      conversationsDir: string;
+      projectPath?: string;
+      sshHost?: string;
+      limit?: number;
+    }
   | {
       type: 'resolve';
       reference: string;
@@ -64,6 +72,24 @@ export function runSessionIndexWorker(): void {
           if (!db) throw new Error('Database not initialized');
           const result = db.list(msg.options);
           parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
+          break;
+        }
+
+        case 'list_conversations': {
+          // Canonical resume-listing parse. Deliberately independent of the
+          // index database so it still runs when the index is unavailable;
+          // the directory is threaded through rather than read from the
+          // worker's own environment.
+          const result: ConversationListEntry[] = listConversationsInDirectory(
+            msg.conversationsDir,
+            msg.projectPath,
+            msg.sshHost,
+          );
+          parentPort!.postMessage({
+            id: msg.id,
+            ok: true,
+            result: Number.isFinite(msg.limit) ? result.slice(0, Math.max(0, Math.floor(msg.limit!))) : result,
+          } satisfies WorkerResponse);
           break;
         }
 

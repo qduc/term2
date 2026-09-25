@@ -35,11 +35,11 @@ import {
   loadLastConversation,
   forkConversation,
   isConversationLocked,
-  listConversations,
   deleteConversation,
   hasConversationContent,
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
+import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { formatResumeList } from './utils/resume-list.js';
 import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
@@ -457,7 +457,7 @@ if (resumeRequested && cli.input.length > 1) {
 }
 
 if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
-  const conversations = listConversations(resumeProjectPath, expectedSshHost).slice(0, 10);
+  const conversations = await listRecentConversations(resumeProjectPath, expectedSshHost, 10);
   const formatted = formatResumeList(conversations);
   console.log(formatted);
   process.exit(0);

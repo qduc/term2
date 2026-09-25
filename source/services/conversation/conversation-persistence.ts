@@ -70,8 +70,7 @@ export function setPidAlivenessCheckForTest(check: ((pid: number) => boolean) | 
   pidAlivenessOverride = check;
 }
 
-function ensureConversationsDir(): string {
-  const dir = getConversationsDir();
+function ensureConversationsDir(dir = getConversationsDir()): string {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -645,7 +644,27 @@ export interface ConversationListEntry {
 
 export function listConversations(expectedProjectPath?: string, expectedSshHost?: string): ConversationListEntry[] {
   ensureConversationsDir();
-  const dir = getConversationsDir();
+  return listConversationsInDirectory(getConversationsDir(), expectedProjectPath, expectedSshHost);
+}
+
+/**
+ * Canonical resume-listing parse over an explicit conversations directory.
+ *
+ * This is the synchronous parse the session-index worker runs so the heavy
+ * JSONL replay stays off the main thread; `listConversations` is the
+ * process-default wrapper around it. Keeping the directory explicit lets a
+ * worker (a separate module instance that does not inherit the in-process
+ * test override) list the same directory the caller listed without relying on
+ * `process.env`.
+ */
+export function listConversationsInDirectory(
+  dir: string,
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+): ConversationListEntry[] {
+  // The worker receives an explicit directory rather than the caller's
+  // in-process override. Preserve the default-path legacy migration there.
+  if (dir === (process.env['TERM2_TEST_DB_DIR'] || CONVERSATIONS_DIR)) ensureConversationsDir(dir);
   try {
     if (!fs.existsSync(dir)) {
       return [];

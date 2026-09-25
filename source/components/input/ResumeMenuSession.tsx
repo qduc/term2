@@ -67,6 +67,8 @@ export function ResumeMenuSession({ frame, active, controller, interactions, ser
       selectedIndex={resume.selectedIndex}
       scrollOffset={resume.scrollOffset}
       query={frame.binding.query}
+      loading={resume.loading}
+      error={resume.error}
     />
   );
 }

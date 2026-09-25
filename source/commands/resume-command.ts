@@ -3,7 +3,7 @@ import type { ConversationListEntry } from '../services/conversation/conversatio
 import { RESUME_TRIGGER } from '../components/input/triggers.js';
 
 interface CreateResumeSlashCommandDeps {
-  listConversations: () => ConversationListEntry[];
+  listConversations: () => Promise<ConversationListEntry[]>;
   resumeConversation: (target?: string) => void | Promise<void>;
   addSystemMessage: (text: string) => void;
   replaceInput: (text: string) => void;

@@ -67,12 +67,12 @@ import { copyToClipboard } from './utils/clipboard.js';
 import type { CopySelection } from './utils/copy-selections.js';
 import {
   isConversationLocked,
-  listConversations,
   loadConversationForProject,
   loadLastConversation,
   type ConversationListEntry,
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
+import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 
@@ -612,8 +612,8 @@ const App: FC<AppProps> = ({
 
   const resumeProjectPath = sshInfo?.remoteDir ?? process.cwd();
   const resumeSshHost = sshInfo?.host;
-  const listSavedConversations = useCallback<() => ConversationListEntry[]>(
-    () => listConversations(resumeProjectPath, resumeSshHost).slice(0, 10),
+  const listSavedConversations = useCallback<() => Promise<ConversationListEntry[]>>(
+    () => listRecentConversations(resumeProjectPath, resumeSshHost, 10),
     [resumeProjectPath, resumeSshHost],
   );
 

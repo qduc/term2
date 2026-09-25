@@ -11,6 +11,7 @@ import type {
   IndexedSearchResult,
   ReconcileResult,
 } from './session-index-database.js';
+import type { ConversationListEntry } from '../conversation-persistence.js';
 import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
 
 export interface SessionIndexWorkerClientOptions {
@@ -62,12 +63,18 @@ export class SessionIndexWorkerClient {
   readonly #timeoutMs: number;
   #nextRequestId = 1;
   #closed = false;
+  #unavailable = false;
   readonly #pending = new Map<
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
   >();
 
-  constructor(dbPath: string, sourceDirectory: string, options?: SessionIndexWorkerClientOptions) {
+  /**
+   * `dbPath`/`sourceDirectory` are optional so the same worker client can host
+   * requests that never touch the SQLite index (see `listConversationsInDirectory`).
+   * The index is initialized only when both are supplied.
+   */
+  constructor(dbPath?: string, sourceDirectory?: string, options?: SessionIndexWorkerClientOptions) {
     this.#timeoutMs = resolveWorkerTimeoutMs(options?.timeoutMs);
     const workerFile = resolveWorkerFile();
     this.#worker = options?.workerFactory?.(workerFile) ?? createDefaultWorker(workerFile);
@@ -87,19 +94,23 @@ export class SessionIndexWorkerClient {
     });
 
     this.#worker.on('error', (err: Error) => {
+      this.#unavailable = true;
       this.#drainPending(err);
     });
 
     this.#worker.on('exit', (code: number) => {
       if (!this.#closed) {
+        this.#unavailable = true;
         this.#drainPending(new Error(`Session index worker stopped with exit code ${code}`));
       }
     });
 
     // Send init request synchronously on creation; catch errors so failures surface gracefully on probe/reconcile
-    void this.#send({ type: 'init', dbPath, sourceDirectory }).catch(() => {
-      // Ignored: initialization failure is captured and reported on subsequent requests
-    });
+    if (dbPath !== undefined && sourceDirectory !== undefined) {
+      void this.#send({ type: 'init', dbPath, sourceDirectory }).catch(() => {
+        // Ignored: initialization failure is captured and reported on subsequent requests
+      });
+    }
   }
 
   #drainPending(error: Error): void {
@@ -114,6 +125,7 @@ export class SessionIndexWorkerClient {
     if (this.#closed) {
       return Promise.reject(new Error('SessionIndexWorkerClient is closed'));
     }
+    if (this.#unavailable) return Promise.reject(new Error('Session index worker is unavailable'));
 
     const id = this.#nextRequestId++;
     const payload: WorkerRequest = { id, ...req };
@@ -146,6 +158,25 @@ export class SessionIndexWorkerClient {
     return this.#send<IndexedListResult>({ type: 'list', options });
   }
 
+  /**
+   * Canonical resume-listing parse in the worker thread. Independent of the
+   * index database, so it succeeds even when the index is unavailable.
+   */
+  async listConversationsInDirectory(
+    conversationsDir: string,
+    projectPath?: string,
+    sshHost?: string,
+    limit?: number,
+  ): Promise<ConversationListEntry[]> {
+    return this.#send<ConversationListEntry[]>({
+      type: 'list_conversations',
+      conversationsDir,
+      projectPath,
+      sshHost,
+      limit,
+    });
+  }
+
   async resolveReference(
     reference: string,
     options: { projectPath: string; sshHost?: string; currentSessionId?: string },
@@ -168,10 +199,10 @@ export class SessionIndexWorkerClient {
     return this.#send<IndexedSearchResult>({ type: 'search', options });
   }
 
-  async close(): Promise<void> {
+  async close(options?: { force?: boolean }): Promise<void> {
     if (this.#closed) return;
     try {
-      await this.#send({ type: 'close' });
+      if (!options?.force && !this.#unavailable) await this.#send({ type: 'close' });
     } catch {
       // Ignore errors on close
     } finally {

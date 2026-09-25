@@ -18,7 +18,7 @@ export const filterConversations = (conversations: ConversationListEntry[], quer
   );
 };
 
-export const useResumeSelection = (deps: { listConversations: () => ConversationListEntry[] }) => {
+export const useResumeSelection = (deps: { listConversations: () => Promise<ConversationListEntry[]> }) => {
   const { listConversations } = deps;
   const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
@@ -27,7 +27,30 @@ export const useResumeSelection = (deps: { listConversations: () => Conversation
   const isOpen = isControllerOpen || mode === 'resume_selection';
   const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
-  const allConversations = useMemo(() => (isOpen ? listConversations() : []), [listConversations, isOpen]);
+  const [result, setResult] = useState<{ entries: ConversationListEntry[]; loading: boolean; error: boolean }>({
+    entries: [],
+    loading: false,
+    error: false,
+  });
+  useEffect(() => {
+    if (!isOpen) return;
+    let current = true;
+    setResult({ entries: [], loading: true, error: false });
+    Promise.resolve()
+      .then(listConversations)
+      .then(
+        (entries) => {
+          if (current) setResult({ entries, loading: false, error: false });
+        },
+        () => {
+          if (current) setResult({ entries: [], loading: false, error: true });
+        },
+      );
+    return () => {
+      current = false;
+    };
+  }, [listConversations, isOpen]);
+  const allConversations = isOpen ? result.entries : [];
 
   const query = useMemo(() => {
     if (!isOpen) return '';
@@ -75,6 +98,8 @@ export const useResumeSelection = (deps: { listConversations: () => Conversation
 
   return {
     isOpen,
+    loading: isOpen && result.loading,
+    error: isOpen && result.error,
     open,
     close,
     query,

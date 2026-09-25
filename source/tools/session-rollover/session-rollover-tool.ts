@@ -15,7 +15,8 @@ export const sessionRolloverParameters = z
       .string()
       .max(8_000)
       .describe(
-        'Keep well below 8,000 characters. Give the next open step, unfinished decisions, completed effects, and durable paths/commits. ' +
+        'Handoff for a successor with no memory of this session; keep well below 8,000 characters. ' +
+          'Cover the goal, standing user constraints, verified versus assumed state, diagnosis and approaches ruled out, and the next open step. ' +
           'When a canonical artifact already holds the state, write a short delta and pointer instead of copying it.',
       ),
     reason: z.enum(['context_pressure', 'task_boundary']).optional(),
@@ -28,9 +29,13 @@ export function createSessionRolloverToolDefinition(
   return {
     name: 'session_rollover',
     description:
-      'Request an idle-boundary rotation into a fresh session. Live background work survives the rotation; include its current status and next action in the brief, but do not wait for it merely to rotate. ' +
-      'Keep the brief well below the 8,000-character limit using durable-state pointers and the next open step. ' +
-      'The successor retains the session-owned live background registry and can inspect or control those handles; save durable results when they are ready rather than copying transient output into the brief.',
+      'Request an idle-boundary rotation into a fresh session. The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
+      '- Goal and done condition, plus user constraints and preferences that still apply.\n' +
+      '- Completed effects with durable pointers (paths, commits, docs), marking what is verified versus assumed.\n' +
+      '- Working knowledge that is costly to rediscover: diagnosis, root causes, key files and symbols, and approaches ruled out with why.\n' +
+      '- Next open step, concrete enough to act on immediately, and any unresolved decisions.\n' +
+      '- Live background work: handle, status, and next action. Handles are session-owned and survive the rotation, so the successor can inspect or control them; do not wait for them merely to rotate, and save durable results when ready rather than copying transient output.\n' +
+      'Keep the brief well below the 8,000-character limit: point to a canonical artifact instead of copying it, and omit narrative history the successor can read from the previous session on demand.',
     parameters: sessionRolloverParameters,
     terminateAfterExecution: (result) =>
       typeof result === 'string' &&

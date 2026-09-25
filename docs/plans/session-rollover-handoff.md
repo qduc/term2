@@ -43,6 +43,14 @@ optional. The model-facing copy does not describe internal context-management
 mechanisms. Existing hard-fit estimation remains separate and is used only to
 decide whether internal boundary work can safely be deferred.
 
+The brief-writing prompt (`session_rollover` description and `brief` field)
+asks for the goal and standing user constraints, verified-versus-assumed state,
+diagnosis and ruled-out approaches, the next open step, and live-work handles.
+This follows the overnight benchmark's finding that the transferred diagnosis
+did the real work; the successor protocol correspondingly carries constraints
+forward and checks unverified state before building on it. No real-run
+comparison has yet measured this wording against the earlier one.
+
 The implementation slice is complete. The session-tool retrieval study is also
 complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
 and the later controlled phase ran six serial interactive cells across three

@@ -354,7 +354,7 @@ export type SessionRuntime = {
 export type PublicStatusInputs = {
   readonly foregroundStatus: SessionStatus;
   readonly foregroundApprovalKind?: 'ask_user' | 'approval';
-  readonly backgroundApprovalPending: boolean;
+  readonly backgroundApprovalPending?: boolean;
   readonly backgroundDetails: readonly BackgroundTaskControlDetails[];
 };
 
@@ -362,40 +362,24 @@ export type PublicStatusInputs = {
  * Projects session-owned work into the coarse public lifecycle state.
  * Waiting interactions take precedence over unrelated active work: a caller
  * must never observe `working` while an approval is waiting for input.
+ * Subagents are isolated from public hook status (docs/plans/public-hooks-system.md);
+ * only root foreground work and background shell jobs drive public status.
  */
 export function computePublicStatus({
   foregroundStatus,
   foregroundApprovalKind,
-  backgroundApprovalPending,
   backgroundDetails,
 }: PublicStatusInputs): import('../hooks/hook-contracts.js').Term2Status {
   if (foregroundStatus === 'awaiting_approval') {
     return foregroundApprovalKind === 'ask_user' ? 'waiting_for_user' : 'waiting_for_approval';
   }
-  if (backgroundApprovalPending) {
-    return 'waiting_for_approval';
-  }
-  let backgroundQuestionPending = false;
   let backgroundWorkPending = false;
   for (const detail of backgroundDetails) {
-    if (detail.kind === 'subagent') {
-      if (detail.status === 'awaiting_approval') {
-        return 'waiting_for_approval';
-      }
-      if (detail.status === 'waiting_for_answer') {
-        backgroundQuestionPending = true;
-      }
-      if (detail.status === 'running' || detail.status === 'cancelling') {
-        backgroundWorkPending = true;
-      }
-    } else if (detail.kind === 'shell') {
+    if (detail.kind === 'shell') {
       if (detail.status === 'running' || detail.status === 'cancelling') {
         backgroundWorkPending = true;
       }
     }
-  }
-  if (backgroundQuestionPending) {
-    return 'waiting_for_user';
   }
   if (foregroundStatus !== 'idle') {
     return 'working';
@@ -494,7 +478,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     client: agentClient,
     notifications: notificationStore,
     onNotification: () => {
-      syncPublicStatus();
       try {
         notificationObserver?.();
       } catch (error) {
@@ -629,7 +612,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         });
       }
     }
-    syncPublicStatus();
+    if (event.type.startsWith('background_shell_')) {
+      syncPublicStatus();
+    }
     if (!notificationStore.enqueue(event)) return;
     try {
       notificationObserver?.();
@@ -721,7 +706,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
             ? 'ask_user'
             : 'approval'
           : undefined,
-      backgroundApprovalPending: backgroundSubagentApprovals.getSnapshot().pendingCount > 0,
+      backgroundApprovalPending: false,
       backgroundDetails: backgroundTaskControl.listDetails(),
     });
   };
@@ -751,9 +736,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   };
 
   appState.statusMachine.setObserver(() => {
-    syncPublicStatus();
-  });
-  backgroundSubagentApprovals.subscribe(() => {
     syncPublicStatus();
   });
 

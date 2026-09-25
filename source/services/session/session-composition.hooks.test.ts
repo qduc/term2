@@ -74,17 +74,17 @@ const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
   } as unknown as ConversationAgentClient);
 
 describe('session-composition public hook status with background tasks', () => {
-  it('reports a pending background approval while foreground work is active', () => {
+  it('ignores background subagent approvals in computePublicStatus', () => {
     expect(
       computePublicStatus({
         foregroundStatus: 'streaming',
         backgroundApprovalPending: true,
         backgroundDetails: [],
       }),
-    ).toBe('waiting_for_approval');
+    ).toBe('working');
   });
 
-  it('prioritizes a background question over an earlier running task', () => {
+  it('ignores background subagent status in computePublicStatus', () => {
     expect(
       computePublicStatus({
         foregroundStatus: 'idle',
@@ -114,10 +114,10 @@ describe('session-composition public hook status with background tasks', () => {
           },
         ],
       }),
-    ).toBe('waiting_for_user');
+    ).toBe('idle');
   });
 
-  it('keeps public status working when foreground turn finishes but background subagent is running', async () => {
+  it('does not leak subagent lifecycle events into public hook status when foreground turn finishes', async () => {
     const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
     let subagentStatuses: SubagentRunStatus[] = [
       {
@@ -158,15 +158,30 @@ describe('session-composition public hook status with background tasks', () => {
 
     const statusChanges = emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change');
 
-    // Turned working on turn start, but did NOT transition to idle on turn completion because subagent is running
-    expect(statusChanges).toHaveLength(1);
+    // Foreground turn started (working) then completed (idle), ignoring the running background subagent
+    expect(statusChanges).toHaveLength(2);
     expect(statusChanges[0]).toMatchObject({
       previous: 'idle',
       current: 'working',
       reason: 'turn_started',
     });
+    expect(statusChanges[1]).toMatchObject({
+      previous: 'working',
+      current: 'idle',
+      reason: 'turn_finished',
+    });
 
-    // 2. Subagent completes
+    // 2. Subagent emits a lifecycle event (subagent_question)
+    sinks.background?.({
+      type: 'subagent_question',
+      async: true,
+      runId: 'sub-1',
+      role: 'explorer',
+      question: 'Which path should I check?',
+      messageId: 'msg-1',
+    });
+
+    // 3. Subagent completes
     subagentStatuses = [
       {
         runId: 'sub-1',
@@ -192,16 +207,11 @@ describe('session-composition public hook status with background tasks', () => {
       },
     });
 
+    // No additional status.change events were emitted by subagent lifecycle events
     const statusChangesAfterCompletion = emittedHookEvents.filter(
       (e): e is StatusChangeHookEvent => e.type === 'status.change',
     );
-
     expect(statusChangesAfterCompletion).toHaveLength(2);
-    expect(statusChangesAfterCompletion[1]).toMatchObject({
-      previous: 'working',
-      current: 'idle',
-      reason: 'turn_finished',
-    });
 
     runtime.dispose();
   });
@@ -282,7 +292,7 @@ describe('session-composition public hook status with background tasks', () => {
     runtime.dispose();
   });
 
-  it('transitions to waiting_for_approval when a background subagent requires approval', async () => {
+  it('does not leak background subagent approval pauses into public hook status', async () => {
     const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
     const subagentStatuses: SubagentRunStatus[] = [
       {
@@ -316,10 +326,13 @@ describe('session-composition public hook status with background tasks', () => {
       hookEvents,
     });
 
-    // Turn is idle, but subagent is running -> status should become working if turn started
+    // Run a foreground turn
     for await (const _event of runtime.turns.start('run worker')) {
       // drain
     }
+
+    const statusChanges = emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change');
+    expect(statusChanges).toHaveLength(2); // turn_started -> turn_finished
 
     // Now background subagent pauses for approval
     sinks.approval?.({
@@ -330,14 +343,11 @@ describe('session-composition public hook status with background tasks', () => {
       apply: () => true,
     });
 
-    const statusChanges = emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change');
-
-    expect(statusChanges).toHaveLength(2);
-    expect(statusChanges[1]).toMatchObject({
-      previous: 'working',
-      current: 'waiting_for_approval',
-      reason: 'approval_requested',
-    });
+    // Subagent approval pause must not emit status.change
+    const statusChangesAfterPause = emittedHookEvents.filter(
+      (e): e is StatusChangeHookEvent => e.type === 'status.change',
+    );
+    expect(statusChangesAfterPause).toHaveLength(2);
 
     // Resolve the approval
     const snapshot = runtime.backgroundSubagentApprovals.getSnapshot();
@@ -350,21 +360,16 @@ describe('session-composition public hook status with background tasks', () => {
       decision: { answer: 'approved' },
     });
 
+    // Subagent approval resolution must not emit status.change
     const statusChangesAfterResolve = emittedHookEvents.filter(
       (e): e is StatusChangeHookEvent => e.type === 'status.change',
     );
-
-    expect(statusChangesAfterResolve).toHaveLength(3);
-    expect(statusChangesAfterResolve[2]).toMatchObject({
-      previous: 'waiting_for_approval',
-      current: 'working',
-      reason: 'approval_resolved',
-    });
+    expect(statusChangesAfterResolve).toHaveLength(2);
 
     runtime.dispose();
   });
 
-  it('tracks multiple concurrent background tasks and only reports idle when all settle', async () => {
+  it('tracks background shell jobs alongside subagents and only reports idle when shell settles', async () => {
     const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
     let subagentStatuses: SubagentRunStatus[] = [
       {
@@ -411,31 +416,10 @@ describe('session-composition public hook status with background tasks', () => {
       // drain
     }
 
-    // Still working because both are running
+    // Still working because shell job is running (subagent is ignored for status)
     expect(emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change')).toHaveLength(1);
 
-    // 1. Shell settles first
-    shellJobs = [
-      {
-        id: 'shell-multi',
-        command: 'build.sh',
-        status: 'completed',
-        startedAt: 1000,
-        completedAt: 1500,
-      },
-    ];
-    sinks.shell?.({
-      type: 'background_shell_completed',
-      jobId: 'shell-multi',
-      command: 'build.sh',
-      status: 'completed',
-      output: 'ok',
-    });
-
-    // Subagent is still running -> still working, no idle emitted
-    expect(emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change')).toHaveLength(1);
-
-    // 2. Subagent settles
+    // 1. Subagent settles first
     subagentStatuses = [
       {
         runId: 'sub-multi',
@@ -461,7 +445,28 @@ describe('session-composition public hook status with background tasks', () => {
       },
     });
 
-    // Now all background work settled -> transition to idle
+    // Shell is still running -> still working, no idle or turn_finished emitted
+    expect(emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change')).toHaveLength(1);
+
+    // 2. Shell settles
+    shellJobs = [
+      {
+        id: 'shell-multi',
+        command: 'build.sh',
+        status: 'completed',
+        startedAt: 1000,
+        completedAt: 1500,
+      },
+    ];
+    sinks.shell?.({
+      type: 'background_shell_completed',
+      jobId: 'shell-multi',
+      command: 'build.sh',
+      status: 'completed',
+      output: 'ok',
+    });
+
+    // Now shell job settled -> transition to idle
     const statusChanges = emittedHookEvents.filter((e): e is StatusChangeHookEvent => e.type === 'status.change');
     expect(statusChanges).toHaveLength(2);
     expect(statusChanges[1]).toMatchObject({

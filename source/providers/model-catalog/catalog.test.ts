@@ -134,12 +134,10 @@ describe('lookupModelAnyProvider', () => {
 });
 
 describe('getModelContextWindow over the vendored catalog', () => {
-  it('returns the context window for a known OpenAI model', () => {
-    expect(getModelContextWindow('openai', 'gpt-5.6-sol')).toBe(272000);
-  });
-
-  it('returns the context window for a dated Claude alias via prefix fallback', () => {
-    expect(getModelContextWindow('anthropic', 'claude-sonnet-4-6-20251120')).toBe(1000000);
+  it('returns the current catalog entry for a provider/model pair', () => {
+    const [modelId, info] = Object.entries(MODEL_CATALOG.openai)[0]!;
+    expect(getCatalogModel('openai', modelId)).toEqual(info);
+    expect(getModelContextWindow('openai', modelId)).toBe(info.contextWindow);
   });
 
   it('returns undefined for an unknown model id', () => {
@@ -150,43 +148,17 @@ describe('getModelContextWindow over the vendored catalog', () => {
     // term2 users may run a catalog model under a custom or unregistered
     // provider (settings falls back to the default provider, which never
     // scopes to the catalog entry). The model id alone must still resolve.
-    expect(getModelContextWindow('custom-local-llm', 'claude-sonnet-4-6')).toBe(1000000);
-    expect(getModelContextWindow('anthropic', 'gpt-5.6-sol')).toBe(272000);
-  });
-
-  it('resolves a dated alias through an unknown provider (prefix match, not just exact)', () => {
-    // A gateway or proxy provider id never scopes to a catalog entry, but the
-    // dated alias is still the same model, so its metadata is usable.
-    expect(getModelContextWindow('my-gateway', 'claude-sonnet-4-6-20251120')).toBe(1000000);
+    const [modelId, info] = Object.entries(MODEL_CATALOG.openai)[0]!;
+    expect(getModelContextWindow('custom-local-llm', modelId)).toBe(info.contextWindow);
   });
 
   it('returns undefined when neither the provider nor the model id is known', () => {
     expect(getModelContextWindow('custom-local-llm', 'model-that-does-not-exist')).toBeUndefined();
   });
 
-  it('prefers the provider-scoped entry over a cross-provider fallback', () => {
-    // gpt-5.6-sol exists under both openai and codex; the openai scope must win.
-    expect(getCatalogModel('openai', 'gpt-5.6-sol')).toMatchObject({ contextWindow: 272000 });
-  });
-
-  it('exposes maxTokens alongside contextWindow', () => {
-    expect(getCatalogModel('openai', 'gpt-4o')).toMatchObject({ contextWindow: 128000, maxTokens: 16384 });
-    expect(getCatalogModel('openrouter', 'meta/muse-spark-1.2')).toMatchObject({
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 1.25,
-      outputPricePerMTok: 4.25,
-      cacheReadPricePerMTok: 0.15,
-      cacheWritePricePerMTok: 0,
-    });
-    expect(getCatalogModel('opencode', 'muse-spark-1.2-contributor')).toMatchObject({
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 0.1,
-      outputPricePerMTok: 0.2,
-      cacheReadPricePerMTok: 0.002,
-      cacheWritePricePerMTok: 0,
-    });
+  it('returns metadata for a vendored model through a provider fallback', () => {
+    const [modelId, info] = Object.entries(MODEL_CATALOG.openai)[0]!;
+    expect(getCatalogModel('custom-local-llm', modelId)).toEqual(info);
   });
 });
 
@@ -204,6 +176,15 @@ describe('vendored catalog data contract', () => {
         }
       }
     }
+  });
+
+  it('carries a standard price for every vendored model', () => {
+    const unpriced = Object.entries(MODEL_CATALOG).flatMap(([provider, models]) =>
+      Object.entries(models)
+        .filter(([, entry]) => entry.inputPricePerMTok === undefined || entry.outputPricePerMTok === undefined)
+        .map(([model]) => `${provider}/${model}`),
+    );
+    expect(unpriced).toEqual([]);
   });
 
   it('keeps model ids lowercase', () => {

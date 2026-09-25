@@ -1,6 +1,30 @@
-import { describe, expect, it } from 'vitest';
-import { MODEL_CATALOG } from '../../providers/model-catalog/catalog.generated.js';
+import { describe, expect, it, vi } from 'vitest';
 import { getCatalogPricingVersion, getModelPricing, getOverlayPricingVersion } from './pricing.js';
+
+// Pricing behavior must not depend on today's upstream model list or rates.
+// The live generated catalog's shape and price coverage are checked in catalog.test.ts.
+vi.mock('../../providers/model-catalog/catalog.generated.js', () => ({
+  CATALOG_META: { schemaVersion: 2, source: 'pi-ai@test' },
+  MODEL_CATALOG: {
+    openai: {
+      'gpt-4.1': {
+        contextWindow: 128000,
+        inputPricePerMTok: 2,
+        outputPricePerMTok: 8,
+        cacheReadPricePerMTok: 0.5,
+        cacheWritePricePerMTok: 0,
+      },
+      'gpt-5.6-sol': { contextWindow: 272000, inputPricePerMTok: 1, outputPricePerMTok: 3 },
+    },
+    codex: { 'gpt-5.6-sol': { contextWindow: 128000, inputPricePerMTok: 2, outputPricePerMTok: 4 } },
+    anthropic: {
+      'claude-sonnet-4-6': { contextWindow: 1000000, inputPricePerMTok: 3, outputPricePerMTok: 15 },
+    },
+    openrouter: {
+      'deepseek/deepseek-v4-flash': { contextWindow: 1048576, inputPricePerMTok: 0.2, outputPricePerMTok: 0.5 },
+    },
+  },
+}));
 
 describe('getModelPricing', () => {
   it('returns the standard price for a known provider/model with cache rates', () => {
@@ -68,18 +92,6 @@ describe('getModelPricing', () => {
       found: false,
       reason: 'unknown_provider',
     });
-  });
-
-  it('every vendored catalog model with a context window carries a standard price', () => {
-    // The vendored pi-ai snapshot prices every model it lists. If a future
-    // snapshot adds an unpriced model, this test pinpoints it so the pricing
-    // path can fail closed deliberately rather than silently.
-    const unpriced = Object.entries(MODEL_CATALOG).flatMap(([provider, models]) =>
-      Object.entries(models)
-        .filter(([, entry]) => entry.inputPricePerMTok === undefined)
-        .map(([model]) => `${provider}/${model}`),
-    );
-    expect(unpriced).toEqual([]);
   });
 
   it('resolves a flex tier through the overlay with the flex price', () => {

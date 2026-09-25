@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput, useStdin } from 'ink';
 import { MultilineInput } from 'ink-prompt';
 import type { ImageRef, PasteErrorReason } from 'ink-prompt';
@@ -14,7 +14,7 @@ import type { LoggingService } from '../services/logging/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
-import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueueList.js';
+import PendingQueueList, { orderPendingQueueMessages, type PendingQueueMessage } from './input/PendingQueueList.js';
 import {
   COLOR_ACCENT,
   COLOR_ACCENT_ALT,
@@ -83,7 +83,7 @@ const InputBox: FC<Props> = ({
   historyService,
   promptLabel,
   allowEmptySubmit = false,
-  pendingQueuedMessages,
+  pendingQueuedMessages: unorderedPendingQueuedMessages,
   onRetractQueuedMessage,
   onEditQueuedMessage,
   cursorOverride: propsCursorOverride,
@@ -100,6 +100,11 @@ const InputBox: FC<Props> = ({
     controller,
   } = useInputContext();
   const cursorOverride = propsCursorOverride ?? contextCursorOverride;
+  // Selection indexes into the grouped display order, not arrival order.
+  const pendingQueuedMessages = useMemo(
+    () => unorderedPendingQueuedMessages && orderPendingQueueMessages(unorderedPendingQueuedMessages),
+    [unorderedPendingQueuedMessages],
+  );
   const { stdin } = useStdin();
   const inputValueRef = useRef(value);
   const cursorOffsetRef = useRef(cursorOffset);
@@ -129,10 +134,12 @@ const InputBox: FC<Props> = ({
     setQueueSelectionIndex(next);
   }, []);
 
-  const editingQueueIndex = editingQueueItem
-    ? pendingQueuedMessages?.findIndex((message) => message.id === editingQueueItem.id)
-    : -1;
-  const activePromptLabel = editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel;
+  const editingQueueDelivery = editingQueueItem
+    ? pendingQueuedMessages?.find((message) => message.id === editingQueueItem.id)?.delivery
+    : undefined;
+  const activePromptLabel = editingQueueItem
+    ? `edit ${editingQueueDelivery === 'steer' ? 'steer' : 'queued'} ▸ `
+    : promptLabel;
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
   const { navigateUp, navigateDown } = useInputHistory(historyService);
   const remountInput = useCallback(() => setInputKey((previous) => previous + 1), []);

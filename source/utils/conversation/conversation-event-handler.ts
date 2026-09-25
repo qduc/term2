@@ -763,6 +763,7 @@ export function createConversationEventHandler(
           id: createMessageId(),
           sender: 'system',
           text: formatMemoryReceipt(event.memories),
+          memoryReceiptCount: event.memories.length,
         };
         setMessages((prev) => [...prev, systemMessage]);
         return;

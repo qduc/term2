@@ -17,7 +17,9 @@ it('renders an injected-memory receipt as a compact system message', () => {
     type: 'memory_injected',
     memories: [{ scope: 'project', id: 'coding-rule', title: 'Coding rule' }],
   });
-  expect(result).toMatchObject([{ sender: 'system', text: expect.stringContaining('coding-rule — Coding rule') }]);
+  expect(result).toMatchObject([
+    { sender: 'system', text: expect.stringContaining('coding-rule — Coding rule'), memoryReceiptCount: 1 },
+  ]);
   expect(result[0].text).toContain('Loaded 1 memory');
 });
 

@@ -333,6 +333,8 @@ type RunState = {
   supportsConversationChaining: boolean;
   /** One-shot: the next model request must be a fresh full-history inference. */
   disableChainingForAttempt?: boolean;
+  /** Oversized tool-argument trips answered with a split-the-work notice in this run. */
+  oversizedToolArgumentRecoveries?: number;
   /** Provider currently executing this continuation. */
   currentProviderId?: string;
   /** Provider that originated responseId; absent on legacy handles. */
@@ -1077,6 +1079,12 @@ export class ApplicationRunLoop {
           state.responseId = undefined;
           state.responseProviderId = undefined;
         }
+        // A per-request signal lets a recoverable guard trip cancel only this
+        // provider request; the segment signal still cancels everything.
+        const requestSignal = new AbortController();
+        const abortRequest = (): void => requestSignal.abort();
+        if (options.signal?.aborted) requestSignal.abort();
+        else options.signal?.addEventListener('abort', abortRequest, { once: true });
         const request: StreamedModelTurnRequest = {
           instructions: criticalWrapUp
             ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
@@ -1112,7 +1120,7 @@ export class ApplicationRunLoop {
                   : state.agent.modelSettings.providerData,
               }
             : {}),
-          ...(options.signal ? { signal: options.signal } : {}),
+          signal: requestSignal.signal,
           ...(state.recoveryBudget ? { recoveryBudget: state.recoveryBudget } : {}),
         };
         activeRequest = request;
@@ -1219,7 +1227,12 @@ export class ApplicationRunLoop {
           else await dispatch();
           break;
         } catch (error) {
-          if (error instanceof GenerationGuardError) requestAbortController.abort();
+          const recoverOversizedToolArgument =
+            isOversizedToolArgumentTrip(error) &&
+            (state.oversizedToolArgumentRecoveries ?? 0) < MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES &&
+            !options.signal?.aborted;
+          if (recoverOversizedToolArgument) requestSignal.abort();
+          else if (error instanceof GenerationGuardError) requestAbortController.abort();
 
           const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
             previousResponseId: activeRequest?.previousResponseId,
@@ -1239,6 +1252,24 @@ export class ApplicationRunLoop {
               });
             }
           };
+
+          if (recoverOversizedToolArgument) {
+            // No tool ran: a call is dispatched only after its arguments
+            // complete. Discard the partial response and ask for smaller calls.
+            state.oversizedToolArgumentRecoveries = (state.oversizedToolArgumentRecoveries ?? 0) + 1;
+            state.input.splice(inputLengthBefore);
+            state.history.splice(historyLengthBefore);
+            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
+            rollbackProvisionalAttempt();
+            this.#deps.logDiagnostic?.('Recovering oversized tool argument in run loop', {
+              code: (error as GenerationGuardError).code,
+              recovery: state.oversizedToolArgumentRecoveries,
+              maxRecoveries: MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES,
+            });
+            this.#queuePendingSystemNotice(oversizedToolArgumentNotice((error as GenerationGuardError).message));
+            this.#admitPendingSteers(state, stream, queue);
+            continue;
+          }
 
           if (decision.retryable && !options.signal?.aborted) {
             attempt++;
@@ -1292,6 +1323,8 @@ export class ApplicationRunLoop {
             tier: resolveServiceTier(request),
           });
           throw error;
+        } finally {
+          options.signal?.removeEventListener('abort', abortRequest);
         }
       }
 
@@ -2320,4 +2353,26 @@ function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
     return [{ type: 'message', role, content: textContent }];
   }
   return [{ type: 'message', role, content }];
+}
+
+/**
+ * A legitimate but oversized tool call (usually one large edit) trips the
+ * tool-argument caps. Unlike runaway output it is answerable: tell the model
+ * the call never ran and let it split the work, a bounded number of times.
+ */
+const MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES = 2;
+
+function isOversizedToolArgumentTrip(error: unknown): error is GenerationGuardError {
+  return (
+    error instanceof GenerationGuardError &&
+    (error.code === 'tool_argument_characters' || error.code === 'cumulative_tool_argument_characters')
+  );
+}
+
+function oversizedToolArgumentNotice(guardMessage: string): string {
+  return (
+    `Your previous response was discarded and its tool call was not executed. ${guardMessage} ` +
+    'Redo the work in smaller tool calls, each well under that limit — for example, several targeted ' +
+    'patches instead of rewriting a whole file in one call.'
+  );
 }

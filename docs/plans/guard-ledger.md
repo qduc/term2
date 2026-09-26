@@ -1178,6 +1178,55 @@ CI=1 pnpm test:provider-black-box
 PASS 19 files, 175 tests; 1 skipped
 ```
 
+### Oversized tool-argument cap: bounded split-the-work recovery
+
+Disposition: **implemented 2026-09-26 (branch `tool-arg-cap-recovery`).** A
+`gpt-6-luna` worker editing 14 files produced one tool call whose streamed
+arguments reached 100,001 characters. `GenerationGuard` stopped it correctly,
+but the trip aborted the whole run segment, so an unattended worker stalled
+with half-finished edits even though no tool had run.
+
+```text
+Harm prevented: one legitimate but oversized tool call (typically a whole-file
+  edit) ending the entire run and stranding unattended work.
+Scope and execution paths: every ApplicationRunLoop request (root, subagent,
+  non-interactive); only the tool_argument_characters and
+  cumulative_tool_argument_characters codes.
+Guard class: containment budget (unchanged cap) with a new bounded recovery.
+Enforcement owner: unchanged — GenerationGuard in ApplicationRunLoop.
+Recovery owner: ApplicationRunLoop request retry loop.
+Measured signal and observation boundary: unchanged — streamed and terminal
+  tool-argument character counts.
+Direct evidence or proxy: direct; a call is dispatched only after its
+  arguments complete, so a trip proves the call never executed.
+Legitimate work that can produce the same signal: a large but finite edit —
+  exactly the case now recovered instead of terminated.
+Configuration sources and precedence: unchanged (maxStreamOutputChars /
+  generationGuard options); recovery limit is a fixed constant of 2 per run.
+Effective default and clamping: 100,000-character caps unchanged.
+Action and why the signal justifies it: abort only that provider request via a
+  per-request signal linked to the segment signal, roll back its provisional
+  output, admit a [Mode Notice] telling the model the call was not executed
+  and to split the work, then retry. After 2 recoveries, or if the user
+  cancelled, the trip settles exactly as before (segment abort, typed error).
+Partial-work settlement: provisional text/reasoning rolled back as for other
+  in-loop retries; no incomplete tool call enters history.
+Retry, fallback, and provider-continuity semantics: the chain anchor is the
+  last completed response, so the retry keeps chaining; the notice enters
+  history and input like a steer.
+Observability fields: diagnostic "Recovering oversized tool argument in run
+  loop" with code, recovery count, max recoveries; no argument content.
+Persisted-setting migration, if any: none.
+Rollback boundary: isOversizedToolArgumentTrip branch, per-request signal, and
+  RunState.oversizedToolArgumentRecoveries in application-run-loop.ts.
+Ledger row: this section.
+```
+
+Red proof: `pnpm test source/services/agent-runtime/application-run-loop.test.ts
+-t "oversized"` failed 2 tests (run rejected instead of recovering; 1 request
+instead of 3). Other guard codes (text, reasoning, output, runaway, deadline,
+idle) keep their terminal behavior.
+
 ### GenerationStreamDeadlines total-deadline false positive (provider-neutral inactivity watchdog)
 
 Incidents: 2026-08-27 OpenRouter `z-ai/glm-5.3-flash` and 2026-08-21 Neuralwatt

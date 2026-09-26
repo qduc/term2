@@ -24,12 +24,28 @@ export function tryExecuteSlashCommand(
   text: string,
   slashCommands: readonly SlashCommand[],
   replaceInput: (value: string) => void,
+  notify: (message: string) => void = () => undefined,
 ): boolean {
+  // A slash inside a filesystem path is message text, not a command.
+  const commandLike = /^\/([A-Za-z0-9][A-Za-z0-9-]*)(?:\s|$)/.exec(text);
+  if (!commandLike) return false;
+
   const parsed = parseInput(text);
   if (parsed.type !== 'slash-command') return false;
 
   const command = resolveSlashCommand(slashCommands as SlashCommand[], parsed.commandName);
-  if (!command) return false;
+  if (!command) {
+    const candidates = slashCommands.filter((candidate) =>
+      candidate.name.toLowerCase().startsWith(parsed.commandName.toLowerCase()),
+    );
+    if (candidates.length > 1) {
+      notify(`Ambiguous command /${parsed.commandName}: ${candidates.map(({ name }) => `/${name}`).join(', ')}`);
+    } else {
+      notify(`Unknown command /${parsed.commandName}`);
+      replaceInput('');
+    }
+    return true;
+  }
 
   const shouldClearInput = command.action(parsed.args || undefined);
   if (shouldClearInput !== false) {

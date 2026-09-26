@@ -171,10 +171,7 @@ export function enhanceApiKeyError(message: string): string {
     message.includes('OPENAI_API_KEY') ||
     (message.includes('401') && message.toLowerCase().includes('unauthorized'))
   ) {
-    return (
-      'OpenAI API key is not configured or invalid. Please set the OPENAI_API_KEY environment variable. ' +
-      'Get your API key from: https://platform.openai.com/api-keys'
-    );
+    return 'The active provider API key is missing or invalid. Check the provider settings with /providers and verify its required environment variable.';
   }
   return message;
 }

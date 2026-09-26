@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import ApprovalPrompt from '../prompt/ApprovalPrompt.js';
 import ApplicationInputSurface from '../input/ApplicationInputSurface.js';
@@ -44,6 +44,8 @@ import type { PendingQueueMessage } from '../input/PendingQueueList.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { truncateTerminalText } from './terminal-text-budget.js';
+import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -227,7 +229,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   mcpConfigController,
 }) => {
   const { controller } = useInputState();
+  const terminalColumns = useTerminalColumns();
   const [dotCount, setDotCount] = useState(1);
+  const [workingElapsedSeconds, setWorkingElapsedSeconds] = useState(0);
+  const workStartedAtRef = useRef<number | null>(null);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
     thinkingStartedAt == null ? 0 : Math.max(0, Math.floor((Date.now() - thinkingStartedAt) / 1000)),
   );
@@ -245,6 +250,22 @@ const BottomArea: FC<BottomAreaProps> = ({
 
     return () => clearInterval(interval);
   }, [isProcessing]);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      workStartedAtRef.current = null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear elapsed time when the run ends
+      setWorkingElapsedSeconds(0);
+      return;
+    }
+
+    workStartedAtRef.current = thinkingStartedAt ?? Date.now();
+    const updateElapsed = () =>
+      setWorkingElapsedSeconds(Math.max(0, Math.floor((Date.now() - (workStartedAtRef.current ?? Date.now())) / 1000)));
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [isProcessing, thinkingStartedAt]);
 
   useEffect(() => {
     if (thinkingStartedAt == null) {
@@ -389,7 +410,9 @@ const BottomArea: FC<BottomAreaProps> = ({
             )}
             {isProcessing && toolCallStreamingInfo && (
               <Text color={COLOR_TEXT_SUBTLE}>
-                Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'}
+                Calling tool {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : ''}
+                {' · '}
+                {workingElapsedSeconds}s
                 {toolCallStreamingInfo.argumentCharCount != null
                   ? ` (${toolCallStreamingInfo.argumentCharCount} chars`
                   : ''}
@@ -402,12 +425,13 @@ const BottomArea: FC<BottomAreaProps> = ({
             )}
             {activeShellCommand && (
               <Text color={COLOR_TEXT_SUBTLE}>
-                Running shell command: <Text bold>{activeShellCommand}</Text>
+                Running shell command:{' '}
+                <Text bold>{truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))}</Text>
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
               <Text color={COLOR_TEXT_SUBTLE}>
-                Thinking... {thinkingElapsedSeconds}s
+                Thinking · {thinkingElapsedSeconds}s
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
                   ? ` (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
                   : ''}
@@ -416,12 +440,11 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color={COLOR_TEXT_SUBTLE}>
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? `generating (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
-                  : 'processing'}
-                {'.'.repeat(dotCount)}
+                  ? `Generating · ${workingElapsedSeconds}s (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
+                  : `Processing · ${workingElapsedSeconds}s`}
               </Text>
             )}
-            {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press ESC again to interrupt</Text>}
+            {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press Esc again to interrupt</Text>}
             <BackgroundTasksPanel
               tasks={mergeLiveTaskRows({
                 foreground:

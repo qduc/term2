@@ -390,6 +390,27 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
     .join('\n\n');
 }
 
+/**
+ * Render a provider error envelope (`{"error":{"type","message"}}`), bare or
+ * after a prefix such as an HTTP status, as `type: message`. Anything else is
+ * returned unchanged.
+ */
+function readableProviderError(errorMessage: string): string {
+  const jsonStart = errorMessage.indexOf('{');
+  if (jsonStart === -1) return errorMessage;
+  try {
+    const parsed: unknown = JSON.parse(errorMessage.slice(jsonStart));
+    const error = parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined;
+    if (!error || typeof error !== 'object') return errorMessage;
+    const { type, message } = error as { type?: unknown; message?: unknown };
+    if (typeof message !== 'string' || !message.trim()) return errorMessage;
+    const readable = `${typeof type === 'string' && type.trim() ? `${type}: ` : ''}${message}`;
+    return `${errorMessage.slice(0, jsonStart)}${readable}`;
+  } catch {
+    return errorMessage;
+  }
+}
+
 export class ConversationOrchestrator {
   private readonly createMessageId: () => string;
   readonly #directlyAppendedMessageIds = new Set<string>();
@@ -883,8 +904,10 @@ export class ConversationOrchestrator {
       // just been cleared, so saying nothing would make the user's text vanish
       // without explanation. Report the rejection and hand the text back.
       if (queueOwnsSubmission && !turnActivated) {
+        // No turn exists to retry: the text is handed back instead.
         this.appendBotError(
           `${enhanceApiKeyError(describeError(error))}\n\nThis message was not sent: ${userMessage.text}`,
+          { retryHint: false },
         );
         return;
       }
@@ -1686,12 +1709,14 @@ export class ConversationOrchestrator {
     this.config.notifier?.approvalNeeded();
   }
 
-  private appendBotError(errorMessage: string): void {
+  private appendBotError(errorMessage: string, options: { retryHint?: boolean } = {}): void {
+    const readableMessage = readableProviderError(errorMessage);
+    const recoveryHint = options.retryHint === false ? '' : '\n\nUse /retry-turn to try again.';
     const botErrorMessage: BotMessage = {
       id: this.createMessageId(),
       sender: 'bot',
       status: 'finalized',
-      text: `Error: ${errorMessage}`,
+      text: `Error: ${readableMessage}${recoveryHint}`,
     };
     this.config.messages.appendMessages([botErrorMessage]);
   }

@@ -626,7 +626,7 @@ it.sequential('StatusBar shows YOLO when mode is always and the sandbox is off',
   expect(output.includes('Sandboxed')).toBe(false);
 });
 
-it.sequential('StatusBar renders a static commit blocker warning', async () => {
+it.sequential('StatusBar hides static commit blocker details outside debug logging', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -649,9 +649,9 @@ it.sequential('StatusBar renders a static commit blocker warning', async () => {
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Static blocked command/running')).toBe(true);
-  expect(output.includes('24msg')).toBe(true);
-  expect(output.includes('18k')).toBe(true);
+  expect(output.includes('Static blocked')).toBe(false);
+  expect(output.includes('24msg')).toBe(false);
+  expect(output.includes('18k')).toBe(false);
 });
 
 it.sequential('StatusBar shows queue badge when queueLength > 0', async () => {
@@ -811,6 +811,37 @@ it.sequential('StatusBar never breaks a word across lines at a narrow width', ()
   if (output.includes(' me') || output.includes('dium')) expect(output).toContain('medium');
 });
 
+it.sequential('StatusBar preserves the complete model and safety mode across common terminal widths', () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-luna',
+    'agent.provider': 'codex',
+    'shell.autoApproveMode': 'always',
+    'sandbox.enabled': false,
+  });
+
+  for (const columns of [44, 60, 85, 120]) {
+    let output = '';
+    act(() => {
+      output = renderToString(
+        <StatusBar
+          settingsService={settingsService}
+          columns={columns}
+          lastUsage={{
+            prompt_tokens: 29_400,
+            completion_tokens: 269,
+            cache_read_tokens: 24_355,
+            tokens_per_second: 48.2,
+          }}
+        />,
+        { columns },
+      );
+    });
+    expect(output).toContain('Codex/gpt-5.6-luna');
+    expect(output).toContain('YOLO');
+    for (const line of output.split('\n')) expect(line.length).toBeLessThanOrEqual(columns);
+  }
+});
+
 it.sequential('StatusBar drops cost and cache before dropping the mode label or provider/model', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-5.6-luna',
@@ -907,7 +938,7 @@ it.sequential('StatusBar renders token streaming speed when present in lastUsage
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2t/s)');
+  expect(output).toContain('↓450 · (48.2t/s)');
 });
 
 it.sequential('StatusBar prefixes estimated token speed with a tilde', async () => {
@@ -928,7 +959,7 @@ it.sequential('StatusBar prefixes estimated token speed with a tilde', async () 
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (~48.2t/s)');
+  expect(output).toContain('↓450 · (~48.2t/s)');
 });
 
 it.sequential('StatusBar hides a burst-inflated decode rate', async () => {
@@ -971,7 +1002,7 @@ it.sequential('StatusBar shows a sustained rate', async () => {
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2t/s)');
+  expect(output).toContain('↓450 · (48.2t/s)');
 });
 
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {

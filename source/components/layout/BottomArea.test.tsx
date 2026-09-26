@@ -505,15 +505,27 @@ it.sequential('BottomArea shows processing indicator when busy with vertical spa
     isProcessing: true,
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('processing.')).toBe(true);
+  expect(output.includes('Processing · 0s')).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
   // With queue mode, input stays visible while processing so the user can queue messages
   expect(output.includes('❯')).toBe(true);
   // Expect a blank line between processing indicator and input prompt for visual breathing room
-  expect(output).toMatch(/processing\.+\n\s*\n\s*❯/);
+  expect(output).toMatch(/Processing · 0s\n\s*\n\s*❯/);
   act(() => {
     unmount();
   });
+});
+
+it.sequential('BottomArea shows the interrupt hint during a run even when the input is empty', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    interruptConfirmVisible: true,
+  });
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Press Esc again to interrupt');
+  expect(output).not.toContain('Press ESC');
+  act(() => unmount());
 });
 
 it.sequential('BottomArea advertises the manager while a shell is transferable', async () => {
@@ -546,7 +558,7 @@ it.sequential('BottomArea shows InputBox while processing when queue mode is act
   const output = lastFrame() ?? '';
   // With queue mode, InputBox shows while processing for queuing additional messages
   expect(output.includes('❯')).toBe(true);
-  expect(output.includes('processing.')).toBe(true);
+  expect(output.includes('Processing · 0s')).toBe(true);
   act(() => {
     unmount();
   });
@@ -595,7 +607,7 @@ it.sequential('BottomArea shows thinking timer when reasoning is active', async 
   });
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Thinking... 12s')).toBe(true);
+  expect(output.includes('Thinking · 12s')).toBe(true);
   expect(output.includes('processing')).toBe(false);
 
   act(() => {
@@ -668,6 +680,7 @@ it.sequential('BottomArea shows tool call streaming indicator when toolCallStrea
   expect(output.includes('Calling')).toBe(true);
   expect(output.includes('shell')).toBe(true);
   expect(output.includes('150 chars')).toBe(true);
+  expect(output.includes('· 0s')).toBe(true);
   expect(output.includes('processing')).toBe(false);
   expect(output.includes('Thinking')).toBe(false);
   act(() => {
@@ -710,7 +723,7 @@ it.sequential('BottomArea falls back to processing when toolCallStreamingInfo is
     toolCallStreamingInfo: null,
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('processing')).toBe(true);
+  expect(output.includes('Processing · 0s')).toBe(true);
   expect(output.includes('Calling')).toBe(false);
   act(() => {
     unmount();
@@ -879,7 +892,7 @@ it.sequential('BottomArea renders live streaming speed during processing, thinki
     isProcessing: true,
     liveStreamingSpeed: { tps: 45.8 },
   });
-  expect(frame1() ?? '').toContain('generating (45.8 tok/s)');
+  expect(frame1() ?? '').toContain('Generating · 0s (45.8 tok/s)');
   act(() => unmount1());
 
   // 2. Thinking with live speed
@@ -890,7 +903,7 @@ it.sequential('BottomArea renders live streaming speed during processing, thinki
     liveStreamingSpeed: { tps: 30.5 },
   });
   expect(frame2() ?? '').toContain('(30.5 tok/s)');
-  expect(frame2() ?? '').toContain('Thinking...');
+  expect(frame2() ?? '').toContain('Thinking ·');
   act(() => unmount2());
 
   // 3. Tool call with live speed
@@ -900,7 +913,7 @@ it.sequential('BottomArea renders live streaming speed during processing, thinki
     toolCallStreamingInfo: { toolName: 'read_file', argumentCharCount: 42 },
     liveStreamingSpeed: { tps: 60.2 },
   });
-  expect(frame3() ?? '').toContain('Calling read_file (42 chars · 60.2 tok/s)');
+  expect(frame3() ?? '').toContain('Calling tool read_file · 0s (42 chars · 60.2 tok/s)');
   act(() => unmount3());
 });
 

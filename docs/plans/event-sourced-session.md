@@ -57,7 +57,7 @@ Native provider compaction is a special case: the semantic log records that a pr
 ## Persistence and compatibility
 
 - New envelopes remain backward-readable v3-compatible JSON objects with optional fields; decoder accepts legacy envelopes unchanged. If adding event IDs requires a version increment, decoder must read v2/v3 and new versions, while old writers continue to read unknown optional fields.
-- Do not rewrite existing JSONL on load, compaction, fork, or upgrade. Read missing IDs using deterministic references; write IDs only on newly appended events. Validate duplicate IDs and non-monotonic sequence at the append/read seam, reporting corruption without discarding previously valid events.
+- Do not rewrite existing JSONL on load, compaction, fork, or upgrade. Read missing IDs using deterministic, per-record references; write IDs only on newly appended events. Deduplicate only repeated explicit persisted event IDs (first occurrence wins). Preserve structurally valid records with repeated or non-monotonic sequence values so legacy replay output is unchanged; sequence validation may diagnose corruption but must not filter distinct records.
 - `.deltas` is logically part of the event stream while an unsettled turn exists: preserve unified ordering and read compatibility. Clean-close deletion remains acceptable only after the deltas have been durably folded into canonical semantic events. Before changing that lifecycle, prove a crash between settlement and fold cannot lose the final transcript.
 - Existing `assistant_turn` and undo `snapshot` fields remain accepted during migration. Treat them as versioned compatibility projections, not new sources of truth. New events should persist semantic operations sufficient for replay; stop writing redundant provider-history snapshots only after replay equivalence and old-file compatibility are proven.
 - Existing `forkConversation` copies settled history; preserve this user behavior. Future fork events establish the child stream and parent refs without modifying parent bytes. Legacy fork files remain readable as-is.
@@ -72,7 +72,7 @@ Each milestone is independently mergeable. Run focused tests during work, `pnpm 
 Add optional `eventId`, immutable stream identity, validation, and deterministic legacy references at the envelope/decoder seam. Preserve the `.deltas` shared sequence and all existing v2/v3 read behavior. Do not change replay output.
 
 - Contracts: Contract 08 (envelope identity, compatibility decoding, append invariants); Contract 02 is unchanged.
-- Tests: decoder roundtrips, legacy IDs stable across repeated reads, duplicate ID and malformed-line behavior, unified canonical/sidecar ordering, fork copies preserve source IDs, and old fixtures replay identically.
+- Tests: decoder roundtrips, legacy IDs stable and unique across repeated sequences, explicit duplicate-ID and malformed-line behavior, sequence restarts and repeated sequences retained in replay, unified canonical/sidecar ordering, fork copies preserve source IDs, and old fixtures replay identically.
 - Preservation: no event rewrite or projection change; current lock, fsync, sidecar, and recovery behavior remains the authority.
 
 ### M2 — semantic event completeness and replay equivalence

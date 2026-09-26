@@ -352,28 +352,145 @@ it.sequential('forkConversation: immediately persists the fork identity, provena
   });
   expect(restored!.history).toHaveLength(2);
   expect(restored!.messages).toMatchObject([{ text: 'hello' }, { text: 'A' }]);
+  const sourceEnvelopes = fs
+    .readFileSync(path.join(testDir, `${srcId}.jsonl`), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const forkEnvelopes = fs
+    .readFileSync(path.join(testDir, `${dstId}.jsonl`), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(forkEnvelopes.slice(0, sourceEnvelopes.length).map((envelope) => envelope.eventId)).toEqual(
+    sourceEnvelopes.map((envelope) => envelope.eventId),
+  );
+  expect(forkEnvelopes.slice(0, sourceEnvelopes.length).every((envelope) => envelope.logId === srcId)).toBe(true);
+  expect(forkEnvelopes.at(-1)).toMatchObject({
+    seq: sourceEnvelopes.length + 1,
+    logId: dstId,
+    event: { id: dstId, forkedFrom: srcId },
+  });
 });
 
-it.sequential(
-  'forkConversation: rewrites every session_init so later initialization cannot restore source identity',
-  () => {
-    const srcId = persistenceModule.generateId();
-    const dstId = persistenceModule.generateId();
-    const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
-    writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
-    writer.append(assistantTurn('before re-init'));
-    writer.append({ type: 'session_init', id: srcId, createdAt: '2026-05-26T00:01:00.000Z' });
-    writer.append(assistantTurn('after re-init', 'r2'));
-    void writer.close();
+it.sequential('loadConversation: deduplicates explicit IDs but retains non-monotonic legacy records', () => {
+  const id = persistenceModule.generateId();
+  const records = [
+    { v: 3, seq: 1, ts: 't', event: { type: 'session_init', id, createdAt: 't' } },
+    {
+      v: 3,
+      seq: 2,
+      ts: 't',
+      eventId: 'same-id',
+      event: { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'kept' } },
+    },
+    {
+      v: 3,
+      seq: 4,
+      ts: 't',
+      eventId: 'same-id',
+      event: { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'duplicate' } },
+    },
+    {
+      v: 3,
+      seq: 2,
+      ts: 't',
+      eventId: 'out-of-order',
+      event: { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'out of order' } },
+    },
+    { v: 3, seq: 5, ts: 't', eventId: '', event: { type: 'session_cleared' } },
+    {
+      v: 3,
+      seq: 6,
+      ts: 't',
+      event: { type: 'user_message', message: { id: 'u4', sender: 'user', text: 'also kept' } },
+    },
+  ];
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+  );
+  expect(
+    persistenceModule.loadConversation(id)?.messages.map((message) => ('text' in message ? message.text : undefined)),
+  ).toEqual(['kept', 'out of order', 'also kept', 'Previous turn was interrupted — send a message to continue.']);
+});
 
-    expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
-    expect(persistenceModule.loadConversation(dstId)).toMatchObject({
-      id: dstId,
-      forkedFrom: srcId,
-      previousResponseId: 'r2',
-    });
-  },
-);
+it.sequential('loadConversation: replays distinct events after a sequence restart and repeated sequence', () => {
+  const id = persistenceModule.generateId();
+  const records = [
+    { v: 3, seq: 1, ts: 't', event: { type: 'session_init', id, createdAt: 't', model: 'initial' } },
+    { v: 3, seq: 2, ts: 't', event: { type: 'settings_changed', key: 'agent.model', value: 'before-resume' } },
+    { v: 3, seq: 1, ts: 't2', event: { type: 'session_init', id, createdAt: 't', model: 'resumed' } },
+    { v: 3, seq: 2, ts: 't2', event: { type: 'settings_changed', key: 'agent.model', value: 'after-resume' } },
+    { v: 3, seq: 2, ts: 't2', event: { type: 'settings_changed', key: 'agent.provider', value: 'openai' } },
+  ];
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+  );
+  expect(persistenceModule.loadConversation(id)).toMatchObject({ id, model: 'after-resume', provider: 'openai' });
+});
+
+it.sequential('loadConversation: preserves valid legacy envelopes beginning at sequence zero', () => {
+  const id = persistenceModule.generateId();
+  const records = [
+    {
+      v: 3,
+      seq: 0,
+      ts: 't',
+      event: { type: 'session_init', id, createdAt: 't', projectPath: '/project' },
+    },
+    {
+      v: 3,
+      seq: 1,
+      ts: 't',
+      event: {
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'legacy answer' }] },
+        state: { previousResponseId: null },
+      },
+    },
+  ];
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+  );
+  expect(persistenceModule.loadConversation(id)).toMatchObject({
+    id,
+    projectPath: '/project',
+    messages: [{ text: 'legacy answer' }],
+  });
+});
+
+it.sequential('forkConversation: appends child lineage without rewriting inherited session identities', () => {
+  const srcId = persistenceModule.generateId();
+  const dstId = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
+  writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append(assistantTurn('before re-init'));
+  writer.append({ type: 'session_init', id: srcId, createdAt: '2026-05-26T00:01:00.000Z' });
+  writer.append(assistantTurn('after re-init', 'r2'));
+  void writer.close();
+
+  expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
+  const copied = fs
+    .readFileSync(path.join(testDir, `${dstId}.jsonl`), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(
+    copied
+      .slice(0, 4)
+      .map((record) => record.event.id)
+      .filter(Boolean),
+  ).toEqual([srcId, srcId]);
+  expect(copied.at(-1).event).toMatchObject({ id: dstId, forkedFrom: srcId });
+  expect(persistenceModule.loadConversation(dstId)).toMatchObject({
+    id: dstId,
+    forkedFrom: srcId,
+    previousResponseId: 'r2',
+  });
+});
 
 it.sequential('forkConversation: terminates a partial trailing record before subsequent writer appends', async () => {
   const srcId = persistenceModule.generateId();

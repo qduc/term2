@@ -81,10 +81,21 @@ history (`history-service.ts`), and log decoding and replay recovery
 
 ## 4. Identities and state crossing the boundary
 
-- **Envelope Record:** `LogEnvelope` (`{ v: 3, seq: number, ts: string, event: LogEvent }`)
+- **Envelope Record:** `LogEnvelope` (`{ v: 3, seq: number, ts: string, logId?: string, eventId?: string, event: LogEvent }`)
   (`conversation-log-events.ts:1-25`).
 - **Monotonic Sequence (`seq`):** A shared integer counter strictly increasing across both
   canonical `<id>.jsonl` and sidecar `<id>.deltas` files.
+- **Event identity:** New appends persist `logId` (the immutable stream ID, currently the session ID) and
+  a generated `eventId` on the envelope before writing it. Existing envelopes remain readable without either
+  optional field; malformed optional identity metadata is ignored without discarding an otherwise valid event.
+  The conversation reader resolves a missing identity as `{ logId, eventId: legacy:<logId>:<seq> }`; later
+  missing-ID occurrences of the same stream sequence receive deterministic `:<occurrence>` suffixes.
+  Canonical file order is retained; when `.deltas` is merged, stable sequence order is used, with canonical
+  records before sidecar records on equal sequences. Only a repeated explicit persisted `eventId` is
+  deduplicated (first occurrence wins). Structurally valid records with repeated or non-monotonic `seq` remain
+  in the read stream and replay projection. Fork copies keep inherited envelope identities and append a child
+  `session_init` envelope with branch provenance;
+  later child appends use the child session ID as their new stream ID.
 - **Lockfile Payload:** `{ pid: number, startedAt: string, host: string }` (`conversation-log-writer.ts:246`).
 - **File Descriptors:** `#fd` (canonical append descriptor) and `#deltaFd` (lazy sidecar descriptor).
 - **Failure Latch:** `#failure` (unwrapped original error stored on critical write failure) and

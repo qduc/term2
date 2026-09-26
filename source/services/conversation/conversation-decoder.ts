@@ -8,6 +8,45 @@ import type { Message } from '../../types/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
 
+/** Materialize stable references without collapsing distinct legacy records. */
+export function resolveEnvelopeIdentities(
+  envelopes: readonly PersistedLogEnvelope[],
+  fallbackLogId: string,
+  options: { deduplicateExplicitEventIds?: boolean } = {},
+): PersistedLogEnvelope[] {
+  const deduplicateExplicitEventIds = options.deduplicateExplicitEventIds ?? true;
+  const reservedIds = new Set(envelopes.flatMap((envelope) => (envelope.eventId ? [envelope.eventId] : [])));
+  const usedIds = new Set<string>();
+  const seenExplicitIds = new Set<string>();
+  const legacyOccurrences = new Map<string, number>();
+  const resolved: PersistedLogEnvelope[] = [];
+
+  for (const envelope of envelopes) {
+    const logId = envelope.logId ?? fallbackLogId;
+    if (envelope.eventId) {
+      if (deduplicateExplicitEventIds && seenExplicitIds.has(envelope.eventId)) continue;
+      seenExplicitIds.add(envelope.eventId);
+      usedIds.add(envelope.eventId);
+      resolved.push({ ...envelope, logId });
+      continue;
+    }
+
+    const occurrenceKey = JSON.stringify([logId, envelope.seq]);
+    let occurrence = (legacyOccurrences.get(occurrenceKey) ?? 0) + 1;
+    let eventId =
+      occurrence === 1 ? `legacy:${logId}:${envelope.seq}` : `legacy:${logId}:${envelope.seq}:${occurrence}`;
+    while (reservedIds.has(eventId) || usedIds.has(eventId)) {
+      occurrence += 1;
+      eventId = `legacy:${logId}:${envelope.seq}:${occurrence}`;
+    }
+    legacyOccurrences.set(occurrenceKey, occurrence);
+    usedIds.add(eventId);
+    resolved.push({ ...envelope, logId, eventId });
+  }
+
+  return resolved;
+}
+
 type UnknownObject = Record<string, unknown>;
 
 const isObject = (value: unknown): value is UnknownObject => typeof value === 'object' && value !== null;
@@ -183,7 +222,6 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
   const v = typeof obj['v'] === 'number' ? obj['v'] : 1;
   const seq = typeof obj['seq'] === 'number' ? obj['seq'] : 0;
   const ts = typeof obj['ts'] === 'string' ? obj['ts'] : '';
-
   let event: PersistedLogEvent;
   if (eventObj['truncated'] === true) {
     const truncatedEvent: TruncatedLogEvent = {
@@ -200,6 +238,8 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     v,
     seq,
     ts,
+    ...(typeof obj['logId'] === 'string' && obj['logId'].length > 0 ? { logId: obj['logId'] } : {}),
+    ...(typeof obj['eventId'] === 'string' && obj['eventId'].length > 0 ? { eventId: obj['eventId'] } : {}),
     event,
   };
 }

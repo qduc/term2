@@ -1,4 +1,5 @@
 import fs from 'fs';
+import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
 import type { ILoggingService } from '../service-interfaces.js';
@@ -116,13 +117,13 @@ function ensureDir(fileSystem: WriterFileSystem, dir: string): void {
   }
 }
 
-const RECOVERY_CHUNK_BYTES = 64 * 1024;
+const RECOVERY_CHUNK_BYTES = 32 * 1024;
 const MAX_RECOVERY_LINE_BYTES = MAX_EVENT_BYTES * 2;
 
 function decodeSequence(line: string): number | null {
   try {
     const envelope = decodeLogEnvelope(JSON.parse(line));
-    return envelope && Number.isSafeInteger(envelope.seq) && envelope.seq > 0 ? envelope.seq : null;
+    return envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0 ? envelope.seq : null;
   } catch {
     return null;
   }
@@ -188,6 +189,9 @@ function readLogTailState(
     // oversized lines remain skippable, keeping recovery memory bounded.
     let lineEnd = needsLineBreak ? size : size - 1;
     let isFinalLine = true;
+    let highWaterSeq = 0;
+    let newestSeq: number | null = null;
+    let detectedSequenceRegression = false;
     while (lineEnd > 0) {
       const lineStart = findLineStart(fileSystem, fd, lineEnd);
       const lineLength = lineEnd - lineStart;
@@ -197,13 +201,30 @@ function readLogTailState(
       if (lineLength <= MAX_RECOVERY_LINE_BYTES || (isFinalLine && !needsLineBreak)) {
         const line = readLine(fileSystem, fd, lineStart, lineLength);
         const seq = decodeSequence(line);
-        if (seq !== null) return { seq, needsLineBreak };
+        if (seq !== null) {
+          if (newestSeq === null) {
+            newestSeq = seq;
+            highWaterSeq = seq;
+          } else if (seq > newestSeq) {
+            detectedSequenceRegression = true;
+            highWaterSeq = Math.max(highWaterSeq, seq);
+          } else if (!detectedSequenceRegression) {
+            // The immediate tail is monotonic; preserve the bounded fast path.
+            return { seq: newestSeq, needsLineBreak };
+          } else {
+            highWaterSeq = Math.max(highWaterSeq, seq);
+          }
+        } else if (newestSeq !== null && !detectedSequenceRegression) {
+          // Older legacy/malformed records carry no usable sequence. They do
+          // not justify an unbounded scan before a valid sequenced tail.
+          return { seq: newestSeq, needsLineBreak };
+        }
       }
       if (lineStart === 0) break;
       lineEnd = lineStart - 1;
       isFinalLine = false;
     }
-    return { seq: 0, needsLineBreak };
+    return { seq: highWaterSeq, needsLineBreak };
   } finally {
     fileSystem.closeSync(fd);
   }
@@ -395,6 +416,8 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       v: LOG_ENVELOPE_VERSION,
       seq: ++this.#seq,
       ts: new Date().toISOString(),
+      logId: this.#sessionId,
+      eventId: crypto.randomUUID(),
       event: sanitizedEvent,
     };
     const line = JSON.stringify(envelope) + '\n';

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../logging/conversation-log-events.js';
 import { replayEvents } from './conversation-replay.js';
-import { decodeLogEnvelope, decodeSavedMessage } from './conversation-decoder.js';
+import { decodeLogEnvelope, decodeSavedMessage, resolveEnvelopeIdentities } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
@@ -2173,6 +2173,68 @@ it('decodeLogEnvelope and decodeSavedMessage: validate structure while retaining
   });
   expect(savedMsg).not.toBe(null);
   expect(savedMsg?.id).toBe('msg-1');
+});
+
+it('decodeLogEnvelope: roundtrips optional event and stream identities', () => {
+  const value = {
+    v: LOG_ENVELOPE_VERSION,
+    seq: 7,
+    ts: '2026-01-01T00:00:00Z',
+    logId: 'stream-a',
+    eventId: 'event-a',
+    event: { type: 'session_cleared' },
+  };
+  expect(decodeLogEnvelope(value)).toEqual(value);
+});
+
+it('decodeLogEnvelope: ignores malformed optional identities without dropping the event', () => {
+  const decoded = decodeLogEnvelope({
+    v: 3,
+    seq: 2,
+    ts: 'old',
+    logId: '',
+    eventId: 42,
+    event: { type: 'session_cleared' },
+  });
+  expect(decoded).toMatchObject({ seq: 2, event: { type: 'session_cleared' } });
+  expect(decoded).not.toHaveProperty('logId');
+  expect(decoded).not.toHaveProperty('eventId');
+});
+
+it('resolveEnvelopeIdentities: repeated legacy sequences get stable distinct references', () => {
+  const firstEnvelope = decodeLogEnvelope({ v: 3, seq: 12, ts: 'old', event: { type: 'session_cleared' } })!;
+  const secondEnvelope = decodeLogEnvelope({ v: 3, seq: 12, ts: 'old2', event: { type: 'session_cleared' } })!;
+  const envelopes = [firstEnvelope, secondEnvelope];
+  const firstRead = resolveEnvelopeIdentities(envelopes, 'session-a');
+  const secondRead = resolveEnvelopeIdentities(envelopes, 'session-a');
+  expect(firstRead).toEqual(secondRead);
+  expect(firstRead.map((envelope) => [envelope.logId, envelope.eventId])).toEqual([
+    ['session-a', 'legacy:session-a:12'],
+    ['session-a', 'legacy:session-a:12:2'],
+  ]);
+  expect(resolveEnvelopeIdentities(envelopes, 'session-b')[0]?.eventId).not.toBe(firstRead[0]?.eventId);
+});
+
+it('resolveEnvelopeIdentities: only repeated explicit event IDs are deduplicated', () => {
+  const first = decodeLogEnvelope({
+    v: 3,
+    seq: 1,
+    ts: 'first',
+    eventId: 'persisted-1',
+    event: { type: 'session_cleared' },
+  })!;
+  const repeated = decodeLogEnvelope({
+    v: 3,
+    seq: 1,
+    ts: 'second',
+    eventId: 'persisted-1',
+    event: { type: 'session_cleared' },
+  })!;
+  const distinctLegacy = decodeLogEnvelope({ v: 3, seq: 1, ts: 'third', event: { type: 'session_cleared' } })!;
+  expect(resolveEnvelopeIdentities([first, repeated, distinctLegacy], 'stream')).toMatchObject([
+    { eventId: 'persisted-1' },
+    { eventId: 'legacy:stream:1' },
+  ]);
 });
 
 // Step 2 of docs/plans/openai-context-compaction.md: an opaque provider item

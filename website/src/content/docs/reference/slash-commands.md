@@ -29,6 +29,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/resume`** | `[conversation-id\|ls]` | Resume a saved conversation or browse conversations. |
 | **`/handoff`** | — | Hand off the last assistant response to another model. |
 | **`/providers`** | — | Open interactive provider manager (list, add, edit, remove providers or switch OAuth accounts). |
+| **`/mcp`** | — | Show configured MCP servers and their connection state. |
 | **`/skills`** | `[skill-name]` | Activate a skill for the next request. |
 | **`/settings`** | `[key] [value]` | View or modify runtime configuration settings. |
 | **`/clear`** | — | Clear current conversation history and start a fresh session. |

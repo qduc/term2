@@ -18,8 +18,7 @@ description: Complete reference of keyboard shortcuts in term2.
 | `Ctrl + T` | Composer | Open reasoning effort selection menu. |
 | `Ctrl + G` | Global / Composer | Toggle Background Task Manager. |
 | `Shift + Tab` | Global / Composer | Toggle between Standard and Plan operating mode. |
-| `Escape` | Composer (typing) | Clear composer text buffer. |
-| `Double Escape` | Active Turn | Interrupt and cancel the active generation and tool execution. |
+| `Escape` | Composer | First press shows an Escape hint; a second press clears typed text. With an empty composer during a turn, double Escape interrupts the turn. |
 | `Up` / `Down` | Composer (empty) | Navigate input history (or queued messages if any are pending). |
 | `Ctrl + C` | Global | Emergency exit with session usage summary. |
 
@@ -27,8 +26,7 @@ description: Complete reference of keyboard shortcuts in term2.
 
 | Shortcut | Context | Action |
 | :--- | :--- | :--- |
-| `y` | Tool Approval | Approve proposed action. |
-| `n` | Tool Approval | Reject proposed action and prompt for optional reason (`Why? `). |
+| `y` / `n` | Docker host-control approval | Approve once / reject. Other tool approvals use the numbered choices shown in the prompt. |
 | `Escape` | Rejection Prompt | Cancel rejection reason prompt. |
 | `Enter` | Rejection Prompt | Submit rejection reason to model. |
 

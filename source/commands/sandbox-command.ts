@@ -14,7 +14,7 @@ export function createSandboxSlashCommand({
 }: CreateSandboxSlashCommandDeps): SlashCommand {
   return {
     name: 'sandbox',
-    description: 'Toggle shell sandbox mode (restricts shell operations to a secure environment)',
+    description: 'Toggle shell sandboxing; disabling it gives shell commands unrestricted access',
     action: () => {
       const currentValue = settingsService.get('sandbox.enabled');
       const newValue = !currentValue;

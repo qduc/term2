@@ -84,6 +84,7 @@ export const useInputHistory = (historyService: HistoryService) => {
   );
 
   return {
+    isNavigating: historyIndex !== -1,
     navigateUp,
     navigateDown,
     reset,

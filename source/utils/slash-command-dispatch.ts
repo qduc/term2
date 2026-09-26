@@ -2,6 +2,24 @@ import { parseInput } from './input-parser.js';
 import { resolveSlashCommand } from '../slash-commands.js';
 import type { SlashCommand } from '../slash-commands.js';
 
+const editDistance = (left: string, right: string): number => {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= left.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= right.length; column += 1) {
+      const above = previous[column];
+      previous[column] = Math.min(
+        previous[column] + 1,
+        previous[column - 1] + 1,
+        diagonal + (left[row - 1] === right[column - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[right.length];
+};
+
 /**
  * The one place that decides whether a fully-formed piece of text is a slash
  * command to execute locally versus ordinary content. Both the primary
@@ -24,12 +42,34 @@ export function tryExecuteSlashCommand(
   text: string,
   slashCommands: readonly SlashCommand[],
   replaceInput: (value: string) => void,
+  notify: (message: string) => void = () => undefined,
 ): boolean {
+  // A slash inside a filesystem path is message text, not a command.
+  const commandLike = /^\/([A-Za-z0-9][A-Za-z0-9-]*)(?:\s|$)/.exec(text);
+  if (!commandLike) return false;
+
   const parsed = parseInput(text);
   if (parsed.type !== 'slash-command') return false;
 
   const command = resolveSlashCommand(slashCommands as SlashCommand[], parsed.commandName);
-  if (!command) return false;
+  if (!command) {
+    const candidates = slashCommands.filter((candidate) =>
+      candidate.name.toLowerCase().startsWith(parsed.commandName.toLowerCase()),
+    );
+    if (candidates.length > 1) {
+      notify(`Ambiguous command /${parsed.commandName}: ${candidates.map(({ name }) => `/${name}`).join(', ')}`);
+    } else {
+      const nearby = slashCommands
+        .map(({ name }) => ({ name, distance: editDistance(parsed.commandName.toLowerCase(), name.toLowerCase()) }))
+        .filter(({ distance }) => distance <= Math.max(2, Math.floor(parsed.commandName.length / 3)))
+        .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+        .slice(0, 3);
+      const suggestions = nearby.length ? `. Did you mean ${nearby.map(({ name }) => `/${name}`).join(', ')}?` : '';
+      // Keep the typed text so a typo can be fixed in place.
+      notify(`Unknown command /${parsed.commandName}${suggestions}`);
+    }
+    return true;
+  }
 
   const shouldClearInput = command.action(parsed.args || undefined);
   if (shouldClearInput !== false) {

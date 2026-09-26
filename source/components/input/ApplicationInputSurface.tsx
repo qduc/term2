@@ -2,6 +2,7 @@ import React, { FC, useEffect } from 'react';
 import { useInput } from 'ink';
 import InputBox from '../InputBox.js';
 import { useInputContext } from '../../context/InputContext.js';
+import { useInputHistory } from '../../hooks/use-input-history.js';
 import { useSlashCommands } from '../../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
@@ -62,6 +63,7 @@ const emptyConversations = async (): Promise<ConversationListEntry[]> => [];
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
   const enabled = props.enabled ?? true;
   const { controller, interactions, stack, cursorOffset, cursorOverride, setCursorOverride } = useInputContext();
+  const historyNavigation = useInputHistory(props.historyService);
   const slash = useSlashCommands({ commands: props.slashCommands, onClose: () => {} });
   const path = usePathCompletion({ loggingService: props.loggingService });
   const settings = useSettingsCompletion(props.settingsService);
@@ -121,6 +123,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     settingsService: props.settingsService,
     loggingService: props.loggingService,
     slash,
+    historyNavigation,
     path,
     skills,
     profiles,
@@ -155,6 +158,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
   return (
     <InputBox
       {...inputBoxProps}
+      historyNavigation={historyNavigation}
       // A newly mounted editor must receive the post-menu cursor in its first
       // render; waiting for an effect lets ink-prompt initialize at the end.
       cursorOverride={cursorOverride !== null ? cursorOffset : null}

@@ -851,7 +851,7 @@ describe('App orchestration', () => {
     });
   });
 
-  it.sequential('falls through unknown slash commands to guarded send', async () => {
+  it.sequential('blocks unknown slash commands from guarded send', async () => {
     const services = createServices();
 
     await renderInAct(
@@ -862,10 +862,7 @@ describe('App orchestration', () => {
       await mocks.bottomAreaProps.onSubmit({ text: '/unknown command', images: [] });
     });
 
-    expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith({
-      text: '/unknown command',
-      images: [],
-    });
+    expect(mocks.submitTurnForAdmission).not.toHaveBeenCalled();
   });
 
   it.sequential('routes a controller submit-prompt intent through admission', async () => {

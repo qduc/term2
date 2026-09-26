@@ -19,7 +19,7 @@ export function createModelSlashCommand({
 }: CreateModelSlashCommandDeps): SlashCommand {
   return {
     name: 'model',
-    description: 'Change the AI model (Ctrl+O, e.g. /model gpt-4)',
+    description: 'Choose or set the AI model (Ctrl+O; use /model <model-id>)',
     expectsArgs: true,
     completion: { type: 'model', trigger: MODEL_CMD_TRIGGER },
     action: (args?: string) => {

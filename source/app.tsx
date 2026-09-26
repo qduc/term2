@@ -1154,6 +1154,7 @@ const App: FC<AppProps> = ({
 
   const { interruptConfirmVisible, markRejectionReasonInputReady } = useAppKeyboardShortcuts({
     exitWithUsage,
+    onCtrlCConfirmHint: (message) => addSystemMessage(message),
     pendingSkillRef,
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
     setWaitingForAskUserAnswer,
@@ -1235,10 +1236,10 @@ const App: FC<AppProps> = ({
         if (hasImages) {
           break;
         }
-        if (tryExecuteSlashCommand(value, slashCommands, replaceInput)) {
+        if (tryExecuteSlashCommand(value, slashCommands, replaceInput, addSystemMessage)) {
           return;
         }
-        // Command not found, fall through to send as message
+        // Non-command slash text (including paths) remains a normal message.
         break;
       }
 
@@ -1293,7 +1294,7 @@ const App: FC<AppProps> = ({
         // as ordinary content — otherwise a resolved command like `/model`
         // would be posted to the model as a literal chat message instead of
         // being executed.
-        if (tryExecuteSlashCommand(intentRequest.intent.text, slashCommands, replaceInput)) {
+        if (tryExecuteSlashCommand(intentRequest.intent.text, slashCommands, replaceInput, addSystemMessage)) {
           return;
         }
         void submitAdmittedTurn({ text: intentRequest.intent.text });

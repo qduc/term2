@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     isActive: boolean;
   }>,
   exitWithUsage: vi.fn(),
+  onCtrlCConfirmHint: vi.fn(),
   pendingSkillRef: { current: null as { name: string } | null },
   setWaitingForAskUserAnswer: vi.fn(),
   setWaitingForRejectionReason: vi.fn(),
@@ -61,6 +62,7 @@ const createProps = (
   overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {},
 ): Parameters<typeof useAppKeyboardShortcuts>[0] => ({
   exitWithUsage: mocks.exitWithUsage,
+  onCtrlCConfirmHint: mocks.onCtrlCConfirmHint,
   pendingSkillRef: mocks.pendingSkillRef as any,
   waitingForAskUserAnswer: false,
   setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
@@ -91,6 +93,7 @@ const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboard
 beforeEach(() => {
   mocks.useInputHandlers = [];
   mocks.exitWithUsage.mockReset();
+  mocks.onCtrlCConfirmHint.mockReset();
   mocks.pendingSkillRef.current = null;
   mocks.setWaitingForAskUserAnswer.mockReset();
   mocks.setWaitingForRejectionReason.mockReset();
@@ -104,13 +107,38 @@ beforeEach(() => {
   mocks.onSkillActivationCancelled.mockReset();
 });
 
-it.sequential('exits immediately on Ctrl+C', async () => {
-  await renderHarness();
+it.sequential('Ctrl+C clears a draft first and exits only on a second press', async () => {
+  await renderHarness({ inputValue: 'draft' });
   const before = mocks.exitWithUsage.mock.calls.length;
+
+  await fireInput('c', { ctrl: true });
+  expect(mocks.exitWithUsage.mock.calls.length).toBe(before);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('');
 
   await fireInput('c', { ctrl: true });
 
   expect(mocks.exitWithUsage.mock.calls.length).toBe(before + 1);
+});
+
+it.sequential('Ctrl+C interrupts a running turn before arming exit', async () => {
+  await renderHarness({ isProcessing: true });
+  await fireInput('c', { ctrl: true });
+  expect(mocks.stopProcessing).toHaveBeenCalledTimes(1);
+  expect(mocks.exitWithUsage).not.toHaveBeenCalled();
+});
+
+it.sequential('Ctrl+C shows an exit hint when idle with an empty draft', async () => {
+  await renderHarness();
+  await fireInput('c', { ctrl: true });
+  expect(mocks.onCtrlCConfirmHint).toHaveBeenCalledTimes(1);
+  expect(mocks.onCtrlCConfirmHint).toHaveBeenCalledWith('Press Ctrl+C again to exit');
+  expect(mocks.exitWithUsage).not.toHaveBeenCalled();
+});
+
+it.sequential('Ctrl+\\ remains an immediate emergency exit', async () => {
+  await renderHarness();
+  await fireInput('\\', { ctrl: true });
+  expect(mocks.exitWithUsage).toHaveBeenCalledTimes(1);
 });
 
 it.sequential('cancels pending skill activation on Escape', async () => {
@@ -288,6 +316,7 @@ it.sequential('Ctrl+C still exits (global) while a prompt owns input', async () 
   await renderHarness({ inputOwner: { kind: 'approval' } });
   const before = mocks.exitWithUsage.mock.calls.length;
 
+  await fireInput('c', { ctrl: true });
   await fireInput('c', { ctrl: true });
 
   expect(mocks.exitWithUsage.mock.calls.length).toBe(before + 1);

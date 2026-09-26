@@ -32,6 +32,7 @@ export type UseAppKeyboardShortcutsResult = {
 
 export type UseAppKeyboardShortcutsOptions = {
   exitWithUsage: () => void;
+  onCtrlCConfirmHint?: (message: string) => void;
   pendingSkillRef: MutableRefObject<SkillInfo | null>;
   waitingForAskUserAnswer: boolean;
   setWaitingForAskUserAnswer: (value: boolean) => void;
@@ -68,6 +69,7 @@ export type UseAppKeyboardShortcutsOptions = {
 
 export const useAppKeyboardShortcuts = ({
   exitWithUsage,
+  onCtrlCConfirmHint,
   pendingSkillRef,
   waitingForAskUserAnswer,
   setWaitingForAskUserAnswer,
@@ -100,6 +102,8 @@ export const useAppKeyboardShortcuts = ({
   const interruptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const approvalDecisionConsumedRef = useRef(false);
   const rejectionReasonBridgeRef = useRef<string | null>(null);
+  const ctrlCArmedRef = useRef(false);
+  const ctrlCTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const disarmInterrupt = (): void => {
     armedRef.current = false;
@@ -134,6 +138,7 @@ export const useAppKeyboardShortcuts = ({
     submitRejectionReason,
     inputOwner,
     exitWithUsage,
+    onCtrlCConfirmHint,
   });
 
   stateRef.current = {
@@ -160,6 +165,7 @@ export const useAppKeyboardShortcuts = ({
     submitRejectionReason,
     inputOwner,
     exitWithUsage,
+    onCtrlCConfirmHint,
   };
 
   const markRejectionReasonInputReady = useCallback(() => {
@@ -181,6 +187,31 @@ export const useAppKeyboardShortcuts = ({
   const handleGlobalInput = useCallback((input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]) => {
     const current = stateRef.current;
     if (key.ctrl && input === 'c') {
+      if (ctrlCArmedRef.current) {
+        ctrlCArmedRef.current = false;
+        if (ctrlCTimeoutRef.current) clearTimeout(ctrlCTimeoutRef.current);
+        ctrlCTimeoutRef.current = null;
+        current.exitWithUsage();
+        return;
+      }
+
+      if (current.inputValue.length > 0) {
+        current.replaceInput('');
+      } else if (current.isProcessing || current.waitingForApproval) {
+        current.stopProcessing();
+      } else {
+        current.onCtrlCConfirmHint?.('Press Ctrl+C again to exit');
+      }
+      ctrlCArmedRef.current = true;
+      if (ctrlCTimeoutRef.current) clearTimeout(ctrlCTimeoutRef.current);
+      ctrlCTimeoutRef.current = setTimeout(() => {
+        ctrlCArmedRef.current = false;
+        ctrlCTimeoutRef.current = null;
+      }, 2000);
+      return;
+    }
+    // SIGQUIT-style escape hatch when the app is wedged and cannot interrupt.
+    if (key.ctrl && input === '\\') {
       current.exitWithUsage();
       return;
     }
@@ -350,6 +381,7 @@ export const useAppKeyboardShortcuts = ({
   useEffect(
     () => () => {
       if (interruptTimeoutRef.current) clearTimeout(interruptTimeoutRef.current);
+      if (ctrlCTimeoutRef.current) clearTimeout(ctrlCTimeoutRef.current);
     },
     [],
   );

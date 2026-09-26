@@ -63,7 +63,17 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
       if (!enabled || controller.getSnapshot().stack.length === 0) return;
       if (isFocusReportingSequence(_input)) return;
 
-      if (key.upArrow) {
+      const historyNavigation = services.historyNavigation as
+        | {
+            isNavigating: boolean;
+            navigateUp: (text: string) => { text: string } | null;
+            navigateDown: () => { text: string } | null;
+          }
+        | undefined;
+      if (activeFrame?.kind === 'slash' && historyNavigation?.isNavigating && (key.upArrow || key.downArrow)) {
+        const next = key.upArrow ? historyNavigation.navigateUp(input) : historyNavigation.navigateDown();
+        if (next) controller.replaceText(next.text, next.text.length);
+      } else if (key.upArrow) {
         dispatch({ type: 'move', direction: 'up' });
       } else if (key.downArrow) {
         dispatch({ type: 'move', direction: 'down' });

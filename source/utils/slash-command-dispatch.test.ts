@@ -38,12 +38,48 @@ describe('tryExecuteSlashCommand', () => {
     expect(replaceInput).not.toHaveBeenCalled();
   });
 
-  it('returns false for a slash-shaped command name that is not registered', () => {
+  it('consumes an unregistered command name but keeps the typed text to fix', () => {
     const replaceInput = vi.fn();
 
     const handled = tryExecuteSlashCommand('/nonexistent foo', [], replaceInput);
 
-    expect(handled).toBe(false);
+    expect(handled).toBe(true);
     expect(replaceInput).not.toHaveBeenCalled();
+  });
+
+  it('consumes unknown command names and reports nearby candidates', () => {
+    const replaceInput = vi.fn();
+    const notify = vi.fn();
+    const handled = tryExecuteSlashCommand(
+      '/re',
+      [
+        { name: 'resume', description: 'Resume', action: vi.fn() },
+        { name: 'rewind', description: 'Rewind', action: vi.fn() },
+      ],
+      replaceInput,
+      notify,
+    );
+    expect(handled).toBe(true);
+    expect(notify).toHaveBeenCalledWith('Ambiguous command /re: /resume, /rewind');
+    expect(replaceInput).not.toHaveBeenCalled();
+  });
+
+  it('does not treat paths with further slashes as commands', () => {
+    const notify = vi.fn();
+    expect(tryExecuteSlashCommand('/tmp/foo is broken', [], vi.fn(), notify)).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('blocks unknown command-like first tokens from falling through as chat', () => {
+    const notify = vi.fn();
+    expect(tryExecuteSlashCommand('/exot', [], vi.fn(), notify)).toBe(true);
+    expect(notify).toHaveBeenCalledWith('Unknown command /exot');
+  });
+
+  it('suggests nearby command names for mistyped commands', () => {
+    const notify = vi.fn();
+    const commands: SlashCommand[] = [{ name: 'model', description: 'Model', action: vi.fn() }];
+    tryExecuteSlashCommand('/modle', commands, vi.fn(), notify);
+    expect(notify).toHaveBeenCalledWith('Unknown command /modle. Did you mean /model?');
   });
 });

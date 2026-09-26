@@ -38,7 +38,7 @@ it('createResumeSlashCommand returns correct command metadata', () => {
   const { command: cmd } = createHarness();
 
   expect(cmd.name).toBe('resume');
-  expect(cmd.description).toBe('Resume a saved conversation (browse with /resume)');
+  expect(cmd.description).toBe('Browse saved conversations or resume one by ID');
   expect(cmd.expectsArgs).toBe(true);
   expect(cmd.completion).toEqual({
     type: 'resume',

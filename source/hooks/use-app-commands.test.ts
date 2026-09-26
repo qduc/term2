@@ -236,6 +236,27 @@ const TestHookWrapper = ({
   return null;
 };
 
+it.sequential('/help lists commands and useful keyboard shortcuts without duplicate rewind rows', async () => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+  const messages: string[] = [];
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onSystemMessage: (text) => messages.push(text),
+    }),
+  );
+  const help = hookResult.slashCommands.find((command: any) => command.name === 'help');
+  expect(help.action()).toBe(true);
+  expect(messages[0]).toContain('/model —');
+  expect(messages[0]).toContain('Shift+Tab');
+  expect(messages[0]).toContain('/rewind —');
+  expect(messages[0]).not.toContain('/undo —');
+});
+
 it.sequential('useAppCommands registers /rewind with its aliases and the separate tool retry', async () => {
   const settings = new Map<string, any>();
   let hookResult: any;
@@ -272,7 +293,7 @@ it.sequential('useAppCommands gives /retry a resend default and /undo an edit de
 
   const find = (name: string) => hookResult.slashCommands.find((command: any) => command.name === name);
   expect(find('retry').description).toContain('resend');
-  expect(find('undo').description).toContain('input box');
+  expect(find('undo').description).toContain('return to the input');
 });
 
 it.sequential('useAppCommands blocks conversation-mutating commands while a turn is in flight', async () => {
@@ -417,6 +438,29 @@ it.sequential('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard'
     hookResult.cycleAppModes();
   });
   expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
+});
+
+it.sequential('useAppCommands requires the Lite confirmation before Shift+Tab changes profile', async () => {
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:lite']]);
+  const requestModeSwitchConfirm = vi.fn();
+  let hookResult: any;
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'user-1', sender: 'user', text: 'hello' } as any],
+      requestModeSwitchConfirm,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+  await act(async () => hookResult.cycleAppModes());
+  expect(settings.get('app.activeProfileId')).toBe('builtin:lite');
+  expect(requestModeSwitchConfirm).toHaveBeenCalledWith({
+    targetProfileId: 'builtin:plan',
+    modeLabel: 'Plan',
+    targetValue: true,
+  });
 });
 
 it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode', async () => {

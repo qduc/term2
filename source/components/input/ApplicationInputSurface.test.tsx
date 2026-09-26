@@ -12,11 +12,15 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { RESUME_TRIGGER } from './triggers.js';
 
 const inputBoxMounts = { mounted: 0, unmounted: 0 };
+let inputBoxProps: any;
+let historyTurns: Array<{ text: string }> = [];
 
 vi.mock('../InputBox.js', () => ({
-  default: function MockInputBox() {
+  default: function MockInputBox(props: any) {
+    inputBoxProps = props;
     useEffect(() => {
       inputBoxMounts.mounted += 1;
       return () => {
@@ -40,12 +44,21 @@ const loggingService = {
 
 const historyService = {
   getMessages: () => [],
-  getTurns: () => [],
+  getTurns: () => historyTurns,
   addMessage: () => {},
   clear: () => {},
 } as unknown as HistoryService;
 
-const slashCommands: SlashCommand[] = [{ name: '/clear', description: 'Clear', action: () => {} }];
+const slashCommands: SlashCommand[] = [
+  { name: 'clear', description: 'Clear', action: () => {} },
+  {
+    name: 'resume',
+    description: 'Browse conversations',
+    action: () => {},
+    expectsArgs: true,
+    completion: { type: 'resume', trigger: RESUME_TRIGGER },
+  },
+];
 
 const renderSurface = async (controller: MenuControllerImpl) => {
   const result = await renderInAct(
@@ -94,6 +107,36 @@ it.sequential('routes Escape through the active slash session and clears the tri
 
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(controller.getSnapshot().editor.text).toBe('');
+});
+
+it.sequential('Escape from the /resume picker clears its command text', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin, unmount } = await renderSurface(controller);
+  act(() => controller.applyEditorEdit({ type: 'set-text', text: RESUME_TRIGGER, cursor: RESUME_TRIGGER.length }));
+  await waitForInputSurface(() => controller.getSnapshot().stack.at(-1)?.kind === 'resume', 'resume menu open');
+  await act(async () => stdin.write('\u001b'));
+  await waitForInputSurface(
+    () => controller.getSnapshot().stack.length === 0 && controller.getSnapshot().editor.text === '',
+    'resume menu close',
+  );
+  act(() => unmount());
+});
+
+it.sequential('Up and Down continue history navigation when a recalled slash entry opens its menu', async () => {
+  historyTurns = [{ text: '/help' }, { text: '/resume' }];
+  const controller = new MenuControllerImpl();
+  const { stdin, unmount } = await renderSurface(controller);
+  const recalled = inputBoxProps.historyNavigation.navigateUp('');
+  act(() => controller.applyEditorEdit({ type: 'set-text', text: recalled.text, cursor: recalled.text.length }));
+  await waitForInputSurface(() => controller.getSnapshot().stack.at(-1)?.kind === 'slash', 'slash menu open');
+  expect(controller.getSnapshot().editor.text).toBe('/resume');
+  await act(async () => stdin.write('\u001b[A'));
+  expect(controller.getSnapshot().editor.text).toBe('/help');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('slash');
+  await act(async () => stdin.write('\u001b[B'));
+  expect(controller.getSnapshot().editor.text).toBe('/resume');
+  act(() => unmount());
+  historyTurns = [];
 });
 
 it.sequential('unmounts InputBox while a menu is visible and restores the empty stack after close', async () => {

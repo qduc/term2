@@ -10,9 +10,17 @@ interface ModeHelpersDeps {
   settingsService: SettingsService;
   transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
+  messages?: { sender: string }[];
+  requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }
 
-export function useModeHelpers({ settingsService, transitionService, addSystemMessage }: ModeHelpersDeps) {
+export function useModeHelpers({
+  settingsService,
+  transitionService,
+  addSystemMessage,
+  messages = [],
+  requestModeSwitchConfirm,
+}: ModeHelpersDeps) {
   const togglePlanMode = useCallback(() => {
     const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
     transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
@@ -21,11 +29,22 @@ export function useModeHelpers({ settingsService, transitionService, addSystemMe
 
   const cycleAppModes = useCallback(() => {
     const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
+    const currentProfileId = resolveActiveProfile(settingsService).identity.id;
+    const targetProfileId = isPlan ? 'builtin:standard' : 'builtin:plan';
+    const hasHistory = messages.some((message) => message.sender !== 'system');
+    if (currentProfileId === 'builtin:lite' && hasHistory) {
+      if (requestModeSwitchConfirm) {
+        requestModeSwitchConfirm({ targetProfileId, modeLabel: 'Plan', targetValue: true });
+      } else {
+        addSystemMessage('Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first.');
+      }
+      return;
+    }
     transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
     addSystemMessage(
       `Switched to ${isPlan ? 'Standard' : 'Plan'} mode${isPlan ? '' : ' - read-only research/planning mode'}`,
     );
-  }, [settingsService, transitionService, addSystemMessage]);
+  }, [settingsService, transitionService, addSystemMessage, messages, requestModeSwitchConfirm]);
 
   return { togglePlanMode, cycleAppModes };
 }

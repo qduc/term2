@@ -33,7 +33,7 @@ export function createResumeSlashCommand({
 }: CreateResumeSlashCommandDeps): SlashCommand {
   return {
     name: 'resume',
-    description: 'Resume a saved conversation (browse with /resume)',
+    description: 'Browse saved conversations or resume one by ID',
     expectsArgs: true,
     completion: { type: 'resume', trigger: RESUME_TRIGGER },
     action: (args?: string) => {

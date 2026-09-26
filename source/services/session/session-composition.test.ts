@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { it, expect, vi } from 'vitest';
 import {
   createConversationSession as createProductionConversationSession,
@@ -11,6 +14,9 @@ import { MockStream } from '../test-helpers/mock-stream.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { createConversationLogWriter } from '../logging/conversation-log-writer.js';
+import { readConversationLogEnvelopes, setConversationsDirForTest } from '../conversation/conversation-persistence.js';
+import { replayEvents } from '../conversation/conversation-replay.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
@@ -153,6 +159,64 @@ it('manual local compaction commits checkpoint plus hot tail and retains genuine
   ]);
   expect(stored.filter((item) => item.contextSummary)).toHaveLength(1);
   expect(stored.slice(-4)).toEqual(history.slice(-4));
+});
+
+it('journals exact summarized source events without changing replay or covering the hot tail', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-checkpoint-'));
+  setConversationsDirForTest(dir);
+  const sessionId = 'checkpoint-provenance';
+  const writer = createConversationLogWriter({ sessionId, dir, logger: makeLogger() as any });
+  writer.init({ id: sessionId, createdAt: new Date().toISOString() });
+  try {
+    const runtime = createConversationSession({
+      sessionId,
+      agentClient: makeMockClient({ chat: async () => 'summary of cold turns' }),
+      deps: { logger: makeLogger(), sessionContextService },
+    });
+    const history = Array.from({ length: 4 }, (_, index) => [
+      { role: 'user' as const, type: 'message' as const, content: `user-${index}` },
+      { role: 'assistant' as const, type: 'message' as const, content: `answer-${index}` },
+    ]).flat();
+    runtime.stateFacade.importState({ history, previousResponseId: null });
+    history.forEach((item, index) => {
+      if (item.role === 'user') {
+        writer.append({
+          type: 'user_message',
+          message: { id: `u-${index}`, sender: 'user', text: item.content as string },
+        });
+      } else {
+        writer.append({
+          type: 'assistant_turn',
+          turn: { items: [{ type: 'assistant_text', text: item.content as string }] },
+        });
+      }
+    });
+    runtime.conversationLogger.setLogSink((event) => writer.append(event));
+    const before = readConversationLogEnvelopes(sessionId)!;
+    const beforeReplay = replayEvents(before);
+
+    const result = await runtime.compactContext();
+
+    expect(result.kind).toBe('compacted');
+    const after = readConversationLogEnvelopes(sessionId)!;
+    const checkpointEvents = after.filter((entry) => entry.event.type === 'context_checkpoint_created');
+    expect(checkpointEvents).toHaveLength(1);
+    const sourceRefs = (
+      checkpointEvents[0].event as Extract<(typeof after)[number]['event'], { type: 'context_checkpoint_created' }>
+    ).sourceRefs;
+    const summarized = before.slice(1, 5).map(({ logId, eventId }) => ({ logId, eventId }));
+    expect(sourceRefs).toEqual(summarized);
+    expect(after.filter((entry) => sourceRefs.some((ref) => ref.eventId === entry.eventId))).toHaveLength(4);
+    expect(sourceRefs.some((ref) => ref.eventId === before[5].eventId || ref.eventId === before[6].eventId)).toBe(
+      false,
+    );
+    expect(replayEvents(after)).toEqual(beforeReplay);
+    runtime.dispose();
+  } finally {
+    await writer.close();
+    setConversationsDirForTest(null);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 it('manual local compaction reports model-request input tokens before and after', async () => {

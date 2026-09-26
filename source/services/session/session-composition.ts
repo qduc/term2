@@ -11,6 +11,8 @@ import { estimateContext, type ContextEstimate } from '../agent-runtime/context-
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { replayEvents } from '../conversation/conversation-replay.js';
+import { resolveCheckpointSourceRefs } from '../conversation/conversation-checkpoint-provenance.js';
+import { readConversationLogEnvelopes, generateId } from '../conversation/conversation-persistence.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
@@ -21,7 +23,7 @@ import {
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
-import type { AssistantTurnState, LogEvent } from '../logging/conversation-log-events.js';
+import type { AssistantTurnState, EventReference, LogEvent } from '../logging/conversation-log-events.js';
 import type {
   AskUserAnswerSink,
   ConversationAgentClient,
@@ -592,6 +594,40 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       );
     },
   });
+  const appendLocalCheckpoint = (input: {
+    history: readonly ProviderInputItem[];
+    hotTail: readonly ProviderInputItem[];
+    checkpoint: ProviderInputItem;
+  }): void => {
+    const envelopes = readConversationLogEnvelopes(identity.current);
+    const sourceRefs: EventReference[] | null = envelopes
+      ? resolveCheckpointSourceRefs({ envelopes, history: input.history, hotTail: input.hotTail })
+      : null;
+    if (!sourceRefs) {
+      logger.warn('Local context compaction committed without a provenance event; source refs were unavailable', {
+        eventType: 'context_compaction.provenance_unavailable',
+        sessionId: identity.current,
+      });
+      return;
+    }
+    conversationLogger.log({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: generateId(),
+      sourceRefs,
+      item: input.checkpoint,
+    });
+  };
+  getMethod<
+    [
+      (input: {
+        history: readonly ProviderInputItem[];
+        hotTail: readonly ProviderInputItem[];
+        checkpoint: ProviderInputItem;
+      }) => void,
+    ],
+    void
+  >(agentClient, 'setLocalCheckpointSink')?.call(agentClient, appendLocalCheckpoint);
   openAIRootFreshTurnSelectorParityObserver?.setEvidenceRecorder?.((evidence) => {
     try {
       conversationLogger.log(evidence);
@@ -1142,6 +1178,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     ) {
       return { kind: 'stale' };
     }
+    appendLocalCheckpoint({ history: snapshot.history, hotTail: outcome.hotTail, checkpoint: outcome.checkpoint });
     providerContinuity.clear();
     return outcome;
   };

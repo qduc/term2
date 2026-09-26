@@ -7,12 +7,6 @@ import { validateCommandSafety } from '../../utils/shell/command-safety/index.js
 import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
-import {
-  setTrimConfig,
-  getTrimConfig,
-  DEFAULT_TRIM_CONFIG,
-  type OutputTrimConfig,
-} from '../../utils/output/output-trim.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
 import type { PostExecutePauseDescriptor, SchemaToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
@@ -148,9 +142,6 @@ export type ShellToolDefinition = Omit<
   execute: (params: ShellToolParams, context?: unknown, details?: unknown) => Promise<string>;
   postExecutePause?: PostExecutePauseDescriptor<ShellToolParams>;
 };
-
-// Re-export trim utilities for backwards compatibility
-export { setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig };
 
 interface ShellCommandResult {
   command: string;

@@ -2,13 +2,7 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import { homedir } from 'node:os';
 import util from 'util';
-import {
-  trimOutput,
-  setTrimConfig,
-  getTrimConfig,
-  DEFAULT_TRIM_CONFIG,
-  type OutputTrimConfig,
-} from '../../utils/output/output-trim.js';
+import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -51,9 +45,6 @@ const searchParametersSchema = z.object({
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
-
-// Re-export trim utilities for backwards compatibility
-export { setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig };
 
 import { ExecutionContext } from '../../services/execution-context.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';

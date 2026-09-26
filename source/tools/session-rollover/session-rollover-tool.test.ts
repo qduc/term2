@@ -26,6 +26,18 @@ describe('session_rollover tool', () => {
     expect(tool.description).toContain('Next open step');
     expect(tool.description).toContain('constraints');
   });
+
+  it('asks for durable state before the call, in the workspace rather than /tmp', () => {
+    // Most rollovers happen before any milestone reminder fires, so the tool
+    // description is the only save-first guidance every caller sees.
+    const tool = createSessionRolloverToolDefinition(() => ({
+      ok: true,
+      status: 'rollover_requested',
+      rolloverId: 'r',
+    }));
+    expect(tool.description).toContain('Before calling');
+    expect(tool.description).toContain('/tmp');
+  });
   it('validates the bounded strict request and records it without approval', async () => {
     const request = vi.fn(() => ({ ok: true as const, status: 'rollover_requested' as const, rolloverId: 'r1' }));
     const tool = createSessionRolloverToolDefinition(request);

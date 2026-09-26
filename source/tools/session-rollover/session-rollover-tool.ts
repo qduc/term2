@@ -29,7 +29,9 @@ export function createSessionRolloverToolDefinition(
   return {
     name: 'session_rollover',
     description:
-      'Request an idle-boundary rotation into a fresh session. The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
+      'Request an idle-boundary rotation into a fresh session. ' +
+      'Before calling, save state the successor must not lose and the brief cannot hold (plans, findings, task state) to a durable artifact in the workspace, such as a plan doc, notes file, memory, or commit, and point to it from the brief. Do not use /tmp for this; it does not survive a reboot. ' +
+      'The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
       '- Goal and done condition, plus user constraints and preferences that still apply.\n' +
       '- Completed effects with durable pointers (paths, commits, docs), marking what is verified versus assumed.\n' +
       '- Working knowledge that is costly to rediscover: diagnosis, root causes, key files and symbols, and approaches ruled out with why.\n' +

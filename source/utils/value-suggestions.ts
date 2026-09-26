@@ -19,6 +19,15 @@ export type SettingValueSuggestion = {
 
 const MAX_RESULTS = 10;
 
+export const AUTO_APPROVE_MODE_DESCRIPTIONS = {
+  off: 'Show approval prompts for tool calls; in-workspace apply-patch edits remain automatic.',
+  advisory:
+    'Use an LLM to assess shell-command risk, but do not auto-approve based on that assessment; in-workspace apply-patch edits remain automatic.',
+  auto: 'Auto-approve explicitly or implicitly authorized shell commands rated low or medium risk with high confidence by the LLM; in-workspace apply-patch edits remain automatic.',
+  always:
+    'Bypass tool approval prompts; ask_user still pauses for your answer. In-workspace apply-patch edits are automatic in every mode.',
+} as const;
+
 const CURATED_PROVIDER_DESCRIPTIONS: Record<string, string> = {
   openai: 'OpenAI official API',
   openrouter: 'OpenRouter.ai',
@@ -108,8 +117,8 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '2', description: 'Most random' },
   ],
   'shell.timeout': [
-    { value: '60000', description: '60s' },
-    { value: '120000', description: '120s' },
+    { value: '60000', description: '1m' },
+    { value: '120000', description: '2m' },
     { value: '300000', description: '5m' },
   ],
   'shell.backgroundTimeout': [
@@ -194,10 +203,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   ],
   'ssh.port': [{ value: '22', description: 'Default SSH port' }],
   'shell.autoApproveMode': [
-    { value: 'off', description: 'Disabled' },
-    { value: 'advisory', description: 'LLM provides safety analysis' },
-    { value: 'auto', description: 'Full auto-approval (CAUTION)' },
-    { value: 'always', description: 'YOLO - allow all, no approval (DANGEROUS)' },
+    { value: 'off', description: AUTO_APPROVE_MODE_DESCRIPTIONS.off },
+    { value: 'advisory', description: AUTO_APPROVE_MODE_DESCRIPTIONS.advisory },
+    { value: 'auto', description: AUTO_APPROVE_MODE_DESCRIPTIONS.auto },
+    { value: 'always', description: AUTO_APPROVE_MODE_DESCRIPTIONS.always },
   ],
   'sandbox.readPolicy': [
     {
@@ -254,6 +263,17 @@ function autoSuggestFromSchema(key: string): SettingValueSuggestion[] {
  * auto-generated suggestions derived from the Zod schema (enum values, boolean).
  */
 export function buildSettingValueSuggestions(key: string): SettingValueSuggestion[] {
+  if (key === 'agent.reasoningEffort') {
+    return [
+      { value: 'none', description: 'No reasoning tokens' },
+      { value: 'minimal', description: 'Use the least reasoning effort' },
+      { value: 'low', description: 'Use low reasoning effort' },
+      { value: 'medium', description: 'Use medium reasoning effort' },
+      { value: 'high', description: 'Use high reasoning effort' },
+      { value: 'xhigh', description: 'Use extra-high reasoning effort' },
+      { value: 'default', description: 'Use the model default' },
+    ];
+  }
   if (isProviderSettingKey(key)) {
     return buildProviderSuggestions();
   }

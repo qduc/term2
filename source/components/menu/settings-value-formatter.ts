@@ -26,6 +26,12 @@ export function truncateKeepingTail(key: string, max: number): string {
   if (key.length <= max) return key;
   const firstDot = key.indexOf('.');
   const leaf = key.slice(key.lastIndexOf('.') + 1);
+  if (leaf.length > max - 1) {
+    const boundary = [...leaf.matchAll(/[A-Z]/g)]
+      .map((match) => match.index!)
+      .find((index) => leaf.length - index <= max - 1);
+    return `…${boundary === undefined ? leaf : leaf.slice(boundary)}`;
+  }
   // Keep the first segment only when the whole leaf name still fits after it.
   const head = firstDot > 0 && firstDot + 2 + leaf.length <= max ? key.slice(0, firstDot + 1) : '';
   const tailLength = Math.max(0, max - head.length - 1);

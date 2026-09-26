@@ -66,7 +66,9 @@ it('action with valid mode updates settings and applies runtime setting', () => 
   expect(result).toBe(true);
   expect(settings['shell.autoApproveMode']).toBe('auto');
   expect(applied['shell.autoApproveMode']).toBe('auto');
-  expect(messages).toEqual(['Tool auto-approval mode set to: AUTO']);
+  expect(messages[0]).toContain('Tool auto-approval mode set to: AUTO.');
+  expect(messages[0]).toContain('rated low or medium risk with high confidence by the LLM');
+  expect(messages[0]).toContain('in-workspace apply-patch edits remain automatic');
 });
 
 it('action with always mode shows special YOLO warning', () => {
@@ -77,7 +79,7 @@ it('action with always mode shows special YOLO warning', () => {
   expect(settings['shell.autoApproveMode']).toBe('always');
   expect(applied['shell.autoApproveMode']).toBe('always');
   expect(messages[0]).toContain('ALWAYS');
-  expect(messages[0]).toContain('Sandbox disabled');
+  expect(messages[0]).toMatch(/in-workspace apply-patch edits are automatic in every mode/i);
 });
 
 it('action handles mixed case and surrounding whitespace', () => {
@@ -87,7 +89,7 @@ it('action handles mixed case and surrounding whitespace', () => {
   expect(result).toBe(true);
   expect(settings['shell.autoApproveMode']).toBe('advisory');
   expect(applied['shell.autoApproveMode']).toBe('advisory');
-  expect(messages).toEqual(['Tool auto-approval mode set to: ADVISORY']);
+  expect(messages[0]).toContain('Tool auto-approval mode set to: ADVISORY.');
 });
 
 it('action with invalid mode returns error message and does not change settings', () => {

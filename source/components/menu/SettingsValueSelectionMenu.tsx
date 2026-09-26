@@ -1,6 +1,8 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { isSecretSetting, isStringSetting, type SettingValueSuggestion } from '../../utils/value-suggestions.js';
+import { formatSettingDisplayValue } from './settings-value-formatter.js';
+import { isDurationSetting } from '../../services/settings/settings-ui-metadata.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
@@ -38,6 +40,12 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   const acceptsTypedValue = acceptsAnyString || Boolean(isNumericSettings);
   const showNeutralEmpty = items.length === 0 && acceptsTypedValue;
   const selectedItem = items[selectedIndex];
+  const title =
+    settingKey === 'agent.reasoningEffort'
+      ? 'Reasoning effort'
+      : settingKey === 'shell.autoApproveMode'
+      ? 'Auto-approve mode'
+      : undefined;
   const canCopySuggestion = items.length > 0 && !isSecretSetting(settingKey);
 
   const header = (currentText !== undefined || defaultText !== undefined || unitHint) && (
@@ -49,7 +57,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           </>
         )}
         {currentText !== undefined && defaultText !== undefined && ' · '}
-        {defaultText !== undefined && (
+        {defaultText !== undefined && !(settingKey === 'agent.reasoningEffort' && defaultText === 'default') && (
           <>
             Default: <Text color={COLOR_TEXT}>{defaultText}</Text>
           </>
@@ -68,6 +76,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         items={items}
         selectedIndex={selectedIndex}
         borderColor={items.length === 0 && !showNeutralEmpty ? COLOR_DANGER : COLOR_ACCENT}
+        title={title}
         fallbackText={
           showNeutralEmpty ? (
             <Box flexDirection="column">
@@ -99,7 +108,9 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           <Box key={item.value}>
             <SelectionMarker selected={isSelected} />
             <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT} bold={isSelected}>
-              {item.value}
+              {isDurationSetting(settingKey)
+                ? formatSettingDisplayValue(settingKey, Number(item.value)).text
+                : item.value}
             </Text>
           </Box>
         )}
@@ -115,7 +126,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         hints={[
           ...(items.length > 0 ? [['↑↓', 'choose'] as const] : []),
           ['⏎', 'apply'],
-          ...(canCopySuggestion ? [['Tab', 'copy into field'] as const] : []),
+          ...(canCopySuggestion ? [['Tab', 'use value'] as const] : []),
           ['Ctrl+D', `reset ${defaultText !== undefined ? `to ${defaultText}` : 'to default'}`],
           ['esc', 'back'],
         ]}

@@ -1,6 +1,7 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { AUTO_APPROVE_TRIGGER } from '../components/input/triggers.js';
+import { AUTO_APPROVE_MODE_DESCRIPTIONS } from '../utils/value-suggestions.js';
 
 interface CreateAutoApproveSlashCommandDeps {
   settingsService: SettingsService;
@@ -43,13 +44,9 @@ export function createAutoApproveSlashCommand({
       settingsService.set('shell.autoApproveMode', newValue);
       applyRuntimeSetting('shell.autoApproveMode', newValue);
 
-      if (newValue === 'always') {
-        addSystemMessage(
-          'Tool auto-approval mode set to: ALWAYS. Sandbox disabled — every tool runs without a permission prompt (YOLO). Clarifying questions still use ask_user.',
-        );
-      } else {
-        addSystemMessage(`Tool auto-approval mode set to: ${newValue.toUpperCase()}`);
-      }
+      addSystemMessage(
+        `Tool auto-approval mode set to: ${newValue.toUpperCase()}. ${AUTO_APPROVE_MODE_DESCRIPTIONS[newValue]}`,
+      );
       return true;
     },
   };

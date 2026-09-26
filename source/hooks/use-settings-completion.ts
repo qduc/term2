@@ -134,7 +134,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
 
   useEffect(() => {
     setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [query]);
+    setSelectedIndex(0);
+  }, [query, setSelectedIndex]);
 
   const switchCategory = useCallback(
     (direction: 'next' | 'prev' = 'next') => {

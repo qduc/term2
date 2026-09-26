@@ -777,9 +777,10 @@ describe('ApplicationRunLoop generation guard', () => {
       generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
     } as any);
     await expect(streaming.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
-    expect(streaming.output).toEqual([
-      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 8 },
-    ]);
+    // Recovery attempts roll back their provisional output, and the
+    // over-limit delta never reaches the stream.
+    const deltas = streaming.output.filter((event: any) => event.type === 'tool_call_streaming_delta');
+    expect(deltas).toEqual([{ type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 8 }]);
 
     const terminalModel: StreamedModelTurn = {
       async *stream() {
@@ -794,6 +795,75 @@ describe('ApplicationRunLoop generation guard', () => {
       generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
     } as any);
     await expect(terminal.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+  });
+
+  it('recovers from an oversized tool argument by asking the model to split the work', async () => {
+    const requests: Array<{ input: unknown[]; signal?: AbortSignal }> = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push({ input: [...(request.input as unknown[])], signal: request.signal });
+        if (requests.length === 1) {
+          yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 8 };
+          yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 11 };
+          return;
+        }
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-after-recovery',
+          output: [{ type: 'message' as const, role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }],
+        } as any;
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
+    } as any);
+
+    await expect(stream.completed).resolves.toBeDefined();
+    expect(requests).toHaveLength(2);
+    // Only the oversized request is cancelled; the run and its retry stay live.
+    expect(requests[0]!.signal?.aborted).toBe(true);
+    expect(requests[1]!.signal?.aborted).toBe(false);
+    const notice = JSON.stringify(requests[1]!.input.at(-1));
+    expect(notice).toContain('[Mode Notice]');
+    expect(notice).toContain('was not executed');
+    expect(notice).toContain('smaller tool calls');
+    expect(JSON.stringify(requests[0]!.input)).not.toContain('[Mode Notice]');
+  });
+
+  it('does not recover an oversized tool argument after the user cancels', async () => {
+    const userAbort = new AbortController();
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        calls++;
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 8 };
+        userAbort.abort();
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 11 };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      signal: userAbort.signal,
+      generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
+    } as any);
+
+    await expect(stream.completed).rejects.toBeDefined();
+    expect(calls).toBe(1);
+  });
+
+  it('stops recovering oversized tool arguments after two attempts', async () => {
+    let calls = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        calls++;
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 11 };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
+    } as any);
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+    expect(calls).toBe(3);
   });
 
   it('cancels a chained Luna request with one unfinished high-rate tiny-delta tool call', async () => {

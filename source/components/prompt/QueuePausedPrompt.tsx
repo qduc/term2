@@ -18,15 +18,14 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
       return;
     }
 
-    if (input === 'd' || input === 'D') {
+    if (input === 'x' || input === 'X') {
       onDiscard();
       return;
     }
 
-    if (key.escape) {
-      onDiscard();
-      return;
-    }
+    // Esc only dismisses the pause notice through its owner; queue contents
+    // remain intact unless the user chooses the explicit discard key.
+    if (key.escape) return;
   });
 
   return (
@@ -38,8 +37,8 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
       <MenuFooter
         hints={[
           ['r', 'resume'],
-          ['d', 'discard'],
-          ['esc', 'discard'],
+          ['x', 'discard'],
+          ['Esc', 'close'],
         ]}
       />
     </Box>

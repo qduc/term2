@@ -12,7 +12,8 @@ it.sequential('QueuePausedPrompt renders queue count and resume/discard options'
 
   const output = lastFrame() ?? '';
   expect(output.includes('Queue paused: 3 item(s) pending.')).toBe(true);
-  expect(output.includes('r resume │ d discard │ esc discard')).toBe(true);
+  expect(output.includes('r resume')).toBe(true);
+  expect(output.includes('x discard')).toBe(true);
   expect(output.includes('⏸')).toBe(false);
   act(() => {
     unmount();
@@ -69,7 +70,7 @@ it.sequential('QueuePausedPrompt calls onResume on r key', async () => {
   });
 });
 
-it.sequential('QueuePausedPrompt calls onDiscard on d key', async () => {
+it.sequential('QueuePausedPrompt calls onDiscard on x key', async () => {
   let discarded = false;
 
   const { stdin, unmount } = await renderInAct(
@@ -84,7 +85,7 @@ it.sequential('QueuePausedPrompt calls onDiscard on d key', async () => {
   );
 
   act(() => {
-    stdin.write('d');
+    stdin.write('x');
   });
   await new Promise((resolve) => setImmediate(resolve));
 
@@ -92,4 +93,38 @@ it.sequential('QueuePausedPrompt calls onDiscard on d key', async () => {
   act(() => {
     unmount();
   });
+});
+
+it.sequential('QueuePausedPrompt Esc leaves queued messages intact', async () => {
+  let discarded = false;
+  const { stdin, unmount } = await renderInAct(
+    <QueuePausedPrompt
+      queueLength={1}
+      onResume={() => {}}
+      onDiscard={() => {
+        discarded = true;
+      }}
+    />,
+  );
+  act(() => stdin.write('\u001b'));
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(discarded).toBe(false);
+  act(() => unmount());
+});
+
+it.sequential('QueuePausedPrompt uses x as the explicit discard key', async () => {
+  let discarded = false;
+  const { stdin, unmount } = await renderInAct(
+    <QueuePausedPrompt
+      queueLength={1}
+      onResume={() => {}}
+      onDiscard={() => {
+        discarded = true;
+      }}
+    />,
+  );
+  act(() => stdin.write('x'));
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(discarded).toBe(true);
+  act(() => unmount());
 });

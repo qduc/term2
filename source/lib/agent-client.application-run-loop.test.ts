@@ -1266,6 +1266,73 @@ describe('AgentClient application-run-loop execution', () => {
 });
 
 describe('AgentClient codex session-history compaction', () => {
+  it('uses provider-reported prompt size to gate native compaction on chained turns', async () => {
+    providers.add('codex');
+    const calls: string[] = [];
+    let ordinaryRequests = 0;
+    const compactHistory = vi.fn(async () => {
+      calls.push('compact');
+      return { history: [{ type: 'message', role: 'user', content: 'compacted' }] };
+    });
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex chained compaction fixture',
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          compactHistory,
+          async *stream() {
+            calls.push('request');
+            ordinaryRequests += 1;
+            yield {
+              type: 'completion' as const,
+              responseId: `chained-${ordinaryRequests}`,
+              usage: { inputTokens: 250_000 },
+              output:
+                ordinaryRequests === 1
+                  ? [{ type: 'tool_call' as const, id: 'call-1', name: 'echo', arguments: '{"value":"done"}' }]
+                  : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+            };
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+    const instance = client(
+      'codex',
+      {
+        agentOverride: {
+          name: 'override',
+          model: 'gpt-6-luna',
+          instructions: 'test',
+          tools: [
+            {
+              name: 'echo',
+              description: 'echo',
+              parameters: z.object({ value: z.string() }),
+              needsApproval: () => false,
+              execute: ({ value }: { value: string }) => value,
+            },
+          ],
+        },
+      },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'auto',
+        'agent.contextCompaction.compactThreshold': 0.8,
+      },
+    );
+    try {
+      await (
+        await instance.startStream('short chained-turn delta')
+      ).completed;
+      expect(compactHistory).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual(['request', 'compact', 'request']);
+    } finally {
+      instance.dispose();
+    }
+  });
+
   const coldHistory = [
     { role: 'user', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
     { role: 'assistant', type: 'message', content: 'cold answer' },

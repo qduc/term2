@@ -227,6 +227,7 @@ export class AgentClient {
     history: readonly ProviderInputItem[];
     model: string;
     automaticCompactionsThisRun: number;
+    lastCompletedInputTokens?: number;
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
     manual: boolean;
@@ -246,13 +247,20 @@ export class AgentClient {
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
     });
+    const measuredInputTokens = Math.max(input.lastCompletedInputTokens ?? 0, estimate.renderedInputTokens);
     if (!input.manual) {
-      if (!threshold.available || estimate.renderedInputTokens < threshold.effectiveThreshold) {
+      if (!threshold.available || measuredInputTokens < threshold.effectiveThreshold) {
+        this.#logger.debug('Codex native compaction threshold not reached', {
+          model: input.model,
+          measuredInputTokens,
+          estimatedInputTokens: estimate.renderedInputTokens,
+          effectiveThreshold: threshold.available ? threshold.effectiveThreshold : undefined,
+        });
         return { kind: 'unchanged' };
       }
       const deferred = shouldDeferAutomaticCompaction({
         automaticCompactionsThisRun: input.automaticCompactionsThisRun,
-        renderedInputTokens: estimate.renderedInputTokens,
+        renderedInputTokens: measuredInputTokens,
         hasCompleteNewUserTurn: true,
       });
       if (deferred) return { kind: 'unchanged' };
@@ -325,6 +333,7 @@ export class AgentClient {
             history,
             model,
             automaticCompactionsThisRun,
+            lastCompletedInputTokens,
             signal,
             onStarted,
             manual: false,

@@ -2,7 +2,7 @@
 // Do not edit manually. Run `pnpm catalog:update` to regenerate.
 export const CATALOG_META = {
   schemaVersion: 2,
-  generatedAt: '2026-09-23T01:24:24.558Z',
+  generatedAt: '2026-09-25T12:38:43.808Z',
   source: 'pi-ai@0.87.1',
 } as const;
 
@@ -17,7 +17,7 @@ export interface GeneratedCatalogModel {
 
 export const MODEL_CATALOG = {
   openai: {
-    'gpt-4': {
+    'chat:gpt-4': {
       contextWindow: 8192,
       maxTokens: 8192,
       inputPricePerMTok: 30,
@@ -25,7 +25,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4-turbo': {
+    'chat:gpt-4-turbo': {
       contextWindow: 128000,
       maxTokens: 4096,
       inputPricePerMTok: 10,
@@ -33,7 +33,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4.1': {
+    'chat:gpt-4.1': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 2,
@@ -41,7 +41,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4.1-mini': {
+    'chat:gpt-4.1-mini': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.4,
@@ -49,7 +49,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4.1-nano': {
+    'chat:gpt-4.1-nano': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.1,
@@ -57,7 +57,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4o': {
+    'chat:gpt-4o': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -65,7 +65,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4o-2024-05-13': {
+    'chat:gpt-4o-2024-05-13': {
       contextWindow: 128000,
       maxTokens: 4096,
       inputPricePerMTok: 5,
@@ -73,7 +73,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4o-2024-08-06': {
+    'chat:gpt-4o-2024-08-06': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -81,7 +81,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4o-2024-11-20': {
+    'chat:gpt-4o-2024-11-20': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -89,7 +89,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-4o-mini': {
+    'chat:gpt-4o-mini': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.15,
@@ -97,7 +97,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5': {
+    'chat:gpt-5': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -105,7 +105,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5-chat-latest': {
+    'chat:gpt-5-chat-latest': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 1.25,
@@ -113,7 +113,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5-mini': {
+    'chat:gpt-5-mini': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.25,
@@ -121,7 +121,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5-nano': {
+    'chat:gpt-5-nano': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.05,
@@ -129,7 +129,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.005,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5-pro': {
+    'chat:gpt-5-pro': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 15,
@@ -137,7 +137,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.1': {
+    'chat:gpt-5.1': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -145,7 +145,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.2': {
+    'chat:gpt-5.2': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -153,7 +153,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.2-chat-latest': {
+    'chat:gpt-5.2-chat-latest': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 1.75,
@@ -161,7 +161,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.2-pro': {
+    'chat:gpt-5.2-pro': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 21,
@@ -169,7 +169,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.3-chat-latest': {
+    'chat:gpt-5.3-chat-latest': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 1.75,
@@ -177,7 +177,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.3-codex': {
+    'chat:gpt-5.3-codex': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -185,7 +185,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.3-codex-spark': {
+    'chat:gpt-5.3-codex-spark': {
       contextWindow: 128000,
       maxTokens: 32000,
       inputPricePerMTok: 1.75,
@@ -193,7 +193,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.4': {
+    'chat:gpt-5.4': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -201,7 +201,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.4-mini': {
+    'chat:gpt-5.4-mini': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.75,
@@ -209,7 +209,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.4-nano': {
+    'chat:gpt-5.4-nano': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -217,7 +217,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.4-pro': {
+    'chat:gpt-5.4-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 30,
@@ -225,7 +225,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.5': {
+    'chat:gpt-5.5': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -233,7 +233,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.5-pro': {
+    'chat:gpt-5.5-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 30,
@@ -241,7 +241,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.6-luna': {
+    'chat:gpt-5.6-luna': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -249,7 +249,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0.25,
     },
-    'gpt-5.6-sol': {
+    'chat:gpt-5.6-sol': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 4,
@@ -257,7 +257,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.4,
       cacheWritePricePerMTok: 5,
     },
-    'gpt-5.6-terra': {
+    'chat:gpt-5.6-terra': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -265,7 +265,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'gpt-6-astra': {
+    'chat:gpt-6-astra': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -273,7 +273,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'gpt-6-luna': {
+    'chat:gpt-6-luna': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -281,7 +281,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.125,
     },
-    'gpt-6-sol': {
+    'chat:gpt-6-sol': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -289,7 +289,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'gpt-realtime-2.1': {
+    'chat:gpt-realtime-2.1': {
       contextWindow: 128000,
       maxTokens: 32000,
       inputPricePerMTok: 4,
@@ -297,7 +297,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.4,
       cacheWritePricePerMTok: 0,
     },
-    o1: {
+    'chat:o1': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 15,
@@ -305,7 +305,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 7.5,
       cacheWritePricePerMTok: 0,
     },
-    'o1-pro': {
+    'chat:o1-pro': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 150,
@@ -313,7 +313,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    o3: {
+    'chat:o3': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 2,
@@ -321,7 +321,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'o3-mini': {
+    'chat:o3-mini': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -329,7 +329,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.55,
       cacheWritePricePerMTok: 0,
     },
-    'o3-pro': {
+    'chat:o3-pro': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 20,
@@ -337,7 +337,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'o4-mini': {
+    'chat:o4-mini': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -347,7 +347,7 @@ export const MODEL_CATALOG = {
     },
   },
   codex: {
-    'gpt-5.3-codex-spark': {
+    'chat:gpt-5.3-codex-spark': {
       contextWindow: 128000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -355,7 +355,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.5': {
+    'chat:gpt-5.5': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -363,7 +363,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'gpt-5.6-luna': {
+    'chat:gpt-5.6-luna': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -371,7 +371,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0.25,
     },
-    'gpt-5.6-sol': {
+    'chat:gpt-5.6-sol': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 4,
@@ -379,7 +379,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.4,
       cacheWritePricePerMTok: 5,
     },
-    'gpt-5.6-terra': {
+    'chat:gpt-5.6-terra': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -387,7 +387,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'gpt-6-astra': {
+    'chat:gpt-6-astra': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -395,7 +395,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'gpt-6-luna': {
+    'chat:gpt-6-luna': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -403,7 +403,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.125,
     },
-    'gpt-6-sol': {
+    'chat:gpt-6-sol': {
       contextWindow: 272000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -413,7 +413,7 @@ export const MODEL_CATALOG = {
     },
   },
   openrouter: {
-    'aion-labs/aion-2.0': {
+    'chat:aion-labs/aion-2.0': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.8,
@@ -421,7 +421,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'aion-labs/aion-3.0': {
+    'chat:aion-labs/aion-3.0': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 3,
@@ -429,7 +429,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.75,
       cacheWritePricePerMTok: 0,
     },
-    'aion-labs/aion-3.0-mini': {
+    'chat:aion-labs/aion-3.0-mini': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.7,
@@ -437,7 +437,23 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.18,
       cacheWritePricePerMTok: 0,
     },
-    'amazon/nova-2-lite-v1': {
+    'chat:aion-labs/aion-3.5': {
+      contextWindow: 262144,
+      maxTokens: 32768,
+      inputPricePerMTok: 3,
+      outputPricePerMTok: 6,
+      cacheReadPricePerMTok: 0.75,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:aion-labs/aion-3.5-mini': {
+      contextWindow: 262144,
+      maxTokens: 32768,
+      inputPricePerMTok: 0.7,
+      outputPricePerMTok: 1.4,
+      cacheReadPricePerMTok: 0.18,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:amazon/nova-2-lite-v1': {
       contextWindow: 1000000,
       maxTokens: 65535,
       inputPricePerMTok: 0.3,
@@ -445,7 +461,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'amazon/nova-lite-v1': {
+    'chat:amazon/nova-lite-v1': {
       contextWindow: 300000,
       maxTokens: 5120,
       inputPricePerMTok: 0.06,
@@ -453,7 +469,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'amazon/nova-micro-v1': {
+    'chat:amazon/nova-micro-v1': {
       contextWindow: 128000,
       maxTokens: 5120,
       inputPricePerMTok: 0.035,
@@ -461,7 +477,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'amazon/nova-premier-v1': {
+    'chat:amazon/nova-premier-v1': {
       contextWindow: 1000000,
       maxTokens: 32000,
       inputPricePerMTok: 2.5,
@@ -469,7 +485,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.625,
       cacheWritePricePerMTok: 0,
     },
-    'amazon/nova-pro-v1': {
+    'chat:amazon/nova-pro-v1': {
       contextWindow: 300000,
       maxTokens: 5120,
       inputPricePerMTok: 0.8,
@@ -477,7 +493,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'anthropic/claude-3-haiku': {
+    'chat:anthropic/claude-3-haiku': {
       contextWindow: 200000,
       maxTokens: 4096,
       inputPricePerMTok: 0.25,
@@ -485,7 +501,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0.3,
     },
-    'anthropic/claude-fable-5': {
+    'chat:anthropic/claude-fable-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -493,7 +509,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'anthropic/claude-fable-5.1': {
+    'chat:anthropic/claude-fable-5.1': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -501,7 +517,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 12.5,
     },
-    'anthropic/claude-fable-5.1:batch': {
+    'chat:anthropic/claude-fable-5.1:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -509,7 +525,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-fable-5:batch': {
+    'chat:anthropic/claude-fable-5:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -517,7 +533,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-haiku-4.5': {
+    'chat:anthropic/claude-haiku-4.5': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 1,
@@ -525,7 +541,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'anthropic/claude-haiku-4.5:batch': {
+    'chat:anthropic/claude-haiku-4.5:batch': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 0.5,
@@ -533,7 +549,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0.625,
     },
-    'anthropic/claude-opus-4.1': {
+    'chat:anthropic/claude-opus-4.1': {
       contextWindow: 200000,
       maxTokens: 32000,
       inputPricePerMTok: 15,
@@ -541,7 +557,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.5,
       cacheWritePricePerMTok: 18.75,
     },
-    'anthropic/claude-opus-4.1:batch': {
+    'chat:anthropic/claude-opus-4.1:batch': {
       contextWindow: 200000,
       maxTokens: 32000,
       inputPricePerMTok: 7.5,
@@ -549,7 +565,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.75,
       cacheWritePricePerMTok: 9.375,
     },
-    'anthropic/claude-opus-4.5': {
+    'chat:anthropic/claude-opus-4.5': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 5,
@@ -557,7 +573,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-opus-4.5:batch': {
+    'chat:anthropic/claude-opus-4.5:batch': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 2.5,
@@ -565,7 +581,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 3.125,
     },
-    'anthropic/claude-opus-4.6': {
+    'chat:anthropic/claude-opus-4.6': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -573,7 +589,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-opus-4.6:batch': {
+    'chat:anthropic/claude-opus-4.6:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -581,7 +597,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 3.125,
     },
-    'anthropic/claude-opus-4.7': {
+    'chat:anthropic/claude-opus-4.7': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -589,7 +605,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-opus-4.7:batch': {
+    'chat:anthropic/claude-opus-4.7:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -597,7 +613,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 3.125,
     },
-    'anthropic/claude-opus-4.8': {
+    'chat:anthropic/claude-opus-4.8': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -605,7 +621,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-opus-4.8:batch': {
+    'chat:anthropic/claude-opus-4.8:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -613,7 +629,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 3.125,
     },
-    'anthropic/claude-opus-5': {
+    'chat:anthropic/claude-opus-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -621,7 +637,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'anthropic/claude-opus-5.5': {
+    'chat:anthropic/claude-opus-5.5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 4,
@@ -629,7 +645,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 5,
     },
-    'anthropic/claude-opus-5.5:batch': {
+    'chat:anthropic/claude-opus-5.5:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -637,7 +653,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 2.5,
     },
-    'anthropic/claude-opus-5:batch': {
+    'chat:anthropic/claude-opus-5:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -645,7 +661,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 3.125,
     },
-    'anthropic/claude-sonnet-4': {
+    'chat:anthropic/claude-sonnet-4': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 3,
@@ -653,7 +669,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'anthropic/claude-sonnet-4.5': {
+    'chat:anthropic/claude-sonnet-4.5': {
       contextWindow: 1000000,
       maxTokens: 64000,
       inputPricePerMTok: 3,
@@ -661,7 +677,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'anthropic/claude-sonnet-4.5:batch': {
+    'chat:anthropic/claude-sonnet-4.5:batch': {
       contextWindow: 1000000,
       maxTokens: 64000,
       inputPricePerMTok: 1.5,
@@ -669,7 +685,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 1.875,
     },
-    'anthropic/claude-sonnet-4.6': {
+    'chat:anthropic/claude-sonnet-4.6': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 3,
@@ -677,7 +693,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'anthropic/claude-sonnet-4.6:batch': {
+    'chat:anthropic/claude-sonnet-4.6:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 1.5,
@@ -685,7 +701,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 1.875,
     },
-    'anthropic/claude-sonnet-5': {
+    'chat:anthropic/claude-sonnet-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -693,7 +709,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'anthropic/claude-sonnet-5:batch': {
+    'chat:anthropic/claude-sonnet-5:batch': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -701,7 +717,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'arcee-ai/trinity-large-thinking': {
+    'chat:arcee-ai/trinity-large-thinking': {
       contextWindow: 262144,
       maxTokens: 80000,
       inputPricePerMTok: 0.25,
@@ -709,7 +725,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.06,
       cacheWritePricePerMTok: 0,
     },
-    auto: {
+    'chat:auto': {
       contextWindow: 2000000,
       maxTokens: 30000,
       inputPricePerMTok: 0,
@@ -717,7 +733,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-1.6': {
+    'chat:bytedance-seed/seed-1.6': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0.25,
@@ -725,7 +741,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-1.6-flash': {
+    'chat:bytedance-seed/seed-1.6-flash': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0.075,
@@ -733,7 +749,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-2-1-turbo': {
+    'chat:bytedance-seed/seed-2-1-turbo': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.5,
@@ -741,7 +757,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-2.0-code': {
+    'chat:bytedance-seed/seed-2.0-code': {
       contextWindow: 262144,
       maxTokens: 131072,
       inputPricePerMTok: 0.5,
@@ -749,7 +765,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-2.0-lite': {
+    'chat:bytedance-seed/seed-2.0-lite': {
       contextWindow: 262144,
       maxTokens: 131072,
       inputPricePerMTok: 0.25,
@@ -757,7 +773,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'bytedance-seed/seed-2.0-mini': {
+    'chat:bytedance-seed/seed-2.0-mini': {
       contextWindow: 262144,
       maxTokens: 131072,
       inputPricePerMTok: 0.1,
@@ -765,7 +781,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'cohere/command-a-plus': {
+    'chat:cohere/command-a-plus': {
       contextWindow: 192000,
       maxTokens: 64000,
       inputPricePerMTok: 0.3,
@@ -773,7 +789,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'cohere/command-r-08-2024': {
+    'chat:cohere/command-r-08-2024': {
       contextWindow: 128000,
       maxTokens: 4000,
       inputPricePerMTok: 0.15,
@@ -781,7 +797,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'cohere/command-r-plus-08-2024': {
+    'chat:cohere/command-r-plus-08-2024': {
       contextWindow: 128000,
       maxTokens: 4000,
       inputPricePerMTok: 2.5,
@@ -789,7 +805,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'cohere/north-mini-code:free': {
+    'chat:cohere/north-mini-code:free': {
       contextWindow: 256000,
       maxTokens: 64000,
       inputPricePerMTok: 0,
@@ -797,7 +813,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-chat': {
+    'chat:deepseek/deepseek-chat': {
       contextWindow: 163840,
       maxTokens: 16384,
       inputPricePerMTok: 0.32,
@@ -805,7 +821,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-chat-v3-0324': {
+    'chat:deepseek/deepseek-chat-v3-0324': {
       contextWindow: 163840,
       maxTokens: 147456,
       inputPricePerMTok: 0.25,
@@ -813,7 +829,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-chat-v3.1': {
+    'chat:deepseek/deepseek-chat-v3.1': {
       contextWindow: 163840,
       maxTokens: 32768,
       inputPricePerMTok: 0.25,
@@ -821,7 +837,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.13,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-r1': {
+    'chat:deepseek/deepseek-r1': {
       contextWindow: 64000,
       maxTokens: 16000,
       inputPricePerMTok: 0.7,
@@ -829,7 +845,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-r1-0528': {
+    'chat:deepseek/deepseek-r1-0528': {
       contextWindow: 163840,
       maxTokens: 32768,
       inputPricePerMTok: 0.5,
@@ -837,7 +853,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.35,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v3.1-terminus': {
+    'chat:deepseek/deepseek-v3.1-terminus': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.27,
@@ -845,7 +861,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.135,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v3.2': {
+    'chat:deepseek/deepseek-v3.2': {
       contextWindow: 163840,
       maxTokens: 65536,
       inputPricePerMTok: 0.269,
@@ -853,7 +869,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1345,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v3.2-exp': {
+    'chat:deepseek/deepseek-v3.2-exp': {
       contextWindow: 163840,
       maxTokens: 65536,
       inputPricePerMTok: 0.27,
@@ -861,23 +877,23 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4-flash': {
+    'chat:deepseek/deepseek-v4-flash': {
       contextWindow: 1024000,
       maxTokens: 384000,
-      inputPricePerMTok: 0.088606,
-      outputPricePerMTok: 0.177212,
-      cacheReadPricePerMTok: 0.017721,
+      inputPricePerMTok: 0.049,
+      outputPricePerMTok: 0.098,
+      cacheReadPricePerMTok: 0.0098,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4-flash-0731': {
+    'chat:deepseek/deepseek-v4-flash-0731': {
       contextWindow: 1048576,
       maxTokens: 943718,
-      inputPricePerMTok: 0.04,
-      outputPricePerMTok: 0.64,
+      inputPricePerMTok: 0.03,
+      outputPricePerMTok: 0.32,
       cacheReadPricePerMTok: 0.016,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4-flash-vision-exp': {
+    'chat:deepseek/deepseek-v4-flash-vision-exp': {
       contextWindow: 1048576,
       maxTokens: 943718,
       inputPricePerMTok: 0.22,
@@ -885,31 +901,31 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.007,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4-pro': {
+    'chat:deepseek/deepseek-v4-pro': {
       contextWindow: 1024000,
       maxTokens: 384000,
-      inputPricePerMTok: 0.95526,
-      outputPricePerMTok: 1.91052,
-      cacheReadPricePerMTok: 0.079605,
+      inputPricePerMTok: 0.783,
+      outputPricePerMTok: 1.566,
+      cacheReadPricePerMTok: 0.06525,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4-pro-0813': {
-      contextWindow: 1048576,
+    'chat:deepseek/deepseek-v4-pro-0813': {
+      contextWindow: 1024000,
       maxTokens: 384000,
-      inputPricePerMTok: 1.32,
-      outputPricePerMTok: 3.96,
-      cacheReadPricePerMTok: 0.044,
+      inputPricePerMTok: 0.462,
+      outputPricePerMTok: 1.386,
+      cacheReadPricePerMTok: 0.0154,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4.1-flash': {
+    'chat:deepseek/deepseek-v4.1-flash': {
       contextWindow: 1048576,
-      maxTokens: 943718,
-      inputPricePerMTok: 0.1,
-      outputPricePerMTok: 0.5,
-      cacheReadPricePerMTok: 0.01,
+      maxTokens: 393216,
+      inputPricePerMTok: 0.15,
+      outputPricePerMTok: 0.6,
+      cacheReadPricePerMTok: 0.003,
       cacheWritePricePerMTok: 0,
     },
-    'deepseek/deepseek-v4.1-flash:batch': {
+    'chat:deepseek/deepseek-v4.1-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.112,
@@ -917,7 +933,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.00336,
       cacheWritePricePerMTok: 0,
     },
-    'dots-studio/dots-3-note-preview:free': {
+    'chat:dots-studio/dots-3-note-preview:free': {
       contextWindow: 512000,
       maxTokens: 460800,
       inputPricePerMTok: 0,
@@ -925,7 +941,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-2.5-flash': {
+    'chat:fireworks/ember-1': {
+      contextWindow: 1048576,
+      maxTokens: 943718,
+      inputPricePerMTok: 3,
+      outputPricePerMTok: 15,
+      cacheReadPricePerMTok: 0.3,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:google/gemini-2.5-flash': {
       contextWindow: 1048576,
       maxTokens: 65535,
       inputPricePerMTok: 0.3,
@@ -933,7 +957,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-2.5-flash-lite': {
+    'chat:google/gemini-2.5-flash-lite': {
       contextWindow: 1048576,
       maxTokens: 65535,
       inputPricePerMTok: 0.1,
@@ -941,7 +965,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-2.5-flash-lite:batch': {
+    'chat:google/gemini-2.5-flash-lite:batch': {
       contextWindow: 1048576,
       maxTokens: 65535,
       inputPricePerMTok: 0.05,
@@ -949,7 +973,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-2.5-flash:batch': {
+    'chat:google/gemini-2.5-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 65535,
       inputPricePerMTok: 0.15,
@@ -957,7 +981,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-2.5-pro': {
+    'chat:google/gemini-2.5-pro': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 1.25,
@@ -965,7 +989,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0.375,
     },
-    'google/gemini-2.5-pro-preview': {
+    'chat:google/gemini-2.5-pro-preview': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 1.25,
@@ -973,7 +997,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0.375,
     },
-    'google/gemini-2.5-pro:batch': {
+    'chat:google/gemini-2.5-pro:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.625,
@@ -981,7 +1005,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3-flash-preview': {
+    'chat:google/gemini-3-flash-preview': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.5,
@@ -989,7 +1013,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-3-flash-preview:batch': {
+    'chat:google/gemini-3-flash-preview:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.25,
@@ -997,7 +1021,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3-pro-image': {
+    'chat:google/gemini-3-pro-image': {
       contextWindow: 65536,
       maxTokens: 32768,
       inputPricePerMTok: 2,
@@ -1005,7 +1029,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0.375,
     },
-    'google/gemini-3.1-flash-lite': {
+    'chat:google/gemini-3.1-flash-lite': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.25,
@@ -1013,7 +1037,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-3.1-flash-lite-preview': {
+    'chat:google/gemini-3.1-flash-lite-preview': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.25,
@@ -1021,7 +1045,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-3.1-flash-lite:batch': {
+    'chat:google/gemini-3.1-flash-lite:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.125,
@@ -1029,7 +1053,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0125,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3.1-pro-preview': {
+    'chat:google/gemini-3.1-pro-preview': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 2,
@@ -1037,7 +1061,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0.375,
     },
-    'google/gemini-3.1-pro-preview-customtools': {
+    'chat:google/gemini-3.1-pro-preview-customtools': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 2,
@@ -1045,7 +1069,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0.375,
     },
-    'google/gemini-3.1-pro-preview:batch': {
+    'chat:google/gemini-3.1-pro-preview:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 1,
@@ -1053,7 +1077,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3.5-flash': {
+    'chat:google/gemini-3.5-flash': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 1.5,
@@ -1061,7 +1085,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-3.5-flash-lite': {
+    'chat:google/gemini-3.5-flash-lite': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.3,
@@ -1069,7 +1093,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0.083333,
     },
-    'google/gemini-3.5-flash-lite:batch': {
+    'chat:google/gemini-3.5-flash-lite:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.15,
@@ -1077,7 +1101,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3.5-flash:batch': {
+    'chat:google/gemini-3.5-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.75,
@@ -1085,7 +1109,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemini-3.6-flash': {
+    'chat:google/gemini-3.6-flash': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.75,
@@ -1093,7 +1117,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemini-3.6-flash:batch': {
+    'chat:google/gemini-3.6-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.375,
@@ -1101,7 +1125,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemini-3.7-flash': {
+    'chat:google/gemini-3.7-flash': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.75,
@@ -1109,7 +1133,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemini-3.7-flash:batch': {
+    'chat:google/gemini-3.7-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.375,
@@ -1117,7 +1141,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemini-3.8-flash': {
+    'chat:google/gemini-3.8-flash': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.75,
@@ -1125,7 +1149,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemini-3.8-flash:batch': {
+    'chat:google/gemini-3.8-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.375,
@@ -1133,7 +1157,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0.041667,
     },
-    'google/gemma-3-12b-it': {
+    'chat:google/gemma-3-12b-it': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.05,
@@ -1141,7 +1165,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemma-3-27b-it': {
+    'chat:google/gemma-3-27b-it': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.08,
@@ -1149,7 +1173,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemma-4-26b-a4b-it': {
+    'chat:google/gemma-4-26b-a4b-it': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.09,
@@ -1157,7 +1181,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemma-4-26b-a4b-it:free': {
+    'chat:google/gemma-4-26b-a4b-it:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -1165,7 +1189,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemma-4-31b-it': {
+    'chat:google/gemma-4-31b-it': {
       contextWindow: 262144,
       maxTokens: 16384,
       inputPricePerMTok: 0.09,
@@ -1173,7 +1197,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0,
     },
-    'google/gemma-4-31b-it:free': {
+    'chat:google/gemma-4-31b-it:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -1181,7 +1205,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'ibm-granite/granite-4.2-8b': {
+    'chat:ibm-granite/granite-4.2-8b': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.06,
@@ -1189,7 +1213,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'inception/mercury-2': {
+    'chat:inception/mercury-2': {
       contextWindow: 128000,
       maxTokens: 50000,
       inputPricePerMTok: 0.25,
@@ -1197,7 +1221,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'inception/mercury-2.5': {
+    'chat:inception/mercury-2.5': {
       contextWindow: 260000,
       maxTokens: 65536,
       inputPricePerMTok: 0.04,
@@ -1205,7 +1229,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.004,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash': {
+    'chat:inclusionai/ling-3.0-flash': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0.021,
@@ -1213,7 +1237,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0042,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash-fin': {
+    'chat:inclusionai/ling-3.0-flash-fin': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.06,
@@ -1221,7 +1245,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.012,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash-fin:free': {
+    'chat:inclusionai/ling-3.0-flash-fin:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -1229,7 +1253,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash-sante:free': {
+    'chat:inclusionai/ling-3.0-flash-sante:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -1237,7 +1261,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash-vl': {
+    'chat:inclusionai/ling-3.0-flash-vl': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.06,
@@ -1245,15 +1269,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.012,
       cacheWritePricePerMTok: 0,
     },
-    'inclusionai/ling-3.0-flash-vl:free': {
-      contextWindow: 262144,
-      maxTokens: 32768,
-      inputPricePerMTok: 0,
-      outputPricePerMTok: 0,
-      cacheReadPricePerMTok: 0,
-      cacheWritePricePerMTok: 0,
-    },
-    'kwaipilot/kat-coder-pro-v2.5': {
+    'chat:kwaipilot/kat-coder-pro-v2.5': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.74,
@@ -1261,7 +1277,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'liquid/lfm-2.5-2.6b:free': {
+    'chat:liquid/lfm-2.5-2.6b:free': {
       contextWindow: 65536,
       maxTokens: 8192,
       inputPricePerMTok: 0,
@@ -1269,7 +1285,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'meituan/longcat-2.0': {
+    'chat:meituan/longcat-2.0': {
       contextWindow: 1048756,
       maxTokens: 262144,
       inputPricePerMTok: 0.3,
@@ -1277,7 +1293,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.006,
       cacheWritePricePerMTok: 0,
     },
-    'meta-llama/llama-3.1-70b-instruct': {
+    'chat:meta-llama/llama-3.1-70b-instruct': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.4,
@@ -1285,7 +1301,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'meta-llama/llama-3.1-8b-instruct': {
+    'chat:meta-llama/llama-3.1-8b-instruct': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.05,
@@ -1293,7 +1309,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'meta-llama/llama-3.3-70b-instruct': {
+    'chat:meta-llama/llama-3.3-70b-instruct': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.1,
@@ -1301,7 +1317,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'meta-llama/llama-4-maverick': {
+    'chat:meta-llama/llama-4-maverick': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.1875,
@@ -1309,7 +1325,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'meta-llama/llama-4-scout': {
+    'chat:meta-llama/llama-4-scout': {
       contextWindow: 327680,
       maxTokens: 16384,
       inputPricePerMTok: 0.1,
@@ -1317,7 +1333,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'meta/muse-glimmer-30b': {
+    'chat:meta/muse-glimmer-30b': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.3,
@@ -1325,31 +1341,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'meta/muse-spark-1.1': {
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 1.25,
-      outputPricePerMTok: 4.25,
-      cacheReadPricePerMTok: 0.15,
-      cacheWritePricePerMTok: 0,
-    },
-    'meta/muse-spark-1.2': {
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 1.25,
-      outputPricePerMTok: 4.25,
-      cacheReadPricePerMTok: 0.15,
-      cacheWritePricePerMTok: 0,
-    },
-    'meta/muse-spark-1.2-contributor': {
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 0.1,
-      outputPricePerMTok: 0.2,
-      cacheReadPricePerMTok: 0.002,
-      cacheWritePricePerMTok: 0,
-    },
-    'meta/muse-spark-1.3': {
+    'chat:meta/muse-spark-1.1': {
       contextWindow: 1048576,
       maxTokens: 943718,
       inputPricePerMTok: 1.25,
@@ -1357,7 +1349,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'meta/muse-spark-1.3-contributor': {
+    'chat:meta/muse-spark-1.2': {
+      contextWindow: 1048576,
+      maxTokens: 943718,
+      inputPricePerMTok: 1.25,
+      outputPricePerMTok: 4.25,
+      cacheReadPricePerMTok: 0.15,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:meta/muse-spark-1.2-contributor': {
       contextWindow: 1048576,
       maxTokens: 943718,
       inputPricePerMTok: 0.1,
@@ -1365,7 +1365,23 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.002,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m1': {
+    'chat:meta/muse-spark-1.3': {
+      contextWindow: 1048576,
+      maxTokens: 943718,
+      inputPricePerMTok: 1.25,
+      outputPricePerMTok: 4.25,
+      cacheReadPricePerMTok: 0.15,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:meta/muse-spark-1.3-contributor': {
+      contextWindow: 1048576,
+      maxTokens: 943718,
+      inputPricePerMTok: 0.1,
+      outputPricePerMTok: 0.2,
+      cacheReadPricePerMTok: 0.002,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:minimax/minimax-m1': {
       contextWindow: 1000000,
       maxTokens: 40000,
       inputPricePerMTok: 0.4,
@@ -1373,15 +1389,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m2': {
-      contextWindow: 204800,
-      maxTokens: 131072,
-      inputPricePerMTok: 0.255,
-      outputPricePerMTok: 1.02,
+    'chat:minimax/minimax-m2': {
+      contextWindow: 196608,
+      maxTokens: 176947,
+      inputPricePerMTok: 0.3,
+      outputPricePerMTok: 1.2,
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m2.1': {
+    'chat:minimax/minimax-m2.1': {
       contextWindow: 204800,
       maxTokens: 131072,
       inputPricePerMTok: 0.3,
@@ -1389,7 +1405,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m2.5': {
+    'chat:minimax/minimax-m2.5': {
       contextWindow: 200000,
       maxTokens: 128000,
       inputPricePerMTok: 0.27,
@@ -1397,7 +1413,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.027,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m2.7': {
+    'chat:minimax/minimax-m2.7': {
       contextWindow: 204800,
       maxTokens: 131072,
       inputPricePerMTok: 0.3,
@@ -1405,7 +1421,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.06,
       cacheWritePricePerMTok: 0,
     },
-    'minimax/minimax-m3': {
+    'chat:minimax/minimax-m3': {
       contextWindow: 524288,
       maxTokens: 512000,
       inputPricePerMTok: 0.3,
@@ -1413,7 +1429,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.06,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/codestral-2508': {
+    'chat:mistralai/codestral-2508': {
       contextWindow: 256000,
       maxTokens: 204800,
       inputPricePerMTok: 0.3,
@@ -1421,7 +1437,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/codestral-2508:batch': {
+    'chat:mistralai/codestral-2508:batch': {
       contextWindow: 256000,
       maxTokens: 204800,
       inputPricePerMTok: 0.15,
@@ -1429,7 +1445,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/devstral-2512': {
+    'chat:mistralai/devstral-2512': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.4,
@@ -1437,7 +1453,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/ministral-14b-2512': {
+    'chat:mistralai/ministral-14b-2512': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.2,
@@ -1445,7 +1461,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/ministral-3b-2512': {
+    'chat:mistralai/ministral-3b-2512': {
       contextWindow: 131072,
       maxTokens: 104857,
       inputPricePerMTok: 0.1,
@@ -1453,7 +1469,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/ministral-8b-2512': {
+    'chat:mistralai/ministral-8b-2512': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.15,
@@ -1461,7 +1477,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/ministral-8b-2512:batch': {
+    'chat:mistralai/ministral-8b-2512:batch': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.075,
@@ -1469,7 +1485,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0075,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-large': {
+    'chat:mistralai/mistral-large': {
       contextWindow: 128000,
       maxTokens: 102400,
       inputPricePerMTok: 2,
@@ -1477,7 +1493,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-large-2407': {
+    'chat:mistralai/mistral-large-2407': {
       contextWindow: 131072,
       maxTokens: 104857,
       inputPricePerMTok: 2,
@@ -1485,7 +1501,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-large-2512:batch': {
+    'chat:mistralai/mistral-large-2512': {
+      contextWindow: 262144,
+      maxTokens: 209715,
+      inputPricePerMTok: 0.5,
+      outputPricePerMTok: 1.5,
+      cacheReadPricePerMTok: 0.05,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:mistralai/mistral-large-2512:batch': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.25,
@@ -1493,7 +1517,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-medium-3': {
+    'chat:mistralai/mistral-medium-3': {
       contextWindow: 131072,
       maxTokens: 104857,
       inputPricePerMTok: 0.4,
@@ -1501,7 +1525,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-medium-3-5': {
+    'chat:mistralai/mistral-medium-3-5': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 1.5,
@@ -1509,7 +1533,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-medium-3-5:batch': {
+    'chat:mistralai/mistral-medium-3-5:batch': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.75,
@@ -1517,7 +1541,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-medium-3.1': {
+    'chat:mistralai/mistral-medium-3.1': {
       contextWindow: 131072,
       maxTokens: 104857,
       inputPricePerMTok: 0.4,
@@ -1525,7 +1549,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-medium-3.1:batch': {
+    'chat:mistralai/mistral-medium-3.1:batch': {
       contextWindow: 131072,
       maxTokens: 104857,
       inputPricePerMTok: 0.2,
@@ -1533,7 +1557,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-nemo': {
+    'chat:mistralai/mistral-nemo': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.019,
@@ -1541,7 +1565,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-saba': {
+    'chat:mistralai/mistral-saba': {
       contextWindow: 32768,
       maxTokens: 26214,
       inputPricePerMTok: 0.2,
@@ -1549,7 +1573,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-small-2603': {
+    'chat:mistralai/mistral-small-2603': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.15,
@@ -1557,7 +1581,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-small-2603:batch': {
+    'chat:mistralai/mistral-small-2603:batch': {
       contextWindow: 262144,
       maxTokens: 209715,
       inputPricePerMTok: 0.075,
@@ -1565,7 +1589,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0075,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-small-3.1-24b-instruct': {
+    'chat:mistralai/mistral-small-3.1-24b-instruct': {
       contextWindow: 128000,
       maxTokens: 102400,
       inputPricePerMTok: 0.351,
@@ -1573,7 +1597,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mistral-small-3.2-24b-instruct': {
+    'chat:mistralai/mistral-small-3.2-24b-instruct': {
       contextWindow: 256000,
       maxTokens: 16384,
       inputPricePerMTok: 0.09375,
@@ -1581,7 +1605,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/mixtral-8x22b-instruct': {
+    'chat:mistralai/mixtral-8x22b-instruct': {
       contextWindow: 65536,
       maxTokens: 52428,
       inputPricePerMTok: 2,
@@ -1589,7 +1613,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'mistralai/voxtral-small-24b-2507': {
+    'chat:mistralai/voxtral-small-24b-2507': {
       contextWindow: 32768,
       maxTokens: 26214,
       inputPricePerMTok: 0.1,
@@ -1597,7 +1621,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2': {
+    'chat:moonshotai/kimi-k2': {
       contextWindow: 131072,
       maxTokens: 98304,
       inputPricePerMTok: 0.57,
@@ -1605,7 +1629,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2-0905': {
+    'chat:moonshotai/kimi-k2-0905': {
       contextWindow: 262144,
       maxTokens: 98304,
       inputPricePerMTok: 0.6,
@@ -1613,7 +1637,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2-thinking': {
+    'chat:moonshotai/kimi-k2-thinking': {
       contextWindow: 262144,
       maxTokens: 98304,
       inputPricePerMTok: 0.6,
@@ -1621,7 +1645,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2.5': {
+    'chat:moonshotai/kimi-k2.5': {
       contextWindow: 262144,
       maxTokens: 4096,
       inputPricePerMTok: 0.41,
@@ -1629,7 +1653,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.07,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2.6': {
+    'chat:moonshotai/kimi-k2.6': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.95,
@@ -1637,15 +1661,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.16,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k2.7-code': {
+    'chat:moonshotai/kimi-k2.7-code': {
       contextWindow: 262144,
       maxTokens: 235929,
-      inputPricePerMTok: 0.7062,
+      inputPricePerMTok: 0.6562,
       outputPricePerMTok: 3.3,
       cacheReadPricePerMTok: 0.18,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k3': {
+    'chat:moonshotai/kimi-k3': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 3,
@@ -1653,7 +1677,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 0,
     },
-    'moonshotai/kimi-k3:batch': {
+    'chat:moonshotai/kimi-k3:batch': {
       contextWindow: 1048576,
       maxTokens: 16384,
       inputPricePerMTok: 2.28,
@@ -1661,7 +1685,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.228,
       cacheWritePricePerMTok: 0,
     },
-    'nex-agi/nex-n2.5-mini:free': {
+    'chat:nex-agi/nex-n2.5-mini:free': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0,
@@ -1669,15 +1693,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nex-agi/nex-n2.5-pro': {
-      contextWindow: 262144,
-      maxTokens: 235929,
-      inputPricePerMTok: 0.075,
-      outputPricePerMTok: 0.25,
-      cacheReadPricePerMTok: 0.015,
-      cacheWritePricePerMTok: 0,
-    },
-    'nex-agi/nex-n2.5-pro:free': {
+    'chat:nex-agi/nex-n2.5-pro:free': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0,
@@ -1685,7 +1701,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-nano-30b-a3b': {
+    'chat:nvidia/nemotron-3-nano-30b-a3b': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.05,
@@ -1693,7 +1709,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': {
+    'chat:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': {
       contextWindow: 256000,
       maxTokens: 65536,
       inputPricePerMTok: 0,
@@ -1701,7 +1717,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-super-120b-a12b': {
+    'chat:nvidia/nemotron-3-super-120b-a12b': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.08,
@@ -1709,7 +1725,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-super-120b-a12b:free': {
+    'chat:nvidia/nemotron-3-super-120b-a12b:free': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0,
@@ -1717,7 +1733,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-ultra-550b-a55b': {
+    'chat:nvidia/nemotron-3-ultra-550b-a55b': {
       contextWindow: 202800,
       maxTokens: 182520,
       inputPricePerMTok: 0.6,
@@ -1725,7 +1741,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.12,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3-ultra-550b-a55b:free': {
+    'chat:nvidia/nemotron-3-ultra-550b-a55b:free': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0,
@@ -1733,7 +1749,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3.5-lightning': {
+    'chat:nvidia/nemotron-3.5-lightning': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.07,
@@ -1741,7 +1757,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'nvidia/nemotron-3.5-lightning:free': {
+    'chat:nvidia/nemotron-3.5-lightning:free': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0,
@@ -1749,7 +1765,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-3.5-turbo': {
+    'chat:openai/gpt-3.5-turbo': {
       contextWindow: 16385,
       maxTokens: 4096,
       inputPricePerMTok: 0.5,
@@ -1757,7 +1773,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-3.5-turbo-0613': {
+    'chat:openai/gpt-3.5-turbo-0613': {
       contextWindow: 4095,
       maxTokens: 3685,
       inputPricePerMTok: 1,
@@ -1765,7 +1781,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-3.5-turbo-16k': {
+    'chat:openai/gpt-3.5-turbo-16k': {
       contextWindow: 16385,
       maxTokens: 4096,
       inputPricePerMTok: 3,
@@ -1773,7 +1789,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-3.5-turbo:batch': {
+    'chat:openai/gpt-3.5-turbo:batch': {
       contextWindow: 16385,
       maxTokens: 4096,
       inputPricePerMTok: 0.25,
@@ -1781,7 +1797,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4': {
+    'chat:openai/gpt-4': {
       contextWindow: 8191,
       maxTokens: 4096,
       inputPricePerMTok: 30,
@@ -1789,7 +1805,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4-turbo': {
+    'chat:openai/gpt-4-turbo': {
       contextWindow: 128000,
       maxTokens: 4096,
       inputPricePerMTok: 10,
@@ -1797,7 +1813,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4-turbo:batch': {
+    'chat:openai/gpt-4-turbo:batch': {
       contextWindow: 128000,
       maxTokens: 4096,
       inputPricePerMTok: 5,
@@ -1805,7 +1821,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1': {
+    'chat:openai/gpt-4.1': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 2,
@@ -1813,7 +1829,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1-mini': {
+    'chat:openai/gpt-4.1-mini': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.4,
@@ -1821,7 +1837,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1-mini:batch': {
+    'chat:openai/gpt-4.1-mini:batch': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.2,
@@ -1829,7 +1845,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1-nano': {
+    'chat:openai/gpt-4.1-nano': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.1,
@@ -1837,7 +1853,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1-nano:batch': {
+    'chat:openai/gpt-4.1-nano:batch': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 0.05,
@@ -1845,7 +1861,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4.1:batch': {
+    'chat:openai/gpt-4.1:batch': {
       contextWindow: 1047576,
       maxTokens: 32768,
       inputPricePerMTok: 1,
@@ -1853,7 +1869,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o': {
+    'chat:openai/gpt-4o': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -1861,7 +1877,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-2024-05-13': {
+    'chat:openai/gpt-4o-2024-05-13': {
       contextWindow: 128000,
       maxTokens: 4096,
       inputPricePerMTok: 5,
@@ -1869,7 +1885,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-2024-08-06': {
+    'chat:openai/gpt-4o-2024-08-06': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -1877,7 +1893,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-2024-11-20': {
+    'chat:openai/gpt-4o-2024-11-20': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -1885,7 +1901,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-mini': {
+    'chat:openai/gpt-4o-mini': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.15,
@@ -1893,7 +1909,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-mini-2024-07-18': {
+    'chat:openai/gpt-4o-mini-2024-07-18': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.15,
@@ -1901,7 +1917,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o-mini:batch': {
+    'chat:openai/gpt-4o-mini:batch': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.075,
@@ -1909,7 +1925,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-4o:batch': {
+    'chat:openai/gpt-4o:batch': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 1.25,
@@ -1917,7 +1933,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.625,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5': {
+    'chat:openai/gpt-5': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -1925,7 +1941,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-mini': {
+    'chat:openai/gpt-5-mini': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.25,
@@ -1933,7 +1949,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-mini:batch': {
+    'chat:openai/gpt-5-mini:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.125,
@@ -1941,7 +1957,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-nano': {
+    'chat:openai/gpt-5-nano': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.05,
@@ -1949,7 +1965,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.005,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-nano:batch': {
+    'chat:openai/gpt-5-nano:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.025,
@@ -1957,7 +1973,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0025,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-pro': {
+    'chat:openai/gpt-5-pro': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 15,
@@ -1965,7 +1981,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5-pro:batch': {
+    'chat:openai/gpt-5-pro:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 7.5,
@@ -1973,7 +1989,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.1': {
+    'chat:openai/gpt-5.1': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -1981,7 +1997,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.1-codex': {
+    'chat:openai/gpt-5.1-codex': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -1989,7 +2005,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.13,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.1-codex-max': {
+    'chat:openai/gpt-5.1-codex-max': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -1997,7 +2013,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.1-codex-mini': {
+    'chat:openai/gpt-5.1-codex-mini': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.25,
@@ -2005,7 +2021,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.1:batch': {
+    'chat:openai/gpt-5.1:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.625,
@@ -2013,7 +2029,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0625,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2': {
+    'chat:openai/gpt-5.2': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -2021,7 +2037,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2-chat': {
+    'chat:openai/gpt-5.2-chat': {
       contextWindow: 128000,
       maxTokens: 32000,
       inputPricePerMTok: 1.75,
@@ -2029,7 +2045,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2-codex': {
+    'chat:openai/gpt-5.2-codex': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -2037,7 +2053,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2-pro': {
+    'chat:openai/gpt-5.2-pro': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 21,
@@ -2045,7 +2061,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2-pro:batch': {
+    'chat:openai/gpt-5.2-pro:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 10.5,
@@ -2053,7 +2069,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.2:batch': {
+    'chat:openai/gpt-5.2:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.875,
@@ -2061,7 +2077,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0875,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.3-codex': {
+    'chat:openai/gpt-5.3-codex': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 1.75,
@@ -2069,7 +2085,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.175,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4': {
+    'chat:openai/gpt-5.4': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -2077,7 +2093,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-mini': {
+    'chat:openai/gpt-5.4-mini': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.75,
@@ -2085,7 +2101,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-mini:batch': {
+    'chat:openai/gpt-5.4-mini:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.375,
@@ -2093,7 +2109,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-nano': {
+    'chat:openai/gpt-5.4-nano': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -2101,7 +2117,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-nano:batch': {
+    'chat:openai/gpt-5.4-nano:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -2109,7 +2125,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-pro': {
+    'chat:openai/gpt-5.4-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 30,
@@ -2117,7 +2133,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4-pro:batch': {
+    'chat:openai/gpt-5.4-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 15,
@@ -2125,7 +2141,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.4:batch': {
+    'chat:openai/gpt-5.4:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1.25,
@@ -2133,7 +2149,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.125,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.5': {
+    'chat:openai/gpt-5.5': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -2141,7 +2157,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.5-pro': {
+    'chat:openai/gpt-5.5-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 30,
@@ -2149,7 +2165,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.5-pro:batch': {
+    'chat:openai/gpt-5.5-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 15,
@@ -2157,7 +2173,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.5:batch': {
+    'chat:openai/gpt-5.5:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2.5,
@@ -2165,7 +2181,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.6-luna': {
+    'chat:openai/gpt-5.6-luna': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -2173,7 +2189,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0.25,
     },
-    'openai/gpt-5.6-luna-pro': {
+    'chat:openai/gpt-5.6-luna-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.2,
@@ -2181,7 +2197,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.02,
       cacheWritePricePerMTok: 0.25,
     },
-    'openai/gpt-5.6-luna-pro:batch': {
+    'chat:openai/gpt-5.6-luna-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -2189,7 +2205,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.6-luna:batch': {
+    'chat:openai/gpt-5.6-luna:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -2197,7 +2213,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.6-sol': {
+    'chat:openai/gpt-5.6-sol': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2205,7 +2221,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-5.6-sol-pro': {
+    'chat:openai/gpt-5.6-sol-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2213,7 +2229,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-5.6-sol-pro:batch': {
+    'chat:openai/gpt-5.6-sol-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2221,7 +2237,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'openai/gpt-5.6-sol:batch': {
+    'chat:openai/gpt-5.6-sol:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2229,7 +2245,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'openai/gpt-5.6-terra': {
+    'chat:openai/gpt-5.6-terra': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2237,7 +2253,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-5.6-terra-pro': {
+    'chat:openai/gpt-5.6-terra-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2245,7 +2261,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-5.6-terra-pro:batch': {
+    'chat:openai/gpt-5.6-terra-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2253,7 +2269,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5.6-terra:batch': {
+    'chat:openai/gpt-5.6-terra:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2261,7 +2277,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-5:batch': {
+    'chat:openai/gpt-5:batch': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.625,
@@ -2269,7 +2285,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0625,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-6-astra': {
+    'chat:openai/gpt-6-astra': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -2277,7 +2293,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'openai/gpt-6-astra-pro': {
+    'chat:openai/gpt-6-astra-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -2285,7 +2301,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'openai/gpt-6-astra-pro:batch': {
+    'chat:openai/gpt-6-astra-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -2293,7 +2309,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'openai/gpt-6-astra:batch': {
+    'chat:openai/gpt-6-astra:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -2301,7 +2317,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'openai/gpt-6-luna': {
+    'chat:openai/gpt-6-luna': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -2309,7 +2325,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.125,
     },
-    'openai/gpt-6-luna-pro': {
+    'chat:openai/gpt-6-luna-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -2317,7 +2333,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.125,
     },
-    'openai/gpt-6-luna-pro:batch': {
+    'chat:openai/gpt-6-luna-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.05,
@@ -2325,7 +2341,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.005,
       cacheWritePricePerMTok: 0.0625,
     },
-    'openai/gpt-6-luna:batch': {
+    'chat:openai/gpt-6-luna:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.05,
@@ -2333,7 +2349,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.005,
       cacheWritePricePerMTok: 0.0625,
     },
-    'openai/gpt-6-sol': {
+    'chat:openai/gpt-6-sol': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2341,7 +2357,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-6-sol-pro': {
+    'chat:openai/gpt-6-sol-pro': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -2349,7 +2365,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    'openai/gpt-6-sol-pro:batch': {
+    'chat:openai/gpt-6-sol-pro:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2357,7 +2373,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'openai/gpt-6-sol:batch': {
+    'chat:openai/gpt-6-sol:batch': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2365,7 +2381,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'openai/gpt-audio': {
+    'chat:openai/gpt-audio': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 2.5,
@@ -2373,7 +2389,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-audio-mini': {
+    'chat:openai/gpt-audio-mini': {
       contextWindow: 128000,
       maxTokens: 16384,
       inputPricePerMTok: 0.6,
@@ -2381,7 +2397,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-chat-latest': {
+    'chat:openai/gpt-chat-latest': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -2389,7 +2405,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-oss-120b': {
+    'chat:openai/gpt-oss-120b': {
       contextWindow: 131072,
       maxTokens: 65536,
       inputPricePerMTok: 0.15,
@@ -2397,7 +2413,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-oss-20b': {
+    'chat:openai/gpt-oss-120b:batch': {
+      contextWindow: 131072,
+      maxTokens: 117964,
+      inputPricePerMTok: 0.0296,
+      outputPricePerMTok: 0.136,
+      cacheReadPricePerMTok: 0,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:openai/gpt-oss-20b': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.018,
@@ -2405,7 +2429,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-oss-20b:batch': {
+    'chat:openai/gpt-oss-20b:batch': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.024,
@@ -2413,7 +2437,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/gpt-oss-safeguard-20b': {
+    'chat:openai/gpt-oss-safeguard-20b': {
       contextWindow: 131072,
       maxTokens: 65536,
       inputPricePerMTok: 0.075,
@@ -2421,7 +2445,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0375,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o1': {
+    'chat:openai/o1': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 15,
@@ -2429,7 +2453,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 7.5,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3': {
+    'chat:openai/o3': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 2,
@@ -2437,7 +2461,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3-mini': {
+    'chat:openai/o3-mini': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -2445,7 +2469,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.55,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3-mini-high': {
+    'chat:openai/o3-mini-high': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -2453,7 +2477,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.55,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3-mini:batch': {
+    'chat:openai/o3-mini:batch': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 0.55,
@@ -2461,7 +2485,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.275,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3-pro': {
+    'chat:openai/o3-pro': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 20,
@@ -2469,7 +2493,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o3:batch': {
+    'chat:openai/o3:batch': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1,
@@ -2477,7 +2501,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o4-mini': {
+    'chat:openai/o4-mini': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -2485,7 +2509,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.275,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o4-mini-high': {
+    'chat:openai/o4-mini-high': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 1.1,
@@ -2493,7 +2517,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.275,
       cacheWritePricePerMTok: 0,
     },
-    'openai/o4-mini:batch': {
+    'chat:openai/o4-mini:batch': {
       contextWindow: 200000,
       maxTokens: 100000,
       inputPricePerMTok: 0.55,
@@ -2501,7 +2525,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1375,
       cacheWritePricePerMTok: 0,
     },
-    'openrouter/auto': {
+    'chat:openrouter/auto': {
       contextWindow: 2000000,
       maxTokens: 4096,
       inputPricePerMTok: -1000000,
@@ -2509,7 +2533,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openrouter/auto-beta': {
+    'chat:openrouter/auto-beta': {
       contextWindow: 2000000,
       maxTokens: 4096,
       inputPricePerMTok: -1000000,
@@ -2517,7 +2541,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openrouter/free': {
+    'chat:openrouter/free': {
       contextWindow: 200000,
       maxTokens: 4096,
       inputPricePerMTok: 0,
@@ -2525,7 +2549,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'openrouter/fusion': {
+    'chat:openrouter/fusion': {
       contextWindow: 1000000,
       maxTokens: 30000,
       inputPricePerMTok: 0,
@@ -2533,7 +2557,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'poolside/laguna-s-2.1': {
+    'chat:poolside/laguna-s-2.1': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.09,
@@ -2541,7 +2565,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.009,
       cacheWritePricePerMTok: 0,
     },
-    'poolside/laguna-s-2.1:free': {
+    'chat:poolside/laguna-s-2.1:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -2549,7 +2573,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'poolside/laguna-xs-2.1': {
+    'chat:poolside/laguna-xs-2.1': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0.06,
@@ -2557,7 +2581,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.03,
       cacheWritePricePerMTok: 0,
     },
-    'poolside/laguna-xs-2.1:free': {
+    'chat:poolside/laguna-xs-2.1:free': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0,
@@ -2565,7 +2589,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'prism-ml/ternary-bonsai-2-27b': {
+    'chat:prism-ml/ternary-bonsai-2-27b': {
       contextWindow: 262144,
       maxTokens: 32768,
       inputPricePerMTok: 0.075,
@@ -2573,7 +2597,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen-2.5-72b-instruct': {
+    'chat:qwen/qwen-2.5-72b-instruct': {
       contextWindow: 32768,
       maxTokens: 16384,
       inputPricePerMTok: 0.36,
@@ -2581,7 +2605,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen-2.5-7b-instruct': {
+    'chat:qwen/qwen-2.5-7b-instruct': {
       contextWindow: 32768,
       maxTokens: 29491,
       inputPricePerMTok: 0.1,
@@ -2589,7 +2613,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen-plus': {
+    'chat:qwen/qwen-plus': {
       contextWindow: 1000000,
       maxTokens: 32768,
       inputPricePerMTok: 0.26,
@@ -2597,7 +2621,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.052,
       cacheWritePricePerMTok: 0.325,
     },
-    'qwen/qwen-plus-2025-07-28': {
+    'chat:qwen/qwen-plus-2025-07-28': {
       contextWindow: 1000000,
       maxTokens: 32768,
       inputPricePerMTok: 0.26,
@@ -2605,7 +2629,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-14b': {
+    'chat:qwen/qwen3-14b': {
       contextWindow: 40960,
       maxTokens: 16384,
       inputPricePerMTok: 0.12,
@@ -2613,7 +2637,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-235b-a22b': {
+    'chat:qwen/qwen3-235b-a22b': {
       contextWindow: 131072,
       maxTokens: 8192,
       inputPricePerMTok: 0.455,
@@ -2621,7 +2645,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-235b-a22b-2507': {
+    'chat:qwen/qwen3-235b-a22b-2507': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.0875,
@@ -2629,7 +2653,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0175,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-235b-a22b-thinking-2507': {
+    'chat:qwen/qwen3-235b-a22b-thinking-2507': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.23,
@@ -2637,7 +2661,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-30b-a3b': {
+    'chat:qwen/qwen3-30b-a3b': {
       contextWindow: 40960,
       maxTokens: 16384,
       inputPricePerMTok: 0.12,
@@ -2645,15 +2669,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-30b-a3b-instruct-2507': {
-      contextWindow: 128000,
-      maxTokens: 32000,
-      inputPricePerMTok: 0.04815,
-      outputPricePerMTok: 0.19305,
+    'chat:qwen/qwen3-30b-a3b-instruct-2507': {
+      contextWindow: 262144,
+      maxTokens: 235929,
+      inputPricePerMTok: 0.1,
+      outputPricePerMTok: 0.3,
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-30b-a3b-thinking-2507': {
+    'chat:qwen/qwen3-30b-a3b-thinking-2507': {
       contextWindow: 81920,
       maxTokens: 32768,
       inputPricePerMTok: 0.2,
@@ -2661,7 +2685,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-32b': {
+    'chat:qwen/qwen3-32b': {
       contextWindow: 40960,
       maxTokens: 16384,
       inputPricePerMTok: 0.08,
@@ -2669,7 +2693,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-8b': {
+    'chat:qwen/qwen3-8b': {
       contextWindow: 131072,
       maxTokens: 8192,
       inputPricePerMTok: 0.117,
@@ -2677,7 +2701,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-coder': {
+    'chat:qwen/qwen3-coder': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.3,
@@ -2685,7 +2709,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-coder-30b-a3b-instruct': {
+    'chat:qwen/qwen3-coder-30b-a3b-instruct': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.07,
@@ -2693,7 +2717,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-coder-flash': {
+    'chat:qwen/qwen3-coder-flash': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.195,
@@ -2701,7 +2725,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.039,
       cacheWritePricePerMTok: 0.24375,
     },
-    'qwen/qwen3-coder-next': {
+    'chat:qwen/qwen3-coder-next': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.12,
@@ -2709,7 +2733,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.07,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-coder-plus': {
+    'chat:qwen/qwen3-coder-plus': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.65,
@@ -2717,7 +2741,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.13,
       cacheWritePricePerMTok: 0.8125,
     },
-    'qwen/qwen3-max': {
+    'chat:qwen/qwen3-max': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.78,
@@ -2725,7 +2749,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.156,
       cacheWritePricePerMTok: 0.975,
     },
-    'qwen/qwen3-max-thinking': {
+    'chat:qwen/qwen3-max-thinking': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.78,
@@ -2733,15 +2757,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-next-80b-a3b-instruct': {
+    'chat:qwen/qwen3-next-80b-a3b-instruct': {
       contextWindow: 262144,
-      maxTokens: 16384,
-      inputPricePerMTok: 0.09,
+      maxTokens: 235929,
+      inputPricePerMTok: 0.1,
       outputPricePerMTok: 1.1,
-      cacheReadPricePerMTok: 0,
+      cacheReadPricePerMTok: 0.07,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-next-80b-a3b-thinking': {
+    'chat:qwen/qwen3-next-80b-a3b-thinking': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.15,
@@ -2749,7 +2773,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-235b-a22b-instruct': {
+    'chat:qwen/qwen3-vl-235b-a22b-instruct': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.21,
@@ -2757,7 +2781,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-235b-a22b-thinking': {
+    'chat:qwen/qwen3-vl-235b-a22b-thinking': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.4,
@@ -2765,15 +2789,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-30b-a3b-instruct': {
-      contextWindow: 131072,
-      maxTokens: 32768,
-      inputPricePerMTok: 0.13,
-      outputPricePerMTok: 0.52,
+    'chat:qwen/qwen3-vl-30b-a3b-instruct': {
+      contextWindow: 262144,
+      maxTokens: 16384,
+      inputPricePerMTok: 0.15,
+      outputPricePerMTok: 0.6,
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-30b-a3b-thinking': {
+    'chat:qwen/qwen3-vl-30b-a3b-thinking': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.2,
@@ -2781,7 +2805,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-32b-instruct': {
+    'chat:qwen/qwen3-vl-32b-instruct': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.104,
@@ -2789,7 +2813,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-8b-instruct': {
+    'chat:qwen/qwen3-vl-8b-instruct': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.117,
@@ -2797,7 +2821,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3-vl-8b-thinking': {
+    'chat:qwen/qwen3-vl-8b-thinking': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.18,
@@ -2805,7 +2829,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-122b-a10b': {
+    'chat:qwen/qwen3.5-122b-a10b': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.26,
@@ -2813,7 +2837,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-27b': {
+    'chat:qwen/qwen3.5-27b': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.195,
@@ -2821,7 +2845,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-35b-a3b': {
+    'chat:qwen/qwen3.5-35b-a3b': {
       contextWindow: 256000,
       maxTokens: 16384,
       inputPricePerMTok: 0.3125,
@@ -2829,7 +2853,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15625,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-397b-a17b': {
+    'chat:qwen/qwen3.5-397b-a17b': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.55,
@@ -2837,7 +2861,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.225,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-9b': {
+    'chat:qwen/qwen3.5-9b': {
       contextWindow: 256000,
       maxTokens: 32768,
       inputPricePerMTok: 0.1,
@@ -2845,7 +2869,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-flash-02-23': {
+    'chat:qwen/qwen3.5-flash-02-23': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.065,
@@ -2853,7 +2877,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-plus-02-15': {
+    'chat:qwen/qwen3.5-plus-02-15': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.26,
@@ -2861,7 +2885,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.5-plus-20260420': {
+    'chat:qwen/qwen3.5-plus-20260420': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.3,
@@ -2869,7 +2893,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0.375,
     },
-    'qwen/qwen3.6-27b': {
+    'chat:qwen/qwen3.6-27b': {
       contextWindow: 262144,
       maxTokens: 262140,
       inputPricePerMTok: 0.32,
@@ -2877,7 +2901,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.6-35b-a3b': {
+    'chat:qwen/qwen3.6-35b-a3b': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.15,
@@ -2885,7 +2909,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.05,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.6-flash': {
+    'chat:qwen/qwen3.6-flash': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.1875,
@@ -2893,7 +2917,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0.234375,
     },
-    'qwen/qwen3.6-max-preview': {
+    'chat:qwen/qwen3.6-max-preview': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 1.027,
@@ -2901,7 +2925,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 1.28375,
     },
-    'qwen/qwen3.6-plus': {
+    'chat:qwen/qwen3.6-plus': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.325,
@@ -2909,7 +2933,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0.40625,
     },
-    'qwen/qwen3.7-flash': {
+    'chat:qwen/qwen3.7-flash': {
       contextWindow: 1000000,
       maxTokens: 65536,
       inputPricePerMTok: 0.03,
@@ -2917,7 +2941,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.006,
       cacheWritePricePerMTok: 0.038,
     },
-    'qwen/qwen3.7-max': {
+    'chat:qwen/qwen3.7-max': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 1.475,
@@ -2925,7 +2949,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.295,
       cacheWritePricePerMTok: 1.84375,
     },
-    'qwen/qwen3.7-plus': {
+    'chat:qwen/qwen3.7-plus': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 0.32,
@@ -2933,7 +2957,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.064,
       cacheWritePricePerMTok: 0.4,
     },
-    'qwen/qwen3.8-2.4t-a95b': {
+    'chat:qwen/qwen3.8-2.4t-a95b': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 2,
@@ -2941,7 +2965,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.8-27b': {
+    'chat:qwen/qwen3.8-27b': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 0.42,
@@ -2949,7 +2973,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.085,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.8-27b:free': {
+    'chat:qwen/qwen3.8-27b:free': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0,
@@ -2957,7 +2981,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'qwen/qwen3.8-flash': {
+    'chat:qwen/qwen3.8-flash': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 0.15,
@@ -2965,7 +2989,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.016,
       cacheWritePricePerMTok: 0.2,
     },
-    'qwen/qwen3.8-max-0902': {
+    'chat:qwen/qwen3.8-max-0902': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 2,
@@ -2973,7 +2997,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 2.5,
     },
-    'qwen/qwen3.8-omni-flash': {
+    'chat:qwen/qwen3.8-max-prime': {
+      contextWindow: 1000000,
+      maxTokens: 131072,
+      inputPricePerMTok: 4,
+      outputPricePerMTok: 12,
+      cacheReadPricePerMTok: 0.5,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:qwen/qwen3.8-omni-flash': {
       contextWindow: 1000000,
       maxTokens: 131072,
       inputPricePerMTok: 0.15,
@@ -2981,7 +3013,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.016,
       cacheWritePricePerMTok: 0,
     },
-    'rekaai/reka-edge': {
+    'chat:rekaai/reka-edge': {
       contextWindow: 16384,
       maxTokens: 14745,
       inputPricePerMTok: 0.1,
@@ -2989,7 +3021,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'relace/relace-search': {
+    'chat:relace/relace-search': {
       contextWindow: 256000,
       maxTokens: 128000,
       inputPricePerMTok: 1,
@@ -2997,7 +3029,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'sakana/fugu-max': {
+    'chat:sakana/fugu-max': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -3005,7 +3037,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'sakana/fugu-ultra': {
+    'chat:sakana/fugu-ultra': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3013,7 +3045,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'sakana/fugu-ultra-v2': {
+    'chat:sakana/fugu-ultra-v2': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3021,7 +3053,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'sakana/sakana-namazu': {
+    'chat:sakana/sakana-namazu': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.95,
@@ -3029,7 +3061,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.15,
       cacheWritePricePerMTok: 0,
     },
-    'sao10k/l3.1-euryale-70b': {
+    'chat:sao10k/l3.1-euryale-70b': {
       contextWindow: 131072,
       maxTokens: 16384,
       inputPricePerMTok: 0.85,
@@ -3037,7 +3069,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'stepfun/step-3.5-flash': {
+    'chat:stealth/space-bunny-alpha': {
+      contextWindow: 1000000,
+      maxTokens: 524288,
+      inputPricePerMTok: 0,
+      outputPricePerMTok: 0,
+      cacheReadPricePerMTok: 0,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:stepfun/step-3.5-flash': {
       contextWindow: 262144,
       maxTokens: 65536,
       inputPricePerMTok: 0.1,
@@ -3045,7 +3085,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'stepfun/step-3.7-flash': {
+    'chat:stepfun/step-3.7-flash': {
       contextWindow: 256000,
       maxTokens: 230400,
       inputPricePerMTok: 0.2,
@@ -3053,7 +3093,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.04,
       cacheWritePricePerMTok: 0,
     },
-    'tencent/hy3': {
+    'chat:tencent/hy3': {
       contextWindow: 262144,
       maxTokens: 128000,
       inputPricePerMTok: 0.132,
@@ -3061,7 +3101,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.033,
       cacheWritePricePerMTok: 0,
     },
-    'tencent/hy3-preview': {
+    'chat:tencent/hy3-preview': {
       contextWindow: 262144,
       maxTokens: 235929,
       inputPricePerMTok: 0.18,
@@ -3069,7 +3109,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.06,
       cacheWritePricePerMTok: 0,
     },
-    'tencent/hy4-preview': {
+    'chat:tencent/hy4-preview': {
       contextWindow: 1048576,
       maxTokens: 64000,
       inputPricePerMTok: 0.834,
@@ -3077,7 +3117,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.042,
       cacheWritePricePerMTok: 0,
     },
-    'thinkingmachines/inkling': {
+    'chat:thinkingmachines/inkling': {
       contextWindow: 524288,
       maxTokens: 471859,
       inputPricePerMTok: 1,
@@ -3085,7 +3125,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.17,
       cacheWritePricePerMTok: 0,
     },
-    'thinkingmachines/inkling-small': {
+    'chat:thinkingmachines/inkling-small': {
       contextWindow: 524288,
       maxTokens: 262144,
       inputPricePerMTok: 0.45,
@@ -3093,7 +3133,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'thinkingmachines/inkling-small:free': {
+    'chat:thinkingmachines/inkling-small:free': {
       contextWindow: 1048576,
       maxTokens: 262144,
       inputPricePerMTok: 0,
@@ -3101,7 +3141,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'thinkingmachines/inkling:free': {
+    'chat:thinkingmachines/inkling:free': {
       contextWindow: 1048576,
       maxTokens: 262144,
       inputPricePerMTok: 0,
@@ -3109,7 +3149,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'unbiased/pareto': {
+    'chat:unbiased/pareto': {
       contextWindow: 262144,
       maxTokens: 131072,
       inputPricePerMTok: 2.5,
@@ -3117,7 +3157,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 0,
     },
-    'upstage/solar-pro-3': {
+    'chat:upstage/solar-mini4': {
+      contextWindow: 524288,
+      maxTokens: 131072,
+      inputPricePerMTok: 0.05,
+      outputPricePerMTok: 0.2,
+      cacheReadPricePerMTok: 0.005,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:upstage/solar-pro-3': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.15,
@@ -3125,7 +3173,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.015,
       cacheWritePricePerMTok: 0,
     },
-    'upstage/solar-pro4': {
+    'chat:upstage/solar-pro4': {
       contextWindow: 524288,
       maxTokens: 131072,
       inputPricePerMTok: 0.09,
@@ -3133,7 +3181,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.018,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.20': {
+    'chat:x-ai/grok-4.20': {
       contextWindow: 2000000,
       maxTokens: 1800000,
       inputPricePerMTok: 1.25,
@@ -3141,7 +3189,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.3': {
+    'chat:x-ai/grok-4.3': {
       contextWindow: 1000000,
       maxTokens: 900000,
       inputPricePerMTok: 1.25,
@@ -3149,7 +3197,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.3:batch': {
+    'chat:x-ai/grok-4.3:batch': {
       contextWindow: 1000000,
       maxTokens: 900000,
       inputPricePerMTok: 1,
@@ -3157,7 +3205,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.16,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.5': {
+    'chat:x-ai/grok-4.5': {
       contextWindow: 500000,
       maxTokens: 450000,
       inputPricePerMTok: 2,
@@ -3165,7 +3213,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.6': {
+    'chat:x-ai/grok-4.6': {
       contextWindow: 500000,
       maxTokens: 450000,
       inputPricePerMTok: 2,
@@ -3173,7 +3221,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-4.7': {
+    'chat:x-ai/grok-4.7': {
       contextWindow: 500000,
       maxTokens: 450000,
       inputPricePerMTok: 1.6,
@@ -3181,7 +3229,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.4,
       cacheWritePricePerMTok: 0,
     },
-    'x-ai/grok-build-0.1': {
+    'chat:x-ai/grok-build-0.1': {
       contextWindow: 256000,
       maxTokens: 230400,
       inputPricePerMTok: 1,
@@ -3189,7 +3237,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0,
     },
-    'xiaomi/mimo-v2.5': {
+    'chat:xiaomi/mimo-v2.5': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.14,
@@ -3197,7 +3245,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0028,
       cacheWritePricePerMTok: 0,
     },
-    'xiaomi/mimo-v2.5-pro': {
+    'chat:xiaomi/mimo-v2.5-pro': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.435,
@@ -3205,7 +3253,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0036,
       cacheWritePricePerMTok: 0,
     },
-    'xiaomi/mimo-v2.6-flash': {
+    'chat:xiaomi/mimo-v2.6-flash': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.14,
@@ -3213,7 +3261,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0028,
       cacheWritePricePerMTok: 0,
     },
-    'xiaomi/mimo-v2.6-pro': {
+    'chat:xiaomi/mimo-v2.6-pro': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.435,
@@ -3221,7 +3269,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.0036,
       cacheWritePricePerMTok: 0,
     },
-    'xiaomi/mimo-v2.6-pro-ultraspeed': {
+    'chat:xiaomi/mimo-v2.6-pro-ultraspeed': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 4.35,
@@ -3229,7 +3277,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.036,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.5': {
+    'chat:z-ai/glm-4.5': {
       contextWindow: 131072,
       maxTokens: 98304,
       inputPricePerMTok: 0.6,
@@ -3237,7 +3285,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.11,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.5-air': {
+    'chat:z-ai/glm-4.5-air': {
       contextWindow: 131072,
       maxTokens: 98304,
       inputPricePerMTok: 0.13,
@@ -3245,7 +3293,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.025,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.5v': {
+    'chat:z-ai/glm-4.5v': {
       contextWindow: 65536,
       maxTokens: 16384,
       inputPricePerMTok: 0.6,
@@ -3253,7 +3301,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.11,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.6': {
+    'chat:z-ai/glm-4.6': {
       contextWindow: 198000,
       maxTokens: 16384,
       inputPricePerMTok: 0.43,
@@ -3261,7 +3309,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.08,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.6v': {
+    'chat:z-ai/glm-4.6v': {
       contextWindow: 131072,
       maxTokens: 32768,
       inputPricePerMTok: 0.3,
@@ -3269,15 +3317,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.055,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.7': {
+    'chat:z-ai/glm-4.7': {
       contextWindow: 202752,
       maxTokens: 131072,
-      inputPricePerMTok: 0.4,
-      outputPricePerMTok: 1.75,
-      cacheReadPricePerMTok: 0.08,
+      inputPricePerMTok: 0.6,
+      outputPricePerMTok: 2.2,
+      cacheReadPricePerMTok: 0.11,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-4.7-flash': {
+    'chat:z-ai/glm-4.7-flash': {
       contextWindow: 131072,
       maxTokens: 117964,
       inputPricePerMTok: 0.0605,
@@ -3285,7 +3333,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5': {
+    'chat:z-ai/glm-5': {
       contextWindow: 198000,
       maxTokens: 128000,
       inputPricePerMTok: 0.6,
@@ -3293,7 +3341,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.119,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5-turbo': {
+    'chat:z-ai/glm-5-turbo': {
       contextWindow: 202752,
       maxTokens: 131072,
       inputPricePerMTok: 1.2,
@@ -3301,15 +3349,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.24,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.1': {
-      contextWindow: 200000,
-      maxTokens: 128000,
-      inputPricePerMTok: 0.966,
-      outputPricePerMTok: 3.036,
-      cacheReadPricePerMTok: 0.1794,
+    'chat:z-ai/glm-5.1': {
+      contextWindow: 202752,
+      maxTokens: 131072,
+      inputPricePerMTok: 0.9646,
+      outputPricePerMTok: 3.0316,
+      cacheReadPricePerMTok: 0.17914,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.2': {
+    'chat:z-ai/glm-5.2': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.6496,
@@ -3317,23 +3365,23 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.12064,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.3': {
-      contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 0.84,
-      outputPricePerMTok: 2.64,
-      cacheReadPricePerMTok: 0.156,
+    'chat:z-ai/glm-5.3': {
+      contextWindow: 1048575,
+      maxTokens: 943717,
+      inputPricePerMTok: 1.4,
+      outputPricePerMTok: 4.4,
+      cacheReadPricePerMTok: 0.26,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.3-flash': {
+    'chat:z-ai/glm-5.3-flash': {
       contextWindow: 1048576,
-      maxTokens: 943718,
-      inputPricePerMTok: 0.15,
-      outputPricePerMTok: 0.5,
-      cacheReadPricePerMTok: 0.05,
+      maxTokens: 128000,
+      inputPricePerMTok: 0.045,
+      outputPricePerMTok: 0.14,
+      cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.3-flash:batch': {
+    'chat:z-ai/glm-5.3-flash:batch': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.06,
@@ -3341,23 +3389,31 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.012,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.3-flashx': {
+    'chat:z-ai/glm-5.3-flashx': {
       contextWindow: 1048576,
       maxTokens: 131072,
       inputPricePerMTok: 0.37,
       outputPricePerMTok: 1.25,
-      cacheReadPricePerMTok: 0.075,
+      cacheReadPricePerMTok: 0.09,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5.3:batch': {
+    'chat:z-ai/glm-5.3-prime': {
+      contextWindow: 1000000,
+      maxTokens: 131072,
+      inputPricePerMTok: 2.8,
+      outputPricePerMTok: 8.8,
+      cacheReadPricePerMTok: 0.56,
+      cacheWritePricePerMTok: 0,
+    },
+    'chat:z-ai/glm-5.3:batch': {
       contextWindow: 1048576,
       maxTokens: 131072,
-      inputPricePerMTok: 0.72,
-      outputPricePerMTok: 2.4,
-      cacheReadPricePerMTok: 0.12,
+      inputPricePerMTok: 0.45,
+      outputPricePerMTok: 2,
+      cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 0,
     },
-    'z-ai/glm-5v-turbo': {
+    'chat:z-ai/glm-5v-turbo': {
       contextWindow: 202752,
       maxTokens: 131072,
       inputPricePerMTok: 1.2,
@@ -3365,7 +3421,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.24,
       cacheWritePricePerMTok: 0,
     },
-    '~anthropic/claude-fable-latest': {
+    'chat:~anthropic/claude-fable-latest': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -3373,7 +3429,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 12.5,
     },
-    '~anthropic/claude-haiku-latest': {
+    'chat:~anthropic/claude-haiku-latest': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 1,
@@ -3381,7 +3437,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    '~anthropic/claude-opus-latest': {
+    'chat:~anthropic/claude-opus-latest': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 4,
@@ -3389,7 +3445,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 5,
     },
-    '~anthropic/claude-sonnet-latest': {
+    'chat:~anthropic/claude-sonnet-latest': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -3397,31 +3453,31 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    '~deepseek/deepseek-flash-latest': {
+    'chat:~deepseek/deepseek-flash-latest': {
       contextWindow: 1048576,
       maxTokens: 943718,
-      inputPricePerMTok: 0.1,
-      outputPricePerMTok: 0.5,
+      inputPricePerMTok: 0.04,
+      outputPricePerMTok: 0.49,
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    '~deepseek/deepseek-pro-latest': {
+    'chat:~deepseek/deepseek-pro-latest': {
       contextWindow: 1048576,
-      maxTokens: 384000,
-      inputPricePerMTok: 0.4,
-      outputPricePerMTok: 4.3,
-      cacheReadPricePerMTok: 0.033,
+      maxTokens: 943718,
+      inputPricePerMTok: 0.2528,
+      outputPricePerMTok: 2.88,
+      cacheReadPricePerMTok: 0.08832,
       cacheWritePricePerMTok: 0,
     },
-    '~deepseek/deepseek-v4-flash-latest': {
+    'chat:~deepseek/deepseek-v4-flash-latest': {
       contextWindow: 1048576,
       maxTokens: 943718,
       inputPricePerMTok: 0.03,
-      outputPricePerMTok: 0.8,
-      cacheReadPricePerMTok: 0.008,
+      outputPricePerMTok: 0.32,
+      cacheReadPricePerMTok: 0.016,
       cacheWritePricePerMTok: 0,
     },
-    '~google/gemini-flash-latest': {
+    'chat:~google/gemini-flash-latest': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 0.75,
@@ -3429,7 +3485,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0.041667,
     },
-    '~google/gemini-pro-latest': {
+    'chat:~google/gemini-pro-latest': {
       contextWindow: 1048576,
       maxTokens: 65536,
       inputPricePerMTok: 2,
@@ -3437,15 +3493,15 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 0.375,
     },
-    '~moonshotai/kimi-latest': {
+    'chat:~moonshotai/kimi-latest': {
       contextWindow: 1048576,
       maxTokens: 131072,
-      inputPricePerMTok: 1.45,
-      outputPricePerMTok: 11.7,
-      cacheReadPricePerMTok: 0.3,
+      inputPricePerMTok: 0.8845,
+      outputPricePerMTok: 10.5346,
+      cacheReadPricePerMTok: 0.33,
       cacheWritePricePerMTok: 0,
     },
-    '~openai/gpt-astra-latest': {
+    'chat:~openai/gpt-astra-latest': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -3453,7 +3509,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    '~openai/gpt-luna-latest': {
+    'chat:~openai/gpt-luna-latest': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 0.1,
@@ -3461,7 +3517,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0.125,
     },
-    '~openai/gpt-mini-latest': {
+    'chat:~openai/gpt-mini-latest': {
       contextWindow: 400000,
       maxTokens: 128000,
       inputPricePerMTok: 0.75,
@@ -3469,7 +3525,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.075,
       cacheWritePricePerMTok: 0,
     },
-    '~openai/gpt-sol-latest': {
+    'chat:~openai/gpt-sol-latest': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -3477,7 +3533,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    '~openai/gpt-terra-latest': {
+    'chat:~openai/gpt-terra-latest': {
       contextWindow: 1050000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -3485,7 +3541,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 2.5,
     },
-    '~x-ai/grok-latest': {
+    'chat:~x-ai/grok-latest': {
       contextWindow: 500000,
       maxTokens: 450000,
       inputPricePerMTok: 1.6,
@@ -3493,25 +3549,39 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.4,
       cacheWritePricePerMTok: 0,
     },
-    '~z-ai/glm-flash-latest': {
+    'chat:~z-ai/glm-flash-latest': {
       contextWindow: 1048576,
-      maxTokens: 131072,
-      inputPricePerMTok: 0.075,
-      outputPricePerMTok: 0.25,
-      cacheReadPricePerMTok: 0.015,
+      maxTokens: 128000,
+      inputPricePerMTok: 0.045,
+      outputPricePerMTok: 0.14,
+      cacheReadPricePerMTok: 0.01,
       cacheWritePricePerMTok: 0,
     },
-    '~z-ai/glm-latest': {
+    'chat:~z-ai/glm-latest': {
       contextWindow: 1048576,
       maxTokens: 131072,
-      inputPricePerMTok: 0.5625,
-      outputPricePerMTok: 2.5,
-      cacheReadPricePerMTok: 0.125,
+      inputPricePerMTok: 0.5614,
+      outputPricePerMTok: 1.7644,
+      cacheReadPricePerMTok: 0.10426,
+      cacheWritePricePerMTok: 0,
+    },
+    'classifier:typesafe/jev-1.13': {
+      contextWindow: 32000,
+      inputPricePerMTok: 0.042,
+      outputPricePerMTok: 0,
+      cacheReadPricePerMTok: 0,
+      cacheWritePricePerMTok: 0,
+    },
+    'classifier:~typesafe/jev-latest': {
+      contextWindow: 32000,
+      inputPricePerMTok: 0.042,
+      outputPricePerMTok: 0,
+      cacheReadPricePerMTok: 0,
       cacheWritePricePerMTok: 0,
     },
   },
   anthropic: {
-    'claude-fable-5': {
+    'chat:claude-fable-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -3519,7 +3589,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 1,
       cacheWritePricePerMTok: 12.5,
     },
-    'claude-fable-5-1': {
+    'chat:claude-fable-5-1': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 10,
@@ -3527,7 +3597,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.25,
       cacheWritePricePerMTok: 12.5,
     },
-    'claude-haiku-4-5': {
+    'chat:claude-haiku-4-5': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 1,
@@ -3535,7 +3605,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'claude-haiku-4-5-20251001': {
+    'chat:claude-haiku-4-5-20251001': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 1,
@@ -3543,7 +3613,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.1,
       cacheWritePricePerMTok: 1.25,
     },
-    'claude-opus-4-5': {
+    'chat:claude-opus-4-5': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 5,
@@ -3551,7 +3621,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-4-5-20251101': {
+    'chat:claude-opus-4-5-20251101': {
       contextWindow: 200000,
       maxTokens: 64000,
       inputPricePerMTok: 5,
@@ -3559,7 +3629,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-4-6': {
+    'chat:claude-opus-4-6': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3567,7 +3637,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-4-7': {
+    'chat:claude-opus-4-7': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3575,7 +3645,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-4-8': {
+    'chat:claude-opus-4-8': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3583,7 +3653,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-5': {
+    'chat:claude-opus-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 5,
@@ -3591,7 +3661,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.5,
       cacheWritePricePerMTok: 6.25,
     },
-    'claude-opus-5-5': {
+    'chat:claude-opus-5-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 4,
@@ -3599,7 +3669,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.2,
       cacheWritePricePerMTok: 5,
     },
-    'claude-sonnet-4-5': {
+    'chat:claude-sonnet-4-5': {
       contextWindow: 1000000,
       maxTokens: 64000,
       inputPricePerMTok: 3,
@@ -3607,7 +3677,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'claude-sonnet-4-5-20250929': {
+    'chat:claude-sonnet-4-5-20250929': {
       contextWindow: 1000000,
       maxTokens: 64000,
       inputPricePerMTok: 3,
@@ -3615,7 +3685,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'claude-sonnet-4-6': {
+    'chat:claude-sonnet-4-6': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 3,
@@ -3623,7 +3693,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.3,
       cacheWritePricePerMTok: 3.75,
     },
-    'claude-sonnet-5': {
+    'chat:claude-sonnet-5': {
       contextWindow: 1000000,
       maxTokens: 128000,
       inputPricePerMTok: 2,
@@ -3633,7 +3703,7 @@ export const MODEL_CATALOG = {
     },
   },
   moonshotai: {
-    'kimi-k2.6': {
+    'chat:kimi-k2.6': {
       contextWindow: 262144,
       maxTokens: 262144,
       inputPricePerMTok: 0.95,
@@ -3641,7 +3711,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.16,
       cacheWritePricePerMTok: 0,
     },
-    'kimi-k2.7-code': {
+    'chat:kimi-k2.7-code': {
       contextWindow: 262144,
       maxTokens: 262144,
       inputPricePerMTok: 0.95,
@@ -3649,7 +3719,7 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.19,
       cacheWritePricePerMTok: 0,
     },
-    'kimi-k2.7-code-highspeed': {
+    'chat:kimi-k2.7-code-highspeed': {
       contextWindow: 262144,
       maxTokens: 262144,
       inputPricePerMTok: 1.9,
@@ -3657,9 +3727,9 @@ export const MODEL_CATALOG = {
       cacheReadPricePerMTok: 0.38,
       cacheWritePricePerMTok: 0,
     },
-    'kimi-k3': {
+    'chat:kimi-k3': {
       contextWindow: 1048576,
-      maxTokens: 131072,
+      maxTokens: 1048576,
       inputPricePerMTok: 3,
       outputPricePerMTok: 15,
       cacheReadPricePerMTok: 0.3,

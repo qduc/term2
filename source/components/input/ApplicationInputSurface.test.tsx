@@ -14,9 +14,12 @@ import type { SlashCommand } from '../../slash-commands.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 
 const inputBoxMounts = { mounted: 0, unmounted: 0 };
+let inputBoxProps: any;
+let historyTurns: Array<{ text: string }> = [];
 
 vi.mock('../InputBox.js', () => ({
-  default: function MockInputBox() {
+  default: function MockInputBox(props: any) {
+    inputBoxProps = props;
     useEffect(() => {
       inputBoxMounts.mounted += 1;
       return () => {
@@ -40,7 +43,7 @@ const loggingService = {
 
 const historyService = {
   getMessages: () => [],
-  getTurns: () => [],
+  getTurns: () => historyTurns,
   addMessage: () => {},
   clear: () => {},
 } as unknown as HistoryService;
@@ -94,6 +97,23 @@ it.sequential('routes Escape through the active slash session and clears the tri
 
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(controller.getSnapshot().editor.text).toBe('');
+});
+
+it.sequential('Up and Down continue history navigation when a recalled slash entry opens its menu', async () => {
+  historyTurns = [{ text: '/help' }, { text: '/resume' }];
+  const controller = new MenuControllerImpl();
+  const { stdin, unmount } = await renderSurface(controller);
+  const recalled = inputBoxProps.historyNavigation.navigateUp('');
+  act(() => controller.applyEditorEdit({ type: 'set-text', text: recalled.text, cursor: recalled.text.length }));
+  await waitForInputSurface(() => controller.getSnapshot().stack.at(-1)?.kind === 'slash', 'slash menu open');
+  expect(controller.getSnapshot().editor.text).toBe('/resume');
+  await act(async () => stdin.write('\u001b[A'));
+  expect(controller.getSnapshot().editor.text).toBe('/help');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('slash');
+  await act(async () => stdin.write('\u001b[B'));
+  expect(controller.getSnapshot().editor.text).toBe('/resume');
+  act(() => unmount());
+  historyTurns = [];
 });
 
 it.sequential('unmounts InputBox while a menu is visible and restores the empty stack after close', async () => {

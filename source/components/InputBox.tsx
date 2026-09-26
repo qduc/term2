@@ -43,6 +43,7 @@ type Props = {
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   cursorOverride?: number | null;
+  historyNavigation?: ReturnType<typeof useInputHistory>;
 };
 
 const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
@@ -100,6 +101,7 @@ const InputBox: FC<Props> = ({
   onRetractQueuedMessage,
   onEditQueuedMessage,
   cursorOverride: propsCursorOverride,
+  historyNavigation,
 }) => {
   const {
     input: value,
@@ -154,7 +156,8 @@ const InputBox: FC<Props> = ({
     ? `edit ${editingQueueDelivery === 'steer' ? 'steer' : 'queued'} ▸ `
     : promptLabel;
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
-  const { navigateUp, navigateDown } = useInputHistory(historyService);
+  const localHistoryNavigation = useInputHistory(historyService);
+  const { navigateUp, navigateDown } = historyNavigation ?? localHistoryNavigation;
   const remountInput = useCallback(() => setInputKey((previous) => previous + 1), []);
 
   useEffect(() => {

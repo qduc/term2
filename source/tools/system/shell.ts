@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import process from 'process';
 import path from 'path';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { relaxedNumber } from '../utils.js';
 import { validateCommandSafety } from '../../utils/shell/command-safety/index.js';
@@ -850,6 +851,10 @@ export function createShellToolDefinition(deps: {
       }
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
+      const sshService = executionContext?.getSSHService();
+      if (!sshService && !existsSync(cwd)) {
+        return `Error: Working directory no longer exists: ${cwd}`;
+      }
       const dockerHostControlRequested =
         sandboxEnabled &&
         (sessionAccess?.requiresDockerApproval(command) ??
@@ -873,7 +878,6 @@ export function createShellToolDefinition(deps: {
       ) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
-      const sshService = executionContext?.getSSHService();
       if (monitor !== undefined && !background) {
         return 'Error: shell.monitor requires background: true.';
       }

@@ -2171,6 +2171,72 @@ describe('ApplicationRunLoop', () => {
     );
   });
 
+  it('admits pre-run steers in FIFO order at the first request boundary', async () => {
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream(request) {
+          requests.push(request);
+          yield { type: 'completion', responseId: 'resp-pre-run', output: [] };
+        },
+      }),
+    });
+
+    loop.openTurn();
+    const first = loop.steer([{ type: 'message', role: 'user', content: 'first pre-run steer' }], { id: 'pre-1' });
+    const second = loop.steer([{ type: 'message', role: 'user', content: 'second pre-run steer' }], { id: 'pre-2' });
+    const stream = loop.startStream(agent, 'start turn');
+
+    await expect(Promise.all([first, second])).resolves.toEqual(['admitted', 'admitted']);
+    await stream.completed;
+    const userMessages = (requests[0]!.input as any[])
+      .filter((item) => item.type === 'message' && item.role === 'user')
+      .map((item) => JSON.stringify(item));
+    expect(userMessages.findIndex((item) => item.includes('first pre-run steer'))).toBeLessThan(
+      userMessages.findIndex((item) => item.includes('second pre-run steer')),
+    );
+  });
+
+  it('preserves pending steers across abortSegment and admits them on continuation', async () => {
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+    let requests = 0;
+    const captured: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream(request) {
+          requests++;
+          captured.push(request);
+          if (requests === 1) {
+            requestStarted();
+            await new Promise<void>((_resolve, reject) => {
+              request.signal?.addEventListener(
+                'abort',
+                () => reject(Object.assign(new Error('aborted segment'), { name: 'AbortError' })),
+                { once: true },
+              );
+            });
+          }
+          yield { type: 'completion', responseId: `resp-segment-${requests}`, output: [] };
+        },
+      }),
+    });
+
+    loop.openTurn();
+    const stream = loop.startStream(agent, 'start turn');
+    await started;
+    loop.abortSegment();
+    await expect(stream.completed).rejects.toMatchObject({ name: 'AbortError' });
+
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'survived segment abort' }]);
+    const resumed = loop.continueRunStream(stream.state!);
+    await expect(steered).resolves.toBe('admitted');
+    await resumed.completed;
+    expect(JSON.stringify(captured[1]!.input)).toContain('survived segment abort');
+  });
+
   it('holds a steer offered during an approval pause and admits it when the turn resumes', async () => {
     // The turn pauses at every approval and resumes as a new segment. A user
     // typing into that visible gap was previously refused outright, because
@@ -3198,6 +3264,65 @@ it('retains terminal-only encrypted reasoning from a Responses lane it has never
 });
 
 describe('ApplicationRunLoop in-loop request retry', () => {
+  it('keeps a steer offered during retry backoff until the next request boundary', async () => {
+    let attempts = 0;
+    let retryWaiting!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      retryWaiting = resolve;
+    });
+    let releaseRetry!: () => void;
+    const retryReleased = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    const work: ToolDefinition = {
+      name: 'work',
+      description: 'Does work',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'work result',
+      formatCommandMessage: () => [],
+    };
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        attempts++;
+        if (attempts === 1) throw new WebSocketClosedEarlyError({ code: 1006, reason: '', unsentCount: 0 });
+        if (attempts === 2) {
+          yield { type: 'tool_call', id: 'call-retry-gap', name: 'work', arguments: '{}' };
+          yield { type: 'completion', responseId: 'resp-retry-tool', output: [] };
+          return;
+        }
+        yield { type: 'completion', responseId: 'resp-after-retry', output: [] };
+      },
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => {
+        retryWaiting();
+        await retryReleased;
+      },
+    });
+
+    loop.openTurn();
+    const stream = loop.startStream(
+      { ...agent, tools: [work], modelSettings: { retry: { maxRetries: 1 } } },
+      'start turn',
+    );
+    await waiting;
+    const steered = loop.steer([{ type: 'message', role: 'user', content: 'during retry backoff' }]);
+    releaseRetry();
+
+    await expect(steered).resolves.toBe('admitted');
+    await stream.completed;
+    expect(JSON.stringify(requests[2]!.input)).toContain('during retry backoff');
+    expect(requests[2]!.input.findIndex((item) => item.type === 'tool_result')).toBeLessThan(
+      requests[2]!.input.findIndex(
+        (item) => item.type === 'message' && JSON.stringify(item).includes('during retry backoff'),
+      ),
+    );
+  });
+
   it('retries transient WebSocketClosedEarlyError mid-stream and succeeds without duplicating stream deltas', async () => {
     let attempts = 0;
     const model: StreamedModelTurn = {

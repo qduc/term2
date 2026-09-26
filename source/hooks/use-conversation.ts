@@ -33,12 +33,11 @@ import type { HistoryService } from '../services/history-service.js';
 import type { InputSurgeApproval } from '../services/input-surge-approval.js';
 import type { RestoredState } from '../services/conversation/conversation-replay.js';
 import type { PendingSessionRolloverRequest } from '../contracts/session-rollover.js';
+import type { ControlSocketServer } from '../services/control-socket/control-socket.js';
 import {
-  projectControlPhase,
-  type ControlSessionPort,
-  type ControlSocketServer,
-  type ControlTopic,
-} from '../services/control-socket/control-socket.js';
+  createControlSessionPort,
+  type ControlSessionMetadata,
+} from '../services/control-socket/control-session-port.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -112,6 +111,7 @@ export const useConversation = ({
   logWriter,
   notifier,
   controlSocket,
+  controlSessionMetadata,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -136,6 +136,7 @@ export const useConversation = ({
   /** Optional notifier to fire desktop notifications on approval/completion events. */
   notifier?: ConversationNotifier;
   controlSocket?: ControlSocketServer;
+  controlSessionMetadata?: () => ControlSessionMetadata;
 }) => {
   const {
     messages,
@@ -181,112 +182,6 @@ export const useConversation = ({
     queueLength,
     queuePauseReason,
   } = getConversationUIFlags(uiState);
-
-  useEffect(() => {
-    if (!controlSocket) return;
-    const port: ControlSessionPort = {
-      status: () => {
-        const pending = conversationService.getPendingInteractionSnapshot();
-        const nested = conversationService.getNestedApprovalSnapshot();
-        const projection = projectControlPhase({
-          foregroundToolName: pending?.approval.toolName,
-          hasNestedApproval: nested !== null,
-          activeTurn: isProcessing,
-          queueOwnsSubmissions: conversationService.isQueueOwningSubmissions(),
-          queueActive: conversationService.isQueueActive(),
-        });
-        return {
-          ...projection,
-          queueStateKind: conversationService.queueStateKind?.() ?? 'idle',
-          sessionId: conversationService.sessionId,
-          queue: [],
-          currentTool: null,
-          context: { contextWindow: null, promptTokens: null },
-          cost: orchestratorRef.current?.getCostSummary() ?? null,
-          model: settingsService?.get('agent.model') ?? null,
-          provider: settingsService?.get('agent.provider') ?? null,
-          reasoningEffort: settingsService?.get('agent.reasoningEffort') ?? null,
-        };
-      },
-      get: (topic: ControlTopic) => {
-        if (topic === 'session')
-          return {
-            sessionId: conversationService.sessionId,
-            socketName: controlSocket.name,
-            pid: process.pid,
-            host: process.env.HOSTNAME ?? null,
-            cwd: process.cwd(),
-            workspaceRoot: null,
-            version: null,
-            createdAt: null,
-            startedAt: null,
-            logPath: null,
-            profileId: settingsService?.get('app.activeProfileId') ?? null,
-          };
-        if (topic === 'model')
-          return {
-            provider: settingsService?.get('agent.provider') ?? null,
-            model: settingsService?.get('agent.model') ?? null,
-            reasoningEffort: settingsService?.get('agent.reasoningEffort') ?? null,
-            autoApproveMode: settingsService?.get('shell.autoApproveMode') ?? null,
-          };
-        if (topic === 'usage') {
-          const usage = usageAccumulator?.get();
-          return {
-            cumulative: usage
-              ? {
-                  prompt_tokens: usage.prompt_tokens ?? 0,
-                  completion_tokens: usage.completion_tokens ?? 0,
-                  cache_read_tokens: usage.cache_read_tokens ?? 0,
-                  cache_creation_tokens: usage.cache_creation_tokens ?? 0,
-                }
-              : null,
-            contextWindow: null,
-            cost: orchestratorRef.current?.getCostSummary() ?? null,
-            lastRequest: null,
-          };
-        }
-        if (topic === 'pending') {
-          const pending = conversationService.getPendingInteractionSnapshot();
-          const nested = conversationService.getNestedApprovalSnapshot();
-          return {
-            foreground: pending
-              ? {
-                  interactionId: pending.interactionId,
-                  revision: pending.revision,
-                  toolName: pending.approval.toolName,
-                  callId: pending.approval.callId,
-                  checkIn: pending.approval.checkIn ?? false,
-                  currentAskUserQuestionIndex: pending.currentAskUserQuestionIndex,
-                  argumentsExcerpt: pending.approval.argumentsText.slice(0, 500),
-                }
-              : null,
-            nested: nested
-              ? {
-                  requestId: nested.requestId,
-                  nestedCallId: nested.nestedCallId,
-                  toolName: nested.approval.toolName,
-                  argumentsExcerpt: nested.approval.argumentsText.slice(0, 500),
-                }
-              : null,
-          };
-        }
-        if (topic === 'tools') return { calls: [] };
-        const tasks = conversationService.backgroundTaskControl?.listDetails().slice(0, 32) ?? [];
-        return {
-          tasks: tasks.map((task) => ({
-            kind: task.kind,
-            id: task.id,
-            status: task.status,
-            startedAt: task.startedAt,
-            labelExcerpt: (task.kind === 'subagent' ? task.taskPreview : task.command).slice(0, 500),
-          })),
-        };
-      },
-    };
-    controlSocket.bind(port);
-    return () => controlSocket.unbind(port);
-  }, [controlSocket, conversationService, isProcessing, settingsService, usageAccumulator]);
 
   const approvedContextRef = useRef<
     import('../services/approval/approval-presentation-policy.js').ApprovedToolContext | null
@@ -766,6 +661,28 @@ export const useConversation = ({
       waitingForRejectionReason,
     ],
   );
+
+  useEffect(() => {
+    const orchestrator = orchestratorRef.current;
+    if (!controlSocket || !orchestrator || !settingsService || !usageAccumulator) return;
+    const port = createControlSessionPort({
+      conversationService,
+      orchestrator,
+      settingsService,
+      usageAccumulator,
+      controlSocket,
+      sessionMetadata:
+        controlSessionMetadata ??
+        (() => ({
+          workspaceRoot: null,
+          version: '',
+          createdAt: conversationService.sessionStartedAt,
+          logPath: '',
+        })),
+    });
+    controlSocket.bind(port);
+    return () => controlSocket.unbind(port);
+  }, [controlSocket, controlSessionMetadata, conversationService, settingsService, usageAccumulator]);
 
   // ── Return object (identical shape to the old monolith) ─────────────────
   return {

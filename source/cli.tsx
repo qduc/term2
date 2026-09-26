@@ -231,6 +231,7 @@ const cli = meow(
           --ssh <user@host>                Enable SSH mode for a remote host
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
+          --control-socket[=<name>]        Enable a local socket for the interactive TUI
           --grok-login                     Log in to Grok in a browser (OAuth) and exit
           --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
           --list-models [search]           Print available models grouped by provider, filtered by an optional search term
@@ -297,6 +298,8 @@ const cli = meow(
       $ term2 --list-models --refresh
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
+      $ term2 --control-socket=worker-1
+      $ term2 control status worker-1 --json
   `,
   {
     importMeta: import.meta,
@@ -374,12 +377,12 @@ const cli = meow(
         default: false,
       },
     },
-    allowUnknownFlags: process.argv[2] === 'serve' || process.argv[2] === 'acp',
+    allowUnknownFlags: controlArgv[0] === 'control' || process.argv[2] === 'serve' || process.argv[2] === 'acp',
   },
 );
 
 if (cli.input[0] === 'control') {
-  const exitCode = await runControlCommand(cli.input.slice(1), process.stdout, process.stderr);
+  const exitCode = await runControlCommand(controlArgv.slice(1), process.stdout, process.stderr);
   process.exit(exitCode);
 }
 
@@ -1290,6 +1293,12 @@ const { waitUntilExit } = render(
         conversationService={conversationService}
         controlSocket={controlSocket}
         controlStartupNotice={controlStartupNotice}
+        controlSessionMetadata={() => ({
+          workspaceRoot: executionContext?.getHomeWorkspace() ?? null,
+          version: String(cli.pkg.version ?? ''),
+          createdAt: effectiveCreatedAt,
+          logPath: path.join(logWriterDir, `${effectiveSessionId ?? conversationService.sessionId}.jsonl`),
+        })}
         settingsService={settings}
         historyService={history}
         loggingService={logger}
@@ -1314,6 +1323,7 @@ const { waitUntilExit } = render(
         onSessionIdChange={(newId, createdAt) => {
           effectiveSessionId = newId;
           effectiveCreatedAt = createdAt;
+          controlSocket?.refreshAdvertisement();
         }}
         onHasConversationContent={(hasContent) => {
           effectiveHasConversationContent = hasContent;

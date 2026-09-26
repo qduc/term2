@@ -131,6 +131,7 @@ export type SessionRuntimeInternals = {
   conversationStore: ConversationStore;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
+  getUnsettledToolExecutions: () => { callId: string; toolName: string; status: string }[];
   toolCallMarkers: ToolCallMarkerStore;
   shellAutoApproval: ShellAutoApprovalResolver;
   approvalFlow: ApprovalFlowCoordinator;
@@ -304,6 +305,8 @@ export type BackgroundSubagentApprovalChannel = Pick<
 export type SessionRuntime = {
   readonly sessionId: string;
   readonly sessionStartedAt: string;
+  /** Read-only projection of tool calls that still lack results in this turn. */
+  getUnsettledToolExecutions: () => { callId: string; toolName: string; status: string }[];
   turns: {
     start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
     continueAfterApproval: (options: {
@@ -1143,6 +1146,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     get sessionStartedAt() {
       return identity.startedAt;
     },
+    getUnsettledToolExecutions: () => {
+      const unsettled = new Set(toolTracker.unsettledToolCallIdsForCurrentTurn());
+      return toolTracker
+        .export()
+        .filter((entry) => unsettled.has(entry.callId))
+        .map(({ callId, toolName, status }) => ({ callId, toolName, status }));
+    },
     logger,
     conversationStore,
     approvalState,
@@ -1221,6 +1231,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     get sessionStartedAt() {
       return internals.identity.startedAt;
     },
+    getUnsettledToolExecutions: internals.getUnsettledToolExecutions,
     turns: {
       start: turnCoordinator.start.bind(turnCoordinator),
       continueAfterApproval: turnCoordinator.continueAfterApproval.bind(turnCoordinator),

@@ -799,6 +799,8 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'follow-up', 'follow_up');
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+    const queuedId = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(orchestrator.listOutstandingSubmissions()).toEqual([{ id: queuedId, text: 'follow-up', stage: 'queued' }]);
 
     release();
     await inFlight;
@@ -959,6 +961,34 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'too late to steer', 'steer');
     expect(cfg.ui.onQueuedMessageReclassified).toHaveBeenCalledWith(expect.any(String), 'follow_up');
+    expect(orchestrator.listOutstandingSubmissions()).toEqual([
+      { id: vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0], text: 'too late to steer', stage: 'queued' },
+    ]);
+  });
+
+  it('reports a steer as pending until its admission promise settles', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (admitted: boolean) => void;
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSteer = resolve;
+        }),
+    );
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sending = orchestrator.sendUserMessage('wait for boundary', { busyMode: 'steer' });
+    await Promise.resolve();
+    await Promise.resolve();
+    const id = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(orchestrator.listOutstandingSubmissions()).toEqual([
+      { id, text: 'wait for boundary', stage: 'pending_steer' },
+    ]);
+
+    resolveSteer(true);
+    await sending;
+    expect(orchestrator.listOutstandingSubmissions()).toEqual([]);
   });
 
   it('clears a delivered queue row even when the queue-start observer never fires', async () => {

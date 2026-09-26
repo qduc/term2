@@ -43,6 +43,15 @@ function outputResult(output: Output, result: unknown, json: boolean): void {
 }
 
 export async function runControlCommand(argv: string[], stdout: Output, stderr: Output): Promise<number> {
+  try {
+    return await runControlCommandImpl(argv, stdout, stderr);
+  } catch (error) {
+    stderr.write(`Control command failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
+async function runControlCommandImpl(argv: string[], stdout: Output, stderr: Output): Promise<number> {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   if (!runtimeDir || !path.isAbsolute(runtimeDir)) {
     stderr.write('Error: XDG_RUNTIME_DIR must be present and absolute.\n');

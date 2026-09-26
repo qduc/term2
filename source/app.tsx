@@ -76,6 +76,7 @@ import { listRecentConversations } from './services/conversation/recent-conversa
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 import type { ControlSocketServer } from './services/control-socket/control-socket.js';
+import type { ControlSessionMetadata } from './services/control-socket/control-session-port.js';
 
 function projectNestedApproval(
   nestedApproval: {
@@ -141,6 +142,7 @@ interface AppProps {
   mcpConfigController?: McpConfigController;
   controlSocket?: ControlSocketServer;
   controlStartupNotice?: string;
+  controlSessionMetadata?: () => ControlSessionMetadata;
 }
 
 const App: FC<AppProps> = ({
@@ -172,6 +174,7 @@ const App: FC<AppProps> = ({
   mcpConfigController,
   controlSocket,
   controlStartupNotice,
+  controlSessionMetadata,
 }) => {
   const { exit, waitUntilRenderFlush } = useApp();
   const { stdout } = useStdout();
@@ -312,6 +315,7 @@ const App: FC<AppProps> = ({
     logWriter,
     notifier,
     controlSocket,
+    controlSessionMetadata,
   });
 
   useEffect(() => {

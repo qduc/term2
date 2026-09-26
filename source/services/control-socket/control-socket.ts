@@ -1,4 +1,4 @@
-import { createServer, type Server, type Socket } from 'node:net';
+import { connect, createServer, type Server, type Socket } from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -153,6 +153,20 @@ function send(socket: Socket, value: unknown): void {
   if (!socket.destroyed) socket.write(`${JSON.stringify(value)}\n`);
 }
 
+function isSocketAcceptingConnections(socketPath: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(socketPath);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', (cause: NodeJS.ErrnoException) => {
+      if (cause.code === 'ECONNREFUSED' || cause.code === 'ENOENT') resolve(false);
+      else reject(cause);
+    });
+  });
+}
+
 export interface ControlSocketOptions {
   name: string;
   sessionId: () => string;
@@ -163,6 +177,8 @@ export interface ControlSocketOptions {
   host?: string;
   startTime?: () => string | null;
   isPidAlive?: (pid: number) => boolean;
+  setSocketMode?: (socketPath: string) => void;
+  socketIsLive?: (socketPath: string) => Promise<boolean>;
 }
 
 /** Owns socket framing, discovery files, connection admission, and the read-only v1 wire. */
@@ -177,6 +193,8 @@ export class ControlSocketServer {
   #port: ControlSessionPort | null;
   #startedAt = '';
   #closed = false;
+  #ownedSocket: { dev: bigint; ino: bigint; ctimeNs: bigint } | null = null;
+  #ownsAdvertisement = false;
 
   constructor(options: ControlSocketOptions) {
     if (!isControlSocketName(options.name)) throw new Error('Invalid control socket name');
@@ -189,6 +207,22 @@ export class ControlSocketServer {
     this.advertisementPath = path.join(this.directory, `${this.name}.json`);
     this.#port = options.port ?? null;
     this.#server = createServer((socket) => this.#accept(socket));
+  }
+
+  get startedAt(): string {
+    return this.#startedAt;
+  }
+
+  refreshAdvertisement(): void {
+    if (!this.#ownsAdvertisement || !this.#startedAt) return;
+    const current = readAdvertisement(this.advertisementPath);
+    if (
+      current?.pid !== (this.#options.pid ?? process.pid) ||
+      current.startedAt !== this.#startedAt ||
+      current.socketPath !== this.socketPath
+    )
+      return;
+    atomicWriteJson(this.advertisementPath, { ...current, sessionId: this.#options.sessionId() }, 0o600);
   }
 
   bind(port: ControlSessionPort): void {
@@ -234,6 +268,8 @@ export class ControlSocketServer {
     }
     if (fs.existsSync(this.socketPath)) {
       if (!fs.lstatSync(this.socketPath).isSocket()) throw new Error('Control socket path exists and is not a socket');
+      const live = await (this.#options.socketIsLive ?? isSocketAcceptingConnections)(this.socketPath);
+      if (live) throw new Error(`Control socket path ${this.socketPath} is already accepting connections`);
       fs.unlinkSync(this.socketPath);
     }
     await new Promise<void>((resolve, reject) => {
@@ -244,7 +280,14 @@ export class ControlSocketServer {
       });
     });
     try {
-      fs.chmodSync(this.socketPath, 0o600);
+      const boundSocketStat = fs.lstatSync(this.socketPath, { bigint: true });
+      this.#ownedSocket = {
+        dev: boundSocketStat.dev,
+        ino: boundSocketStat.ino,
+        ctimeNs: boundSocketStat.ctimeNs,
+      };
+      if (this.#options.setSocketMode) this.#options.setSocketMode(this.socketPath);
+      else fs.chmodSync(this.socketPath, 0o600);
       const socketStat = fs.statSync(this.socketPath);
       if (!socketStat.isSocket() || socketStat.uid !== uid || (socketStat.mode & 0o077) !== 0) {
         throw new Error('Control socket must be owned by this user and mode 0600');
@@ -262,6 +305,7 @@ export class ControlSocketServer {
         host: this.#options.host ?? os.hostname(),
       };
       atomicWriteJson(this.advertisementPath, advertisement, 0o600);
+      this.#ownsAdvertisement = true;
     } catch (cause) {
       await this.close();
       throw cause;
@@ -273,10 +317,31 @@ export class ControlSocketServer {
     this.#closed = true;
     for (const socket of this.#connections) socket.destroy();
     if (this.#server.listening) await new Promise<void>((resolve) => this.#server.close(() => resolve()));
-    for (const file of [this.advertisementPath, this.socketPath]) {
+    if (this.#ownsAdvertisement) {
+      const current = readAdvertisement(this.advertisementPath);
+      if (
+        current?.pid === (this.#options.pid ?? process.pid) &&
+        current.startedAt === this.#startedAt &&
+        current.socketPath === this.socketPath
+      ) {
+        try {
+          fs.unlinkSync(this.advertisementPath);
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+    if (this.#ownedSocket) {
       try {
-        if (file === this.socketPath && !fs.lstatSync(file).isSocket()) continue;
-        fs.unlinkSync(file);
+        const current = fs.lstatSync(this.socketPath, { bigint: true });
+        if (
+          current.isSocket() &&
+          current.dev === this.#ownedSocket.dev &&
+          current.ino === this.#ownedSocket.ino &&
+          current.ctimeNs === this.#ownedSocket.ctimeNs
+        ) {
+          fs.unlinkSync(this.socketPath);
+        }
       } catch {
         /* already gone */
       }
@@ -382,6 +447,10 @@ export class ControlSocketServer {
         return helloSeen;
       }
       const params = request.params;
+      if (params?.topic === 'transcript') {
+        reply(false, undefined, 'unavailable', 'Transcript reads are not available in protocol v1 milestone 1');
+        return helloSeen;
+      }
       if (
         !params ||
         typeof params !== 'object' ||

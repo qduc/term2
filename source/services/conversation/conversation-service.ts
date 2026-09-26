@@ -256,6 +256,14 @@ export class ConversationService {
     return this.#runtime.sessionId;
   }
 
+  get sessionStartedAt(): string {
+    return this.#runtime.sessionStartedAt;
+  }
+
+  getUnsettledToolExecutions(): { callId: string; toolName: string; status: string }[] {
+    return this.#runtime.getUnsettledToolExecutions();
+  }
+
   get hookEvents(): HookEventFactory | undefined {
     return this.#clientHandle.hookEvents;
   }

@@ -2187,6 +2187,20 @@ it('decodeLogEnvelope: roundtrips optional event and stream identities', () => {
   expect(decodeLogEnvelope(value)).toEqual(value);
 });
 
+it('decodeLogEnvelope: ignores malformed optional identities without dropping the event', () => {
+  const decoded = decodeLogEnvelope({
+    v: 3,
+    seq: 2,
+    ts: 'old',
+    logId: '',
+    eventId: 42,
+    event: { type: 'session_cleared' },
+  });
+  expect(decoded).toMatchObject({ seq: 2, event: { type: 'session_cleared' } });
+  expect(decoded).not.toHaveProperty('logId');
+  expect(decoded).not.toHaveProperty('eventId');
+});
+
 it('resolveEnvelopeIdentity: legacy references remain stable across repeated reads', () => {
   const legacy = decodeLogEnvelope({ v: 3, seq: 12, ts: 'old', event: { type: 'session_cleared' } })!;
   const first = resolveEnvelopeIdentity(legacy, 'session-a');

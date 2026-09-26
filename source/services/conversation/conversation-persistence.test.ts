@@ -386,22 +386,22 @@ it.sequential('loadConversation: skips malformed identities, duplicate IDs, and 
     },
     {
       v: 3,
-      seq: 3,
+      seq: 4,
       ts: 't',
       eventId: 'same-id',
       event: { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'duplicate' } },
     },
     {
       v: 3,
-      seq: 1,
+      seq: 3,
       ts: 't',
       eventId: 'out-of-order',
       event: { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'out of order' } },
     },
-    { v: 3, seq: 4, ts: 't', eventId: '', event: { type: 'session_cleared' } },
+    { v: 3, seq: 5, ts: 't', eventId: '', event: { type: 'session_cleared' } },
     {
       v: 3,
-      seq: 5,
+      seq: 6,
       ts: 't',
       event: { type: 'user_message', message: { id: 'u4', sender: 'user', text: 'also kept' } },
     },
@@ -413,6 +413,37 @@ it.sequential('loadConversation: skips malformed identities, duplicate IDs, and 
   expect(
     persistenceModule.loadConversation(id)?.messages.map((message) => ('text' in message ? message.text : undefined)),
   ).toEqual(['kept', 'also kept', 'Previous turn was interrupted — send a message to continue.']);
+});
+
+it.sequential('loadConversation: preserves valid legacy envelopes beginning at sequence zero', () => {
+  const id = persistenceModule.generateId();
+  const records = [
+    {
+      v: 3,
+      seq: 0,
+      ts: 't',
+      event: { type: 'session_init', id, createdAt: 't', projectPath: '/project' },
+    },
+    {
+      v: 3,
+      seq: 1,
+      ts: 't',
+      event: {
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'legacy answer' }] },
+        state: { previousResponseId: null },
+      },
+    },
+  ];
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+  );
+  expect(persistenceModule.loadConversation(id)).toMatchObject({
+    id,
+    projectPath: '/project',
+    messages: [{ text: 'legacy answer' }],
+  });
 });
 
 it.sequential('forkConversation: appends child lineage without rewriting inherited session identities', () => {

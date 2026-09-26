@@ -203,17 +203,17 @@ function decodeEnvelopeLines(content: string, logId: string): PersistedLogEnvelo
   const lines = content.split('\n');
   const envelopes: PersistedLogEnvelope[] = [];
   const seenEventIds = new Set<string>();
-  let previousSeq = 0;
+  let previousSeq = -1;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const envelope = decodeLogEnvelope(parsed);
-      if (envelope && Number.isSafeInteger(envelope.seq) && envelope.seq > previousSeq) {
+      if (envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0 && envelope.seq > previousSeq) {
         const identified = resolveEnvelopeIdentity(envelope, logId);
-        if (seenEventIds.has(identified.eventId!)) continue;
         previousSeq = envelope.seq;
+        if (seenEventIds.has(identified.eventId!)) continue;
         seenEventIds.add(identified.eventId!);
         envelopes.push(identified);
       }
@@ -258,9 +258,9 @@ function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
 
   const ordered = [...envelopes, ...deltas].sort((a, b) => a.seq - b.seq);
   const seenIds = new Set<string>();
-  let previousSeq = 0;
+  let previousSeq = -1;
   return ordered.filter((envelope) => {
-    if (envelope.seq <= previousSeq || seenIds.has(envelope.eventId!)) return false;
+    if (envelope.seq < 0 || envelope.seq <= previousSeq || seenIds.has(envelope.eventId!)) return false;
     previousSeq = envelope.seq;
     seenIds.add(envelope.eventId!);
     return true;

@@ -87,7 +87,8 @@ history (`history-service.ts`), and log decoding and replay recovery
   canonical `<id>.jsonl` and sidecar `<id>.deltas` files.
 - **Event identity:** New appends persist `logId` (the immutable stream ID, currently the session ID) and
   a generated `eventId` on the envelope before writing it. Existing envelopes remain readable without either
-  optional field; the conversation reader resolves their reference as `{ logId: filename session ID,
+  optional field; malformed optional identity metadata is ignored without discarding an otherwise valid event.
+  The conversation reader resolves a missing identity as `{ logId: filename session ID,
   eventId: legacy:<logId>:<seq> }` without rewriting stored bytes. Duplicate event IDs and non-increasing
   sequence records are skipped at the read seam while other valid records remain available. Fork copies keep
   inherited envelope identities and append a child `session_init` envelope with branch provenance;

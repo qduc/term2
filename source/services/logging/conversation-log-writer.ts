@@ -123,7 +123,7 @@ const MAX_RECOVERY_LINE_BYTES = MAX_EVENT_BYTES * 2;
 function decodeSequence(line: string): number | null {
   try {
     const envelope = decodeLogEnvelope(JSON.parse(line));
-    return envelope && Number.isSafeInteger(envelope.seq) && envelope.seq > 0 ? envelope.seq : null;
+    return envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0 ? envelope.seq : null;
   } catch {
     return null;
   }

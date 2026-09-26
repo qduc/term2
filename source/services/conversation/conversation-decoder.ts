@@ -193,13 +193,6 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
   const v = typeof obj['v'] === 'number' ? obj['v'] : 1;
   const seq = typeof obj['seq'] === 'number' ? obj['seq'] : 0;
   const ts = typeof obj['ts'] === 'string' ? obj['ts'] : '';
-  if (
-    (obj['logId'] !== undefined && (typeof obj['logId'] !== 'string' || obj['logId'].length === 0)) ||
-    (obj['eventId'] !== undefined && (typeof obj['eventId'] !== 'string' || obj['eventId'].length === 0))
-  ) {
-    return null;
-  }
-
   let event: PersistedLogEvent;
   if (eventObj['truncated'] === true) {
     const truncatedEvent: TruncatedLogEvent = {
@@ -216,8 +209,8 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     v,
     seq,
     ts,
-    ...(typeof obj['logId'] === 'string' ? { logId: obj['logId'] } : {}),
-    ...(typeof obj['eventId'] === 'string' ? { eventId: obj['eventId'] } : {}),
+    ...(typeof obj['logId'] === 'string' && obj['logId'].length > 0 ? { logId: obj['logId'] } : {}),
+    ...(typeof obj['eventId'] === 'string' && obj['eventId'].length > 0 ? { eventId: obj['eventId'] } : {}),
     event,
   };
 }

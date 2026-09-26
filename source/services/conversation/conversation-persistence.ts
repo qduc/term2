@@ -4,8 +4,13 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
-import { DELTA_SIDECAR_SUFFIX, deltaSidecarPathFor, isTruncatedLogEvent } from '../logging/conversation-log-events.js';
-import { decodeLogEnvelope, type PersistedLogEnvelope } from './conversation-decoder.js';
+import {
+  DELTA_SIDECAR_SUFFIX,
+  LOG_ENVELOPE_VERSION,
+  deltaSidecarPathFor,
+  isTruncatedLogEvent,
+} from '../logging/conversation-log-events.js';
+import { decodeLogEnvelope, resolveEnvelopeIdentity, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 import { auditSessionLog, type SessionAudit } from './session-audit.js';
 
@@ -194,17 +199,23 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
+function decodeEnvelopeLines(content: string, logId: string): PersistedLogEnvelope[] {
   const lines = content.split('\n');
   const envelopes: PersistedLogEnvelope[] = [];
+  const seenEventIds = new Set<string>();
+  let previousSeq = 0;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const envelope = decodeLogEnvelope(parsed);
-      if (envelope) {
-        envelopes.push(envelope);
+      if (envelope && Number.isSafeInteger(envelope.seq) && envelope.seq > previousSeq) {
+        const identified = resolveEnvelopeIdentity(envelope, logId);
+        if (seenEventIds.has(identified.eventId!)) continue;
+        previousSeq = envelope.seq;
+        seenEventIds.add(identified.eventId!);
+        envelopes.push(identified);
       }
     } catch {
       // skip corrupt line
@@ -225,7 +236,8 @@ function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
  * written before the sidecar split carry their deltas inline and are unaffected.
  */
 function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
-  const envelopes = decodeEnvelopeLines(fs.readFileSync(filePath, 'utf-8'));
+  const logId = path.basename(filePath, '.jsonl');
+  const envelopes = decodeEnvelopeLines(fs.readFileSync(filePath, 'utf-8'), logId);
 
   const sidecarPath = deltaSidecarPathFor(filePath);
   if (!fs.existsSync(sidecarPath)) {
@@ -234,7 +246,7 @@ function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
 
   let deltas: PersistedLogEnvelope[];
   try {
-    deltas = decodeEnvelopeLines(fs.readFileSync(sidecarPath, 'utf-8'));
+    deltas = decodeEnvelopeLines(fs.readFileSync(sidecarPath, 'utf-8'), logId);
   } catch {
     // An unreadable sidecar degrades an interrupted turn; it must never make
     // an otherwise-loadable conversation fail to open.
@@ -244,7 +256,15 @@ function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
     return envelopes;
   }
 
-  return [...envelopes, ...deltas].sort((a, b) => a.seq - b.seq);
+  const ordered = [...envelopes, ...deltas].sort((a, b) => a.seq - b.seq);
+  const seenIds = new Set<string>();
+  let previousSeq = 0;
+  return ordered.filter((envelope) => {
+    if (envelope.seq <= previousSeq || seenIds.has(envelope.eventId!)) return false;
+    previousSeq = envelope.seq;
+    seenIds.add(envelope.eventId!);
+    return true;
+  });
 }
 
 function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]): string | undefined {
@@ -777,25 +797,38 @@ export function forkConversation(sourceId: string, newId: string): boolean {
   }
 
   const lines = fs.readFileSync(srcPath, 'utf-8').split('\n');
-  let rewroteIdentity = false;
-  const forkedLines = lines.map((line) => {
-    if (!line.trim()) return line;
-    try {
-      const parsed = JSON.parse(line) as unknown;
-      const envelope = decodeLogEnvelope(parsed);
-      if (!envelope || isTruncatedLogEvent(envelope.event) || envelope.event.type !== 'session_init') return line;
-      rewroteIdentity = true;
-      return JSON.stringify({
-        ...envelope,
-        event: { ...envelope.event, id: newId, forkedFrom: sourceId },
-      });
-    } catch {
-      return line;
-    }
-  });
-  if (!rewroteIdentity) {
+  let latestInit: PersistedLogEnvelope | null = null;
+  let highWaterSeq = 0;
+  const forkedLines = lines
+    .filter((line) => line.trim())
+    .map((line) => {
+      try {
+        const parsed = JSON.parse(line) as unknown;
+        const envelope = decodeLogEnvelope(parsed);
+        if (!envelope) return line;
+        if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
+        const identified = resolveEnvelopeIdentity(envelope, sourceId);
+        if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
+        return JSON.stringify(identified);
+      } catch {
+        return line;
+      }
+    });
+  const initEnvelope = latestInit as PersistedLogEnvelope | null;
+  if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
     return false;
   }
+  const createdAt = new Date().toISOString();
+  forkedLines.push(
+    JSON.stringify({
+      v: LOG_ENVELOPE_VERSION,
+      seq: highWaterSeq + 1,
+      ts: createdAt,
+      logId: newId,
+      eventId: crypto.randomUUID(),
+      event: { ...initEnvelope.event, id: newId, forkedFrom: sourceId },
+    }),
+  );
 
   const tempPath = path.join(dir, `.${newId}.${crypto.randomUUID()}.tmp`);
   const forkedContent = forkedLines.join('\n');

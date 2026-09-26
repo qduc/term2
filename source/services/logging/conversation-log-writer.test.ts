@@ -56,6 +56,37 @@ function readEventTypes(filePath: string): string[] {
 }
 
 describe('ConversationLogWriter delta sidecar', () => {
+  it('resumes above earlier valid sequence numbers after a malformed non-monotonic tail', async () => {
+    const dir = tempDir();
+    const sessionId = 'non-monotonic-sequence';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const base = { v: 3, ts: '2026-06-01T00:00:00.000Z', event: { type: 'session_cleared' } };
+    fs.writeFileSync(
+      filePath,
+      [JSON.stringify({ ...base, seq: 5 }), JSON.stringify({ ...base, seq: 3 })].join('\n') + '\n',
+    );
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    await writer.close();
+    expect(readSeqs(filePath)).toEqual([5, 3, 6]);
+  });
+
+  it('assigns each canonical and delta event one stable identity in the shared stream', async () => {
+    const dir = tempDir();
+    const sessionId = 'identity-session';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'partial' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    await writer.close();
+
+    const records = [sessionId + '.jsonl', sessionId + '.deltas']
+      .flatMap((name) => fs.readFileSync(path.join(dir, name), 'utf8').trim().split('\n'))
+      .map((line) => JSON.parse(line));
+    expect(records.every((record) => record.logId === sessionId && typeof record.eventId === 'string')).toBe(true);
+    expect(new Set(records.map((record) => record.eventId)).size).toBe(records.length);
+  });
+
   it('keeps streaming deltas out of the canonical log and drops the sidecar on a settled close', async () => {
     const dir = tempDir();
     const sessionId = 'settled-session';

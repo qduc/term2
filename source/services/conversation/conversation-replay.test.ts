@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../logging/conversation-log-events.js';
 import { replayEvents } from './conversation-replay.js';
-import { decodeLogEnvelope, decodeSavedMessage } from './conversation-decoder.js';
+import { decodeLogEnvelope, decodeSavedMessage, resolveEnvelopeIdentity } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
@@ -2173,6 +2173,27 @@ it('decodeLogEnvelope and decodeSavedMessage: validate structure while retaining
   });
   expect(savedMsg).not.toBe(null);
   expect(savedMsg?.id).toBe('msg-1');
+});
+
+it('decodeLogEnvelope: roundtrips optional event and stream identities', () => {
+  const value = {
+    v: LOG_ENVELOPE_VERSION,
+    seq: 7,
+    ts: '2026-01-01T00:00:00Z',
+    logId: 'stream-a',
+    eventId: 'event-a',
+    event: { type: 'session_cleared' },
+  };
+  expect(decodeLogEnvelope(value)).toEqual(value);
+});
+
+it('resolveEnvelopeIdentity: legacy references remain stable across repeated reads', () => {
+  const legacy = decodeLogEnvelope({ v: 3, seq: 12, ts: 'old', event: { type: 'session_cleared' } })!;
+  const first = resolveEnvelopeIdentity(legacy, 'session-a');
+  const second = resolveEnvelopeIdentity(legacy, 'session-a');
+  expect(first).toEqual(second);
+  expect(first).toMatchObject({ logId: 'session-a', eventId: 'legacy:session-a:12' });
+  expect(resolveEnvelopeIdentity(legacy, 'session-b').eventId).not.toBe(first.eventId);
 });
 
 // Step 2 of docs/plans/openai-context-compaction.md: an opaque provider item

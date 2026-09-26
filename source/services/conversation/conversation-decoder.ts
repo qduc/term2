@@ -8,6 +8,16 @@ import type { Message } from '../../types/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
 
+/** Materialize a stable reference for envelopes written before event IDs existed. */
+export function resolveEnvelopeIdentity(envelope: PersistedLogEnvelope, logId: string): PersistedLogEnvelope {
+  const resolvedLogId = envelope.logId ?? logId;
+  return {
+    ...envelope,
+    logId: resolvedLogId,
+    eventId: envelope.eventId ?? `legacy:${resolvedLogId}:${envelope.seq}`,
+  };
+}
+
 type UnknownObject = Record<string, unknown>;
 
 const isObject = (value: unknown): value is UnknownObject => typeof value === 'object' && value !== null;
@@ -183,6 +193,12 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
   const v = typeof obj['v'] === 'number' ? obj['v'] : 1;
   const seq = typeof obj['seq'] === 'number' ? obj['seq'] : 0;
   const ts = typeof obj['ts'] === 'string' ? obj['ts'] : '';
+  if (
+    (obj['logId'] !== undefined && (typeof obj['logId'] !== 'string' || obj['logId'].length === 0)) ||
+    (obj['eventId'] !== undefined && (typeof obj['eventId'] !== 'string' || obj['eventId'].length === 0))
+  ) {
+    return null;
+  }
 
   let event: PersistedLogEvent;
   if (eventObj['truncated'] === true) {
@@ -200,6 +216,8 @@ export function decodeLogEnvelope(value: unknown): PersistedLogEnvelope | null {
     v,
     seq,
     ts,
+    ...(typeof obj['logId'] === 'string' ? { logId: obj['logId'] } : {}),
+    ...(typeof obj['eventId'] === 'string' ? { eventId: obj['eventId'] } : {}),
     event,
   };
 }

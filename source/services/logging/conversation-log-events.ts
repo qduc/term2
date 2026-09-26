@@ -398,6 +398,10 @@ export interface LogEnvelope<TEvent = LogEvent> {
   v: number;
   seq: number;
   ts: string;
+  /** Immutable identity of the journal stream that first appended this event. */
+  logId?: string;
+  /** Stable identity generated once before a new event is appended. */
+  eventId?: string;
   event: TEvent;
 }
 

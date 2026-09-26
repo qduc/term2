@@ -33,6 +33,82 @@ it('replayEvents: empty log produces empty state with no warnings', () => {
   expect(restored.replayWarnings).toEqual([]);
 });
 
+it.each(['openai', 'local'] as const)(
+  'replayEvents restores %s compacted history and appends later turns to the replacement',
+  (kind) => {
+    const history =
+      kind === 'openai'
+        ? [
+            {
+              type: 'compaction',
+              id: 'checkpoint-native',
+              encrypted_content: 'opaque',
+              providerOpaque: { provider: 'openai' },
+            },
+          ]
+        : [
+            { role: 'user' as const, type: 'message' as const, content: 'earlier user turn' },
+            {
+              role: 'system' as const,
+              type: 'message' as const,
+              content: 'local summary',
+              contextSummary: { version: 1 as const, strategy: 'local' as const },
+            },
+            { role: 'user' as const, type: 'message' as const, content: 'hot user turn' },
+          ];
+    const firstTurn = env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'DISTINCTIVE PRE-COMPACTION ASSISTANT PHRASE' }] },
+      state: { previousResponseId: 'prior-response' },
+    });
+    const replacement = env({
+      type: 'history_replaced',
+      history: [...history, { role: 'assistant', type: 'message', content: 'post-compaction output' }],
+    });
+    const compactedTurn = env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'post-compaction output' }] },
+      state: { previousResponseId: 'after-compaction' },
+    });
+    const restored = replayEvents([
+      env({ type: 'session_init', id: 'compacted-session', createdAt: '2026-09-26T00:00:00Z' }),
+      env({
+        type: 'user_message',
+        message: { id: 'user-1', sender: 'user', text: 'earlier user turn', timestamp: 't1' } as any,
+      }),
+      firstTurn,
+      env({
+        type: 'user_message',
+        message: { id: 'user-2', sender: 'user', text: 'current user turn', timestamp: 't2' } as any,
+      }),
+      compactedTurn,
+      replacement,
+    ]);
+
+    expect(JSON.stringify(restored.history)).not.toContain('DISTINCTIVE PRE-COMPACTION ASSISTANT PHRASE');
+    expect(restored.history).toEqual([
+      ...history,
+      { role: 'assistant', type: 'message', content: 'post-compaction output' },
+    ]);
+
+    const later = replayEvents([
+      env({ type: 'history_replaced', history: restored.history }),
+      env({
+        type: 'user_message',
+        message: { id: 'user-3', sender: 'user', text: 'later turn', timestamp: 't3' } as any,
+      }),
+      env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'later answer' }] },
+        state: { previousResponseId: 'later-response' },
+      }),
+    ]);
+    expect(JSON.stringify(later.history)).toContain('post-compaction output');
+    expect(JSON.stringify(later.history)).toContain('later turn');
+    expect(JSON.stringify(later.history)).not.toContain('DISTINCTIVE PRE-COMPACTION ASSISTANT PHRASE');
+  },
+);
+
 it('replays a memory receipt from the persisted event without adding it to provider history', () => {
   const record = env({
     type: 'memory_injected',

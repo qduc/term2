@@ -393,8 +393,12 @@ export class SessionStreamProcessor {
           this.deps.conversationStore.getHistory(),
           projectedSnapshot.output,
         );
-        if (stream.historyReplacedByCompaction && hasConversationMessageItems(projectedSnapshot.history)) {
+        if (stream.historyReplacedByCompaction && projectedSnapshot.history.length > 0) {
           this.deps.conversationStore.replaceHistory(projectedSnapshot.history as ProviderInputItem[]);
+          this.deps.conversationLogger.log({
+            type: 'history_replaced',
+            history: projectedSnapshot.history as ProviderInputItem[],
+          });
         } else if (replacementHistory) {
           this.deps.conversationStore.replaceHistory(replacementHistory);
         } else if (inputMode === 'delta') {

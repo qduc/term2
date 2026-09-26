@@ -180,6 +180,8 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       );
     case 'undo':
       return hasNumber(event, 'removedUserTurns') && isSnapshot(event['snapshot']);
+    case 'history_replaced':
+      return Array.isArray(event['history']) && (event['turnId'] === undefined || hasString(event, 'turnId'));
     case 'openai_root_selector_parity':
     case 'openai_root_checkpoint_lifecycle':
       return hasNumber(event, 'version');

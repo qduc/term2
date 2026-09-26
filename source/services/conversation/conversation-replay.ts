@@ -901,6 +901,10 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.inFlightToolCalls.clear();
       return;
     }
+    case 'history_replaced': {
+      state.history = cloneValue(event.history);
+      return;
+    }
     case 'session_cleared': {
       return;
     }

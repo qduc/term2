@@ -310,6 +310,13 @@ export interface UndoEvent {
   snapshot: StateSnapshot;
 }
 
+/** Authoritative provider-history replacement after application-owned compaction. */
+export interface HistoryReplacedEvent {
+  type: 'history_replaced';
+  history: ProviderInputItem[];
+  turnId?: string;
+}
+
 export interface SessionClearedEvent {
   type: 'session_cleared';
 }
@@ -373,6 +380,7 @@ export type LogEvent =
   | AssistantJournalDeltaLogEvent
   | AssistantJournalItemLogEvent
   | UndoEvent
+  | HistoryReplacedEvent
   | SessionClearedEvent
   | SessionRolloverEvent;
 

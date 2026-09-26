@@ -59,14 +59,21 @@ const openAICompaction = (id: string) => ({
 
 const createProcessorForHistory = (conversationStore: ConversationStore) => {
   const generationGuard = new GenerationGuard();
+  const loggedEvents: unknown[] = [];
   return {
     generationGuard,
+    loggedEvents,
     processor: new SessionStreamProcessor({
       logger,
       sessionId: 'compaction-history-session',
       toolTracker: new SessionToolTracker(conversationStore),
       conversationStore,
-      conversationLogger: { hasSink: () => false } as ConversationLogger,
+      conversationLogger: {
+        hasSink: () => true,
+        log: (event: unknown) => {
+          loggedEvents.push(event);
+        },
+      } as unknown as ConversationLogger,
       providerContinuity: new ProviderContinuity(),
       generationGuard,
       journal: makeJournal(),
@@ -140,7 +147,7 @@ it('SessionStreamProcessor.finalize() persists the full replacement transcript f
   conversationStore.addUserMessage('raw old turn');
   conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw old answer' } as any]);
   conversationStore.addUserMessage('current turn');
-  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const { processor, generationGuard, loggedEvents } = createProcessorForHistory(conversationStore);
   const checkpoint = {
     role: 'system' as const,
     type: 'message' as const,
@@ -167,6 +174,10 @@ it('SessionStreamProcessor.finalize() persists the full replacement transcript f
     result,
     answer,
   ]);
+  expect(loggedEvents).toContainEqual({
+    type: 'history_replaced',
+    history: conversationStore.getProviderHistorySnapshot().history,
+  });
   expect(
     conversationStore.getProviderHistorySnapshot().history.filter((item: any) => item.callId === 'call-after-compact'),
   ).toHaveLength(2);
@@ -181,7 +192,7 @@ it('SessionStreamProcessor.finalize() persists Codex native compact history with
   const nativeCheckpoint = {
     type: 'compaction',
     id: 'codex-checkpoint',
-    providerOpaque: { provider: 'codex' },
+    providerOpaque: { provider: 'openai' },
     encrypted_content: 'opaque-checkpoint',
   };
   const answer = { role: 'assistant', type: 'message', content: 'answer after checkpoint' };
@@ -195,6 +206,21 @@ it('SessionStreamProcessor.finalize() persists Codex native compact history with
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
   expect(conversationStore.getProviderHistorySnapshot().history).toEqual([nativeCheckpoint, answer]);
   expect(JSON.stringify(conversationStore.getProviderHistorySnapshot().history)).not.toContain('raw old answer');
+});
+
+it('persists native compact artifact with tool-only hot tail even without message items', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('raw history');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const replacement = [
+    { type: 'compaction', id: 'codex-tool-only', encrypted_content: 'opaque', providerOpaque: { provider: 'openai' } },
+    { type: 'function_call', callId: 'call-hot', name: 'lookup', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-hot', name: 'lookup', output: 'ok' },
+  ];
+  const stream = makeStream([], { history: replacement, interruptions: [], historyReplacedByCompaction: true } as any);
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual(replacement);
 });
 
 it('persists chained local compaction through approval continuation and reuses the compacted snapshot', async () => {

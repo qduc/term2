@@ -671,6 +671,10 @@ export const useConversation = ({
       settingsService,
       usageAccumulator,
       controlSocket,
+      addSystemMessage,
+      cancelAskUser,
+      stopProcessing,
+      stopProcessingWithNotice,
       sessionMetadata:
         controlSessionMetadata ??
         (() => ({
@@ -682,7 +686,17 @@ export const useConversation = ({
     });
     controlSocket.bind(port);
     return () => controlSocket.unbind(port);
-  }, [controlSocket, controlSessionMetadata, conversationService, settingsService, usageAccumulator]);
+  }, [
+    addSystemMessage,
+    cancelAskUser,
+    controlSocket,
+    controlSessionMetadata,
+    conversationService,
+    settingsService,
+    stopProcessing,
+    stopProcessingWithNotice,
+    usageAccumulator,
+  ]);
 
   // ── Return object (identical shape to the old monolith) ─────────────────
   return {
@@ -730,6 +744,7 @@ export const useConversation = ({
     resetConversationPresentation,
     restoreConversation,
     stopProcessing: stopProcessingWithNotice,
+    stopProcessingWithNotice,
     cancelAskUser,
     rewindToTarget,
     retryLastToolOutput,

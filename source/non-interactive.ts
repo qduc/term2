@@ -25,7 +25,7 @@ import { formatBackgroundSubagentNotifications } from './services/conversation/c
 import type { BackgroundSubagentNotificationPort } from './services/subagents/subagent-notification-store.js';
 import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 
-export const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
+const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
 
 export interface NonInteractiveOutstandingWork {

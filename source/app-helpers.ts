@@ -34,7 +34,7 @@ export const messagesHaveNonSystemContent = (messages: Message[]): boolean =>
 export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
 
 /** Clear visible screen only (preserves scrollback) — used for automatic resize redraws. */
-export const TERMINAL_REDRAW_VISIBLE = '\u001B[2J\u001B[H';
+const TERMINAL_REDRAW_VISIBLE = '\u001B[2J\u001B[H';
 
 export const clearTerminalForRedraw = (stdout: TerminalWriter): void => {
   stdout.write(TERMINAL_REDRAW_CLEAR);

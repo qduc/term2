@@ -39,7 +39,6 @@ export { RUN_CODE_EXECUTION_RESULT, getRunCodeExecutionResult } from './run-code
 export {
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
-  TOOL_NAME_DESCRIBE,
   TOOL_NAME_RUN_CODE,
   isDirectlyCallable,
 } from './run-code-runtime.js';

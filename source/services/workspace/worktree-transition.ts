@@ -36,7 +36,7 @@ export type ExitWorktreeOutcome =
   | { kind: 'busy'; jobs: RunningJob[] };
 
 /** Working trees the session may lease: everything but the home root and bare records. */
-export function enterableWorktrees(worktrees: GitWorktree[], homeRoot: string): GitWorktree[] {
+function enterableWorktrees(worktrees: GitWorktree[], homeRoot: string): GitWorktree[] {
   return worktrees.filter((worktree) => !worktree.bare && worktree.path !== homeRoot);
 }
 

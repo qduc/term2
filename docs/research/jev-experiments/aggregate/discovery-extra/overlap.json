@@ -1,0 +1,225 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "overlap",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83"
+    },
+    "method": "char 5-gram Jaccard over state leaf values, lowercased, whitespace-collapsed",
+    "tasks": {
+      "D2": {
+        "any_case_to_nearest_other": {
+          "max": 0.933,
+          "median": 0.889,
+          "min": 0.844,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-10",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-10",
+            "jaccard": 0.933
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-22",
+            "jaccard": 0.921
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-07",
+            "jaccard": 0.916
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-06",
+            "jaccard": 0.907
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-03",
+            "jaccard": 0.904
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-24",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-23",
+            "jaccard": 0.903
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-10",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-19",
+            "jaccard": 0.902
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-02",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-02",
+            "jaccard": 0.896
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-24",
+            "jaccard": 0.896
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-21",
+            "jaccard": 0.895
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-11",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-11",
+            "jaccard": 0.894
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-20",
+            "jaccard": 0.89
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-15",
+            "jaccard": 0.883
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-08",
+            "jaccard": 0.88
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-16",
+            "jaccard": 0.879
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-01",
+            "jaccard": 0.878
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-09",
+            "jaccard": 0.878
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-17",
+            "jaccard": 0.877
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-17",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-04",
+            "jaccard": 0.872
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-18",
+            "jaccard": 0.87
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-05",
+            "jaccard": 0.869
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-12",
+            "jaccard": 0.863
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-14",
+            "jaccard": 0.862
+          },
+          {
+            "dev": "jev-fit-20260919-DX-D2-dev-07",
+            "holdout": "jev-fit-20260919-DX-D2-holdout-13",
+            "jaccard": 0.861
+          }
+        ],
+        "holdout_to_nearest_dev": {
+          "max": 0.933,
+          "median": 0.883,
+          "min": 0.861,
+          "n": 24
+        },
+        "template_ratio": 1.0
+      },
+      "D3": {
+        "any_case_to_nearest_other": {
+          "max": 0.455,
+          "median": 0.205,
+          "min": 0.113,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.424,
+          "median": 0.193,
+          "min": 0.1,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "D4": {
+        "any_case_to_nearest_other": {
+          "max": 0.556,
+          "median": 0.276,
+          "min": 0.137,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.53,
+          "median": 0.229,
+          "min": 0.107,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "D5": {
+        "any_case_to_nearest_other": {
+          "max": 0.86,
+          "median": 0.282,
+          "min": 0.107,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [
+          {
+            "dev": "jev-fit-20260919-DX-D5-dev-21",
+            "holdout": "jev-fit-20260919-DX-D5-holdout-23",
+            "jaccard": 0.659
+          }
+        ],
+        "holdout_to_nearest_dev": {
+          "max": 0.659,
+          "median": 0.156,
+          "min": 0.091,
+          "n": 24
+        },
+        "template_ratio": 0.083
+      },
+      "D6": {
+        "any_case_to_nearest_other": {
+          "max": 0.527,
+          "median": 0.23,
+          "min": 0.127,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.527,
+          "median": 0.227,
+          "min": 0.173,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      }
+    },
+    "threshold": 0.6
+  },
+  "returncode": 0
+}

@@ -1,0 +1,188 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/results/holdout.jsonl",
+    "--phase",
+    "holdout",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true,
+      "records_before_freeze": 0
+    },
+    "jsonl_problems": [],
+    "phase": "holdout",
+    "records_in_phase_used": 24,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/results/holdout.jsonl": "fdfef59b4687ad4eb4e84080f791a7473bdead7553bbc1b7f76f91b6ffa0d5b2"
+    },
+    "tasks": {
+      "D1|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9242,
+        "class_support_and_recall": {
+          "api-design": "1/1",
+          "architecture-diagram": "1/1",
+          "auth-features": "1/1",
+          "batch-file-ops": "1/1",
+          "cache-docs": "1/1",
+          "ci-debugging": "1/1",
+          "data-visualization": "1/1",
+          "date-utils": "1/1",
+          "docker-optimization": "1/1",
+          "email-deliverability": "1/1",
+          "email-drafting": "1/1",
+          "frontend-features": "1/1",
+          "git-workflow": "1/1",
+          "insufficient_evidence": "1/3",
+          "pdf": "1/1",
+          "scheduled-jobs": "1/1",
+          "schema-validation": "1/1",
+          "screen-capture": "1/1",
+          "test-debugging": "1/1",
+          "test-optimization": "1/1",
+          "transcription": "0/1",
+          "unit-testing": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "api-design": {
+            "api-design": 1
+          },
+          "architecture-diagram": {
+            "architecture-diagram": 1
+          },
+          "auth-features": {
+            "auth-features": 1
+          },
+          "batch-file-ops": {
+            "batch-file-ops": 1
+          },
+          "cache-docs": {
+            "cache-docs": 1
+          },
+          "ci-debugging": {
+            "ci-debugging": 1
+          },
+          "data-visualization": {
+            "data-visualization": 1
+          },
+          "date-utils": {
+            "date-utils": 1
+          },
+          "docker-optimization": {
+            "docker-optimization": 1
+          },
+          "email-deliverability": {
+            "email-deliverability": 1
+          },
+          "email-drafting": {
+            "email-drafting": 1
+          },
+          "frontend-features": {
+            "frontend-features": 1
+          },
+          "git-workflow": {
+            "git-workflow": 1
+          },
+          "insufficient_evidence": {
+            "incident-debugging": 1,
+            "insufficient_evidence": 1,
+            "technical-writing": 1
+          },
+          "pdf": {
+            "pdf": 1
+          },
+          "scheduled-jobs": {
+            "scheduled-jobs": 1
+          },
+          "schema-validation": {
+            "schema-validation": 1
+          },
+          "screen-capture": {
+            "screen-capture": 1
+          },
+          "test-debugging": {
+            "test-debugging": 1
+          },
+          "test-optimization": {
+            "test-optimization": 1
+          },
+          "transcription": {
+            "none": 1
+          },
+          "unit-testing": {
+            "unit-testing": 1
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 788.125,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 593.223,
+          "p95": 714.825
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.03906,
+            "model_losses": 1,
+            "model_wins": 8,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 2,
+            "model_wins": 20,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.125,
+            "model_losses": 1,
+            "model_wins": 6,
+            "other_correct": 16
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      }
+    },
+    "unknown_case_ids": []
+  },
+  "returncode": 0
+}

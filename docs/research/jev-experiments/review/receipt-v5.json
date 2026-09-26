@@ -1,0 +1,205 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V5",
+  "worker": "review",
+  "status": "complete",
+  "route": {
+    "harness": "term2",
+    "actual_model": "GPT-5.6 Sol",
+    "verified": "self-reported"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/discovery-extra-v2-assessment.md",
+  "sha256": "43bd02577128a3ca4589596f15f3bd2cad784e88345f0fcac00b50cb4726e84e",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-discovery-extra-v2.json",
+      "sha256": "8aad1329bd6b1fd42bb33993f2914a51b1970c9cc3311f6b8c6c612549776b83"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/uncertainties-discovery-extra-v2.md",
+      "sha256": "e8f422c487c5fad9f4f46b509e3c10d3d3ba065bc689757fcb5d542229d278dd"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/blind-discovery-extra-v2.json",
+      "sha256": "655c3aca87a096c979a0ef9dd36ab58eeb0544e0279459c08fba893de46f2df1"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/blind-discovery-extra-v2-manifest.json",
+      "sha256": "a0e39281c83e3fecef68f60cf4180651d290517e54a5a8f0baa8500bc19989bf"
+    }
+  ],
+  "inputs": {
+    "discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+    "discovery-extra/baseline.py": "324aa7ff00d9db0f7bee7baa35b87b8b6023c007ffb82e7d8647db9969a678b1",
+    "discovery-extra/prompts.json": "1d10a3203357fb77099418c2515e8c7dca95044df00e08bc3fbc10eeba564b74",
+    "discovery-extra/freeze.json": "6061d72b7596731ea5854a32c2e719958316e7e19c8921e50c4c78f0be3bab6a",
+    "discovery-extra/results/dev.jsonl": "1fae0ef7f7f2040d6327f2ce3fd00d132ac2fb48c7da564040fc530414eadaa1",
+    "discovery-extra/results/holdout.jsonl": "f7dfb53ab5a056c9916c2a4c791c9ef43cc654c0045c0c7e86ecf40a6d1b0989",
+    "discovery-extra/results/stability.jsonl": "688d42bdccbbe165e3adbdf80ba4aec491d9d212bd4d5784537aaa408dc3fa67"
+  },
+  "audit_tool": {
+    "path": "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "sha256": "8be6f9c9e42783eda369da264fe8b9242f71c4d44c42db2c863417a378175cf2"
+  },
+  "blind_order_attestation": "labels-discovery-extra-v2.json and uncertainties-discovery-extra-v2.md were written and hashed from the blind sample before the discovery-extra dataset, frozen labels, reports, or result records were opened; both files remained unchanged after unblinding",
+  "blind_manifest": {
+    "dataset_sha256": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+    "sample_sha256": "655c3aca87a096c979a0ef9dd36ab58eeb0544e0279459c08fba893de46f2df1"
+  },
+  "blind_agreement": {
+    "total": "22/25",
+    "D2": "5/5",
+    "D3": "4/5",
+    "D4": "4/5",
+    "D5": "5/5",
+    "D6": "4/5"
+  },
+  "decisions": {
+    "D2": "promising pilot for advisory top-1 tool choice within the supplied catalog",
+    "D3": "conditional fit; 23/24 but superiority over the 20/24 authored baseline is not established and the sole error is label-sensitive",
+    "D4": "conditional fit; 22/24 with significant baseline improvement, bounded by duplicate-relevant excerpt ambiguity",
+    "D5": "promising pilot for top-1 choice among synthetic repository-flavored passages; not real-code ranking evidence",
+    "D6": "conditional fit; 21/24 with significant baseline improvement, bounded by duplicate-relevant evidence and one rationale-text fixture leak"
+  },
+  "scores": {
+    "development_selected_or_tie_rule": {
+      "D2": "rubric 24/24; scoped 23/24; minimal 19/24",
+      "D3": "minimal 24/24; rubric 24/24; scoped 24/24; scoped selected by tie rule",
+      "D4": "minimal 24/24; rubric 24/24; scoped 24/24; scoped selected by tie rule",
+      "D5": "minimal 24/24; rubric 24/24; scoped 24/24; scoped selected by tie rule",
+      "D6": "minimal 24/24; rubric 24/24; scoped 24/24; scoped selected by tie rule"
+    },
+    "holdout": {
+      "D2|rubric": "24/24",
+      "D3|scoped": "23/24",
+      "D4|scoped": "22/24",
+      "D5|scoped": "24/24",
+      "D6|scoped": "21/24"
+    },
+    "stability": {
+      "repeat": "10/10",
+      "reversed": "10/10",
+      "total": "20/20"
+    }
+  },
+  "record_counts": {
+    "development": 360,
+    "holdout": 120,
+    "stability": 20,
+    "total": 500,
+    "success": 500,
+    "failure": 0
+  },
+  "verification_argv": [
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "contract",
+      "docs/research/jev-experiments/discovery-extra/dataset.json"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "overlap",
+      "docs/research/jev-experiments/discovery-extra/dataset.json"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "baselines",
+      "docs/research/jev-experiments/discovery-extra/dataset.json",
+      "--baseline-script",
+      "docs/research/jev-experiments/discovery-extra/baseline.py"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "blind-compare",
+      "docs/research/jev-experiments/discovery-extra/dataset.json",
+      "--sample",
+      "docs/research/jev-experiments/review/blind-discovery-extra-v2.json",
+      "--reviewer",
+      "docs/research/jev-experiments/review/labels-discovery-extra-v2.json"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "score",
+      "docs/research/jev-experiments/discovery-extra/dataset.json",
+      "--records",
+      "docs/research/jev-experiments/discovery-extra/results/dev.jsonl",
+      "--phase",
+      "dev",
+      "--freeze",
+      "docs/research/jev-experiments/discovery-extra/freeze.json"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "score",
+      "docs/research/jev-experiments/discovery-extra/dataset.json",
+      "--records",
+      "docs/research/jev-experiments/discovery-extra/results/holdout.jsonl",
+      "--phase",
+      "holdout",
+      "--freeze",
+      "docs/research/jev-experiments/discovery-extra/freeze.json"
+    ],
+    [
+      "python3",
+      "docs/research/jev-experiments/review/audit.py",
+      "score",
+      "docs/research/jev-experiments/discovery-extra/dataset.json",
+      "--records",
+      "docs/research/jev-experiments/discovery-extra/results/stability.jsonl",
+      "--phase",
+      "stability",
+      "--freeze",
+      "docs/research/jev-experiments/discovery-extra/freeze.json"
+    ],
+    ["python3", "-m", "json.tool", "docs/research/jev-experiments/review/receipt-v5.json"]
+  ],
+  "verification_result": {
+    "contract_exit_code": 0,
+    "contract_ok": true,
+    "contract_errors": 0,
+    "duplicate_canonical_states": 0,
+    "baseline_reproducible": "240/240",
+    "blind_compare_exit_code": 0,
+    "score_dev_exit_code": 0,
+    "score_holdout_exit_code": 0,
+    "score_stability_exit_code": 0,
+    "score_jsonl_problems": 0,
+    "score_unknown_case_ids": 0,
+    "score_duplicate_case_variant_tuples": 0,
+    "live_successes": "500/500",
+    "freeze_dataset_match": true,
+    "dev_records_after_freeze": 0,
+    "holdout_records_before_freeze": 0,
+    "stability_records": 20,
+    "resolved_model": "typesafe/jev-1.13-20260917",
+    "json_validation_exit_code": 0
+  },
+  "root_independent_verification": "all 500 lane records match frozen hashes/state; freeze precedes all 120 holdouts; one Choice per request",
+  "resolved_verification_note": "An initial sha256sum invocation used shell brace groups that were interpreted as literal path text. It was replaced, not repeated, with explicit artifact paths; all expected hashes matched. This was a command-construction error, not an artifact or runner-schema mismatch.",
+  "posthoc_not_preregistered": [
+    "shortest-candidate diagnostic on D3-D6 holdout",
+    "longest-candidate diagnostic on D3-D6 holdout"
+  ],
+  "provider_calls_by_reviewer": 0,
+  "fixture_or_gold_edits_by_reviewer": 0,
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Choice top-1 only; no ranking metric is supported.",
+    "D5 passages are handcrafted synthetic repository-flavored fixtures, not real-code retrieval or ranking evidence.",
+    "All tasks use synthetic author-visible holdout cases with n=24 per task.",
+    "Blind relabeling covers five cases per task and found three frozen-label disagreements plus additional duplicate-relevant uncertainty.",
+    "D6-holdout-13 repeats rationale prose inside supplied evidence, so it is not a clean semantic test.",
+    "The 20-record stability probe covers only two cases per task.",
+    "No provider attribution or billing cross-check was performed.",
+    "No long-context, multilingual, production replay, confidence calibration, Score/Noul, or end-to-end benefit was tested.",
+    "Original gold labels, fixtures, and runner records were not modified."
+  ],
+  "finished_at": "2026-09-19"
+}

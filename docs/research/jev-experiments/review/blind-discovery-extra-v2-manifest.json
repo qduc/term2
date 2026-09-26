@@ -1,0 +1,6 @@
+{
+  "dataset_sha256": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+  "sample_sha256": "655c3aca87a096c979a0ef9dd36ab58eeb0544e0279459c08fba893de46f2df1",
+  "selection": "lowest sha256(jev-blind-v1 + case id), five per task",
+  "reviewer": "w1J:p6 GPT-5.6 Sol, no prior D2-D6 label exposure"
+}

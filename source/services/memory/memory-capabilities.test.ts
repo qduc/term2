@@ -169,6 +169,7 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.guidance).toContain('Before finishing a task');
     expect(capability.guidance).toContain('explicit durable');
     expect(capability.guidance).toContain('ordinary conversation');
+    expect(capability.guidance).toContain('facts easily recovered by reading the repository');
   });
 
   it('injects summary context for a main agent with write access', () => {

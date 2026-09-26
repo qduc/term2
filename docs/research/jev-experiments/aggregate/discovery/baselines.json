@@ -1,0 +1,46 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "baselines",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json",
+    "--baseline-script",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/baseline.py"
+  ],
+  "output": {
+    "authored_baseline_reproducibility": {
+      "crashes_on_state_and_criteria_only": [],
+      "function": "choose",
+      "matches_stored_field": 48,
+      "mismatch_ids": [],
+      "n": 48,
+      "reproducible_from_state_and_criteria": true,
+      "script": "/home/qduc/term2/docs/research/jev-experiments/discovery/baseline.py",
+      "script_sha256": "8fe1698a74fd25e8e08f93c5e83f8ea2a149bf2d0a9196796d79c584fa5ab701",
+      "static_scan": {}
+    },
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "dev_majority_label_names": "hidden (use --show-labels)",
+    "tasks": {
+      "D1": {
+        "dev": {
+          "authored_stored_correct": 13,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 20,
+          "lexical_probe_correct": 16,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 14,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 21,
+          "lexical_probe_correct": 16,
+          "n": 24
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

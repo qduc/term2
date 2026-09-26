@@ -1,0 +1,175 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/results/stability.jsonl",
+    "--phase",
+    "stability",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true
+    },
+    "jsonl_problems": [],
+    "phase": "stability",
+    "records_in_phase_used": 4,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/results/stability.jsonl": "16be52ed25e16e957571e6e6585e81d247f0e99de5bde1b669c4f64c39ee642d"
+    },
+    "tasks": {
+      "D1|repeat": {
+        "answered": 2,
+        "attempted": 2,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "cache-docs": "1/1",
+          "scheduled-jobs": "1/1"
+        },
+        "confidence_n": 2,
+        "confusion_expected_to_predicted": {
+          "cache-docs": {
+            "cache-docs": 1
+          },
+          "scheduled-jobs": {
+            "scheduled-jobs": 1
+          }
+        },
+        "correct": 2,
+        "correct_over_answered": "2/2",
+        "correct_over_attempted": "2/2",
+        "criteria_order": {
+          "original": 2
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 2
+        },
+        "latency_ms": {
+          "distinct_values": 2,
+          "max": 643.889,
+          "n": 2,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 608.653,
+          "p95": 643.889
+        },
+        "not_attempted": 22,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.5,
+            "model_losses": 0,
+            "model_wins": 2,
+            "other_correct": 0
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.5,
+            "model_losses": 0,
+            "model_wins": 2,
+            "other_correct": 0
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 1.0,
+            "model_losses": 0,
+            "model_wins": 1,
+            "other_correct": 1
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 2,
+          "unique": 2
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 2
+        },
+        "universe": 24,
+        "wilson95_answered": [0.3424, 1.0],
+        "wilson95_attempted": [0.3424, 1.0]
+      },
+      "D1|reversed": {
+        "answered": 2,
+        "attempted": 2,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "cache-docs": "1/1",
+          "scheduled-jobs": "1/1"
+        },
+        "confidence_n": 2,
+        "confusion_expected_to_predicted": {
+          "cache-docs": {
+            "cache-docs": 1
+          },
+          "scheduled-jobs": {
+            "scheduled-jobs": 1
+          }
+        },
+        "correct": 2,
+        "correct_over_answered": "2/2",
+        "correct_over_attempted": "2/2",
+        "criteria_order": {
+          "reversed": 2
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 2
+        },
+        "latency_ms": {
+          "distinct_values": 2,
+          "max": 595.914,
+          "n": 2,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 587.463,
+          "p95": 595.914
+        },
+        "not_attempted": 22,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.5,
+            "model_losses": 0,
+            "model_wins": 2,
+            "other_correct": 0
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.5,
+            "model_losses": 0,
+            "model_wins": 2,
+            "other_correct": 0
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 1.0,
+            "model_losses": 0,
+            "model_wins": 1,
+            "other_correct": 1
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 2,
+          "unique": 2
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 2
+        },
+        "universe": 24,
+        "wilson95_answered": [0.3424, 1.0],
+        "wilson95_attempted": [0.3424, 1.0]
+      }
+    },
+    "unknown_case_ids": []
+  },
+  "returncode": 0
+}

@@ -1,0 +1,22 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "D",
+  "role": "worker discovery",
+  "acknowledged_at": "2026-09-19T02:41:23.010Z",
+  "touch_set": "/home/qduc/term2/docs/research/jev-experiments/discovery/",
+  "intended_route": "term2/zai/glm-5.3-flash",
+  "actual_route": {
+    "dispatched_as": "term2/zai/glm-5.3-flash",
+    "self_verified": false,
+    "evidence": "No provider/model identity is exposed in this session's environment or in process args (`ps` shows multiple bare `term2` processes; other panes are protected and were not inspected). Actual serving route must be confirmed from coordinator-side dispatch records."
+  },
+  "constraints_acknowledged": [
+    "research only; no production source/settings changes; no git commits; no nested agents",
+    "work only inside the discovery artifact directory",
+    "no reading of private conversations; no credential printing/storage",
+    "dangerous command strings are fixture data only, never executed",
+    "no scored provider calls; coordinator will supply the runner command",
+    "return-only sink: this terminal + receipt.json; no existing Herdr panes"
+  ],
+  "deliverables_planned": ["dataset.json", "prompts.json", "baseline.py", "design.md", "receipt.json"]
+}

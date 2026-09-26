@@ -1,0 +1,80 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V3",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported; coordinator recorded 'Opus 5' from live TUI footer"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/evidence-live-assessment.md",
+  "sha256": "14eb6d1ebe18eb4e1a1a0e86534e9ff6e5e9c3df0a5d78de2fa0599357b55111",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/evidence-live-audit.json",
+      "sha256": "f3f890bc241568d5a13f238d3941e80ea99e1234230b2fbc6a6aaa08c4c5a964"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/evidence-live-analysis.py",
+      "sha256": "997d14d28f694be3c170cf0ca220fdddc21453a853e97a3cf40bce371b7852e9"
+    }
+  ],
+  "inputs": {
+    "evidence/dataset.json": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+    "evidence/prompts.json": "a10ead314bec3c7fbd1693596231c5a11139edbd38417d6a58992a18cac5aa98",
+    "evidence/freeze.json": "63c2e32fe9e852db2ea4fbca9b6b617065e2e1bffd7026940400bc01ac220224",
+    "evidence/stability-plan.json": "fada1288d0117b3a8dc914bf2406a4ace6f7f675a91c3e258c6a6af2fb2d918f",
+    "evidence/results/dev.jsonl": "e0089e38b380e5a92b334b78c62baf4d63ed17b0176a9ef83010f24141b9d20b",
+    "evidence/results/holdout.jsonl": "5f1055d876e45876a36858ad4d9e736f2129d2937aacbb56c29698ea2c1f964e",
+    "evidence/results/stability.jsonl": "2d38f56b5251a57624d72f4232b0064f445de78a8ba6b731ccc166eebe44e55e",
+    "review/audit.py": "8be6f9c9e42783eda369da264fe8b9242f71c4d44c42db2c863417a378175cf2"
+  },
+  "unchanged": "dataset, prompts, freeze, records and audit.py untouched (audit.py sha 8be6f9c9... identical to V2)",
+  "verdicts": {
+    "E1": "promising pilot, advisory only",
+    "E2": "promising pilot",
+    "E3": "inconclusive (label-sensitive at threshold)",
+    "E4": "inconclusive (rubric/fixture defect)",
+    "E5": "conditional fit (fixture-limited)",
+    "E6": "promising pilot, advisory only (1 false suppression)",
+    "E7": "conditional fit (answer channel)",
+    "E8": "conditional fit (threshold, unstable, injection-followed)"
+  },
+  "stability": {
+    "repeat": "12/14",
+    "reversed": "12/14",
+    "omitted": ["E2 adversarial", "E6 adversarial"],
+    "omission_basis": "evidence/stability-plan.json coordinator pre-call amendment; omitted not substituted"
+  },
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/review/audit.py", "--selftest"],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true,
+    "checks": 46,
+    "evidence": "MOCK fixtures only"
+  },
+  "reproduce": [
+    [
+      "python3",
+      "review/audit.py",
+      "score",
+      "evidence/dataset.json",
+      "--records",
+      "evidence/results/holdout.jsonl",
+      "--phase",
+      "holdout",
+      "--freeze",
+      "evidence/freeze.json"
+    ],
+    ["python3", "review/evidence-live-analysis.py"]
+  ],
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Provider IDs not cross-checked against OpenRouter records (no credentials used)",
+    "Unsafe-direction class sets defined by reviewer per preregistered false-safe/false-complete rule; listed in evidence-live-analysis.py",
+    "Contested labels (E3-holdout-016, E4 single-fragment COMPLETE cases, E4-holdout-020/024) unresolved; headline uses frozen labels",
+    "n=24 per task, synthetic one-sentence states, author-visible holdout",
+    "Cost is provider-reported usage.cost, not billing-verified"
+  ]
+}

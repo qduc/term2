@@ -1,0 +1,167 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "baselines",
+    "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json",
+    "--baseline-script",
+    "/home/qduc/term2/docs/research/jev-experiments/evidence/baseline.py"
+  ],
+  "output": {
+    "authored_baseline_reproducibility": {
+      "crashes_on_state_and_criteria_only": [],
+      "function": "predict_case",
+      "matches_stored_field": 384,
+      "mismatch_ids": [],
+      "n": 384,
+      "reproducible_from_state_and_criteria": true,
+      "script": "/home/qduc/term2/docs/research/jev-experiments/evidence/baseline.py",
+      "script_sha256": "ac1f618bfd66fd18c088b445efd0d67af869c8f34eb0fec68c82b44068077b39",
+      "static_scan": {
+        "label_field_reads": [
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 169
+          }
+        ]
+      }
+    },
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb"
+    },
+    "dev_majority_label_names": "hidden (use --show-labels)",
+    "tasks": {
+      "E1": {
+        "dev": {
+          "authored_stored_correct": 19,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 12,
+          "lexical_probe_correct": 12,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 11,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 12,
+          "lexical_probe_correct": 11,
+          "n": 24
+        }
+      },
+      "E2": {
+        "dev": {
+          "authored_stored_correct": 16,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 14,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 9,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 15,
+          "n": 24
+        }
+      },
+      "E3": {
+        "dev": {
+          "authored_stored_correct": 10,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 8,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 7,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 6,
+          "n": 24
+        }
+      },
+      "E4": {
+        "dev": {
+          "authored_stored_correct": 10,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 10,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 7,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 7,
+          "n": 24
+        }
+      },
+      "E5": {
+        "dev": {
+          "authored_stored_correct": 24,
+          "dev_majority_correct": 5,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 5,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 24,
+          "dev_majority_correct": 5,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 5,
+          "n": 24
+        }
+      },
+      "E6": {
+        "dev": {
+          "authored_stored_correct": 13,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 15,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 5,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 11,
+          "n": 24
+        }
+      },
+      "E7": {
+        "dev": {
+          "authored_stored_correct": 23,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 4,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 22,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 4,
+          "n": 24
+        }
+      },
+      "E8": {
+        "dev": {
+          "authored_stored_correct": 11,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 17,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 8,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 11,
+          "n": 24
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

@@ -1,0 +1,101 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V4",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/v4-live-assessment.md",
+  "sha256": "00da1680c6adc3ac9f76eb7ddf4de8c0a9f62a8cc8cf21ac20e9c7a02ea297f6",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/v4-live-audit.json",
+      "sha256": "1d3926753be1661ce2762fcd4ed215c7d6b2bc1e1ea424bba8abbea1abb2b7a2"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/v4-live-analysis.py",
+      "sha256": "e050a3b033faa9e5a0d8118002a06668fb2a3478685c4deb65d3f264bf19e18a"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/v4-discovery-routing.md",
+      "sha256": "dab74c6a118138605135d2c4a9fe7aaf679f6181b771bb960677e178a52d1db9"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/v4-discovery-d1.md",
+      "sha256": "747ed09cd8dd09c2ea7ef3291f3716a3c1aa73f2e79ac56ef7632657c92883a0"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-discovery.json",
+      "sha256": "d70284e2cfeb72851a4485bd4c4bdc57627dc38a7ef16c7e84034e714a9c80ed"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-discovery-uncertainties.md",
+      "sha256": "8f8a64bf9040226b75b55a6a78ff69701f08f50382eeb18078bbab7d0037decc"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-routing.json",
+      "sha256": "86e267d3b103f91826d5b2b0e88d2dd966928b23a33d705893f966b02dcc0681"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-routing-uncertainties.md",
+      "sha256": "9578d8d85c63de80d5632d2525bf1be3f12fb2e4fdc467dea541a8517a22e3a4"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-discovery-extra.json",
+      "sha256": "77fda97ecac4f92ed140d17a4fcd20b52cff9d7d601691c0d48d8a938d437b7f"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-discovery-extra-uncertainties.md",
+      "sha256": "6504d8af34f20438b85bd193d7f71eb23896949d8e72b4d1cc45ec4d6cceb03a"
+    }
+  ],
+  "inputs": {
+    "routing/dataset.json": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c",
+    "routing/freeze.json": "75935b66f1b92a8773baf6dafd77525bce3c3c6206dec2a0ae1e66cb8e3e4537",
+    "routing/results/dev.jsonl": "c9a7e54605cd9a9d76c68f898c1a7682a7992047b0b5b21105fa006d5153fee9",
+    "routing/results/holdout.jsonl": "ec8012cf1b048b08d7e2ef223e70bf73a5c72a794e6e69f66637bf37713e3c3a",
+    "routing/results/stability.jsonl": "c1e62e50fe18acc1040543b7ffa358dee795114ae405263a9289313f96fda0b0",
+    "discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc",
+    "discovery/freeze.json": "3df29be491bcf9149fc0cc0a234718973dd37c2c8ec4887de3603c2f0ddd7413",
+    "discovery/results/dev.jsonl": "5193f8bf45af7b10bfe0c12222c57a0f8353477d6f4981e7788b732579da78aa",
+    "discovery/results/holdout.jsonl": "fdfef59b4687ad4eb4e84080f791a7473bdead7553bbc1b7f76f91b6ffa0d5b2",
+    "discovery/results/stability.jsonl": "16be52ed25e16e957571e6e6585e81d247f0e99de5bde1b669c4f64c39ee642d",
+    "discovery-extra/dataset.json": "a24ddd2a975867d53eeb8eb075ddd7f6ec03d22992ba300c5eb8f45c79e4cb19"
+  },
+  "blind_order_attestation": "each labels-*.json and uncertainty note written and hashed before the corresponding lane dataset/labels/results were opened; v1 D2-D6 blind artifacts left unamended per coordinator",
+  "blind_agreement": {
+    "D1": "5/5",
+    "routing": "30/30",
+    "D2-D6": "25/25"
+  },
+  "decisions": {
+    "R1": "promising pilot (rubric agreement; economics untested)",
+    "R2": "poor fit on frozen labels; inconclusive if R2-holdout-10 adjudicated (16->17/24)",
+    "R3": "promising pilot",
+    "R4": "promising pilot (advisory)",
+    "R5": "promising pilot (advisory, outside exact control)",
+    "R6": "conditional fit as narrated-admission classifier; inconclusive for general programmable use",
+    "D1": "conditional fit, position-confounded (post hoc 5-1 vs position-only, p=0.22); abstention not established"
+  },
+  "posthoc_not_preregistered": ["position-only diagnostic", "D1 accuracy split by answer position"],
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/review/audit.py", "--selftest"],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true,
+    "checks": 46,
+    "evidence": "MOCK fixtures only"
+  },
+  "unchanged": "audit.py sha 8be6f9c9... unchanged; no lane files edited; no API calls",
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "D2-D6 live calls held; not audited",
+    "Blind agreement is one model reviewer's second opinion",
+    "Provider IDs not cross-checked with OpenRouter",
+    "n=24/task synthetic, author-visible holdout",
+    "Stability adversarial trials omitted for R3/R4/R5 (and E2/E6 earlier)",
+    "Discovery-extra stored baseline stale for 3 D6 cases (recompute from baseline.py)"
+  ]
+}

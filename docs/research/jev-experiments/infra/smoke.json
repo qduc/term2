@@ -1,0 +1,49 @@
+{
+  "body": {
+    "model": "typesafe/jev-1.13",
+    "questions": {
+      "smoke": {
+        "criteria": {
+          "understood": "The neutral state and question are understandable.",
+          "unknown": "The state is insufficient to understand the question."
+        },
+        "instructions": "Choose the option that best describes whether this neutral request is understandable.",
+        "type": "choice"
+      }
+    },
+    "state": {
+      "purpose": "neutral transport smoke test; do not infer a production decision"
+    }
+  },
+  "duration_ms": 642.678,
+  "ended_at": "2026-09-19T02:48:00.655859Z",
+  "endpoint": "https://openrouter.ai/api/alpha/decisions",
+  "http_status": 200,
+  "live": true,
+  "model": "typesafe/jev-1.13",
+  "payload_sha256": "b27ac02c44e55eb0a580d6d45d0aee26a7afcf077181d98499e6f41c99761730",
+  "provider_id": "gen-dec-1789786080-3a6a03gD5SIBecL9D99M",
+  "real_response": {
+    "answers": {
+      "smoke": {
+        "choice": "understood",
+        "confidence": 0.4,
+        "probabilities": {
+          "understood": 0.7,
+          "unknown": 0.3
+        },
+        "type": "choice"
+      }
+    },
+    "id": "gen-dec-1789786080-3a6a03gD5SIBecL9D99M",
+    "model": "typesafe/jev-1.13-20260917",
+    "provider": "TypeSafe",
+    "usage": {
+      "cost": 1.4574e-5,
+      "input_tokens": 347,
+      "output_tokens": 36
+    }
+  },
+  "resolved_model": "typesafe/jev-1.13-20260917",
+  "started_at": "2026-09-19T02:48:00.013240Z"
+}

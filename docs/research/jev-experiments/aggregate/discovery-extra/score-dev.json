@@ -1,0 +1,2292 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/results/dev.jsonl",
+    "--phase",
+    "dev",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true,
+      "records_after_freeze": 0
+    },
+    "jsonl_problems": [],
+    "phase": "dev",
+    "records_in_phase_used": 360,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/results/dev.jsonl": "1fae0ef7f7f2040d6327f2ce3fd00d132ac2fb48c7da564040fc530414eadaa1"
+    },
+    "tasks": {
+      "D2|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8167,
+        "class_support_and_recall": {
+          "apply_patch": "0/1",
+          "ask_user": "1/1",
+          "create_file": "1/1",
+          "glob": "3/3",
+          "grep": "2/2",
+          "memory_search": "1/1",
+          "none": "1/4",
+          "read_file": "3/3",
+          "run_code": "1/1",
+          "run_subagent": "1/1",
+          "search_replace": "0/1",
+          "session_search": "1/1",
+          "shell": "1/1",
+          "web_fetch": "2/2",
+          "web_search": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "apply_patch": {
+            "read_file": 1
+          },
+          "ask_user": {
+            "ask_user": 1
+          },
+          "create_file": {
+            "create_file": 1
+          },
+          "glob": {
+            "glob": 3
+          },
+          "grep": {
+            "grep": 2
+          },
+          "memory_search": {
+            "memory_search": 1
+          },
+          "none": {
+            "ask_user": 2,
+            "none": 1,
+            "shell": 1
+          },
+          "read_file": {
+            "read_file": 3
+          },
+          "run_code": {
+            "run_code": 1
+          },
+          "run_subagent": {
+            "run_subagent": 1
+          },
+          "search_replace": {
+            "read_file": 1
+          },
+          "session_search": {
+            "session_search": 1
+          },
+          "shell": {
+            "shell": 1
+          },
+          "web_fetch": {
+            "web_fetch": 2
+          },
+          "web_search": {
+            "web_search": 1
+          }
+        },
+        "correct": 19,
+        "correct_over_answered": "19/24",
+        "correct_over_attempted": "19/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1430.907,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.697,
+          "p95": 1056.358
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.28906,
+            "model_losses": 2,
+            "model_wins": 6,
+            "other_correct": 15
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 3
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.5953, 0.9076],
+        "wilson95_attempted": [0.5953, 0.9076]
+      },
+      "D2|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "apply_patch": "1/1",
+          "ask_user": "1/1",
+          "create_file": "1/1",
+          "glob": "3/3",
+          "grep": "2/2",
+          "memory_search": "1/1",
+          "none": "4/4",
+          "read_file": "3/3",
+          "run_code": "1/1",
+          "run_subagent": "1/1",
+          "search_replace": "1/1",
+          "session_search": "1/1",
+          "shell": "1/1",
+          "web_fetch": "2/2",
+          "web_search": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "apply_patch": {
+            "apply_patch": 1
+          },
+          "ask_user": {
+            "ask_user": 1
+          },
+          "create_file": {
+            "create_file": 1
+          },
+          "glob": {
+            "glob": 3
+          },
+          "grep": {
+            "grep": 2
+          },
+          "memory_search": {
+            "memory_search": 1
+          },
+          "none": {
+            "none": 4
+          },
+          "read_file": {
+            "read_file": 3
+          },
+          "run_code": {
+            "run_code": 1
+          },
+          "run_subagent": {
+            "run_subagent": 1
+          },
+          "search_replace": {
+            "search_replace": 1
+          },
+          "session_search": {
+            "session_search": 1
+          },
+          "shell": {
+            "shell": 1
+          },
+          "web_fetch": {
+            "web_fetch": 2
+          },
+          "web_search": {
+            "web_search": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1077.346,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 562.122,
+          "p95": 722.949
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 15
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D2|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9833,
+        "class_support_and_recall": {
+          "apply_patch": "1/1",
+          "ask_user": "1/1",
+          "create_file": "1/1",
+          "glob": "3/3",
+          "grep": "2/2",
+          "memory_search": "1/1",
+          "none": "3/4",
+          "read_file": "3/3",
+          "run_code": "1/1",
+          "run_subagent": "1/1",
+          "search_replace": "1/1",
+          "session_search": "1/1",
+          "shell": "1/1",
+          "web_fetch": "2/2",
+          "web_search": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "apply_patch": {
+            "apply_patch": 1
+          },
+          "ask_user": {
+            "ask_user": 1
+          },
+          "create_file": {
+            "create_file": 1
+          },
+          "glob": {
+            "glob": 3
+          },
+          "grep": {
+            "grep": 2
+          },
+          "memory_search": {
+            "memory_search": 1
+          },
+          "none": {
+            "ask_user": 1,
+            "none": 3
+          },
+          "read_file": {
+            "read_file": 3
+          },
+          "run_code": {
+            "run_code": 1
+          },
+          "run_subagent": {
+            "run_subagent": 1
+          },
+          "search_replace": {
+            "search_replace": 1
+          },
+          "session_search": {
+            "session_search": 1
+          },
+          "shell": {
+            "shell": 1
+          },
+          "web_fetch": {
+            "web_fetch": 2
+          },
+          "web_search": {
+            "web_search": 1
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1030.069,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 592.562,
+          "p95": 1029.764
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.02148,
+            "model_losses": 1,
+            "model_wins": 9,
+            "other_correct": 15
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 1,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 20,
+            "other_correct": 3
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "D3|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "mem_bg_monitor": "1/1",
+          "mem_cache_step": "1/1",
+          "mem_candidate_gates": "1/1",
+          "mem_code_host": "1/1",
+          "mem_dispatch": "1/1",
+          "mem_effect_safety": "1/1",
+          "mem_field_editor": "1/1",
+          "mem_gateway": "1/1",
+          "mem_mcp_code": "1/1",
+          "mem_midturn": "1/1",
+          "mem_nested": "1/1",
+          "mem_neutral_compact": "1/1",
+          "mem_oauth": "1/1",
+          "mem_queue": "1/1",
+          "mem_reasoning_roundtrip": "1/1",
+          "mem_shell_timeouts": "1/1",
+          "mem_slow_tests": "1/1",
+          "mem_sqlite": "1/1",
+          "mem_stall": "1/1",
+          "mem_ui_sep": "1/1",
+          "mem_worktree": "1/1",
+          "none": "3/3"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "mem_bg_monitor": {
+            "mem_bg_monitor": 1
+          },
+          "mem_cache_step": {
+            "mem_cache_step": 1
+          },
+          "mem_candidate_gates": {
+            "mem_candidate_gates": 1
+          },
+          "mem_code_host": {
+            "mem_code_host": 1
+          },
+          "mem_dispatch": {
+            "mem_dispatch": 1
+          },
+          "mem_effect_safety": {
+            "mem_effect_safety": 1
+          },
+          "mem_field_editor": {
+            "mem_field_editor": 1
+          },
+          "mem_gateway": {
+            "mem_gateway": 1
+          },
+          "mem_mcp_code": {
+            "mem_mcp_code": 1
+          },
+          "mem_midturn": {
+            "mem_midturn": 1
+          },
+          "mem_nested": {
+            "mem_nested": 1
+          },
+          "mem_neutral_compact": {
+            "mem_neutral_compact": 1
+          },
+          "mem_oauth": {
+            "mem_oauth": 1
+          },
+          "mem_queue": {
+            "mem_queue": 1
+          },
+          "mem_reasoning_roundtrip": {
+            "mem_reasoning_roundtrip": 1
+          },
+          "mem_shell_timeouts": {
+            "mem_shell_timeouts": 1
+          },
+          "mem_slow_tests": {
+            "mem_slow_tests": 1
+          },
+          "mem_sqlite": {
+            "mem_sqlite": 1
+          },
+          "mem_stall": {
+            "mem_stall": 1
+          },
+          "mem_ui_sep": {
+            "mem_ui_sep": 1
+          },
+          "mem_worktree": {
+            "mem_worktree": 1
+          },
+          "none": {
+            "none": 3
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1156.903,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 556.67,
+          "p95": 1045.738
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 17
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D3|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "mem_bg_monitor": "1/1",
+          "mem_cache_step": "1/1",
+          "mem_candidate_gates": "1/1",
+          "mem_code_host": "1/1",
+          "mem_dispatch": "1/1",
+          "mem_effect_safety": "1/1",
+          "mem_field_editor": "1/1",
+          "mem_gateway": "1/1",
+          "mem_mcp_code": "1/1",
+          "mem_midturn": "1/1",
+          "mem_nested": "1/1",
+          "mem_neutral_compact": "1/1",
+          "mem_oauth": "1/1",
+          "mem_queue": "1/1",
+          "mem_reasoning_roundtrip": "1/1",
+          "mem_shell_timeouts": "1/1",
+          "mem_slow_tests": "1/1",
+          "mem_sqlite": "1/1",
+          "mem_stall": "1/1",
+          "mem_ui_sep": "1/1",
+          "mem_worktree": "1/1",
+          "none": "3/3"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "mem_bg_monitor": {
+            "mem_bg_monitor": 1
+          },
+          "mem_cache_step": {
+            "mem_cache_step": 1
+          },
+          "mem_candidate_gates": {
+            "mem_candidate_gates": 1
+          },
+          "mem_code_host": {
+            "mem_code_host": 1
+          },
+          "mem_dispatch": {
+            "mem_dispatch": 1
+          },
+          "mem_effect_safety": {
+            "mem_effect_safety": 1
+          },
+          "mem_field_editor": {
+            "mem_field_editor": 1
+          },
+          "mem_gateway": {
+            "mem_gateway": 1
+          },
+          "mem_mcp_code": {
+            "mem_mcp_code": 1
+          },
+          "mem_midturn": {
+            "mem_midturn": 1
+          },
+          "mem_nested": {
+            "mem_nested": 1
+          },
+          "mem_neutral_compact": {
+            "mem_neutral_compact": 1
+          },
+          "mem_oauth": {
+            "mem_oauth": 1
+          },
+          "mem_queue": {
+            "mem_queue": 1
+          },
+          "mem_reasoning_roundtrip": {
+            "mem_reasoning_roundtrip": 1
+          },
+          "mem_shell_timeouts": {
+            "mem_shell_timeouts": 1
+          },
+          "mem_slow_tests": {
+            "mem_slow_tests": 1
+          },
+          "mem_sqlite": {
+            "mem_sqlite": 1
+          },
+          "mem_stall": {
+            "mem_stall": 1
+          },
+          "mem_ui_sep": {
+            "mem_ui_sep": 1
+          },
+          "mem_worktree": {
+            "mem_worktree": 1
+          },
+          "none": {
+            "none": 3
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1191.89,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 560.053,
+          "p95": 1068.527
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 17
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D3|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "mem_bg_monitor": "1/1",
+          "mem_cache_step": "1/1",
+          "mem_candidate_gates": "1/1",
+          "mem_code_host": "1/1",
+          "mem_dispatch": "1/1",
+          "mem_effect_safety": "1/1",
+          "mem_field_editor": "1/1",
+          "mem_gateway": "1/1",
+          "mem_mcp_code": "1/1",
+          "mem_midturn": "1/1",
+          "mem_nested": "1/1",
+          "mem_neutral_compact": "1/1",
+          "mem_oauth": "1/1",
+          "mem_queue": "1/1",
+          "mem_reasoning_roundtrip": "1/1",
+          "mem_shell_timeouts": "1/1",
+          "mem_slow_tests": "1/1",
+          "mem_sqlite": "1/1",
+          "mem_stall": "1/1",
+          "mem_ui_sep": "1/1",
+          "mem_worktree": "1/1",
+          "none": "3/3"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "mem_bg_monitor": {
+            "mem_bg_monitor": 1
+          },
+          "mem_cache_step": {
+            "mem_cache_step": 1
+          },
+          "mem_candidate_gates": {
+            "mem_candidate_gates": 1
+          },
+          "mem_code_host": {
+            "mem_code_host": 1
+          },
+          "mem_dispatch": {
+            "mem_dispatch": 1
+          },
+          "mem_effect_safety": {
+            "mem_effect_safety": 1
+          },
+          "mem_field_editor": {
+            "mem_field_editor": 1
+          },
+          "mem_gateway": {
+            "mem_gateway": 1
+          },
+          "mem_mcp_code": {
+            "mem_mcp_code": 1
+          },
+          "mem_midturn": {
+            "mem_midturn": 1
+          },
+          "mem_nested": {
+            "mem_nested": 1
+          },
+          "mem_neutral_compact": {
+            "mem_neutral_compact": 1
+          },
+          "mem_oauth": {
+            "mem_oauth": 1
+          },
+          "mem_queue": {
+            "mem_queue": 1
+          },
+          "mem_reasoning_roundtrip": {
+            "mem_reasoning_roundtrip": 1
+          },
+          "mem_shell_timeouts": {
+            "mem_shell_timeouts": 1
+          },
+          "mem_slow_tests": {
+            "mem_slow_tests": 1
+          },
+          "mem_sqlite": {
+            "mem_sqlite": 1
+          },
+          "mem_stall": {
+            "mem_stall": 1
+          },
+          "mem_ui_sep": {
+            "mem_ui_sep": 1
+          },
+          "mem_worktree": {
+            "mem_worktree": 1
+          },
+          "none": {
+            "none": 3
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 645.972,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 551.145,
+          "p95": 641.067
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 17
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D4|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sess_act": "1/1",
+          "sess_continuity": "1/1",
+          "sess_cursor": "1/1",
+          "sess_denied_read": "1/1",
+          "sess_double_escape": "1/1",
+          "sess_explorer_role": "1/1",
+          "sess_glob_fd": "1/1",
+          "sess_heal": "1/1",
+          "sess_image_read": "1/1",
+          "sess_json_schema": "1/1",
+          "sess_kinds_read": "1/1",
+          "sess_memory_cursor": "1/1",
+          "sess_mentor": "1/1",
+          "sess_nested_shell": "1/1",
+          "sess_no_symlink": "1/1",
+          "sess_noninteractive": "1/1",
+          "sess_pair": "1/1",
+          "sess_prev": "1/1",
+          "sess_rtk": "1/1",
+          "sess_trim": "1/1",
+          "sess_workflow": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sess_act": {
+            "sess_act": 1
+          },
+          "sess_continuity": {
+            "sess_continuity": 1
+          },
+          "sess_cursor": {
+            "sess_cursor": 1
+          },
+          "sess_denied_read": {
+            "sess_denied_read": 1
+          },
+          "sess_double_escape": {
+            "sess_double_escape": 1
+          },
+          "sess_explorer_role": {
+            "sess_explorer_role": 1
+          },
+          "sess_glob_fd": {
+            "sess_glob_fd": 1
+          },
+          "sess_heal": {
+            "sess_heal": 1
+          },
+          "sess_image_read": {
+            "sess_image_read": 1
+          },
+          "sess_json_schema": {
+            "sess_json_schema": 1
+          },
+          "sess_kinds_read": {
+            "sess_kinds_read": 1
+          },
+          "sess_memory_cursor": {
+            "sess_memory_cursor": 1
+          },
+          "sess_mentor": {
+            "sess_mentor": 1
+          },
+          "sess_nested_shell": {
+            "sess_nested_shell": 1
+          },
+          "sess_no_symlink": {
+            "sess_no_symlink": 1
+          },
+          "sess_noninteractive": {
+            "sess_noninteractive": 1
+          },
+          "sess_pair": {
+            "sess_pair": 1
+          },
+          "sess_prev": {
+            "sess_prev": 1
+          },
+          "sess_rtk": {
+            "sess_rtk": 1
+          },
+          "sess_trim": {
+            "sess_trim": 1
+          },
+          "sess_workflow": {
+            "sess_workflow": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 923.238,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 556.474,
+          "p95": 705.143
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D4|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sess_act": "1/1",
+          "sess_continuity": "1/1",
+          "sess_cursor": "1/1",
+          "sess_denied_read": "1/1",
+          "sess_double_escape": "1/1",
+          "sess_explorer_role": "1/1",
+          "sess_glob_fd": "1/1",
+          "sess_heal": "1/1",
+          "sess_image_read": "1/1",
+          "sess_json_schema": "1/1",
+          "sess_kinds_read": "1/1",
+          "sess_memory_cursor": "1/1",
+          "sess_mentor": "1/1",
+          "sess_nested_shell": "1/1",
+          "sess_no_symlink": "1/1",
+          "sess_noninteractive": "1/1",
+          "sess_pair": "1/1",
+          "sess_prev": "1/1",
+          "sess_rtk": "1/1",
+          "sess_trim": "1/1",
+          "sess_workflow": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sess_act": {
+            "sess_act": 1
+          },
+          "sess_continuity": {
+            "sess_continuity": 1
+          },
+          "sess_cursor": {
+            "sess_cursor": 1
+          },
+          "sess_denied_read": {
+            "sess_denied_read": 1
+          },
+          "sess_double_escape": {
+            "sess_double_escape": 1
+          },
+          "sess_explorer_role": {
+            "sess_explorer_role": 1
+          },
+          "sess_glob_fd": {
+            "sess_glob_fd": 1
+          },
+          "sess_heal": {
+            "sess_heal": 1
+          },
+          "sess_image_read": {
+            "sess_image_read": 1
+          },
+          "sess_json_schema": {
+            "sess_json_schema": 1
+          },
+          "sess_kinds_read": {
+            "sess_kinds_read": 1
+          },
+          "sess_memory_cursor": {
+            "sess_memory_cursor": 1
+          },
+          "sess_mentor": {
+            "sess_mentor": 1
+          },
+          "sess_nested_shell": {
+            "sess_nested_shell": 1
+          },
+          "sess_no_symlink": {
+            "sess_no_symlink": 1
+          },
+          "sess_noninteractive": {
+            "sess_noninteractive": 1
+          },
+          "sess_pair": {
+            "sess_pair": 1
+          },
+          "sess_prev": {
+            "sess_prev": 1
+          },
+          "sess_rtk": {
+            "sess_rtk": 1
+          },
+          "sess_trim": {
+            "sess_trim": 1
+          },
+          "sess_workflow": {
+            "sess_workflow": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 612.06,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 555.936,
+          "p95": 600.009
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D4|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sess_act": "1/1",
+          "sess_continuity": "1/1",
+          "sess_cursor": "1/1",
+          "sess_denied_read": "1/1",
+          "sess_double_escape": "1/1",
+          "sess_explorer_role": "1/1",
+          "sess_glob_fd": "1/1",
+          "sess_heal": "1/1",
+          "sess_image_read": "1/1",
+          "sess_json_schema": "1/1",
+          "sess_kinds_read": "1/1",
+          "sess_memory_cursor": "1/1",
+          "sess_mentor": "1/1",
+          "sess_nested_shell": "1/1",
+          "sess_no_symlink": "1/1",
+          "sess_noninteractive": "1/1",
+          "sess_pair": "1/1",
+          "sess_prev": "1/1",
+          "sess_rtk": "1/1",
+          "sess_trim": "1/1",
+          "sess_workflow": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sess_act": {
+            "sess_act": 1
+          },
+          "sess_continuity": {
+            "sess_continuity": 1
+          },
+          "sess_cursor": {
+            "sess_cursor": 1
+          },
+          "sess_denied_read": {
+            "sess_denied_read": 1
+          },
+          "sess_double_escape": {
+            "sess_double_escape": 1
+          },
+          "sess_explorer_role": {
+            "sess_explorer_role": 1
+          },
+          "sess_glob_fd": {
+            "sess_glob_fd": 1
+          },
+          "sess_heal": {
+            "sess_heal": 1
+          },
+          "sess_image_read": {
+            "sess_image_read": 1
+          },
+          "sess_json_schema": {
+            "sess_json_schema": 1
+          },
+          "sess_kinds_read": {
+            "sess_kinds_read": 1
+          },
+          "sess_memory_cursor": {
+            "sess_memory_cursor": 1
+          },
+          "sess_mentor": {
+            "sess_mentor": 1
+          },
+          "sess_nested_shell": {
+            "sess_nested_shell": 1
+          },
+          "sess_no_symlink": {
+            "sess_no_symlink": 1
+          },
+          "sess_noninteractive": {
+            "sess_noninteractive": 1
+          },
+          "sess_pair": {
+            "sess_pair": 1
+          },
+          "sess_prev": {
+            "sess_prev": 1
+          },
+          "sess_rtk": {
+            "sess_rtk": 1
+          },
+          "sess_trim": {
+            "sess_trim": 1
+          },
+          "sess_workflow": {
+            "sess_workflow": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1035.745,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 544.459,
+          "p95": 695.618
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D5|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "pass_ask_orch": "1/1",
+          "pass_browser_search": "1/1",
+          "pass_create_file_desc": "1/1",
+          "pass_enforcement": "1/1",
+          "pass_fit": "1/1",
+          "pass_get_status": "1/1",
+          "pass_glob_target": "1/1",
+          "pass_looks_binary": "1/1",
+          "pass_normalize": "1/1",
+          "pass_query_terms": "1/1",
+          "pass_rank_mem": "1/1",
+          "pass_resolve_model": "1/1",
+          "pass_route": "1/1",
+          "pass_rtk_wrap": "1/1",
+          "pass_safety_mod": "1/1",
+          "pass_sandbox_policy": "1/1",
+          "pass_score": "1/1",
+          "pass_session_grant": "1/1",
+          "pass_trim_set": "1/1",
+          "pass_validate_safety": "1/1",
+          "pass_web_md": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "pass_ask_orch": {
+            "pass_ask_orch": 1
+          },
+          "pass_browser_search": {
+            "pass_browser_search": 1
+          },
+          "pass_create_file_desc": {
+            "pass_create_file_desc": 1
+          },
+          "pass_enforcement": {
+            "pass_enforcement": 1
+          },
+          "pass_fit": {
+            "pass_fit": 1
+          },
+          "pass_get_status": {
+            "pass_get_status": 1
+          },
+          "pass_glob_target": {
+            "pass_glob_target": 1
+          },
+          "pass_looks_binary": {
+            "pass_looks_binary": 1
+          },
+          "pass_normalize": {
+            "pass_normalize": 1
+          },
+          "pass_query_terms": {
+            "pass_query_terms": 1
+          },
+          "pass_rank_mem": {
+            "pass_rank_mem": 1
+          },
+          "pass_resolve_model": {
+            "pass_resolve_model": 1
+          },
+          "pass_route": {
+            "pass_route": 1
+          },
+          "pass_rtk_wrap": {
+            "pass_rtk_wrap": 1
+          },
+          "pass_safety_mod": {
+            "pass_safety_mod": 1
+          },
+          "pass_sandbox_policy": {
+            "pass_sandbox_policy": 1
+          },
+          "pass_score": {
+            "pass_score": 1
+          },
+          "pass_session_grant": {
+            "pass_session_grant": 1
+          },
+          "pass_trim_set": {
+            "pass_trim_set": 1
+          },
+          "pass_validate_safety": {
+            "pass_validate_safety": 1
+          },
+          "pass_web_md": {
+            "pass_web_md": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 622.942,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 543.306,
+          "p95": 606.56
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 0,
+            "model_wins": 11,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D5|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "pass_ask_orch": "1/1",
+          "pass_browser_search": "1/1",
+          "pass_create_file_desc": "1/1",
+          "pass_enforcement": "1/1",
+          "pass_fit": "1/1",
+          "pass_get_status": "1/1",
+          "pass_glob_target": "1/1",
+          "pass_looks_binary": "1/1",
+          "pass_normalize": "1/1",
+          "pass_query_terms": "1/1",
+          "pass_rank_mem": "1/1",
+          "pass_resolve_model": "1/1",
+          "pass_route": "1/1",
+          "pass_rtk_wrap": "1/1",
+          "pass_safety_mod": "1/1",
+          "pass_sandbox_policy": "1/1",
+          "pass_score": "1/1",
+          "pass_session_grant": "1/1",
+          "pass_trim_set": "1/1",
+          "pass_validate_safety": "1/1",
+          "pass_web_md": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "pass_ask_orch": {
+            "pass_ask_orch": 1
+          },
+          "pass_browser_search": {
+            "pass_browser_search": 1
+          },
+          "pass_create_file_desc": {
+            "pass_create_file_desc": 1
+          },
+          "pass_enforcement": {
+            "pass_enforcement": 1
+          },
+          "pass_fit": {
+            "pass_fit": 1
+          },
+          "pass_get_status": {
+            "pass_get_status": 1
+          },
+          "pass_glob_target": {
+            "pass_glob_target": 1
+          },
+          "pass_looks_binary": {
+            "pass_looks_binary": 1
+          },
+          "pass_normalize": {
+            "pass_normalize": 1
+          },
+          "pass_query_terms": {
+            "pass_query_terms": 1
+          },
+          "pass_rank_mem": {
+            "pass_rank_mem": 1
+          },
+          "pass_resolve_model": {
+            "pass_resolve_model": 1
+          },
+          "pass_route": {
+            "pass_route": 1
+          },
+          "pass_rtk_wrap": {
+            "pass_rtk_wrap": 1
+          },
+          "pass_safety_mod": {
+            "pass_safety_mod": 1
+          },
+          "pass_sandbox_policy": {
+            "pass_sandbox_policy": 1
+          },
+          "pass_score": {
+            "pass_score": 1
+          },
+          "pass_session_grant": {
+            "pass_session_grant": 1
+          },
+          "pass_trim_set": {
+            "pass_trim_set": 1
+          },
+          "pass_validate_safety": {
+            "pass_validate_safety": 1
+          },
+          "pass_web_md": {
+            "pass_web_md": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 922.803,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 563.396,
+          "p95": 682.631
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 0,
+            "model_wins": 11,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D5|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "pass_ask_orch": "1/1",
+          "pass_browser_search": "1/1",
+          "pass_create_file_desc": "1/1",
+          "pass_enforcement": "1/1",
+          "pass_fit": "1/1",
+          "pass_get_status": "1/1",
+          "pass_glob_target": "1/1",
+          "pass_looks_binary": "1/1",
+          "pass_normalize": "1/1",
+          "pass_query_terms": "1/1",
+          "pass_rank_mem": "1/1",
+          "pass_resolve_model": "1/1",
+          "pass_route": "1/1",
+          "pass_rtk_wrap": "1/1",
+          "pass_safety_mod": "1/1",
+          "pass_sandbox_policy": "1/1",
+          "pass_score": "1/1",
+          "pass_session_grant": "1/1",
+          "pass_trim_set": "1/1",
+          "pass_validate_safety": "1/1",
+          "pass_web_md": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "pass_ask_orch": {
+            "pass_ask_orch": 1
+          },
+          "pass_browser_search": {
+            "pass_browser_search": 1
+          },
+          "pass_create_file_desc": {
+            "pass_create_file_desc": 1
+          },
+          "pass_enforcement": {
+            "pass_enforcement": 1
+          },
+          "pass_fit": {
+            "pass_fit": 1
+          },
+          "pass_get_status": {
+            "pass_get_status": 1
+          },
+          "pass_glob_target": {
+            "pass_glob_target": 1
+          },
+          "pass_looks_binary": {
+            "pass_looks_binary": 1
+          },
+          "pass_normalize": {
+            "pass_normalize": 1
+          },
+          "pass_query_terms": {
+            "pass_query_terms": 1
+          },
+          "pass_rank_mem": {
+            "pass_rank_mem": 1
+          },
+          "pass_resolve_model": {
+            "pass_resolve_model": 1
+          },
+          "pass_route": {
+            "pass_route": 1
+          },
+          "pass_rtk_wrap": {
+            "pass_rtk_wrap": 1
+          },
+          "pass_safety_mod": {
+            "pass_safety_mod": 1
+          },
+          "pass_sandbox_policy": {
+            "pass_sandbox_policy": 1
+          },
+          "pass_score": {
+            "pass_score": 1
+          },
+          "pass_session_grant": {
+            "pass_session_grant": 1
+          },
+          "pass_trim_set": {
+            "pass_trim_set": 1
+          },
+          "pass_validate_safety": {
+            "pass_validate_safety": 1
+          },
+          "pass_web_md": {
+            "pass_web_md": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 692.614,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 555.379,
+          "p95": 691.512
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 0,
+            "model_wins": 11,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D6|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sec_429": "1/1",
+          "sec_act": "1/1",
+          "sec_ambiguous_id": "1/1",
+          "sec_binary": "1/1",
+          "sec_budget": "1/1",
+          "sec_deadline": "1/1",
+          "sec_denied": "1/1",
+          "sec_fd": "1/1",
+          "sec_first_assert": "1/1",
+          "sec_full_output": "1/1",
+          "sec_heal": "1/1",
+          "sec_invariant": "1/1",
+          "sec_json": "1/1",
+          "sec_lane": "1/1",
+          "sec_lock": "1/1",
+          "sec_nested": "1/1",
+          "sec_physical": "1/1",
+          "sec_rtk": "1/1",
+          "sec_schema": "1/1",
+          "sec_stale_cursor": "1/1",
+          "sec_typecheck": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sec_429": {
+            "sec_429": 1
+          },
+          "sec_act": {
+            "sec_act": 1
+          },
+          "sec_ambiguous_id": {
+            "sec_ambiguous_id": 1
+          },
+          "sec_binary": {
+            "sec_binary": 1
+          },
+          "sec_budget": {
+            "sec_budget": 1
+          },
+          "sec_deadline": {
+            "sec_deadline": 1
+          },
+          "sec_denied": {
+            "sec_denied": 1
+          },
+          "sec_fd": {
+            "sec_fd": 1
+          },
+          "sec_first_assert": {
+            "sec_first_assert": 1
+          },
+          "sec_full_output": {
+            "sec_full_output": 1
+          },
+          "sec_heal": {
+            "sec_heal": 1
+          },
+          "sec_invariant": {
+            "sec_invariant": 1
+          },
+          "sec_json": {
+            "sec_json": 1
+          },
+          "sec_lane": {
+            "sec_lane": 1
+          },
+          "sec_lock": {
+            "sec_lock": 1
+          },
+          "sec_nested": {
+            "sec_nested": 1
+          },
+          "sec_physical": {
+            "sec_physical": 1
+          },
+          "sec_rtk": {
+            "sec_rtk": 1
+          },
+          "sec_schema": {
+            "sec_schema": 1
+          },
+          "sec_stale_cursor": {
+            "sec_stale_cursor": 1
+          },
+          "sec_typecheck": {
+            "sec_typecheck": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 699.786,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 552.329,
+          "p95": 670.742
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D6|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sec_429": "1/1",
+          "sec_act": "1/1",
+          "sec_ambiguous_id": "1/1",
+          "sec_binary": "1/1",
+          "sec_budget": "1/1",
+          "sec_deadline": "1/1",
+          "sec_denied": "1/1",
+          "sec_fd": "1/1",
+          "sec_first_assert": "1/1",
+          "sec_full_output": "1/1",
+          "sec_heal": "1/1",
+          "sec_invariant": "1/1",
+          "sec_json": "1/1",
+          "sec_lane": "1/1",
+          "sec_lock": "1/1",
+          "sec_nested": "1/1",
+          "sec_physical": "1/1",
+          "sec_rtk": "1/1",
+          "sec_schema": "1/1",
+          "sec_stale_cursor": "1/1",
+          "sec_typecheck": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sec_429": {
+            "sec_429": 1
+          },
+          "sec_act": {
+            "sec_act": 1
+          },
+          "sec_ambiguous_id": {
+            "sec_ambiguous_id": 1
+          },
+          "sec_binary": {
+            "sec_binary": 1
+          },
+          "sec_budget": {
+            "sec_budget": 1
+          },
+          "sec_deadline": {
+            "sec_deadline": 1
+          },
+          "sec_denied": {
+            "sec_denied": 1
+          },
+          "sec_fd": {
+            "sec_fd": 1
+          },
+          "sec_first_assert": {
+            "sec_first_assert": 1
+          },
+          "sec_full_output": {
+            "sec_full_output": 1
+          },
+          "sec_heal": {
+            "sec_heal": 1
+          },
+          "sec_invariant": {
+            "sec_invariant": 1
+          },
+          "sec_json": {
+            "sec_json": 1
+          },
+          "sec_lane": {
+            "sec_lane": 1
+          },
+          "sec_lock": {
+            "sec_lock": 1
+          },
+          "sec_nested": {
+            "sec_nested": 1
+          },
+          "sec_physical": {
+            "sec_physical": 1
+          },
+          "sec_rtk": {
+            "sec_rtk": 1
+          },
+          "sec_schema": {
+            "sec_schema": 1
+          },
+          "sec_stale_cursor": {
+            "sec_stale_cursor": 1
+          },
+          "sec_typecheck": {
+            "sec_typecheck": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 807.598,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 552.254,
+          "p95": 709.591
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D6|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sec_429": "1/1",
+          "sec_act": "1/1",
+          "sec_ambiguous_id": "1/1",
+          "sec_binary": "1/1",
+          "sec_budget": "1/1",
+          "sec_deadline": "1/1",
+          "sec_denied": "1/1",
+          "sec_fd": "1/1",
+          "sec_first_assert": "1/1",
+          "sec_full_output": "1/1",
+          "sec_heal": "1/1",
+          "sec_invariant": "1/1",
+          "sec_json": "1/1",
+          "sec_lane": "1/1",
+          "sec_lock": "1/1",
+          "sec_nested": "1/1",
+          "sec_physical": "1/1",
+          "sec_rtk": "1/1",
+          "sec_schema": "1/1",
+          "sec_stale_cursor": "1/1",
+          "sec_typecheck": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sec_429": {
+            "sec_429": 1
+          },
+          "sec_act": {
+            "sec_act": 1
+          },
+          "sec_ambiguous_id": {
+            "sec_ambiguous_id": 1
+          },
+          "sec_binary": {
+            "sec_binary": 1
+          },
+          "sec_budget": {
+            "sec_budget": 1
+          },
+          "sec_deadline": {
+            "sec_deadline": 1
+          },
+          "sec_denied": {
+            "sec_denied": 1
+          },
+          "sec_fd": {
+            "sec_fd": 1
+          },
+          "sec_first_assert": {
+            "sec_first_assert": 1
+          },
+          "sec_full_output": {
+            "sec_full_output": 1
+          },
+          "sec_heal": {
+            "sec_heal": 1
+          },
+          "sec_invariant": {
+            "sec_invariant": 1
+          },
+          "sec_json": {
+            "sec_json": 1
+          },
+          "sec_lane": {
+            "sec_lane": 1
+          },
+          "sec_lock": {
+            "sec_lock": 1
+          },
+          "sec_nested": {
+            "sec_nested": 1
+          },
+          "sec_physical": {
+            "sec_physical": 1
+          },
+          "sec_rtk": {
+            "sec_rtk": 1
+          },
+          "sec_schema": {
+            "sec_schema": 1
+          },
+          "sec_stale_cursor": {
+            "sec_stale_cursor": 1
+          },
+          "sec_typecheck": {
+            "sec_typecheck": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 838.012,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 557.095,
+          "p95": 668.242
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      }
+    },
+    "unknown_case_ids": [],
+    "variant_selection": {
+      "D2": {
+        "correct_by_variant": {
+          "minimal": 19,
+          "rubric": 24,
+          "scoped": 23
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 1,
+          "other_correct": 23
+        },
+        "margin_cases": 1,
+        "runner_up": "scoped",
+        "top": "rubric",
+        "weak_evidence": true
+      },
+      "D3": {
+        "correct_by_variant": {
+          "minimal": 24,
+          "rubric": 24,
+          "scoped": 24
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 24
+        },
+        "margin_cases": 0,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      },
+      "D4": {
+        "correct_by_variant": {
+          "minimal": 24,
+          "rubric": 24,
+          "scoped": 24
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 24
+        },
+        "margin_cases": 0,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      },
+      "D5": {
+        "correct_by_variant": {
+          "minimal": 24,
+          "rubric": 24,
+          "scoped": 24
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 24
+        },
+        "margin_cases": 0,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      },
+      "D6": {
+        "correct_by_variant": {
+          "minimal": 24,
+          "rubric": 24,
+          "scoped": 24
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 24
+        },
+        "margin_cases": 0,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      }
+    }
+  },
+  "returncode": 0
+}

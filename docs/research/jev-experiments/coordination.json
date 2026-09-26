@@ -1,0 +1,85 @@
+{
+  "run_id": "jev-fit-20260919",
+  "workspace": "w1J",
+  "workspace_label": "Jev experiments",
+  "protected": "all pre-existing panes; w1J:p1 unused shell",
+  "workers": [
+    {
+      "task": "P1 + P2",
+      "worker": "infra",
+      "pane": "w1J:p3",
+      "harness": "term2",
+      "provider": "codex",
+      "model": "gpt-5.6-terra",
+      "identity_evidence": "live TUI footer",
+      "ack": "verified visible worker response",
+      "wait_session": 73352,
+      "status": "verified and accepted: runner, aggregate, shortcut diagnostic; idle"
+    },
+    {
+      "task": "D1",
+      "worker": "discovery",
+      "pane": "w1J:p2",
+      "harness": "term2",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "identity_evidence": "live TUI footer",
+      "ack": "verified visible worker response",
+      "wait_session": 54159,
+      "effort": "medium",
+      "recovery": "Original high-effort session produced no dataset after prolonged reasoning; cleanly exited and restarted same pane with bounded D1 assignment. Prior session f453fbad-81ac-4093-b551-0f4757750660 retained.",
+      "status": "verified and accepted: D1 fixtures,100 live records, corrected findings; idle"
+    },
+    {
+      "task": "R",
+      "worker": "routing",
+      "pane": "w1J:p5",
+      "harness": "term2",
+      "provider": "codex",
+      "model": "gpt-5.6-terra",
+      "identity_evidence": "live TUI footer",
+      "ack": "verified visible worker response",
+      "wait_session": 51101,
+      "status": "verified and accepted:594 live records and corrected findings; idle"
+    },
+    {
+      "task": "E",
+      "worker": "evidence",
+      "pane": "w1J:p6",
+      "harness": "term2",
+      "provider": "codex",
+      "model": "gpt-5.6-sol",
+      "identity_evidence": "live TUI footer",
+      "ack": "verified visible worker response",
+      "wait_session": 60573,
+      "status": "verified and accepted: E1-E8 and independent V5 audit; idle"
+    },
+    {
+      "task": "V0 + V1 + V2 + live audit",
+      "worker": "review",
+      "pane": "w1J:p4",
+      "harness": "claude",
+      "model": "Opus 5",
+      "identity_evidence": "live TUI footer",
+      "ack": "ack.json and active review",
+      "wait_session": 94187,
+      "status": "verified and accepted: V0-V6; no unresolved material findings; idle"
+    },
+    {
+      "task": "C + D2-D6",
+      "worker": "challenge",
+      "pane": "w1J:p7",
+      "harness": "grok",
+      "model": "Grok 4.6 (default, no override)",
+      "identity_evidence": "live TUI footer",
+      "ack": "verified visible worker response",
+      "wait_session": 39398,
+      "status": "verified and accepted:80 challenge records; D2-D6 final dataset accepted and500 live records complete; idle",
+      "independence_note": "Challenge was frozen before D2-D6 assignment; same Grok author now owns discovery-extra, so challenge is not independently authored relative to that lane."
+    }
+  ],
+  "capacity": "Fresh sessions. Codex displayed ~20-26k/272k context and 53% weekly quota remaining; GLM ~18k/1M; Claude ~49k context and 1% five-hour use. Model task aptitude remains subject to independent artifact review. No nested workers.",
+  "lifecycle": "Complete: all 20 tasks scored, independently reviewed and integrated. All workers idle; workspace retained. No active provider work or nested workers.",
+  "authentication_note": "grok models printed unauthenticated; actual interactive Grok read files and authored reasoning successfully. CLI catalog report was not authoritative for harness inference.",
+  "updated_at": "2026-09-19T03:37:38.495908+00:00"
+}

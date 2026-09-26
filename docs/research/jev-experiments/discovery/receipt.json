@@ -1,0 +1,53 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "discovery-d1-recovery",
+  "worker": "discovery (glm, intended route term2/zai/glm-5.3-flash; route not self-verifiable in-session)",
+  "artifact": ["dataset.json", "prompts.json", "baseline.py", "design.md", "findings.md", "receipt.json"],
+  "sha256": {
+    "dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc",
+    "prompts.json": "8de0afbd345ac2771a9b49e42ace1e53f474c6eb6e88a5f58b570fb96aceaa86",
+    "baseline.py": "8fe1698a74fd25e8e08f93c5e83f8ea2a149bf2d0a9196796d79c584fa5ab701",
+    "findings.md": "cda7e9b881f777a4c18aaafdc9975c1c51de4c44ceca94857ccd04036820b123"
+  },
+  "verify_argv": [
+    "python3",
+    "-m",
+    "json.tool",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json"
+  ],
+  "verification_result": {
+    "runner_validate": "pass (python3 docs/research/jev-experiments/infra/runner.py validate docs/research/jev-experiments/discovery)",
+    "verify_argv_result": "pass (valid JSON, exit 0)",
+    "dataset_json_tool_exit": 0,
+    "case_counts": {
+      "D1": {
+        "dev": 24,
+        "holdout": 24,
+        "total": 48
+      }
+    },
+    "criteria_policy": "all 176 criteria entries are generic applicability conditions built from the case's own candidate catalog; answer-revealing wording removed per steering correction 2026-09-19 (STEER_ACK_755CDA0A) before freezing",
+    "label_freeze": "expected labels authored before baseline computation and before any provider call; no scored provider calls made by this worker",
+    "baseline_agreement_with_frozen_labels": "27/48 (non-oracle floor, reads state+criteria only)",
+    "frozen_run": {
+      "dev": "72/72 live success; minimal 22/24, rubric 23/24, scoped 23/24; scoped selected by predeclared tie order (margin 0; weak evidence only)",
+      "holdout": "24/24 live success; scoped frozen variant 21/24 (Wilson 0.69-0.96)",
+      "stability": "4/4 (repeat and reversed correct on both predeclared holdout cases)",
+      "baseline_comparison": "authored lexical baseline 14/24 (reproduced 48/48 from state+criteria via review/audit.py); strongest preregistered independent lexical probe 16/24 (aggregate/discovery/baselines.json); scoped 21/24 vs lexical 16/24 is 6-1, exact McNemar p=0.125: weak evidence of superiority, not significant",
+      "position_confound": "expected label first in 33/48 cases; post hoc: 16/17 answer-first vs 5/7 not-first; position-only diagnostic 17/24 (5-1, p=0.22); review verdict adopted: conditional fit, position-confounded; abstention not established",
+      "blind_review": "D1 blind relabel complete 5/5; does not adjudicate the specific failed-case labels (d1-dev-21, d1-holdout-12/20/21 remain open)",
+      "expected_first_bias": "33/48 cases have expected label first in criteria order; frozen for this run, must be balanced in any successor"
+    }
+  },
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "cases are handcrafted synthetic; no production reliability evidence",
+    "findings.md claims agreement with frozen author labels only; the 5/5 blind sample does not resolve the specific failed-case labels, notably the refusal-threshold cluster (d1-dev-21, d1-holdout-20, d1-holdout-21), which the review flags as adjudication-sensitive (none vs insufficient_evidence wording overlap)",
+    "superiority over the strongest preregistered baseline (lexical 16/24) is weak evidence only (McNemar p=0.125) and position-confounded (33/48 expected-first); result cannot be distinguished from ordering behavior",
+    "none-abstention untested on holdout (0 expected-none holdout cases); insufficient_evidence abstention 1/3",
+    "actual serving route not verifiable from inside the session; coordinator-side dispatch records are authoritative",
+    "only D1 covered by this worker's dataset; D2-D6 owned by other workers",
+    "top-choice metric only; no full ranking claims"
+  ]
+}

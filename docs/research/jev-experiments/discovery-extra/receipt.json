@@ -1,0 +1,69 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "D2-D6",
+  "worker": "discovery-extra",
+  "status": "frozen_for_scoring",
+  "actual_default_model": "Grok 4.6",
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json",
+  "sha256": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+  "prompts_sha256": "1d10a3203357fb77099418c2515e8c7dca95044df00e08bc3fbc10eeba564b74",
+  "prior_rejected_artifact": "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset-v1-rejected.json",
+  "prior_rejected_sha256": "a24ddd2a975867d53eeb8eb075ddd7f6ec03d22992ba300c5eb8f45c79e4cb19",
+  "verify_argv": [
+    "python3",
+    "-m",
+    "json.tool",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json"
+  ],
+  "runner_validate_argv": [
+    "python3",
+    "/home/qduc/term2/docs/research/jev-experiments/infra/runner.py",
+    "validate",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra"
+  ],
+  "verification_result": {
+    "exit_code": 0,
+    "valid_json": true,
+    "runner_validate_exit_code": 0,
+    "cases": 240,
+    "by_task": {
+      "D2": { "dev": 24, "holdout": 24 },
+      "D3": { "dev": 24, "holdout": 24 },
+      "D4": { "dev": 24, "holdout": 24 },
+      "D5": { "dev": 24, "holdout": 24 },
+      "D6": { "dev": 24, "holdout": 24 }
+    },
+    "d2_unchanged_vs_v1": true,
+    "expected_labels_unchanged_vs_v1": true,
+    "queries_unchanged_vs_v1": true,
+    "prompts_unchanged": true,
+    "baseline_recompute_exit_code": 0,
+    "baseline_disagrees_with_expected": 115,
+    "dataset_frozen": true,
+    "further_fixture_edits": "stopped"
+  },
+  "deliverables": [
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset-v1-rejected.json",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/prompts.json",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/baseline.py",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/design.md",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/ack.json",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/receipt.json"
+  ],
+  "children": [],
+  "background_work": [],
+  "scored_provider_calls": 0,
+  "limitations": [
+    "D1 is not in this directory; GLM/discovery/ still owns skill selection.",
+    "Challenge80 was not read, reused, or modified.",
+    "Choice top-1 only; do not report ranking metrics from these labels.",
+    "Handcrafted/synthetic repository-flavored fixtures, not production reliability evidence.",
+    "No scored Jev calls in this worker. Prompts remain unselected until the coordinator runs the shared runner on dev.",
+    "Lexical baseline is not an oracle (115/240 disagreements).",
+    "jev-fit-20260919-DX-D6-holdout-13: the case rationale string 'from/cursor mix is the error' also appears inside state/criteria text for distractor sec_id. That overlap is synthetic explanatory-log ambiguity in the fixture logs, not an answer-key field in the provider payload (id, split, expected, baseline, rationale, tags, and provenance are not sent). Left frozen; not repaired in this pin.",
+    "Stub maps lengthen thin D3-D6 competitors with authored facts but are still synthetic. Empty/whitespace D6 sections remain empty by design for missing-evidence cases.",
+    "Authoring model was Grok 4.6."
+  ],
+  "finished_at": "2026-09-19"
+}

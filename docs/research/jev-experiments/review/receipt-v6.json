@@ -1,0 +1,106 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V6",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/final-synthesis-review.md",
+  "sha256": "dedf12fc3634ae9ac968990683df782d1de137ca08cb6e25beab24261d995c3b",
+  "audited_final": {
+    "README.md": "df0f12affa58d6acbe63524fa1e122d3fbab34f448f07463bbce6f30df74303c",
+    "integrated-results.json": "c468ca13aad023d044515604fd4d0a2536d2c75e5b4dc39a38a84339102e03f1",
+    "synthesis.json": "6fdf7c317d27b1fc17f3d9cb85a01eaecdd1d90ef8e39a46a423c4ce4a96812d",
+    "prompt-catalog.md": "5086f3c16819ffd52934b391077bae20e465229d06de842db34e4ea498cac937",
+    "prompt-catalog.json": "f7c2c8be63214cde862b6cb1c19f1087e45b7cc262658aeb85b535edd7772b8e",
+    "build_report.py": "ec63ea4fb84879b0eb1aefb98c42e981127a31834412987abfc977dc2b2e4925",
+    "build_prompt_catalog.py": "cc27fb57b562bf077d570b8b8bc90430102c51c8c7754fb8e1ea3cc3181a2cba",
+    "interpretation-preregistered.md": "e738473ed2a2993902870aff88b30bc72801998f3460b764c13500a784a7fe92",
+    "aggregate/summary.json": "3e382c5c7700478f7c4f19596f0e6bc74b45c43bd3777a4bf8e5c70eef20210c",
+    "aggregate/shortcuts.json": "6ad5f3cbd0d64657076312ae8bbfc0817b2d78e4a1149b562013a9a26ec70853"
+  },
+  "frozen_inputs_checked": {
+    "discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc",
+    "discovery/prompts.json": "8de0afbd345ac2771a9b49e42ace1e53f474c6eb6e88a5f58b570fb96aceaa86",
+    "discovery/freeze.json": "3df29be491bcf9149fc0cc0a234718973dd37c2c8ec4887de3603c2f0ddd7413",
+    "discovery/results/dev.jsonl": "5193f8bf45af7b10bfe0c12222c57a0f8353477d6f4981e7788b732579da78aa",
+    "discovery/results/holdout.jsonl": "fdfef59b4687ad4eb4e84080f791a7473bdead7553bbc1b7f76f91b6ffa0d5b2",
+    "discovery/results/stability.jsonl": "16be52ed25e16e957571e6e6585e81d247f0e99de5bde1b669c4f64c39ee642d",
+    "discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+    "discovery-extra/prompts.json": "1d10a3203357fb77099418c2515e8c7dca95044df00e08bc3fbc10eeba564b74",
+    "discovery-extra/freeze.json": "6061d72b7596731ea5854a32c2e719958316e7e19c8921e50c4c78f0be3bab6a",
+    "discovery-extra/results/dev.jsonl": "1fae0ef7f7f2040d6327f2ce3fd00d132ac2fb48c7da564040fc530414eadaa1",
+    "discovery-extra/results/holdout.jsonl": "f7dfb53ab5a056c9916c2a4c791c9ef43cc654c0045c0c7e86ecf40a6d1b0989",
+    "discovery-extra/results/stability.jsonl": "688d42bdccbbe165e3adbdf80ba4aec491d9d212bd4d5784537aaa408dc3fa67",
+    "routing/dataset.json": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c",
+    "routing/prompts.json": "38efbadefef4ad513a8cfdbbb311575c71aa21225edbe566277c959798d2fb43",
+    "routing/freeze.json": "75935b66f1b92a8773baf6dafd77525bce3c3c6206dec2a0ae1e66cb8e3e4537",
+    "routing/results/dev.jsonl": "c9a7e54605cd9a9d76c68f898c1a7682a7992047b0b5b21105fa006d5153fee9",
+    "routing/results/holdout.jsonl": "ec8012cf1b048b08d7e2ef223e70bf73a5c72a794e6e69f66637bf37713e3c3a",
+    "routing/results/stability.jsonl": "c1e62e50fe18acc1040543b7ffa358dee795114ae405263a9289313f96fda0b0",
+    "evidence/dataset.json": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+    "evidence/prompts.json": "a10ead314bec3c7fbd1693596231c5a11139edbd38417d6a58992a18cac5aa98",
+    "evidence/freeze.json": "63c2e32fe9e852db2ea4fbca9b6b617065e2e1bffd7026940400bc01ac220224",
+    "evidence/results/dev.jsonl": "e0089e38b380e5a92b334b78c62baf4d63ed17b0176a9ef83010f24141b9d20b",
+    "evidence/results/holdout.jsonl": "5f1055d876e45876a36858ad4d9e736f2129d2937aacbb56c29698ea2c1f964e",
+    "evidence/results/stability.jsonl": "2d38f56b5251a57624d72f4232b0064f445de78a8ba6b731ccc166eebe44e55e",
+    "challenge/dataset.json": "1fe5e87390d12f6e63fd302865c4ce7795d2a380c5a67315e37b120f53e52a25",
+    "challenge/results/challenge.jsonl": "d0b6a86a56de567e237d78aa9a04640b679807c575b791ca66129d615171929e"
+  },
+  "tools": {
+    "review/audit.py": "8be6f9c9e42783eda369da264fe8b9242f71c4d44c42db2c863417a378175cf2",
+    "review/labels-discovery-extra-v2.json (p6, read-only)": "8aad1329bd6b1fd42bb33993f2914a51b1970c9cc3311f6b8c6c612549776b83"
+  },
+  "results": {
+    "numeric_reproduction": "20/20 tasks exact (dev per variant, selection, holdout, strongest baseline, paired p); totals 2070/2 failures/$0.05167487/latency exact; challenge 79/80",
+    "prompt_catalog": "exact: selected instructions, 60 variants, digests, dev-only examples; observed_holdout_failures and correct_out_of_24 match raw logs",
+    "verdict_strings_consistent_across_artifacts": true,
+    "corrections": {
+      "C1_D3": "resolved (verified in final files)",
+      "C2_D4_D6": "resolved (verified in final files)",
+      "C3_E6": "resolved (verified in final files)",
+      "C4_R2": "resolved (verified in final files)",
+      "C5_E2": "resolved (verified in final files)",
+      "C6_D3_D4_D6_disclosure": "closed, non-material: root reasoning explicit in conditions; V5 linked",
+      "C7_D6_holdout_13": "closed, non-material: covered by D6 duplicate-content condition; no score impact"
+    },
+    "omissions": {
+      "stability 33/35 + 32/35": "resolved",
+      "p6 blind 22/25": "resolved",
+      "E6 dev suppression": "resolved",
+      "D6-holdout-13 rationale-overlap explanation": "resolved"
+    },
+    "final_recheck": "verdict strings 20/20 consistent; catalog exact; no holdout/total drift",
+    "v5_reconciliation": {
+      "numeric_conflicts": 0,
+      "verdict_difference": "V5 conditional vs synthesis inconclusive for D3/D4/D6; root reasoning (label ambiguity affects baselines) endorsed",
+      "v5_inaccuracy": "corrected in final V5 (one Choice per request); audit.py generic batched note left unchanged and documented as inapplicable"
+    }
+  },
+  "p6_assessment_present": true,
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/review/audit.py", "--selftest"],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true,
+    "checks": 46,
+    "evidence": "MOCK fixtures only"
+  },
+  "edits": "only review/final-synthesis-review.md and review/receipt-v6.json written; no source/runner/frozen-input edits; no provider calls",
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "One model reviewer",
+    "Provider IDs not cross-checked with OpenRouter",
+    "C2 baseline-side effect argued from inspected cases, not an adjudicated count"
+  ],
+  "pending": [],
+  "p6_inputs": {
+    "review/discovery-extra-v2-assessment.md": "43bd02577128a3ca4589596f15f3bd2cad784e88345f0fcac00b50cb4726e84e",
+    "review/receipt-v5.json": "750724d59e19e3b8b7f104c97772debd8f841cab56996c211f28f1c9623eb3d0",
+    "receipt_v5_artifact_hash_matches": true
+  },
+  "status": "final",
+  "unresolved_material_findings": []
+}

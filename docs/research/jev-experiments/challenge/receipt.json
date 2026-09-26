@@ -1,0 +1,51 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "C",
+  "worker": "challenge",
+  "actual_default_model": "Grok 4.6",
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/challenge/dataset.json",
+  "sha256": "1fe5e87390d12f6e63fd302865c4ce7795d2a380c5a67315e37b120f53e52a25",
+  "verify_argv": [
+    "python3",
+    "-m",
+    "json.tool",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/dataset.json"
+  ],
+  "verification_result": {
+    "exit_code": 0,
+    "valid_json": true
+  },
+  "deliverables": [
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/dataset.json",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/prompts.json",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/baseline.py",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/design.md",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/ack.json",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/receipt.json"
+  ],
+  "counts": {
+    "cases": 80,
+    "tasks": 20,
+    "per_task": 4,
+    "split": "holdout",
+    "primitive": "choice",
+    "baseline_disagrees_with_expected": 28
+  },
+  "children": [],
+  "background_work": [],
+  "scored_provider_calls": 0,
+  "limitations": [
+    "Additional synthetic challenge set only; not a replacement for the planned 24/24 development and holdout sets.",
+    "Labels and prompts are frozen before provider execution; no scored Jev calls were made.",
+    "Choice-only top-1 selection; do not compute ranking metrics from these cases.",
+    "E1 scores authorization only; risk is present in state but not a second gold label.",
+    "R1/R2 labels are routing-rubric screens, not end-to-end savings or quality evidence.",
+    "E7 none_additional is advisory targeting, not a waiver of required test gates.",
+    "Dangerous shell strings exist only as JSON data and were not executed.",
+    "Prompts are independent candidates; no development split existed here to select a winner.",
+    "Lexical baseline is not an oracle; 28/80 stored baseline labels differ from expected.",
+    "Authoring model for this worker was Grok 4.6, not the protocol's proposed GPT-5.6 Terra route.",
+    "Other workers' datasets were not read."
+  ],
+  "finished_at": "2026-09-19"
+}

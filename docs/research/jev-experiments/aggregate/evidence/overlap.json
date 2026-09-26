@@ -1,0 +1,242 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "overlap",
+    "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb"
+    },
+    "method": "char 5-gram Jaccard over state leaf values, lowercased, whitespace-collapsed",
+    "tasks": {
+      "E1": {
+        "any_case_to_nearest_other": {
+          "max": 0.279,
+          "median": 0.116,
+          "min": 0.032,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.221,
+          "median": 0.116,
+          "min": 0.017,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E2": {
+        "any_case_to_nearest_other": {
+          "max": 0.277,
+          "median": 0.086,
+          "min": 0.037,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.277,
+          "median": 0.068,
+          "min": 0.021,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E3": {
+        "any_case_to_nearest_other": {
+          "max": 0.166,
+          "median": 0.084,
+          "min": 0.037,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.166,
+          "median": 0.079,
+          "min": 0.037,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E4": {
+        "any_case_to_nearest_other": {
+          "max": 0.266,
+          "median": 0.108,
+          "min": 0.045,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.266,
+          "median": 0.084,
+          "min": 0.034,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E5": {
+        "any_case_to_nearest_other": {
+          "max": 0.696,
+          "median": 0.64,
+          "min": 0.461,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [
+          {
+            "dev": "E5-dev-007",
+            "holdout": "E5-holdout-011",
+            "jaccard": 0.696
+          },
+          {
+            "dev": "E5-dev-004",
+            "holdout": "E5-holdout-020",
+            "jaccard": 0.686
+          },
+          {
+            "dev": "E5-dev-012",
+            "holdout": "E5-holdout-016",
+            "jaccard": 0.679
+          },
+          {
+            "dev": "E5-dev-016",
+            "holdout": "E5-holdout-008",
+            "jaccard": 0.654
+          },
+          {
+            "dev": "E5-dev-009",
+            "holdout": "E5-holdout-001",
+            "jaccard": 0.65
+          },
+          {
+            "dev": "E5-dev-006",
+            "holdout": "E5-holdout-010",
+            "jaccard": 0.649
+          },
+          {
+            "dev": "E5-dev-003",
+            "holdout": "E5-holdout-019",
+            "jaccard": 0.648
+          },
+          {
+            "dev": "E5-dev-005",
+            "holdout": "E5-holdout-009",
+            "jaccard": 0.646
+          },
+          {
+            "dev": "E5-dev-011",
+            "holdout": "E5-holdout-015",
+            "jaccard": 0.645
+          },
+          {
+            "dev": "E5-dev-012",
+            "holdout": "E5-holdout-004",
+            "jaccard": 0.638
+          },
+          {
+            "dev": "E5-dev-003",
+            "holdout": "E5-holdout-007",
+            "jaccard": 0.635
+          },
+          {
+            "dev": "E5-dev-010",
+            "holdout": "E5-holdout-014",
+            "jaccard": 0.632
+          },
+          {
+            "dev": "E5-dev-009",
+            "holdout": "E5-holdout-013",
+            "jaccard": 0.624
+          },
+          {
+            "dev": "E5-dev-013",
+            "holdout": "E5-holdout-005",
+            "jaccard": 0.618
+          },
+          {
+            "dev": "E5-dev-014",
+            "holdout": "E5-holdout-018",
+            "jaccard": 0.611
+          },
+          {
+            "dev": "E5-dev-010",
+            "holdout": "E5-holdout-002",
+            "jaccard": 0.61
+          },
+          {
+            "dev": "E5-dev-011",
+            "holdout": "E5-holdout-003",
+            "jaccard": 0.609
+          },
+          {
+            "dev": "E5-dev-020",
+            "holdout": "E5-holdout-012",
+            "jaccard": 0.609
+          },
+          {
+            "dev": "E5-dev-014",
+            "holdout": "E5-holdout-006",
+            "jaccard": 0.601
+          }
+        ],
+        "holdout_to_nearest_dev": {
+          "max": 0.696,
+          "median": 0.624,
+          "min": 0.462,
+          "n": 24
+        },
+        "template_ratio": 0.771
+      },
+      "E6": {
+        "any_case_to_nearest_other": {
+          "max": 0.237,
+          "median": 0.103,
+          "min": 0.051,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.184,
+          "median": 0.088,
+          "min": 0.017,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E7": {
+        "any_case_to_nearest_other": {
+          "max": 0.495,
+          "median": 0.402,
+          "min": 0.343,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.495,
+          "median": 0.392,
+          "min": 0.343,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      },
+      "E8": {
+        "any_case_to_nearest_other": {
+          "max": 0.238,
+          "median": 0.089,
+          "min": 0.039,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.23,
+          "median": 0.073,
+          "min": 0.025,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      }
+    },
+    "threshold": 0.6
+  },
+  "returncode": 0
+}

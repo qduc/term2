@@ -1,0 +1,13 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "D2-D6",
+  "worker": "discovery-extra",
+  "assignment": "Main-pilot Choice datasets for D2-D6 only (24 dev + 24 holdout each). D1 remains GLM/discovery/. Challenge80 is external and unmodified.",
+  "intended_route": "not pinned; discovery lane remains zai/glm-5.3-flash for D1",
+  "actual_default_model": "Grok 4.6",
+  "actual_route": "xAI Grok Build TUI session, model Grok 4.6",
+  "route_verified": false,
+  "touch_set": ["/home/qduc/term2/docs/research/jev-experiments/discovery-extra/"],
+  "no_children": true,
+  "acknowledged_at": "2026-09-19"
+}

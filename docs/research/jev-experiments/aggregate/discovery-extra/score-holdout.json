@@ -1,0 +1,761 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/results/holdout.jsonl",
+    "--phase",
+    "holdout",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true,
+      "records_before_freeze": 0
+    },
+    "jsonl_problems": [],
+    "phase": "holdout",
+    "records_in_phase_used": 120,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/results/holdout.jsonl": "f7dfb53ab5a056c9916c2a4c791c9ef43cc654c0045c0c7e86ecf40a6d1b0989"
+    },
+    "tasks": {
+      "D2|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "apply_patch": "1/1",
+          "ask_user": "1/1",
+          "create_file": "2/2",
+          "glob": "1/1",
+          "grep": "2/2",
+          "memory_search": "2/2",
+          "none": "4/4",
+          "read_file": "2/2",
+          "run_code": "1/1",
+          "run_subagent": "1/1",
+          "search_replace": "1/1",
+          "session_search": "2/2",
+          "shell": "2/2",
+          "web_fetch": "1/1",
+          "web_search": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "apply_patch": {
+            "apply_patch": 1
+          },
+          "ask_user": {
+            "ask_user": 1
+          },
+          "create_file": {
+            "create_file": 2
+          },
+          "glob": {
+            "glob": 1
+          },
+          "grep": {
+            "grep": 2
+          },
+          "memory_search": {
+            "memory_search": 2
+          },
+          "none": {
+            "none": 4
+          },
+          "read_file": {
+            "read_file": 2
+          },
+          "run_code": {
+            "run_code": 1
+          },
+          "run_subagent": {
+            "run_subagent": 1
+          },
+          "search_replace": {
+            "search_replace": 1
+          },
+          "session_search": {
+            "session_search": 2
+          },
+          "shell": {
+            "shell": 2
+          },
+          "web_fetch": {
+            "web_fetch": 1
+          },
+          "web_search": {
+            "web_search": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 950.896,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.356,
+          "p95": 901.223
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 22,
+            "other_correct": 2
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D3|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9848,
+        "class_support_and_recall": {
+          "mem_authoring": "1/1",
+          "mem_compaction_salience": "1/1",
+          "mem_completion": "1/1",
+          "mem_decision_client": "1/1",
+          "mem_docker_host": "1/1",
+          "mem_exclusive": "1/1",
+          "mem_guard_last": "1/1",
+          "mem_handoff": "1/1",
+          "mem_intent": "1/1",
+          "mem_lane_policy": "1/1",
+          "mem_legacy_debt": "1/1",
+          "mem_openai_compact": "1/1",
+          "mem_profiles": "1/1",
+          "mem_progress_advisory": "1/1",
+          "mem_prompt_ctor": "1/1",
+          "mem_provider_oauth_plan": "1/1",
+          "mem_related": "1/1",
+          "mem_retry_policy": "1/1",
+          "mem_sandbox_write": "1/1",
+          "mem_service_contracts": "1/1",
+          "mem_test_audit": "1/1",
+          "none": "2/3"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "mem_authoring": {
+            "mem_authoring": 1
+          },
+          "mem_compaction_salience": {
+            "mem_compaction_salience": 1
+          },
+          "mem_completion": {
+            "mem_completion": 1
+          },
+          "mem_decision_client": {
+            "mem_decision_client": 1
+          },
+          "mem_docker_host": {
+            "mem_docker_host": 1
+          },
+          "mem_exclusive": {
+            "mem_exclusive": 1
+          },
+          "mem_guard_last": {
+            "mem_guard_last": 1
+          },
+          "mem_handoff": {
+            "mem_handoff": 1
+          },
+          "mem_intent": {
+            "mem_intent": 1
+          },
+          "mem_lane_policy": {
+            "mem_lane_policy": 1
+          },
+          "mem_legacy_debt": {
+            "mem_legacy_debt": 1
+          },
+          "mem_openai_compact": {
+            "mem_openai_compact": 1
+          },
+          "mem_profiles": {
+            "mem_profiles": 1
+          },
+          "mem_progress_advisory": {
+            "mem_progress_advisory": 1
+          },
+          "mem_prompt_ctor": {
+            "mem_prompt_ctor": 1
+          },
+          "mem_provider_oauth_plan": {
+            "mem_provider_oauth_plan": 1
+          },
+          "mem_related": {
+            "mem_related": 1
+          },
+          "mem_retry_policy": {
+            "mem_retry_policy": 1
+          },
+          "mem_sandbox_write": {
+            "mem_sandbox_write": 1
+          },
+          "mem_service_contracts": {
+            "mem_service_contracts": 1
+          },
+          "mem_test_audit": {
+            "mem_test_audit": 1
+          },
+          "none": {
+            "mem_price": 1,
+            "none": 2
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 768.469,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.409,
+          "p95": 696.025
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.25,
+            "model_losses": 0,
+            "model_wins": 3,
+            "other_correct": 20
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 1,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 6
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "D4|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9091,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sess_activate_skill": "1/1",
+          "sess_ask_user_const": "1/1",
+          "sess_bounded_json": "1/1",
+          "sess_cancel_shell": "1/1",
+          "sess_code_context": "1/1",
+          "sess_credits": "1/1",
+          "sess_docker": "1/1",
+          "sess_from_end": "1/1",
+          "sess_full_suite_justify": "1/1",
+          "sess_get_job": "1/1",
+          "sess_grep_include": "1/1",
+          "sess_invariant": "1/1",
+          "sess_locks": "1/1",
+          "sess_no_ff": "1/1",
+          "sess_profiles_map": "1/1",
+          "sess_scripted_e2e": "0/1",
+          "sess_search_or": "1/1",
+          "sess_session_access": "1/1",
+          "sess_ts_language": "0/1",
+          "sess_web_search_vs_fetch": "1/1",
+          "sess_worktree_tool": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sess_activate_skill": {
+            "sess_activate_skill": 1
+          },
+          "sess_ask_user_const": {
+            "sess_ask_user_const": 1
+          },
+          "sess_bounded_json": {
+            "sess_bounded_json": 1
+          },
+          "sess_cancel_shell": {
+            "sess_cancel_shell": 1
+          },
+          "sess_code_context": {
+            "sess_code_context": 1
+          },
+          "sess_credits": {
+            "sess_credits": 1
+          },
+          "sess_docker": {
+            "sess_docker": 1
+          },
+          "sess_from_end": {
+            "sess_from_end": 1
+          },
+          "sess_full_suite_justify": {
+            "sess_full_suite_justify": 1
+          },
+          "sess_get_job": {
+            "sess_get_job": 1
+          },
+          "sess_grep_include": {
+            "sess_grep_include": 1
+          },
+          "sess_invariant": {
+            "sess_invariant": 1
+          },
+          "sess_locks": {
+            "sess_locks": 1
+          },
+          "sess_no_ff": {
+            "sess_no_ff": 1
+          },
+          "sess_profiles_map": {
+            "sess_profiles_map": 1
+          },
+          "sess_scripted_e2e": {
+            "sess_e2e": 1
+          },
+          "sess_search_or": {
+            "sess_search_or": 1
+          },
+          "sess_session_access": {
+            "sess_session_access": 1
+          },
+          "sess_ts_language": {
+            "sess_languages": 1
+          },
+          "sess_web_search_vs_fetch": {
+            "sess_web_search_vs_fetch": 1
+          },
+          "sess_worktree_tool": {
+            "sess_worktree_tool": 1
+          }
+        },
+        "correct": 22,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 988.087,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 559.807,
+          "p95": 671.3
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 7
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7415, 0.9768],
+        "wilson95_attempted": [0.7415, 0.9768]
+      },
+      "D5|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "pass_bound_text": "1/1",
+          "pass_caps": "1/1",
+          "pass_checkin": "1/1",
+          "pass_classify": "1/1",
+          "pass_docker_create": "1/1",
+          "pass_escape_instr": "1/1",
+          "pass_format_cmd": "1/1",
+          "pass_get_result": "1/1",
+          "pass_heal_edit": "1/1",
+          "pass_list_def": "1/1",
+          "pass_matcher": "1/1",
+          "pass_mcp_surface": "1/1",
+          "pass_names": "1/1",
+          "pass_read_outside": "1/1",
+          "pass_relaxed": "1/1",
+          "pass_scripted": "1/1",
+          "pass_send_message": "1/1",
+          "pass_telemetry": "1/1",
+          "pass_temp_dir": "1/1",
+          "pass_upstream_apply": "1/1",
+          "pass_web_fetch_cap": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "pass_bound_text": {
+            "pass_bound_text": 1
+          },
+          "pass_caps": {
+            "pass_caps": 1
+          },
+          "pass_checkin": {
+            "pass_checkin": 1
+          },
+          "pass_classify": {
+            "pass_classify": 1
+          },
+          "pass_docker_create": {
+            "pass_docker_create": 1
+          },
+          "pass_escape_instr": {
+            "pass_escape_instr": 1
+          },
+          "pass_format_cmd": {
+            "pass_format_cmd": 1
+          },
+          "pass_get_result": {
+            "pass_get_result": 1
+          },
+          "pass_heal_edit": {
+            "pass_heal_edit": 1
+          },
+          "pass_list_def": {
+            "pass_list_def": 1
+          },
+          "pass_matcher": {
+            "pass_matcher": 1
+          },
+          "pass_mcp_surface": {
+            "pass_mcp_surface": 1
+          },
+          "pass_names": {
+            "pass_names": 1
+          },
+          "pass_read_outside": {
+            "pass_read_outside": 1
+          },
+          "pass_relaxed": {
+            "pass_relaxed": 1
+          },
+          "pass_scripted": {
+            "pass_scripted": 1
+          },
+          "pass_send_message": {
+            "pass_send_message": 1
+          },
+          "pass_telemetry": {
+            "pass_telemetry": 1
+          },
+          "pass_temp_dir": {
+            "pass_temp_dir": 1
+          },
+          "pass_upstream_apply": {
+            "pass_upstream_apply": 1
+          },
+          "pass_web_fetch_cap": {
+            "pass_web_fetch_cap": 1
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 728.891,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 586.606,
+          "p95": 657.004
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 12
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "D6|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8636,
+        "class_support_and_recall": {
+          "none": "3/3",
+          "sec_529": "1/1",
+          "sec_abort": "1/1",
+          "sec_additional": "1/1",
+          "sec_allowlist": "1/1",
+          "sec_cursor_mix": "1/1",
+          "sec_denied_write": "1/1",
+          "sec_docker_retry": "1/1",
+          "sec_first_typeerror": "1/1",
+          "sec_flake_seed": "1/1",
+          "sec_heal_patch": "1/1",
+          "sec_image": "1/1",
+          "sec_mcp_missing": "1/1",
+          "sec_monitor_cancel": "0/1",
+          "sec_or_blast": "1/1",
+          "sec_pairing": "1/1",
+          "sec_pnpm_exec": "1/1",
+          "sec_profile_miss": "1/1",
+          "sec_scripted_bound": "0/1",
+          "sec_trim_set": "0/1",
+          "sec_workflow_nest": "1/1",
+          "sec_zod_index": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "none": {
+            "none": 3
+          },
+          "sec_529": {
+            "sec_529": 1
+          },
+          "sec_abort": {
+            "sec_abort": 1
+          },
+          "sec_additional": {
+            "sec_additional": 1
+          },
+          "sec_allowlist": {
+            "sec_allowlist": 1
+          },
+          "sec_cursor_mix": {
+            "sec_cursor_mix": 1
+          },
+          "sec_denied_write": {
+            "sec_denied_write": 1
+          },
+          "sec_docker_retry": {
+            "sec_docker_retry": 1
+          },
+          "sec_first_typeerror": {
+            "sec_first_typeerror": 1
+          },
+          "sec_flake_seed": {
+            "sec_flake_seed": 1
+          },
+          "sec_heal_patch": {
+            "sec_heal_patch": 1
+          },
+          "sec_image": {
+            "sec_image": 1
+          },
+          "sec_mcp_missing": {
+            "sec_mcp_missing": 1
+          },
+          "sec_monitor_cancel": {
+            "sec_heartbeat": 1
+          },
+          "sec_or_blast": {
+            "sec_or_blast": 1
+          },
+          "sec_pairing": {
+            "sec_pairing": 1
+          },
+          "sec_pnpm_exec": {
+            "sec_pnpm_exec": 1
+          },
+          "sec_profile_miss": {
+            "sec_profile_miss": 1
+          },
+          "sec_scripted_bound": {
+            "sec_preview": 1
+          },
+          "sec_trim_set": {
+            "sec_preview": 1
+          },
+          "sec_workflow_nest": {
+            "sec_workflow_nest": 1
+          },
+          "sec_zod_index": {
+            "sec_zod_index": 1
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 788.704,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 556.804,
+          "p95": 637.922
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 4
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 1,
+            "model_wins": 14,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {
+          "jev-fit-20260919-DX-D6-holdout-13": ["rationale text present in payload"]
+        },
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      }
+    },
+    "unknown_case_ids": []
+  },
+  "returncode": 0
+}

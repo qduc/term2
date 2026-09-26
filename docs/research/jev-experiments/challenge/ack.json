@@ -1,0 +1,13 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "C",
+  "worker": "challenge",
+  "assignment": "Independent 4-case holdout challenge set per D1-D6, R1-R6, E1-E8 (80 Choice cases). Research only; no live scored calls.",
+  "intended_route": "brief did not pin a coding-model route; protocol proposal was GPT-5.6 Terra via term2 Codex and is not this session",
+  "actual_default_model": "Grok 4.6",
+  "actual_route": "xAI Grok Build TUI session, model Grok 4.6",
+  "route_verified": false,
+  "touch_set": ["/home/qduc/term2/docs/research/jev-experiments/challenge/"],
+  "no_children": true,
+  "acknowledged_at": "2026-09-19"
+}

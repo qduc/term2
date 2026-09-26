@@ -1,0 +1,8 @@
+{
+  "dev": {
+    "dataset_sha256": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+    "model": "typesafe/jev-1.13",
+    "prepared_at": "2026-09-19T02:50:18.100726Z",
+    "prompts_sha256": "a10ead314bec3c7fbd1693596231c5a11139edbd38417d6a58992a18cac5aa98"
+  }
+}

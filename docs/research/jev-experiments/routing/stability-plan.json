@@ -1,0 +1,44 @@
+{
+  "created_at": "2026-09-19T03:09:29.294921+00:00",
+  "dataset_sha256": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c",
+  "prompts_sha256": "38efbadefef4ad513a8cfdbbb311575c71aa21225edbe566277c959798d2fb43",
+  "model": "typesafe/jev-1.13",
+  "selected": {
+    "R1": {
+      "ordinary": "R1-holdout-01",
+      "adversarial": "R1-holdout-20"
+    },
+    "R2": {
+      "ordinary": "R2-holdout-01",
+      "adversarial": "R2-holdout-12"
+    },
+    "R3": {
+      "ordinary": "R3-holdout-01"
+    },
+    "R4": {
+      "ordinary": "R4-holdout-01"
+    },
+    "R5": {
+      "ordinary": "R5-holdout-01"
+    },
+    "R6": {
+      "ordinary": "R6-holdout-01",
+      "adversarial": "R6-holdout-03"
+    }
+  },
+  "missing_trials": [
+    {
+      "task": "R3",
+      "category": "adversarial"
+    },
+    {
+      "task": "R4",
+      "category": "adversarial"
+    },
+    {
+      "task": "R5",
+      "category": "adversarial"
+    }
+  ],
+  "note": "Coordinator amendment before all routing provider calls: keep first ordinary and first adversarial when present; omit missing adversarial R3/R4/R5 rather than substitute ordinary cases. This matches the evidence-lane amendment and narrows robustness coverage; original preregistration fallback is not used."
+}

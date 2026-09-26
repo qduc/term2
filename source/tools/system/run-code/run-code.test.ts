@@ -108,7 +108,7 @@ describe('run_code', () => {
     const result = await run([protectedTool], "return await tools.protected({ value: 'x' });", {}, approvalRegistry);
 
     expect(result).toContain('bad patch: malformed hunk');
-    expect(result).toContain('Fix the policy input');
+    expect(result).toContain('Nothing was executed; correct the arguments and call it again.');
     expect(result).toContain('Approval policy error (protected): bad patch: malformed hunk');
   });
 

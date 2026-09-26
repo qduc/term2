@@ -769,7 +769,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
               : decision.kind === 'interceptor_denied'
               ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
               : decision.kind === 'error'
-              ? `"${prepared.tool.name}" approval policy failed and is unavailable from inside a script: ${decision.message}. Fix the policy input if applicable and retry.`
+              ? `"${prepared.tool.name}" was not run: checking its arguments for approval failed: ${decision.message}. Nothing was executed; correct the arguments and call it again.`
               : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'not_applied', message);
           return failed(message);

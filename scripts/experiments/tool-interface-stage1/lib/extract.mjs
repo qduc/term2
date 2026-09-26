@@ -5,8 +5,7 @@ const NESTED_CALL = /tools\.([A-Za-z0-9_]+)\s*\(/g;
 const INVALID_PARAMS = /Invalid parameters for "([^"]+)"/g;
 const UNKNOWN_TOOL = /Unknown tool "([^"]+)"/g;
 const SCHEMA_DIRECT = /Tool input did not match schema for ([A-Za-z0-9_]+)/g;
-const CALL_SUMMARY =
-  /\[(no tool calls|\d+ tool calls?: [^\];]+?)(?:; (\d+) schema lookups?)?\]/;
+const CALL_SUMMARY = /\[(no tool calls|\d+ tool calls?: [^\];]+?)(?:; (\d+) schema lookups?)?\]/;
 const RESULT_FAILURE_PREFIXES = [
   'Error:',
   'Script failed',
@@ -248,8 +247,8 @@ export function extractDirectSchemaFailures(events) {
       event.type === 'command_message' && typeof event.message?.output === 'string'
         ? event.message.output
         : event.type === 'tool_result' && typeof event.output === 'string'
-          ? event.output
-          : '';
+        ? event.output
+        : '';
     count += countMatches(output, SCHEMA_DIRECT);
   }
   return count;

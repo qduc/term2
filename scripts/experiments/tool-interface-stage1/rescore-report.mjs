@@ -79,7 +79,8 @@ function parseArgs(argv) {
     else if (flag === '--out') args.output = path.resolve(rest.shift());
     else throw new Error('Unknown argument: ' + flag);
   }
-  if (!args.input || !args.output) throw new Error('Usage: rescore-report.mjs --in report.json --out report.rescored.json');
+  if (!args.input || !args.output)
+    throw new Error('Usage: rescore-report.mjs --in report.json --out report.rescored.json');
   if (path.resolve(args.input) === path.resolve(args.output)) {
     throw new Error('refusing to overwrite input report');
   }

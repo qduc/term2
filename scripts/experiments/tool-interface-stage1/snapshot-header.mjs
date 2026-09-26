@@ -117,7 +117,11 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
       skillsService,
       allowBackgroundShell: true,
       allowAskUser: true,
-      sessionBrowser: { list() { return []; } },
+      sessionBrowser: {
+        list() {
+          return [];
+        },
+      },
     },
     resolvedModel,
   );

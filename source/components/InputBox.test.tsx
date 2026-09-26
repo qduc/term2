@@ -449,18 +449,25 @@ it.sequential('InputBox routes Enter to steer and Alt+Enter to a queued follow-u
 });
 
 it.sequential('InputBox recognizes Alt+Enter when terminal input arrives in split chunks', async () => {
+  const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
   const submissions: Array<{ turn: UserTurn; options?: { busyMode?: 'steer' | 'follow_up' } }> = [];
-  const { stdin } = await renderAndFlush(
-    <TestInputBox
-      {...defaultProps}
-      onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => submissions.push({ turn, options })}
-    />,
-  );
+  try {
+    const { stdin } = await renderAndFlush(
+      <TestInputBox
+        {...defaultProps}
+        onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) =>
+          submissions.push({ turn, options })
+        }
+      />,
+    );
 
-  await writeInput(stdin, 'follow-up\x1b');
-  await writeInput(stdin, '\r');
+    await writeInput(stdin, 'follow-up\x1b');
+    await writeInput(stdin, '\r');
 
-  expect(submissions).toEqual([{ turn: { text: 'follow-up' }, options: { busyMode: 'follow_up' } }]);
+    expect(submissions).toEqual([{ turn: { text: 'follow-up' }, options: { busyMode: 'follow_up' } }]);
+  } finally {
+    nowSpy.mockRestore();
+  }
 });
 
 it.sequential(

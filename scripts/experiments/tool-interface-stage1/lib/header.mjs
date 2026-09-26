@@ -85,9 +85,7 @@ function requireCrypto() {
 
 function loadCrypto() {
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  const crypto = globalThis.crypto?.createHash
-    ? globalThis.crypto
-    : null;
+  const crypto = globalThis.crypto?.createHash ? globalThis.crypto : null;
   if (crypto) {
     globalThis.__term2Crypto = crypto;
     return crypto;

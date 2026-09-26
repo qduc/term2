@@ -22,12 +22,22 @@ export function scoreOracle(oracle, actual) {
       return { correct: false, reason: 'file-not-json' };
     }
     const ok = Object.entries(oracle.subset).every(([key, value]) => parsed?.[key] === value);
-    return { correct: ok, reason: ok ? 'json-subset-match' : 'json-subset-miss', expected: oracle.subset, actual: parsed };
+    return {
+      correct: ok,
+      reason: ok ? 'json-subset-match' : 'json-subset-miss',
+      expected: oracle.subset,
+      actual: parsed,
+    };
   }
   if (oracle.kind === 'exact-lines') {
     const text = typeof actual.finalText === 'string' ? actual.finalText.trim() : '';
     const expected = String(oracle.text).trim();
-    return { correct: text === expected, reason: text === expected ? 'lines-match' : 'lines-miss', expected, actual: text.slice(0, 500) };
+    return {
+      correct: text === expected,
+      reason: text === expected ? 'lines-match' : 'lines-miss',
+      expected,
+      actual: text.slice(0, 500),
+    };
   }
   return { correct: false, reason: 'unknown-oracle-kind' };
 }
@@ -60,7 +70,8 @@ export function scorePair({ baseline, candidate }) {
   );
   let pairInvalidReason = null;
   if (!baselineRaw || !candidateRaw) pairInvalidReason = 'raw-header-missing';
-  else if (!headerReady(baselineHeader) || !headerReady(candidateHeader)) pairInvalidReason = 'empty-or-missing-run-code-header';
+  else if (!headerReady(baselineHeader) || !headerReady(candidateHeader))
+    pairInvalidReason = 'empty-or-missing-run-code-header';
   else if (!nameListsMatch) pairInvalidReason = 'registry-name-set-mismatch';
   else if (!staticProseMatch) pairInvalidReason = 'static-prose-mismatch';
   const fairness = {

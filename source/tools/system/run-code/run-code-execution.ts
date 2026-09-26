@@ -44,6 +44,7 @@ export interface RunCodeExecutionCall {
   readonly durationMs: number;
   readonly directlyCallable?: boolean;
   readonly diagnostic?: RunCodeDiagnosticCode;
+  readonly reason?: string;
 }
 
 export interface RunCodeExecutionAction {

@@ -502,6 +502,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       directlyCallable?: boolean,
       callId?: string,
       diagnostic?: RunCodeDiagnosticCode,
+      reason?: string,
     ) => {
       calls.push({
         tool,
@@ -510,6 +511,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         directlyCallable,
         ...(callId ? { callId } : {}),
         ...(diagnostic ? { diagnostic } : {}),
+        ...(reason ? { reason: clipReason(reason) } : {}),
       });
       if (outcome !== 'describe') {
         writeNestedCallRecord(
@@ -752,14 +754,22 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
               : decision.kind === 'interceptor_denied'
               ? 'interceptor_denied'
               : 'approval_required';
-          record(prepared.tool.name, outcome, prepared.started, isDirectlyCallable(prepared.tool), callId);
+          record(
+            prepared.tool.name,
+            outcome,
+            prepared.started,
+            isDirectlyCallable(prepared.tool),
+            callId,
+            undefined,
+            decision.kind === 'error' ? decision.message : undefined,
+          );
           const message =
             decision.kind === 'unknown'
               ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script.`
               : decision.kind === 'interceptor_denied'
               ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
               : decision.kind === 'error'
-              ? `"${prepared.tool.name}" approval policy failed and is unavailable from inside a script.`
+              ? `"${prepared.tool.name}" approval policy failed and is unavailable from inside a script: ${decision.message}. Fix the policy input if applicable and retry.`
               : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'not_applied', message);
           return failed(message);

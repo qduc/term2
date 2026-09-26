@@ -4,7 +4,7 @@ export type ToolApprovalPolicyResult =
   | { kind: 'auto_approve' }
   | { kind: 'prompt' }
   | { kind: 'unknown' }
-  | { kind: 'error' }
+  | { kind: 'error'; message: string }
   | { kind: 'interceptor_denied' };
 
 export interface ToolApprovalPolicyRegistration {
@@ -51,8 +51,10 @@ export class ToolApprovalPolicyRegistry {
       }
       const requiresApproval = await policy.needsApproval(normalized, evaluation.context);
       return requiresApproval ? { kind: 'prompt' } : { kind: 'auto_approve' };
-    } catch {
-      return { kind: 'error' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const singleLine = message.replace(/[\r\n\t]+/g, ' ').slice(0, 300);
+      return { kind: 'error', message: singleLine || 'Unknown approval policy error' };
     }
   }
 

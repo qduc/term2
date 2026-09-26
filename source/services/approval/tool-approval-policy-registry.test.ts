@@ -27,7 +27,10 @@ describe('ToolApprovalPolicyRegistry.decide', () => {
         throw new Error('broken policy');
       },
     });
-    await expect(registry.evaluate({ toolName: 'broken', args: {} })).resolves.toEqual({ kind: 'error' });
+    await expect(registry.evaluate({ toolName: 'broken', args: {} })).resolves.toEqual({
+      kind: 'error',
+      message: 'broken policy',
+    });
   });
 
   it('suppresses prompts when an interceptor rejects a call', async () => {

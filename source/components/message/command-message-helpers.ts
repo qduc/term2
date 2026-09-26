@@ -893,9 +893,13 @@ export const parseRunCodeTrace = (output: string | undefined): RunCodeTrace | nu
     ],
     [/^Unavailable \(no registered approval policy\): (.+)$/m, 'no approval policy'],
   ];
-
   const notes = new Map<string, string>();
   const consumed: string[] = [summaryMatch[0]];
+  const policyDetailPattern = /^Approval policy error \(([^)]+)\): .+$/gm;
+  for (const match of output.matchAll(policyDetailPattern)) {
+    consumed.push(match[0]);
+    if (!notes.has(match[1])) notes.set(match[1], 'approval policy error; fix arguments and retry');
+  }
   for (const [pattern, note] of noteByLine) {
     const match = output.match(pattern);
     if (!match) continue;

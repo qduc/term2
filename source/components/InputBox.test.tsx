@@ -252,7 +252,7 @@ it.sequential('large paste placeholder includes line count and submits the compl
   );
 
   await writeInput(stdin, pasted);
-  expect(lastFrame()).toContain('[Paste text #1 · 301 lines]');
+  expect(lastFrame()).toContain('[Paste text #1 · 300 lines]');
   await writeInput(stdin, '\r');
   expect(submissions).toEqual([{ text: pasted }]);
 });

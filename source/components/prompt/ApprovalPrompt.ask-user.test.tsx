@@ -53,7 +53,7 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   // The footer now uses the shared MenuFooter component, whose hint glyph is
   // "⏎" (matching every other menu in the app), not the word "enter".
   expect(output.includes('⏎ confirm')).toBe(true);
-  expect(output.includes('esc cancel')).toBe(true);
+  expect(output.includes('Esc cancel')).toBe(true);
   expect(output.includes('Use the safe default')).toBe(true);
   expect(output.includes('HELP & DETAILS')).toBe(false);
   expect(output.includes('Allow this action?')).toBe(false);
@@ -149,7 +149,7 @@ it.sequential('ApprovalPrompt renders the Docker host-control menu without ordin
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('Docker Host Control');
+  expect(output).toContain('Docker host control');
   expect(output).toContain('Deny');
   expect(output).toContain('Allow this command');
   expect(output).toContain('Allow for this session');
@@ -197,7 +197,6 @@ it.sequential('ApprovalPrompt sends the Docker session grant answer', async () =
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
   await writeInput(stdin, '\u001B[B');
-  await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('docker-allow-session');
 });
@@ -212,7 +211,7 @@ it.sequential('ApprovalPrompt sends the Docker project grant answer', async () =
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  for (let index = 0; index < 3; index++) await writeInput(stdin, '\u001B[B');
+  for (let index = 0; index < 2; index++) await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('docker-allow-project');
 });
@@ -227,7 +226,9 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
   );
-  // Navigate down from index 0 ('Allow this command') to index 1 ('Deny')
+  // Deny is last, after all available grants.
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(rejected).toBe(true);
@@ -249,7 +250,7 @@ it.sequential('ApprovalPrompt renders the Docker menu for a command that does no
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('Docker Host Control');
+  expect(output).toContain('Docker host control');
   expect(output).toContain('Allow for this session');
   expect(output).not.toContain('Approve');
 });
@@ -277,7 +278,7 @@ it.sequential('ApprovalPrompt identifies Docker host control from raw interrupti
   const { lastFrame } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
   );
-  expect(lastFrame()).toContain('Docker Host Control');
+  expect(lastFrame()).toContain('Docker host control');
 });
 
 it.sequential(
@@ -794,8 +795,7 @@ it.sequential('ApprovalPrompt sends allow-session for network access approval', 
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  // Navigate to 'Allow host for this session' (index 2: Deny [0], Allow once [1], Allow host for this session [2])
-  await writeInput(stdin, '\u001B[B');
+  // Navigate to 'Allow host for this session', after Allow once.
   await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('allow-session');
@@ -812,8 +812,8 @@ it.sequential('ApprovalPrompt sends allow-project for network access approval', 
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  // Navigate to 'Always allow host for this project' (index 3)
-  for (let idx = 0; idx < 3; idx++) await writeInput(stdin, '\u001B[B');
+  // Navigate to 'Always allow host for this project' (index 2).
+  for (let idx = 0; idx < 2; idx++) await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('allow-project');
 });

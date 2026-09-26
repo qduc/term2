@@ -1,3 +1,20 @@
+## [0.27.0] - 2026-09-26
+
+### Features
+- Added opt-in automatic-memory canary evaluation and offline memory-candidate distillation, with evidence-gated promotion, secret redaction, and path-safety checks.
+- Added teammate-memory checkpoint tooling and historical session-knowledge candidate scanning.
+- Added memory injection receipts, correction provenance, and topical filtering for automatic memory recall.
+
+### Bug Fixes
+- Preserved user-authored memory-recall markup and stopped rewriting instructions to inject memory context.
+- Prevented subagent lifecycle events and background-task completion from producing misleading user notifications.
+- Improved memory distillation transport cleanup and memory-store promotion safety.
+
+### Improvements
+- Loaded recent conversations asynchronously through a worker for more responsive resume menus.
+- Refined menu layout, selection markers, confirmation prompts, and pending-queue presentation.
+- Improved session rollover knowledge recovery and teammate-memory evaluation coverage.
+
 ## [0.26.1] - 2026-09-24
 
 ### Features

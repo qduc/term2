@@ -133,6 +133,8 @@ export function projectSemanticEvents(
       if (
         seenRefs.has(key) ||
         !source ||
+        isTruncatedLogEvent(source.event) ||
+        (source.event.type !== 'user_message' && source.event.type !== 'assistant_turn') ||
         source.seq <= previousSourceSeq ||
         source.seq >= checkpoint.envelope.seq ||
         retractedRefs.has(key)

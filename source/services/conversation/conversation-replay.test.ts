@@ -796,6 +796,72 @@ it('semantic projection refuses checkpoint refs that are duplicated or out of so
   });
 });
 
+it('semantic projection refuses local checkpoints sourced from non-conversation events', () => {
+  const setting = {
+    ...env({ type: 'settings_changed', key: 'model', value: 'model-a' }),
+    logId: 's',
+    eventId: 'e-setting',
+  };
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'summary-setting-source',
+      sourceRefs: [{ logId: 's', eventId: 'e-setting' }],
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
+    }),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  };
+
+  expect(projectSemanticEvents([setting, checkpoint])).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
+});
+
+it('semantic projection refuses a local checkpoint sourced from another checkpoint event', () => {
+  const priorCheckpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'opaque-checkpoint',
+      sourceRefs: [],
+      item: { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction' } },
+    }),
+    logId: 's',
+    eventId: 'e-prior-checkpoint',
+  };
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'summary-checkpoint-source',
+      sourceRefs: [{ logId: 's', eventId: 'e-prior-checkpoint' }],
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
+    }),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  };
+
+  expect(projectSemanticEvents([priorCheckpoint, checkpoint])).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
+});
+
 it('semantic projection refuses a checkpoint whose source payload no longer matches its digest', () => {
   const source = {
     ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'original' } }),

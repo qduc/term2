@@ -91,6 +91,27 @@ export interface GoalChangedEvent {
   goal: DurableGoal;
 }
 
+export interface EventReference {
+  logId: string;
+  eventId: string;
+}
+
+/** Append-only retraction of exact source events; it does not delete journal bytes. */
+export interface EventsRetractedEvent {
+  type: 'events_retracted';
+  version: 1;
+  refs: EventReference[];
+}
+
+/** Provider-neutral checkpoint adjunct. It is usable only while every source ref remains active. */
+export interface ContextCheckpointCreatedEvent {
+  type: 'context_checkpoint_created';
+  version: 1;
+  artifactId: string;
+  sourceRefs: EventReference[];
+  item: ProviderInputItem;
+}
+
 export interface UserMessageEvent {
   type: 'user_message';
   message: UserMessage;
@@ -365,6 +386,8 @@ export type LogEvent =
   | SessionInitEvent
   | SettingsChangedEvent
   | GoalChangedEvent
+  | EventsRetractedEvent
+  | ContextCheckpointCreatedEvent
   | UserMessageEvent
   | ToolStartedLogEvent
   | ToolResultLogEvent

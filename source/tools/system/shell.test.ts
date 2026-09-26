@@ -1,4 +1,4 @@
-import { it, expect, describe, beforeEach, afterEach } from 'vitest';
+import { it, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -138,6 +138,23 @@ function createSettledRegistry(createId = () => 'monitor-job'): BackgroundShellR
 }> {
   return new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({ createId });
 }
+
+describe('missing working directory', () => {
+  it('returns a clear error without executing when the session cwd was deleted', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-removed-'));
+    fs.rmSync(cwd, { recursive: true, force: true });
+    const executeShellCommandImpl = vi.fn();
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+      executionContext: ExecutionContext.pin(cwd),
+      executeShellCommandImpl,
+    });
+
+    await expect(shell.execute({ command: 'git status' })).resolves.toMatch(/working directory.*no longer exists/i);
+    expect(executeShellCommandImpl).not.toHaveBeenCalled();
+  });
+});
 
 describe('background shell monitor tools', () => {
   it('monitor_shell_job registers a watch on a running job and cancel_shell_monitor removes it', async () => {

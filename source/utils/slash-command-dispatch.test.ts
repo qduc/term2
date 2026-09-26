@@ -38,13 +38,13 @@ describe('tryExecuteSlashCommand', () => {
     expect(replaceInput).not.toHaveBeenCalled();
   });
 
-  it('returns false for a slash-shaped command name that is not registered', () => {
+  it('consumes an unregistered command name but keeps the typed text to fix', () => {
     const replaceInput = vi.fn();
 
     const handled = tryExecuteSlashCommand('/nonexistent foo', [], replaceInput);
 
     expect(handled).toBe(true);
-    expect(replaceInput).toHaveBeenCalledWith('');
+    expect(replaceInput).not.toHaveBeenCalled();
   });
 
   it('consumes unknown command names and reports nearby candidates', () => {

@@ -65,8 +65,8 @@ export function tryExecuteSlashCommand(
         .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
         .slice(0, 3);
       const suggestions = nearby.length ? `. Did you mean ${nearby.map(({ name }) => `/${name}`).join(', ')}?` : '';
+      // Keep the typed text so a typo can be fixed in place.
       notify(`Unknown command /${parsed.commandName}${suggestions}`);
-      replaceInput('');
     }
     return true;
   }

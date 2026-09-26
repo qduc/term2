@@ -47,23 +47,36 @@ export function deriveLocalCheckpointRequestHistory(
   if (!checkpoint.artifactId || checkpoint.sourceRefs.length === 0) return { status: 'refused' };
 
   const beforeCheckpoint = envelopes.slice(0, checkpointIndex);
-  const finalizedTurnIdsBeforeCheckpoint = new Set(
-    beforeCheckpoint.flatMap((envelope) =>
-      !isTruncatedLogEvent(envelope.event) && envelope.event.type === 'assistant_turn' && envelope.event.turnId
-        ? [envelope.event.turnId]
-        : [],
-    ),
-  );
+  const finalizedTurnsById = new Map<string, { index: number; envelope: PersistedLogEnvelope }[]>();
+  for (const [index, envelope] of envelopes.entries()) {
+    if (!isTruncatedLogEvent(envelope.event) && envelope.event.type === 'assistant_turn' && envelope.event.turnId) {
+      const matches = finalizedTurnsById.get(envelope.event.turnId) ?? [];
+      matches.push({ index, envelope });
+      finalizedTurnsById.set(envelope.event.turnId, matches);
+    }
+  }
+  const finalizedTurnForJournal = (turnId: string) => {
+    const matches = finalizedTurnsById.get(turnId);
+    if (matches?.length !== 1) return null;
+    const match = matches[0]!;
+    if (isTruncatedLogEvent(match.envelope.event) || match.envelope.event.type !== 'assistant_turn') return null;
+    return { ...match, event: match.envelope.event };
+  };
+  const journalTurnIds = new Set<string>();
   for (const envelope of beforeCheckpoint) {
     if (
       !isTruncatedLogEvent(envelope.event) &&
-      (envelope.event.type === 'assistant_journal_item' || envelope.event.type === 'assistant_journal_delta') &&
-      !finalizedTurnIdsBeforeCheckpoint.has(envelope.event.turnId)
+      (envelope.event.type === 'assistant_journal_item' || envelope.event.type === 'assistant_journal_delta')
     ) {
-      // The replay fold owns recovery of an open assistant journal, including
-      // tool effects. Until those items have a finalized assistant_turn before
-      // the checkpoint, replacing replay history could drop an executed effect.
-      return { status: 'refused' };
+      const turnId = envelope.event.turnId;
+      const finalized = turnId ? finalizedTurnForJournal(turnId) : null;
+      if (!turnId || !finalized || (finalized.index > checkpointIndex && !finalized.event.providerHistory)) {
+        // The replay fold owns recovery of an open assistant journal, including
+        // tool effects. Do not project unless a unique finalized turn accounts
+        // for them; a later turn also needs a request snapshot to prove parity.
+        return { status: 'refused' };
+      }
+      journalTurnIds.add(turnId);
     }
   }
 
@@ -156,6 +169,9 @@ export function deriveLocalCheckpointRequestHistory(
 
   const history: ProviderInputItem[] = [clone(checkpoint.item)];
   let hasPostCheckpointSnapshot = false;
+  const correlatedFinalizedTurns = [...journalTurnIds]
+    .map((turnId) => finalizedTurnForJournal(turnId))
+    .filter((match): match is NonNullable<typeof match> => match !== null && match.index > checkpointIndex);
   const afterCheckpoint = envelopes.slice(checkpointIndex + 1);
   const finalizedTurnIds = new Set(
     afterCheckpoint.flatMap((envelope) =>
@@ -198,6 +214,15 @@ export function deriveLocalCheckpointRequestHistory(
   if (hasPostCheckpointSnapshot) {
     const observed = projectModelRequestHistory(replayedHistory);
     if (JSON.stringify(history) !== JSON.stringify(observed)) return { status: 'refused' };
+  }
+  for (const envelope of correlatedFinalizedTurns) {
+    if (isTruncatedLogEvent(envelope.event) || envelope.event.type !== 'assistant_turn') return { status: 'refused' };
+    if (
+      !envelope.event.providerHistory ||
+      JSON.stringify(history) !== JSON.stringify(projectModelRequestHistory(envelope.event.providerHistory))
+    ) {
+      return { status: 'refused' };
+    }
   }
   return {
     status: 'derived',

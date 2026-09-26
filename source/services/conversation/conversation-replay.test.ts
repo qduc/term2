@@ -11,6 +11,7 @@ import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 import { ConversationStore } from './conversation-store.js';
 import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
 import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
+import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -991,6 +992,9 @@ it('replays the production planner/provenance automatic checkpoint before and af
     { type: 'function_call_result', callId: 'call-current', name: 'write_file', output: 'effect committed' },
   ];
   const atCheckpoint = replayEvents([...persisted, checkpointEvent]);
+  expect(deriveLocalCheckpointRequestHistory([...persisted, checkpointEvent], atCheckpoint.history).status).toBe(
+    'refused',
+  );
   expect(atCheckpoint.history).not.toEqual(interruptedRequest);
   expect(JSON.stringify(atCheckpoint.history)).toContain('answer-1');
   expect(JSON.stringify(atCheckpoint.history)).toContain('call-current');
@@ -1002,22 +1006,70 @@ it('replays the production planner/provenance automatic checkpoint before and af
   const nextAssistant = {
     role: 'assistant',
     type: 'message',
+    status: 'completed',
     content: [{ type: 'output_text', text: 'current answer' }],
   };
-  const finalized = replayEvents([
-    ...persisted,
-    checkpointEvent,
-    {
-      ...env({
-        type: 'assistant_turn',
-        turn: { items: [{ type: 'assistant_text', text: 'current answer' }] },
-        state: { previousResponseId: 'new-chain' },
-        providerHistory: [...interruptedRequest, nextAssistant],
-      }),
-      logId: 's',
-      eventId: 'current-assistant',
-    },
-  ]);
+  const finalizedAssistantEvent = {
+    ...env({
+      type: 'assistant_turn',
+      turnId: 'current-turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-current', toolName: 'write_file', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-current',
+            toolName: 'write_file',
+            status: 'completed',
+            output: 'effect committed',
+          },
+          { type: 'assistant_text', text: 'current answer' },
+        ],
+      },
+      state: { previousResponseId: 'new-chain' },
+      providerHistory: [...interruptedRequest, nextAssistant],
+    }),
+    logId: 's',
+    eventId: 'current-assistant',
+  };
+  const finalized = replayEvents([...persisted, checkpointEvent, finalizedAssistantEvent]);
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [...persisted, checkpointEvent, finalizedAssistantEvent],
+      [...interruptedRequest, nextAssistant],
+    ),
+  ).toMatchObject({ status: 'derived', history: [...interruptedRequest, nextAssistant] });
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [
+        ...persisted,
+        checkpointEvent,
+        {
+          ...finalizedAssistantEvent,
+          event: { ...finalizedAssistantEvent.event, turnId: 'unrelated-turn' } as Extract<
+            LogEvent,
+            { type: 'assistant_turn' }
+          >,
+        },
+      ],
+      [...interruptedRequest, nextAssistant],
+    ).status,
+  ).toBe('refused');
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [
+        ...persisted,
+        checkpointEvent,
+        finalizedAssistantEvent,
+        {
+          ...finalizedAssistantEvent,
+          seq: finalizedAssistantEvent.seq + 1,
+          eventId: 'duplicate-current-assistant',
+        },
+      ],
+      [...interruptedRequest, nextAssistant],
+    ).status,
+  ).toBe('refused');
   expect(finalized.history).toEqual([...interruptedRequest, nextAssistant]);
   expect(finalized.history.filter((item) => item.content === 'current')).toHaveLength(1);
   expect(JSON.stringify(finalized.history)).not.toContain('answer-1');

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionIndexDatabase } from './session-index-database.js';
 import { createConversationLogWriter } from '../../logging/conversation-log-writer.js';
-import { setConversationsDirForTest } from '../conversation-persistence.js';
+import { setConversationsDirForTest, setPidAlivenessCheckForTest } from '../conversation-persistence.js';
 import { SessionBrowser } from '../session-browser.js';
 
 let tempDir = '';
@@ -23,6 +23,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setConversationsDirForTest(null);
+  setPidAlivenessCheckForTest(null);
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -441,6 +442,41 @@ describe('SessionIndexDatabase', () => {
       const listB = index.list({ projectPath: '/project-b' });
       expect(listB.total).toBe(1);
       expect(listB.sessions[0].id).toBe('22222222-0000-4000-8000-000000000001');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('skips sessions still running in another process when falling back from previous', () => {
+    const runningPid = 424_242;
+    const holdLock = (id: string) =>
+      fs.writeFileSync(
+        path.join(convDir, `${id}.lock`),
+        JSON.stringify({ pid: runningPid, startedAt: '2026-01-01T00:00:00.000Z', host: os.hostname() }),
+      );
+    setPidAlivenessCheckForTest((pid) => pid === runningPid);
+    writeSession('sibling-a', '/project');
+    writeSession('sibling-b', '/project/.worktrees/other');
+    writeSession('current', '/project');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+      // session_list order: the first other session is what recency would pick.
+      const [newest, older] = index
+        .list({ projectPath: '/project' })
+        .sessions.map((s) => s.id)
+        .filter((id) => id !== 'current');
+      holdLock(newest!);
+
+      expect(
+        index.resolveReference('previous', { projectPath: '/project', currentSessionId: 'current' }),
+      ).toMatchObject({ kind: 'resolved', id: older });
+
+      holdLock(older!);
+      expect(
+        index.resolveReference('previous', { projectPath: '/project', currentSessionId: 'current' }),
+      ).toMatchObject({ kind: 'not_found', message: expect.stringContaining('still running') });
     } finally {
       index.close();
     }

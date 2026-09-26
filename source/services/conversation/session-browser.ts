@@ -2,6 +2,7 @@ import {
   browseConversationsForProject,
   getConversationSourceVersionReadOnly,
   getConversationsDirectoryVersionReadOnly,
+  isConversationLocked,
   loadConversationForProjectReadOnly,
   loadConversationUnscopedForIndex,
   resolveConversationReference,
@@ -752,8 +753,20 @@ type SessionReferenceResolution =
 const PREVIOUS_UNAVAILABLE_MESSAGE =
   'The current session is unknown, so "previous" cannot be resolved; use session_list to find the session.';
 const NO_OTHER_SESSION_MESSAGE = 'This session has no rollover predecessor and no other session exists in this scope.';
+const ONLY_RUNNING_SESSIONS_MESSAGE =
+  'This session has no rollover predecessor and every other session in this scope is still running, so "previous" cannot be inferred; use session_list to find the session.';
 const CURRENT_OUT_OF_SCOPE_MESSAGE =
   'This session has no rollover predecessor and is not in this scope, so "previous" cannot be inferred; use session_list to find the session.';
+
+/**
+ * A session another live process is still writing. The project scope spans
+ * every worktree, so the newest other session is often a concurrently running
+ * sibling rather than anything this session continues; the recency fallback
+ * for "previous" skips those.
+ */
+function isRunningElsewhere(sessionId: string): boolean {
+  return isConversationLocked(sessionId)?.status === 'held';
+}
 
 function resolveSessionReference(
   reference: string,
@@ -776,11 +789,13 @@ function resolveSessionReference(
       return { kind: 'not_found', message: CURRENT_OUT_OF_SCOPE_MESSAGE };
     }
     // `conversations` is already ordered most recently updated first, matching session_list.
-    const fallback = conversations.find(
+    const others = conversations.filter(
       (conversation) =>
         conversation.id !== currentSessionId && isBrowsableSession(conversation) && project(conversation) !== null,
     );
-    if (!fallback) return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
+    if (others.length === 0) return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
+    const fallback = others.find((conversation) => !isRunningElsewhere(conversation.id));
+    if (!fallback) return { kind: 'not_found', message: ONLY_RUNNING_SESSIONS_MESSAGE };
     return { kind: 'resolved', id: fallback.id };
   }
 
@@ -1000,5 +1015,7 @@ export {
   prefixSnippet,
   PREVIOUS_UNAVAILABLE_MESSAGE,
   NO_OTHER_SESSION_MESSAGE,
+  ONLY_RUNNING_SESSIONS_MESSAGE,
   CURRENT_OUT_OF_SCOPE_MESSAGE,
+  isRunningElsewhere,
 };

@@ -9,6 +9,9 @@ import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/m
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 import { ConversationStore } from './conversation-store.js';
+import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
+import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
+import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -732,6 +735,429 @@ it('semantic projection does not apply a checkpoint whose source ref is missing'
     status: 'projected',
     state: { history: [{ role: 'user', content: 'source' }] },
   });
+});
+
+it('replay derives a provenance-proven local checkpoint request from the checkpoint and uncovered source events', () => {
+  const checkpoint = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'durable summary' }],
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const hotUser = { role: 'user', type: 'message', content: 'hot question' };
+  const hotAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'hot answer' }],
+  };
+  const secondHotUser = { role: 'user', type: 'message', content: 'hot question two' };
+  const secondHotAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'hot answer two' }],
+  };
+  const nextUser = { role: 'user', type: 'message', content: 'next question' };
+  const nextAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'next answer' }],
+  };
+  const sourceUser = {
+    ...env({ type: 'user_message', message: { id: 'cold-u', sender: 'user', text: 'cold question' } }),
+    logId: 's',
+    eventId: 'cold-user',
+  };
+  const sourceAssistant = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'cold answer' }] } }),
+    logId: 's',
+    eventId: 'cold-assistant',
+  };
+  const hotUsersAndAssistantEvents = [
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u1', sender: 'user', text: 'hot question one' } }),
+      logId: 's',
+      eventId: 'hot-user-1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer one' }] } }),
+      logId: 's',
+      eventId: 'hot-assistant-1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+      logId: 's',
+      eventId: 'hot-user-2',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'hot-assistant-2',
+    },
+  ];
+  const hotUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'hot-u', sender: 'user', text: 'hot question' } }),
+    logId: 's',
+    eventId: 'hot-user',
+  };
+  const hotAssistantEvent = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer' }] } }),
+    logId: 's',
+    eventId: 'hot-assistant',
+  };
+  const secondHotUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+    logId: 's',
+    eventId: 'hot-user-two',
+  };
+  const secondHotAssistantEvent = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] } }),
+    logId: 's',
+    eventId: 'hot-assistant-two',
+  };
+  const nextUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'next-u', sender: 'user', text: 'next question' } }),
+    logId: 's',
+    eventId: 'next-user',
+  };
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'local-1',
+      sourceRefs: [
+        { logId: 's', eventId: 'cold-user' },
+        { logId: 's', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+  const nextAssistantEvent = {
+    ...env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'next answer' }] },
+      state: { previousResponseId: 'post-checkpoint-chain' },
+      providerHistory: [checkpoint, hotUser, hotAssistant, secondHotUser, secondHotAssistant, nextUser, nextAssistant],
+    }),
+    logId: 's',
+    eventId: 'next-assistant',
+  };
+
+  const restored = replayEvents([
+    sourceUser,
+    sourceAssistant,
+    hotUserEvent,
+    hotAssistantEvent,
+    secondHotUserEvent,
+    secondHotAssistantEvent,
+    nextUserEvent,
+    checkpointEvent,
+    nextAssistantEvent,
+  ]);
+
+  expect(restored.history).toEqual([
+    checkpoint,
+    hotUser,
+    hotAssistant,
+    secondHotUser,
+    secondHotAssistant,
+    nextUser,
+    nextAssistant,
+  ]);
+  expect(restored.previousResponseId).toBe('post-checkpoint-chain');
+});
+
+it('replays the production planner/provenance automatic checkpoint before and after current-turn finalization', () => {
+  const turn = (n: number) => [
+    { role: 'user' as const, type: 'message' as const, content: `user-${n}` },
+    { role: 'assistant' as const, type: 'message' as const, content: `answer-${n}` },
+  ];
+  const history = [
+    ...turn(1),
+    ...turn(2),
+    ...turn(3),
+    { role: 'user' as const, type: 'message' as const, content: 'current' },
+    { type: 'function_call', callId: 'call-current', name: 'write_file', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-current', name: 'write_file', output: 'effect committed' },
+  ];
+  const plan = planLocalCompaction({ history, usableInputTokens: 64_000 });
+  expect(plan.kind).toBe('planned');
+  if (plan.kind !== 'planned') return;
+
+  const persisted = [
+    {
+      ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'user-1' } }),
+      logId: 's',
+      eventId: 'u1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'answer-1' }] } }),
+      logId: 's',
+      eventId: 'a1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'user-2' } }),
+      logId: 's',
+      eventId: 'u2',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'answer-2' }] } }),
+      logId: 's',
+      eventId: 'a2',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'u3', sender: 'user', text: 'user-3' } }),
+      logId: 's',
+      eventId: 'u3',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'answer-3' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'a3',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'current', sender: 'user', text: 'current' } }),
+      logId: 's',
+      eventId: 'current',
+    },
+    {
+      ...env({
+        type: 'assistant_journal_item',
+        turnId: 'current-turn',
+        seq: 1,
+        item: { type: 'tool_call', callId: 'call-current', toolName: 'write_file', arguments: '{}' },
+      }),
+      logId: 's',
+      eventId: 'journal-call',
+    },
+    {
+      ...env({
+        type: 'assistant_journal_item',
+        turnId: 'current-turn',
+        seq: 2,
+        item: {
+          type: 'tool_result',
+          callId: 'call-current',
+          toolName: 'write_file',
+          status: 'completed',
+          output: 'effect committed',
+        },
+      }),
+      logId: 's',
+      eventId: 'journal-result',
+    },
+  ];
+  const sourceRefs = resolveCheckpointSourceRefs({ envelopes: persisted, history, hotTail: plan.hotTail });
+  expect(sourceRefs).toEqual([
+    { logId: 's', eventId: 'u1' },
+    { logId: 's', eventId: 'a1' },
+    { logId: 's', eventId: 'u2' },
+    { logId: 's', eventId: 'a2' },
+  ]);
+  const checkpoint = {
+    role: 'system',
+    type: 'message',
+    content: 'summary',
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'automatic',
+      sourceRefs: sourceRefs!,
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+  const interruptedRequest = [
+    checkpoint,
+    { role: 'user', type: 'message', content: 'user-3' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'answer-3' }] },
+    { role: 'user', type: 'message', content: 'current' },
+    { type: 'function_call', callId: 'call-current', name: 'write_file', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-current', name: 'write_file', output: 'effect committed' },
+  ];
+  const atCheckpoint = replayEvents([...persisted, checkpointEvent]);
+  expect(deriveLocalCheckpointRequestHistory([...persisted, checkpointEvent], atCheckpoint.history).status).toBe(
+    'refused',
+  );
+  expect(atCheckpoint.history).not.toEqual(interruptedRequest);
+  expect(JSON.stringify(atCheckpoint.history)).toContain('answer-1');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('call-current');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('effect committed');
+  expect(atCheckpoint.history.filter((item) => item.content === 'current')).toHaveLength(1);
+  expect(atCheckpoint.history.filter((item) => item.callId === 'call-current')).toHaveLength(2);
+  expect(atCheckpoint.previousResponseId).toBeNull();
+
+  const nextAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'current answer' }],
+  };
+  const finalizedAssistantEvent = {
+    ...env({
+      type: 'assistant_turn',
+      turnId: 'current-turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-current', toolName: 'write_file', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-current',
+            toolName: 'write_file',
+            status: 'completed',
+            output: 'effect committed',
+          },
+          { type: 'assistant_text', text: 'current answer' },
+        ],
+      },
+      state: { previousResponseId: 'new-chain' },
+      providerHistory: [...interruptedRequest, nextAssistant],
+    }),
+    logId: 's',
+    eventId: 'current-assistant',
+  };
+  const finalized = replayEvents([...persisted, checkpointEvent, finalizedAssistantEvent]);
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [...persisted, checkpointEvent, finalizedAssistantEvent],
+      [...interruptedRequest, nextAssistant],
+    ),
+  ).toMatchObject({ status: 'derived', history: [...interruptedRequest, nextAssistant] });
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [
+        ...persisted,
+        checkpointEvent,
+        {
+          ...finalizedAssistantEvent,
+          event: { ...finalizedAssistantEvent.event, turnId: 'unrelated-turn' } as Extract<
+            LogEvent,
+            { type: 'assistant_turn' }
+          >,
+        },
+      ],
+      [...interruptedRequest, nextAssistant],
+    ).status,
+  ).toBe('refused');
+  expect(
+    deriveLocalCheckpointRequestHistory(
+      [
+        ...persisted,
+        checkpointEvent,
+        finalizedAssistantEvent,
+        {
+          ...finalizedAssistantEvent,
+          seq: finalizedAssistantEvent.seq + 1,
+          eventId: 'duplicate-current-assistant',
+        },
+      ],
+      [...interruptedRequest, nextAssistant],
+    ).status,
+  ).toBe('refused');
+  expect(finalized.history).toEqual([...interruptedRequest, nextAssistant]);
+  expect(finalized.history.filter((item) => item.content === 'current')).toHaveLength(1);
+  expect(JSON.stringify(finalized.history)).not.toContain('answer-1');
+  expect(finalized.previousResponseId).toBe('new-chain');
+});
+
+it('replay applies a checkpoint appended just before a crash and severs the prior provider chain', () => {
+  const checkpoint = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'durable summary' }],
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const sourceUser = {
+    ...env({ type: 'user_message', message: { id: 'cold-u', sender: 'user', text: 'cold question' } }),
+    logId: 's',
+    eventId: 'cold-user',
+  };
+  const sourceAssistant = {
+    ...env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'cold answer' }] },
+      state: { previousResponseId: 'old-chain' },
+    }),
+    logId: 's',
+    eventId: 'cold-assistant',
+  };
+  const hotUsersAndAssistantEvents = [
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u1', sender: 'user', text: 'hot question one' } }),
+      logId: 's',
+      eventId: 'hot-user-1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer one' }] } }),
+      logId: 's',
+      eventId: 'hot-assistant-1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+      logId: 's',
+      eventId: 'hot-user-2',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'hot-assistant-2',
+    },
+  ];
+  const currentUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'current-u', sender: 'user', text: 'current request' } }),
+    logId: 's',
+    eventId: 'current-user',
+  };
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'local-1',
+      sourceRefs: [
+        { logId: 's', eventId: 'cold-user' },
+        { logId: 's', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+
+  const restored = replayEvents([
+    sourceUser,
+    sourceAssistant,
+    ...hotUsersAndAssistantEvents,
+    currentUserEvent,
+    checkpointEvent,
+  ]);
+
+  expect(restored.history).toHaveLength(6);
+  expect(restored.history[0]).toEqual(checkpoint);
+  expect(JSON.stringify(restored.history)).toContain('hot question one');
+  expect(JSON.stringify(restored.history)).toContain('hot question two');
+  expect(JSON.stringify(restored.history)).toContain('current request');
+  expect(JSON.stringify(restored.history)).not.toContain('cold answer');
+  expect(restored.previousResponseId).toBeNull();
 });
 
 it('decodeLogEnvelope requires unique, complete references on events_retracted', () => {

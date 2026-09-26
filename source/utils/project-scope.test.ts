@@ -3,7 +3,13 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createProjectScopeResolver, projectScopeKey } from './project-scope.js';
+import { createProjectScopeResolver, projectScopeKey, readGitCommonDir } from './project-scope.js';
+
+// Pass-through spy: the real-git tests below still spawn git.
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+});
 
 let tempRoot: string | undefined;
 afterEach(() => {
@@ -66,4 +72,14 @@ it('keys a real git worktree and its main checkout identically', () => {
 
   expect(projectScopeKey(worktree)).toBe(repo);
   expect(projectScopeKey(repo)).toBe(repo);
+});
+
+it('does not spawn git for a session directory that no longer exists', () => {
+  // Most historical session paths are merged-and-removed worktrees; scoping
+  // them must not block the UI on one git process each.
+  tempRoot = mkdtempSync(path.join(os.tmpdir(), 'project-scope-'));
+  vi.mocked(execFileSync).mockClear();
+
+  expect(readGitCommonDir(path.join(tempRoot, 'removed-worktree'))).toBeNull();
+  expect(execFileSync).not.toHaveBeenCalled();
 });

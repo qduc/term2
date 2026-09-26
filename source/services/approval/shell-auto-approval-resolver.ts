@@ -13,7 +13,7 @@ import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
 
-export const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
+const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
   'read_file',
   'grep',
   'find_files',
@@ -22,11 +22,7 @@ export const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
   'code_context_search',
 ]);
 
-export const FILE_MUTATION_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
-  'create_file',
-  'search_replace',
-  'apply_patch',
-]);
+const FILE_MUTATION_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set(['create_file', 'search_replace', 'apply_patch']);
 
 export function isAutoApprovableTool(toolName: string | undefined): boolean {
   if (!toolName) return false;
@@ -63,7 +59,7 @@ export function extractToolTargetPaths(toolName: string, rawArgs: unknown): stri
   return [];
 }
 
-export function formatToolOperationDescription(toolName: string, rawArgs: unknown): string {
+function formatToolOperationDescription(toolName: string, rawArgs: unknown): string {
   if (typeof rawArgs === 'string') {
     try {
       rawArgs = JSON.parse(rawArgs);

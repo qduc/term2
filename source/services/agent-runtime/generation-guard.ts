@@ -39,7 +39,7 @@ export interface GenerationGuardOptions {
   readonly toolArgumentRunawayMs?: number;
 }
 
-export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuardOptions>> = {
+const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuardOptions>> = {
   maxOutputCharacters: 100_000,
   maxTextCharacters: 100_000,
   maxReasoningCharacters: 100_000,
@@ -519,7 +519,7 @@ export class GenerationStreamDeadlines {
   }
 }
 
-export function resolveGenerationGuardOptions(options?: GenerationGuardOptions): ResolvedGenerationGuardOptions {
+function resolveGenerationGuardOptions(options?: GenerationGuardOptions): ResolvedGenerationGuardOptions {
   return {
     maxOutputCharacters: options?.maxOutputCharacters ?? DEFAULT_GENERATION_GUARD_OPTIONS.maxOutputCharacters,
     maxTextCharacters: options?.maxTextCharacters ?? DEFAULT_GENERATION_GUARD_OPTIONS.maxTextCharacters,

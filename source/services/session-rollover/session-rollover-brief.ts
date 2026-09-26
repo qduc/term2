@@ -14,7 +14,7 @@ export type SessionRolloverTaskInventoryEntry = {
 
 const LIVE_TASK_STATUSES = new Set(['running', 'awaiting_approval', 'waiting_for_answer', 'cancelling']);
 
-export function isLiveRolloverTask(task: SessionRolloverTaskInventoryEntry): boolean {
+function isLiveRolloverTask(task: SessionRolloverTaskInventoryEntry): boolean {
   return LIVE_TASK_STATUSES.has(task.status);
 }
 

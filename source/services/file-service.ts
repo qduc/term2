@@ -33,7 +33,7 @@ const workspaceRoot = (): string => getActiveWorkspaceRoot();
 const DEFAULT_IGNORES = ['.git/**'];
 const GITIGNORE_NAME = '.gitignore';
 const MAX_SCAN_DEPTH = 25;
-export const WORKSPACE_PATH_COMPLETION_ENTRY_LIMIT = 10_000;
+const WORKSPACE_PATH_COMPLETION_ENTRY_LIMIT = 10_000;
 
 let cachedEntries: PathEntry[] | null = null;
 let cachedRoot: string | null = null;
@@ -195,8 +195,6 @@ export const refreshWorkspaceEntries = async (): Promise<PathEntry[]> => {
   cachedEntries = null;
   return getWorkspaceEntries();
 };
-
-export const getWorkspaceRoot = (): string => workspaceRoot();
 
 export const getWorkspaceEntriesMeta = (): WorkspaceEntriesMeta => ({
   lastLoadedAt,

@@ -74,8 +74,6 @@ export interface NonInteractiveConfig {
   mcpToolSource?: import('./services/mcp/mcp-tool-source.js').McpToolSource;
 }
 
-export { NON_INTERACTIVE_REJECTION_REASON } from './services/approval/non-interactive-approval-policy.js';
-
 export const createNonInteractiveSessionId = (): string => `non-interactive-${randomUUID()}`;
 
 export interface ConversationSessionLike {

@@ -7,7 +7,7 @@ import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getTierModelPool } from '../agent-runtime/model-resolver.js';
 
-export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 
 export type NonInteractiveApprovalDecision =
   | { answer: 'y' }

@@ -8,7 +8,7 @@ import type { SupportedSubagentRole } from './types.js';
  * Mentor fans a question out across its own `agent.mentorPool` entries
  * (`MentorRunner`) instead of drawing from a tier.
  */
-export const ROLE_ANCILLARY_TIERS: Record<Exclude<SupportedSubagentRole, 'mentor'>, AncillaryModelTier> = {
+const ROLE_ANCILLARY_TIERS: Record<Exclude<SupportedSubagentRole, 'mentor'>, AncillaryModelTier> = {
   explorer: 'cheap',
   worker: 'balanced',
   librarian: 'cheap',
@@ -29,7 +29,7 @@ export function getAncillaryTierForRole(role: SupportedSubagentRole | string): A
  * model-id strings (`'models'`), while the mentor pool holds
  * `{model, provider, reasoningEffort}` entries (`'entries'`).
  */
-export const SUBAGENT_POOL_SETTINGS: ReadonlyArray<{
+const SUBAGENT_POOL_SETTINGS: ReadonlyArray<{
   key: string;
   roleLabel: string;
   entryShape: 'entries' | 'models';

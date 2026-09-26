@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { normalizeProjectPath, projectScopeKey } from '../../utils/project-scope.js';
+import { projectScopeKey } from '../../utils/project-scope.js';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
@@ -155,7 +155,7 @@ export function getConversationsDirectoryVersionReadOnly(): string | null {
   return statVersion(getConversationsDir());
 }
 
-export { normalizeProjectPath, projectScopeKey };
+export { projectScopeKey };
 
 export function normalizeSshHost(host: string): string {
   return host.trim().toLowerCase();
@@ -961,8 +961,3 @@ export function saveLastConversation(id: string, projectPath?: string, sshHost?:
   });
   writeLastConversationFile(file);
 }
-
-export const __testing = {
-  getConversationPath,
-  getLockPath,
-};

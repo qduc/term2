@@ -100,7 +100,7 @@ const requirementsBlockSchema = z
   .object({ kind: z.literal('requirements'), requirements: z.array(requirementSchema) })
   .strict();
 
-export const profileBlockSchema = z.union([
+const profileBlockSchema = z.union([
   referenceSchema,
   instructionsSchema,
   contextSchema,
@@ -111,7 +111,7 @@ export const profileBlockSchema = z.union([
   requirementsBlockSchema,
 ]);
 
-export const profileDefinitionSchema = z
+const profileDefinitionSchema = z
   .object({
     schemaVersion: z.literal(1),
     id: localId,
@@ -134,7 +134,7 @@ export const profileDefinitionSchema = z
   })
   .strict();
 
-export const enforcementPolicySchema = z
+const enforcementPolicySchema = z
   .object({
     id,
     kind: z.literal('enforcement'),
@@ -143,7 +143,7 @@ export const enforcementPolicySchema = z
     handoffRestriction: z.string().optional(),
   })
   .strict();
-export const integrationDefinitionSchema = z
+const integrationDefinitionSchema = z
   .object({
     id,
     kind: z.literal('integrations'),
@@ -152,7 +152,7 @@ export const integrationDefinitionSchema = z
   })
   .strict();
 
-export class ProfileValidationError extends Error {
+class ProfileValidationError extends Error {
   readonly issues: readonly z.ZodIssue[];
   constructor(message: string, issues: readonly z.ZodIssue[] = []) {
     super(message);

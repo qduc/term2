@@ -6,7 +6,7 @@ import type {
   Term2Hooks,
 } from './hook-contracts.js';
 
-export const DEFAULT_HOOK_CALLBACK_TIMEOUT_MS = 5_000;
+const DEFAULT_HOOK_CALLBACK_TIMEOUT_MS = 5_000;
 
 export interface HookRegistrationSource {
   readonly path?: string;

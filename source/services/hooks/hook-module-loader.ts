@@ -84,5 +84,3 @@ export class JitiHookModuleLoader implements HookModuleLoader {
     return registrationFromModule(path, moduleValue);
   }
 }
-
-export const validateHookModuleDefaultExport = registrationFromModule;

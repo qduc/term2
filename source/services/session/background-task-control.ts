@@ -15,7 +15,7 @@ import {
 } from './background-task-liveness.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 
-export { BACKGROUND_SHELL_QUIET_AFTER_MS, BACKGROUND_SUBAGENT_QUIET_AFTER_MS } from './background-task-liveness.js';
+export { BACKGROUND_SUBAGENT_QUIET_AFTER_MS } from './background-task-liveness.js';
 export type {
   BackgroundTaskActivity,
   BackgroundTaskActivityState,

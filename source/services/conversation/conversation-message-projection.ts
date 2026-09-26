@@ -3,7 +3,7 @@ import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
 import { isLocalContextSummary } from '../../contracts/provider-input.js';
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
-export const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
+const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
 
 export type ConversationMessageRole = 'user' | 'assistant' | 'system';
 

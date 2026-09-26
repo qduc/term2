@@ -60,7 +60,7 @@ export function createOpenRouterDecisionClient(options: {
   };
 }
 
-export function normalizeDecisionResponse(response: unknown): DecisionClientResponse {
+function normalizeDecisionResponse(response: unknown): DecisionClientResponse {
   if (!isRecord(response)) {
     throw new DecisionEvaluationError('OpenRouter Decisions response has invalid answers', 'invalid_response');
   }

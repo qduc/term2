@@ -31,7 +31,7 @@ export type NicknameEntry = { nickname: string } & ParsedNicknameTarget;
  * - '.' — keeps a nickname visibly distinct from dotted model ids, the shape
  *   it must never be confused with.
  */
-export const NICKNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const NICKNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 /** Generous ceiling; nicknames exist to be shorter than the ids they replace. */
 export const NICKNAME_MAX_LENGTH = 64;

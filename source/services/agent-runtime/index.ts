@@ -3,7 +3,7 @@
 // JSON output, context injection, cancellation/timeout signals, and
 // skill instruction resolution.
 
-export { AgentRuntime, type AgentRuntimeDeps } from './agent-runtime.js';
+export type { AgentRuntime, AgentRuntimeDeps } from './agent-runtime.js';
 export {
   // Types
   type AgentConfig,
@@ -40,19 +40,17 @@ export {
 // Execution budget for tree-level resource enforcement
 export { ExecutionBudget, createRootBudget, type ChildAcquireRejection } from './execution-budget.js';
 
-// Bounded programmable workflow evaluator.
-export { WorkflowEvaluatorImpl } from './workflow/workflow-evaluator.js';
-export {
-  DEFAULT_WORKFLOW_LIMITS,
-  type JsonValue,
-  type WorkflowAgentConfig,
-  type WorkflowEvaluator,
-  type WorkflowInput,
-  type WorkflowLimits,
-  type WorkflowResult,
-  type WorkflowRunInput,
-  type WorkflowRunResult,
-  type WorkflowRunSummary,
+// Bounded programmable workflow evaluator types.
+export type {
+  JsonValue,
+  WorkflowAgentConfig,
+  WorkflowEvaluator,
+  WorkflowInput,
+  WorkflowLimits,
+  WorkflowResult,
+  WorkflowRunInput,
+  WorkflowRunResult,
+  WorkflowRunSummary,
 } from './workflow/workflow-types.js';
 
 // ── Internal types re-exported for subagent integration ───────────────

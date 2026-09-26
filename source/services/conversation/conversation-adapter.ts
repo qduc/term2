@@ -138,7 +138,7 @@ export type AbortDiscardResult = {
   readonly proven: boolean;
 };
 
-export class AdmissionLeaseError extends Error {
+class AdmissionLeaseError extends Error {
   readonly code: 'stale' | 'wrong_session' | 'already_settled' | 'closed';
   constructor(code: AdmissionLeaseError['code']) {
     super('message admission lease rejected');

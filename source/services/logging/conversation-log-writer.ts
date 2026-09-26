@@ -8,7 +8,6 @@ import {
   deltaSidecarPathFor,
   type LogEnvelope,
   type LogEvent,
-  type TruncatedLogEvent,
   type SessionInitEvent,
 } from './conversation-log-events.js';
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
@@ -245,39 +244,6 @@ export function sanitizeSubagentResult(value: unknown): unknown {
   }
 
   return value;
-}
-
-function truncateForLog(event: LogEvent): LogEvent | TruncatedLogEvent {
-  const serialized = JSON.stringify(event);
-  if (serialized.length <= MAX_EVENT_BYTES) {
-    return event;
-  }
-  const truncate = (value: unknown): unknown => {
-    if (typeof value === 'string' && value.length > 1024) {
-      return value.slice(0, 1024) + '…[truncated for log]';
-    }
-    if (Array.isArray(value)) {
-      return value.map(truncate);
-    }
-    if (value && typeof value === 'object') {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(value)) {
-        out[k] = truncate(v);
-      }
-      return out;
-    }
-    return value;
-  };
-  const truncated = truncate(event) as LogEvent;
-  const reserialized = JSON.stringify(truncated);
-  if (reserialized.length <= MAX_EVENT_BYTES) {
-    return truncated;
-  }
-  return {
-    type: event.type,
-    truncated: true,
-    originalSize: serialized.length,
-  };
 }
 
 function acquireLock(
@@ -626,9 +592,3 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
 export function createConversationLogWriter(opts: WriterOptions): ConversationLogWriter {
   return new ConversationLogWriterImpl(opts);
 }
-
-export const __testing = {
-  truncateForLog,
-  acquireLock,
-  releaseLock,
-};

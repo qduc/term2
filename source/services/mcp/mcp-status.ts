@@ -32,7 +32,7 @@ const toolCount = (server: McpServerSnapshot): string =>
  * The error is kept on its own continuation line: opt-in errors embed a JSON
  * snippet and would otherwise hard-wrap into the middle of the next column.
  */
-export const formatMcpServerLines = (server: McpServerSnapshot): string[] => {
+const formatMcpServerLines = (server: McpServerSnapshot): string[] => {
   const head = [
     `  ${server.name}`,
     `[${STATE_LABEL[server.state]}]`,

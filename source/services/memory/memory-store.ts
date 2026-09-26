@@ -112,7 +112,7 @@ export type MemoryIndexRender = {
  * the status line, and nothing is dropped silently: unlisted memories are
  * counted and pointed at the retrieval tools.
  */
-export function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): MemoryIndexRender {
+function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): MemoryIndexRender {
   if (!memories.length) return { text: '', total: 0, summarized: 0, titleOnly: 0, notListed: 0 };
   const sorted = [...memories].sort(byRecent);
   const total = sorted.length;

@@ -31,7 +31,7 @@ export interface InputSurgeRecordOptions extends InputSurgeInspectOptions {
   previousInput?: unknown;
 }
 
-export const DEFAULT_INPUT_SURGE_GUARD_CONFIG: InputSurgeGuardConfig = {
+const DEFAULT_INPUT_SURGE_GUARD_CONFIG: InputSurgeGuardConfig = {
   maxDuplicateToolCallSignatureCount: 4,
   minDuplicateToolCallSignaturesForBlock: 20,
 };

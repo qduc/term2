@@ -84,7 +84,7 @@ export function getSubagentRunContext(context: unknown): SubagentRunContext | un
   return undefined;
 }
 
-export function formatRunningCommandMessages(
+function formatRunningCommandMessages(
   definition: Pick<AnyToolDefinition, 'name' | 'formatCommandMessage'>,
   params: unknown,
 ): CommandMessage[] {

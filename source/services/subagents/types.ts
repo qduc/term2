@@ -5,9 +5,8 @@ import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian', 'reviewer'] as const;
-export const PHASE_1_ASYNC_SUBAGENT_ROLES = ['explorer', 'mentor'] as const;
 export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];
-export type Phase1AsyncSubagentRole = (typeof PHASE_1_ASYNC_SUBAGENT_ROLES)[number];
+export type Phase1AsyncSubagentRole = 'explorer' | 'mentor';
 export type SubagentRole = SupportedSubagentRole | string;
 
 export interface SubagentRequest {

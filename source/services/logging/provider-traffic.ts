@@ -1175,7 +1175,7 @@ export class ProviderTrafficArtifactStore {
   }
 }
 
-export const extractResponseText = (body: Record<string, unknown> | null | undefined): string | undefined => {
+const extractResponseText = (body: Record<string, unknown> | null | undefined): string | undefined => {
   if (!body) return undefined;
   if (typeof body.output_text === 'string') {
     return body.output_text;
@@ -1203,7 +1203,7 @@ export const extractResponseText = (body: Record<string, unknown> | null | undef
   return undefined;
 };
 
-export const extractToolCalls = (body: Record<string, unknown> | null | undefined): unknown => {
+const extractToolCalls = (body: Record<string, unknown> | null | undefined): unknown => {
   if (!body) return undefined;
   const choices = body.choices;
   if (!Array.isArray(choices)) {
@@ -1222,7 +1222,7 @@ const stringValue = (value: unknown): string | undefined => (typeof value === 's
  * Summarize a websocket response (non-Response payload with output items)
  * into a ReceivedTrafficSummary with transport: 'websocket'.
  */
-export function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSummary {
+function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSummary {
   const record = asRecord(response) ?? {};
 
   // Some callers pass a normalized provider response that wraps provider-specific

@@ -1,7 +1,7 @@
 import type { MemoryMetadata, MemorySearchResult } from './memory-store.js';
 import { matchCenteredSnippet } from '../../utils/output/text-snippet.js';
 
-export const CONTENT_SNIPPET_CHARS = 240;
+const CONTENT_SNIPPET_CHARS = 240;
 
 export type ScopedMemorySearchResult = MemorySearchResult & { scope: 'global' | 'project' };
 

@@ -20,7 +20,7 @@ export interface SessionIndexServiceOptions {
   logger?: { warn: (msg: string, meta?: Record<string, unknown>) => void; info?: (msg: string) => void };
 }
 
-export function resolveDefaultSessionIndexPath(conversationsDir: string): string {
+function resolveDefaultSessionIndexPath(conversationsDir: string): string {
   if (process.env['TERM2_SESSION_INDEX_PATH']) {
     return process.env['TERM2_SESSION_INDEX_PATH'];
   }

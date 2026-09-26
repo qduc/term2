@@ -50,7 +50,7 @@ const isOpenAICompaction = (item: unknown): boolean => {
   );
 };
 
-export const isContextReplacementBoundary = (item: unknown): boolean =>
+const isContextReplacementBoundary = (item: unknown): boolean =>
   isOpenAICompaction(item) || isLocalContextSummary(item);
 
 const lastReplacementBoundaryIndex = (history: readonly unknown[]): number => {

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
-  BlockKind,
   ContextBlock,
   EnforcementPolicyDefinition,
   IntegrationDefinition,
@@ -16,7 +15,7 @@ const prompt = (name: string): string =>
   fs.readFileSync(path.join(import.meta.dirname, '../../prompts', name), 'utf8').trim();
 
 /** Stable source kinds owned by the application. Profile data cannot invent one. */
-export const BUILTIN_CONTEXT_SOURCES = [
+const BUILTIN_CONTEXT_SOURCES = [
   'environment',
   'workspace',
   'project-instructions',
@@ -27,7 +26,7 @@ export const BUILTIN_CONTEXT_SOURCES = [
   'profile-document',
 ] as const;
 
-export const BUILTIN_TOOL_CAPABILITIES = [
+const BUILTIN_TOOL_CAPABILITIES = [
   'filesystem-read-workspace',
   'filesystem-read-external',
   'filesystem-write',
@@ -44,10 +43,7 @@ export const BUILTIN_TOOL_CAPABILITIES = [
   'mcp',
 ] as const;
 
-export const BUILTIN_ENFORCEMENT_POLICIES = [
-  'builtin:enforcement/normal',
-  'builtin:enforcement/plan-read-only',
-] as const;
+const BUILTIN_ENFORCEMENT_POLICIES = ['builtin:enforcement/normal', 'builtin:enforcement/plan-read-only'] as const;
 
 export const BUILTIN_INTEGRATIONS = [
   'builtin:integration/mentor',
@@ -81,7 +77,7 @@ const builtinInstructionBlock = (id: string, entry: InstructionsBlock): Register
   definition: entry,
 });
 
-export const builtinBlocks: readonly RegisteredBlock[] = [
+const builtinBlocks: readonly RegisteredBlock[] = [
   builtinInstructionBlock('builtin:instructions/lite', {
     kind: 'instructions',
     identity: { content: prompt('lite.md') },
@@ -108,7 +104,7 @@ export const builtinBlocks: readonly RegisteredBlock[] = [
   { id: 'builtin:tools/lite', kind: 'tools', definition: liteTools },
 ];
 
-export const builtinPolicies: readonly EnforcementPolicyDefinition[] = [
+const builtinPolicies: readonly EnforcementPolicyDefinition[] = [
   { id: BUILTIN_ENFORCEMENT_POLICIES[0], kind: 'enforcement', denials: [] },
   {
     id: BUILTIN_ENFORCEMENT_POLICIES[1],
@@ -118,7 +114,7 @@ export const builtinPolicies: readonly EnforcementPolicyDefinition[] = [
   },
 ];
 
-export const builtinIntegrations: readonly IntegrationDefinition[] = [
+const builtinIntegrations: readonly IntegrationDefinition[] = [
   { id: BUILTIN_INTEGRATIONS[0], kind: 'integrations', availableByDefault: false },
   { id: BUILTIN_INTEGRATIONS[1], kind: 'integrations', availableByDefault: true },
   { id: BUILTIN_INTEGRATIONS[2], kind: 'integrations', availableByDefault: true },
@@ -198,12 +194,7 @@ export const builtinProfileRegistry: ProfileRegistry = {
   integrations: mapById(builtinIntegrations),
 };
 
-/** Convenience lookup for consumers that only need reusable built-in blocks. */
-export const builtinBlockRegistry = builtinProfileRegistry.blocks;
-
 export const isBuiltinContextSource = (value: string): boolean =>
   (BUILTIN_CONTEXT_SOURCES as readonly string[]).includes(value);
 export const isBuiltinToolCapability = (value: string): boolean =>
   (BUILTIN_TOOL_CAPABILITIES as readonly string[]).includes(value);
-export const isBuiltinBlockKind = (value: string): value is BlockKind =>
-  ['instructions', 'context', 'tools', 'enforcement', 'integrations', 'presentation', 'requirements'].includes(value);

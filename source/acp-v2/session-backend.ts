@@ -523,8 +523,6 @@ export function createAcpV2SessionBackend(options: AcpV2SessionBackendOptions): 
   };
 }
 
-export const createProductionAcpV2SessionBackend = createAcpV2SessionBackend;
-
 function permissionScope(
   answer: string,
   approval: PendingInteractionSnapshot['approval'],

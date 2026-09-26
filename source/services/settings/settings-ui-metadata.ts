@@ -253,7 +253,7 @@ function extractEnumValues(unwrapped: any): string[] {
 /**
  * Determine the primitive or composite type of a setting schema.
  */
-export function getSettingValueType(schema: any): SettingValueType {
+function getSettingValueType(schema: any): SettingValueType {
   const unwrapped = unwrapSchema(schema);
   if (!unwrapped) return 'string';
   const def = unwrapped.def ?? unwrapped._def;
@@ -338,7 +338,7 @@ export function isSecretSetting(key: string): boolean {
   return meta ? meta.isSecret : /(^|\.)apiKey$/.test(key);
 }
 
-export function isSettingType(key: string, expectedType: SettingValueType): boolean {
+function isSettingType(key: string, expectedType: SettingValueType): boolean {
   const meta = getSettingMetadata(key);
   return meta ? meta.type === expectedType : false;
 }

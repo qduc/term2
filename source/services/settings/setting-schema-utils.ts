@@ -35,16 +35,6 @@ export function unwrapSchema(schema: any): any {
   return current;
 }
 
-/** True when the setting's leaf schema is an array type. */
-export function isSettingArrayKey(key: string): boolean {
-  const schema = resolveSettingAtPath(key);
-  if (!schema) return false;
-  const unwrapped = unwrapSchema(schema);
-  if (!unwrapped) return false;
-  const def = unwrapped.def || unwrapped._def;
-  return (def?.type || def?.typeName) === 'array';
-}
-
 /**
  * Navigate a dotted setting key path through the SettingsSchema and return
  * the leaf schema (before unwrapping wrappers). Returns undefined if the path

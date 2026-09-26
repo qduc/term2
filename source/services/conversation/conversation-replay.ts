@@ -26,6 +26,7 @@ import {
 } from './conversation-turn-items.js';
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
 import { projectProviderHistory } from './conversation-state-projector.js';
+import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
 import {
   legacyModeFromProfileId,
@@ -1354,6 +1355,15 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     state.warnings.push(
       `Repaired conversation history: removed ${repair.removedItems} duplicated tool replay item(s).`,
     );
+  }
+
+  // For provenance-proven local compaction, reconstruct portable request
+  // history from the checkpoint and uncovered source events. A mismatch or
+  // unresolved reference leaves the legacy replay projection untouched.
+  const checkpointProjection = deriveLocalCheckpointRequestHistory(envelopes, state.history);
+  if (checkpointProjection.status === 'derived') {
+    state.history = checkpointProjection.history;
+    state.previousResponseId = null;
   }
 
   // Cross-model invalidation

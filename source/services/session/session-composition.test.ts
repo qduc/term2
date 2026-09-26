@@ -161,7 +161,7 @@ it('manual local compaction commits checkpoint plus hot tail and retains genuine
   expect(stored.slice(-4)).toEqual(history.slice(-4));
 });
 
-it('journals exact summarized source events without changing replay or covering the hot tail', async () => {
+it('journals exact summarized source events and replays the checkpoint with the uncovered hot tail', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-checkpoint-'));
   setConversationsDirForTest(dir);
   const sessionId = 'checkpoint-provenance';
@@ -210,7 +210,12 @@ it('journals exact summarized source events without changing replay or covering 
     expect(sourceRefs.some((ref) => ref.eventId === before[5].eventId || ref.eventId === before[6].eventId)).toBe(
       false,
     );
-    expect(replayEvents(after)).toEqual(beforeReplay);
+    const afterReplay = replayEvents(after);
+    const checkpointItem = (
+      checkpointEvents[0]!.event as Extract<(typeof after)[number]['event'], { type: 'context_checkpoint_created' }>
+    ).item;
+    expect(afterReplay.messages).toEqual(beforeReplay.messages);
+    expect(afterReplay.history).toEqual([checkpointItem, ...beforeReplay.history.slice(-4)]);
     runtime.dispose();
   } finally {
     await writer.close();

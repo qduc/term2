@@ -734,6 +734,213 @@ it('semantic projection does not apply a checkpoint whose source ref is missing'
   });
 });
 
+it('replay derives a provenance-proven local checkpoint request from the checkpoint and uncovered source events', () => {
+  const checkpoint = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'durable summary' }],
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const hotUser = { role: 'user', type: 'message', content: 'hot question' };
+  const hotAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'hot answer' }],
+  };
+  const secondHotUser = { role: 'user', type: 'message', content: 'hot question two' };
+  const secondHotAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'hot answer two' }],
+  };
+  const nextUser = { role: 'user', type: 'message', content: 'next question' };
+  const nextAssistant = {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'next answer' }],
+  };
+  const sourceUser = {
+    ...env({ type: 'user_message', message: { id: 'cold-u', sender: 'user', text: 'cold question' } }),
+    logId: 's',
+    eventId: 'cold-user',
+  };
+  const sourceAssistant = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'cold answer' }] } }),
+    logId: 's',
+    eventId: 'cold-assistant',
+  };
+  const hotUsersAndAssistantEvents = [
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u1', sender: 'user', text: 'hot question one' } }),
+      logId: 's',
+      eventId: 'hot-user-1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer one' }] } }),
+      logId: 's',
+      eventId: 'hot-assistant-1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+      logId: 's',
+      eventId: 'hot-user-2',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'hot-assistant-2',
+    },
+  ];
+  const hotUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'hot-u', sender: 'user', text: 'hot question' } }),
+    logId: 's',
+    eventId: 'hot-user',
+  };
+  const hotAssistantEvent = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer' }] } }),
+    logId: 's',
+    eventId: 'hot-assistant',
+  };
+  const secondHotUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+    logId: 's',
+    eventId: 'hot-user-two',
+  };
+  const secondHotAssistantEvent = {
+    ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] } }),
+    logId: 's',
+    eventId: 'hot-assistant-two',
+  };
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'local-1',
+      sourceRefs: [
+        { logId: 's', eventId: 'cold-user' },
+        { logId: 's', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+  const nextUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'next-u', sender: 'user', text: 'next question' } }),
+    logId: 's',
+    eventId: 'next-user',
+  };
+  const nextAssistantEvent = {
+    ...env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'next answer' }] },
+      providerHistory: [checkpoint, hotUser, hotAssistant, secondHotUser, secondHotAssistant, nextUser, nextAssistant],
+    }),
+    logId: 's',
+    eventId: 'next-assistant',
+  };
+
+  const restored = replayEvents([
+    sourceUser,
+    sourceAssistant,
+    hotUserEvent,
+    hotAssistantEvent,
+    secondHotUserEvent,
+    secondHotAssistantEvent,
+    checkpointEvent,
+    nextUserEvent,
+    nextAssistantEvent,
+  ]);
+
+  expect(restored.history).toEqual([
+    checkpoint,
+    hotUser,
+    hotAssistant,
+    secondHotUser,
+    secondHotAssistant,
+    nextUser,
+    nextAssistant,
+  ]);
+});
+
+it('replay applies a checkpoint appended just before a crash and severs the prior provider chain', () => {
+  const checkpoint = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'durable summary' }],
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const sourceUser = {
+    ...env({ type: 'user_message', message: { id: 'cold-u', sender: 'user', text: 'cold question' } }),
+    logId: 's',
+    eventId: 'cold-user',
+  };
+  const sourceAssistant = {
+    ...env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'cold answer' }] },
+      state: { previousResponseId: 'old-chain' },
+    }),
+    logId: 's',
+    eventId: 'cold-assistant',
+  };
+  const hotUsersAndAssistantEvents = [
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u1', sender: 'user', text: 'hot question one' } }),
+      logId: 's',
+      eventId: 'hot-user-1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hot answer one' }] } }),
+      logId: 's',
+      eventId: 'hot-assistant-1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'hot-u2', sender: 'user', text: 'hot question two' } }),
+      logId: 's',
+      eventId: 'hot-user-2',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'hot answer two' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'hot-assistant-2',
+    },
+  ];
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'local-1',
+      sourceRefs: [
+        { logId: 's', eventId: 'cold-user' },
+        { logId: 's', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+
+  const restored = replayEvents([sourceUser, sourceAssistant, ...hotUsersAndAssistantEvents, checkpointEvent]);
+
+  expect(restored.history).toHaveLength(5);
+  expect(restored.history[0]).toEqual(checkpoint);
+  expect(JSON.stringify(restored.history)).toContain('hot question one');
+  expect(JSON.stringify(restored.history)).toContain('hot question two');
+  expect(restored.previousResponseId).toBeNull();
+});
+
 it('decodeLogEnvelope requires unique, complete references on events_retracted', () => {
   const valid = env({ type: 'events_retracted', version: 1, refs: [{ logId: 's', eventId: 'e1' }] });
   const duplicate = {

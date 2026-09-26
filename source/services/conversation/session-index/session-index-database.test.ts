@@ -472,6 +472,13 @@ describe('SessionIndexDatabase', () => {
 
       // Previous without a known current session, or with no other session in scope
       expect(index.resolveReference('previous', { projectPath: '/project' }).kind).toBe('not_found');
+      // A current session the index cannot place is not replaced by a recency guess
+      expect(
+        index.resolveReference('previous', { projectPath: '/project', currentSessionId: 'unindexed-session' }).kind,
+      ).toBe('not_found');
+      expect(index.resolveReference('previous', { projectPath: '/project', currentSessionId: soloId }).kind).toBe(
+        'not_found',
+      );
       expect(index.resolveReference('previous', { projectPath: '/solo', currentSessionId: soloId }).kind).toBe(
         'not_found',
       );

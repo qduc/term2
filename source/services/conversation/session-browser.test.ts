@@ -428,6 +428,26 @@ it('prefers the rollover predecessor over a more recently updated session', () =
   expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
 });
 
+it('resolves previous from the current session record even when that session is persisted outside the scope', () => {
+  // Rotation inside a worktree used to persist the successor under the
+  // worktree path while the browser scope stayed at the home workspace.
+  writeSession('predecessor', '/project');
+  writeSession('sibling', '/project');
+  writeSession('current', '/project/.worktrees/feature', undefined, 'current', 'predecessor');
+  touchSession('sibling', '2030-01-01T00:00:00.000Z');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
+});
+
+it('does not guess previous by recency when the current session is outside the scope', () => {
+  writeSession('sibling', '/project');
+  writeSession('current', '/project/.worktrees/feature');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect(browser.read({ id: 'previous' })).toMatchObject({ error: { code: 'not_found' } });
+});
+
 it('does not resolve previous without a known current session or another session', () => {
   writeSession('only', '/project');
 

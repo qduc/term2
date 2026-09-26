@@ -19,6 +19,7 @@ import {
 import { deltaSidecarPathFor } from '../../logging/conversation-log-events.js';
 import {
   isBrowsableSession,
+  CURRENT_OUT_OF_SCOPE_MESSAGE,
   NO_OTHER_SESSION_MESSAGE,
   PREVIOUS_UNAVAILABLE_MESSAGE,
   prefixSnippet,
@@ -580,8 +581,14 @@ export class SessionIndexDatabase {
         .prepare('SELECT predecessor_id FROM sessions WHERE id = ?')
         .get(options.currentSessionId) as { predecessor_id: string | null } | undefined;
 
-      // Without a rollover predecessor, fall back to the most recently updated
-      // other session in scope, in the same order session_list uses.
+      // The predecessor is read from the current session's own row, whatever
+      // its scope. Without one, fall back to the most recently updated other
+      // session in scope, in the same order session_list uses — but only for a
+      // current session inside that scope: otherwise the guess is likely a
+      // concurrent sibling rather than anything this session continues.
+      if (!current?.predecessor_id && !rows.some((row) => row.id === options.currentSessionId)) {
+        return { kind: 'not_found', message: CURRENT_OUT_OF_SCOPE_MESSAGE };
+      }
       const previousId =
         current?.predecessor_id ??
         (

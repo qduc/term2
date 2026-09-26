@@ -27,8 +27,9 @@ export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProp
             </Text>
           ) : (
             <Text color={COLOR_WARNING}>
-              Select {providerLabel} to enter its API key, or choose another provider. Credential presence is checked
-              locally.
+              {provider === 'grok'
+                ? 'Log in to Grok in your browser with `term2 --grok-login`, then reselect Grok.'
+                : `Select ${providerLabel} to enter its API key, or choose another provider.`}
             </Text>
           )}
         </>

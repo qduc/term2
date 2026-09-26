@@ -10,7 +10,7 @@ it('createSandboxSlashCommand returns a command with correct metadata', () => {
   });
 
   expect(cmd.name).toBe('sandbox');
-  expect(cmd.description).toBe('Toggle shell sandbox mode (restricts shell operations to a secure environment)');
+  expect(cmd.description).toBe('Toggle shell sandboxing; disabling it gives shell commands unrestricted access');
 });
 
 it.each([

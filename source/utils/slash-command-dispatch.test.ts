@@ -75,4 +75,11 @@ describe('tryExecuteSlashCommand', () => {
     expect(tryExecuteSlashCommand('/exot', [], vi.fn(), notify)).toBe(true);
     expect(notify).toHaveBeenCalledWith('Unknown command /exot');
   });
+
+  it('suggests nearby command names for mistyped commands', () => {
+    const notify = vi.fn();
+    const commands: SlashCommand[] = [{ name: 'model', description: 'Model', action: vi.fn() }];
+    tryExecuteSlashCommand('/modle', commands, vi.fn(), notify);
+    expect(notify).toHaveBeenCalledWith('Unknown command /modle. Did you mean /model?');
+  });
 });

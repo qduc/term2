@@ -2,6 +2,24 @@ import { parseInput } from './input-parser.js';
 import { resolveSlashCommand } from '../slash-commands.js';
 import type { SlashCommand } from '../slash-commands.js';
 
+const editDistance = (left: string, right: string): number => {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= left.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= right.length; column += 1) {
+      const above = previous[column];
+      previous[column] = Math.min(
+        previous[column] + 1,
+        previous[column - 1] + 1,
+        diagonal + (left[row - 1] === right[column - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[right.length];
+};
+
 /**
  * The one place that decides whether a fully-formed piece of text is a slash
  * command to execute locally versus ordinary content. Both the primary
@@ -41,7 +59,13 @@ export function tryExecuteSlashCommand(
     if (candidates.length > 1) {
       notify(`Ambiguous command /${parsed.commandName}: ${candidates.map(({ name }) => `/${name}`).join(', ')}`);
     } else {
-      notify(`Unknown command /${parsed.commandName}`);
+      const nearby = slashCommands
+        .map(({ name }) => ({ name, distance: editDistance(parsed.commandName.toLowerCase(), name.toLowerCase()) }))
+        .filter(({ distance }) => distance <= Math.max(2, Math.floor(parsed.commandName.length / 3)))
+        .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+        .slice(0, 3);
+      const suggestions = nearby.length ? `. Did you mean ${nearby.map(({ name }) => `/${name}`).join(', ')}?` : '';
+      notify(`Unknown command /${parsed.commandName}${suggestions}`);
       replaceInput('');
     }
     return true;

@@ -259,6 +259,52 @@ it('replayEvents: golden current v3 conversation restores from compact assistant
   expect(restored.messages.map((message) => message.sender)).toEqual(['user', 'command', 'bot']);
 });
 
+it('replayEvents: preserves dispatched-but-unknown tool outcomes', () => {
+  const toolStarted = env({
+    type: 'tool_started',
+    turnId: 'turn-1',
+    toolCallId: 'call-unknown',
+    toolName: 'shell',
+    arguments: { command: 'write' },
+  });
+  const toolResult = env({
+    type: 'tool_result',
+    turnId: 'turn-1',
+    callId: 'call-unknown',
+    toolName: 'shell',
+    status: 'unknown',
+    output: 'Verify before retrying.',
+  });
+  expect(decodeLogEnvelope(toolResult)).not.toBeNull();
+  const restored = replayEvents([toolStarted, toolResult]);
+
+  expect(restored.toolLedger).toMatchObject([
+    { callId: 'call-unknown', status: 'unknown', output: 'Verify before retrying.' },
+  ]);
+});
+
+it('decodeLogEnvelope: accepts an unknown status in a persisted assistant turn item', () => {
+  const envelope = env({
+    type: 'assistant_turn',
+    turn: {
+      items: [
+        {
+          type: 'tool_result',
+          callId: 'call-unknown',
+          toolName: 'shell',
+          status: 'unknown',
+          output: 'Verify before retrying.',
+        },
+      ],
+    },
+  });
+  const decoded = decodeLogEnvelope(envelope);
+
+  expect(decoded).not.toBeNull();
+  expect(replayEvents([decoded!]).toolLedger).toMatchObject([{ callId: 'call-unknown', status: 'unknown' }]);
+  expect(replayEvents([decoded!]).messages).toMatchObject([{ sender: 'command', status: 'unknown' }]);
+});
+
 it('replayEvents: timed-out partial assistant turn preserves tool history for the next message', () => {
   const restored = replayEvents([
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

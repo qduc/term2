@@ -76,7 +76,7 @@ const isAssistantItem = (value: unknown): boolean => {
       return (
         hasString(value, 'callId') &&
         hasString(value, 'toolName') &&
-        isOneOf(value['status'], ['completed', 'failed', 'aborted'])
+        isOneOf(value['status'], ['completed', 'failed', 'aborted', 'unknown'])
       );
     default:
       return true;
@@ -139,7 +139,7 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return (
         hasString(event, 'callId') &&
         hasString(event, 'toolName') &&
-        isOneOf(event['status'], ['completed', 'failed', 'aborted'])
+        isOneOf(event['status'], ['completed', 'failed', 'aborted', 'unknown'])
       );
     case 'approval_required':
       return isObject(event['approval']) && hasString(event['approval'], 'toolName');

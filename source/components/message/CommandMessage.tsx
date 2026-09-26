@@ -413,7 +413,7 @@ const CommandMessage: FC<Props> = ({
     // outcome from a normal failed run — so it is checked first and maps to the
     // same 'failed' glyph/color as success === false.
     const statusKind: ToolStatusKind =
-      isApprovalRejection || success === false
+      isApprovalRejection || success === false || status === 'unknown'
         ? 'failed'
         : isWaiting || isQueued
         ? 'pending'
@@ -492,6 +492,7 @@ const CommandMessage: FC<Props> = ({
       const isFailed =
         status === 'failed' ||
         status === 'aborted' ||
+        status === 'unknown' ||
         isApprovalRejection ||
         success === false ||
         Boolean(failureReason);

@@ -26,7 +26,7 @@ export interface ToolResult {
   type: 'tool_result';
   callId: string;
   toolName: string;
-  status: 'completed' | 'failed' | 'aborted';
+  status: 'completed' | 'failed' | 'aborted' | 'unknown';
   output: unknown;
   providerItem?: Record<string, unknown>;
   runCodeExecution?: { readonly success: boolean; readonly diagnosticCode?: string };

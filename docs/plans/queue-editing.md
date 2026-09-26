@@ -1,5 +1,7 @@
 # Editing and deleting a submitted-while-busy prompt
 
+Status: **complete and merged.** Steps 1–4 merged to main: Steps 1–2 in `ccc02324` / `b5f31095`, Step 3 in `f1eebcc5` (`19a3f22d`), and Step 4 in `061427c8` (all included by `a7a0d677`).
+
 ## Resume here
 
 **Steps 1–4 (`## Build order`) are done and merged to `main`**: Steps 1–2 are

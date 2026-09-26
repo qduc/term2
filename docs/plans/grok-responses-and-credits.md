@@ -1,8 +1,6 @@
 # Grok on the Responses API & Credit Usage Tracking
 
-## Status
-- **Grok Responses API**: Merged 2026-08-20 (`b065bbc9`, `40c4546a`).
-- **Grok Credit Usage in Status Bar**: Merged 2026-08-21.
+Status: **implemented and merged.** Grok Responses API merged 2026-08-20 (`b065bbc9`, `40c4546a`); Grok Credit Usage in Status Bar merged 2026-08-21 (`9fa492c9`).
 
 ---
 

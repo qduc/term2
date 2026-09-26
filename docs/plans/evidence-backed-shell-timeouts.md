@@ -1,5 +1,7 @@
 # Evidence-backed shell timeout improvements
 
+Status: **closed (2026-09-06).** M1 guidance + M2 executor/log observability merged to main (`c9162de4`; branch commit `19e77307`); pilot decision sample complete; M3 decision taken — close, no escalation.
+
 ## Resume here
 
 **Closed (2026-09-06): M1 guidance + M2 executor/log observability merged to

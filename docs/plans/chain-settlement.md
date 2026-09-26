@@ -1,8 +1,6 @@
 # Chain settlement
 
-## Status
-
-Implemented on branch `chain-settlement` (2026-08-11).
+Status: **implemented and merged** to `main` in `9a91a5b8` (2026-08-11); model-switch chain drop merged in `8fa674f0` (2026-08-30).
 
 ## The defect
 

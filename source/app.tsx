@@ -75,6 +75,7 @@ import {
 import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
+import type { ControlSocketServer } from './services/control-socket/control-socket.js';
 
 function projectNestedApproval(
   nestedApproval: {
@@ -138,6 +139,8 @@ interface AppProps {
   mcpStartupNotices?: readonly string[];
   mcpUserConfigPath?: string;
   mcpConfigController?: McpConfigController;
+  controlSocket?: ControlSocketServer;
+  controlStartupNotice?: string;
 }
 
 const App: FC<AppProps> = ({
@@ -167,6 +170,8 @@ const App: FC<AppProps> = ({
   mcpStartupNotices,
   mcpUserConfigPath,
   mcpConfigController,
+  controlSocket,
+  controlStartupNotice,
 }) => {
   const { exit, waitUntilRenderFlush } = useApp();
   const { stdout } = useStdout();
@@ -306,7 +311,12 @@ const App: FC<AppProps> = ({
     onRestoreInput: setInput,
     logWriter,
     notifier,
+    controlSocket,
   });
+
+  useEffect(() => {
+    if (controlStartupNotice) addSystemMessage(controlStartupNotice);
+  }, [controlStartupNotice, addSystemMessage]);
 
   // Keep older test/integration harnesses compatible while the session facade
   // rolls out the adopted-subagent approval channel.

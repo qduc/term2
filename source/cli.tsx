@@ -74,6 +74,26 @@ import { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
 import { McpConfigController } from './services/mcp/mcp-config-controller.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import { AutomaticMemoryCanary } from './services/memory/automatic-memory-canary.js';
+import { ControlSocketServer, isControlSocketName } from './services/control-socket/control-socket.js';
+import { runControlCommand } from './services/control-socket/control-command.js';
+
+const controlArgv: string[] = [];
+let controlSocketRequested = false;
+let controlSocketName: string | undefined;
+let controlSocketNameRejected = false;
+for (const arg of process.argv.slice(2)) {
+  if (arg === '--control-socket') {
+    controlSocketRequested = true;
+    controlSocketName ??= String(process.pid);
+  } else if (arg.startsWith('--control-socket=')) {
+    controlSocketRequested = true;
+    const name = arg.slice('--control-socket='.length);
+    controlSocketName = name;
+    if (!isControlSocketName(name)) controlSocketNameRejected = true;
+  } else {
+    controlArgv.push(arg);
+  }
+}
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -116,6 +136,7 @@ type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
 let activeSessionBrowser: SessionBrowser | null = null;
 let activeMcpManager: McpConnectionManager | null = null;
+let activeControlSocketServer: ControlSocketServer | null = null;
 let effectiveSessionId: string | undefined;
 let effectiveHasConversationContent = false;
 let sessionSummaryPrinted = false;
@@ -129,6 +150,7 @@ process.on('SIGINT', () => {
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
     activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
   ]).finally(() => {
     printUsageOnce();
     process.exit(130);
@@ -143,6 +165,7 @@ process.on('SIGTERM', () => {
     activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
     activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
     activeMcpManager ? activeMcpManager.close() : Promise.resolve(),
+    activeControlSocketServer ? activeControlSocketServer.close() : Promise.resolve(),
   ]).finally(() => {
     process.exit(143);
   });
@@ -277,6 +300,7 @@ const cli = meow(
   `,
   {
     importMeta: import.meta,
+    argv: controlArgv,
     flags: {
       model: {
         type: 'string',
@@ -353,6 +377,11 @@ const cli = meow(
     allowUnknownFlags: process.argv[2] === 'serve' || process.argv[2] === 'acp',
   },
 );
+
+if (cli.input[0] === 'control') {
+  const exitCode = await runControlCommand(cli.input.slice(1), process.stdout, process.stderr);
+  process.exit(exitCode);
+}
 
 function oauthLoginIo(providerLabel: string) {
   return {
@@ -1231,11 +1260,36 @@ if (!hasPositionalPrompt && (!nodeStdin.isTTY || !nodeStdout.isTTY)) {
   process.exit(1);
 }
 
+let controlStartupNotice: string | undefined;
+let controlSocket: ControlSocketServer | undefined;
+if (controlSocketRequested) {
+  if (controlSocketNameRejected || !controlSocketName) {
+    controlStartupNotice = `Control socket name rejected: ${controlSocketName ?? ''}`;
+  } else {
+    try {
+      controlSocket = new ControlSocketServer({
+        name: controlSocketName,
+        sessionId: () => effectiveSessionId ?? conversationService.sessionId,
+      });
+      await controlSocket.listen();
+      activeControlSocketServer = controlSocket;
+      controlStartupNotice = `Control socket on: ${controlSocket.name} (pid ${process.pid})`;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      controlStartupNotice = `Control socket off: ${reason}`;
+      if (controlSocket) await controlSocket.close().catch(() => undefined);
+      controlSocket = undefined;
+    }
+  }
+}
+
 const { waitUntilExit } = render(
   (
     <InputProvider>
       <App
         conversationService={conversationService}
+        controlSocket={controlSocket}
+        controlStartupNotice={controlStartupNotice}
         settingsService={settings}
         historyService={history}
         loggingService={logger}
@@ -1277,6 +1331,10 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
+if (controlSocket) {
+  await controlSocket.close();
+  activeControlSocketServer = null;
+}
 if (conversationService.hookEvents) {
   await hookService.emit(
     conversationService.hookEvents.create('session.end', {

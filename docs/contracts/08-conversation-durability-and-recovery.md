@@ -141,7 +141,7 @@ history (`history-service.ts`), and log decoding and replay recovery
   - Missing sidecar (`conversation-persistence.ts:170-172`) or unreadable sidecar (`:174-181`, e.g. `EISDIR` / read error)
     during resume degrades to settled canonical history without failing the load.
 - **Context Mismatch:**
-  - `loadConversationForProject` returns `{ status: 'project_mismatch', conversation }` when either `projectPath` or `sshHost` mismatches.
+  - `loadConversationForProject` returns `{ status: 'project_mismatch', conversation }` when either the `projectScopeKey` of `projectPath` or the `sshHost` mismatches. For a local path the key is the git project root (`project-scope.ts`), so a project's root checkout and its worktrees share one scope; a remote path keys by its normalized path. The same key scopes `SessionBrowser` and the session index, so resume and session tools agree on what one project is.
   - `loadConversationForProject` returns `{ status: 'unreadable', error }` instead of leaking a raw `fs` exception.
   - `loadConversation` returns `null` (lossy collapse of missing vs. mismatch vs. read failure).
 - **Scope Boundary with Provider Semantics:**

@@ -472,6 +472,16 @@ it.sequential('loadConversationForProject: reports project mismatch', () => {
   expect(result.status).toBe('project_mismatch');
 });
 
+it.sequential('loadConversationForProject: resumes a session persisted in a removed project worktree', () => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/alpha/.worktrees/fix' });
+  void writer.close();
+
+  expect(persistenceModule.loadConversationForProject(id, '/workspace/alpha').status).toBe('loaded');
+  expect(persistenceModule.listConversations('/workspace/alpha').map((entry) => entry.id)).toContain(id);
+});
+
 it.sequential('loadConversationForProject: not_found for missing', () => {
   expect(persistenceModule.loadConversationForProject('missing', '/x').status).toBe('not_found');
 });

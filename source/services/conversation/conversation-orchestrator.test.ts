@@ -1313,6 +1313,25 @@ describe('ConversationOrchestrator', () => {
     const commandRows = (cfg: ConversationOrchestratorConfig) =>
       cfg.messages.getMessages().filter((message) => message.sender === 'command');
 
+    it('formats provider error envelopes and gives a retry recovery hint', async () => {
+      const cfg = configWithoutQueue();
+      vi.mocked(cfg.conversationService.sendMessage).mockRejectedValue(
+        new Error(
+          JSON.stringify({
+            type: 'error',
+            error: { type: 'invalid_request_error', message: 'The request body was invalid.' },
+          }),
+        ),
+      );
+
+      await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+      const error = cfg.messages.getMessages().find((message) => message.sender === 'bot');
+      expect(error?.text).toContain('invalid_request_error: The request body was invalid.');
+      expect(error?.text).toContain('Use /retry-turn to try again.');
+      expect(error?.text).not.toContain('{"type":"error"');
+    });
+
     it('aborts a row left running when the turn fails', async () => {
       const cfg = configWithoutQueue();
       cfg.messages.appendMessages([runningRow('call-stranded')]);

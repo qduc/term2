@@ -226,13 +226,15 @@ it('createStreamingState: returns new object each call', () => {
 
 it('enhanceApiKeyError: enhances OPENAI_API_KEY message', () => {
   const result = enhanceApiKeyError('Missing OPENAI_API_KEY');
-  expect(result.includes('OpenAI API key is not configured')).toBe(true);
-  expect(result.includes('platform.openai.com/api-keys')).toBe(true);
+  expect(result.includes('API key')).toBe(true);
+  expect(result.includes('/providers')).toBe(true);
+  expect(result.includes('OpenAI')).toBe(false);
 });
 
 it('enhanceApiKeyError: enhances 401 unauthorized message', () => {
   const result = enhanceApiKeyError('Error 401: Unauthorized access');
-  expect(result.includes('OpenAI API key is not configured')).toBe(true);
+  expect(result.includes('/providers')).toBe(true);
+  expect(result.includes('OpenAI')).toBe(false);
 });
 
 it('enhanceApiKeyError: passes through other errors', () => {

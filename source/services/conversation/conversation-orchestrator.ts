@@ -1687,11 +1687,28 @@ export class ConversationOrchestrator {
   }
 
   private appendBotError(errorMessage: string): void {
+    let readableMessage = errorMessage;
+    try {
+      const parsed: unknown = JSON.parse(errorMessage);
+      if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+        const error = (parsed as { error?: unknown }).error;
+        if (error && typeof error === 'object') {
+          const { type, message } = error as { type?: unknown; message?: unknown };
+          if (typeof message === 'string' && message.trim()) {
+            readableMessage = `${typeof type === 'string' && type.trim() ? `${type}: ` : ''}${message}`;
+          }
+        }
+      }
+    } catch {
+      // Keep non-JSON provider messages unchanged.
+    }
+
+    const recoveryHint = 'Use /retry-turn to try again.';
     const botErrorMessage: BotMessage = {
       id: this.createMessageId(),
       sender: 'bot',
       status: 'finalized',
-      text: `Error: ${errorMessage}`,
+      text: `Error: ${readableMessage}\n\n${recoveryHint}`,
     };
     this.config.messages.appendMessages([botErrorMessage]);
   }

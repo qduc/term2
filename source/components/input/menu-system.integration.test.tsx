@@ -353,6 +353,20 @@ it.sequential('shows the typed settings query above the filtered menu', async ()
   expect(lastFrame()).toContain('Filter: shell.time');
 });
 
+it.sequential('settings filter prompt uses the filter query instead of a legacy prompt fallback', async () => {
+  const controller = new MenuControllerImpl();
+  const LegacyPrompt = () => {
+    const { setMenuPromptLabel } = useInputContext();
+    useEffect(() => setMenuPromptLabel('Legacy: '), [setMenuPromptLabel]);
+    return null;
+  };
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand], <LegacyPrompt />);
+  await writeInput(stdin, '/settings shell.time');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+  expect(lastFrame()).toContain('Filter: shell.time');
+  expect(lastFrame()).not.toContain('Legacy: /settings shell.time');
+});
+
 it.sequential('Escape from the root settings menu clears the slash command buffer', async () => {
   const controller = new MenuControllerImpl();
   const { stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);

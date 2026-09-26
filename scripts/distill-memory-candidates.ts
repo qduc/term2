@@ -18,17 +18,7 @@ import { ToolOwnershipRegistry } from '../source/services/approval/tool-ownershi
 import { FileMemoryStore, MemoryAlreadyExistsError } from '../source/services/memory/memory-store.js';
 import { redactSecrets } from '../source/services/memory/distiller/secret-redaction.js';
 import { isPathInside } from '../source/services/memory/distiller/path-safety.js';
-
-type Operation = {
-  op: 'create' | 'noop';
-  id?: string;
-  kind: 'preference' | 'decision' | 'correction' | 'reference';
-  scope: 'project' | 'global';
-  title: string;
-  summary: string;
-  content: string;
-  evidence: Array<{ sourceIndex: number; quote: string }>;
-};
+import { validateDistilledOperation } from '../source/services/memory/distiller/promotion-policy.js';
 
 const [projectArg, scratchArg, provider, model, limitArg] = process.argv.slice(2);
 if (!projectArg || !scratchArg || !provider || !model || process.argv.length > 7)
@@ -58,13 +48,13 @@ if (isPathInside(liveMemoryRoot, scratchRoot))
   throw new Error('scratch-dir must be outside the configured live memory directory');
 const existing = new FileMemoryStore({ root: scratchRoot });
 const existingMemories = await existing.list({ limit: 200 });
-const explicitLeads = new Map<string, string[]>();
+const explicitLeads = new Map<string, Array<{ sourceIndex: number; quote: string; category: string }>>();
 for (const candidate of scanSessionKnowledgeCandidates(projectPath).candidates) {
-  const key = `${candidate.sessionId}:${candidate.sourceIndex}`;
-  explicitLeads.set(key, [...(explicitLeads.get(key) ?? []), candidate.quote]);
+  explicitLeads.set(candidate.sessionId, [...(explicitLeads.get(candidate.sessionId) ?? []), candidate]);
 }
 await mkdir(scratchRoot, { recursive: true });
 const evidenceFile = path.join(scratchRoot, `distiller-evidence-${Date.now()}.jsonl`);
+const candidateFile = path.join(scratchRoot, `distiller-candidates-${Date.now()}.jsonl`);
 const logger = new LoggingService({ disableLogging: true });
 const client = new AgentClient({
   providerOverride: provider,
@@ -79,8 +69,9 @@ let processed = 0;
 let skipped = 0;
 let rejected = 0;
 let written = 0;
+let eligible = 0;
+let candidates = 0;
 let noops = 0;
-let ungrounded = 0;
 let costMicros = 0;
 let inputTokens = 0;
 let outputTokens = 0;
@@ -135,68 +126,36 @@ for (const session of settled) {
     continue;
   }
   for (const value of operations as unknown[]) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      rejected++;
-      continue;
-    }
-    const raw = value as Partial<Operation>;
-    if (raw.op === 'noop') {
+    const decision = validateDistilledOperation(value, records, explicitLeads.get(session.id) ?? []);
+    if (decision.status === 'noop') {
       noops++;
       continue;
     }
-    if (raw.op !== 'create' || raw.scope !== 'project' || !Array.isArray(raw.evidence) || !raw.evidence.length) {
+    if (decision.status === 'rejected') {
       rejected++;
       continue;
     }
-    const grounded = raw.evidence.every(
-      (evidence) =>
-        !!evidence &&
-        typeof evidence === 'object' &&
-        Number.isInteger(evidence.sourceIndex) &&
-        typeof evidence.quote === 'string' &&
-        userMessages.some(
-          (message) => message.sourceIndex === evidence.sourceIndex && message.text.includes(evidence.quote!),
-        ),
-    );
-    if (!grounded) ungrounded++;
-    if (
-      !grounded ||
-      typeof raw.id !== 'string' ||
-      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw.id) ||
-      !['preference', 'decision', 'correction', 'reference'].includes(raw.kind) ||
-      typeof raw.title !== 'string' ||
-      !raw.title.trim() ||
-      typeof raw.summary !== 'string' ||
-      !raw.summary.trim() ||
-      typeof raw.content !== 'string' ||
-      !raw.content.trim() ||
-      [raw.title, raw.summary, raw.content].some((text) => text.length > 2000 || redactSecrets(text) !== text)
-    ) {
-      rejected++;
+    if (decision.status === 'candidate') {
+      await appendFile(
+        candidateFile,
+        `${JSON.stringify({ sessionId: session.id, memory: decision.memory, evidence: [decision.evidence] })}\n`,
+      );
+      candidates++;
       continue;
     }
     try {
-      await existing.create({
-        id: raw.id,
-        title: raw.title.trim(),
-        summary: raw.summary.trim(),
-        content: raw.content.trim(),
-        tags: [raw.kind],
-      });
+      await existing.create(decision.memory);
       await appendFile(
         evidenceFile,
         `${JSON.stringify({
           sessionId: session.id,
-          memoryId: raw.id,
-          evidence: raw.evidence,
-          autoApplyEligible: raw.evidence.some((evidence) =>
-            explicitLeads
-              .get(`${session.id}:${evidence.sourceIndex}`)
-              ?.some((leadQuote) => leadQuote.includes(evidence.quote)),
-          ),
+          memoryId: decision.memory.id,
+          evidence: [decision.evidence],
+          status: decision.status,
         })}\n`,
       );
       written++;
+      eligible++;
     } catch (error) {
       if (error instanceof MemoryAlreadyExistsError) rejected++;
       else throw error;
@@ -213,14 +172,16 @@ process.stdout.write(
       provider,
       model,
       evidenceFile,
+      candidateFile,
       eligible: settled.length,
       skippedOtherProviders,
       unavailable: browsed.unavailable,
       processed,
       skipped,
       rejected,
-      ungrounded,
       written,
+      eligible,
+      candidates,
       noops,
       inputTokens,
       outputTokens,

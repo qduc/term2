@@ -183,7 +183,10 @@ export interface ApplicationRunLoopOptions {
   readonly onRequestBoundary?: (
     history: readonly ProviderInputItem[],
     onReminder: (text: string) => void,
-    observation: { readonly lastCompletedInputTokens?: number },
+    observation: {
+      readonly lastCompletedInputTokens?: number;
+      readonly compactionSkipReason?: 'missing_snapshot' | 'user_mismatch';
+    },
   ) => { deferCompaction?: boolean } | void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
@@ -289,6 +292,7 @@ type RunState = {
   history: ProviderInputItem[];
   compactionHistory?: readonly ProviderInputItem[];
   usesDeltaHistory?: boolean;
+  compactedDuringRun?: boolean;
   pendingApproval?: PendingApproval;
   pendingApprovals?: PendingApproval[];
   approvalDecision?: 'approved' | 'rejected';
@@ -902,21 +906,26 @@ export class ApplicationRunLoop {
         this.#admitPendingSteers(state, stream, queue);
         this.#evaluateRunBudget(state, stream, queue);
         if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
+        const compactionHistoryResult = state.usesDeltaHistory
+          ? state.compactionHistory
+            ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+            : { kind: 'skipped' as const, reason: 'missing_snapshot' as const }
+          : { kind: 'ready' as const, history: state.history };
         const boundaryDecision = options.onRequestBoundary?.(
-          state.history,
+          compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : state.history,
           (text) => this.#queuePendingSystemNotice(text),
           {
             ...(state.lastCompletedInputTokens !== undefined
               ? { lastCompletedInputTokens: state.lastCompletedInputTokens }
               : {}),
+            ...(compactionHistoryResult.kind === 'skipped'
+              ? { compactionSkipReason: compactionHistoryResult.reason }
+              : {}),
           },
         );
 
-        const compactionHistory = state.usesDeltaHistory
-          ? state.compactionHistory
-            ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
-            : undefined
-          : state.history;
+        const compactionHistory =
+          compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : undefined;
         if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
           const compactionStartedAt = Date.now();
           const compaction = await options.boundaryCompaction.compact({
@@ -928,6 +937,7 @@ export class ApplicationRunLoop {
               outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
           });
           if (compaction.kind === 'compacted') {
+            state.compactedDuringRun = true;
             state.history.splice(0, state.history.length, ...compaction.history);
             state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
             state.responseId = undefined;
@@ -1905,6 +1915,7 @@ function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRun
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
   stream.history = state.history;
+  stream.historyReplacedByCompaction = state.compactedDuringRun === true;
   stream.terminalCause = state.terminalCause;
   stream.latestProviderInputTokens = state.lastCompletedInputTokens;
   if (
@@ -2106,10 +2117,10 @@ function normalizeHistory(input: ProviderInput): ProviderInputItem[] {
 function mergeChainedCompactionHistory(
   sessionHistory: readonly ProviderInputItem[],
   deltaHistory: readonly ProviderInputItem[],
-): ProviderInputItem[] | undefined {
+): { kind: 'ready'; history: ProviderInputItem[] } | { kind: 'skipped'; reason: 'user_mismatch' } {
   const firstDeltaItem = deltaHistory[0];
   if (!firstDeltaItem || firstDeltaItem.type !== 'message' || firstDeltaItem.role !== 'user') {
-    return undefined;
+    return { kind: 'skipped', reason: 'user_mismatch' };
   }
   let latestUserIndex = -1;
   for (let index = sessionHistory.length - 1; index >= 0; index--) {
@@ -2119,17 +2130,22 @@ function mergeChainedCompactionHistory(
       break;
     }
   }
-  if (latestUserIndex < 0) return undefined;
+  if (latestUserIndex < 0) return { kind: 'skipped', reason: 'user_mismatch' };
   const latestSessionUser = sessionHistory[latestUserIndex];
   const normalizedDeltaUser = normalizeApplicationInput([firstDeltaItem]);
   const normalizedSessionUser = normalizeApplicationInput([latestSessionUser]);
-  if (JSON.stringify(normalizedDeltaUser) !== JSON.stringify(normalizedSessionUser)) return undefined;
-  return [
-    ...sessionHistory.slice(0, latestUserIndex),
-    firstDeltaItem,
-    ...sessionHistory.slice(latestUserIndex + 1),
-    ...deltaHistory.slice(1),
-  ];
+  if (JSON.stringify(normalizedDeltaUser) !== JSON.stringify(normalizedSessionUser)) {
+    return { kind: 'skipped', reason: 'user_mismatch' };
+  }
+  return {
+    kind: 'ready',
+    history: [
+      ...sessionHistory.slice(0, latestUserIndex),
+      firstDeltaItem,
+      ...sessionHistory.slice(latestUserIndex + 1),
+      ...deltaHistory.slice(1),
+    ],
+  };
 }
 
 type UnknownRecord = Record<string, unknown>;

@@ -393,7 +393,9 @@ export class SessionStreamProcessor {
           this.deps.conversationStore.getHistory(),
           projectedSnapshot.output,
         );
-        if (replacementHistory) {
+        if (stream.historyReplacedByCompaction && hasConversationMessageItems(projectedSnapshot.history)) {
+          this.deps.conversationStore.replaceHistory(projectedSnapshot.history as ProviderInputItem[]);
+        } else if (replacementHistory) {
           this.deps.conversationStore.replaceHistory(replacementHistory);
         } else if (inputMode === 'delta') {
           appendWithoutReplayedTools(projectedSnapshot.output);

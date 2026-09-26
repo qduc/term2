@@ -489,8 +489,10 @@ export class AgentClient {
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
     });
+    const measuredHardFitTokens =
+      estimate.hardFitTokens + Math.max(0, (lastCompletedInputTokens ?? 0) - estimate.renderedInputTokens);
     const canSafelyDeferCompaction =
-      catalog?.contextWindow !== undefined && estimate.hardFitTokens <= catalog.contextWindow;
+      catalog?.contextWindow !== undefined && measuredHardFitTokens <= catalog.contextWindow;
     const config = {
       enabled: this.#settings.get('agent.sessionRollover.enabled') ?? true,
       milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
@@ -1389,8 +1391,15 @@ export class AgentClient {
           runBudget,
           ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
           ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-          onRequestBoundary: (history, onReminder, observation) =>
-            this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
+          onRequestBoundary: (history, onReminder, observation) => {
+            if (observation.compactionSkipReason) {
+              this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
+                reason: observation.compactionSkipReason,
+                measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
+              });
+            }
+            return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
+          },
         });
       };
       const stream = run();
@@ -1431,8 +1440,15 @@ export class AgentClient {
       runBudget,
       ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
       ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-      onRequestBoundary: (history, onReminder, observation) =>
-        this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
+      onRequestBoundary: (history, onReminder, observation) => {
+        if (observation.compactionSkipReason) {
+          this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
+            reason: observation.compactionSkipReason,
+            measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
+          });
+        }
+        return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
+      },
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

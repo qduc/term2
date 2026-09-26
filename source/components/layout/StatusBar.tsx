@@ -295,6 +295,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const mentorModel = smartModel ?? legacyMentorModel;
   const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
+  const debugMode = useSetting(settingsService, 'logging.logLevel') === 'debug';
   const autoApproveMode = useSetting(settingsService, 'shell.autoApproveMode') ?? 'off';
   const sandboxEnabled = useSetting(settingsService, 'sandbox.enabled') ?? false;
   // Session-scoped grants are intentionally not process-global, so only the
@@ -524,7 +525,8 @@ const StatusBar: FC<StatusBarProps> = ({
   // in one row (rather than stacked beside the identity segments, as before)
   // means the bar is a single line whenever nothing is wrong — which is most
   // of the time — and grows only to say something.
-  const hasAlerts = Boolean(warningText || dockerHostAccess || runBudgetNoticeText || staticCommitBlockerText);
+  const visibleStaticCommitBlockerText = debugMode ? staticCommitBlockerText : '';
+  const hasAlerts = Boolean(warningText || dockerHostAccess || runBudgetNoticeText || visibleStaticCommitBlockerText);
   const quotaText = codexRateLimitText || grokCreditUsageText || openCodeGoUsageText;
 
   // Segments as data: each group is fit to the *full* row budget on its own
@@ -533,7 +535,7 @@ const StatusBar: FC<StatusBarProps> = ({
   // drop decision for each group independent of whatever the other group is
   // doing, per the drop-order contract each priority list documents.
   const configSegments: StatusSegment[] = [
-    { id: 'ssh-marker', text: sshInfo ? 'SSH' : '', color: glow, bold: true },
+    { id: 'ssh-marker', text: sshInfo ? 'SSH' : '', color: glow, bold: true, tier: 0 },
     {
       id: 'ssh-detail',
       text: sshInfo ? ` ${sshInfo.user}@${sshInfo.host}:${sshInfo.remoteDir}` : '',
@@ -579,7 +581,6 @@ const StatusBar: FC<StatusBarProps> = ({
       color: safetyColor,
       bold: true,
       separator: 'group',
-      tier: 4,
     },
   ];
 
@@ -600,7 +601,7 @@ const StatusBar: FC<StatusBarProps> = ({
     { id: 'cost', text: costText, color: slate, separator: 'metric', tier: 2 },
   ];
 
-  const configFit = fitGroup(configSegments, budget, 'provider-model');
+  const configFit = fitGroup(configSegments, budget);
   const metricsFit = fitGroup(metricsSegments, budget);
   const bothVisible = configFit.visible.length > 0 && metricsFit.visible.length > 0;
   const combinedWidth = configFit.width + (bothVisible ? GROUP_SEPARATOR_WIDTH : 0) + metricsFit.width;
@@ -654,11 +655,11 @@ const StatusBar: FC<StatusBarProps> = ({
                 </Text>
               </>
             )}
-            {staticCommitBlockerText && (
+            {visibleStaticCommitBlockerText && (
               <>
                 {(warningText || dockerHostAccess || runBudgetNoticeText) && <Divider />}
                 <Text color={warnRed} bold wrap="truncate-end">
-                  {staticCommitBlockerText}
+                  {visibleStaticCommitBlockerText}
                 </Text>
               </>
             )}

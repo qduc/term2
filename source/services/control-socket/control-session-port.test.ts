@@ -4,6 +4,55 @@ import { isSecretSetting } from '../settings/settings-ui-metadata.js';
 import { createControlSessionPort } from './control-session-port.js';
 
 describe('control session port', () => {
+  it('refuses large-input confirmation without calling the orchestrator', async () => {
+    const sendUserMessage = vi.fn();
+    const conversationService = {
+      previewLargeUncachedInput: () => ({ action: 'confirm' }),
+      previewInputSurge: () => ({ action: 'allow' }),
+    } as any;
+    const port = createControlSessionPort({
+      conversationService,
+      orchestrator: { sendUserMessage } as any,
+      settingsService: { get: () => null } as any,
+      usageAccumulator: { get: () => ({}) } as any,
+      controlSocket: { name: 'worker', startedAt: '' } as any,
+      sessionMetadata: () => ({ workspaceRoot: null, version: '', createdAt: '', logPath: '' }),
+    });
+    await expect(port.submit?.({ text: 'brief', clientRequestId: 'id' })).resolves.toEqual({
+      delivery: 'rejected',
+      reason: 'needs_confirmation',
+    });
+    expect(sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns an accepted receipt at admission while the turn is still running', async () => {
+    let finishTurn!: () => void;
+    const turn = new Promise<void>((resolve) => (finishTurn = resolve));
+    const addSystemMessage = vi.fn();
+    const sendUserMessage = vi.fn((_text, options) => {
+      options.onAdmitted('message-1', 'started');
+      return turn;
+    });
+    const port = createControlSessionPort({
+      conversationService: {
+        previewLargeUncachedInput: () => ({ action: 'allow' }),
+        previewInputSurge: () => ({ action: 'allow' }),
+      } as any,
+      orchestrator: { sendUserMessage } as any,
+      settingsService: { get: () => null } as any,
+      usageAccumulator: { get: () => ({}) } as any,
+      controlSocket: { name: 'worker', startedAt: '' } as any,
+      sessionMetadata: () => ({ workspaceRoot: null, version: '', createdAt: '', logPath: '' }),
+      addSystemMessage,
+    });
+    await expect(port.submit?.({ text: 'brief', clientRequestId: 'id' })).resolves.toEqual({
+      messageId: 'message-1',
+      delivery: 'started',
+    });
+    expect(addSystemMessage).toHaveBeenCalledWith('Control submit message-1');
+    finishTurn();
+  });
+
   it('projects the documented read sources and never returns a schema-secret setting', () => {
     const secret = 'schema-secret-fixture';
     expect(isSecretSetting('agent.openai.apiKey')).toBe(true);

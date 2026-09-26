@@ -270,6 +270,7 @@ const App: FC<AppProps> = ({
     resetConversationPresentation,
     restoreConversation,
     stopProcessing,
+    stopProcessingWithNotice,
     cancelAskUser,
     rewindToTarget,
     retryLastToolOutput,
@@ -1067,6 +1068,37 @@ const App: FC<AppProps> = ({
     pendingApproval,
     nestedApproval,
     stopProcessing,
+  ]);
+
+  useEffect(() => {
+    if (!controlSocket) return;
+    const interrupt = () => {
+      const hasInterruptibleSurface = Boolean(
+        sandboxPromptRequest || backgroundApprovalEntry || nestedApproval || pendingApproval,
+      );
+      if (hasInterruptibleSurface) {
+        handleCancelApproval();
+        return { accepted: true };
+      }
+      if (isProcessing || _queueActive || queueLength > 0) {
+        stopProcessingWithNotice();
+        return { accepted: true };
+      }
+      return { accepted: false, reason: 'idle' };
+    };
+    controlSocket.bindInterruptHandler(interrupt);
+    return () => controlSocket.unbindInterruptHandler(interrupt);
+  }, [
+    _queueActive,
+    backgroundApprovalEntry,
+    controlSocket,
+    handleCancelApproval,
+    isProcessing,
+    nestedApproval,
+    pendingApproval,
+    queueLength,
+    sandboxPromptRequest,
+    stopProcessingWithNotice,
   ]);
 
   const submitBridgedRejectionReason = useCallback(

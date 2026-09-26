@@ -28,6 +28,10 @@ export function createControlSessionPort(input: {
   settingsService: SettingsService;
   usageAccumulator: UsageAccumulator;
   controlSocket: ControlSocketServer;
+  addSystemMessage?: (text: string) => void;
+  cancelAskUser?: () => void;
+  stopProcessing?: () => void;
+  stopProcessingWithNotice?: () => void;
   sessionMetadata: () => ControlSessionMetadata;
 }): ControlSessionPort {
   const { conversationService, orchestrator, settingsService, usageAccumulator, controlSocket } = input;
@@ -37,7 +41,42 @@ export function createControlSessionPort(input: {
     return provider && model ? getModelContextWindow(provider, model) ?? null : null;
   };
   const toolCalls = () => conversationService.getUnsettledToolExecutions();
+  const mutate = async (
+    text: string,
+    busyMode: 'steer' | 'follow_up',
+    onSteerSettled?: () => void,
+  ): Promise<import('./control-socket.js').ControlMutationReceipt> => {
+    const large = conversationService.previewLargeUncachedInput(text);
+    const surge = conversationService.previewInputSurge(text);
+    if (large.action !== 'allow' || surge.action !== 'allow') {
+      return { delivery: 'rejected', reason: 'needs_confirmation' };
+    }
+    return new Promise((resolve, reject) => {
+      void orchestrator
+        .sendUserMessage(text, {
+          busyMode,
+          onSteerSettled,
+          onAdmitted: (messageId, delivery) => {
+            input.addSystemMessage?.(`Control ${busyMode === 'steer' ? 'steer' : 'submit'} ${messageId}`);
+            resolve({ messageId, delivery });
+          },
+        })
+        .catch(reject);
+    });
+  };
   return {
+    submit: ({ text }) => mutate(text, 'follow_up'),
+    steer: ({ text, onSteerSettled }) => mutate(text, 'steer', onSteerSettled),
+    interrupt: async () => {
+      const pending = conversationService.getPendingInteractionSnapshot();
+      const nested = conversationService.getNestedApprovalSnapshot();
+      if (pending?.approval.toolName === 'ask_user') input.cancelAskUser?.();
+      else if (nested || pending) input.stopProcessing?.();
+      else if (orchestrator.isTurnActive() || conversationService.isQueueOwningSubmissions()) {
+        input.stopProcessingWithNotice?.();
+      } else return { accepted: false, reason: 'idle' };
+      return { accepted: true };
+    },
     status: () => {
       const pending = conversationService.getPendingInteractionSnapshot();
       const nested = conversationService.getNestedApprovalSnapshot();

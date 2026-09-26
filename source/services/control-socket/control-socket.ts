@@ -40,6 +40,26 @@ export type ControlErrorCode =
 export interface ControlSessionPort {
   status(): unknown;
   get(topic: ControlTopic): unknown;
+  submit?(params: {
+    text: string;
+    clientRequestId: string;
+    origin?: unknown;
+    onSteerSettled?: () => void;
+  }): Promise<ControlMutationReceipt>;
+  steer?(params: {
+    text: string;
+    clientRequestId: string;
+    origin?: unknown;
+    onSteerSettled?: () => void;
+  }): Promise<ControlMutationReceipt>;
+  interrupt?(): Promise<{ accepted: boolean; reason?: string }>;
+}
+
+export interface ControlMutationReceipt {
+  messageId?: string;
+  delivery: 'started' | 'queued' | 'steering' | 'rejected';
+  reason?: string;
+  replayed?: boolean;
 }
 
 /** FIFO admission primitive shared by future state-changing methods. */
@@ -69,6 +89,10 @@ export class ControlIdempotencyMap<T> {
 
   constructor(capacity = 256) {
     this.#capacity = capacity;
+  }
+
+  canStore(): boolean {
+    return this.#entries.size < this.#capacity || [...this.#entries.values()].some((entry) => !entry.pending);
   }
 
   get(
@@ -190,7 +214,12 @@ export class ControlSocketServer {
   readonly #options: ControlSocketOptions;
   readonly #server: Server;
   readonly #connections = new Set<Socket>();
+  readonly #admissionLock = new ControlAdmissionLock();
+  readonly #idempotency = new ControlIdempotencyMap<ControlMutationReceipt>();
   #port: ControlSessionPort | null;
+  #interruptHandler:
+    | (() => Promise<{ accepted: boolean; reason?: string }> | { accepted: boolean; reason?: string })
+    | null = null;
   #startedAt = '';
   #closed = false;
   #ownedSocket: { dev: bigint; ino: bigint; ctimeNs: bigint } | null = null;
@@ -231,6 +260,18 @@ export class ControlSocketServer {
 
   unbind(port: ControlSessionPort): void {
     if (this.#port === port) this.#port = null;
+  }
+
+  bindInterruptHandler(
+    handler: () => Promise<{ accepted: boolean; reason?: string }> | { accepted: boolean; reason?: string },
+  ): void {
+    this.#interruptHandler = handler;
+  }
+
+  unbindInterruptHandler(
+    handler: () => Promise<{ accepted: boolean; reason?: string }> | { accepted: boolean; reason?: string },
+  ): void {
+    if (this.#interruptHandler === handler) this.#interruptHandler = null;
   }
 
   async listen(): Promise<void> {
@@ -430,16 +471,89 @@ export class ControlSocketServer {
           reply(false, undefined, 'invalid_request', 'hello may only be sent once');
           return helloSeen;
         }
-        reply(true, { v: 1, capabilities: [], topics: [...CONTROL_TOPICS] });
+        reply(true, { v: 1, capabilities: ['submit', 'steer', 'interrupt'], topics: [...CONTROL_TOPICS] });
         return true;
       }
-      if (request.method !== 'status' && request.method !== 'get') {
+      if (!['status', 'get', 'submit', 'steer', 'interrupt'].includes(request.method)) {
         reply(false, undefined, 'unknown_method', `Unknown method: ${request.method}`);
         return helloSeen;
       }
       const port = this.#port;
       if (!port) {
         reply(false, undefined, 'not_ready', 'Interactive session is not ready');
+        return helloSeen;
+      }
+      if (request.method === 'submit' || request.method === 'steer') {
+        const params = request.params;
+        if (
+          !params ||
+          typeof params !== 'object' ||
+          Array.isArray(params) ||
+          Object.keys(params).some((key) => !['text', 'clientRequestId', 'origin'].includes(key)) ||
+          typeof params.text !== 'string' ||
+          params.text.length < 1 ||
+          params.text.length > 128_000 ||
+          typeof params.clientRequestId !== 'string' ||
+          !/^[A-Za-z0-9_-]{1,256}$/.test(params.clientRequestId) ||
+          (params.origin !== undefined &&
+            (!params.origin ||
+              typeof params.origin !== 'object' ||
+              Array.isArray(params.origin) ||
+              Object.keys(params.origin).some((key) => key !== 'kind') ||
+              !['orchestrator', 'peer'].includes(params.origin.kind)))
+        ) {
+          reply(false, undefined, 'invalid_request', 'Expected text and an opaque clientRequestId');
+          return helloSeen;
+        }
+        if (params.origin?.kind === 'peer') {
+          reply(false, undefined, 'unavailable', 'Peer-originated messages are unavailable in milestone 1');
+          return helloSeen;
+        }
+        const body = { text: params.text };
+        const mutate = request.method === 'submit' ? port.submit : port.steer;
+        if (!mutate) {
+          reply(false, undefined, 'unavailable', 'Mutation is not available');
+          return helloSeen;
+        }
+        const result = await this.#admissionLock
+          .run(async () => {
+            const prior = this.#idempotency.get(params.clientRequestId, body);
+            if (prior.kind === 'conflict')
+              throw Object.assign(new Error('clientRequestId was already used with a different body'), {
+                code: 'conflict',
+              });
+            if (prior.kind === 'replay') return { ...prior.receipt, replayed: true };
+            if (!this.#idempotency.canStore()) {
+              return { delivery: 'rejected', reason: 'idempotency_capacity' } as ControlMutationReceipt;
+            }
+            const receipt = await mutate.call(port, {
+              ...params,
+              onSteerSettled: () => this.#idempotency.settle(params.clientRequestId),
+            });
+            this.#idempotency.set(params.clientRequestId, body, receipt, receipt.delivery === 'steering');
+            if (receipt.delivery !== 'steering') this.#idempotency.settle(params.clientRequestId);
+            return receipt;
+          })
+          .catch((cause: any) => {
+            if (cause?.code === 'conflict') {
+              reply(false, undefined, 'conflict', cause.message);
+              return null;
+            }
+            throw cause;
+          });
+        if (!result) return helloSeen;
+        reply(true, result);
+        return helloSeen;
+      }
+      if (request.method === 'interrupt') {
+        if (!port.interrupt) {
+          reply(false, undefined, 'unavailable', 'Interrupt is not available');
+          return helloSeen;
+        }
+        reply(
+          true,
+          await this.#admissionLock.run(() => (this.#interruptHandler ? this.#interruptHandler() : port.interrupt!())),
+        );
         return helloSeen;
       }
       if (request.method === 'status') {

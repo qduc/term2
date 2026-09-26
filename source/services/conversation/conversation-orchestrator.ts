@@ -773,6 +773,8 @@ export class ConversationOrchestrator {
       inputSurgeApproval?: InputSurgeApproval;
       busyMode?: 'steer' | 'follow_up';
       presentation?: UserMessage['presentation'];
+      onAdmitted?: (messageId: string, delivery: 'started' | 'queued' | 'steering') => void;
+      onSteerSettled?: (steered: boolean) => void;
     },
   ): Promise<void> {
     const turn = normalizeUserTurn(input);
@@ -786,6 +788,12 @@ export class ConversationOrchestrator {
       text: formatUserTurnForDisplay(turn),
       ...(turn.skill ? { skill: turn.skill } : {}),
       ...(options?.presentation ? { presentation: options.presentation } : {}),
+    };
+    let admissionReported = false;
+    const reportAdmission = (delivery: 'started' | 'queued' | 'steering') => {
+      if (admissionReported) return;
+      admissionReported = true;
+      options?.onAdmitted?.(userMessage.id, delivery);
     };
 
     // When no turn is in flight, append the user message directly to the
@@ -832,6 +840,7 @@ export class ConversationOrchestrator {
         // next request boundary. A follow-up (Alt+Enter) is the only case that
         // should read as "Queued" here.
         this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
+        reportAdmission('steering');
         // Diagnostics for "my steer just queued". The three fields below
         // separate the ways delivery can fail, which otherwise look identical
         // in the UI because the queued label is drawn before this even runs:
@@ -860,6 +869,7 @@ export class ConversationOrchestrator {
           waitedMs: Date.now() - steerStartedAt,
           messageId: userMessage.id,
         });
+        options?.onSteerSettled?.(steered);
         if (steered) {
           this.#outstandingSubmissions.delete(userMessage.id);
           const admittedTurn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
@@ -888,6 +898,7 @@ export class ConversationOrchestrator {
         this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
       } else {
         this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
+        reportAdmission('queued');
       }
     } else {
       // No turn is in flight — append directly. The queue observer will also
@@ -917,12 +928,14 @@ export class ConversationOrchestrator {
 
     try {
       const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
-      const result = await this.config.conversationService.sendMessage(turnToSend, {
+      const sendPromise = this.config.conversationService.sendMessage(turnToSend, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         inputSurgeApproval: options?.inputSurgeApproval,
         busyMode: options?.busyMode,
         preferredMessageId: userMessage.id,
       });
+      reportAdmission(queueOwnsSubmission ? 'queued' : 'started');
+      const result = await sendPromise;
 
       this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
     } catch (error) {

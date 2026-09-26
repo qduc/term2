@@ -37,7 +37,7 @@ function outputResult(output: Output, result: unknown, json: boolean): void {
     json
       ? `${JSON.stringify(result)}\n`
       : `${Object.entries(result as Record<string, unknown>)
-          .map(([key, value]) => `${key}=${String(value)}`)
+          .map(([key, value]) => `${key}=${value && typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
           .join(' ')}\n`,
   );
 }
@@ -73,7 +73,12 @@ async function runControlCommandImpl(argv: string[], stdout: Output, stderr: Out
     return 0;
   }
   const json = rest.includes('--json');
-  const positional = rest.filter((arg) => arg !== '--json');
+  const positional = rest.filter(
+    (arg, index) =>
+      arg !== '--json' &&
+      !['--id', '--message-id', '--timeout'].includes(arg) &&
+      !['--id', '--message-id', '--timeout'].includes(rest[index - 1] ?? ''),
+  );
   const name = positional[0];
   const advertisement = name && listControlAdvertisements(runtimeDir).find((item) => item.name === name);
   if (!advertisement) {
@@ -98,6 +103,66 @@ async function runControlCommandImpl(argv: string[], stdout: Output, stderr: Out
     outputResult(stdout, response.result, json);
     return 0;
   }
-  stderr.write('Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json]\n');
+  if (subcommand === 'submit' || subcommand === 'steer') {
+    const idIndex = rest.indexOf('--id');
+    const requestId = idIndex >= 0 ? rest[idIndex + 1] : undefined;
+    if (!requestId || !/^[A-Za-z0-9_-]{1,256}$/.test(requestId) || positional.length !== 1) return 1;
+    let text = '';
+    for await (const chunk of process.stdin) text += chunk.toString();
+    if (text.length === 0) {
+      stderr.write('Error: stdin must contain a non-empty message.\n');
+      return 1;
+    }
+    const response = await call(advertisement.socketPath, subcommand, { text, clientRequestId: requestId });
+    if (!response.ok) {
+      stderr.write(`${response.error?.message ?? response.error?.code ?? 'Control request failed'}\n`);
+      return 1;
+    }
+    outputResult(stdout, response.result, json);
+    return 0;
+  }
+  if (subcommand === 'interrupt' && positional.length === 1) {
+    const response = await call(advertisement.socketPath, 'interrupt');
+    if (!response.ok) {
+      stderr.write(`${response.error?.message ?? response.error?.code ?? 'Control request failed'}\n`);
+      return 1;
+    }
+    outputResult(stdout, response.result, json);
+    return 0;
+  }
+  if (subcommand === 'wait-turn') {
+    const messageIndex = rest.indexOf('--message-id');
+    const messageId = messageIndex >= 0 ? rest[messageIndex + 1] : undefined;
+    const timeoutIndex = rest.indexOf('--timeout');
+    const timeoutSeconds = timeoutIndex >= 0 ? Number(rest[timeoutIndex + 1]) : 600;
+    if (!messageId || !Number.isFinite(timeoutSeconds) || timeoutSeconds < 0 || positional.length !== 1) return 1;
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    let firstPoll = true;
+    while (firstPoll || Date.now() <= deadline) {
+      firstPoll = false;
+      const response = await call(advertisement.socketPath, 'status');
+      if (!response.ok) {
+        stderr.write(`${response.error?.message ?? response.error?.code ?? 'Control request failed'}\n`);
+        return 1;
+      }
+      const result = response.result;
+      if (result.phase === 'awaiting_approval') {
+        outputResult(stdout, { status: 'awaiting_approval', messageId }, json);
+        return 3;
+      }
+      const queued = Array.isArray(result.queue) && result.queue.some((item: any) => item.id === messageId);
+      if (result.phase === 'idle' && !queued) {
+        outputResult(stdout, { status: 'complete', messageId }, json);
+        return 0;
+      }
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    outputResult(stdout, { status: 'timeout', messageId }, json);
+    return 2;
+  }
+  stderr.write(
+    'Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>\n',
+  );
   return 1;
 }

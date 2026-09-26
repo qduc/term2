@@ -35,7 +35,11 @@ async function setup() {
     name: 'cli-worker',
     runtimeDir,
     sessionId: () => 'session',
-    port: { status: () => ({ phase: 'idle' }), get: (topic) => ({ topic, value: 'ok' }) },
+    port: {
+      status: () => ({ phase: 'idle', context: { contextWindow: 100 }, cost: { state: 'exact' } }),
+      get: (topic) => ({ topic, value: 'ok' }),
+      interrupt: async () => ({ accepted: false, reason: 'idle' }),
+    },
   });
   servers.push(server);
   await server.listen();
@@ -55,7 +59,20 @@ describe('control CLI', () => {
 
     const status = capture();
     expect(await runControlCommand(['status', 'cli-worker', '--json'], status.stdout, status.stderr)).toBe(0);
-    expect(JSON.parse(status.read().stdout)).toEqual({ phase: 'idle' });
+    expect(JSON.parse(status.read().stdout)).toEqual({
+      phase: 'idle',
+      context: { contextWindow: 100 },
+      cost: { state: 'exact' },
+    });
+
+    const readableStatus = capture();
+    expect(await runControlCommand(['status', 'cli-worker'], readableStatus.stdout, readableStatus.stderr)).toBe(0);
+    expect(readableStatus.read().stdout).toContain('context={"contextWindow":100}');
+    expect(readableStatus.read().stdout).not.toContain('[object Object]');
+
+    const interrupt = capture();
+    expect(await runControlCommand(['interrupt', 'cli-worker', '--json'], interrupt.stdout, interrupt.stderr)).toBe(0);
+    expect(JSON.parse(interrupt.read().stdout)).toEqual({ accepted: false, reason: 'idle' });
 
     const get = capture();
     expect(await runControlCommand(['get', 'cli-worker', 'model', '--json'], get.stdout, get.stderr)).toBe(0);

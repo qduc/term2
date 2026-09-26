@@ -1,6 +1,6 @@
 # TUI control socket
 
-Status: plan. Design only, not implemented. Decisions D1–D9 below were recorded 2026-09-26.
+Status: Milestone 1 implemented (2026-09-26: M1a read surface merged `2bf3d9c3`, M1b mutations merged `facee0f3`, both live-smoke-tested in a real TUI). Milestones 2–4 not started. Decisions D1–D9 below were recorded 2026-09-26.
 
 ## Resume here
 

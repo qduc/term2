@@ -70,6 +70,19 @@ it('filterSettingsByQuery ranks exact and prefix key matches ahead of fuzzy matc
   expect(result.map((item) => item.key)[0]).toBe('shell.timeout');
 });
 
+it('filterSettingsByQuery ranks a key whose last segment matches the query first', () => {
+  const result = filterSettingsByQuery(
+    [
+      { key: 'codex.websocketFirstFrameTimeoutMs', description: 'First frame timeout' },
+      { key: 'shell.timeout', description: 'The shell command timeout' },
+      { key: 'shell.backgroundTimeout', description: 'A background timeout' },
+    ],
+    'timeout',
+    10,
+  );
+  expect(result.map((item) => item.key)[0]).toBe('shell.timeout');
+});
+
 it('filterSettingsByCategory returns memory entries for the memory category', () => {
   const result = filterSettingsByCategory(
     [

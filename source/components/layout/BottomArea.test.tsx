@@ -374,8 +374,8 @@ it.sequential('BottomArea shows approval prompt when waiting for approval', asyn
   });
   const output = lastFrame() ?? '';
   expect(output.includes('Allow this action?')).toBe(true);
-  expect(output.includes('Approve')).toBe(true);
-  expect(output.includes('Reject')).toBe(true);
+  expect(output.includes('Allow once')).toBe(true);
+  expect(output.includes('Deny')).toBe(true);
   expect(output.includes('processing')).toBe(false);
   act(() => {
     unmount();

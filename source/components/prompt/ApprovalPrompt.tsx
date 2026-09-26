@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import os from 'node:os';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import {
   READ_FILE_SESSION_APPROVE_ANSWER,
   supportsFolderSessionRead,
@@ -22,6 +22,7 @@ import {
   COLOR_TEXT_MUTED,
   COLOR_TEXT_SUBTLE,
   COLOR_WARNING,
+  GLYPH_FAVORITE,
 } from '../theme.js';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 
@@ -339,20 +340,20 @@ const TwoPaneApprovalLayout: FC<{
   left: React.ReactNode;
   rightTitle: React.ReactNode;
   rightDescription: React.ReactNode;
-}> = ({ left, rightTitle, rightDescription }) => (
-  <Box flexDirection="row" width="100%" marginTop={1}>
-    <Box flexDirection="column" width="50%" flexShrink={0} flexGrow={0}>
-      {left}
-    </Box>
+}> = ({ left, rightTitle, rightDescription }) => {
+  const { stdout } = useStdout();
+  const isNarrow = (stdout.columns ?? 100) < 90;
+  const description = (
     <Box
       flexDirection="column"
-      width="50%"
-      paddingLeft={2}
-      borderStyle="single"
+      width={isNarrow ? '100%' : '50%'}
+      paddingLeft={isNarrow ? 0 : 2}
+      marginTop={isNarrow ? 1 : 0}
+      borderStyle={isNarrow ? undefined : 'single'}
       borderTop={false}
       borderBottom={false}
       borderRight={false}
-      borderLeft={true}
+      borderLeft={!isNarrow}
       borderColor={COLOR_BORDER}
     >
       <Text bold color={COLOR_WARNING}>
@@ -368,12 +369,34 @@ const TwoPaneApprovalLayout: FC<{
         )}
       </Box>
     </Box>
-  </Box>
-);
+  );
+  return (
+    <Box flexDirection={isNarrow ? 'column' : 'row'} width="100%" marginTop={1}>
+      <Box flexDirection="column" width={isNarrow ? '100%' : '50%'} flexShrink={0} flexGrow={0}>
+        {left}
+      </Box>
+      {description}
+    </Box>
+  );
+};
+
+export function deniedReadOptionColor(item: string): string {
+  if (item === 'Deny') return COLOR_DANGER;
+  if (item === 'Run unsandboxed once') return COLOR_WARNING;
+  return COLOR_SUCCESS;
+}
+
+const APPROVAL_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['1-9', 'select'],
+  ['y/n', 'answer'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
 
 /**
  * Descriptions for the standard (non-ask_user) approval menus. Several
- * contexts reuse the same label ("Allow once", "Reject") for different scope,
+ * contexts reuse the same label ("Allow once", "Deny") for different scope,
  * so the description depends on which approval is showing, not just the
  * label text.
  */
@@ -419,7 +442,7 @@ function describeStandardApprovalOption(
         return 'Allow edits to this exact file for the rest of this session.';
       case 'Allow this folder for this session':
         return 'Allow edits anywhere under this folder for the rest of this session.';
-      case 'Reject':
+      case 'Deny':
         return 'Deny this edit.';
     }
   }
@@ -431,14 +454,14 @@ function describeStandardApprovalOption(
         return ctx.folderReadGrantPath
           ? `Allow read_file, grep, and glob to read ${ctx.folderReadGrantPath} for the rest of this session.`
           : 'Allow read_file, grep, and glob to read this folder for the rest of this session.';
-      case 'Reject':
+      case 'Deny':
         return 'Deny this read.';
     }
   }
   switch (item) {
-    case 'Approve':
+    case 'Allow once':
       return 'Allow this tool call.';
-    case 'Reject':
+    case 'Deny':
       return 'Deny this tool call.';
   }
   return '';
@@ -551,27 +574,27 @@ const ApprovalPrompt: FC<Props> = ({
 
   const deniedReadMenuItems = React.useMemo(() => {
     if (!deniedRead) return [];
-    const items = ['Allow once', 'Deny'];
+    const items = ['Allow once'];
     if (!deniedRead.sensitive) {
       items.push('Allow and remember this path');
     }
-    items.push('Run unsandboxed once');
+    items.push('Run unsandboxed once', 'Deny');
     return items;
   }, [deniedRead]);
 
   const askUserMenuItems = React.useMemo(() => {
     if (isDockerHostControlApproval) {
-      return ['Allow this command', 'Deny', 'Allow for this session', 'Always allow for this project'];
+      return ['Allow this command', 'Allow for this session', 'Always allow for this project', 'Deny'];
     }
     if (isSandboxNetworkApproval) {
-      return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
+      return ['Allow once', 'Allow host for this session', 'Always allow host for this project', 'Deny'];
     }
     if (!isAskUser && !isDeniedReadShell) {
       return isOutsideWorkspaceEdit
-        ? ['Allow once', 'Allow this file for this session', 'Allow this folder for this session', 'Reject']
+        ? ['Allow once', 'Allow this file for this session', 'Allow this folder for this session', 'Deny']
         : isFolderReadApproval
-        ? ['Allow once', 'Allow this folder for this session', 'Reject']
-        : ['Approve', 'Reject'];
+        ? ['Allow once', 'Allow this folder for this session', 'Deny']
+        : ['Allow once', 'Deny'];
     }
     if (isDeniedReadShell) {
       return deniedReadMenuItems;
@@ -592,6 +615,32 @@ const ApprovalPrompt: FC<Props> = ({
     isOutsideWorkspaceEdit,
   ]);
 
+  const handleStandardSelection = (selected: string | undefined, index: number): void => {
+    if (selected === 'Deny' || selected === 'Reject') {
+      onReject();
+    } else if (isDockerHostControlApproval) {
+      if (selected === 'Allow this command') onApprove('docker-allow-once');
+      else if (selected === 'Allow for this session') onApprove('docker-allow-session');
+      else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
+    } else if (isSandboxNetworkApproval) {
+      if (selected === 'Allow once') onApprove('allow-once');
+      else if (selected === 'Allow host for this session') onApprove('allow-session');
+      else if (selected === 'Always allow host for this project') onApprove('allow-project');
+    } else if (isDeniedReadShell) {
+      if (selected === 'Allow once') onApprove('allow-once');
+      else if (selected === 'Allow and remember this path') onApprove('allow-remember');
+      else if (selected === 'Run unsandboxed once') onApprove('unsandboxed-once');
+    } else if (index === 0) {
+      onApprove();
+    } else if (isFolderReadApproval && index === 1) {
+      onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
+    } else if (isOutsideWorkspaceEdit && index === 1) {
+      onApprove('allow-edit-file-session');
+    } else if (isOutsideWorkspaceEdit && index === 2) {
+      onApprove('allow-edit-folder-session');
+    }
+  };
+
   // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection on question/approval change
@@ -610,6 +659,18 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     if (waitingForAskUserAnswer) {
+      return;
+    }
+
+    if (approval.checkIn && (input === '1' || input === '2')) {
+      if (input === '1') onApprove();
+      else onReject();
+      return;
+    }
+
+    if (isDockerHostControlApproval && (input.toLowerCase() === 'y' || input.toLowerCase() === 'n')) {
+      if (input.toLowerCase() === 'y') onApprove('docker-allow-once');
+      else onReject();
       return;
     }
 
@@ -667,6 +728,14 @@ const ApprovalPrompt: FC<Props> = ({
       }
     }
 
+    if (!isAskUser && !approval.checkIn && /^[1-9]$/.test(input)) {
+      const targetIndex = Number(input) - 1;
+      if (targetIndex < askUserMenuItems.length) {
+        handleStandardSelection(askUserMenuItems[targetIndex], targetIndex);
+        return;
+      }
+    }
+
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev === 0 ? askUserMenuItems.length - 1 : prev - 1));
     }
@@ -692,33 +761,23 @@ const ApprovalPrompt: FC<Props> = ({
     }
 
     if (key.return) {
+      if (approval.checkIn) {
+        if (selectedIndex === 0) onApprove();
+        else onReject();
+        return;
+      }
       if (isDockerHostControlApproval) {
         const selected = askUserMenuItems[selectedIndex];
-        if (selected === 'Deny') onReject();
-        else if (selected === 'Allow this command') onApprove('docker-allow-once');
-        else if (selected === 'Allow for this session') onApprove('docker-allow-session');
-        else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
+        handleStandardSelection(selected, selectedIndex);
         return;
       }
       if (isSandboxNetworkApproval) {
         const selected = askUserMenuItems[selectedIndex];
-        if (selected === 'Deny') onReject();
-        else if (selected === 'Allow once') onApprove('allow-once');
-        else if (selected === 'Allow host for this session') onApprove('allow-session');
-        else if (selected === 'Always allow host for this project') onApprove('allow-project');
+        handleStandardSelection(selected, selectedIndex);
         return;
       }
       if (isDeniedReadShell) {
-        const selected = deniedReadMenuItems[selectedIndex];
-        if (selected === 'Deny') {
-          onReject();
-        } else if (selected === 'Allow once') {
-          onApprove('allow-once');
-        } else if (selected === 'Allow and remember this path') {
-          onApprove('allow-remember');
-        } else if (selected === 'Run unsandboxed once') {
-          onApprove('unsandboxed-once');
-        }
+        handleStandardSelection(deniedReadMenuItems[selectedIndex], selectedIndex);
         return;
       }
       if (isAskUser) {
@@ -747,16 +806,8 @@ const ApprovalPrompt: FC<Props> = ({
         } else {
           onApprove(selected);
         }
-      } else if (selectedIndex === 0) {
-        onApprove();
-      } else if (isFolderReadApproval && selectedIndex === 1) {
-        onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
-      } else if (isOutsideWorkspaceEdit && selectedIndex === 1) {
-        onApprove('allow-edit-file-session');
-      } else if (isOutsideWorkspaceEdit && selectedIndex === 2) {
-        onApprove('allow-edit-folder-session');
       } else {
-        onReject();
+        handleStandardSelection(askUserMenuItems[selectedIndex], selectedIndex);
       }
     }
   });
@@ -777,12 +828,15 @@ const ApprovalPrompt: FC<Props> = ({
           <Box flexDirection="column" marginLeft={1}>
             <Box>
               <SelectionMarker selected={selectedIndex === 0} />
-              <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>Continue</Text>
+              <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>1. Continue</Text>
             </Box>
             <Box>
               <SelectionMarker selected={selectedIndex === 1} />
-              <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>Stop</Text>
+              <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>2. Stop</Text>
             </Box>
+          </Box>
+          <Box marginTop={1} marginLeft={1}>
+            <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
           </Box>
         </Box>
       </Box>
@@ -872,7 +926,7 @@ const ApprovalPrompt: FC<Props> = ({
       ...(hasMultipleQuestions ? ([['p/n', 'prev/next question']] as [string, string][]) : []),
       ...(isMultiSelect ? ([['space', 'toggle']] as [string, string][]) : []),
       ['⏎', isMultiSelect ? 'submit' : 'confirm'],
-      ['esc', 'cancel'],
+      ['Esc', 'cancel'],
     ];
 
     content = (
@@ -916,7 +970,7 @@ const ApprovalPrompt: FC<Props> = ({
                 <SelectionMarker selected={isSelected} />
                 <Box width={2} flexShrink={0}>
                   <Text color={COLOR_TEXT_SUBTLE} dimColor>
-                    {isRecommended ? '★' : ' '}
+                    {isRecommended ? GLYPH_FAVORITE : ' '}
                   </Text>
                 </Box>
                 <Box flexDirection="row" flexShrink={1} flexWrap="wrap">
@@ -964,11 +1018,13 @@ const ApprovalPrompt: FC<Props> = ({
           {content}
           <Box flexDirection="column" marginTop={1}>
             {deniedReadMenuItems.map((item, idx) => {
-              const color = idx === 0 ? COLOR_DANGER : item === 'Run unsandboxed once' ? COLOR_WARNING : COLOR_SUCCESS;
+              const color = deniedReadOptionColor(item);
               return (
                 <Box key={item}>
                   <SelectionMarker selected={selectedIndex === idx} />
-                  <Text color={selectedIndex === idx ? color : undefined}>{item}</Text>
+                  <Text color={selectedIndex === idx ? color : undefined}>
+                    {idx + 1}. {item}
+                  </Text>
                 </Box>
               );
             })}
@@ -987,6 +1043,9 @@ const ApprovalPrompt: FC<Props> = ({
               </Text>
             </Box>
           )}
+          <Box marginTop={1} marginLeft={1}>
+            <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+          </Box>
         </Box>
       </Box>
     );
@@ -1006,11 +1065,13 @@ const ApprovalPrompt: FC<Props> = ({
       <TwoPaneApprovalLayout
         left={askUserMenuItems.map((item, index) => {
           const isSelected = selectedIndex === index;
-          const isDangerLabel = item === 'Reject' || item === 'Deny';
+          const isDangerLabel = item === 'Deny';
           return (
             <Box key={item}>
               <SelectionMarker selected={isSelected} />
-              <Text color={isSelected ? (isDangerLabel ? COLOR_DANGER : COLOR_SUCCESS) : undefined}>{item}</Text>
+              <Text color={isSelected ? (isDangerLabel ? COLOR_DANGER : COLOR_SUCCESS) : undefined}>
+                {index + 1}. {item}
+              </Text>
             </Box>
           );
         })}
@@ -1038,6 +1099,9 @@ const ApprovalPrompt: FC<Props> = ({
           </Text>
         </Box>
       )}
+      <Box marginTop={1} marginLeft={1}>
+        <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+      </Box>
     </Box>
   );
 
@@ -1060,7 +1124,7 @@ const ApprovalPrompt: FC<Props> = ({
       <Text color={COLOR_WARNING}>
         {isDockerHostControlApproval ? (
           <Text bold color={COLOR_DANGER}>
-            Docker Host Control
+            Docker host control
           </Text>
         ) : (
           <>

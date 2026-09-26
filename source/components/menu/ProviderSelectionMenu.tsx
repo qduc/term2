@@ -286,7 +286,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           } else if (item.kind === 'account') {
             // "in use" is what this session is authenticating as right now;
             // "next session" is a selection that has not taken effect yet.
-            prefix = item.isInUse ? '● ' : item.isSelected ? '○ ' : '  ';
+            prefix = item.isInUse ? '● ' : item.isSelected ? '◉ ' : '  ';
             color = item.isInUse
               ? COLOR_SUCCESS
               : item.isSelected

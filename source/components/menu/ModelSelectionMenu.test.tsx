@@ -281,6 +281,7 @@ it.sequential('ModelSelectionMenu shows a "how to add" empty state on the Favori
     />,
   );
   expect(lastFrame()).toContain('No favorites yet');
+  expect(lastFrame()).toContain('Ctrl+F');
   expect(lastFrame()).toContain('ctrl+f');
 });
 
@@ -295,6 +296,7 @@ it.sequential('ModelSelectionMenu shows a "how to add" empty state on the Nickna
     />,
   );
   expect(lastFrame()).toContain('No nicknames yet');
+  expect(lastFrame()).toContain('Ctrl+N');
   expect(lastFrame()).toContain('ctrl+n');
 });
 

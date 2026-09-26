@@ -1066,7 +1066,7 @@ describe('resolveModelFlag interactivePicker', () => {
     expect(interactivePicker).toHaveBeenCalledWith({
       initialQuery: 'zzz-nonexistent',
       lockProvider: undefined,
-      bannerLines: ['No models match "zzz-nonexistent".'],
+      bannerLines: ['No model named zzz-nonexistent; pick one.'],
     });
     expect(result).toEqual<ModelResolutionResult>({
       status: 'resolved',
@@ -1094,7 +1094,7 @@ describe('resolveModelFlag interactivePicker', () => {
       initialQuery: 'zzz-nonexistent',
       lockProvider: 'openai',
       bannerLines: [
-        'No models match "zzz-nonexistent".',
+        'No model named zzz-nonexistent; pick one.',
         expect.stringContaining('The cached catalog for openai may be stale'),
       ],
     });

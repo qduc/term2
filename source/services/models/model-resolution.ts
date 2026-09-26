@@ -576,7 +576,7 @@ export async function resolveModelFlag(deps: {
             initialQuery: parsed.pattern,
             lockProvider: explicitProvider ? parsed.provider : undefined,
             bannerLines: [
-              `No models match "${deps.modelFlag}".`,
+              `No model named ${deps.modelFlag}; pick one.`,
               `The cached catalog for ${targetGroup.provider} may be stale — delete ${cacheFilePath} to refetch.`,
             ],
           });
@@ -600,7 +600,7 @@ export async function resolveModelFlag(deps: {
       const picked = await deps.interactivePicker({
         initialQuery: parsed.pattern,
         lockProvider: explicitProvider ? parsed.provider : undefined,
-        bannerLines: [`No models match "${deps.modelFlag}".`],
+        bannerLines: [`No model named ${deps.modelFlag}; pick one.`],
       });
       if (!picked) return { status: 'cancelled', error: 'Cancelled.' };
       return {

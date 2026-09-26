@@ -260,13 +260,14 @@ describe('runModelPickerHost', () => {
       stderr: new FakeStdout() as any,
       initialQuery: 'gpt',
       lockProvider: providerId,
-      bannerLines: ['No models match "zzz".'],
+      bannerLines: ['No model named zzz; pick one.'],
     });
 
     await waitFor(
       () =>
-        stdout.frames.some((frame) => frame.includes('No models match')) &&
-        stdout.frames.some((frame) => frame.includes('gpt-test')),
+        stdout.frames.some((frame) => frame.includes('No model named zzz; pick one.')) &&
+        stdout.frames.some((frame) => frame.includes('gpt-test')) &&
+        stdout.frames.some((frame) => frame.includes('Filter: gpt')),
     );
 
     stdin.write('');

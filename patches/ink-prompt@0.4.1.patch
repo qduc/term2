@@ -1,0 +1,48 @@
+diff --git a/dist/components/MultilineInput/index.d.ts b/dist/components/MultilineInput/index.d.ts
+index cb693fe83cd87a6a0bd9944524dadfa7944b06cb..44e11c335b8832ad5017df9fdf99536dbce87f94 100644
+--- a/dist/components/MultilineInput/index.d.ts
++++ b/dist/components/MultilineInput/index.d.ts
+@@ -23,7 +23,7 @@ export interface MultilineInputProps {
+      * Receives the display number (1-based) and should return the display string.
+      * Default: (n) => `[Paste text #${n}]`
+      */
+-    formatPastePlaceholder?: (displayNumber: number) => string;
++    formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
+     images?: ImageRef[];
+     onImagesChange?: (images: ImageRef[]) => void;
+     onPasteError?: (reason: PasteErrorReason) => void;
+@@ -56,7 +56,7 @@ export interface MultilineInputCoreProps {
+      * Receives the display number (1-based) and should return the display string.
+      * Default: (n) => `[Paste text #${n}]`
+      */
+-    formatPastePlaceholder?: (displayNumber: number) => string;
++    formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
+     images?: ImageRef[];
+     onImagesChange?: (images: ImageRef[]) => void;
+     maxHeight?: number;
+diff --git a/dist/components/MultilineInput/useTextInput.d.ts b/dist/components/MultilineInput/useTextInput.d.ts
+index d1ce637b9be5977f7a56cd98a87c6adb86c69627..4ab317b73db57c7637ebb0c7cf7ef2302de71eed 100644
+--- a/dist/components/MultilineInput/useTextInput.d.ts
++++ b/dist/components/MultilineInput/useTextInput.d.ts
+@@ -7,7 +7,7 @@ export interface UseTextInputProps {
+     historyLimit?: number;
+     undoDebounceMs?: number;
+     pasteThreshold?: number;
+-    formatPastePlaceholder?: (displayNumber: number) => string;
++    formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
+ }
+ export interface UseTextInputResult {
+     value: string;
+diff --git a/dist/components/MultilineInput/useTextInput.js b/dist/components/MultilineInput/useTextInput.js
+index fbc203b29d0d75cf5ea911afd4b200f326efd784..84fbf5938fd432f03dc46fb5ebb46674355bc8cd 100644
+--- a/dist/components/MultilineInput/useTextInput.js
++++ b/dist/components/MultilineInput/useTextInput.js
+@@ -101,7 +101,7 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100, und
+         if (pasteThreshold !== undefined && pasteThreshold > 0 && normalized.length > pasteThreshold) {
+             flushPendingInsertBatch();
+             pushToHistory(buffer, cursor);
+-            const displayText = formatPastePlaceholder(blockState.nextPasteNumber);
++            const displayText = formatPastePlaceholder(blockState.nextPasteNumber, normalized);
+             const { marker, state: newBlockState } = createPasteBlockEntry(blockState, normalized, displayText);
+             setBlockState(newBlockState);
+             const result = bufferInsertText(buffer, cursor, marker);

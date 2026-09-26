@@ -2,6 +2,12 @@
 
 ## Resume here
 
+**Stage 3A verdict (2026-09-09): BLOCKED / NOT ACCEPTED; do not advance the
+present Stage 3A candidate.** See the [final gate report](../reports/tool-interface-stage3a-v3-gate.md).
+Stage 3B remains separate and unevaluated. The halted Stage 2 experiment closed
+with a negative measurement stop; see [its decision](../reports/tool-interface-stage2-measurement-stop.md).
+The text below is the pre-verdict specification, kept for design rationale.
+
 This is a specification draft for discussion, not implementation authorization
 or a claim that Stage 3 is complete. The September 7 roadmap described Stage 3
 as "explicit failures/partial completion" (handoff in session `d2898582`).

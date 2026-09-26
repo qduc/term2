@@ -18,7 +18,7 @@ export type PersistedSessionSnapshot = {
 
 const SNAPSHOT_FILENAME = 'session-snapshot.json';
 
-export const sessionSnapshotPath = (sessionDirectory: string): string => path.join(sessionDirectory, SNAPSHOT_FILENAME);
+const sessionSnapshotPath = (sessionDirectory: string): string => path.join(sessionDirectory, SNAPSHOT_FILENAME);
 
 /**
  * Reading is three-valued on purpose: a session created before the sidecar

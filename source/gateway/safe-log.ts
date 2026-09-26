@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { SAFE_LOG_OPERATIONS, SAFE_LOG_REASONS, type GatewaySafeLogMetadata } from './contracts.js';
 
 // The allowlists live in contracts.ts as const tuples so the union type and the
@@ -27,10 +27,6 @@ export class GatewayLogError extends Error {
     super('gateway log metadata rejected');
     this.name = 'GatewayLogError';
   }
-}
-
-export function principalRef(ownerUserId: string, key: string | Buffer): string {
-  return createHmac('sha256', key).update(ownerUserId).digest('base64url').slice(0, 32);
 }
 
 export function createSafeLogMetadata(

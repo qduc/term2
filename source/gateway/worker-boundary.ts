@@ -40,7 +40,7 @@ export function assertProviderBrokerReady(
   return capability;
 }
 
-export function createSessionScopedProviderBroker(
+function createSessionScopedProviderBroker(
   base: ProviderBrokerCapability,
   sessionId: string,
   options: { maxRequestsPerTurn?: number } = {},
@@ -93,7 +93,7 @@ export function createSessionScopedProviderBroker(
   return scoped;
 }
 
-export function createSecretFreeWorkerSettings(
+function createSecretFreeWorkerSettings(
   capability: ProviderBrokerCapability | undefined,
   canonicalRoot: string,
   snapshot?: SessionSettingsSnapshot,

@@ -1,10 +1,5 @@
 import { createPublicKey, createSign, createVerify, randomUUID, type KeyObject } from 'node:crypto';
-import {
-  ASSERTION_PURPOSES,
-  isAssertionPurpose,
-  type AssertionPurpose,
-  type GatewayAssertionClaims,
-} from './contracts.js';
+import { isAssertionPurpose, type AssertionPurpose, type GatewayAssertionClaims } from './contracts.js';
 import type { ReplayLedger } from './replay-ledger.js';
 
 const MAX_ASSERTION_LIFETIME_SECONDS = 60;
@@ -216,5 +211,3 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
     typeof candidate.sessionId === 'string'
   );
 }
-
-export const assertionPurposes = [...ASSERTION_PURPOSES];

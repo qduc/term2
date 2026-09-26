@@ -41,7 +41,7 @@ export type RuntimeResourcePolicy = Readonly<{
   maxLiveSessionsPerOwner: number;
 }>;
 
-export const DEFAULT_RUNTIME_RESOURCE_POLICY: RuntimeResourcePolicy = Object.freeze({
+const DEFAULT_RUNTIME_RESOURCE_POLICY: RuntimeResourcePolicy = Object.freeze({
   maxLiveSessions: 16,
   maxQueuedSubmissions: 32,
   preparedLeaseTtlMs: 10_000,
@@ -278,7 +278,7 @@ export function createProductionRuntimeFactory(input: {
   });
 }
 
-export function resolveRuntimeResourcePolicy(input?: Partial<RuntimeResourcePolicy>): RuntimeResourcePolicy {
+function resolveRuntimeResourcePolicy(input?: Partial<RuntimeResourcePolicy>): RuntimeResourcePolicy {
   const merged = { ...DEFAULT_RUNTIME_RESOURCE_POLICY, ...(input ?? {}) };
   const finitePositive = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
   if (

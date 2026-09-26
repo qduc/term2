@@ -46,6 +46,27 @@ export function deriveLocalCheckpointRequestHistory(
   const checkpoint = checkpointEnvelope.event;
   if (!checkpoint.artifactId || checkpoint.sourceRefs.length === 0) return { status: 'refused' };
 
+  const beforeCheckpoint = envelopes.slice(0, checkpointIndex);
+  const finalizedTurnIdsBeforeCheckpoint = new Set(
+    beforeCheckpoint.flatMap((envelope) =>
+      !isTruncatedLogEvent(envelope.event) && envelope.event.type === 'assistant_turn' && envelope.event.turnId
+        ? [envelope.event.turnId]
+        : [],
+    ),
+  );
+  for (const envelope of beforeCheckpoint) {
+    if (
+      !isTruncatedLogEvent(envelope.event) &&
+      (envelope.event.type === 'assistant_journal_item' || envelope.event.type === 'assistant_journal_delta') &&
+      !finalizedTurnIdsBeforeCheckpoint.has(envelope.event.turnId)
+    ) {
+      // The replay fold owns recovery of an open assistant journal, including
+      // tool effects. Until those items have a finalized assistant_turn before
+      // the checkpoint, replacing replay history could drop an executed effect.
+      return { status: 'refused' };
+    }
+  }
+
   const byRef = new Map<string, PersistedLogEnvelope>();
   for (const envelope of envelopes) {
     const key = envelopeKey(envelope);

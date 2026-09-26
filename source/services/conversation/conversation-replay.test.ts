@@ -884,6 +884,8 @@ it('replays the production planner/provenance automatic checkpoint before and af
     ...turn(2),
     ...turn(3),
     { role: 'user' as const, type: 'message' as const, content: 'current' },
+    { type: 'function_call', callId: 'call-current', name: 'write_file', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-current', name: 'write_file', output: 'effect committed' },
   ];
   const plan = planLocalCompaction({ history, usableInputTokens: 64_000 });
   expect(plan.kind).toBe('planned');
@@ -929,6 +931,32 @@ it('replays the production planner/provenance automatic checkpoint before and af
       logId: 's',
       eventId: 'current',
     },
+    {
+      ...env({
+        type: 'assistant_journal_item',
+        turnId: 'current-turn',
+        seq: 1,
+        item: { type: 'tool_call', callId: 'call-current', toolName: 'write_file', arguments: '{}' },
+      }),
+      logId: 's',
+      eventId: 'journal-call',
+    },
+    {
+      ...env({
+        type: 'assistant_journal_item',
+        turnId: 'current-turn',
+        seq: 2,
+        item: {
+          type: 'tool_result',
+          callId: 'call-current',
+          toolName: 'write_file',
+          status: 'completed',
+          output: 'effect committed',
+        },
+      }),
+      logId: 's',
+      eventId: 'journal-result',
+    },
   ];
   const sourceRefs = resolveCheckpointSourceRefs({ envelopes: persisted, history, hotTail: plan.hotTail });
   expect(sourceRefs).toEqual([
@@ -959,13 +987,16 @@ it('replays the production planner/provenance automatic checkpoint before and af
     { role: 'user', type: 'message', content: 'user-3' },
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'answer-3' }] },
     { role: 'user', type: 'message', content: 'current' },
+    { type: 'function_call', callId: 'call-current', name: 'write_file', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-current', name: 'write_file', output: 'effect committed' },
   ];
   const atCheckpoint = replayEvents([...persisted, checkpointEvent]);
-  expect(atCheckpoint.history).toEqual(interruptedRequest);
-  expect(JSON.stringify(atCheckpoint.history)).not.toContain('answer-1');
-  expect(JSON.stringify(atCheckpoint.history)).toContain('answer-3');
-  expect(JSON.stringify(atCheckpoint.history)).toContain('current');
+  expect(atCheckpoint.history).not.toEqual(interruptedRequest);
+  expect(JSON.stringify(atCheckpoint.history)).toContain('answer-1');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('call-current');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('effect committed');
   expect(atCheckpoint.history.filter((item) => item.content === 'current')).toHaveLength(1);
+  expect(atCheckpoint.history.filter((item) => item.callId === 'call-current')).toHaveLength(2);
   expect(atCheckpoint.previousResponseId).toBeNull();
 
   const nextAssistant = {

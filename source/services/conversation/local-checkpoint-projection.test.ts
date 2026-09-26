@@ -348,6 +348,43 @@ describe('deriveLocalCheckpointRequestHistory', () => {
     ).toMatchObject({ status: 'refused' });
   });
 
+  it('refuses projection when a pre-checkpoint assistant journal has no finalized turn', () => {
+    const checkpoint: ProviderInputItem = {
+      role: 'system',
+      type: 'message',
+      content: 'summary',
+      contextSummary: { version: 1, strategy: 'local' },
+    };
+    const envelopes = [
+      envelope(1, 'cold-user', { type: 'user_message', message: { sender: 'user', text: 'cold' } }),
+      envelope(2, 'cold-assistant', assistantTurn('cold answer')),
+      envelope(3, 'hot-user', { type: 'user_message', message: { sender: 'user', text: 'hot' } }),
+      envelope(4, 'hot-assistant', assistantTurn('hot answer')),
+      envelope(5, 'current-user', { type: 'user_message', message: { sender: 'user', text: 'current' } }),
+      envelope(6, 'journal-delta', {
+        type: 'assistant_journal_delta',
+        turnId: 'open-turn',
+        seq: 1,
+        kind: 'text',
+        delta: 'partial output',
+      }),
+      envelope(7, 'checkpoint', {
+        type: 'context_checkpoint_created',
+        version: 1,
+        artifactId: 'open-journal',
+        sourceRefs: [
+          { logId: 'session', eventId: 'cold-user' },
+          { logId: 'session', eventId: 'cold-assistant' },
+        ],
+        item: checkpoint,
+      }),
+    ];
+
+    expect(deriveLocalCheckpointRequestHistory(envelopes, [checkpoint, { role: 'user', content: 'current' }])).toEqual({
+      status: 'refused',
+    });
+  });
+
   it('refuses an unresolved source reference without changing the safe history', () => {
     const safeHistory: ProviderInputItem[] = [
       {

@@ -252,6 +252,17 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         return parseOrcaRouterModels(resolved.type, body);
       }
       const raw = getModelListItems(resolved.type, body);
+      // Some gateways answer routing errors with HTTP 200 and an error body
+      // (e.g. Z.ai: {"code":500,"msg":"404 NOT_FOUND"}). Surface that as a
+      // fetch failure instead of reporting a silently empty model catalog.
+      if (raw === null) {
+        const listField = resolved.type === 'google' ? 'models' : 'data';
+        const bodyPreview = typeof body === 'string' ? body : JSON.stringify(body) ?? '';
+        throw new Error(
+          `${label} models listing response was not recognized (expected a JSON object with a '${listField}' array)` +
+            (bodyPreview ? `: ${bodyPreview.slice(0, 120)}` : ''),
+        );
+      }
 
       return raw.map((item: any) => mapModelListItem(resolved.type, item)).filter(Boolean) as Array<{
         id: string;

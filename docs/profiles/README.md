@@ -1,5 +1,7 @@
 # Profile architecture specification
 
+Status: **Milestone 1 implemented and merged.** Built-in profile architecture and legacy mode removal merged in `b1ddd32a` (2026-09-02); Pair profile added in `37523fac` (2026-09-03).
+
 This directory specifies the Profile architecture that will replace term2's
 hard-coded built-in mode composition. The first implementation milestone is a
 behavior-preserving reconstruction of Standard, Lite, Plan, Mentor, and

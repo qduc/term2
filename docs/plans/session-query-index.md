@@ -1,5 +1,7 @@
 # SQLite index for session tools
 
+Status: **complete and merged (2026-09-06).** Milestones M0–M6 (including M2a) implemented, reviewed, and merged (M0 `eee504b7`, M1 `b73d9254`, M2a `539aad5a`, M2b `b187346c`, M3 `425a4ffa`, M4 `7a337115`, M5 `5b61a2ae`, M6 `ee2505b6`).
+
 ## Resume here
 
 Implement a rebuildable SQLite query index for `session_list`, `session_search`,

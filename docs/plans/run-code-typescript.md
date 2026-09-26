@@ -1,5 +1,7 @@
 # Type-checked TypeScript in run_code
 
+Status: **deferred (2026-09-13).** Completion telemetry merged in `8edf5950` (2026-09-10); frozen audit (`864a4923`) did not justify a compiler; compiler addition deferred pending targeted code/data composition experiments.
+
 ## Resume here
 
 User decision (2026-09-08): add type-checked scripts to the

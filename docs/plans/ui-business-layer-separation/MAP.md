@@ -1,5 +1,7 @@
 # UI / Business Layer Separation
 
+Status: **complete and merged.** All tranches merged: non-interactive approval policy `c9312f50`, sandbox approval coordination `eae1f4b7`, pending interaction authority `a8463d3c`, shell interaction ownership `d07a1149`, rewind target ownership `00dd5292`, conversation admission `9a31f23b`, settings transaction/config `a49f2bff`, handoff workflow `7ba8e7c6`, provider management `db57239e`, and model catalog `cea1ad1c`. Submission authority and conversation projection closed without new layers.
+
 ## Resume here
 
 The UI/business-layer separation tranche is complete. Settings transaction and

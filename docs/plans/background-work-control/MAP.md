@@ -1,5 +1,7 @@
 # Background work control
 
+Status: **implemented and merged.** Background task controls and shell handoff merged in `d17810dc`; transferred subagent approval lifecycle in `d83189a9`, `c0c5981b`, `16bc4c12`, and `108ada1a`; unified subagent UI in `a41dc4a8`; background check-in scheduler merged in `753bef1c` (commits `520852f8`, `29633065`, `16268ec4`).
+
 ## Resume here
 
 Background details, per-item stop, action notification, truthful root-shell transfer, and foreground-subagent transfer are implemented. Foreground-subagent transfer is an approval-capable lease adopted by the existing async registry, not cancel-and-restart; child approvals stay outside the root turn's singleton approval continuation.

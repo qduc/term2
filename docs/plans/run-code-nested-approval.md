@@ -111,7 +111,10 @@ divergence for relative nested paths; the LLM auto-approve seam in
 - Worktree: `/home/qduc/term2/.worktrees/nested-approval-preflight`.
 - Branch: `nested-approval-preflight`, based on `b1b2e3fd`.
 - Uncommitted test:
-  `source/components/layout/BottomArea.nested-approval-preflight.test.tsx`.
+  `source/components/layout/BottomArea.nested-approval-preflight.test.tsx` (in the
+  experimental worktree only; production coverage merged in
+  `source/components/layout/BottomArea.test.tsx` and
+  `source/services/approval/nested-approval-owner.test.ts`).
 - SHA-256 at handoff:
   `477c6680024bc7558414e07212936c50d9a3ac4fb27729b8c3744f166d71b605`.
 - Executed evidence: 4 focused files / 56 tests passed; typecheck passed;

@@ -31,8 +31,8 @@ notification delivery, so `pnpm test:provider-black-box` runs during development
 on those, not at the end. Read `docs/plans/mid-turn-injection.md` before phase 4
 — it owns the vocabulary (Segment, Request Boundary, Injection, Background
 Notification) this delivery path is described in. The parent single-file plan was
-moved here on 2026-08-10; `## Found in the territory` records the one stale path
-(`source/utils/shell/shell.ts` → `source/tools/system/shell.ts`).
+moved here on 2026-08-10; `## Found in the territory` records the historical path
+relocation (the former `source/utils/shell/shell.ts` moved to `source/tools/system/shell.ts` in `29773ead`).
 
 ## Destination
 
@@ -360,9 +360,9 @@ independently reviewable, each in its own worktree.
   `onOutputChunk`/`overflow`, the 120000 ms default still applies to background
   launches (`source/tools/system/shell.ts:611`), and `maxBuffer` overflow still
   sets `ex` and kills the child (`execute-shell.ts:149-152`).
-- 2026-08-10: One plan path is stale. The shell tool moved from
-  `source/utils/shell/shell.ts` to `source/tools/system/shell.ts` (UI/business
-  layer separation); `createBackgroundShellJobToolDefinitions` and the stranded
+- 2026-08-10: Historical path relocation. The shell tool formerly at
+  `source/utils/shell/shell.ts` moved to `source/tools/system/shell.ts` (directory restructure
+  `29773ead`); `createBackgroundShellJobToolDefinitions` and the stranded
   running-row `formatCommandMessage` note still sit at `shell.ts:200`/`shell.ts:144`.
 - 2026-08-10: Phase 1 merged. The black-box suite has one pre-existing failure
   (`provider-session-resilience` > reasoning traffic not persisted under the

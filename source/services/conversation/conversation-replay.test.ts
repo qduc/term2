@@ -361,6 +361,31 @@ it('semantic projection derives parallel complete and partial tool ledger entrie
   ]);
 });
 
+it('semantic projection preserves complete parallel tool call/result batches', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run both' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'c1', toolName: 'shell', arguments: 'a' },
+          { type: 'tool_call', callId: 'c2', toolName: 'shell', arguments: 'b' },
+          { type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'completed', output: 'a' },
+          { type: 'tool_result', callId: 'c2', toolName: 'shell', status: 'completed', output: 'b' },
+        ],
+      },
+    }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status === 'projected') {
+    expect(result.state.toolLedger).toMatchObject([
+      { callId: 'c1', status: 'completed', output: 'a' },
+      { callId: 'c2', status: 'completed', output: 'b' },
+    ]);
+  }
+});
+
 it('semantic projection preserves unknown tool effects instead of treating them as completed', () => {
   const result = projectSemanticEvents([
     env({ type: 'tool_started', turnId: 't1', toolCallId: 'c-unknown', toolName: 'shell', arguments: 'write' }),
@@ -444,6 +469,179 @@ it('semantic projection reports snapshot-only undo as unsupported', () => {
     reason: 'legacy_undo_snapshot',
     seq: undo.seq,
   });
+});
+
+it('semantic projection retracts exactly the referenced source events and invalidates chain anchors', () => {
+  const init = {
+    ...env({ type: 'session_init', id: 'retract', createdAt: '2026-01-01T00:00:00Z' }),
+    logId: 'retract',
+    eventId: 'e-init',
+  };
+  const user = {
+    ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'remove me' } }),
+    logId: 'retract',
+    eventId: 'e-user',
+  };
+  const turn = {
+    ...env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'c1', toolName: 'shell', arguments: 'write' },
+          { type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'completed', output: 'done' },
+          { type: 'assistant_text', text: 'remove result' },
+        ],
+      },
+      state: { previousResponseId: 'chain-secret', model: 'model-a', provider: 'provider-a' },
+    }),
+    logId: 'retract',
+    eventId: 'e-turn',
+  };
+  const retraction = {
+    ...env({
+      type: 'events_retracted',
+      version: 1,
+      refs: [
+        { logId: 'retract', eventId: 'e-user' },
+        { logId: 'retract', eventId: 'e-turn' },
+      ],
+    }),
+    logId: 'retract',
+    eventId: 'e-retraction',
+  };
+
+  const actual = projectSemanticEvents([init, user, turn, retraction]);
+  const expected = projectSemanticEvents([init]);
+  expect(actual).toEqual(expected);
+  expect(user.event.type).toBe('user_message');
+  expect(turn.event.type).toBe('assistant_turn');
+  expect(retraction.event.type).toBe('events_retracted');
+});
+
+it('semantic projection refuses unresolved retraction refs instead of consulting a legacy snapshot', () => {
+  const snapshotTurn = {
+    ...env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'snapshot must not restore me' }] },
+      snapshot: {
+        history: [{ role: 'assistant', type: 'message', content: 'not a source' }],
+        previousResponseId: 'r',
+        toolLedger: [],
+      },
+    }),
+    logId: 'local',
+    eventId: 'e-turn',
+  };
+  const retract = {
+    ...env({ type: 'events_retracted', version: 1, refs: [{ logId: 'predecessor', eventId: 'missing' }] }),
+    logId: 'local',
+    eventId: 'e-retract',
+  };
+
+  expect(projectSemanticEvents([snapshotTurn, retract])).toEqual({
+    status: 'unsupported',
+    reason: 'unresolved_retraction_refs',
+    seq: retract.seq,
+  });
+});
+
+it('semantic projection applies child-local retractions without changing parent projection', () => {
+  const inherited = {
+    ...env({ type: 'user_message', message: { id: 'u-parent', sender: 'user', text: 'parent turn' } }),
+    logId: 'parent',
+    eventId: 'parent-event',
+  };
+  const parentBefore = projectSemanticEvents([inherited]);
+  const childRetraction = {
+    ...env({ type: 'events_retracted', version: 1, refs: [{ logId: 'parent', eventId: 'parent-event' }] }),
+    logId: 'child',
+    eventId: 'child-retract',
+  };
+  const child = projectSemanticEvents([inherited, childRetraction]);
+  const parentAfter = projectSemanticEvents([inherited]);
+
+  expect(parentAfter).toEqual(parentBefore);
+  expect(child).toMatchObject({ status: 'projected', state: { messages: [] } });
+});
+
+it('semantic projection cannot retract a rollover predecessor that is outside the new log', () => {
+  const newSession = {
+    ...env({ type: 'session_init', id: 'successor', createdAt: '2026-01-01T00:00:00Z', rolloverFrom: 'predecessor' }),
+    logId: 'successor',
+    eventId: 'successor-init',
+  };
+  const retract = {
+    ...env({ type: 'events_retracted', version: 1, refs: [{ logId: 'predecessor', eventId: 'old-user' }] }),
+    logId: 'successor',
+    eventId: 'successor-retract',
+  };
+
+  expect(projectSemanticEvents([newSession, retract])).toMatchObject({
+    status: 'unsupported',
+    reason: 'unresolved_retraction_refs',
+  });
+});
+
+it('semantic projection does not apply a checkpoint that covers a retracted source', () => {
+  const source = {
+    ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'source' } }),
+    logId: 's',
+    eventId: 'e-source',
+  };
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'summary-1',
+      sourceRefs: [{ logId: 's', eventId: 'e-source' }],
+      item: { role: 'system', type: 'message', content: 'summary should not apply' },
+    }),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  };
+  const retract = {
+    ...env({ type: 'events_retracted', version: 1, refs: [{ logId: 's', eventId: 'e-source' }] }),
+    logId: 's',
+    eventId: 'e-retract',
+  };
+  const valid = projectSemanticEvents([source, checkpoint]);
+  const retracted = projectSemanticEvents([source, checkpoint, retract]);
+
+  expect(valid).toMatchObject({
+    status: 'projected',
+    state: { history: [{ role: 'user', content: 'source' }, { content: 'summary should not apply' }] },
+  });
+  expect(retracted).toMatchObject({ status: 'projected', state: { history: [] } });
+});
+
+it('decodeLogEnvelope requires unique, complete references on events_retracted', () => {
+  const valid = env({ type: 'events_retracted', version: 1, refs: [{ logId: 's', eventId: 'e1' }] });
+  const duplicate = {
+    ...valid,
+    event: {
+      ...valid.event,
+      refs: [
+        { logId: 's', eventId: 'e1' },
+        { logId: 's', eventId: 'e1' },
+      ],
+    },
+  } as unknown as LogEnvelope;
+  const incomplete = {
+    ...valid,
+    event: { ...valid.event, refs: [{ logId: 's' }] },
+  } as unknown as LogEnvelope;
+
+  expect(decodeLogEnvelope(valid)).not.toBeNull();
+  expect(decodeLogEnvelope(valid)?.event).toEqual(valid.event);
+  expect(decodeLogEnvelope(duplicate)).toBeNull();
+  expect(decodeLogEnvelope(incomplete)).toBeNull();
+});
+
+it('legacy replay output is unchanged when it encounters a semantic retraction event', () => {
+  const source = env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'keep legacy replay' } });
+  const retraction = env({ type: 'events_retracted', version: 1, refs: [{ logId: 's', eventId: 'e1' }] });
+
+  expect(replayEvents([source, retraction])).toEqual(replayEvents([source]));
 });
 
 it('semantic projection preserves storage truncation markers without treating them as source events', () => {

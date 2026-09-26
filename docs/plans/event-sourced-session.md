@@ -1,6 +1,6 @@
 # Event-sourced session and provenance
 
-Status: **design only; no implementation is claimed by this document.**
+Status: **design with comparison-only M2 implementation; production replay remains unchanged.**
 
 ## Resume here
 
@@ -104,6 +104,8 @@ Observed event inventory already includes semantic `user_message`, `assistant_jo
 Future snapshot-free undo should append one versioned `events_retracted` operation with an exact, ordered set of stable event references (`{ logId, eventId }`) for the user turns and their causally owned assistant, approval, and tool lifecycle events. Replay excludes those source events from transcript, provider-neutral history, and tool ledger; any provider chain anchor is invalidated rather than restored. The operation is append-only and does not erase its targets from the journal. Do not derive the target set by guessing from the undo count during replay.
 
 Retractions apply only in the current log's visible branch: a fork may reference inherited events copied into that branch, but retracting there never changes the parent. A rollover starts a new log; a retraction cannot reach backward into its predecessor. If a future compaction checkpoint covers any retracted source, it is unusable unless its provenance and projection are recomputed; until that is possible, replay must fall back to source history rather than apply the stale checkpoint. Legacy `undo.snapshot` records remain readable by the old replay but are explicitly unsupported by the pure projection; neither the reference list nor provider history may be inferred from the snapshot. Equivalence is exact equality of transcript, provider-neutral history, effect ledger, and durable metadata for logs whose undo targets are resolvable; provider chain IDs are intentionally excluded.
+
+The version-1 `events_retracted` envelope carries a non-empty ordered `refs` array; duplicate or malformed `{ logId, eventId }` pairs are rejected. A projection applies a reference only when it resolves in that same visible log. Any unresolved or cross-rollover target makes that projection explicitly unsupported. A branch-local fork can resolve inherited refs because fork copies preserve those event identities; it filters only its own projected event list. The comparison projection also accepts version-1 `context_checkpoint_created` records with exact `sourceRefs`; a checkpoint is applied only when every ref resolves and none is retracted. This checkpoint event is comparison support, not a production compaction-writer migration.
 
 - Contracts: Contract 08 (event fold and resume), Contract 02 (tool-pair settlement, opaque isolation, chain invalidation), Contract 12 only at its existing queue recovery join; no transfer of queue ownership is implied.
 - Tests: golden old-log/new-log replay equality for transcript and provider input; interrupted turns and approvals; complete/partial parallel tools; unknown effects; model/provider switch; clear, undo, fork, and rollover; provider black-box characterization if run-loop dispatch semantics change.

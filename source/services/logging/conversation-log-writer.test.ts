@@ -765,6 +765,14 @@ describe('ConversationLogWriter event fsync classification', () => {
       },
       { type: 'assistant_journal_item', turnId: 't1', seq: 10, item: { type: 'assistant_text', text: 'journal' } },
       { type: 'goal_changed', version: 1, goal: { id: 'g1', outcome: 'Ship it', status: 'active' } },
+      { type: 'events_retracted', version: 1, refs: [{ logId: 'source', eventId: 'event-1' }] },
+      {
+        type: 'context_checkpoint_created',
+        version: 1,
+        artifactId: 'checkpoint-1',
+        sourceRefs: [{ logId: 'source', eventId: 'event-1' }],
+        item: { role: 'system', type: 'message', content: 'summary' },
+      },
     ];
 
     for (const event of criticalEvents) {

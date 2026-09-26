@@ -64,6 +64,20 @@ const isSnapshot = (value: unknown): boolean =>
 const isOneOf = (value: unknown, allowed: readonly string[]): boolean =>
   typeof value === 'string' && allowed.includes(value);
 
+const isEventReferences = (value: unknown): boolean => {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const seen = new Set<string>();
+  for (const ref of value) {
+    if (!isObject(ref) || !hasString(ref, 'logId') || !ref['logId'] || !hasString(ref, 'eventId') || !ref['eventId']) {
+      return false;
+    }
+    const key = JSON.stringify([ref['logId'], ref['eventId']]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+};
+
 const isAssistantItem = (value: unknown): boolean => {
   if (!isObject(value) || !hasString(value, 'type')) return false;
   switch (value['type']) {
@@ -108,6 +122,18 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
         outcome.length <= 2000 &&
         (criteria === undefined || (typeof criteria === 'string' && criteria.length > 0 && criteria.length <= 2000)) &&
         isOneOf(goal['status'], ['active', 'achieved', 'abandoned'])
+      );
+    }
+    case 'events_retracted':
+      return event['version'] === 1 && isEventReferences(event['refs']);
+    case 'context_checkpoint_created': {
+      const artifactId = event['artifactId'];
+      return (
+        event['version'] === 1 &&
+        typeof artifactId === 'string' &&
+        artifactId.length > 0 &&
+        isEventReferences(event['sourceRefs']) &&
+        isObject(event['item'])
       );
     }
     case 'user_message':

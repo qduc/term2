@@ -15,7 +15,7 @@ export function createHandoffSlashCommand({
 }: CreateHandoffSlashCommandDeps): SlashCommand {
   return {
     name: 'handoff',
-    description: 'Hand off the last assistant response to another model',
+    description: 'Send the last assistant response to another model for review',
     action: () => {
       const lastText = getLastFinalAssistantText(messages);
       if (!lastText) {

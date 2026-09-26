@@ -69,6 +69,13 @@ const MODEL_HINTS: ReadonlyArray<MenuHint> = [
   ['Ctrl+T', 'effort'],
 ];
 
+const IDLE_HINTS: ReadonlyArray<MenuHint> = [
+  ['/', 'commands'],
+  ['@', 'paths'],
+  ['!', 'shell'],
+  ['Shift+Tab', 'plan'],
+];
+
 // Steer/queue key colors match the pending-queue group headers they create.
 const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
   ['⏎', 'steer', COLOR_ACCENT],
@@ -443,7 +450,7 @@ const InputBox: FC<Props> = ({
         value === '' &&
         !activePromptLabel && (
           <Box marginTop={1}>
-            <MenuFooter hints={MODEL_HINTS} />
+            <MenuFooter hints={IDLE_HINTS} />
           </Box>
         )}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (

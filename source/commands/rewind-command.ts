@@ -95,13 +95,17 @@ export function createRewindSlashCommand({
   onRewind,
 }: CreateRewindSlashCommandOptions): SlashCommand {
   const description =
-    defaultDisposition === 'resend'
+    name === 'retry'
+      ? 'Resend the last user turn, or choose a turn to resend'
+      : name === 'undo'
+      ? 'Choose a user turn to remove and return to the input'
+      : defaultDisposition === 'resend'
       ? 'Rewind to a user turn and resend it'
       : 'Rewind to a user turn and put it back in the input box';
 
   return {
     name,
-    description: aliasOf ? `${description} (alias of /${aliasOf})` : description,
+    description: aliasOf && name !== 'retry' ? `${description} (same options as /${aliasOf})` : description,
     expectsArgs: true,
     action: (args?: string) => {
       const parsed = parseArgs(args);

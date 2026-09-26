@@ -144,7 +144,7 @@ export const useAppCommands = ({
     const guardBusyTurn = (command: SlashCommand) =>
       guardAgainstBusyTurn(command, { turnInFlight: () => turnInFlight, notify: addSystemMessage });
 
-    return [
+    const commands: SlashCommand[] = [
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
@@ -266,6 +266,21 @@ export const useAppCommands = ({
       createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, replaceInput }),
       guardBusyTurn(createQuitSlashCommand(exit)),
     ];
+    commands.push({
+      name: 'help',
+      description: 'Show commands and keyboard shortcuts',
+      action: () => {
+        const commandLines = commands
+          .filter(({ name }) => name !== 'undo')
+          .map(({ name, description }) => `/${name} — ${description}`)
+          .join('\n');
+        addSystemMessage(
+          `Commands\n${commandLines}\n\nKeyboard shortcuts\nCtrl+C: clear draft or interrupt; press again to exit\nCtrl+O: choose model · Ctrl+T: choose reasoning effort\nShift+Tab: switch Standard/Plan · @: complete paths · !: shell`,
+        );
+        return true;
+      },
+    });
+    return commands;
   }, [
     addSystemMessage,
     applyRuntimeSetting,

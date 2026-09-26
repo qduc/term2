@@ -230,7 +230,10 @@ it.sequential('InputBox shows the input prompt and idle shortcut hints', async (
   const output = lastFrame();
   // Should show the prompt character
   expect(output!.includes('❯')).toBe(true);
-  expect(output!.includes('Ctrl+O model │ Ctrl+T effort')).toBe(true);
+  expect(output!.includes('/ commands')).toBe(true);
+  expect(output!.includes('@ paths')).toBe(true);
+  expect(output!.includes('! shell')).toBe(true);
+  expect(output!.includes('Shift+Tab plan')).toBe(true);
 });
 
 it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {

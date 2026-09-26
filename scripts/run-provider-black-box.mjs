@@ -8,9 +8,8 @@ import { spawn } from 'node:child_process';
  * drives the built CLI through a PTY and waits on its output, so when the CLI
  * cannot start — a compile that succeeded but crashes at runtime, a renamed
  * prompt marker, a stale `dist/` — every PTY test burns its full timeout
- * instead of failing fast. `provider-session-resilience.blackbox.ts` alone
- * holds 34 sequential tests, so that turns a ~20s suite into a silent
- * 11-minute one.
+ * instead of failing fast. `provider-session-resilience.blackbox.ts` runs
+ * many scenarios sequentially, so a broken build can look silently hung.
  *
  * - `--reporter=verbose` streams a line per finished test. This is deliberate
  *   over the `default` reporter: both `default` and `minimal` print nothing

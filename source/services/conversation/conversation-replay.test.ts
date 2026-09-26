@@ -796,6 +796,136 @@ it('semantic projection refuses checkpoint refs that are duplicated or out of so
   });
 });
 
+it('semantic projection refuses a digest-correct checkpoint with a gap in its source prefix', () => {
+  const sources = [
+    ['u1', { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'u1' } }],
+    ['a1', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a1' }] } }],
+    ['u2', { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'u2' } }],
+    ['a2', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a2' }] } }],
+    ['u3', { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'u3' } }],
+    ['a3', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a3' }] } }],
+  ].map(([eventId, event]) => ({ ...env(event as LogEvent), logId: 's', eventId: eventId as string }));
+  const sourceRefs = ['u1', 'a1', 'u3', 'a3'].map((eventId) => ({ logId: 's', eventId }));
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'gapped-prefix',
+      sourceRefs,
+      sourceDigest: createCheckpointSourceDigest(sourceRefs, sources)!,
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+
+  expect(projectSemanticEvents([...sources, checkpoint])).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
+});
+
+it('semantic projection accepts valid repeated and digest-free source prefixes without absorbing post-checkpoint events', () => {
+  const source = (eventId: string, event: LogEvent) => ({ ...env(event), logId: 's', eventId });
+  const userEvent = (id: string): LogEvent => ({
+    type: 'user_message',
+    message: { id, sender: 'user', text: id },
+  });
+  const assistantEvent = (text: string): LogEvent => ({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text }] },
+  });
+  const firstUser = source('u1', userEvent('u1'));
+  const firstAssistant = source('a1', assistantEvent('a1'));
+  const checkpoint = (
+    eventId: string,
+    artifactId: string,
+    sourceEventIds: string[],
+    digestSources: LogEnvelope[] = [],
+  ) => {
+    const sourceRefs = sourceEventIds.map((id) => ({ logId: 's', eventId: id }));
+    return {
+      ...env({
+        type: 'context_checkpoint_created',
+        version: 1,
+        artifactId,
+        sourceRefs,
+        ...(artifactId === 'first' ? { sourceDigest: createCheckpointSourceDigest(sourceRefs, digestSources)! } : {}),
+        item: {
+          role: 'assistant',
+          type: 'message',
+          content: [{ type: 'output_text', text: artifactId }],
+          contextSummary: { version: 1, strategy: 'local' },
+        },
+      }),
+      logId: 's',
+      eventId,
+    };
+  };
+  const first = checkpoint('checkpoint-1', 'first', ['u1', 'a1'], [firstUser, firstAssistant]);
+  const secondUser = source('u2', userEvent('u2'));
+  const secondAssistant = source('a2', assistantEvent('a2'));
+  const thirdUser = source('u3', userEvent('u3'));
+  const thirdAssistant = source('a3', assistantEvent('a3'));
+  const second = checkpoint('checkpoint-2', 'second', ['u1', 'a1', 'u2', 'a2']);
+  const repeated = projectSemanticEvents([
+    firstUser,
+    firstAssistant,
+    first,
+    secondUser,
+    secondAssistant,
+    thirdUser,
+    thirdAssistant,
+    second,
+  ]);
+  const legacyUser = source('legacy-u1', userEvent('legacy-u1'));
+  const legacyAssistant = source('legacy-a1', assistantEvent('legacy-a1'));
+  const legacyCheckpoint = checkpoint('legacy-checkpoint', 'legacy', ['legacy-u1', 'legacy-a1']);
+  const legacyTail = [source('legacy-u2', userEvent('legacy-u2')), source('legacy-a2', assistantEvent('legacy-a2'))];
+  const legacy = projectSemanticEvents([legacyUser, legacyAssistant, legacyCheckpoint, ...legacyTail]);
+
+  expect(repeated.status).toBe('projected');
+  expect(legacy.status).toBe('projected');
+});
+
+it('semantic projection accepts an automatic checkpoint prefix with a completed hot tail and open current user', () => {
+  const sources = [
+    ['u1', { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'u1' } }],
+    ['a1', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a1' }] } }],
+    ['u2', { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'u2' } }],
+    ['a2', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a2' }] } }],
+    ['u3', { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'u3' } }],
+    ['a3', { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'a3' }] } }],
+    ['u4', { type: 'user_message', message: { id: 'u4', sender: 'user', text: 'current' } }],
+  ].map(([eventId, event]) => ({ ...env(event as LogEvent), logId: 's', eventId: eventId as string }));
+  const sourceRefs = ['u1', 'a1', 'u2', 'a2'].map((eventId) => ({ logId: 's', eventId }));
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'automatic-cut',
+      sourceRefs,
+      sourceDigest: createCheckpointSourceDigest(sourceRefs, sources)!,
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+
+  expect(projectSemanticEvents([...sources, checkpoint]).status).toBe('projected');
+});
+
 it('semantic projection refuses local checkpoints sourced from non-conversation events', () => {
   const setting = {
     ...env({ type: 'settings_changed', key: 'model', value: 'model-a' }),

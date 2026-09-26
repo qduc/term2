@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MenuController } from '../components/input/menu-types.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
-import { getProviderLabel } from '../providers/provider-service.js';
 import { hasProviderCredentials } from '../utils/ai/provider-credentials.js';
 
 export type FirstRunSetupPhase = 'provider' | 'model';
@@ -149,5 +148,3 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
     completeModelSelection,
   };
 }
-
-export const describeFirstRunProvider = (provider: string): string => getProviderLabel(provider) ?? provider;

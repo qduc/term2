@@ -33,7 +33,7 @@ type Props = {
   entryShape: 'entries' | 'models';
 };
 
-export function SubagentPoolSelectionMenu({
+function SubagentPoolSelectionMenu({
   phase,
   selectedIndex,
   activeItems,

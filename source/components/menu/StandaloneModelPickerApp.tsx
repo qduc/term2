@@ -37,7 +37,7 @@ export type StandaloneModelPickerAppProps = {
  * once, which lets the host clear the transient frame before unmounting and
  * restoring the terminal.
  */
-export function StandaloneModelPickerApp({
+function StandaloneModelPickerApp({
   settingsService,
   loggingService,
   modelFetcher,

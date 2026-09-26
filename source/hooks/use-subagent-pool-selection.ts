@@ -201,12 +201,6 @@ export function serializeTierPoolEntries(
   return entries.map((entry) => (entry.provider ? { model: entry.model, provider: entry.provider } : entry.model));
 }
 
-export function formatSubagentPoolEntry(entry: SubagentPoolEntry): string {
-  const provider = entry.provider ? ` @ ${entry.provider}` : '';
-  const effort = entry.reasoningEffort && entry.reasoningEffort !== 'default' ? ` (${entry.reasoningEffort})` : '';
-  return `${entry.model}${provider}${effort}`;
-}
-
 export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
   const actions: SubagentPoolMenuItem[] = [];
   if (entries.length < MAX_SUBAGENT_POOL_ENTRIES) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });

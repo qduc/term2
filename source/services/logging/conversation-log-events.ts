@@ -10,11 +10,13 @@ import type {
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
 import type { ModelRequestCost } from '../cost/model-cost.js';
-import type { InjectedMemory } from '../memory/memory-capabilities.js';
+import type { InjectedMemory, MemoryRecallProvenance } from '../memory/memory-capabilities.js';
 
 export interface MemoryInjectedLogEvent {
   type: 'memory_injected';
   memories: InjectedMemory[];
+  /** Absent in logs written before recall provenance was recorded. */
+  recall?: MemoryRecallProvenance;
   turnId?: string;
 }
 

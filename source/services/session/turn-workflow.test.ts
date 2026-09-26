@@ -168,7 +168,11 @@ it('recalls memory on the user turn, not the instructions, and reports it before
   const queries: string[] = [];
   const { client, inputs } = recallingClient((query) => {
     queries.push(query);
-    return { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
+    return {
+      text: recallBlock,
+      memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
+      queryTerms: 'question',
+    };
   });
   const { workflow, composition } = setupWorkflow(client);
   const events: any[] = [];
@@ -178,6 +182,7 @@ it('recalls memory on the user turn, not the instructions, and reports it before
   expect(events[0]).toEqual({
     type: 'memory_injected',
     memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
+    recall: { source: 'turn_text', terms: 'question' },
   });
   expect(events.some((event) => event.type === 'text_delta')).toBe(true);
   // The block is part of the persisted user turn, so later requests replay the
@@ -192,16 +197,25 @@ it('keys recall on the turn memoryRecallQuery instead of harness-composed text',
   const queries: string[] = [];
   const { client, inputs } = recallingClient((query) => {
     queries.push(query);
-    return { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
+    return {
+      text: recallBlock,
+      memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
+      queryTerms: 'websocket pool retirement',
+    };
   });
   const { workflow } = setupWorkflow(client);
-  for await (const _event of workflow.executeInitial({
+  const events: any[] = [];
+  for await (const event of workflow.executeInitial({
     text: '# Continuation briefing\n\nGoal: fix websocket pool retirement.',
     memoryRecallQuery: 'Goal: fix websocket pool retirement.',
   }))
-    void _event;
+    events.push(event);
 
   expect(queries).toEqual(['Goal: fix websocket pool retirement.']);
+  expect(events.find((event) => event.type === 'memory_injected')?.recall).toEqual({
+    source: 'recall_query',
+    terms: 'websocket pool retirement',
+  });
   // The model still receives the full turn text; only the recall query changes.
   expect(JSON.stringify(inputs[0])).toContain('# Continuation briefing');
 });

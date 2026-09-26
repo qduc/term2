@@ -25,7 +25,10 @@ export type MemoryCapability = {
 };
 
 export type InjectedMemory = { scope: 'global' | 'project'; id: string; title: string };
-export type TurnMemorySelection = { text: string; memories: InjectedMemory[] };
+/** Why a turn recalled what it did: which text keyed the search, and its search terms. */
+export type MemoryRecallProvenance = { source: 'turn_text' | 'recall_query'; terms: string };
+/** `queryTerms` is present whenever memories were selected. */
+export type TurnMemorySelection = { text: string; memories: InjectedMemory[]; queryTerms?: string };
 
 type MemorySettings = {
   enabled: boolean;
@@ -223,7 +226,7 @@ export class MemoryCapabilityBuilder {
           memories.push({ scope, id: memory.id, title });
         }
       }
-      return memories.length ? { text: renderMemoryRecall(lines), memories } : empty();
+      return memories.length ? { text: renderMemoryRecall(lines), memories, queryTerms: terms } : empty();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.#onWarning(`Persistent memory retrieval could not be loaded: ${detail}`);

@@ -7,7 +7,7 @@ import type { PersistedAssistantTurnItem } from './conversation-persistence-type
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
-import type { InjectedMemory } from '../memory/memory-capabilities.js';
+import type { InjectedMemory, MemoryRecallProvenance } from '../memory/memory-capabilities.js';
 import type { BackgroundTaskActivity, BackgroundTaskObservation } from '../background-task-activity.js';
 export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
@@ -56,6 +56,7 @@ export type ConversationEvent =
 export interface MemoryInjectedEvent {
   type: 'memory_injected';
   memories: InjectedMemory[];
+  recall?: MemoryRecallProvenance;
 }
 
 export function formatMemoryReceipt(memories: readonly InjectedMemory[]): string {

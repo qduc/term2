@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   setWaitingForAskUserAnswer: vi.fn(),
   resolveBackgroundSubagentApproval: vi.fn(),
   stopProcessing: vi.fn(),
+  stopProcessingWithNotice: vi.fn(),
   addSystemMessage: vi.fn(),
   sendUserMessage: vi.fn(),
   sendSessionRolloverBrief: vi.fn(),
@@ -188,6 +189,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
       clearConversation: mocks.clearConversation,
       resetConversationPresentation: mocks.resetConversationPresentation,
       stopProcessing: mocks.stopProcessing,
+      stopProcessingWithNotice: mocks.stopProcessingWithNotice,
       undoLastUserMessage: vi.fn(),
       retryLastToolOutput: vi.fn(async () => false),
       getUserMessages: mocks.getUserMessages,
@@ -343,6 +345,7 @@ beforeEach(() => {
   mocks.setWaitingForAskUserAnswer.mockReset();
   mocks.resolveBackgroundSubagentApproval.mockReset();
   mocks.stopProcessing.mockReset();
+  mocks.stopProcessingWithNotice.mockReset();
   mocks.addSystemMessage.mockReset();
   mocks.sendUserMessage.mockReset();
   mocks.sendSessionRolloverBrief.mockReset();
@@ -1251,5 +1254,77 @@ describe('App orchestration', () => {
 
       expect(mocks.setTerminalTitle).toHaveBeenCalledWith('[...] term2');
     });
+
+    it.sequential('routes socket interrupt through the background-subagent Escape denial', async () => {
+      const services = createServices();
+      let interrupt: (() => Promise<{ accepted: boolean; reason?: string }>) | undefined;
+      const controlSocket = {
+        bindInterruptHandler: (handler: typeof interrupt) => {
+          interrupt = handler;
+        },
+        unbindInterruptHandler: (handler: typeof interrupt) => {
+          if (interrupt === handler) interrupt = undefined;
+        },
+      };
+      mocks.conversationState.backgroundSubagentApproval = {
+        revision: 4,
+        current: { requestId: 'background-1' },
+        pendingCount: 1,
+      };
+      await renderInAct(
+        <App
+          {...services}
+          controlSocket={controlSocket as any}
+          sessionId="session-1"
+          terminalTitleBase="term2"
+          generateId={() => 'session-2'}
+        />,
+      );
+      await act(async () => {
+        expect(await interrupt?.()).toEqual({ accepted: true });
+      });
+      expect(mocks.resolveBackgroundSubagentApproval).toHaveBeenCalledWith({
+        revision: 4,
+        entry: { requestId: 'background-1' },
+        decision: { answer: 'no', rejectionReason: undefined },
+      });
+    });
+
+    it.sequential(
+      'routes socket interrupt through sandbox prompt denial and keeps idle interruption a no-op',
+      async () => {
+        const services = createServices();
+        let interrupt: (() => Promise<{ accepted: boolean; reason?: string }>) | undefined;
+        const controlSocket = {
+          bindInterruptHandler: (handler: typeof interrupt) => {
+            interrupt = handler;
+          },
+          unbindInterruptHandler: (handler: typeof interrupt) => {
+            if (interrupt === handler) interrupt = undefined;
+          },
+        };
+        await renderInAct(
+          <App
+            {...services}
+            controlSocket={controlSocket as any}
+            sessionId="session-1"
+            terminalTitleBase="term2"
+            generateId={() => 'session-2'}
+          />,
+        );
+        expect(await interrupt?.()).toEqual({ accepted: false, reason: 'idle' });
+        expect(mocks.stopProcessingWithNotice).not.toHaveBeenCalled();
+
+        let approval: Promise<unknown> | undefined;
+        await act(async () => {
+          approval = mocks.sandboxNetworkHandler!({ host: 'control-test.invalid' });
+          await Promise.resolve();
+        });
+        await act(async () => {
+          expect(await interrupt?.()).toEqual({ accepted: true });
+        });
+        await expect(approval).resolves.toBe('deny');
+      },
+    );
   });
 });

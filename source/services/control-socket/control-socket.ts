@@ -493,6 +493,7 @@ export class ControlSocketServer {
           typeof params.text !== 'string' ||
           params.text.length < 1 ||
           params.text.length > 128_000 ||
+          !params.text.trim() ||
           typeof params.clientRequestId !== 'string' ||
           !/^[A-Za-z0-9_-]{1,256}$/.test(params.clientRequestId) ||
           (params.origin !== undefined &&

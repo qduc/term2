@@ -184,10 +184,98 @@ describe('control socket', () => {
       }),
     ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
     expect(received).toHaveLength(1);
+    expect(
+      await request(socket, {
+        v: 1,
+        id: 'whitespace',
+        method: 'submit',
+        params: { text: '  \n  ', clientRequestId: 'request-whitespace' },
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'invalid_request' } });
+    expect(
+      (
+        await request(socket, {
+          v: 1,
+          id: 'after-whitespace',
+          method: 'submit',
+          params: { text: 'still works', clientRequestId: 'request-after-whitespace' },
+        })
+      ).result,
+    ).toMatchObject({ messageId: 'message-1', delivery: 'started' });
+    expect(received).toHaveLength(2);
     expect((await request(socket, { v: 1, id: 'i', method: 'interrupt' })).result).toEqual({
       accepted: false,
       reason: 'idle',
     });
+    socket.destroy();
+  });
+
+  it('releases the admission lock after a port reports not_admitted', async () => {
+    let calls = 0;
+    const server = new ControlSocketServer({
+      name: 'recovery',
+      runtimeDir: runtimeDirectory(),
+      sessionId: () => 'session-1',
+      port: {
+        ...fakePort(),
+        submit: async () => {
+          calls += 1;
+          return calls === 1
+            ? { delivery: 'rejected', reason: 'not_admitted' }
+            : { messageId: 'message-2', delivery: 'started' };
+        },
+      },
+      startTime: () => '12345',
+      isPidAlive: () => false,
+    });
+    servers.push(server);
+    await server.listen();
+    const socket = connect(server.socketPath);
+    await once(socket, 'connect');
+    await request(socket, { v: 1, id: 'h', method: 'hello' });
+    expect(
+      (
+        await request(socket, {
+          v: 1,
+          id: 'first',
+          method: 'submit',
+          params: { text: 'first', clientRequestId: 'first' },
+        })
+      ).result,
+    ).toEqual({ delivery: 'rejected', reason: 'not_admitted' });
+    expect(
+      (
+        await request(socket, {
+          v: 1,
+          id: 'second',
+          method: 'submit',
+          params: { text: 'second', clientRequestId: 'second' },
+        })
+      ).result,
+    ).toEqual({ messageId: 'message-2', delivery: 'started' });
+    socket.destroy();
+  });
+
+  it('routes socket interrupt to the App-bound handler instead of the port fallback', async () => {
+    const server = new ControlSocketServer({
+      name: 'app-interrupt',
+      runtimeDir: runtimeDirectory(),
+      sessionId: () => 'session-1',
+      port: {
+        ...fakePort(),
+        interrupt: async () => ({ accepted: false, reason: 'idle' }),
+      },
+      startTime: () => '12345',
+      isPidAlive: () => false,
+    });
+    servers.push(server);
+    const appInterrupt = async () => ({ accepted: true });
+    server.bindInterruptHandler(appInterrupt);
+    await server.listen();
+    const socket = connect(server.socketPath);
+    await once(socket, 'connect');
+    await request(socket, { v: 1, id: 'h', method: 'hello' });
+    expect((await request(socket, { v: 1, id: 'i', method: 'interrupt' })).result).toEqual({ accepted: true });
     socket.destroy();
   });
 

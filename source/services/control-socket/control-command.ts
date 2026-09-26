@@ -42,16 +42,26 @@ function outputResult(output: Output, result: unknown, json: boolean): void {
   );
 }
 
-export async function runControlCommand(argv: string[], stdout: Output, stderr: Output): Promise<number> {
+export async function runControlCommand(
+  argv: string[],
+  stdout: Output,
+  stderr: Output,
+  stdin: AsyncIterable<Buffer | string> = process.stdin,
+): Promise<number> {
   try {
-    return await runControlCommandImpl(argv, stdout, stderr);
+    return await runControlCommandImpl(argv, stdout, stderr, stdin);
   } catch (error) {
     stderr.write(`Control command failed: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
 }
 
-async function runControlCommandImpl(argv: string[], stdout: Output, stderr: Output): Promise<number> {
+async function runControlCommandImpl(
+  argv: string[],
+  stdout: Output,
+  stderr: Output,
+  stdin: AsyncIterable<Buffer | string>,
+): Promise<number> {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   if (!runtimeDir || !path.isAbsolute(runtimeDir)) {
     stderr.write('Error: XDG_RUNTIME_DIR must be present and absolute.\n');
@@ -108,7 +118,7 @@ async function runControlCommandImpl(argv: string[], stdout: Output, stderr: Out
     const requestId = idIndex >= 0 ? rest[idIndex + 1] : undefined;
     if (!requestId || !/^[A-Za-z0-9_-]{1,256}$/.test(requestId) || positional.length !== 1) return 1;
     let text = '';
-    for await (const chunk of process.stdin) text += chunk.toString();
+    for await (const chunk of stdin) text += chunk.toString();
     if (text.length === 0) {
       stderr.write('Error: stdin must contain a non-empty message.\n');
       return 1;

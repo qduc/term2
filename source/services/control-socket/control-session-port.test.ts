@@ -53,6 +53,27 @@ describe('control session port', () => {
     finishTurn();
   });
 
+  it('settles a submission that completes without reporting admission', async () => {
+    const port = createControlSessionPort({
+      conversationService: {
+        previewLargeUncachedInput: () => ({ action: 'allow' }),
+        previewInputSurge: () => ({ action: 'allow' }),
+      } as any,
+      orchestrator: { sendUserMessage: vi.fn().mockResolvedValue(undefined) } as any,
+      settingsService: { get: () => null } as any,
+      usageAccumulator: { get: () => ({}) } as any,
+      controlSocket: { name: 'worker', startedAt: '' } as any,
+      sessionMetadata: () => ({ workspaceRoot: null, version: '', createdAt: '', logPath: '' }),
+    });
+    const receipt = port.submit?.({ text: 'valid text', clientRequestId: 'id' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(Promise.race([receipt, Promise.resolve('unsettled')])).resolves.toEqual({
+      delivery: 'rejected',
+      reason: 'not_admitted',
+    });
+  });
+
   it('projects the documented read sources and never returns a schema-secret setting', () => {
     const secret = 'schema-secret-fixture';
     expect(isSecretSetting('agent.openai.apiKey')).toBe(true);

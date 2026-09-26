@@ -52,16 +52,23 @@ export function createControlSessionPort(input: {
       return { delivery: 'rejected', reason: 'needs_confirmation' };
     }
     return new Promise((resolve, reject) => {
-      void orchestrator
-        .sendUserMessage(text, {
-          busyMode,
-          onSteerSettled,
-          onAdmitted: (messageId, delivery) => {
-            input.addSystemMessage?.(`Control ${busyMode === 'steer' ? 'steer' : 'submit'} ${messageId}`);
-            resolve({ messageId, delivery });
-          },
-        })
-        .catch(reject);
+      let admissionReported = false;
+      const send = orchestrator.sendUserMessage(text, {
+        busyMode,
+        onSteerSettled,
+        onAdmitted: (messageId, delivery) => {
+          if (admissionReported) return;
+          admissionReported = true;
+          input.addSystemMessage?.(`Control ${busyMode === 'steer' ? 'steer' : 'submit'} ${messageId}`);
+          resolve({ messageId, delivery });
+        },
+      });
+      void send.then(() => {
+        if (!admissionReported) {
+          admissionReported = true;
+          resolve({ delivery: 'rejected', reason: 'not_admitted' });
+        }
+      }, reject);
     });
   };
   return {

@@ -1376,6 +1376,7 @@ export class AgentClient {
           ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
             ? { previousResponseId: options.previousResponseId }
             : {}),
+          ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
           ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
           ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
           providerId: provider,
@@ -1418,6 +1419,7 @@ export class AgentClient {
       ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
         ? { previousResponseId: options.previousResponseId }
         : {}),
+      ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
       ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
       providerId: provider,

@@ -142,6 +142,8 @@ export interface ApplicationRunLoopOptions {
   readonly recoveryBudget?: RetryRecoveryBudget;
   /** Existing provider response to continue from on the first model turn. */
   readonly previousResponseId?: string | null;
+  /** Canonical session history for compaction when `input` is only a chained delta. */
+  readonly compactionHistory?: readonly ProviderInputItem[];
   /** Skip previous_response_id and transport history compression for the next model request. */
   readonly disableChainingForAttempt?: boolean;
   /** Identity of the provider making this run. Required to establish response provenance. */
@@ -285,6 +287,8 @@ type RunState = {
   recoveryBudget?: RetryRecoveryBudget;
   input: StreamedModelTurnInput[];
   history: ProviderInputItem[];
+  compactionHistory?: readonly ProviderInputItem[];
+  usesDeltaHistory?: boolean;
   pendingApproval?: PendingApproval;
   pendingApprovals?: PendingApproval[];
   approvalDecision?: 'approved' | 'rejected';
@@ -580,6 +584,8 @@ export class ApplicationRunLoop {
       recoveryBudget: options.recoveryBudget,
       input: normalizeInput(input),
       history: normalizeHistory(input),
+      compactionHistory: options.compactionHistory,
+      usesDeltaHistory: Boolean(options.previousResponseId) && options.disableChainingForAttempt !== true,
       // A response ID is usable only after its provider origin is recorded.
       // This also makes old callers that omit providerId fail closed.
       responseId:
@@ -697,6 +703,7 @@ export class ApplicationRunLoop {
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
     if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
+    if (options.compactionHistory) state.compactionHistory = options.compactionHistory;
     if (options.disableChainingForAttempt === true) {
       state.disableChainingForAttempt = true;
       state.responseId = undefined;
@@ -905,10 +912,15 @@ export class ApplicationRunLoop {
           },
         );
 
-        if (options.boundaryCompaction && !boundaryDecision?.deferCompaction) {
+        const compactionHistory = state.usesDeltaHistory
+          ? state.compactionHistory
+            ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+            : undefined
+          : state.history;
+        if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
           const compactionStartedAt = Date.now();
           const compaction = await options.boundaryCompaction.compact({
-            history: state.history,
+            history: compactionHistory,
             automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
             lastCompletedInputTokens: state.lastCompletedInputTokens,
             signal: options.signal,
@@ -920,6 +932,7 @@ export class ApplicationRunLoop {
             state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
             state.responseId = undefined;
             state.responseProviderId = undefined;
+            state.usesDeltaHistory = false;
             if (compaction.costRecords?.length) {
               state.costRecords ??= [];
               state.costRecords.push(...compaction.costRecords);
@@ -2088,6 +2101,35 @@ function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {
 function normalizeHistory(input: ProviderInput): ProviderInputItem[] {
   if (typeof input === 'string') return [{ type: 'message', role: 'user', content: input }];
   return Array.isArray(input) ? [...input] : [input];
+}
+
+function mergeChainedCompactionHistory(
+  sessionHistory: readonly ProviderInputItem[],
+  deltaHistory: readonly ProviderInputItem[],
+): ProviderInputItem[] | undefined {
+  const firstDeltaItem = deltaHistory[0];
+  if (!firstDeltaItem || firstDeltaItem.type !== 'message' || firstDeltaItem.role !== 'user') {
+    return undefined;
+  }
+  let latestUserIndex = -1;
+  for (let index = sessionHistory.length - 1; index >= 0; index--) {
+    const item = sessionHistory[index];
+    if (item.type === 'message' && item.role === 'user') {
+      latestUserIndex = index;
+      break;
+    }
+  }
+  if (latestUserIndex < 0) return undefined;
+  const latestSessionUser = sessionHistory[latestUserIndex];
+  const normalizedDeltaUser = normalizeApplicationInput([firstDeltaItem]);
+  const normalizedSessionUser = normalizeApplicationInput([latestSessionUser]);
+  if (JSON.stringify(normalizedDeltaUser) !== JSON.stringify(normalizedSessionUser)) return undefined;
+  return [
+    ...sessionHistory.slice(0, latestUserIndex),
+    firstDeltaItem,
+    ...sessionHistory.slice(latestUserIndex + 1),
+    ...deltaHistory.slice(1),
+  ];
 }
 
 type UnknownRecord = Record<string, unknown>;

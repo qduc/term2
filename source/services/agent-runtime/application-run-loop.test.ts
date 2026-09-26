@@ -428,6 +428,7 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
         providerId: 'openai',
         supportsConversationChaining: true,
         previousResponseId: 'stale',
+        compactionHistory: [{ role: 'user', type: 'message', content: 'old' }],
         boundaryCompaction: {
           compact: async () => ({
             kind: 'compacted',
@@ -513,6 +514,7 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       providerId: 'openai',
       supportsConversationChaining: true,
       previousResponseId: 'still-live',
+      compactionHistory: original,
       boundaryCompaction: {
         compact: async () => ({ kind: 'failed', provider: 'openai' }),
       },

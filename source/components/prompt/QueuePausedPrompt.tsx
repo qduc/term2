@@ -23,8 +23,7 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
       return;
     }
 
-    // Esc only dismisses the pause notice through its owner; queue contents
-    // remain intact unless the user chooses the explicit discard key.
+    // Esc must never implicitly discard queued messages.
     if (key.escape) return;
   });
 
@@ -38,7 +37,6 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
         hints={[
           ['r', 'resume'],
           ['x', 'discard'],
-          ['Esc', 'close'],
         ]}
       />
     </Box>

@@ -304,6 +304,41 @@ describe('AgentClient application-run-loop execution', () => {
     instance.dispose();
   });
 
+  it('uses the previous completed request usage to remind at the next user-turn boundary', async () => {
+    const provider = `rollover-next-turn-${Date.now()}`;
+    providers.add(provider);
+    let requests = 0;
+    registerProvider({
+      id: provider,
+      label: 'Rollover next turn test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          requests += 1;
+          yield {
+            type: 'completion' as const,
+            responseId: `response-${requests}`,
+            usage: { inputTokens: 210_000 },
+            output: [],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      { 'agent.sessionRollover.enabled': true, 'agent.sessionRollover.milestones': [150_000] },
+    );
+
+    const first = await instance.startStream('first turn');
+    await first.completed;
+    const next = await instance.startStream('next turn');
+    await next.completed;
+
+    expect(JSON.stringify(next.history)).toContain('provider reported 210000 input tokens');
+    instance.dispose();
+  });
+
   it('attaches the latest provider-reported input usage to an accepted rollover request', async () => {
     const provider = `rollover-usage-${Date.now()}`;
     providers.add(provider);

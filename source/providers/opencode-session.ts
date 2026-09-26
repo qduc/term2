@@ -61,7 +61,7 @@ function nestedScopeKey(context: SessionTrafficContext | null | undefined): stri
   return undefined;
 }
 
-export function resolveOpencodeSessionId(options: {
+function resolveOpencodeSessionId(options: {
   sessionContextService?: ISessionContextService;
   fallbackSessionId?: string;
   fallbackSessionIdOverride?: string;
@@ -93,7 +93,7 @@ export function resolveOpencodeSessionId(options: {
   return options.fallbackSessionId;
 }
 
-export function withOpencodeSessionHeader(init: RequestInit, sessionId: string): RequestInit {
+function withOpencodeSessionHeader(init: RequestInit, sessionId: string): RequestInit {
   return {
     ...init,
     headers: injectHeaders(init.headers, {

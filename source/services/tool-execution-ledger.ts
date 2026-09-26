@@ -4,7 +4,7 @@ import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 export type ToolExecutionStatus = 'started' | 'completed' | 'failed' | 'approval_required' | 'aborted' | 'unknown';
 
 /** Synthetic tool result for a dispatched call whose outcome was never observed. */
-export const UNKNOWN_OUTCOME_TOOL_RESULT =
+const UNKNOWN_OUTCOME_TOOL_RESULT =
   'Outcome unobserved: this operation was dispatched but the result was lost ' +
   '(for example due to a stream failure). Do not assume it failed or succeeded. ' +
   'Verify the current state before any retry, and do not re-run non-idempotent operations blindly.';
@@ -36,10 +36,10 @@ export interface ToolLedgerRecoverySummary {
   message: string;
 }
 
-export const asRecord = (value: unknown): Record<string, unknown> | null =>
+const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
-export const rawItem = (item: unknown): Record<string, unknown> | null => {
+const rawItem = (item: unknown): Record<string, unknown> | null => {
   const record = asRecord(item);
   if (!record) {
     return null;

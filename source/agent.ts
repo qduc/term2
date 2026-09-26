@@ -76,8 +76,6 @@ import { ToolApprovalPolicyRegistry } from './services/approval/tool-approval-po
 import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
 import type { McpToolSource } from './services/mcp/mcp-tool-source.js';
 
-export { getProjectTreeForPrompt } from './utils/project-tree.js';
-
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
 export function getEnvInfo(

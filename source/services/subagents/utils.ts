@@ -45,13 +45,13 @@ export function buildTurnBudgetExhaustedFinalText(options: { maxTurns?: number; 
   return body ? `${header}\n\n${body}` : header;
 }
 
-export function isToolHistoryItem(raw: any): boolean {
+function isToolHistoryItem(raw: any): boolean {
   const type = typeof raw?.type === 'string' ? raw.type : '';
   if (raw?.role === 'tool') return true;
   return /tool|function_call/i.test(type);
 }
 
-export function assistantText(raw: any): string | null {
+function assistantText(raw: any): string | null {
   if (raw?.role !== 'assistant') return null;
   const content = raw?.content;
   if (typeof content === 'string') return content;
@@ -195,7 +195,7 @@ export function createCompositeAbortSignal(
   return { signal: controller.signal, cleanup };
 }
 
-export const MAX_PREVIEW_LENGTH = 300;
+const MAX_PREVIEW_LENGTH = 300;
 
 /**
  * Condenses subagent output into a single-line, length-bounded preview: the

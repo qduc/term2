@@ -1,5 +1,4 @@
-/** The schema version of the public Term2 hook event contract. */
-export const TERM2_HOOK_SCHEMA_VERSION = 1 as const;
+const TERM2_HOOK_SCHEMA_VERSION = 1 as const;
 
 export type Term2HookSchemaVersion = typeof TERM2_HOOK_SCHEMA_VERSION;
 
@@ -188,11 +187,11 @@ export interface Term2Hooks {
 
 export type Term2HookRegistration = (hooks: Term2Hooks) => void | Promise<void>;
 
-export function isTerm2HookEventName(value: unknown): value is Term2HookEventName {
+function isTerm2HookEventName(value: unknown): value is Term2HookEventName {
   return typeof value === 'string' && (TERM2_HOOK_EVENT_NAMES as readonly string[]).includes(value);
 }
 
-export function isTerm2HookScope(value: unknown): value is Term2HookScope {
+function isTerm2HookScope(value: unknown): value is Term2HookScope {
   if (value === 'root') return true;
   if (typeof value !== 'object' || value === null) return false;
   const subagent = (value as { subagent?: unknown }).subagent;

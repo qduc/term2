@@ -300,7 +300,7 @@ function contextCompaction(
 }
 
 /** Wire shape for `context_management`, or undefined when gated off. */
-export function resolveContextManagement(
+function resolveContextManagement(
   providerOptions: StreamedModelProviderOptions | undefined,
   model: string,
   providerSupportsContextCompaction: boolean,

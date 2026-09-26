@@ -139,7 +139,6 @@ export const consumeDockerHostControlDenial = (sessionId: string | undefined, co
  * The UI cannot see a session, so it must not call this — see
  * `ApprovalDescriptor.dockerHostControl`, resolved by the producer that can.
  */
-export const normalizeDockerHostControlWorkspaceRoot = realRoot;
 export const requiresDockerHostControlApproval = (sessionId: string | undefined, command: string) =>
   requestsDockerHostControl(command) || dockerHostControlGrants.hasDenial(sessionId, command);
 export const resetDockerHostControlGrantsForTests = () => dockerHostControlGrants.resetForTests();

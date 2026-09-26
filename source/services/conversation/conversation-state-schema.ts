@@ -26,7 +26,7 @@ const MigratingToolExecutionStatusSchema = z.preprocess((value) => {
   return 'aborted';
 }, ToolExecutionStatusSchema);
 
-export const SavedToolExecutionSchema = z
+const SavedToolExecutionSchema = z
   .object({
     turnId: z.string(),
     callId: z.string(),

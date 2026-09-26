@@ -60,7 +60,7 @@ export type ApplicationInputSurfaceProps = {
 
 const emptyConversations = async (): Promise<ConversationListEntry[]> => [];
 
-export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
+const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
   const enabled = props.enabled ?? true;
   const { controller, interactions, stack, cursorOffset, cursorOverride, setCursorOverride } = useInputContext();
   const historyNavigation = useInputHistory(props.historyService);

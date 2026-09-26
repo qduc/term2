@@ -74,7 +74,7 @@ type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: (
  * injected so unit tests drive time deterministically; owned sessions pass
  * this adapter when the watch layer is created.
  */
-export function createBackgroundShellWatchScheduler(): BackgroundShellWatchScheduler {
+function createBackgroundShellWatchScheduler(): BackgroundShellWatchScheduler {
   return {
     schedule: (callback, delayMs) => setTimeout(callback, delayMs),
     cancel: (handle) => clearTimeout(handle as NodeJS.Timeout),

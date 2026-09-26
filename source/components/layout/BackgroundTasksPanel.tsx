@@ -8,8 +8,6 @@ import type {
 } from '../../services/session/background-task-control.js';
 import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
 import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
-
-export { BACKGROUND_TASKS_PANEL_GRACE_MS };
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 import {
   COLOR_ACCENT_ALT,

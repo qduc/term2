@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { createGatewayAssertion } from './assertion.js';
 import { GatewayLifecycle } from './lifecycle.js';
 import {
   loadGatewayManifest,
@@ -3642,5 +3641,5 @@ export function mapConversationEvent(
   }
 }
 
-export { createGatewayAssertion, interactionDtoFromSnapshot, isPublicEventEnvelope };
+export { interactionDtoFromSnapshot, isPublicEventEnvelope };
 export type { SessionBinding };

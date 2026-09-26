@@ -3,8 +3,6 @@ import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 
-export { SKILLS_TRIGGER } from '../components/input/triggers.js';
-
 /** Case-insensitive match over skill name and description. */
 export const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
   if (!query) return skills;

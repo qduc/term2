@@ -32,7 +32,7 @@ export type ProfileTransitionDeps = ProfileTransitionPlanningDeps & {
 };
 
 /** The interactive runtime exposes all built-in integration points. */
-export const DEFAULT_AVAILABLE_INTEGRATIONS: ReadonlyMap<string, boolean> = new Map(
+const DEFAULT_AVAILABLE_INTEGRATIONS: ReadonlyMap<string, boolean> = new Map(
   BUILTIN_INTEGRATIONS.map((id) => [id, true]),
 );
 

@@ -44,13 +44,6 @@ const defaultRegistry: MenuRegistry = {
   model: ModelMenuSession as React.ComponentType<any>,
 };
 
-export function registerMenuComponent<K extends MenuFrame['kind']>(
-  kind: K,
-  component: React.ComponentType<MenuComponentProps<Extract<MenuFrame, { kind: K }>>>,
-): void {
-  (defaultRegistry as any)[kind] = component;
-}
-
 export function getMenuRegistry(): MenuRegistry {
   return defaultRegistry;
 }

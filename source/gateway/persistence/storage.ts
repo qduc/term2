@@ -5,14 +5,14 @@ import { GatewayPersistenceError } from './contracts.js';
 
 const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 
-export function assertOpaqueStorageId(value: string, field = 'id'): void {
+function assertOpaqueStorageId(value: string, field = 'id'): void {
   if (!OPAQUE_ID.test(value) || value === '.' || value === '..') {
     throw new GatewayPersistenceError('unsafe_root', `invalid opaque ${field}`);
   }
 }
 
 /** Hashes IDs before they become path components; the original ID is never a path. */
-export function storageHash(value: string): string {
+function storageHash(value: string): string {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 

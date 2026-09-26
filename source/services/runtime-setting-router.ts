@@ -121,7 +121,7 @@ export class ConversationConfigurationService {
   }
 }
 
-export function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSettingRouterDeps): void {
+function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSettingRouterDeps): void {
   if (key === 'app.activeProfileId') {
     const transitionService = new ProfileTransitionService({
       settingsService: deps.settingsService,

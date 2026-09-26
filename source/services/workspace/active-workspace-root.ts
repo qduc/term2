@@ -16,7 +16,7 @@ import process from 'process';
 let activeRoot: string | undefined;
 let liveSessionRuntimeCount = 0;
 
-export class ConcurrentWorkspaceRootError extends Error {
+class ConcurrentWorkspaceRootError extends Error {
   readonly code = 'workspace_root_multi_runtime';
 
   constructor() {

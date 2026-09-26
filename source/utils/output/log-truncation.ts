@@ -240,10 +240,6 @@ export function sanitizeLogMetadata(meta: LogMetadata): LogMetadata {
   return result;
 }
 
-export function truncateImageData(meta: LogMetadata): LogMetadata {
-  return sanitizeLogMetadata(meta);
-}
-
 export function truncateLogText(text: string, maxLen = MAX_LOG_TEXT_LEN): string {
   if (maxLen < 0) return text;
   const normalized = text.replace(/\r\n/g, '\n');

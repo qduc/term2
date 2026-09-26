@@ -5,7 +5,6 @@ import type { ExecutionContext } from '../../services/execution-context.js';
 import type { GitWorktree } from '../../services/workspace/parse-worktree-list.js';
 import { listGitWorktrees, type ListWorktrees } from '../../services/workspace/worktree-inventory.js';
 import {
-  enterableWorktrees,
   resolveEnterWorktree,
   resolveExitWorktree,
   type RunningJob,
@@ -190,5 +189,3 @@ export function createWorktreeToolDefinitions(dependencies: WorktreeToolDependen
 
   return { enter, exit };
 }
-
-export { enterableWorktrees };

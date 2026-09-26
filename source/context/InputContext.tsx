@@ -55,7 +55,7 @@ export type InputMode =
   | 'provider_selection'
   | 'subagent_pool_selection';
 
-export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): InputMode {
+function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): InputMode {
   switch (kind) {
     case 'slash':
       return 'slash_commands';

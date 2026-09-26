@@ -6,7 +6,6 @@ import { useEscapeKey } from '../hooks/use-escape-key.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
 import { useTerminalWidth } from '../hooks/use-terminal-width.js';
-import { calculateInputWidth } from './input/input-width.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -17,8 +16,6 @@ import type { SubmissionMutation } from '../services/conversation/conversation-a
 import { MenuFooter, type MenuHint } from './common/MenuContainer.js';
 import PendingQueueList, { orderPendingQueueMessages, type PendingQueueMessage } from './input/PendingQueueList.js';
 import { COLOR_ACCENT, COLOR_ACCENT_ALT, COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
-
-export { calculateInputWidth };
 
 type Props = {
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;

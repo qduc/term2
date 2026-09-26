@@ -127,7 +127,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
-    "import-jsx": "^5.0.0",
     "ink-testing-library": "^4.0.0",
     "lint-staged": "^16.2.7",
     "prettier": "^2.8.7",

@@ -45,7 +45,7 @@ export type SSHRemoteEffect = 'none' | 'unknown';
  * decision (`'aborted'`, `'timeout'`, `'not_connected'`) from an ambiguous
  * transport drop without guessing at message text.
  */
-export class SSHTransportError extends Error {
+class SSHTransportError extends Error {
   readonly kind: SSHTransportErrorKind;
   readonly remoteEffect: SSHRemoteEffect;
   /** Bytes received before settlement. Best effort only — never a complete result. */

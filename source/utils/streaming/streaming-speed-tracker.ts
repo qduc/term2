@@ -52,7 +52,7 @@ const HIDDEN_TOKEN_RATIO = 2;
  * cutoff marks 81% of settled figures as burst-inflated while clearing
  * genuine sustained rates (median honest ≈ 60 tok/s) by a wide margin.
  */
-export const MAX_PLAUSIBLE_DECODE_TPS = 500;
+const MAX_PLAUSIBLE_DECODE_TPS = 500;
 
 export function formatTokensPerSecond(tps: number, approximate = false): string {
   const value = tps.toFixed(1);

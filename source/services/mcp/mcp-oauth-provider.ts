@@ -11,7 +11,7 @@ import {
 import type { McpOAuthCredentialScope, McpOAuthStore } from './mcp-oauth-store.js';
 
 /** The client name authorization servers (and the user) see in consent screens. */
-export const MCP_OAUTH_CLIENT_NAME = 'term2-mcp';
+const MCP_OAUTH_CLIENT_NAME = 'term2-mcp';
 
 export type McpOAuthProviderOptions = {
   /** Credential storage, keyed by server URL and issuer. */

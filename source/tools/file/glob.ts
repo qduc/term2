@@ -17,8 +17,6 @@ import type { NestedToolCompatibilityState } from '../../services/session/nested
 import type { ISettingsService } from '../../services/service-interfaces.js';
 import { resolveGlobSearchTarget } from './glob-target.js';
 
-export { resolveGlobSearchTarget };
-
 const execPromise = util.promisify(exec);
 
 const findFilesParametersSchema = z.object({

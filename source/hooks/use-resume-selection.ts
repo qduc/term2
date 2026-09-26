@@ -3,8 +3,6 @@ import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
 import type { ConversationListEntry } from '../services/conversation/conversation-persistence.js';
 
-export { RESUME_TRIGGER } from '../components/input/triggers.js';
-
 /** Case-insensitive match over id, first message, model, and SSH host. */
 export const filterConversations = (conversations: ConversationListEntry[], query: string): ConversationListEntry[] => {
   if (!query) return conversations;

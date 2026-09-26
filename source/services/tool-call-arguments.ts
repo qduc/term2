@@ -1,20 +1,3 @@
-export const normalizeToolCallArguments = (args: unknown): unknown => {
-  if (typeof args !== 'string') {
-    return args;
-  }
-
-  const trimmed = args.trim();
-  if (!trimmed) {
-    return args;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return args;
-  }
-};
-
 export interface ToolCallArgumentParseResult {
   arguments: unknown;
   invalidJsonDiagnostic?: {

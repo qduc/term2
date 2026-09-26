@@ -49,38 +49,3 @@ export function addCacheControlToLastTwoMessages(messages: any[], modelId?: stri
     }
   }
 }
-
-export function extractModelSettingsForRequest(settings: any): any {
-  const body: any = {};
-
-  if (settings) {
-    if (settings.temperature != null) body.temperature = settings.temperature;
-
-    if (settings.topP != null) body.top_p = settings.topP;
-
-    if (settings.maxTokens != null) body.max_tokens = settings.maxTokens;
-
-    if (settings.topK != null) body.top_k = settings.topK;
-
-    if (settings.frequencyPenalty != null) body.frequency_penalty = settings.frequencyPenalty;
-
-    if (settings.presencePenalty != null) body.presence_penalty = settings.presencePenalty;
-
-    const hasReasoningObj = settings.reasoning && typeof settings.reasoning === 'object';
-    if (hasReasoningObj) {
-      body.reasoning = { ...settings.reasoning };
-    }
-
-    const reasoningEffort = settings.reasoningEffort ?? settings.reasoning?.effort;
-    const normalizedEffort = reasoningEffort === 'default' ? 'medium' : reasoningEffort;
-
-    if (normalizedEffort && normalizedEffort !== 'none') {
-      body.reasoning = {
-        ...(body.reasoning ?? {}),
-        effort: normalizedEffort,
-      };
-    }
-  }
-
-  return body;
-}

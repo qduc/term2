@@ -42,10 +42,6 @@ export function isToolToggleKey(key: string): boolean {
   return CAPABILITY_GROUP_KEYS.has(key);
 }
 
-export function getToolToggleKeys(): readonly string[] {
-  return [...CAPABILITY_GROUP_KEYS];
-}
-
 /** Minimal read surface of ISettingsService, for testability without the full service. */
 type SettingsReader = {
   getDynamic(key: string): unknown;

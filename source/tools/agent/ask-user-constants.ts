@@ -4,8 +4,6 @@ export const ASK_USER_DECLINE_RESULT = 'User declined to answer.';
 export const ASK_USER_NO_ANSWER_RESULT = 'User did not provide an answer.';
 export const ASK_USER_NO_RESPONSE_DISPLAY = 'No response from user';
 export const ASK_USER_SUBMIT_LABEL = 'Submit answer';
-export const ASK_USER_PREV_QUESTION_LABEL = '◀ Previous question';
-export const ASK_USER_NEXT_QUESTION_LABEL = 'Next question ▶';
 
 /**
  * Answers that end the whole ask_user call rather than answering the question

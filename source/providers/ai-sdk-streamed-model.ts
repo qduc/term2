@@ -471,10 +471,7 @@ function parseCostValue(value: unknown): number | string | undefined {
  * Extract provider-reported cost (USD amount or credits) from AI SDK
  * provider metadata or usage when present (e.g. OpenRouter usage accounting).
  */
-export function extractAiSdkCostUsd(
-  providerMetadata?: Record<string, unknown>,
-  usage?: unknown,
-): number | string | undefined {
+function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?: unknown): number | string | undefined {
   const usageRecord = asRecord(usage);
   if (usageRecord) {
     const rawRecord = asRecord(usageRecord.raw);

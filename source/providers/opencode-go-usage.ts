@@ -1,5 +1,5 @@
 /** Usage meter for the OpenCode Go subscription. */
-export const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage';
+const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage';
 export interface OpenCodeGoUsageLimit {
   readonly usagePercent: number;
   readonly resetInSec: number;

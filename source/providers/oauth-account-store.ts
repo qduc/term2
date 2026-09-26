@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
  * made us stop sharing files with the `grok` and `codex` CLIs in the first
  * place (docs/plans/provider-oauth-independence.md).
  */
-export const OAUTH_ACCOUNT_STORE_VERSION = 2;
+const OAUTH_ACCOUNT_STORE_VERSION = 2;
 
 export type OAuthAccount<TTokens> = {
   /** Stable within a provider; derived from the credential, not the login order. */

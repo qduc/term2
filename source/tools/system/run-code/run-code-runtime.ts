@@ -260,7 +260,7 @@ export const serializeResult = async (
   }
 };
 
-export function getConversationSessionId(context: unknown): string | undefined {
+function getConversationSessionId(context: unknown): string | undefined {
   if (!context || typeof context !== 'object') return undefined;
   const runContext = (context as { context?: unknown }).context;
   if (!runContext || typeof runContext !== 'object') return undefined;
@@ -268,7 +268,7 @@ export function getConversationSessionId(context: unknown): string | undefined {
   return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
 }
 
-export function writeNestedCallRecord(
+function writeNestedCallRecord(
   tool: string,
   sessionId: string | undefined,
   outcome: 'success' | 'failure' | 'denied-by-approval',
@@ -391,7 +391,7 @@ export function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSig
   return controller.signal;
 }
 
-export async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
+async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
   const declared = tool.parallelSafe;
   if (declared === undefined || declared === false) return false;
   if (declared === true) return true;

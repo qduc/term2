@@ -77,13 +77,6 @@ interface UseAppCommandsProps {
   openMcpMenu?: () => void;
 }
 
-// Re-export for backward compat
-export { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
-export { createCopySlashCommand } from '../commands/copy-command.js';
-export { createUsageSlashCommand } from '../commands/usage-command.js';
-export { createRewindSlashCommand } from '../commands/rewind-command.js';
-export { createRetryToolSlashCommand } from '../commands/retry-tool-command.js';
-
 export const useAppCommands = ({
   settingsService,
   transitionService,

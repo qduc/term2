@@ -179,19 +179,6 @@ export function buildPersistedAssistantItemsFromRaw(item: unknown): PersistedAss
   return normalizeRunItem(item);
 }
 
-/**
- * Normalize a single raw provider run item into a persisted item shape.
- * Returns `null` if the item is not a recognized assistant-produced shape
- * (tool call, tool result, assistant message, or reasoning).
- *
- * When the raw item maps to multiple persisted items (e.g. reasoning +
- * text), only the first is returned. Prefer `buildPersistedAssistantItemsFromRaw`
- * when you need the full set.
- */
-export function buildPersistedAssistantItemFromRaw(item: unknown): PersistedAssistantTurnItem | null {
-  return buildPersistedAssistantItemsFromRaw(item)[0] ?? null;
-}
-
 export function buildPersistedAssistantTurnItems(items: readonly unknown[] | undefined): PersistedAssistantTurnItem[] {
   return normalizeRunItems(items);
 }

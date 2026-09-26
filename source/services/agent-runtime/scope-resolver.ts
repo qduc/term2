@@ -87,14 +87,6 @@ export function normalizeToolPath(rawPath: string): string | null {
 }
 
 /**
- * Check if a raw path (from a tool invocation) is within the workspace.
- * Returns true if the normalized path is safe.
- */
-export function isPathWithinWorkspace(rawPath: string): boolean {
-  return normalizeToolPath(rawPath) !== null;
-}
-
-/**
  * Symlink-safe resolution of a tool-targeted path.
  *
  * Uses fs.realpath to resolve symlinks in the path. For paths that

@@ -1,4 +1,4 @@
-export function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEffort: string | undefined): void {
+function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEffort: string | undefined): void {
   const budgets: Record<string, number> = {
     low: 1024,
     medium: 4096,

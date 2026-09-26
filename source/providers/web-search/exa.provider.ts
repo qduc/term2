@@ -110,4 +110,4 @@ const exaProvider: WebSearchProvider = {
 registerWebSearchProvider(exaProvider);
 
 // Export for testing purposes
-export { exaProvider, searchExa, isConfigured as isExaConfigured };
+export { exaProvider, isConfigured as isExaConfigured };

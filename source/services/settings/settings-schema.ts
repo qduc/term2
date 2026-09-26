@@ -619,7 +619,7 @@ export function isKnownCustomProviderType(value: string): value is KnownCustomPr
   return (KNOWN_CUSTOM_PROVIDER_TYPES as readonly string[]).includes(value);
 }
 
-export const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
+const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
 
 export const CustomProviderSchema = z
   .object({
@@ -665,7 +665,7 @@ export const CustomProviderSchema = z
  * Settings that are sensitive and should NEVER be saved to disk.
  * These are only loaded from environment variables.
  */
-export function getSensitiveSettingKeys(): Set<string> {
+function getSensitiveSettingKeys(): Set<string> {
   return new Set<string>([
     'app.shellPath',
     'agent.openrouter.baseUrl',

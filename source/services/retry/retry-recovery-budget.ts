@@ -3,7 +3,7 @@
  * recovery. The owner is deliberately the retry/session layer: providers can
  * consume claims; only accepted terminal model completion ends an episode.
  */
-export const RETRY_RECOVERY_LIMITS = {
+const RETRY_RECOVERY_LIMITS = {
   maxRecoveryTimeMs: 90_000,
   maxPhysicalAttempts: 3,
   maxAutomaticReplays: 1,

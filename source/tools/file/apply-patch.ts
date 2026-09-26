@@ -799,7 +799,7 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
 /**
  * Format errors from applyDiff to be clearer and more actionable.
  */
-export function formatPatchError(error: Error, diff: string, original?: string): string {
+function formatPatchError(error: Error, diff: string, original?: string): string {
   const message = error.message || String(error);
   let formatted = '';
 

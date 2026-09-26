@@ -43,7 +43,7 @@ export function resolvePrompt(promptPath: string): string {
   }
 }
 
-export function parseFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
+function parseFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) {
     return { frontmatter: {}, body: content };
@@ -140,7 +140,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   };
 }
 
-export function selectSubagentBasePromptFile(model: string): string {
+function selectSubagentBasePromptFile(model: string): string {
   const normalizedModel = model.toLowerCase();
   if (isGpt5OrGpt6Model(normalizedModel) && normalizedModel.includes('codex')) {
     return 'base-codex.md';
@@ -160,7 +160,7 @@ export function resolveSubagentSearchViaShell(settings: ISettingsService, canRun
   return settings.get('app.searchViaShell') === 'on' && canRunShell;
 }
 
-export function buildAvailableToolGuidance(
+function buildAvailableToolGuidance(
   toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
   searchViaShell: boolean,
 ): string {

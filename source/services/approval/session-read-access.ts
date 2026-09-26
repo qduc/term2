@@ -52,7 +52,7 @@ export function isSessionReadGranted(
   return !!sessionId && !!nestedCompatibility?.allowsRead(sessionId, resolvedPath, cwd);
 }
 
-export function getSessionIdFromToolContext(context: unknown): string | null {
+function getSessionIdFromToolContext(context: unknown): string | null {
   if (!context || typeof context !== 'object') return null;
   const runContext = context as { context?: unknown };
   if (!runContext.context || typeof runContext.context !== 'object') return null;

@@ -302,5 +302,3 @@ export class HookDiscovery {
 export async function discoverHookFiles(options: HookDiscoveryOptions = {}): Promise<HookDiscoveryResult> {
   return new HookDiscovery(options).discover();
 }
-
-export const discoverHooks = discoverHookFiles;

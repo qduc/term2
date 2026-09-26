@@ -52,7 +52,7 @@ const collapseUnchangedLines = (lines: string[]): string[] => {
   return result;
 };
 
-export const DiffView: FC<DiffViewProps> = ({ diff }) => {
+const DiffView: FC<DiffViewProps> = ({ diff }) => {
   const renderLine = (line: string, key: any) => {
     let color: string | undefined;
     if (line.startsWith('+')) {

@@ -33,7 +33,7 @@ export function flattenSettings(obj: unknown, prefix = ''): Record<string, unkno
 /**
  * Deep merge source into target (mutates target).
  */
-export function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const key in source) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
 

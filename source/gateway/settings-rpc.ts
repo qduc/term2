@@ -4,7 +4,7 @@ import { loadProviderItems } from '../providers/provider-service.js';
 import { resolveProviderCredentials, type ProviderCredentialResolution } from '../utils/ai/provider-credentials.js';
 import { listOAuthAccounts } from '../providers/oauth-accounts.js';
 
-export const SAFE_SETTINGS_KEYS = [
+const SAFE_SETTINGS_KEYS = [
   'agent.model',
   'agent.provider',
   'agent.reasoningEffort',
@@ -36,7 +36,7 @@ export const SAFE_SETTINGS_KEYS = [
  * session_update; it must never be smuggled through the launcher-wide
  * settings authority.
  */
-export const PERSISTENT_SETTINGS_KEYS = ['logging.logLevel'] as const;
+const PERSISTENT_SETTINGS_KEYS = ['logging.logLevel'] as const;
 
 export type SafeSettingsKey = (typeof SAFE_SETTINGS_KEYS)[number];
 export type CredentialSource = 'setting' | 'stored' | 'environment' | 'token-file' | 'local' | 'external' | 'missing';
@@ -109,11 +109,11 @@ const CREDENTIALS: Record<string, { settingKey: string; providerId: string; requ
   exa: { settingKey: 'webSearch.exa.apiKey', providerId: 'exa', required: true },
 };
 
-export function isSafeSettingsKey(key: string): key is SafeSettingsKey {
+function isSafeSettingsKey(key: string): key is SafeSettingsKey {
   return (SAFE_SETTINGS_KEYS as readonly string[]).includes(key);
 }
 
-export function isPersistentSettingsKey(key: string): boolean {
+function isPersistentSettingsKey(key: string): boolean {
   return (PERSISTENT_SETTINGS_KEYS as readonly string[]).includes(key);
 }
 
@@ -241,7 +241,7 @@ export function deleteCredential(
   return { status: 'deleted', configured: false };
 }
 
-export function credentialStatus(
+function credentialStatus(
   settings: SettingsAuthority,
   definition: { settingKey: string; providerId: string; required: boolean },
 ): SecretFreeCredential {

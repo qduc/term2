@@ -39,7 +39,7 @@ export const resolveProviderName = (entry: unknown, fallbackId: string): string 
   return trimmed.length > 0 ? trimmed : fallbackId;
 };
 
-export const decodeStoredCustomProviderConfig = (entry: unknown): StoredCustomProviderConfig | null => {
+const decodeStoredCustomProviderConfig = (entry: unknown): StoredCustomProviderConfig | null => {
   if (!entry || typeof entry !== 'object' || entry === null) return null;
 
   const id = resolveProviderId(entry);

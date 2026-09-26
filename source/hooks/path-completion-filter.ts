@@ -2,7 +2,7 @@ import path from 'node:path';
 import type { PathEntry } from '../services/file-service.js';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 
-export { isSubsequenceMatch, scoreSubsequence } from '../utils/subsequence-filter.js';
+export { isSubsequenceMatch } from '../utils/subsequence-filter.js';
 
 export const filterPathEntries = (entries: PathEntry[], query: string, maxResults: number): PathEntry[] => {
   const trimmed = query.trim();

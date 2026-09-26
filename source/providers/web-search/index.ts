@@ -8,13 +8,6 @@ import './tavily.provider.js';
 import './exa.provider.js';
 
 // Re-export registry API and types
-export {
-  registerWebSearchProvider,
-  getWebSearchProvider,
-  getDefaultWebSearchProvider,
-  getAllWebSearchProviders,
-  getConfiguredWebSearchProvider,
-  clearWebSearchProviders,
-} from './registry.js';
+export { getConfiguredWebSearchProvider } from './registry.js';
 
 export type { WebSearchProvider, WebSearchResponse, WebSearchResult, WebSearchDeps } from './types.js';

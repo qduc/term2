@@ -76,7 +76,5 @@ export const isBotMessage = (message: Message): message is BotMessage => message
 
 export const isCommandMessage = (message: Message): message is CommandMessage => message.sender === 'command';
 
-export const isReasoningMessage = (message: Message): message is ReasoningMessage => message.sender === 'reasoning';
-
 export const isSubagentActivityMessage = (message: Message): message is SubagentActivityMessage =>
   message.sender === 'subagent';

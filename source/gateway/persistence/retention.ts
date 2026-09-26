@@ -10,7 +10,7 @@ export type RetentionPolicy = {
   readonly maxGlobalBytes: number;
 };
 
-export const DEFAULT_RETENTION_POLICY: RetentionPolicy = Object.freeze({
+const DEFAULT_RETENTION_POLICY: RetentionPolicy = Object.freeze({
   closedRetentionMs: 30 * 24 * 60 * 60 * 1000,
   maxSessionBytes: 128 * 1024 * 1024,
   maxGlobalBytes: 2 * 1024 * 1024 * 1024,

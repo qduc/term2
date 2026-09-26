@@ -87,7 +87,7 @@ const isOpaqueReasoning = (item: unknown): boolean => {
   return false;
 };
 
-export const filterHistoryForEstimate = (history: readonly ProviderInputItem[]): ProviderInputItem[] => {
+const filterHistoryForEstimate = (history: readonly ProviderInputItem[]): ProviderInputItem[] => {
   const hasReasoningItem = history.some((item) => (item as Record<string, unknown>)?.type === 'reasoning');
   if (!hasReasoningItem) return history as ProviderInputItem[];
   return history.filter((item) => !isOpaqueReasoning(item));

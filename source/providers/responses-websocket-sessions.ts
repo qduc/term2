@@ -134,7 +134,7 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
   }
 }
 
-export function responsesWebSocketSessionKey(headers?: Record<string, string>): string {
+function responsesWebSocketSessionKey(headers?: Record<string, string>): string {
   if (!headers) return '';
   return headers['session-id'] ?? headers['session_id'] ?? headers['thread-id'] ?? '';
 }

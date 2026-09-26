@@ -26,7 +26,7 @@ import type {
  * to log in, whether to open a browser) lives in `mcp-oauth-provider.ts` and its
  * caller.
  */
-export const MCP_OAUTH_STORE_VERSION = 1;
+const MCP_OAUTH_STORE_VERSION = 1;
 
 export type McpOAuthCredentialScope = 'all' | 'client' | 'tokens' | 'verifier' | 'discovery';
 
@@ -62,7 +62,7 @@ export type McpOAuthStoreOptions = {
 };
 
 /** term2's own MCP credential file, beside `grok-auth.json` and `codex-auth.json`. */
-export function defaultMcpOAuthStorePath(): string {
+function defaultMcpOAuthStorePath(): string {
   const dir = process.env.TERM2_CONFIG_DIR || envPaths('term2').config;
   return path.join(dir, 'mcp-oauth.json');
 }

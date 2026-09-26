@@ -214,7 +214,7 @@ export interface SubagentNotificationStoreDeps {
 const DEFAULT_DELIVERED_ID_CAP = 256;
 export const BACKGROUND_TASK_RECENT_RETENTION_MS = 5_000;
 /** How many of a live run's newest tool calls the task panel shows. */
-export const BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT = 3;
+const BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT = 3;
 
 /**
  * Pending notifications for background (async) subagent runs.

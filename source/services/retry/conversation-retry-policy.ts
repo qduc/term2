@@ -3,10 +3,6 @@ export { isTransientRetryableError } from './retry-error-classification.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
 export const MAX_SUBAGENT_MODEL_RETRIES = 2;
-export const DEFAULT_TRANSIENT_RETRIES = 5;
-export const getMaxTransientRetries = (providerConfig?: { streamMaxRetries?: number }): number =>
-  providerConfig?.streamMaxRetries ?? DEFAULT_TRANSIENT_RETRIES;
-export const MAX_TRANSIENT_RETRIES = DEFAULT_TRANSIENT_RETRIES;
 
 export const isRecoverableModelError = (error: unknown): boolean => {
   if (!isModelBehaviorError(error)) {

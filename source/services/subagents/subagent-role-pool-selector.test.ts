@@ -117,4 +117,38 @@ describe('SubagentRolePoolSelector', () => {
       reasoningEffort: 'high',
     });
   });
+
+  it('runs each pinned pool entry on its own provider and bare entries on the tier provider', () => {
+    const selector = new SubagentRolePoolSelector(
+      settings({ 'agent.cheapModel': ['model-a', { model: 'model-b', provider: 'codex' }] }),
+    );
+
+    expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({
+      model: 'model-a',
+      provider: 'base-provider',
+    });
+    expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({ model: 'model-b', provider: 'codex' });
+    expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({
+      model: 'model-a',
+      provider: 'base-provider',
+    });
+  });
+
+  it("does not carry a pinned first entry's provider onto bare entries", () => {
+    // loadRoleDefinition pairs the definition with the first entry, so its
+    // provider is that entry's pin, not the tier's.
+    const selector = new SubagentRolePoolSelector(
+      settings({
+        'agent.cheapModel': [{ model: 'model-a', provider: 'codex' }, 'model-b'],
+        'agent.cheapProvider': 'DeepSeek',
+      }),
+    );
+    const pinnedDefinition = { ...baseDefinition, model: 'model-a', provider: 'codex' };
+
+    selector.resolveForSpawn('explorer', pinnedDefinition);
+    expect(selector.resolveForSpawn('explorer', pinnedDefinition)).toMatchObject({
+      model: 'model-b',
+      provider: 'DeepSeek',
+    });
+  });
 });

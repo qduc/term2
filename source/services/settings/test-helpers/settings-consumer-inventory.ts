@@ -208,8 +208,7 @@ export const LEGACY_FALLBACK_CHAINS: readonly SettingReadSite[] = [
   {
     consumer: 'Shell auto-approval evaluation model',
     sourceFile: 'source/services/approval/shell-auto-approval-evaluator.ts',
-    readExpression:
-      "getTierModelPool('chore', settingsService)[0] ?? settingsService.get('agent.autoApproveModel') ?? choreModel.model",
+    readExpression: "resolveAncillaryModelTier('chore', settingsService).model",
     primaryKey: 'agent.choreModel',
     fallbackKeys: ['agent.autoApproveModel'],
   },
@@ -224,16 +223,14 @@ export const LEGACY_FALLBACK_CHAINS: readonly SettingReadSite[] = [
   {
     consumer: 'Search-replace file edit healing model',
     sourceFile: 'source/tools/file/search-replace.ts',
-    readExpression:
-      "getTierModelPool('chore', settingsService)[0] ?? settingsService.get('tools.editHealingModel') ?? choreModel.model",
+    readExpression: "resolveAncillaryModelTier('chore', settingsService).model",
     primaryKey: 'agent.choreModel',
     fallbackKeys: ['tools.editHealingModel'],
   },
   {
     consumer: 'Apply-patch file edit healing model',
     sourceFile: 'source/tools/file/apply-patch.ts',
-    readExpression:
-      "settingsService.get('agent.choreModel') ?? settingsService.get('tools.editHealingModel') ?? choreModel.model",
+    readExpression: "resolveAncillaryModelTier('chore', settingsService).model",
     primaryKey: 'agent.choreModel',
     fallbackKeys: ['tools.editHealingModel'],
   },

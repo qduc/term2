@@ -15,7 +15,7 @@ import {
 } from '../../prompts/shell-auto-approval.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
-import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../utils/shell/sandbox/denied-read-detector.js';
 import { evaluateDecisionShadow, type DecisionShadowEvidence } from './decision-shadow.js';
@@ -478,9 +478,10 @@ export async function evaluateShellAutoApprovalAdvisories({
   const mode = settingsService.get('shell.autoApproveMode');
   if (mode === 'off') return out;
 
-  const choreModel = resolveAncillaryModelTier('chore', settingsService);
-  const autoApproveModel = getTierModelPool('chore', settingsService)[0] ?? choreModel.model;
-  const autoApproveProvider = settingsService.get('agent.choreProvider') ?? choreModel.provider;
+  const { model: autoApproveModel, provider: autoApproveProvider } = resolveAncillaryModelTier(
+    'chore',
+    settingsService,
+  );
 
   let toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   const redSafetyDetails = new Map<string, string>();

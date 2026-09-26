@@ -6,6 +6,8 @@ import {
   mergeSubagentPoolModels,
   resolveSubagentPoolBrowseProvider,
   resolveSubagentPoolModelSelection,
+  serializeTierPoolEntries,
+  tierPoolEntryForPick,
 } from './use-subagent-pool-selection.js';
 
 it('offers add and save actions below the pool entries', () => {
@@ -108,4 +110,25 @@ it('resolves the model browser starting provider from the entry, then the role, 
       agentProvider: 'anthropic',
     }),
   ).toBe('anthropic');
+});
+
+it('pins the provider of a tier pool pick made from another provider catalog', () => {
+  // Regression: codex/gpt-6-luna picked into a DeepSeek-provider tier was
+  // stored bare and sent to DeepSeek.
+  expect(tierPoolEntryForPick('gpt-6-luna', 'codex', 'DeepSeek')).toEqual({ model: 'gpt-6-luna', provider: 'codex' });
+  expect(tierPoolEntryForPick('deepseek-flash', 'DeepSeek', 'DeepSeek')).toEqual({ model: 'deepseek-flash' });
+});
+
+it('persists pinned tier pool entries with their provider and bare entries as ids', () => {
+  expect(serializeTierPoolEntries([{ model: 'deepseek-flash' }, { model: 'gpt-6-luna', provider: 'codex' }])).toEqual([
+    'deepseek-flash',
+    { model: 'gpt-6-luna', provider: 'codex' },
+  ]);
+});
+
+it('labels a pinned pool entry with its provider', () => {
+  const labels = buildSubagentPoolListItems([{ model: 'deepseek-flash' }, { model: 'gpt-6-luna', provider: 'codex' }])
+    .filter((item) => item.kind === 'entry')
+    .map((item) => item.label);
+  expect(labels).toEqual(['deepseek-flash', 'gpt-6-luna @ codex']);
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveModelPolicy } from './model-resolver.js';
+import { getTierModelPool, resolveAncillaryModelTier, resolveModelPolicy } from './model-resolver.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ModelPolicy } from './types.js';
 
@@ -261,5 +261,28 @@ describe('resolveModelPolicy', () => {
       provider: 'anthropic',
       model: 'claude-haiku',
     });
+  });
+});
+
+describe('tier model pools with a pinned provider', () => {
+  // Regression: a pool picked across providers (codex/gpt-6-luna into a
+  // DeepSeek-provider tier) lost the pick's provider and was sent to DeepSeek.
+  it("resolves a tier to its first entry together with that entry's pinned provider", () => {
+    const s = settings({
+      'agent.balancedModel': [{ model: 'gpt-6-luna', provider: 'codex' }, 'deepseek-flash'],
+      'agent.balancedProvider': 'DeepSeek',
+    });
+
+    expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'codex', model: 'gpt-6-luna' });
+    expect(getTierModelPool('balanced', s)).toEqual(['gpt-6-luna', 'deepseek-flash']);
+  });
+
+  it('keeps the tier provider for a bare first entry', () => {
+    const s = settings({
+      'agent.balancedModel': ['deepseek-flash', { model: 'gpt-6-luna', provider: 'codex' }],
+      'agent.balancedProvider': 'DeepSeek',
+    });
+
+    expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'DeepSeek', model: 'deepseek-flash' });
   });
 });

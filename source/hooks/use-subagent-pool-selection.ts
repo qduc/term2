@@ -20,6 +20,7 @@ import {
   selectModelsForTab,
 } from '../services/models/model-tabs.js';
 import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
+import { TierModelPoolEntrySchema } from '../services/settings/settings-schema.js';
 
 export const SUBAGENT_POOL_REASONING_EFFORTS = [
   'default',
@@ -75,18 +76,21 @@ const noOpLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-// Tier model pools persist plain model-id strings (a bare string normalizes
-// to a single-entry pool); the editor surfaces them as {model} entries.
+// Tier model pools persist bare model ids, or `{model, provider}` for a model
+// picked from another provider's catalog (a bare string normalizes to a
+// single-entry pool); the editor surfaces them as {model, provider?} entries.
 const tierPoolSchema = z.preprocess(
   (value) =>
     value === undefined || value === null || value === '' ? undefined : Array.isArray(value) ? value : [value],
-  z.array(z.string().min(1)).max(MAX_SUBAGENT_POOL_ENTRIES),
+  z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES),
 );
 
 const cloneEntries = (value: unknown, roleLabel: string, entryShape: 'entries' | 'models'): SubagentPoolEntry[] => {
   if (entryShape === 'models') {
     const parsed = tierPoolSchema.safeParse(value);
-    return parsed.success ? parsed.data.map((model) => ({ model })) : [];
+    return parsed.success
+      ? parsed.data.map((entry) => (typeof entry === 'string' ? { model: entry } : { ...entry }))
+      : [];
   }
   const parsed = subagentPoolSchema(roleLabel).safeParse(value);
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
@@ -181,6 +185,22 @@ export function applySubagentPoolModelPick(
   };
 }
 
+/**
+ * A tier pool entry for a catalog pick. A pick from the tier's own provider
+ * stays bare so it follows later tier-provider changes; a pick from any other
+ * provider pins it, or the model would be sent to the tier's provider.
+ */
+export function tierPoolEntryForPick(model: string, provider: string, tierProvider: string): SubagentPoolEntry {
+  return provider && provider !== tierProvider ? { model, provider } : { model };
+}
+
+/** Tier pools persist bare model ids, and `{model, provider}` only when pinned. */
+export function serializeTierPoolEntries(
+  entries: readonly SubagentPoolEntry[],
+): Array<string | { model: string; provider: string }> {
+  return entries.map((entry) => (entry.provider ? { model: entry.model, provider: entry.provider } : entry.model));
+}
+
 export function formatSubagentPoolEntry(entry: SubagentPoolEntry): string {
   const provider = entry.provider ? ` @ ${entry.provider}` : '';
   const effort = entry.reasoningEffort && entry.reasoningEffort !== 'default' ? ` (${entry.reasoningEffort})` : '';
@@ -196,7 +216,7 @@ export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]
       kind: 'entry' as const,
       entry,
       index,
-      label: entry.model,
+      label: entry.provider ? `${entry.model} @ ${entry.provider}` : entry.model,
     })),
     ...actions,
   ];
@@ -254,6 +274,8 @@ export function useSubagentPoolSelection(
     agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
   });
   const modelProvider = browsingProvider ?? fallbackModelProvider;
+  // Where a bare tier pool entry runs (resolveTierProvider).
+  const tierProvider = roleProvider || settingsService.get(SETTING_KEYS.AGENT_PROVIDER) || 'openai';
   const providerIds = useMemo(
     () => orderedProviderIds(settingsService, getProviderIds()),
     [settingsService, modelRefreshKey],
@@ -610,9 +632,8 @@ export function useSubagentPoolSelection(
       }
       if (entryShape === 'models') {
         // Model-only pools commit immediately: there is no provider or
-        // reasoning field to review afterwards — the tier's own provider
-        // and reasoning settings apply.
-        const next: SubagentPoolEntry = { model };
+        // reasoning field to review afterwards.
+        const next = tierPoolEntryForPick(model, provider, tierProvider);
         setEntries((current) => {
           if (draft._isNew || editingIndex === null) return [...current, next];
           return current.map((entry, index) => (index === editingIndex ? next : entry));
@@ -639,7 +660,7 @@ export function useSubagentPoolSelection(
       setInput('');
       return true;
     },
-    [draft, editingIndex, entryShape, phase, setInput, selection.setSelectedIndex],
+    [draft, editingIndex, entryShape, phase, setInput, selection.setSelectedIndex, tierProvider],
   );
 
   const selectModel = useCallback(
@@ -728,8 +749,7 @@ export function useSubagentPoolSelection(
 
   const saveIntent = useCallback(
     (frameId: string): MenuEffect | null => {
-      // Tier model pools persist plain model-id strings.
-      const value = entryShape === 'models' ? entries.map((entry) => entry.model) : entries;
+      const value = entryShape === 'models' ? serializeTierPoolEntries(entries) : entries;
       const result =
         entryShape === 'models' ? tierPoolSchema.safeParse(value) : subagentPoolSchema(roleLabel).safeParse(entries);
       if (!result.success) {

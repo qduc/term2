@@ -10,7 +10,7 @@ import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
-import { getTierModelPool, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { getTierModelPoolEntries, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { getAncillaryTierForRole } from './subagent-pool-config.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
@@ -106,11 +106,17 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   const configuredLegacyReasoningEffort = settings.getDynamic(`${subagentPrefix}ReasoningEffort`) as string | undefined;
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
+  const firstPoolEntry = getTierModelPoolEntries(tier, settings)[0];
   const model = isInherited(frontmatter.model)
-    ? getTierModelPool(tier, settings)[0] ?? legacyModel ?? tierModel.model
+    ? firstPoolEntry?.model ?? legacyModel ?? tierModel.model
     : frontmatter.model;
+  // A pool entry picked from another provider pins it; keep model and
+  // provider paired so the definition never runs a model on the wrong host.
   const provider = isInherited(frontmatter.provider)
-    ? (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? legacyProvider ?? tierModel.provider
+    ? firstPoolEntry?.provider ??
+      (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ??
+      legacyProvider ??
+      tierModel.provider
     : frontmatter.provider;
 
   return {

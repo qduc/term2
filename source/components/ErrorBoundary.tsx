@@ -89,8 +89,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           </Box>
 
           <Box flexDirection="column" marginLeft={2}>
-            <Text>• Type /clear to start a new conversation</Text>
-            <Text>• Type /quit to exit</Text>
             <Text>• Press Ctrl+C to force quit</Text>
             <Text>• Restart the application</Text>
           </Box>

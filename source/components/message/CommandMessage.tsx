@@ -10,6 +10,7 @@ import {
   formatToolArgs,
   getFirstParagraph,
   getMatchCount,
+  isStructuredToolError,
   isSearchLikeTool,
   parseCodeOutlineOutput,
   parseRunCodeTrace,
@@ -546,6 +547,7 @@ const CommandMessage: FC<Props> = ({
     if (success === false || failureReason) {
       const parsedOutputError = extractErrorMessage(output);
       const errorMsg = failureReason || parsedOutputError || 'failed';
+      const summarizeRawError = !failureReason && isStructuredToolError(output);
       const displayErrorMsg = isSearchLikeTool(toolName, command)
         ? stripRgErrorLines(errorMsg).trim() || 'failed'
         : errorMsg;
@@ -570,6 +572,14 @@ const CommandMessage: FC<Props> = ({
             {changeStatsElement}
           </Text>
           {matchCountElement}
+          {summarizeRawError && (
+            <>
+              <Text color={textColor || COLOR_TEXT_MUTED}>Tool failed.</Text>
+              <Text color={textColor || COLOR_TEXT_MUTED}>
+                Review the error details and retry after correcting the issue.
+              </Text>
+            </>
+          )}
           {matchCount === 0 && <Text color={textColor || COLOR_TEXT_MUTED}>{truncatedError}</Text>}
         </Box>
       );
@@ -632,6 +642,19 @@ const CommandMessage: FC<Props> = ({
   }
   const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
   const displayed = outputText && outputText !== '(no output)' ? truncateOutputLines(output || '') : outputText;
+
+  if (success === false && !failureReason && isStructuredToolError(output)) {
+    return (
+      <Box flexDirection="column">
+        {renderStandardHeader()}
+        <Text color={textColor || COLOR_TEXT_MUTED}>Tool failed.</Text>
+        <Text color={textColor || COLOR_TEXT_MUTED}>
+          Review the error details and retry after correcting the issue.
+        </Text>
+        <Text color={COLOR_DANGER}>{extractErrorMessage(output)}</Text>
+      </Box>
+    );
+  }
 
   // Special handling for apply_patch
   if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {

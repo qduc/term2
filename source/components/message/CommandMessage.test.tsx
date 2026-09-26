@@ -45,6 +45,41 @@ afterAll(() => {
 
 const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
+it('summarizes structured raw errors and retains their full diagnostic detail', async () => {
+  const rawError = JSON.stringify({ error: { message: '429 Too Many Requests (request id: req-123)' } });
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="web_search"
+      toolName="web_search"
+      status="completed"
+      success={false}
+      output={rawError}
+      displayMode="standard"
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Tool failed.');
+  expect(output).toContain('Review the error details and retry after correcting the issue.');
+  expect(output).toContain('429 Too Many Requests (request id: req-123)');
+  unmount();
+});
+
+it('keeps actionable validation failures unchanged', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="apply_patch"
+      toolName="apply_patch"
+      status="failed"
+      success={false}
+      failureReason="Patch context did not match; reread the file and retry with current context."
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Patch context did not match; reread the file and retry with current context.');
+  expect(output).not.toContain('Tool failed.');
+  unmount();
+});
+
 const advanceTimersInAct = async (ms: number) => {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);

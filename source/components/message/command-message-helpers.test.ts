@@ -4,6 +4,7 @@ import {
   classifySearchKind,
   countDiffStats,
   extractErrorMessage,
+  isStructuredToolError,
   formatToolArgs,
   getFirstParagraph,
   getMatchCount,
@@ -538,4 +539,9 @@ it('extractErrorMessage returns plain text as-is when not JSON', () => {
   expect(extractErrorMessage('grep: ~/.zshenv: No such file or directory')).toBe(
     'grep: ~/.zshenv: No such file or directory',
   );
+});
+
+it('identifies structured provider/tool errors without classifying plain actionable output', () => {
+  expect(isStructuredToolError(JSON.stringify({ error: { message: '429 Too Many Requests' } }))).toBe(true);
+  expect(isStructuredToolError('Permission denied; check the file permissions')).toBe(false);
 });

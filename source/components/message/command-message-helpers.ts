@@ -32,6 +32,18 @@ export const extractErrorMessage = (output: string | undefined): string | undefi
   return output;
 };
 
+/** Provider/tool errors commonly arrive as structured JSON, unlike actionable
+ * validation messages which are supplied separately as `failureReason`. */
+export const isStructuredToolError = (output: string | undefined): boolean => {
+  if (!output) return false;
+  try {
+    const parsed = JSON.parse(output);
+    return Boolean(parsed?.output?.[0]?.error || parsed?.error);
+  } catch {
+    return false;
+  }
+};
+
 export const getFirstParagraph = (text: string | undefined, minChars = 0): string => {
   if (!text) return '';
   const trimmed = text.trim();

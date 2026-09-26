@@ -56,6 +56,8 @@ export function composeSessionRolloverBrief({
     '- Use `session_search` only when the relevant session or location is unknown.',
     '- Do not replay the entire previous transcript.',
     '- Live job and subagent handles remain session-owned and are retained across this rollover; inspect or control them through the background-task tools when needed. Use durable artifacts, paths, and commits for completed results rather than copying transient output into the handoff.',
+    '- User constraints and preferences stated in the handoff still apply.',
+    '- Before building on state the handoff marks unverified, or that the workspace may have changed since cutover, check it cheaply first.',
     '- Continue from the next open step rather than redoing completed work.',
   ].join('\n');
 }

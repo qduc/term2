@@ -22,6 +22,8 @@ describe('composeSessionRolloverBrief', () => {
     expect(brief).toContain('Continue from the next open step');
     expect(brief).toContain('session-owned');
     expect(brief).toContain('durable artifacts');
+    expect(brief).toContain('unverified');
+    expect(brief).toContain('constraints');
   });
 
   it('labels an unspecified reason without inventing one', () => {

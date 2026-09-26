@@ -13,6 +13,19 @@ describe('session_rollover tool', () => {
     expect(tool.description).toContain('session-owned');
     expect(sessionRolloverParameters.shape.brief.description).toContain('delta');
   });
+
+  it('asks the brief to transfer working knowledge the successor cannot cheaply rediscover', () => {
+    const tool = createSessionRolloverToolDefinition(() => ({
+      ok: true,
+      status: 'rollover_requested',
+      rolloverId: 'r',
+    }));
+    expect(tool.description).toContain('no memory of this session');
+    expect(tool.description).toContain('ruled out');
+    expect(tool.description).toContain('verified');
+    expect(tool.description).toContain('Next open step');
+    expect(tool.description).toContain('constraints');
+  });
   it('validates the bounded strict request and records it without approval', async () => {
     const request = vi.fn(() => ({ ok: true as const, status: 'rollover_requested' as const, rolloverId: 'r1' }));
     const tool = createSessionRolloverToolDefinition(request);

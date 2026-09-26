@@ -32,6 +32,7 @@ import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { Term2HookScope } from '../hooks/hook-contracts.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
+import { describeError } from '../../utils/error-helpers.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 import {
   RunBudget,
@@ -1255,7 +1256,7 @@ export class ApplicationRunLoop {
               maxRetries,
               kind: decision.kind,
               delayMs: decision.delayMs,
-              error: error instanceof Error ? error.message : String(error),
+              error: describeError(error),
             });
             await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
             continue;

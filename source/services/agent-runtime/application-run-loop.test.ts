@@ -3170,6 +3170,35 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     expect(diagnostics.find((d) => d.msg === 'Retrying model request in run loop')?.options).toBeUndefined();
   });
 
+  it('names a non-Error transport failure in the retry diagnostic', async () => {
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      async *stream(_request) {
+        attempts++;
+        if (attempts === 1) {
+          throw { message: 'socket hang up' };
+        }
+        yield { type: 'text_delta', text: 'ok' };
+        yield {
+          type: 'completion',
+          responseId: 'resp-retry-ok',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'ok' }] }],
+        };
+      },
+    };
+
+    const diagnostics: any[] = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      logDiagnostic: (msg, meta, options) => diagnostics.push({ msg, meta, options }),
+      waitBeforeModelRetry: async () => undefined,
+    });
+
+    await loop.startStream({ ...agent, modelSettings: { retry: { maxRetries: 2 } } }, 'test prompt').completed;
+
+    expect(diagnostics.find((d) => d.msg === 'Retrying model request in run loop')?.meta.error).toBe('socket hang up');
+  });
+
   it('disables chaining on retry after connection drop of an unchained request', async () => {
     const requests: any[] = [];
     let attempts = 0;

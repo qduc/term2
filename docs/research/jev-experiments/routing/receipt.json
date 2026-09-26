@@ -1,0 +1,51 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "R",
+  "worker": "routing",
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json",
+  "sha256": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c",
+  "baseline_sha256": "e47894f69a43611e9d6f786120bce524de1b93a09683b00ec4b227b547d81a02",
+  "findings_artifact": "/home/qduc/term2/docs/research/jev-experiments/routing/findings.md",
+  "findings_sha256": "21a84910d028b5f67dd858e486a0cbb802a31e8ac5a5fdc42da53b050a7b8551",
+  "verify_argv": ["python3", "-m", "json.tool", "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json"],
+  "verification_result": {
+    "status": "passed",
+    "case_count": 288,
+    "counts": {
+      "R1/dev": 24,
+      "R1/holdout": 24,
+      "R2/dev": 24,
+      "R2/holdout": 24,
+      "R3/dev": 24,
+      "R3/holdout": 24,
+      "R4/dev": 24,
+      "R4/holdout": 24,
+      "R5/dev": 24,
+      "R5/holdout": 24,
+      "R6/dev": 24,
+      "R6/holdout": 24
+    },
+    "unique_ids": 288,
+    "baseline_recomputed": true,
+    "scored_calls": 594,
+    "completed_live_records": {
+      "dev": 432,
+      "holdout": 144
+    },
+    "stability_records": {
+      "completed": 18,
+      "repeat_matches_holdout": "9/9",
+      "reversed_matches_holdout": "8/9",
+      "only_unstable_case": "R2-holdout-12"
+    }
+  },
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Synthetic handcrafted cases; not production reliability evidence.",
+    "Development and holdout cases were author-visible; holdout is not sealed.",
+    "No additional API or provider calls were made while authoring findings and receipt artifacts.",
+    "A 30-case independent blind relabel agreed with frozen labels; boundary-label uncertainty remains, especially R2-holdout-10.",
+    "Choice-only top-choice pilot; it does not support ranking, calibration, routing-economics, or task-outcome claims."
+  ]
+}

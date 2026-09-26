@@ -1,0 +1,18 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "P1",
+  "worker": "infra",
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/infra/challenge_runner.py",
+  "sha256": "7431367fbc043d95fa844ca864831025d0929ee7845f7b42d6a125d1065f0f86",
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/infra/challenge_runner.py", "selftest"],
+  "verification_result": "passed: py_compile, challenge_runner.py mock selftest (80-case validation, immutable manifest, scoped-only append-only execution), and git diff --check on 2026-09-19",
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Prepared shared infrastructure only; no scored provider request was made. A coordinator-run live smoke succeeded separately.",
+    "Selftest uses explicit mock fixtures and is not provider evidence.",
+    "This runner measures the provider alpha endpoint, not term2 integration behaviour.",
+    "Lane datasets, labels, prompts, and baselines are owned by lane workers.",
+    "challenge_runner.py is prepared only; the coordinator must admit its live run after the evidence phases."
+  ]
+}

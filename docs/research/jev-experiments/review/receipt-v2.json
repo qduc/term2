@@ -1,0 +1,82 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V2",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported; coordinator recorded 'Opus 5' from live TUI footer"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/v2-evidence-assessment.md",
+  "sha256": "57e4cc670d6cb3b15b952b188f574ecd9e027326b1ce75f2e6e8dd5ae0a1f727",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-evidence.json",
+      "sha256": "182f07877e6c15da26e4e7af61c60eb31f060f45753c011197dcc8e78ae5ae57"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/labels-evidence-uncertainties.md",
+      "sha256": "c531aeb4b38d02cc393f94e2f7b98b3680d61d91792a5f4a26cc53a2c4b36782"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+      "sha256": "8be6f9c9e42783eda369da264fe8b9242f71c4d44c42db2c863417a378175cf2"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/audit-README.md",
+      "sha256": "a74285a277fd07614e4b088ddb5cb377cde5e939a87597fab790850410c9dee7"
+    }
+  ],
+  "inputs": {
+    "blind_sample": {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/blind-evidence.json",
+      "sha256": "f1dcc8663e30988dead39cf5af35ff11214492b8d04ce5762290d5eabe9b4f3a"
+    },
+    "evidence_dataset": {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json",
+      "sha256": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb"
+    },
+    "evidence_baseline": {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/evidence/baseline.py",
+      "sha256": "ac1f618bfd66fd18c088b445efd0d67af869c8f34eb0fec68c82b44068077b39"
+    }
+  },
+  "blind_order_attestation": "labels-evidence.json and uncertainties written and hashed before any lane label was read; blind-compare run afterwards",
+  "results": {
+    "blind_agreement": "39/40",
+    "disagreements": [
+      {
+        "id": "E4-holdout-020",
+        "frozen": "COMPLETION_UNKNOWN",
+        "reviewer": "UNSUPPORTED_CLAIM",
+        "pre_flagged_uncertain": true
+      }
+    ],
+    "contract_ok": true,
+    "baseline_reproducible": "384/384 from state+criteria; line169 read is main()/CLI only, not in predictor path",
+    "fixture_limitations": {
+      "E5": "prefix-solvable; authored baseline 24/24 dev and holdout; overlap is shared scaffold (objective + reused distractor pool), 0/20 holdout gold texts reused",
+      "E7": "changed_surface maps 1:1 to expected class (35 values); authored baseline 23/24 dev, 22/24 holdout"
+    }
+  },
+  "audit_changes": [
+    "provenance may be nonempty text or nonempty object (coordinator-approved, narrow)",
+    "static baseline scan made AST/function-aware: label reads outside predictor call path are listed, not flagged"
+  ],
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/review/audit.py", "--selftest"],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true,
+    "checks": 46,
+    "evidence": "MOCK fixtures only"
+  },
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Single model reviewer; blind agreement is a second opinion, not ground truth",
+    "Blind sample of 5/task on near-trivial states cannot validate hard-case labels",
+    "No scored calls or Jev output inspected",
+    "Routing, discovery and challenge sets not assessed in V2",
+    "Evidence-lane dataset not modified; fixture limitations are reported, not fixed"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "E",
+  "worker": "evidence",
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json",
+  "sha256": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+  "verify_argv": ["python3", "-m", "json.tool", "/home/qduc/term2/docs/research/jev-experiments/evidence/dataset.json"],
+  "verification_result": {
+    "status": "passed",
+    "exit_code": 0
+  },
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "All cases are handcrafted synthetic fixtures rather than production reliability evidence.",
+    "No scored provider calls were made; development prompt selection and holdout evaluation remain pending the coordinator-verified common runner.",
+    "No latency, cost, calibration, stability, or provider availability was measured.",
+    "Choice top-answer outcomes cannot support full-ranking metric claims."
+  ]
+}

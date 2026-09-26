@@ -1,0 +1,131 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "baselines",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json",
+    "--baseline-script",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/baseline.py"
+  ],
+  "output": {
+    "authored_baseline_reproducibility": {
+      "crashes_on_state_and_criteria_only": [],
+      "function": "predict",
+      "matches_stored_field": 240,
+      "mismatch_ids": [],
+      "n": 240,
+      "reproducible_from_state_and_criteria": true,
+      "script": "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/baseline.py",
+      "script_sha256": "324aa7ff00d9db0f7bee7baa35b87b8b6023c007ffb82e7d8647db9969a678b1",
+      "static_scan": {
+        "label_field_reads": [
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 170
+          },
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 171
+          },
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 174
+          }
+        ]
+      }
+    },
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83"
+    },
+    "dev_majority_label_names": "hidden (use --show-labels)",
+    "tasks": {
+      "D2": {
+        "dev": {
+          "authored_stored_correct": 15,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 3,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 10,
+          "dev_majority_correct": 4,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 2,
+          "n": 24
+        }
+      },
+      "D3": {
+        "dev": {
+          "authored_stored_correct": 17,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 6,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 20,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 6,
+          "n": 24
+        }
+      },
+      "D4": {
+        "dev": {
+          "authored_stored_correct": 14,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 10,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 13,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 7,
+          "n": 24
+        }
+      },
+      "D5": {
+        "dev": {
+          "authored_stored_correct": 13,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 8,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 14,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 12,
+          "n": 24
+        }
+      },
+      "D6": {
+        "dev": {
+          "authored_stored_correct": 5,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 10,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 3,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 8,
+          "n": 24
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

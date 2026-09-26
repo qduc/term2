@@ -1,0 +1,67 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "contract",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "duplicate_states": {
+      "cross_split": [],
+      "cross_task": [],
+      "within_split": []
+    },
+    "errors": [],
+    "leakage_flags": {
+      "tag_word_in_state": [
+        "d1-dev-01",
+        "d1-dev-02",
+        "d1-dev-04",
+        "d1-dev-05",
+        "d1-dev-06",
+        "d1-dev-07",
+        "d1-holdout-01",
+        "d1-holdout-02",
+        "d1-holdout-03",
+        "d1-holdout-04",
+        "d1-holdout-05",
+        "d1-holdout-06"
+      ]
+    },
+    "note": "Leakage flags are heuristics that name case IDs only; each needs human inspection.",
+    "ok": true,
+    "tasks": {
+      "D1": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 48,
+        "distinct_label_sets": 47,
+        "expected_first_count": 33,
+        "expected_last_count": 2,
+        "expected_position": {
+          "0/3": 8,
+          "0/4": 25,
+          "1/2": 1,
+          "1/3": 6,
+          "2/3": 1,
+          "2/4": 6,
+          "3/5": 1
+        },
+        "first_count_if_position_uniform": 13.45,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "2": 1,
+          "3": 15,
+          "4": 31,
+          "5": 1
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

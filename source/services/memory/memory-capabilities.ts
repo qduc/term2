@@ -59,7 +59,7 @@ After reading a memory, treat it as normal context for the remainder of the task
 
 Use memory_retrieve for one focused lookup. When the task depends on several memories, terminology may vary, or prior decisions may conflict or be stale, run memory_retrieve with several distinct search angles and synthesize the returned evidence in your own reasoning.
 
-Before finishing a task, briefly review whether the user established an explicit durable preference, accepted a lasting project decision, or corrected an existing memory. Persist or update only those high-confidence outcomes; do not create memory merely because a turn completed.
+Before finishing a task, briefly review whether the user established an explicit durable preference, accepted a lasting project decision, or corrected an existing memory. Persist or update only those high-confidence outcomes; do not create memory merely because a turn completed. Do not duplicate facts easily recovered by reading the repository; when useful, retain the hard-to-recover decision or lesson and point to its canonical source.
 
 Validate any memory proposals from subagents before acting on them. Persist only durable, useful information, and merge or update an existing memory rather than creating a duplicate when appropriate. Do not store temporary task state, intermediate reasoning, ordinary conversation details, duplicates, secrets, or sensitive data unless the user explicitly requests persistence.`;
 

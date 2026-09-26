@@ -1,0 +1,58 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V1",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported by harness; coordinator recorded 'Opus 5' from live TUI footer"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+  "sha256": "d67d7503d0f334556d703ea4636ab624e41ed5a1e6de71c547b96ab45fac1209",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/audit-README.md",
+      "sha256": "1ee2011403e75b9ed982f996bcbf7f3ee8b52f949a6e4f7c865451dde23b93e5"
+    },
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/ack-v1.json",
+      "sha256": "9f43f095a6f8ec7881dd4c2089bf72c33ae07fcf0de99064095e6925e4b32fbc"
+    }
+  ],
+  "verify_argv": ["python3", "/home/qduc/term2/docs/research/jev-experiments/review/audit.py", "--selftest"],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true,
+    "stdout": "{\"selftest\": \"passed\", \"checks\": 43, \"evidence\": \"MOCK fixtures only; not provider evidence\"}"
+  },
+  "interop_checks": {
+    "runner_sha256_at_check": "88336e0fd11bb70ff676ba5c702b8268567a4c61967f43d1efe5bf5c02f8fd48",
+    "payload_digest_matches_wire_digest": true,
+    "reversed_criteria_digest_matches": true,
+    "cli_contract_overlap_baselines_on_infra_mock_dataset": "exit 0 (tmp copy; infra MOCK fixture, not a lane dataset)",
+    "infra_baseline_reproducible_from_state_and_criteria": true
+  },
+  "observations_for_coordinator": [
+    "runner files HTTP-200 answers with invalid choice/confidence (parse ValueError) as status=transport_error; protocol step 7 separates task/schema errors from transport. audit.py reports them as schema_or_answer.",
+    "runner selftest fixtures carry live=true (in a temp dir). The live flag alone is not provenance; audit.py also requires body+payload hash, http_status, and a response body on success.",
+    "infra MOCK fixture dataset trips audit heuristics (template_ratio 1.0; category tag words in state; UNKNOWN label named in state). Harmless because it is a fixture; it shows the detectors fire.",
+    "runner.py changed at least twice during V1 (sha 35636a0c... then 88336e0f...); rerun interop if its record schema changes again."
+  ],
+  "not_done": [
+    "Routing draft dataset not audited or scored (being re-authored, per brief)",
+    "No lane labels printed; blind relabel preserved pending coordinator blind-sample.json",
+    "No live inference; no lane dataset audited yet (discovery/evidence datasets absent)"
+  ],
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Selftest proves audit logic on MOCK fixtures only",
+    "Leakage/overlap flags are heuristics needing human inspection",
+    "baselines --baseline-script executes lane code (opt-in)",
+    "Reviewer model identity self-reported"
+  ],
+  "side_effects": [
+    "review/__pycache__/audit.cpython-312.pyc created by my imports (own dir)",
+    "infra/__pycache__/{runner,baseline,build_dataset}.cpython-312.pyc (mtime 09:44:55 +0700) was possibly created by my read-only interop import of infra modules; infra's own selftest imports the same modules, so ownership is ambiguous. Not deleted: it is another worker's dir. Neither path is gitignored."
+  ]
+}

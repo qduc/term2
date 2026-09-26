@@ -1,0 +1,485 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/results/dev.jsonl",
+    "--phase",
+    "dev",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true,
+      "records_after_freeze": 0
+    },
+    "jsonl_problems": [],
+    "phase": "dev",
+    "records_in_phase_used": 72,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/results/dev.jsonl": "5193f8bf45af7b10bfe0c12222c57a0f8353477d6f4981e7788b732579da78aa"
+    },
+    "tasks": {
+      "D1|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.975,
+        "class_support_and_recall": {
+          "blog-writer": "1/1",
+          "changelog": "1/1",
+          "ci-pipelines": "1/1",
+          "code-refactoring": "1/1",
+          "data-analysis": "1/1",
+          "db-export": "1/1",
+          "db-migration": "1/1",
+          "frontend-debugging": "1/1",
+          "insufficient_evidence": "2/4",
+          "issue-tracking": "1/1",
+          "memory-profiling": "1/1",
+          "none": "2/2",
+          "password-vault": "1/1",
+          "pdf": "1/1",
+          "performance-optimization": "1/1",
+          "static-site-preview": "1/1",
+          "theming": "1/1",
+          "web-performance": "1/1",
+          "website-content": "1/1",
+          "xlsx": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "blog-writer": {
+            "blog-writer": 1
+          },
+          "changelog": {
+            "changelog": 1
+          },
+          "ci-pipelines": {
+            "ci-pipelines": 1
+          },
+          "code-refactoring": {
+            "code-refactoring": 1
+          },
+          "data-analysis": {
+            "data-analysis": 1
+          },
+          "db-export": {
+            "db-export": 1
+          },
+          "db-migration": {
+            "db-migration": 1
+          },
+          "frontend-debugging": {
+            "frontend-debugging": 1
+          },
+          "insufficient_evidence": {
+            "data-cleaning": 1,
+            "insufficient_evidence": 2,
+            "release-manager": 1
+          },
+          "issue-tracking": {
+            "issue-tracking": 1
+          },
+          "memory-profiling": {
+            "memory-profiling": 1
+          },
+          "none": {
+            "none": 2
+          },
+          "password-vault": {
+            "password-vault": 1
+          },
+          "pdf": {
+            "pdf": 1
+          },
+          "performance-optimization": {
+            "performance-optimization": 1
+          },
+          "static-site-preview": {
+            "static-site-preview": 1
+          },
+          "theming": {
+            "theming": 1
+          },
+          "web-performance": {
+            "web-performance": 1
+          },
+          "website-content": {
+            "website-content": 1
+          },
+          "xlsx": {
+            "xlsx": 1
+          }
+        },
+        "correct": 22,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1268.615,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 596.843,
+          "p95": 1155.459
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.01172,
+            "model_losses": 1,
+            "model_wins": 10,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 2,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.03125,
+            "model_losses": 0,
+            "model_wins": 6,
+            "other_correct": 16
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7415, 0.9768],
+        "wilson95_attempted": [0.7415, 0.9768]
+      },
+      "D1|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9875,
+        "class_support_and_recall": {
+          "blog-writer": "1/1",
+          "changelog": "1/1",
+          "ci-pipelines": "1/1",
+          "code-refactoring": "1/1",
+          "data-analysis": "1/1",
+          "db-export": "1/1",
+          "db-migration": "1/1",
+          "frontend-debugging": "1/1",
+          "insufficient_evidence": "3/4",
+          "issue-tracking": "1/1",
+          "memory-profiling": "1/1",
+          "none": "2/2",
+          "password-vault": "1/1",
+          "pdf": "1/1",
+          "performance-optimization": "1/1",
+          "static-site-preview": "1/1",
+          "theming": "1/1",
+          "web-performance": "1/1",
+          "website-content": "1/1",
+          "xlsx": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "blog-writer": {
+            "blog-writer": 1
+          },
+          "changelog": {
+            "changelog": 1
+          },
+          "ci-pipelines": {
+            "ci-pipelines": 1
+          },
+          "code-refactoring": {
+            "code-refactoring": 1
+          },
+          "data-analysis": {
+            "data-analysis": 1
+          },
+          "db-export": {
+            "db-export": 1
+          },
+          "db-migration": {
+            "db-migration": 1
+          },
+          "frontend-debugging": {
+            "frontend-debugging": 1
+          },
+          "insufficient_evidence": {
+            "data-cleaning": 1,
+            "insufficient_evidence": 3
+          },
+          "issue-tracking": {
+            "issue-tracking": 1
+          },
+          "memory-profiling": {
+            "memory-profiling": 1
+          },
+          "none": {
+            "none": 2
+          },
+          "password-vault": {
+            "password-vault": 1
+          },
+          "pdf": {
+            "pdf": 1
+          },
+          "performance-optimization": {
+            "performance-optimization": 1
+          },
+          "static-site-preview": {
+            "static-site-preview": 1
+          },
+          "theming": {
+            "theming": 1
+          },
+          "web-performance": {
+            "web-performance": 1
+          },
+          "website-content": {
+            "website-content": 1
+          },
+          "xlsx": {
+            "xlsx": 1
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1106.188,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 603.517,
+          "p95": 705.811
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00635,
+            "model_losses": 1,
+            "model_wins": 11,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 1,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 16
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "D1|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9875,
+        "class_support_and_recall": {
+          "blog-writer": "1/1",
+          "changelog": "1/1",
+          "ci-pipelines": "1/1",
+          "code-refactoring": "1/1",
+          "data-analysis": "1/1",
+          "db-export": "1/1",
+          "db-migration": "1/1",
+          "frontend-debugging": "1/1",
+          "insufficient_evidence": "3/4",
+          "issue-tracking": "1/1",
+          "memory-profiling": "1/1",
+          "none": "2/2",
+          "password-vault": "1/1",
+          "pdf": "1/1",
+          "performance-optimization": "1/1",
+          "static-site-preview": "1/1",
+          "theming": "1/1",
+          "web-performance": "1/1",
+          "website-content": "1/1",
+          "xlsx": "1/1"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "blog-writer": {
+            "blog-writer": 1
+          },
+          "changelog": {
+            "changelog": 1
+          },
+          "ci-pipelines": {
+            "ci-pipelines": 1
+          },
+          "code-refactoring": {
+            "code-refactoring": 1
+          },
+          "data-analysis": {
+            "data-analysis": 1
+          },
+          "db-export": {
+            "db-export": 1
+          },
+          "db-migration": {
+            "db-migration": 1
+          },
+          "frontend-debugging": {
+            "frontend-debugging": 1
+          },
+          "insufficient_evidence": {
+            "data-cleaning": 1,
+            "insufficient_evidence": 3
+          },
+          "issue-tracking": {
+            "issue-tracking": 1
+          },
+          "memory-profiling": {
+            "memory-profiling": 1
+          },
+          "none": {
+            "none": 2
+          },
+          "password-vault": {
+            "password-vault": 1
+          },
+          "pdf": {
+            "pdf": 1
+          },
+          "performance-optimization": {
+            "performance-optimization": 1
+          },
+          "static-site-preview": {
+            "static-site-preview": 1
+          },
+          "theming": {
+            "theming": 1
+          },
+          "web-performance": {
+            "web-performance": 1
+          },
+          "website-content": {
+            "website-content": 1
+          },
+          "xlsx": {
+            "xlsx": 1
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 822.241,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 564.737,
+          "p95": 728.47
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00635,
+            "model_losses": 1,
+            "model_wins": 11,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 1,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 16
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      }
+    },
+    "unknown_case_ids": [],
+    "variant_selection": {
+      "D1": {
+        "correct_by_variant": {
+          "minimal": 22,
+          "rubric": 23,
+          "scoped": 23
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 23
+        },
+        "margin_cases": 0,
+        "runner_up": "scoped",
+        "top": "rubric",
+        "weak_evidence": true
+      }
+    }
+  },
+  "returncode": 0
+}

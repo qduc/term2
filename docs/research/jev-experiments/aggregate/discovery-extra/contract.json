@@ -1,0 +1,156 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "contract",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery-extra/dataset.json": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83"
+    },
+    "duplicate_states": {
+      "cross_split": [],
+      "cross_task": [],
+      "within_split": []
+    },
+    "errors": [],
+    "leakage_flags": {
+      "rationale_copied_into_state": ["jev-fit-20260919-DX-D6-holdout-13"],
+      "tag_word_in_state": [
+        "jev-fit-20260919-DX-D2-dev-21",
+        "jev-fit-20260919-DX-D2-dev-22",
+        "jev-fit-20260919-DX-D2-holdout-21",
+        "jev-fit-20260919-DX-D2-holdout-22",
+        "jev-fit-20260919-DX-D3-dev-10",
+        "jev-fit-20260919-DX-D3-holdout-16",
+        "jev-fit-20260919-DX-D4-dev-09",
+        "jev-fit-20260919-DX-D4-holdout-10"
+      ]
+    },
+    "note": "Leakage flags are heuristics that name case IDs only; each needs human inspection.",
+    "ok": true,
+    "tasks": {
+      "D2": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 5,
+        "expected_last_count": 8,
+        "expected_position": {
+          "0/17": 5,
+          "1/17": 4,
+          "10/17": 3,
+          "11/17": 2,
+          "12/17": 2,
+          "13/17": 2,
+          "16/17": 8,
+          "2/17": 4,
+          "3/17": 2,
+          "4/17": 2,
+          "5/17": 3,
+          "6/17": 3,
+          "7/17": 2,
+          "8/17": 3,
+          "9/17": 3
+        },
+        "first_count_if_position_uniform": 2.82,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "17": 48
+        }
+      },
+      "D3": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 48,
+        "distinct_label_sets": 46,
+        "expected_first_count": 5,
+        "expected_last_count": 13,
+        "expected_position": {
+          "0/5": 5,
+          "1/5": 9,
+          "2/5": 8,
+          "3/5": 13,
+          "4/5": 13
+        },
+        "first_count_if_position_uniform": 9.6,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "5": 48
+        }
+      },
+      "D4": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 48,
+        "distinct_label_sets": 46,
+        "expected_first_count": 13,
+        "expected_last_count": 10,
+        "expected_position": {
+          "0/5": 13,
+          "1/5": 7,
+          "2/5": 9,
+          "3/5": 9,
+          "4/5": 10
+        },
+        "first_count_if_position_uniform": 9.6,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "5": 48
+        }
+      },
+      "D5": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 48,
+        "distinct_label_sets": 47,
+        "expected_first_count": 11,
+        "expected_last_count": 8,
+        "expected_position": {
+          "0/5": 11,
+          "1/5": 12,
+          "2/5": 10,
+          "3/5": 7,
+          "4/5": 8
+        },
+        "first_count_if_position_uniform": 9.6,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "5": 48
+        }
+      },
+      "D6": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 48,
+        "distinct_label_sets": 48,
+        "expected_first_count": 12,
+        "expected_last_count": 13,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 11,
+          "2/4": 12,
+          "3/4": 13
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

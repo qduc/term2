@@ -1,0 +1,35 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "V0",
+  "worker": "review",
+  "route": {
+    "harness": "Claude Code CLI",
+    "actual_model": "claude-opus-5",
+    "verified": "self-reported by harness system prompt"
+  },
+  "artifact": "/home/qduc/term2/docs/research/jev-experiments/review/review.md",
+  "sha256": "6e1f46cdb12de12b03b63fa78bec2da624a9fe32b71fb496069d336f75a59079",
+  "supporting_artifacts": [
+    {
+      "path": "/home/qduc/term2/docs/research/jev-experiments/review/protocol-review.md",
+      "sha256": "29657b0e082cdb91ac8fe7216d545b2d065ed8166a6af62b4c0529ce4426ff23"
+    }
+  ],
+  "verify_argv": [
+    "python3",
+    "-c",
+    "from pathlib import Path; assert Path('/home/qduc/term2/docs/research/jev-experiments/review/review.md').stat().st_size > 100"
+  ],
+  "verification_result": {
+    "exit_code": 0,
+    "passed": true
+  },
+  "children": [],
+  "background_work": [],
+  "limitations": [
+    "Design-only review: no lane dataset, prompts, baseline, runner, or provider response existed at review time",
+    "Reviewer model identity self-reported, not attested",
+    "Pending checklist in review.md must run after coordinator hand-off; nothing accepted yet",
+    "Verify argv checks file size only, not review quality"
+  ]
+}

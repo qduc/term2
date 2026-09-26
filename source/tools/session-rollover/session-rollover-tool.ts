@@ -37,6 +37,7 @@ export function createSessionRolloverToolDefinition(
       '- Working knowledge that is costly to rediscover: diagnosis, root causes, key files and symbols, and approaches ruled out with why.\n' +
       '- Next open step, concrete enough to act on immediately, and any unresolved decisions.\n' +
       '- Live background work: handle, status, and next action. Handles are session-owned and survive the rotation, so the successor can inspect or control them; do not wait for them merely to rotate, and save durable results when ready rather than copying transient output.\n' +
+      '- If this session established a lasting user preference, accepted project decision, or reusable lesson learned, update persistent memory when appropriate; skip facts easily recovered from the repository, and do not save the handoff wholesale as memory.\n' +
       'Keep the brief well below the 8,000-character limit: point to a canonical artifact instead of copying it, and omit narrative history the successor can read from the previous session on demand.',
     parameters: sessionRolloverParameters,
     terminateAfterExecution: (result) =>

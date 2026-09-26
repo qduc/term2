@@ -1,0 +1,31 @@
+{
+  "run_id": "jev-fit-20260919",
+  "status": "complete",
+  "completed_at": "2026-09-19T03:37:38.495908+00:00",
+  "tasks": 20,
+  "live_requests_excluding_smoke": 2070,
+  "successful_responses": 2068,
+  "final_artifacts": {
+    "README.md": "df0f12affa58d6acbe63524fa1e122d3fbab34f448f07463bbce6f30df74303c",
+    "prompt-catalog.md": "5086f3c16819ffd52934b391077bae20e465229d06de842db34e4ea498cac937",
+    "prompt-catalog.json": "f7c2c8be63214cde862b6cb1c19f1087e45b7cc262658aeb85b535edd7772b8e",
+    "integrated-results.json": "c468ca13aad023d044515604fd4d0a2536d2c75e5b4dc39a38a84339102e03f1",
+    "synthesis.json": "6fdf7c317d27b1fc17f3d9cb85a01eaecdd1d90ef8e39a46a423c4ce4a96812d",
+    "review/receipt-v5.json": "750724d59e19e3b8b7f104c97772debd8f841cab56996c211f28f1c9623eb3d0",
+    "review/receipt-v6.json": "6857504273fa480f9c471e024971bd17ccd48bf2af689d9e7390af6131a50b66",
+    "coordination.json": "1730e23a38bc30f422a33fe3805bed0ddb48b3c0e5ab250ef6b845611828e92b"
+  },
+  "verification": [
+    "Independent V5/V6 receipt hashes and pinned inputs match",
+    "No unresolved material V6 findings",
+    "Deliverable local links resolve",
+    "All JSON and JSONL parsed",
+    "Earlier runner, challenge, independent audit and shortcut selftests passed",
+    "Research only; repository runtime test gates not applicable"
+  ],
+  "limitations": [
+    "Synthetic author-visible holdout, 24 cases per task",
+    "Choice top-1 only; no end-to-end production benefit established",
+    "Generic batched-development note in audit output is inapplicable: every live request contained one Choice"
+  ]
+}

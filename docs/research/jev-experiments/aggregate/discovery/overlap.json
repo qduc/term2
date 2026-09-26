@@ -1,0 +1,34 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "overlap",
+    "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/discovery/dataset.json": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc"
+    },
+    "method": "char 5-gram Jaccard over state leaf values, lowercased, whitespace-collapsed",
+    "tasks": {
+      "D1": {
+        "any_case_to_nearest_other": {
+          "max": 0.416,
+          "median": 0.234,
+          "min": 0.091,
+          "n": 48
+        },
+        "holdout_pairs_at_or_above_threshold": [],
+        "holdout_to_nearest_dev": {
+          "max": 0.377,
+          "median": 0.185,
+          "min": 0.074,
+          "n": 24
+        },
+        "template_ratio": 0.0
+      }
+    },
+    "threshold": 0.6
+  },
+  "returncode": 0
+}

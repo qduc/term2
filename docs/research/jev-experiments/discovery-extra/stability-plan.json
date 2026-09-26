@@ -1,0 +1,29 @@
+{
+  "created_at": "2026-09-19T03:26:27.223959Z",
+  "dataset_sha256": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+  "model": "typesafe/jev-1.13",
+  "note": "Separate stability-only records: repeat uses the frozen prompt and original criteria order; reversed reverses only criteria insertion order.",
+  "prompts_sha256": "1d10a3203357fb77099418c2515e8c7dca95044df00e08bc3fbc10eeba564b74",
+  "selected": {
+    "D2": {
+      "adversarial": "jev-fit-20260919-DX-D2-holdout-19",
+      "ordinary": "jev-fit-20260919-DX-D2-holdout-01"
+    },
+    "D3": {
+      "adversarial": "jev-fit-20260919-DX-D3-holdout-09",
+      "ordinary": "jev-fit-20260919-DX-D3-holdout-01"
+    },
+    "D4": {
+      "adversarial": "jev-fit-20260919-DX-D4-holdout-08",
+      "ordinary": "jev-fit-20260919-DX-D4-holdout-01"
+    },
+    "D5": {
+      "adversarial": "jev-fit-20260919-DX-D5-holdout-08",
+      "ordinary": "jev-fit-20260919-DX-D5-holdout-01"
+    },
+    "D6": {
+      "adversarial": "jev-fit-20260919-DX-D6-holdout-08",
+      "ordinary": "jev-fit-20260919-DX-D6-holdout-01"
+    }
+  }
+}

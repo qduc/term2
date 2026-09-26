@@ -1,0 +1,371 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "baselines",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/dataset.json",
+    "--baseline-script",
+    "/home/qduc/term2/docs/research/jev-experiments/challenge/baseline.py"
+  ],
+  "output": {
+    "authored_baseline_reproducibility": {
+      "crashes_on_state_and_criteria_only": [],
+      "function": "predict",
+      "matches_stored_field": 80,
+      "mismatch_ids": [],
+      "n": 80,
+      "reproducible_from_state_and_criteria": true,
+      "script": "/home/qduc/term2/docs/research/jev-experiments/challenge/baseline.py",
+      "script_sha256": "9425bfc0b8b741bebedfdb6a7f851668073af57166faaa674f5f87ff6534ebf8",
+      "static_scan": {
+        "label_field_reads": [
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 217
+          },
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 218
+          },
+          {
+            "field": "baseline",
+            "function": "main",
+            "in_predictor_path": false,
+            "line": 223
+          }
+        ]
+      }
+    },
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/challenge/dataset.json": "1fe5e87390d12f6e63fd302865c4ce7795d2a380c5a67315e37b120f53e52a25"
+    },
+    "dev_majority_label_names": "hidden (use --show-labels)",
+    "tasks": {
+      "D1": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "D2": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 1,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 0,
+          "n": 4
+        }
+      },
+      "D3": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 3,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "D4": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 3,
+          "n": 4
+        }
+      },
+      "D5": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 3,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "D6": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 1,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 0,
+          "n": 4
+        }
+      },
+      "E1": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "E2": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 3,
+          "n": 4
+        }
+      },
+      "E3": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 3,
+          "n": 4
+        }
+      },
+      "E4": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "E5": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 3,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "E6": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "E7": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "E8": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 1,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "R1": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 4,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "R2": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "R3": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      },
+      "R4": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 3,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 3,
+          "n": 4
+        }
+      },
+      "R5": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 3,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 1,
+          "n": 4
+        }
+      },
+      "R6": {
+        "dev": {
+          "authored_stored_correct": 0,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 0,
+          "n": 0
+        },
+        "holdout": {
+          "authored_stored_correct": 2,
+          "dev_majority_correct": 0,
+          "dev_majority_inapplicable": 4,
+          "lexical_probe_correct": 2,
+          "n": 4
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

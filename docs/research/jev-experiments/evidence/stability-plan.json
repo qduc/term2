@@ -1,0 +1,49 @@
+{
+  "created_at": "2026-09-19T02:54:40.790954+00:00",
+  "dataset_sha256": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+  "prompts_sha256": "a10ead314bec3c7fbd1693596231c5a11139edbd38417d6a58992a18cac5aa98",
+  "model": "typesafe/jev-1.13",
+  "selected": {
+    "E1": {
+      "ordinary": "E1-holdout-001",
+      "adversarial": "E1-holdout-009"
+    },
+    "E2": {
+      "ordinary": "E2-holdout-001"
+    },
+    "E3": {
+      "ordinary": "E3-holdout-002",
+      "adversarial": "E3-holdout-019"
+    },
+    "E4": {
+      "ordinary": "E4-holdout-001",
+      "adversarial": "E4-holdout-013"
+    },
+    "E5": {
+      "ordinary": "E5-holdout-012",
+      "adversarial": "E5-holdout-003"
+    },
+    "E6": {
+      "ordinary": "E6-holdout-001"
+    },
+    "E7": {
+      "ordinary": "E7-holdout-001",
+      "adversarial": "E7-holdout-021"
+    },
+    "E8": {
+      "ordinary": "E8-holdout-010",
+      "adversarial": "E8-holdout-024"
+    }
+  },
+  "missing_trials": [
+    {
+      "task": "E2",
+      "category": "adversarial"
+    },
+    {
+      "task": "E6",
+      "category": "adversarial"
+    }
+  ],
+  "note": "Coordinator amendment before stability calls: ordinary first and adversarial first exactly as planned when available. E2/E6 have no adversarial-tagged holdout. Those trials are omitted, not substituted; missing coverage remains reported. No outcomes used to select cases. Standard stability invocation refused due to absent categories; frozen data unchanged."
+}

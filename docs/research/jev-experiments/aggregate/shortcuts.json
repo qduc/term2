@@ -1,0 +1,1117 @@
+{
+  "generated_at": "2026-09-19T03:24:16.192263Z",
+  "lanes": {
+    "discovery": {
+      "dataset_sha256": "9b0ddebc6c57a174f508c2676bc8fa18d61deca6e3e3950dfe00a5debf530adc",
+      "present": true,
+      "tasks": {
+        "D1": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "16/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 16,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "16/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 16,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "11/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 11,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "17/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 17,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "17/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 17,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "10/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 10,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          }
+        }
+      }
+    },
+    "discovery-extra": {
+      "dataset_sha256": "11a6475a001b7cbdf41b6987bb5bdc7c9f9ec5c005630d2f6db12307a2961d83",
+      "present": true,
+      "tasks": {
+        "D2": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "3/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 3,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "2/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 2,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "D3": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "3/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 3,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "7/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 7,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "7/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 7,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "2/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 2,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "0/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          }
+        },
+        "D4": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "8/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 8,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "2/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 2,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "9/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 9,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "5/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 5,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "7/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 7,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "9/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 9,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          }
+        },
+        "D5": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "5/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 5,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "3/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 3,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "8/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 8,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "7/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 7,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "9/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 9,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          }
+        },
+        "D6": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "5/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 5,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "17/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 17,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "14/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 14,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": 24
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "dataset_sha256": "f7697a083c88747d29d1338f407c40e53fbb54d9c9b78ad01e08d99c07d50ccb",
+      "present": true,
+      "tasks": {
+        "E1": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "8/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 8,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "8/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 8,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E2": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E3": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E4": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E5": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "5/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 5,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "5/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 5,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E6": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E7": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "E8": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "4/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 4,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        }
+      }
+    },
+    "routing": {
+      "dataset_sha256": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c",
+      "present": true,
+      "tasks": {
+        "R1": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "R2": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "R3": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "R4": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "R5": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        },
+        "R6": {
+          "dev": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          },
+          "holdout": {
+            "first_criteria_option": {
+              "accuracy": "6/24",
+              "applicable": 24,
+              "cases": 24,
+              "correct": 6,
+              "inapplicable": 0,
+              "recognizable_retrieval_records": null
+            },
+            "first_state_candidate_or_section": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            },
+            "longest_state_candidate_or_section_description": {
+              "accuracy": "n/a_no_retrieval_records",
+              "applicable": 0,
+              "cases": 24,
+              "correct": 0,
+              "inapplicable": 24,
+              "recognizable_retrieval_records": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "methods": {
+    "first_criteria_option": "Predict the first inserted criteria key.",
+    "first_state_candidate_or_section": "Predict the label/id/name of the first object in the first top-level state list whose key contains candidate, section, memory, session, or passage.",
+    "longest_state_candidate_or_section_description": "Predict the label/id/name of the object with the longest description/text/content/summary in that same list; equal lengths choose the first object. An id/text record uses id as the prediction and text as its description."
+  },
+  "notice": "Not preregistered baselines; detects possible fixture shortcut confounding, not model quality.",
+  "run_id": "jev-fit-20260919",
+  "status": "post_hoc_diagnostic_only"
+}

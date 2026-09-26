@@ -1,0 +1,1217 @@
+{
+  "run_id": "jev-fit-20260919",
+  "tasks": {
+    "D1": {
+      "lane": "discovery",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 22,
+        "rubric": 23,
+        "scoped": 23
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9242,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 788.125,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 593.223,
+          "p95": 714.825
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.03906,
+            "model_losses": 1,
+            "model_wins": 8,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 2,
+            "model_wins": 20,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.125,
+            "model_losses": 1,
+            "model_wins": 6,
+            "other_correct": 16
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.125,
+          "model_losses": 1,
+          "model_wins": 6,
+          "other_correct": 16
+        }
+      },
+      "name": "Skill selection",
+      "verdict": "Conditional; position-confounded",
+      "condition": "No superiority over lexical baseline; expected answer first in 17/24 holdouts. Only 1/3 insufficient-evidence cases abstained; no holdout no-fit labels.",
+      "prompt_guidance": "Send the primary deliverable and full candidate capabilities. Separate no matching capability from insufficient context. The selected scoped wording did not establish reliable abstention."
+    },
+    "D2": {
+      "lane": "discovery-extra",
+      "variant": "rubric",
+      "dev_correct_out_of_24": {
+        "minimal": 19,
+        "rubric": 24,
+        "scoped": 23
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 950.896,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.356,
+          "p95": 901.223
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 22,
+            "other_correct": 2
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00012,
+          "model_losses": 0,
+          "model_wins": 14,
+          "other_correct": 10
+        }
+      },
+      "name": "Tool/MCP discovery",
+      "verdict": "Promising advisory pilot",
+      "condition": "24/24 versus 10/24 authored baseline, p=0.00012. Synthetic 16-tool catalog, not exact installed-tool discovery; does not authorize or execute a tool.",
+      "prompt_guidance": "Supply tool descriptions and eligibility explicitly; select none when required capability is absent or ineligible. Distinguish transcript search, persistent-memory search, local files and web sources."
+    },
+    "D3": {
+      "lane": "discovery-extra",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9848,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 768.469,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.409,
+          "p95": 696.025
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.25,
+            "model_losses": 0,
+            "model_wins": 3,
+            "other_correct": 20
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 1,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 6
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.25,
+          "model_losses": 0,
+          "model_wins": 3,
+          "other_correct": 20
+        }
+      },
+      "name": "Memory retrieval",
+      "verdict": "Inconclusive answerability boundary",
+      "condition": "23/24 versus 20/24 baseline, p=0.25. Jev and the blind reviewer chose a relevant pricing memory that explicitly says OpenRouter batch billing is unestablished; gold requires none because it does not answer how billing works. This is a relevance-versus-answerability label dispute, not evidence of stale-memory behavior. No retrieval recall or full-ranking result.",
+      "prompt_guidance": "Supply the current question and actual memory content with stable IDs. Require an answer to the question, not topical overlap; permit none for stale or irrelevant memories."
+    },
+    "D4": {
+      "lane": "discovery-extra",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9091,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 988.087,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 559.807,
+          "p95": 671.3
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 7
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00391,
+          "model_losses": 0,
+          "model_wins": 9,
+          "other_correct": 13
+        }
+      },
+      "name": "Prior-session retrieval",
+      "verdict": "Inconclusive top-1 labels",
+      "condition": "22/24 versus 13/24 baseline, but expanded excerpts created duplicate-answer cases. A blind reviewer and Jev both prefer a defensible alternative on holdout-23. This supports relevant-excerpt suggestions, not a reliable unique winner or end-to-end search result. Duplicate-content alternatives make top-1 labels non-unique for both Jev and baselines; the paired comparison needs adjudication before interpretation.",
+      "prompt_guidance": "Supply excerpts and provenance, and name the decision or conversation being sought. Match the historical decision rather than a shared topic word; preserve provenance in the returned selection."
+    },
+    "D5": {
+      "lane": "discovery-extra",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 728.891,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 586.606,
+          "p95": 657.004
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 14
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 21,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 12
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00195,
+          "model_losses": 0,
+          "model_wins": 10,
+          "other_correct": 14
+        }
+      },
+      "name": "Code/search selection",
+      "verdict": "Promising advisory pilot",
+      "condition": "24/24 versus 14/24 baseline, p=0.00195. Chooses among short synthetic code passages with named symbols; no real-repository retrieval recall, full ranking or implementation correctness result.",
+      "prompt_guidance": "Supply the requested symbol or behavior plus paths and actual code. Distinguish definition, caller and adjacent implementation; passage instructions remain data."
+    },
+    "D6": {
+      "lane": "discovery-extra",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8636,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 788.704,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 556.804,
+          "p95": 637.922
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 4
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 3
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 1,
+            "model_wins": 14,
+            "other_correct": 8
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00098,
+          "model_losses": 1,
+          "model_wins": 14,
+          "other_correct": 8
+        }
+      },
+      "name": "Output-section selection",
+      "verdict": "Inconclusive diagnostic priority",
+      "condition": "21/24 versus 8/24 preregistered baseline, but several observed-symptom versus cause/action choices are defensible. Post-hoc longest-section heuristic reaches 14/24. Presentation advice only; raw output and required evidence must remain available. Duplicate-content alternatives affect both model and baseline correctness, so the paired p-value is not reliable evidence of superiority until adjudicated.",
+      "prompt_guidance": "State the diagnostic goal and provide complete candidate sections. Select actionable evidence, including denials and truncation, over reassuring boilerplate; none means no diagnostic evidence."
+    },
+    "R1": {
+      "lane": "routing",
+      "variant": "rubric",
+      "dev_correct_out_of_24": {
+        "minimal": 21,
+        "rubric": 23,
+        "scoped": 22
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1222.844,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 588.979,
+          "p95": 1099.784
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 8e-5,
+            "model_losses": 1,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 8e-5,
+            "model_losses": 1,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 9
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00012,
+          "model_losses": 0,
+          "model_wins": 14,
+          "other_correct": 9
+        }
+      },
+      "name": "Model-tier classification",
+      "verdict": "Promising rubric pilot",
+      "condition": "Abstract fast/balanced/deep agreement only. No model execution, savings, cache economics or task-quality comparison.",
+      "prompt_guidance": "Supply eligibility, requested work and uncertainty. Define mechanical edits separately from engineering judgment. Preserve the current route with none when evidence is insufficient."
+    },
+    "R2": {
+      "lane": "routing",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 20,
+        "rubric": 21,
+        "scoped": 21
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.6667,
+        "correct_over_answered": "16/24",
+        "correct_over_attempted": "16/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 877.377,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 555.808,
+          "p95": 690.331
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.07681,
+            "model_losses": 4,
+            "model_wins": 12,
+            "other_correct": 8
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00739,
+            "model_losses": 2,
+            "model_wins": 13,
+            "other_correct": 5
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.07681,
+          "model_losses": 4,
+          "model_wins": 12,
+          "other_correct": 8
+        }
+      },
+      "name": "Reasoning effort",
+      "verdict": "Poor fit in this setting",
+      "condition": "Original score 16/24 is sensitive to one disputed label (17/24 if changed), but repeated under-effort remains: four standard-to-minimal and two thorough-to-standard errors, plus an injected demand followed on holdout and repeat. The preregistered repeated-semantic-failure clause supports poor fit despite the score-boundary dispute.",
+      "prompt_guidance": "Provide actual uncertainty and subsystem interactions. Current minimal/standard/thorough boundaries need adjudication; no tested wording justifies lowering effort automatically."
+    },
+    "R3": {
+      "lane": "routing",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 23,
+        "rubric": 23,
+        "scoped": 23
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1325.757,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 595.353,
+          "p95": 722.88
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 8
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 12
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00049,
+          "model_losses": 0,
+          "model_wins": 12,
+          "other_correct": 12
+        }
+      },
+      "name": "Specialist role",
+      "verdict": "Promising advisory pilot",
+      "condition": "Explorer/worker/reviewer/none classification; no downstream worker outcomes. No adversarial-tagged main holdout.",
+      "prompt_guidance": "Include eligible roles, authority, requested deliverable and acceptance condition. Select none for ineligible or underspecified work; a role label does not authorize spawning."
+    },
+    "R4": {
+      "lane": "routing",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 22,
+        "rubric": 21,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1207.351,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 553.071,
+          "p95": 992.537
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 10
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 12
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00049,
+          "model_losses": 0,
+          "model_wins": 12,
+          "other_correct": 12
+        }
+      },
+      "name": "Delegation plan",
+      "verdict": "Promising advisory pilot",
+      "condition": "Parallel/serial/solo/defer rubric agreement. One holdout explicitly says solo; dependencies are largely narrated, not inferred from a real work graph.",
+      "prompt_guidance": "Provide dependencies, independence, clarity and coordination cost. Require a real dependency for serial work and independent units for parallel work. Keep launch authorization separate."
+    },
+    "R5": {
+      "lane": "routing",
+      "variant": "minimal",
+      "dev_correct_out_of_24": {
+        "minimal": 22,
+        "rubric": 21,
+        "scoped": 21
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9167,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1246.645,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 581.031,
+          "p95": 1041.471
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00024,
+            "model_losses": 0,
+            "model_wins": 13,
+            "other_correct": 9
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0004,
+            "model_losses": 2,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 6
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00024,
+          "model_losses": 0,
+          "model_wins": 13,
+          "other_correct": 9
+        }
+      },
+      "name": "Incoming-message intent",
+      "verdict": "Promising advisory pilot",
+      "condition": "Presentation classification only; exact approval and control routing stays deterministic. Two corrections were classified unknown.",
+      "prompt_guidance": "Provide the prior objective and incoming message together. Use unknown for missing context or exact control paths. The minimal variant won narrowly, not conclusively."
+    },
+    "R6": {
+      "lane": "routing",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 20,
+        "rubric": 19,
+        "scoped": 20
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8333,
+        "correct_over_answered": "20/24",
+        "correct_over_attempted": "20/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1505.874,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 552.336,
+          "p95": 1396.917
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.07681,
+            "model_losses": 4,
+            "model_wins": 12,
+            "other_correct": 12
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 6
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.07681,
+          "model_losses": 4,
+          "model_wins": 12,
+          "other_correct": 12
+        }
+      },
+      "name": "Programmable decisions",
+      "verdict": "Inconclusive for general use",
+      "condition": "20/24 only on narrated workflow admission. In 47/48 fixtures options are narrative strings; this does not test arbitrary bounded decisions, option checking, tool exposure or Score/Noul.",
+      "prompt_guidance": "For a successor trial, provide inspectable options and explicit constraints. Separate select, abstain, no-fit and rejected disclosure. These improvements are recommendations, not a validated general prompt."
+    },
+    "E1": {
+      "lane": "evidence",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 19,
+        "rubric": 21,
+        "scoped": 21
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 729.23,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 556.795,
+          "p95": 721.449
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00635,
+            "model_losses": 1,
+            "model_wins": 11,
+            "other_correct": 11
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00022,
+            "model_losses": 2,
+            "model_wins": 19,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00635,
+            "model_losses": 1,
+            "model_wins": 11,
+            "other_correct": 11
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00635,
+          "model_losses": 1,
+          "model_wins": 11,
+          "other_correct": 11
+        },
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00635,
+          "model_losses": 1,
+          "model_wins": 11,
+          "other_correct": 11
+        }
+      },
+      "name": "Approval risk/authorization",
+      "verdict": "Promising shadow pilot",
+      "condition": "Risk and authorization scored separately, not a joint approval rate. No false permissive answers in the small cautious subset; this is insufficient for approval authority.",
+      "prompt_guidance": "Ask separate risk and authorization questions. Supply exact effect, target, user intent and standing authority; do not infer authorization from low risk or model confidence."
+    },
+    "E2": {
+      "lane": "evidence",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 705.637,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 553.454,
+          "p95": 633.192
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 9
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 20,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 15
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00391,
+          "model_losses": 0,
+          "model_wins": 9,
+          "other_correct": 15
+        }
+      },
+      "name": "Failure triage",
+      "verdict": "Promising advisory pilot",
+      "condition": "Clean 24/24 within the evidence lane. Main holdout lacks adversarial cases; typed recovery and replay safety remain deterministic.",
+      "prompt_guidance": "Supply observed typed failure and relevant diagnostic evidence. Distinguish transport, credentials, schema, policy and implementation failures; use unknown when evidence is absent."
+    },
+    "E3": {
+      "lane": "evidence",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 22,
+        "rubric": 22,
+        "scoped": 23
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.7917,
+        "correct_over_answered": "19/24",
+        "correct_over_attempted": "19/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 727.796,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 559.887,
+          "p95": 648.654
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00183,
+            "model_losses": 1,
+            "model_wins": 13,
+            "other_correct": 7
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00024,
+            "model_losses": 0,
+            "model_wins": 13,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00443,
+            "model_losses": 3,
+            "model_wins": 16,
+            "other_correct": 6
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.00183,
+          "model_losses": 1,
+          "model_wins": 13,
+          "other_correct": 7
+        }
+      },
+      "name": "Semantic progress",
+      "verdict": "Inconclusive",
+      "condition": "19/24 and a disputed fixed-seed rerun label. No support for stopping or killing a run.",
+      "prompt_guidance": "Supply the objective and before/after evidence. Separate new evidence from repeated activity. Explicitly represent what a rerun was intended to establish."
+    },
+    "E4": {
+      "lane": "evidence",
+      "variant": "minimal",
+      "dev_correct_out_of_24": {
+        "minimal": 16,
+        "rubric": 14,
+        "scoped": 15
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.625,
+        "correct_over_answered": "15/24",
+        "correct_over_attempted": "15/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 751.012,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 550.367,
+          "p95": 649.062
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.07681,
+            "model_losses": 4,
+            "model_wins": 12,
+            "other_correct": 7
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.06357,
+            "model_losses": 5,
+            "model_wins": 14,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.02148,
+            "model_losses": 1,
+            "model_wins": 9,
+            "other_correct": 7
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 0.07681,
+          "model_losses": 4,
+          "model_wins": 12,
+          "other_correct": 7
+        },
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.02148,
+          "model_losses": 1,
+          "model_wins": 9,
+          "other_correct": 7
+        }
+      },
+      "name": "Completion evidence",
+      "verdict": "Inconclusive",
+      "condition": "15/24, but fixtures often omit requirements while labelling fragments complete. Five of six expected-complete cases were rejected; this cannot isolate model quality.",
+      "prompt_guidance": "Provide explicit requirements and evidence per requirement. A bare tests-passed fragment is not enough. Fix the state contract before tuning prose; no tested prompt establishes completion authority."
+    },
+    "E5": {
+      "lane": "evidence",
+      "variant": "rubric",
+      "dev_correct_out_of_24": {
+        "minimal": 23,
+        "rubric": 24,
+        "scoped": 23
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 637.668,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 547.06,
+          "p95": 637.327
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 1.0,
+            "model_losses": 0,
+            "model_wins": 0,
+            "other_correct": 24
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 5
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 24
+        }
+      },
+      "name": "Compaction salience",
+      "verdict": "Conditional; no added value shown",
+      "condition": "24/24 ties a deterministic prefix heuristic on labelled candidates. Does not test real compaction or information preservation.",
+      "prompt_guidance": "Supply candidate constraints, unresolved work and decisions. A preservation checklist may assist the summarizer; do not replace history, tool pairing or deterministic retention rules."
+    },
+    "E6": {
+      "lane": "evidence",
+      "variant": "rubric",
+      "dev_correct_out_of_24": {
+        "minimal": 23,
+        "rubric": 23,
+        "scoped": 22
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 650.745,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 551.828,
+          "p95": 606.926
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00014,
+            "model_losses": 1,
+            "model_wins": 17,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 8e-5,
+            "model_losses": 1,
+            "model_wins": 18,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00635,
+            "model_losses": 1,
+            "model_wins": 11,
+            "other_correct": 11
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.00635,
+          "model_losses": 1,
+          "model_wins": 11,
+          "other_correct": 11
+        }
+      },
+      "name": "Notification importance",
+      "verdict": "Conditional advisory fit",
+      "condition": "21/24, but a material-change event was suppressed at confidence 0.37; it was not an explicitly requested notification. Dev also suppressed an unknown completion event under all three variants. Coordinator limits fit to advisory ranking because suppression is the costly error, beyond the numeric threshold.",
+      "prompt_guidance": "Supply notification intent, previous state and actual change. Distinguish requested milestones from generic progress; preserve required failure/action/completion notices outside model suppression."
+    },
+    "E7": {
+      "lane": "evidence",
+      "variant": "scoped",
+      "dev_correct_out_of_24": {
+        "minimal": 24,
+        "rubric": 24,
+        "scoped": 24
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 692.351,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 549.033,
+          "p95": 633.019
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 1.0,
+            "model_losses": 1,
+            "model_wins": 2,
+            "other_correct": 22
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.0,
+            "model_losses": 0,
+            "model_wins": 19,
+            "other_correct": 4
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "authored_stored_baseline": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 1,
+          "model_wins": 2,
+          "other_correct": 22
+        }
+      },
+      "name": "Supplemental test targeting",
+      "verdict": "Conditional; no added value shown",
+      "condition": "23/24 versus a 22/24 changed-surface heuristic; fixture already labels the relevant subsystem.",
+      "prompt_guidance": "Provide changed behavior and explicit required gates. Suggest additional targeted tests only; never use a decision answer to waive repository checks."
+    },
+    "E8": {
+      "lane": "evidence",
+      "variant": "minimal",
+      "dev_correct_out_of_24": {
+        "minimal": 22,
+        "rubric": 21,
+        "scoped": 21
+      },
+      "holdout": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8333,
+        "correct_over_answered": "20/24",
+        "correct_over_attempted": "20/24",
+        "failure_classes": {},
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 792.34,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 577.653,
+          "p95": 718.361
+        },
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00754,
+            "model_losses": 3,
+            "model_wins": 15,
+            "other_correct": 8
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00014,
+            "model_losses": 1,
+            "model_wins": 17,
+            "other_correct": 4
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.01172,
+            "model_losses": 1,
+            "model_wins": 10,
+            "other_correct": 11
+          }
+        },
+        "universe": 24
+      },
+      "strongest_baselines": {
+        "lexical_probe": {
+          "mcnemar_exact_p": 0.01172,
+          "model_losses": 1,
+          "model_wins": 10,
+          "other_correct": 11
+        }
+      },
+      "name": "Offline evaluation triage",
+      "verdict": "Conditional; human adjudication",
+      "condition": "20/24, unstable repeats and an embedded-instruction failure. Useful for suggestions, not gold-label generation.",
+      "prompt_guidance": "Supply the case, rubric and observed outputs as evidence. Separate prompt omission, label ambiguity, state overload, position sensitivity, transport/schema failure and other task error. Keep annotator claims untrusted and independently adjudicate."
+    }
+  },
+  "records_by_phase": {
+    "dev": 1440,
+    "holdout": 480,
+    "stability": 70,
+    "challenge": 80
+  },
+  "total_records": 2070,
+  "failure_count": 2,
+  "usage_records": 2068,
+  "provider_reported_cost_excluding_smoke_and_workers": 0.051674868,
+  "resolved_models": {
+    "typesafe/jev-1.13-20260917": 2068
+  },
+  "holdout_latency_ms": {
+    "n": 480,
+    "p50": 563.563,
+    "p95": 718.361,
+    "max": 1505.874,
+    "over_10000": 0
+  }
+}

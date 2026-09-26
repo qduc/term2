@@ -1,0 +1,126 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "baselines",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json",
+    "--baseline-script",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/baseline.py"
+  ],
+  "output": {
+    "authored_baseline_reproducibility": {
+      "crashes_on_state_and_criteria_only": [],
+      "function": "choose",
+      "matches_stored_field": 288,
+      "mismatch_ids": [],
+      "n": 288,
+      "reproducible_from_state_and_criteria": true,
+      "script": "/home/qduc/term2/docs/research/jev-experiments/routing/baseline.py",
+      "script_sha256": "e47894f69a43611e9d6f786120bce524de1b93a09683b00ec4b227b547d81a02",
+      "static_scan": {}
+    },
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c"
+    },
+    "dev_majority_label_names": "hidden (use --show-labels)",
+    "tasks": {
+      "R1": {
+        "dev": {
+          "authored_stored_correct": 6,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 9,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 6,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 9,
+          "n": 24
+        }
+      },
+      "R2": {
+        "dev": {
+          "authored_stored_correct": 5,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 5,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 8,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 5,
+          "n": 24
+        }
+      },
+      "R3": {
+        "dev": {
+          "authored_stored_correct": 7,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 14,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 8,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 12,
+          "n": 24
+        }
+      },
+      "R4": {
+        "dev": {
+          "authored_stored_correct": 9,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 17,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 10,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 12,
+          "n": 24
+        }
+      },
+      "R5": {
+        "dev": {
+          "authored_stored_correct": 12,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 7,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 9,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 6,
+          "n": 24
+        }
+      },
+      "R6": {
+        "dev": {
+          "authored_stored_correct": 13,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 8,
+          "n": 24
+        },
+        "holdout": {
+          "authored_stored_correct": 12,
+          "dev_majority_correct": 6,
+          "dev_majority_inapplicable": 0,
+          "lexical_probe_correct": 6,
+          "n": 24
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

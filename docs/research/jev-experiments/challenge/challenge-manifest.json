@@ -1,0 +1,12 @@
+{
+  "case_count": 80,
+  "challenge_runner_sha256": "7431367fbc043d95fa844ca864831025d0929ee7845f7b42d6a125d1065f0f86",
+  "dataset_sha256": "1fe5e87390d12f6e63fd302865c4ce7795d2a380c5a67315e37b120f53e52a25",
+  "model": "typesafe/jev-1.13",
+  "phase": "challenge",
+  "prompts_sha256": "15a4ccc1995b93bd89e4ed973196073eed7a2c157434bccb84ef7cdb9c6ebfdf",
+  "run_id": "jev-fit-20260919",
+  "task_id": "C",
+  "variant": "scoped",
+  "verified_runner_sha256": "e31b9ee149f21a6bc9a8080924d0e431a1ad611f43a3a3e37f32fe0e4e79bfe0"
+}

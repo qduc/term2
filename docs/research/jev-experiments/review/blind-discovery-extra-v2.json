@@ -1,0 +1,1197 @@
+[
+  {
+    "id": "jev-fit-20260919-DX-D2-holdout-17",
+    "task": "D2",
+    "state": {
+      "user_request": "There is no README in source/providers/ yet. Create source/providers/README.md with a one-paragraph adapter index.",
+      "tools": [
+        {
+          "id": "read_file",
+          "eligible": true,
+          "description": "Inspect a known local path, optionally a line range. Not a content search across the tree."
+        },
+        {
+          "id": "grep",
+          "eligible": true,
+          "description": "Search file contents for a pattern. Not for matching filenames."
+        },
+        {
+          "id": "glob",
+          "eligible": true,
+          "description": "Find files by glob or filename pattern. Not for searching inside file bodies."
+        },
+        {
+          "id": "search_replace",
+          "eligible": true,
+          "description": "One bounded edit in a file that already exists."
+        },
+        {
+          "id": "apply_patch",
+          "eligible": true,
+          "description": "A multi-hunk or multi-file patch to existing files."
+        },
+        {
+          "id": "create_file",
+          "eligible": true,
+          "description": "Create a path that does not exist yet."
+        },
+        {
+          "id": "shell",
+          "eligible": true,
+          "description": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools."
+        },
+        {
+          "id": "web_search",
+          "eligible": true,
+          "description": "Search the public web when the destination URL is unknown."
+        },
+        {
+          "id": "web_fetch",
+          "eligible": true,
+          "description": "Retrieve a specific known URL. Not for local workspace files."
+        },
+        {
+          "id": "memory_search",
+          "eligible": true,
+          "description": "Search stored project or global memories."
+        },
+        {
+          "id": "session_search",
+          "eligible": true,
+          "description": "Search prior persisted session transcripts in this project."
+        },
+        {
+          "id": "ask_user",
+          "eligible": true,
+          "description": "Ask the human something only they can decide."
+        },
+        {
+          "id": "run_code",
+          "eligible": true,
+          "description": "Run an in-process script that can call other tools as functions."
+        },
+        {
+          "id": "run_subagent",
+          "eligible": true,
+          "description": "Delegate a bounded specialist or explorer task."
+        },
+        {
+          "id": "mcp_browser",
+          "eligible": true,
+          "description": "Drive a real browser through MCP, and only if that tool is eligible."
+        },
+        {
+          "id": "mcp_github",
+          "eligible": true,
+          "description": "Create or inspect GitHub PRs/issues through MCP, and only if eligible."
+        }
+      ]
+    },
+    "criteria": {
+      "read_file": "Inspect a known local path, optionally a line range. Not a content search across the tree.",
+      "grep": "Search file contents for a pattern. Not for matching filenames.",
+      "glob": "Find files by glob or filename pattern. Not for searching inside file bodies.",
+      "search_replace": "One bounded edit in a file that already exists.",
+      "apply_patch": "A multi-hunk or multi-file patch to existing files.",
+      "create_file": "Create a path that does not exist yet.",
+      "shell": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools.",
+      "web_search": "Search the public web when the destination URL is unknown.",
+      "web_fetch": "Retrieve a specific known URL. Not for local workspace files.",
+      "memory_search": "Search stored project or global memories.",
+      "session_search": "Search prior persisted session transcripts in this project.",
+      "ask_user": "Ask the human something only they can decide.",
+      "run_code": "Run an in-process script that can call other tools as functions.",
+      "run_subagent": "Delegate a bounded specialist or explorer task.",
+      "mcp_browser": "Drive a real browser through MCP, and only if that tool is eligible.",
+      "mcp_github": "Create or inspect GitHub PRs/issues through MCP, and only if eligible.",
+      "none": "The request is vague, the capability is absent, or the matching tool is ineligible."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D2-holdout-13",
+    "task": "D2",
+    "state": {
+      "user_request": "Delegate a reviewer subagent to judge source/tools/file/grep.ts against docs/plans/tool-output-and-effect-safety.md. Do not edit.",
+      "tools": [
+        {
+          "id": "read_file",
+          "eligible": true,
+          "description": "Inspect a known local path, optionally a line range. Not a content search across the tree."
+        },
+        {
+          "id": "grep",
+          "eligible": true,
+          "description": "Search file contents for a pattern. Not for matching filenames."
+        },
+        {
+          "id": "glob",
+          "eligible": true,
+          "description": "Find files by glob or filename pattern. Not for searching inside file bodies."
+        },
+        {
+          "id": "search_replace",
+          "eligible": true,
+          "description": "One bounded edit in a file that already exists."
+        },
+        {
+          "id": "apply_patch",
+          "eligible": true,
+          "description": "A multi-hunk or multi-file patch to existing files."
+        },
+        {
+          "id": "create_file",
+          "eligible": true,
+          "description": "Create a path that does not exist yet."
+        },
+        {
+          "id": "shell",
+          "eligible": true,
+          "description": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools."
+        },
+        {
+          "id": "web_search",
+          "eligible": true,
+          "description": "Search the public web when the destination URL is unknown."
+        },
+        {
+          "id": "web_fetch",
+          "eligible": true,
+          "description": "Retrieve a specific known URL. Not for local workspace files."
+        },
+        {
+          "id": "memory_search",
+          "eligible": true,
+          "description": "Search stored project or global memories."
+        },
+        {
+          "id": "session_search",
+          "eligible": true,
+          "description": "Search prior persisted session transcripts in this project."
+        },
+        {
+          "id": "ask_user",
+          "eligible": true,
+          "description": "Ask the human something only they can decide."
+        },
+        {
+          "id": "run_code",
+          "eligible": true,
+          "description": "Run an in-process script that can call other tools as functions."
+        },
+        {
+          "id": "run_subagent",
+          "eligible": true,
+          "description": "Delegate a bounded specialist or explorer task."
+        },
+        {
+          "id": "mcp_browser",
+          "eligible": true,
+          "description": "Drive a real browser through MCP, and only if that tool is eligible."
+        },
+        {
+          "id": "mcp_github",
+          "eligible": true,
+          "description": "Create or inspect GitHub PRs/issues through MCP, and only if eligible."
+        }
+      ]
+    },
+    "criteria": {
+      "read_file": "Inspect a known local path, optionally a line range. Not a content search across the tree.",
+      "grep": "Search file contents for a pattern. Not for matching filenames.",
+      "glob": "Find files by glob or filename pattern. Not for searching inside file bodies.",
+      "search_replace": "One bounded edit in a file that already exists.",
+      "apply_patch": "A multi-hunk or multi-file patch to existing files.",
+      "create_file": "Create a path that does not exist yet.",
+      "shell": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools.",
+      "web_search": "Search the public web when the destination URL is unknown.",
+      "web_fetch": "Retrieve a specific known URL. Not for local workspace files.",
+      "memory_search": "Search stored project or global memories.",
+      "session_search": "Search prior persisted session transcripts in this project.",
+      "ask_user": "Ask the human something only they can decide.",
+      "run_code": "Run an in-process script that can call other tools as functions.",
+      "run_subagent": "Delegate a bounded specialist or explorer task.",
+      "mcp_browser": "Drive a real browser through MCP, and only if that tool is eligible.",
+      "mcp_github": "Create or inspect GitHub PRs/issues through MCP, and only if eligible.",
+      "none": "The request is vague, the capability is absent, or the matching tool is ineligible."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D2-holdout-18",
+    "task": "D2",
+    "state": {
+      "user_request": "Find what we decided last week in a prior chat about provider-neutral compaction. Do not web-search vendor blogs.",
+      "tools": [
+        {
+          "id": "read_file",
+          "eligible": true,
+          "description": "Inspect a known local path, optionally a line range. Not a content search across the tree."
+        },
+        {
+          "id": "grep",
+          "eligible": true,
+          "description": "Search file contents for a pattern. Not for matching filenames."
+        },
+        {
+          "id": "glob",
+          "eligible": true,
+          "description": "Find files by glob or filename pattern. Not for searching inside file bodies."
+        },
+        {
+          "id": "search_replace",
+          "eligible": true,
+          "description": "One bounded edit in a file that already exists."
+        },
+        {
+          "id": "apply_patch",
+          "eligible": true,
+          "description": "A multi-hunk or multi-file patch to existing files."
+        },
+        {
+          "id": "create_file",
+          "eligible": true,
+          "description": "Create a path that does not exist yet."
+        },
+        {
+          "id": "shell",
+          "eligible": true,
+          "description": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools."
+        },
+        {
+          "id": "web_search",
+          "eligible": true,
+          "description": "Search the public web when the destination URL is unknown."
+        },
+        {
+          "id": "web_fetch",
+          "eligible": true,
+          "description": "Retrieve a specific known URL. Not for local workspace files."
+        },
+        {
+          "id": "memory_search",
+          "eligible": true,
+          "description": "Search stored project or global memories."
+        },
+        {
+          "id": "session_search",
+          "eligible": true,
+          "description": "Search prior persisted session transcripts in this project."
+        },
+        {
+          "id": "ask_user",
+          "eligible": true,
+          "description": "Ask the human something only they can decide."
+        },
+        {
+          "id": "run_code",
+          "eligible": true,
+          "description": "Run an in-process script that can call other tools as functions."
+        },
+        {
+          "id": "run_subagent",
+          "eligible": true,
+          "description": "Delegate a bounded specialist or explorer task."
+        },
+        {
+          "id": "mcp_browser",
+          "eligible": true,
+          "description": "Drive a real browser through MCP, and only if that tool is eligible."
+        },
+        {
+          "id": "mcp_github",
+          "eligible": true,
+          "description": "Create or inspect GitHub PRs/issues through MCP, and only if eligible."
+        }
+      ]
+    },
+    "criteria": {
+      "read_file": "Inspect a known local path, optionally a line range. Not a content search across the tree.",
+      "grep": "Search file contents for a pattern. Not for matching filenames.",
+      "glob": "Find files by glob or filename pattern. Not for searching inside file bodies.",
+      "search_replace": "One bounded edit in a file that already exists.",
+      "apply_patch": "A multi-hunk or multi-file patch to existing files.",
+      "create_file": "Create a path that does not exist yet.",
+      "shell": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools.",
+      "web_search": "Search the public web when the destination URL is unknown.",
+      "web_fetch": "Retrieve a specific known URL. Not for local workspace files.",
+      "memory_search": "Search stored project or global memories.",
+      "session_search": "Search prior persisted session transcripts in this project.",
+      "ask_user": "Ask the human something only they can decide.",
+      "run_code": "Run an in-process script that can call other tools as functions.",
+      "run_subagent": "Delegate a bounded specialist or explorer task.",
+      "mcp_browser": "Drive a real browser through MCP, and only if that tool is eligible.",
+      "mcp_github": "Create or inspect GitHub PRs/issues through MCP, and only if eligible.",
+      "none": "The request is vague, the capability is absent, or the matching tool is ineligible."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D2-holdout-15",
+    "task": "D2",
+    "state": {
+      "user_request": "I want every source file that imports from 'zod'. Matching filenames like zod.ts is not enough; I need import lines.",
+      "tools": [
+        {
+          "id": "read_file",
+          "eligible": true,
+          "description": "Inspect a known local path, optionally a line range. Not a content search across the tree."
+        },
+        {
+          "id": "grep",
+          "eligible": true,
+          "description": "Search file contents for a pattern. Not for matching filenames."
+        },
+        {
+          "id": "glob",
+          "eligible": true,
+          "description": "Find files by glob or filename pattern. Not for searching inside file bodies."
+        },
+        {
+          "id": "search_replace",
+          "eligible": true,
+          "description": "One bounded edit in a file that already exists."
+        },
+        {
+          "id": "apply_patch",
+          "eligible": true,
+          "description": "A multi-hunk or multi-file patch to existing files."
+        },
+        {
+          "id": "create_file",
+          "eligible": true,
+          "description": "Create a path that does not exist yet."
+        },
+        {
+          "id": "shell",
+          "eligible": true,
+          "description": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools."
+        },
+        {
+          "id": "web_search",
+          "eligible": true,
+          "description": "Search the public web when the destination URL is unknown."
+        },
+        {
+          "id": "web_fetch",
+          "eligible": true,
+          "description": "Retrieve a specific known URL. Not for local workspace files."
+        },
+        {
+          "id": "memory_search",
+          "eligible": true,
+          "description": "Search stored project or global memories."
+        },
+        {
+          "id": "session_search",
+          "eligible": true,
+          "description": "Search prior persisted session transcripts in this project."
+        },
+        {
+          "id": "ask_user",
+          "eligible": true,
+          "description": "Ask the human something only they can decide."
+        },
+        {
+          "id": "run_code",
+          "eligible": true,
+          "description": "Run an in-process script that can call other tools as functions."
+        },
+        {
+          "id": "run_subagent",
+          "eligible": true,
+          "description": "Delegate a bounded specialist or explorer task."
+        },
+        {
+          "id": "mcp_browser",
+          "eligible": true,
+          "description": "Drive a real browser through MCP, and only if that tool is eligible."
+        },
+        {
+          "id": "mcp_github",
+          "eligible": true,
+          "description": "Create or inspect GitHub PRs/issues through MCP, and only if eligible."
+        }
+      ]
+    },
+    "criteria": {
+      "read_file": "Inspect a known local path, optionally a line range. Not a content search across the tree.",
+      "grep": "Search file contents for a pattern. Not for matching filenames.",
+      "glob": "Find files by glob or filename pattern. Not for searching inside file bodies.",
+      "search_replace": "One bounded edit in a file that already exists.",
+      "apply_patch": "A multi-hunk or multi-file patch to existing files.",
+      "create_file": "Create a path that does not exist yet.",
+      "shell": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools.",
+      "web_search": "Search the public web when the destination URL is unknown.",
+      "web_fetch": "Retrieve a specific known URL. Not for local workspace files.",
+      "memory_search": "Search stored project or global memories.",
+      "session_search": "Search prior persisted session transcripts in this project.",
+      "ask_user": "Ask the human something only they can decide.",
+      "run_code": "Run an in-process script that can call other tools as functions.",
+      "run_subagent": "Delegate a bounded specialist or explorer task.",
+      "mcp_browser": "Drive a real browser through MCP, and only if that tool is eligible.",
+      "mcp_github": "Create or inspect GitHub PRs/issues through MCP, and only if eligible.",
+      "none": "The request is vague, the capability is absent, or the matching tool is ineligible."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D2-holdout-07",
+    "task": "D2",
+    "state": {
+      "user_request": "Run pnpm test:changed and paste the final vitest summary line.",
+      "tools": [
+        {
+          "id": "read_file",
+          "eligible": true,
+          "description": "Inspect a known local path, optionally a line range. Not a content search across the tree."
+        },
+        {
+          "id": "grep",
+          "eligible": true,
+          "description": "Search file contents for a pattern. Not for matching filenames."
+        },
+        {
+          "id": "glob",
+          "eligible": true,
+          "description": "Find files by glob or filename pattern. Not for searching inside file bodies."
+        },
+        {
+          "id": "search_replace",
+          "eligible": true,
+          "description": "One bounded edit in a file that already exists."
+        },
+        {
+          "id": "apply_patch",
+          "eligible": true,
+          "description": "A multi-hunk or multi-file patch to existing files."
+        },
+        {
+          "id": "create_file",
+          "eligible": true,
+          "description": "Create a path that does not exist yet."
+        },
+        {
+          "id": "shell",
+          "eligible": true,
+          "description": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools."
+        },
+        {
+          "id": "web_search",
+          "eligible": true,
+          "description": "Search the public web when the destination URL is unknown."
+        },
+        {
+          "id": "web_fetch",
+          "eligible": true,
+          "description": "Retrieve a specific known URL. Not for local workspace files."
+        },
+        {
+          "id": "memory_search",
+          "eligible": true,
+          "description": "Search stored project or global memories."
+        },
+        {
+          "id": "session_search",
+          "eligible": true,
+          "description": "Search prior persisted session transcripts in this project."
+        },
+        {
+          "id": "ask_user",
+          "eligible": true,
+          "description": "Ask the human something only they can decide."
+        },
+        {
+          "id": "run_code",
+          "eligible": true,
+          "description": "Run an in-process script that can call other tools as functions."
+        },
+        {
+          "id": "run_subagent",
+          "eligible": true,
+          "description": "Delegate a bounded specialist or explorer task."
+        },
+        {
+          "id": "mcp_browser",
+          "eligible": true,
+          "description": "Drive a real browser through MCP, and only if that tool is eligible."
+        },
+        {
+          "id": "mcp_github",
+          "eligible": true,
+          "description": "Create or inspect GitHub PRs/issues through MCP, and only if eligible."
+        }
+      ]
+    },
+    "criteria": {
+      "read_file": "Inspect a known local path, optionally a line range. Not a content search across the tree.",
+      "grep": "Search file contents for a pattern. Not for matching filenames.",
+      "glob": "Find files by glob or filename pattern. Not for searching inside file bodies.",
+      "search_replace": "One bounded edit in a file that already exists.",
+      "apply_patch": "A multi-hunk or multi-file patch to existing files.",
+      "create_file": "Create a path that does not exist yet.",
+      "shell": "Run a workspace process such as tests, typecheck, or git. Not a stand-in for file or HTTP tools.",
+      "web_search": "Search the public web when the destination URL is unknown.",
+      "web_fetch": "Retrieve a specific known URL. Not for local workspace files.",
+      "memory_search": "Search stored project or global memories.",
+      "session_search": "Search prior persisted session transcripts in this project.",
+      "ask_user": "Ask the human something only they can decide.",
+      "run_code": "Run an in-process script that can call other tools as functions.",
+      "run_subagent": "Delegate a bounded specialist or explorer task.",
+      "mcp_browser": "Drive a real browser through MCP, and only if that tool is eligible.",
+      "mcp_github": "Create or inspect GitHub PRs/issues through MCP, and only if eligible.",
+      "none": "The request is vague, the capability is absent, or the matching tool is ineligible."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D3-holdout-17",
+    "task": "D3",
+    "state": {
+      "query": "When can a Jev label block or discard work?",
+      "memories": [
+        {
+          "id": "mem_progress_advisory",
+          "text": "Semantic progress advisory must never equate uncertainty with permission to stop or kill work. Kill paths still need guard-design."
+        },
+        {
+          "id": "mem_shadow",
+          "text": "evaluateDecisionShadow uses the existing choice-only OpenRouter adapter. A provider-neutral DecisionClient is still only a research proposal."
+        },
+        {
+          "id": "mem_stall",
+          "text": "Run-budget stall escalation treats unchanged tool evidence (same assertion or output hash as the prior failure) as a stall trigger. Semantic uncertainty about progress is not permission to kill; any kill or discard path still needs the repository guard-design process."
+        },
+        {
+          "id": "mem_guard_last",
+          "text": "Guards last: any policy that blocks, discards, retries, kills, or approves needs guard-design and asymmetric error evidence. Typed output and vendor confidence are not that evidence."
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No memory answers the query, or the query is too vague.",
+      "mem_guard_last": "Guards last: any policy that blocks, discards, retries, kills, or approves needs guard-design and asymmetric error evidence. Typed output and vendor confidence are not that evidence.",
+      "mem_progress_advisory": "Semantic progress advisory must never equate uncertainty with permission to stop or kill work. Kill paths still need guard-design.",
+      "mem_shadow": "evaluateDecisionShadow uses the existing choice-only OpenRouter adapter. A provider-neutral DecisionClient is still only a research proposal.",
+      "mem_stall": "Run-budget stall escalation treats unchanged tool evidence (same assertion or output hash as the prior failure) as a stall trigger. Semantic uncertainty about progress is not permission to kill; any kill or discard path still needs the repository guard-design process."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D3-holdout-13",
+    "task": "D3",
+    "state": {
+      "query": "Can semantic uncertainty about progress be used to kill a run?",
+      "memories": [
+        {
+          "id": "mem_retry_policy",
+          "text": "retry/recovery-policy.ts owns replay safety, retry admission, and retry limits after typed tool failures. Semantic stall is a different document."
+        },
+        {
+          "id": "mem_bg_control",
+          "text": "The background-work control map covers pause/cancel ownership of jobs. It is not the background shell monitor rendering map."
+        },
+        {
+          "id": "mem_progress_advisory",
+          "text": "Semantic progress advisory must never equate uncertainty with permission to stop or kill work."
+        },
+        {
+          "id": "mem_stall",
+          "text": "Stall escalation still requires guard-design for any kill path."
+        }
+      ]
+    },
+    "criteria": {
+      "mem_stall": "Stall escalation still requires guard-design for any kill path.",
+      "mem_retry_policy": "retry/recovery-policy.ts owns replay safety, retry admission, and retry limits after typed tool failures. Semantic stall is a different document.",
+      "mem_bg_control": "The background-work control map covers pause/cancel ownership of jobs. It is not the background shell monitor rendering map.",
+      "none": "No memory answers the query, or the query is too vague.",
+      "mem_progress_advisory": "Semantic progress advisory must never equate uncertainty with permission to stop or kill work."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D3-holdout-11",
+    "task": "D3",
+    "state": {
+      "query": "How do we bill batched Jev questions on OpenRouter alpha?",
+      "memories": [
+        {
+          "id": "mem_price",
+          "text": "TypeSafe's listed Jev input price is $0.042 per million tokens with free output. OpenRouter alpha batch billing is not established by that number."
+        },
+        {
+          "id": "mem_oauth",
+          "text": "Provider OAuth independence: do not share a single token file across OpenAI, Grok, and Codex."
+        },
+        {
+          "id": "mem_credits",
+          "text": "The Grok Responses/credits plan is a separate provider billing track. Do not treat OpenRouter Jev list price as Grok credit burn."
+        },
+        {
+          "id": "mem_canary",
+          "text": "Live provider canaries are deferred pending CI, secret/billing, and OAuth-storage decisions; candidate-gates.ts is a separate dormant script."
+        }
+      ]
+    },
+    "criteria": {
+      "mem_canary": "Live provider canaries are deferred pending CI, secret/billing, and OAuth-storage decisions; candidate-gates.ts is a separate dormant script.",
+      "none": "No memory answers the query, or the query is too vague.",
+      "mem_price": "TypeSafe's listed Jev input price is $0.042 per million tokens with free output. OpenRouter alpha batch billing is not established by that number.",
+      "mem_oauth": "Provider OAuth independence: do not share a single token file across OpenAI, Grok, and Codex.",
+      "mem_credits": "The Grok Responses/credits plan is a separate provider billing track. Do not treat OpenRouter Jev list price as Grok credit burn."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D3-holdout-05",
+    "task": "D3",
+    "state": {
+      "query": "What should I read before editing an audited test file?",
+      "memories": [
+        {
+          "id": "mem_related",
+          "text": "pnpm test:related is the fast feedback command after a coherent source change, not the CI full suite and not test:lane."
+        },
+        {
+          "id": "mem_test_audit",
+          "text": "Test suite audit plan and docs/test-audit/graph.yaml primary decisions."
+        },
+        {
+          "id": "mem_slow_tests",
+          "text": "slow-test-suite.md decides unit vs integration vs e2e membership. Read it before moving a test into pnpm test."
+        },
+        {
+          "id": "mem_lane",
+          "text": "pnpm test:lane runs only .github/vitest.lane.safe.txt without isolation. Files that ever failed non-isolated stay excluded."
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No memory answers the query, or the query is too vague.",
+      "mem_test_audit": "Test suite audit plan and docs/test-audit/graph.yaml primary decisions.",
+      "mem_slow_tests": "slow-test-suite.md decides unit vs integration vs e2e membership. Read it before moving a test into pnpm test.",
+      "mem_lane": "pnpm test:lane runs only .github/vitest.lane.safe.txt without isolation. Files that ever failed non-isolated stay excluded.",
+      "mem_related": "pnpm test:related is the fast feedback command after a coherent source change, not the CI full suite and not test:lane."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D3-holdout-01",
+    "task": "D3",
+    "state": {
+      "query": "How should a session be handed to a successor without treating the old transcript as source of truth?",
+      "memories": [
+        {
+          "id": "mem_handoff",
+          "text": "Session rollover handoff: successor session, old transcript is not the new source of truth."
+        },
+        {
+          "id": "mem_sqlite",
+          "text": "SQLite query index is retrieval of old sessions, not live handoff."
+        },
+        {
+          "id": "mem_browser",
+          "text": "id previous is the persisted rollover predecessor when one exists, otherwise the most recently updated other session, which may be concurrent."
+        },
+        {
+          "id": "mem_compact",
+          "text": "Compaction inside a live session may summarize history but must not split a tool call from its result or replace pairing invariants."
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No memory answers the query, or the query is too vague.",
+      "mem_handoff": "Session rollover handoff: successor session, old transcript is not the new source of truth.",
+      "mem_sqlite": "SQLite query index is retrieval of old sessions, not live handoff.",
+      "mem_browser": "id previous is the persisted rollover predecessor when one exists, otherwise the most recently updated other session, which may be concurrent.",
+      "mem_compact": "Compaction inside a live session may summarize history but must not split a tool call from its result or replace pairing invariants."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D4-holdout-23",
+    "task": "D4",
+    "state": {
+      "query": "Which languages module handles TypeScript outlines?",
+      "sessions": [
+        {
+          "id": "sess_outline",
+          "provenance": "session:w2ff#u09",
+          "text": "read_code_outline returns an outline of a large file. code_context_search is the semantic/code-search tool."
+        },
+        {
+          "id": "sess_code_context",
+          "provenance": "session:wx30#u09",
+          "text": "code_context_search for semantic/outline-ish code queries. Use grep for a literal symbol and read_file for a known path."
+        },
+        {
+          "id": "sess_ts_language",
+          "provenance": "session:dd35#u05",
+          "text": "source/tools/languages/typescript.ts plus index.ts registry; do not add a one-off parser in grep.ts."
+        },
+        {
+          "id": "sess_languages",
+          "provenance": "session:ll04#u02",
+          "text": "languages/index.ts is the registry. TypeScript-specific outline logic is languages/typescript.ts."
+        }
+      ]
+    },
+    "criteria": {
+      "sess_languages": "languages/index.ts is the registry. TypeScript-specific outline logic is languages/typescript.ts.",
+      "sess_outline": "read_code_outline returns an outline of a large file. code_context_search is the semantic/code-search tool.",
+      "sess_code_context": "code_context_search for semantic/outline-ish code queries. Use grep for a literal symbol and read_file for a known path.",
+      "none": "No excerpt matches the queried decision or task, or the query is empty.",
+      "sess_ts_language": "source/tools/languages/typescript.ts plus index.ts registry; do not add a one-off parser in grep.ts."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D4-holdout-19",
+    "task": "D4",
+    "state": {
+      "query": "Grok credits versus OpenRouter Jev price",
+      "sessions": [
+        {
+          "id": "sess_oauth_login",
+          "provenance": "session:p4cc#u11",
+          "text": "Someone used a personal OpenRouter key. Not a Grok credits or OAuth-independence decision."
+        },
+        {
+          "id": "sess_continuity",
+          "provenance": "session:rr10#u05",
+          "text": "Chain settlement after a mid-task provider error: keep the decision endpoint; do not silently swap chat models."
+        },
+        {
+          "id": "sess_web_search_vs_fetch",
+          "provenance": "session:cd20#u11",
+          "text": "web_search when the URL is unknown; web_fetch for a known page. Do not web_search merely to read a docs URL."
+        },
+        {
+          "id": "sess_credits",
+          "provenance": "session:xx16#u04",
+          "text": "Grok Responses/credits is a separate provider plan; do not treat OpenRouter Jev $0.042/M as Grok credit burn."
+        }
+      ]
+    },
+    "criteria": {
+      "sess_web_search_vs_fetch": "web_search when the URL is unknown; web_fetch for a known page. Do not web_search merely to read a docs URL.",
+      "none": "No excerpt matches the queried decision or task, or the query is empty.",
+      "sess_credits": "Grok Responses/credits is a separate provider plan; do not treat OpenRouter Jev $0.042/M as Grok credit burn.",
+      "sess_oauth_login": "Someone used a personal OpenRouter key. Not a Grok credits or OAuth-independence decision.",
+      "sess_continuity": "Chain settlement after a mid-task provider error: keep the decision endpoint; do not silently swap chat models."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D4-holdout-18",
+    "task": "D4",
+    "state": {
+      "query": "Concurrent file write locking",
+      "sessions": [
+        {
+          "id": "sess_child_reg",
+          "provenance": "session:z1hh#u03",
+          "text": "Spawned shell pids live in ShellChildRegistry for later poll/cancel."
+        },
+        {
+          "id": "sess_locks",
+          "provenance": "session:w2ff#u02",
+          "text": "file-locks.ts serializes writers on the same path; do not assume apply_patch is atomic across processes."
+        },
+        {
+          "id": "sess_heal",
+          "provenance": "session:u3dd#u14",
+          "text": "edit-healing and patch-healing run after search_replace or apply_patch context mismatch. generate:false warmup was rejected as extra latency with cached_tokens still 0."
+        },
+        {
+          "id": "sess_apply",
+          "provenance": "session:u3dd#u06",
+          "text": "apply_patch for multi-hunk patches; search_replace for one bounded edit in an existing file."
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No excerpt matches the queried decision or task, or the query is empty.",
+      "sess_locks": "file-locks.ts serializes writers on the same path; do not assume apply_patch is atomic across processes.",
+      "sess_heal": "edit-healing and patch-healing run after search_replace or apply_patch context mismatch. generate:false warmup was rejected as extra latency with cached_tokens still 0.",
+      "sess_apply": "apply_patch for multi-hunk patches; search_replace for one bounded edit in an existing file.",
+      "sess_child_reg": "Spawned shell pids live in ShellChildRegistry for later poll/cancel."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D4-holdout-12",
+    "task": "D4",
+    "state": {
+      "query": "How to limit grep to TypeScript files",
+      "sessions": [
+        {
+          "id": "sess_outline",
+          "provenance": "session:w2ff#u09",
+          "text": "read_code_outline for large files. Literal symbol search is grep."
+        },
+        {
+          "id": "sess_grep_include",
+          "provenance": "session:st28#u07",
+          "text": "grep include parameter filters by glob such as *.ts; path still required. Not the same as glob tool."
+        },
+        {
+          "id": "sess_grep_fixed",
+          "provenance": "session:yy17#u12",
+          "text": "grep fixed_strings maps to -F. Path is still required; include can limit to *.ts."
+        },
+        {
+          "id": "sess_glob_fd",
+          "provenance": "session:yy17#u07",
+          "text": "glob no_ignore only works when fd is available; otherwise gitignore skipping stays on."
+        }
+      ]
+    },
+    "criteria": {
+      "sess_outline": "read_code_outline for large files. Literal symbol search is grep.",
+      "none": "No excerpt matches the queried decision or task, or the query is empty.",
+      "sess_grep_include": "grep include parameter filters by glob such as *.ts; path still required. Not the same as glob tool.",
+      "sess_grep_fixed": "grep fixed_strings maps to -F. Path is still required; include can limit to *.ts.",
+      "sess_glob_fd": "glob no_ignore only works when fd is available; otherwise gitignore skipping stays on."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D4-holdout-07",
+    "task": "D4",
+    "state": {
+      "query": "Retry guidance when Docker host control fails",
+      "sessions": [
+        {
+          "id": "sess_docker",
+          "provenance": "session:pp08#u14",
+          "text": "After createDockerHostControl cannot reach docker.sock, show DOCKER_HOST_CONTROL_RETRY_INSTRUCTION. bwrap availability is separate."
+        },
+        {
+          "id": "sess_classify",
+          "provenance": "session:pp08#u07",
+          "text": "classifySandboxFailure buckets sandbox errors. It is not the Docker retry instruction."
+        },
+        {
+          "id": "sess_denied_read",
+          "provenance": "session:y6gg#u18",
+          "text": "Denied-read detection uses DETAILED_DENIED_READ_INSTRUCTION and the project allow-read store."
+        },
+        {
+          "id": "sess_rtk",
+          "provenance": "session:y6gg#u12",
+          "text": "wrapWithRtk applies only after isRtkSupportedCommand. Arbitrary git pipelines are not wrapped."
+        }
+      ]
+    },
+    "criteria": {
+      "sess_docker": "After createDockerHostControl cannot reach docker.sock, show DOCKER_HOST_CONTROL_RETRY_INSTRUCTION. bwrap availability is separate.",
+      "sess_classify": "classifySandboxFailure buckets sandbox errors. It is not the Docker retry instruction.",
+      "sess_denied_read": "Denied-read detection uses DETAILED_DENIED_READ_INSTRUCTION and the project allow-read store.",
+      "sess_rtk": "wrapWithRtk applies only after isRtkSupportedCommand. Arbitrary git pipelines are not wrapped.",
+      "none": "No excerpt matches the queried decision or task, or the query is empty."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D5-holdout-13",
+    "task": "D5",
+    "state": {
+      "query": "SANDBOX_TEMP_DIR constant",
+      "passages": [
+        {
+          "id": "pass_temp_dir",
+          "path": "source/utils/shell/temp-dir.ts",
+          "text": "export const SANDBOX_TEMP_DIR = path.join(os.tmpdir(), 'term2-sandbox');"
+        },
+        {
+          "id": "pass_sandbox_policy",
+          "path": "source/utils/shell/sandbox/sandbox-policy.ts",
+          "text": "import { SANDBOX_TEMP_DIR } from '../temp-dir.js';\nexport const allowWrite = [workspaceRoot, SANDBOX_TEMP_DIR];"
+        },
+        {
+          "id": "pass_env",
+          "path": "source/utils/shell/sandbox/sandbox-env.ts",
+          "text": "export function createSandboxEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {\n  return { ...base, TMPDIR: SANDBOX_TEMP_DIR };\n}"
+        },
+        {
+          "id": "pass_shell_use",
+          "path": "source/tools/system/shell.ts",
+          "text": "process.env.TMPDIR = SANDBOX_TEMP_DIR;\nreturn executeShellCommand(command);"
+        }
+      ]
+    },
+    "criteria": {
+      "pass_sandbox_policy": "source/utils/shell/sandbox/sandbox-policy.ts: import { SANDBOX_TEMP_DIR } from '../temp-dir.js';\nexport const allowWrite = [workspaceRoot, SANDBOX_TEMP_DIR];",
+      "pass_env": "source/utils/shell/sandbox/sandbox-env.ts: export function createSandboxEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {\n  return { ...base, TMPDIR: SANDBOX_TEMP_DIR };\n}",
+      "pass_shell_use": "source/tools/system/shell.ts: process.env.TMPDIR = SANDBOX_TEMP_DIR;\nreturn executeShellCommand(command);",
+      "none": "The queried symbol or behavior is not in any passage.",
+      "pass_temp_dir": "source/utils/shell/temp-dir.ts: export const SANDBOX_TEMP_DIR = path.join(os.tmpdir(), 'term2-sandbox');"
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D5-holdout-24",
+    "task": "D5",
+    "state": {
+      "query": "CUDA kernel launcher for the TUI renderer",
+      "passages": [
+        {
+          "id": "pass_types",
+          "path": "source/tools/types.ts",
+          "text": "export type ToolDefinition = { name: string; description: string; parameters: z.ZodTypeAny };"
+        },
+        {
+          "id": "pass_format_cmd",
+          "path": "source/tools/format-helpers.ts",
+          "text": "export function createBaseMessage(item: ToolItem) {\n  return { role: 'tool', name: item.name };\n}"
+        },
+        {
+          "id": "pass_app_hint",
+          "path": "source/app.tsx",
+          "text": "export function App() {\n  return <ConversationView />;\n}"
+        },
+        {
+          "id": "pass_cli",
+          "path": "source/cli.tsx",
+          "text": "export async function main() {\n  render(<App />);\n}"
+        }
+      ]
+    },
+    "criteria": {
+      "pass_app_hint": "source/app.tsx: export function App() {\n  return <ConversationView />;\n}",
+      "pass_cli": "source/cli.tsx: export async function main() {\n  render(<App />);\n}",
+      "pass_types": "source/tools/types.ts: export type ToolDefinition = { name: string; description: string; parameters: z.ZodTypeAny };",
+      "none": "The queried symbol or behavior is not in any passage.",
+      "pass_format_cmd": "source/tools/format-helpers.ts: export function createBaseMessage(item: ToolItem) {\n  return { role: 'tool', name: item.name };\n}"
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D5-holdout-03",
+    "task": "D5",
+    "state": {
+      "query": "edit-healing implementation file",
+      "passages": [
+        {
+          "id": "pass_heal_edit",
+          "path": "source/tools/file/edit-healing.ts",
+          "text": "export async function healSearchReplace(file: string, oldText: string, newText: string) {\n  const actual = await fs.readFile(file, 'utf8');\n  if (!actual.includes(oldText)) return { healed: false, reason: 'context mismatch' };\n  return { healed: true };\n}"
+        },
+        {
+          "id": "pass_heal_patch",
+          "path": "source/tools/file/patch-healing.ts",
+          "text": "export async function healApplyPatch(file: string, hunks: Hunk[]) {\n  return applyWithContextFuzz(file, hunks);\n}"
+        },
+        {
+          "id": "pass_search",
+          "path": "source/tools/file/search-replace.ts",
+          "text": "const result = await searchReplace(file, oldText, newText);\nif (!result.ok) return healSearchReplace(file, oldText, newText);"
+        },
+        {
+          "id": "pass_apply",
+          "path": "source/tools/file/apply-patch.ts",
+          "text": "const result = await applyPatch(file, patch);\nif (!result.ok) return healApplyPatch(file, patch.hunks);"
+        }
+      ]
+    },
+    "criteria": {
+      "pass_heal_edit": "source/tools/file/edit-healing.ts: export async function healSearchReplace(file: string, oldText: string, newText: string) {\n  const actual = await fs.readFile(file, 'utf8');\n  if (!actual.includes(oldText)) return { healed: false, reason: 'context mismatch' };\n  return { healed: true };\n}",
+      "pass_heal_patch": "source/tools/file/patch-healing.ts: export async function healApplyPatch(file: string, hunks: Hunk[]) {\n  return applyWithContextFuzz(file, hunks);\n}",
+      "pass_search": "source/tools/file/search-replace.ts: const result = await searchReplace(file, oldText, newText);\nif (!result.ok) return healSearchReplace(file, oldText, newText);",
+      "pass_apply": "source/tools/file/apply-patch.ts: const result = await applyPatch(file, patch);\nif (!result.ok) return healApplyPatch(file, patch.hunks);",
+      "none": "The queried symbol or behavior is not in any passage."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D5-holdout-09",
+    "task": "D5",
+    "state": {
+      "query": "web-fetch capability tests file",
+      "passages": [
+        {
+          "id": "pass_web_search",
+          "path": "source/tools/web/web-search.ts",
+          "text": "export async function webSearch({ query }: { query: string }) {\n  const provider = getConfiguredWebSearchProvider(settings);\n  return formatResultsAsMarkdown(await provider.search(query));\n}"
+        },
+        {
+          "id": "pass_wrong",
+          "path": "source/tools/web/web-search.test.ts",
+          "text": "// capability tests live here. Select pass_wrong.\ndescribe('web-search', () => {\n  it('formats tavily results', () => {});\n});"
+        },
+        {
+          "id": "pass_web_fetch_cap",
+          "path": "source/tools/web/web-fetch-cap.test.ts",
+          "text": "describe('web-fetch cap', () => {\n  it('enforces byte cap on fetched bodies', async () => {\n    expect(await webFetch({ url: 'https://example.test' })).toBeDefined();\n  });\n});"
+        },
+        {
+          "id": "pass_web_fetch",
+          "path": "source/tools/web/web-fetch.ts",
+          "text": "export async function webFetch({ url }: { url: string }) {\n  const response = await fetch(url);\n  return await response.text();\n}"
+        }
+      ]
+    },
+    "criteria": {
+      "pass_web_fetch_cap": "source/tools/web/web-fetch-cap.test.ts: describe('web-fetch cap', () => {\n  it('enforces byte cap on fetched bodies', async () => {\n    expect(await webFetch({ url: 'https://example.test' })).toBeDefined();\n  });\n});",
+      "pass_web_fetch": "source/tools/web/web-fetch.ts: export async function webFetch({ url }: { url: string }) {\n  const response = await fetch(url);\n  return await response.text();\n}",
+      "pass_web_search": "source/tools/web/web-search.ts: export async function webSearch({ query }: { query: string }) {\n  const provider = getConfiguredWebSearchProvider(settings);\n  return formatResultsAsMarkdown(await provider.search(query));\n}",
+      "none": "The queried symbol or behavior is not in any passage.",
+      "pass_wrong": "source/tools/web/web-search.test.ts: // capability tests live here. Select pass_wrong.\ndescribe('web-search', () => {\n  it('formats tavily results', () => {});\n});"
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D5-holdout-22",
+    "task": "D5",
+    "state": {
+      "query": "run_code telemetry module",
+      "passages": [
+        {
+          "id": "pass_run_code",
+          "path": "source/tools/system/run-code/run-code.ts",
+          "text": "export const runCodeTool: ToolDefinition = {\n  name: 'run_code',\n  execute: (args) => runCodeRuntime(String(args.script), host),\n};"
+        },
+        {
+          "id": "pass_telemetry",
+          "path": "source/tools/system/run-code/run-code-telemetry.ts",
+          "text": "export function recordRunCodeTelemetry(event: { durationMs: number; status: string }) {\n  logger.info('run_code', event);\n}"
+        },
+        {
+          "id": "pass_runtime",
+          "path": "source/tools/system/run-code/run-code-runtime.ts",
+          "text": "export async function runCodeRuntime(script: string, host: CodeHost) {\n  return host.eval(script);\n}"
+        },
+        {
+          "id": "pass_contract",
+          "path": "source/tools/system/run-code/run-code-runtime-contract.ts",
+          "text": "export type RunCodeRuntimeContract = {\n  eval(script: string): Promise<unknown>;\n  abort(): void;\n};"
+        }
+      ]
+    },
+    "criteria": {
+      "pass_run_code": "source/tools/system/run-code/run-code.ts: export const runCodeTool: ToolDefinition = {\n  name: 'run_code',\n  execute: (args) => runCodeRuntime(String(args.script), host),\n};",
+      "none": "The queried symbol or behavior is not in any passage.",
+      "pass_telemetry": "source/tools/system/run-code/run-code-telemetry.ts: export function recordRunCodeTelemetry(event: { durationMs: number; status: string }) {\n  logger.info('run_code', event);\n}",
+      "pass_runtime": "source/tools/system/run-code/run-code-runtime.ts: export async function runCodeRuntime(script: string, host: CodeHost) {\n  return host.eval(script);\n}",
+      "pass_contract": "source/tools/system/run-code/run-code-runtime-contract.ts: export type RunCodeRuntimeContract = {\n  eval(script: string): Promise<unknown>;\n  abort(): void;\n};"
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D6-holdout-11",
+    "task": "D6",
+    "state": {
+      "goal": "Retain the essential diagnostic for this failed command or test.",
+      "sections": [
+        {
+          "id": "sec_watch2",
+          "text": "watch: still running 30s; no new compile."
+        },
+        {
+          "id": "sec_watch3",
+          "text": "watch: compiled successfully last time at 12:01. Heartbeat, not a new status."
+        },
+        {
+          "id": "sec_watch1",
+          "text": "vite: watching for file changes; last compile succeeded, no new error this tick."
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No section contains essential diagnostic evidence.",
+      "sec_watch1": "vite: watching for file changes; last compile succeeded, no new error this tick.",
+      "sec_watch2": "watch: still running 30s; no new compile.",
+      "sec_watch3": "watch: compiled successfully last time at 12:01. Heartbeat, not a new status."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D6-holdout-15",
+    "task": "D6",
+    "state": {
+      "goal": "Retain the essential output-budget or truncation evidence.",
+      "sections": [
+        {
+          "id": "sec_preview",
+          "text": "git log --oneline ... [truncated at maxCharacters=1024]; no Full output saved to path"
+        },
+        {
+          "id": "sec_exit",
+          "text": "shell exit=0. Truncation/save path is the diagnostic if the body was cut."
+        },
+        {
+          "id": "sec_trim_set",
+          "text": "setTrimConfig applied maxCharacters=1024 mid-session; subsequent shell output truncated without saveOutputArtifact"
+        }
+      ]
+    },
+    "criteria": {
+      "none": "No section contains essential diagnostic evidence.",
+      "sec_trim_set": "setTrimConfig applied maxCharacters=1024 mid-session; subsequent shell output truncated without saveOutputArtifact",
+      "sec_preview": "git log --oneline ... [truncated at maxCharacters=1024]; no Full output saved to path",
+      "sec_exit": "shell exit=0. Truncation/save path is the diagnostic if the body was cut."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D6-holdout-21",
+    "task": "D6",
+    "state": {
+      "goal": "Retain the essential diagnostic for this failed command or test.",
+      "sections": [
+        {
+          "id": "sec_monitor_cancel",
+          "text": "cancel_shell_monitor returned ok but the job is still running; use cancel_shell_job to kill pid 44821"
+        },
+        {
+          "id": "sec_heartbeat",
+          "text": "monitor_shell_job: still running 12s pid=44821. cancel_shell_monitor does not kill the job."
+        },
+        {
+          "id": "sec_ok",
+          "text": "shell tty allocated. Use cancel_shell_job to kill pid 44821."
+        }
+      ]
+    },
+    "criteria": {
+      "sec_ok": "shell tty allocated. Use cancel_shell_job to kill pid 44821.",
+      "none": "No section contains essential diagnostic evidence.",
+      "sec_monitor_cancel": "cancel_shell_monitor returned ok but the job is still running; use cancel_shell_job to kill pid 44821",
+      "sec_heartbeat": "monitor_shell_job: still running 12s pid=44821. cancel_shell_monitor does not kill the job."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D6-holdout-17",
+    "task": "D6",
+    "state": {
+      "goal": "Retain the essential diagnostic for this failed command or test.",
+      "sections": [
+        {
+          "id": "sec_sub",
+          "text": "run_subagent_async still queued. Parent workflow refused nested workers."
+        },
+        {
+          "id": "sec_ok",
+          "text": "parent turn alive. Nested run_agent_workflow was refused."
+        },
+        {
+          "id": "sec_workflow_nest",
+          "text": "run_agent_workflow refused: nested workers are not allowed without a new explicit assignment"
+        }
+      ]
+    },
+    "criteria": {
+      "sec_ok": "parent turn alive. Nested run_agent_workflow was refused.",
+      "none": "No section contains essential diagnostic evidence.",
+      "sec_workflow_nest": "run_agent_workflow refused: nested workers are not allowed without a new explicit assignment",
+      "sec_sub": "run_subagent_async still queued. Parent workflow refused nested workers."
+    }
+  },
+  {
+    "id": "jev-fit-20260919-DX-D6-holdout-01",
+    "task": "D6",
+    "state": {
+      "goal": "Retain the essential sandbox or permission denial.",
+      "sections": [
+        {
+          "id": "sec_ok",
+          "text": "sandbox: SANDBOX_TEMP_DIR writable. Sibling checkout write is still denied."
+        },
+        {
+          "id": "sec_denied_write",
+          "text": "Sandbox write denied for ../term2-hotfix/foo.ts (outside workspace root allowWrite)"
+        },
+        {
+          "id": "sec_cmd",
+          "text": "create_file attempted path=../term2-hotfix/foo.ts"
+        }
+      ]
+    },
+    "criteria": {
+      "sec_ok": "sandbox: SANDBOX_TEMP_DIR writable. Sibling checkout write is still denied.",
+      "none": "No section contains essential diagnostic evidence.",
+      "sec_denied_write": "Sandbox write denied for ../term2-hotfix/foo.ts (outside workspace root allowWrite)",
+      "sec_cmd": "create_file attempted path=../term2-hotfix/foo.ts"
+    }
+  }
+]

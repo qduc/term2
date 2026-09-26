@@ -1,0 +1,1564 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "score",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json",
+    "--records",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/results/dev.jsonl",
+    "--phase",
+    "dev",
+    "--freeze",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/freeze.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c"
+    },
+    "duplicate_case_variant_tuples": [],
+    "evidence": "live-eligible records only",
+    "excluded_unattributable_or_mock": [],
+    "freeze_checks": {
+      "dataset_sha_matches_freeze": true,
+      "records_after_freeze": 0
+    },
+    "jsonl_problems": [],
+    "phase": "dev",
+    "records_in_phase_used": 432,
+    "records_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/routing/results/dev.jsonl": "c9a7e54605cd9a9d76c68f898c1a7682a7992047b0b5b21105fa006d5153fee9"
+    },
+    "tasks": {
+      "R1|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "balanced": "3/6",
+          "deep": "6/6",
+          "fast": "6/6",
+          "none": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "balanced": {
+            "balanced": 3,
+            "fast": 3
+          },
+          "deep": {
+            "deep": 6
+          },
+          "fast": {
+            "fast": 6
+          },
+          "none": {
+            "none": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 744.744,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 584.269,
+          "p95": 719.1
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 9
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R1|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "class_support_and_recall": {
+          "balanced": "5/6",
+          "deep": "6/6",
+          "fast": "6/6",
+          "none": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "balanced": {
+            "balanced": 5,
+            "fast": 1
+          },
+          "deep": {
+            "deep": 6
+          },
+          "fast": {
+            "fast": 6
+          },
+          "none": {
+            "none": 6
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 649.37,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 560.308,
+          "p95": 621.782
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 8e-5,
+            "model_losses": 1,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 8e-5,
+            "model_losses": 1,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 9
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "R1|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9167,
+        "class_support_and_recall": {
+          "balanced": "5/6",
+          "deep": "5/6",
+          "fast": "6/6",
+          "none": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "balanced": {
+            "balanced": 5,
+            "fast": 1
+          },
+          "deep": {
+            "balanced": 1,
+            "deep": 5
+          },
+          "fast": {
+            "fast": 6
+          },
+          "none": {
+            "none": 6
+          }
+        },
+        "correct": 22,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 805.864,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 586.716,
+          "p95": 790.488
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00014,
+            "model_losses": 1,
+            "model_wins": 17,
+            "other_correct": 6
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00014,
+            "model_losses": 1,
+            "model_wins": 17,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00024,
+            "model_losses": 0,
+            "model_wins": 13,
+            "other_correct": 9
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7415, 0.9768],
+        "wilson95_attempted": [0.7415, 0.9768]
+      },
+      "R2|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8333,
+        "class_support_and_recall": {
+          "minimal": "6/6",
+          "none": "6/6",
+          "standard": "2/6",
+          "thorough": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "minimal": {
+            "minimal": 6
+          },
+          "none": {
+            "none": 6
+          },
+          "standard": {
+            "minimal": 4,
+            "standard": 2
+          },
+          "thorough": {
+            "thorough": 6
+          }
+        },
+        "correct": 20,
+        "correct_over_answered": "20/24",
+        "correct_over_attempted": "20/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 702.566,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 566.154,
+          "p95": 702.549
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 5
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.6415, 0.9332],
+        "wilson95_attempted": [0.6415, 0.9332]
+      },
+      "R2|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "minimal": "6/6",
+          "none": "6/6",
+          "standard": "3/6",
+          "thorough": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "minimal": {
+            "minimal": 6
+          },
+          "none": {
+            "none": 6
+          },
+          "standard": {
+            "minimal": 3,
+            "standard": 3
+          },
+          "thorough": {
+            "thorough": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1558.026,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 568.824,
+          "p95": 687.005
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00086,
+            "model_losses": 3,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 5
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R2|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "minimal": "6/6",
+          "none": "6/6",
+          "standard": "3/6",
+          "thorough": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "minimal": {
+            "minimal": 6
+          },
+          "none": {
+            "none": 6
+          },
+          "standard": {
+            "minimal": 3,
+            "standard": 3
+          },
+          "thorough": {
+            "thorough": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 829.57,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 565.092,
+          "p95": 655.244
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00086,
+            "model_losses": 3,
+            "model_wins": 19,
+            "other_correct": 5
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 5
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R3|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "class_support_and_recall": {
+          "explorer": "6/6",
+          "none": "5/6",
+          "reviewer": "6/6",
+          "worker": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "explorer": {
+            "explorer": 6
+          },
+          "none": {
+            "explorer": 1,
+            "none": 5
+          },
+          "reviewer": {
+            "reviewer": 6
+          },
+          "worker": {
+            "worker": 6
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 897.872,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 573.772,
+          "p95": 750.387
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 7
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 14
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "R3|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "class_support_and_recall": {
+          "explorer": "6/6",
+          "none": "5/6",
+          "reviewer": "6/6",
+          "worker": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "explorer": {
+            "explorer": 6
+          },
+          "none": {
+            "explorer": 1,
+            "none": 5
+          },
+          "reviewer": {
+            "reviewer": 6
+          },
+          "worker": {
+            "worker": 6
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 718.822,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 582.018,
+          "p95": 709.166
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 7
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 14
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "R3|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9583,
+        "class_support_and_recall": {
+          "explorer": "6/6",
+          "none": "5/6",
+          "reviewer": "6/6",
+          "worker": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "explorer": {
+            "explorer": 6
+          },
+          "none": {
+            "explorer": 1,
+            "none": 5
+          },
+          "reviewer": {
+            "reviewer": 6
+          },
+          "worker": {
+            "worker": 6
+          }
+        },
+        "correct": 23,
+        "correct_over_answered": "23/24",
+        "correct_over_attempted": "23/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1254.815,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 562.784,
+          "p95": 989.737
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 7
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 2e-5,
+            "model_losses": 0,
+            "model_wins": 17,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 14
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7976, 0.9926],
+        "wilson95_attempted": [0.7976, 0.9926]
+      },
+      "R4|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9167,
+        "class_support_and_recall": {
+          "defer": "6/6",
+          "parallel": "6/6",
+          "serial": "5/6",
+          "solo": "5/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "defer": {
+            "defer": 6
+          },
+          "parallel": {
+            "parallel": 6
+          },
+          "serial": {
+            "defer": 1,
+            "serial": 5
+          },
+          "solo": {
+            "defer": 1,
+            "solo": 5
+          }
+        },
+        "correct": 22,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 755.412,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 565.952,
+          "p95": 709.996
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 1,
+            "model_wins": 14,
+            "other_correct": 9
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 3e-5,
+            "model_losses": 0,
+            "model_wins": 16,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.125,
+            "model_losses": 1,
+            "model_wins": 6,
+            "other_correct": 17
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7415, 0.9768],
+        "wilson95_attempted": [0.7415, 0.9768]
+      },
+      "R4|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "defer": "6/6",
+          "parallel": "5/6",
+          "serial": "4/6",
+          "solo": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "defer": {
+            "defer": 6
+          },
+          "parallel": {
+            "defer": 1,
+            "parallel": 5
+          },
+          "serial": {
+            "defer": 2,
+            "serial": 4
+          },
+          "solo": {
+            "solo": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 793.401,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 572.435,
+          "p95": 787.364
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00183,
+            "model_losses": 1,
+            "model_wins": 13,
+            "other_correct": 9
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.28906,
+            "model_losses": 2,
+            "model_wins": 6,
+            "other_correct": 17
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R4|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 1.0,
+        "class_support_and_recall": {
+          "defer": "6/6",
+          "parallel": "6/6",
+          "serial": "6/6",
+          "solo": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "defer": {
+            "defer": 6
+          },
+          "parallel": {
+            "parallel": 6
+          },
+          "serial": {
+            "serial": 6
+          },
+          "solo": {
+            "solo": 6
+          }
+        },
+        "correct": 24,
+        "correct_over_answered": "24/24",
+        "correct_over_attempted": "24/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1250.571,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 571.141,
+          "p95": 735.349
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 6e-5,
+            "model_losses": 0,
+            "model_wins": 15,
+            "other_correct": 9
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 1e-5,
+            "model_losses": 0,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.01562,
+            "model_losses": 0,
+            "model_wins": 7,
+            "other_correct": 17
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.862, 1.0],
+        "wilson95_attempted": [0.862, 1.0]
+      },
+      "R5|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.9167,
+        "class_support_and_recall": {
+          "correction": "4/6",
+          "follow_up": "6/6",
+          "new_topic": "6/6",
+          "unknown": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "correction": {
+            "correction": 4,
+            "unknown": 2
+          },
+          "follow_up": {
+            "follow_up": 6
+          },
+          "new_topic": {
+            "new_topic": 6
+          },
+          "unknown": {
+            "unknown": 6
+          }
+        },
+        "correct": 22,
+        "correct_over_answered": "22/24",
+        "correct_over_attempted": "22/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 663.441,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.499,
+          "p95": 637.358
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00195,
+            "model_losses": 0,
+            "model_wins": 10,
+            "other_correct": 12
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.0004,
+            "model_losses": 2,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00027,
+            "model_losses": 1,
+            "model_wins": 16,
+            "other_correct": 7
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.7415, 0.9768],
+        "wilson95_attempted": [0.7415, 0.9768]
+      },
+      "R5|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "correction": "3/6",
+          "follow_up": "6/6",
+          "new_topic": "6/6",
+          "unknown": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "correction": {
+            "correction": 3,
+            "unknown": 3
+          },
+          "follow_up": {
+            "follow_up": 6
+          },
+          "new_topic": {
+            "new_topic": 6
+          },
+          "unknown": {
+            "unknown": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 693.064,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 559.103,
+          "p95": 692.39
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 12
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00052,
+            "model_losses": 1,
+            "model_wins": 15,
+            "other_correct": 7
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R5|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.875,
+        "class_support_and_recall": {
+          "correction": "3/6",
+          "follow_up": "6/6",
+          "new_topic": "6/6",
+          "unknown": "6/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "correction": {
+            "correction": 3,
+            "unknown": 3
+          },
+          "follow_up": {
+            "follow_up": 6
+          },
+          "new_topic": {
+            "new_topic": 6
+          },
+          "unknown": {
+            "unknown": 6
+          }
+        },
+        "correct": 21,
+        "correct_over_answered": "21/24",
+        "correct_over_attempted": "21/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 722.857,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 567.722,
+          "p95": 677.332
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.00391,
+            "model_losses": 0,
+            "model_wins": 9,
+            "other_correct": 12
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00149,
+            "model_losses": 3,
+            "model_wins": 18,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00052,
+            "model_losses": 1,
+            "model_wins": 15,
+            "other_correct": 7
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.69, 0.9566],
+        "wilson95_attempted": [0.69, 0.9566]
+      },
+      "R6|minimal": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8333,
+        "class_support_and_recall": {
+          "abstain": "6/6",
+          "no_fit": "6/6",
+          "reject": "6/6",
+          "select": "2/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "abstain": {
+            "abstain": 6
+          },
+          "no_fit": {
+            "no_fit": 6
+          },
+          "reject": {
+            "reject": 6
+          },
+          "select": {
+            "abstain": 4,
+            "select": 2
+          }
+        },
+        "correct": 20,
+        "correct_over_answered": "20/24",
+        "correct_over_attempted": "20/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 1696.694,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 604.553,
+          "p95": 1162.038
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.09229,
+            "model_losses": 3,
+            "model_wins": 10,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.6415, 0.9332],
+        "wilson95_attempted": [0.6415, 0.9332]
+      },
+      "R6|rubric": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.7917,
+        "class_support_and_recall": {
+          "abstain": "6/6",
+          "no_fit": "6/6",
+          "reject": "6/6",
+          "select": "1/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "abstain": {
+            "abstain": 6
+          },
+          "no_fit": {
+            "no_fit": 6
+          },
+          "reject": {
+            "reject": 6
+          },
+          "select": {
+            "abstain": 5,
+            "select": 1
+          }
+        },
+        "correct": 19,
+        "correct_over_answered": "19/24",
+        "correct_over_attempted": "19/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 780.256,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 554.063,
+          "p95": 668.116
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.17957,
+            "model_losses": 4,
+            "model_wins": 10,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00024,
+            "model_losses": 0,
+            "model_wins": 13,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00098,
+            "model_losses": 0,
+            "model_wins": 11,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.5953, 0.9076],
+        "wilson95_attempted": [0.5953, 0.9076]
+      },
+      "R6|scoped": {
+        "answered": 24,
+        "attempted": 24,
+        "balanced_accuracy_attempted": 0.8333,
+        "class_support_and_recall": {
+          "abstain": "6/6",
+          "no_fit": "6/6",
+          "reject": "6/6",
+          "select": "2/6"
+        },
+        "confidence_n": 24,
+        "confusion_expected_to_predicted": {
+          "abstain": {
+            "abstain": 6
+          },
+          "no_fit": {
+            "no_fit": 6
+          },
+          "reject": {
+            "reject": 6
+          },
+          "select": {
+            "abstain": 4,
+            "select": 2
+          }
+        },
+        "correct": 20,
+        "correct_over_answered": "20/24",
+        "correct_over_attempted": "20/24",
+        "criteria_order": {
+          "original": 24
+        },
+        "failure_classes": {},
+        "http_status": {
+          "200": 24
+        },
+        "latency_ms": {
+          "distinct_values": 24,
+          "max": 653.066,
+          "n": 24,
+          "note": "batched dev requests are not comparable to single-question holdout latency",
+          "over_production_10s": 0,
+          "p50": 565.053,
+          "p95": 651.222
+        },
+        "not_attempted": 0,
+        "paired_vs_baselines": {
+          "authored_stored_baseline": {
+            "mcnemar_exact_p": 0.09229,
+            "model_losses": 3,
+            "model_wins": 10,
+            "other_correct": 13
+          },
+          "dev_majority": {
+            "mcnemar_exact_p": 0.00012,
+            "model_losses": 0,
+            "model_wins": 14,
+            "other_correct": 6
+          },
+          "lexical_probe": {
+            "mcnemar_exact_p": 0.00049,
+            "model_losses": 0,
+            "model_wins": 12,
+            "other_correct": 8
+          }
+        },
+        "payload_problems": {},
+        "provider_ids": {
+          "present": 24,
+          "unique": 24
+        },
+        "records_with_other_dataset_sha256": 0,
+        "response_model_field": {
+          "typesafe/jev-1.13-20260917": 24
+        },
+        "universe": 24,
+        "wilson95_answered": [0.6415, 0.9332],
+        "wilson95_attempted": [0.6415, 0.9332]
+      }
+    },
+    "unknown_case_ids": [],
+    "variant_selection": {
+      "R1": {
+        "correct_by_variant": {
+          "minimal": 21,
+          "rubric": 23,
+          "scoped": 22
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 1,
+          "other_correct": 22
+        },
+        "margin_cases": 1,
+        "runner_up": "scoped",
+        "top": "rubric",
+        "weak_evidence": true
+      },
+      "R2": {
+        "correct_by_variant": {
+          "minimal": 20,
+          "rubric": 21,
+          "scoped": 21
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 21
+        },
+        "margin_cases": 0,
+        "runner_up": "scoped",
+        "top": "rubric",
+        "weak_evidence": true
+      },
+      "R3": {
+        "correct_by_variant": {
+          "minimal": 23,
+          "rubric": 23,
+          "scoped": 23
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 23
+        },
+        "margin_cases": 0,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      },
+      "R4": {
+        "correct_by_variant": {
+          "minimal": 22,
+          "rubric": 21,
+          "scoped": 24
+        },
+        "discordant": {
+          "mcnemar_exact_p": 0.5,
+          "model_losses": 0,
+          "model_wins": 2,
+          "other_correct": 22
+        },
+        "margin_cases": 2,
+        "runner_up": "minimal",
+        "top": "scoped",
+        "weak_evidence": true
+      },
+      "R5": {
+        "correct_by_variant": {
+          "minimal": 22,
+          "rubric": 21,
+          "scoped": 21
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 1,
+          "other_correct": 21
+        },
+        "margin_cases": 1,
+        "runner_up": "rubric",
+        "top": "minimal",
+        "weak_evidence": true
+      },
+      "R6": {
+        "correct_by_variant": {
+          "minimal": 20,
+          "rubric": 19,
+          "scoped": 20
+        },
+        "discordant": {
+          "mcnemar_exact_p": 1.0,
+          "model_losses": 0,
+          "model_wins": 0,
+          "other_correct": 20
+        },
+        "margin_cases": 0,
+        "runner_up": "scoped",
+        "top": "minimal",
+        "weak_evidence": true
+      }
+    }
+  },
+  "returncode": 0
+}

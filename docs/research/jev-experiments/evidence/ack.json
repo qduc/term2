@@ -1,0 +1,10 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "E",
+  "worker": "evidence",
+  "role": "evidence",
+  "route": "term2/codex/gpt-5.6-sol",
+  "acknowledged": true,
+  "children": [],
+  "background_work": []
+}

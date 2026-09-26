@@ -1,0 +1,10 @@
+{
+  "run_id": "jev-fit-20260919",
+  "task_id": "R",
+  "worker": "routing",
+  "role": "routing research worker",
+  "route": "term2/codex/gpt-5.6-terra",
+  "status": "acknowledged",
+  "children": [],
+  "background_work": []
+}

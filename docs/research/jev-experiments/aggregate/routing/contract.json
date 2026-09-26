@@ -1,0 +1,174 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/qduc/term2/docs/research/jev-experiments/review/audit.py",
+    "contract",
+    "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json"
+  ],
+  "output": {
+    "dataset_sha256": {
+      "/home/qduc/term2/docs/research/jev-experiments/routing/dataset.json": "f9782dcc551f6cd983c5eb2e48242008cde2e3d42d6e6b979d217ccdc04ccb9c"
+    },
+    "duplicate_states": {
+      "cross_split": [],
+      "cross_task": [],
+      "within_split": []
+    },
+    "errors": [],
+    "leakage_flags": {
+      "only_expected_label_named_in_state": ["R4-holdout-19", "R5-dev-13"],
+      "tag_word_in_state": [
+        "R1-dev-03",
+        "R1-dev-09",
+        "R1-dev-10",
+        "R1-dev-13",
+        "R1-dev-15",
+        "R1-dev-18",
+        "R1-dev-19",
+        "R1-holdout-02",
+        "R1-holdout-03",
+        "R1-holdout-06",
+        "R1-holdout-07",
+        "R1-holdout-09",
+        "R1-holdout-10",
+        "R1-holdout-11",
+        "R1-holdout-17",
+        "R1-holdout-19",
+        "R1-holdout-22",
+        "R3-holdout-08",
+        "R4-holdout-12"
+      ]
+    },
+    "note": "Leakage flags are heuristics that name case IDs only; each needs human inspection.",
+    "ok": true,
+    "tasks": {
+      "R1": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      },
+      "R2": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      },
+      "R3": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      },
+      "R4": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      },
+      "R5": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      },
+      "R6": {
+        "counts": {
+          "dev": 24,
+          "holdout": 24
+        },
+        "distinct_criteria_sets": 1,
+        "distinct_label_sets": 1,
+        "expected_first_count": 12,
+        "expected_last_count": 12,
+        "expected_position": {
+          "0/4": 12,
+          "1/4": 12,
+          "2/4": 12,
+          "3/4": 12
+        },
+        "first_count_if_position_uniform": 12.0,
+        "n_with_valid_expected": 48,
+        "option_count_distribution": {
+          "4": 48
+        }
+      }
+    }
+  },
+  "returncode": 0
+}

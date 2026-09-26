@@ -75,95 +75,99 @@ let noops = 0;
 let costMicros = 0;
 let inputTokens = 0;
 let outputTokens = 0;
-for (const session of settled) {
-  const records = projectMessages(session)
-    .records.filter((record) => (record.kind === 'user' || record.kind === 'assistant') && record.text.trim())
-    .map((record) => ({
-      sourceIndex: record.index,
-      role: record.kind,
-      text: redactSecrets(record.kind === 'assistant' ? record.text.slice(0, 1200) : record.text),
-    }));
-  const userMessages = records.filter((record) => record.role === 'user');
-  if (userMessages.length < 3) {
-    skipped++;
-    continue;
-  }
-  const payload = {
-    sessionId: session.id,
-    messages: records,
-    existingMemories: existingMemories.map(({ id, title, summary }) => ({
-      id: redactSecrets(id),
-      title: redactSecrets(title),
-      summary: redactSecrets(summary),
-    })),
-  };
-  const response = await client.chatDetailed(JSON.stringify(payload), {
-    provider,
-    model,
-    reasoningEffort: settings.get('agent.reasoningEffort'),
-    instructions: system,
-    maxTokens: 2500,
-  });
-  if (!response.costRecords?.length)
-    throw new Error(`No cost record for distillation request ${session.id}; refusing unmetered run`);
-  for (const cost of response.costRecords) {
-    if (cost.usdMicros === undefined)
-      throw new Error(`Unpriced distillation request ${session.id}; refusing unmetered run`);
-    costMicros += cost.usdMicros;
-  }
-  inputTokens += response.usage?.prompt_tokens ?? 0;
-  outputTokens += response.usage?.completion_tokens ?? 0;
-  processed++;
-  let operations: unknown;
-  try {
-    operations = JSON.parse(response.text);
-  } catch {
-    rejected++;
-    continue;
-  }
-  if (!Array.isArray(operations)) {
-    rejected++;
-    continue;
-  }
-  for (const value of operations as unknown[]) {
-    const decision = validateDistilledOperation(value, records, explicitLeads.get(session.id) ?? []);
-    if (decision.status === 'noop') {
-      noops++;
+try {
+  for (const session of settled) {
+    const records = projectMessages(session)
+      .records.filter((record) => (record.kind === 'user' || record.kind === 'assistant') && record.text.trim())
+      .map((record) => ({
+        sourceIndex: record.index,
+        role: record.kind,
+        text: redactSecrets(record.kind === 'assistant' ? record.text.slice(0, 1200) : record.text),
+      }));
+    const userMessages = records.filter((record) => record.role === 'user');
+    if (userMessages.length < 3) {
+      skipped++;
       continue;
     }
-    if (decision.status === 'rejected') {
+    const payload = {
+      sessionId: session.id,
+      messages: records,
+      existingMemories: existingMemories.map(({ id, title, summary }) => ({
+        id: redactSecrets(id),
+        title: redactSecrets(title),
+        summary: redactSecrets(summary),
+      })),
+    };
+    const response = await client.chatDetailed(JSON.stringify(payload), {
+      provider,
+      model,
+      reasoningEffort: settings.get('agent.reasoningEffort'),
+      instructions: system,
+      maxTokens: 2500,
+    });
+    if (!response.costRecords?.length)
+      throw new Error(`No cost record for distillation request ${session.id}; refusing unmetered run`);
+    for (const cost of response.costRecords) {
+      if (cost.usdMicros === undefined)
+        throw new Error(`Unpriced distillation request ${session.id}; refusing unmetered run`);
+      costMicros += cost.usdMicros;
+    }
+    inputTokens += response.usage?.prompt_tokens ?? 0;
+    outputTokens += response.usage?.completion_tokens ?? 0;
+    processed++;
+    let operations: unknown;
+    try {
+      operations = JSON.parse(response.text);
+    } catch {
       rejected++;
       continue;
     }
-    if (decision.status === 'candidate') {
-      await appendFile(
-        candidateFile,
-        `${JSON.stringify({ sessionId: session.id, memory: decision.memory, evidence: [decision.evidence] })}\n`,
-      );
-      candidates++;
+    if (!Array.isArray(operations)) {
+      rejected++;
       continue;
     }
-    try {
-      await existing.create(decision.memory);
-      await appendFile(
-        evidenceFile,
-        `${JSON.stringify({
-          sessionId: session.id,
-          memoryId: decision.memory.id,
-          evidence: [decision.evidence],
-          status: decision.status,
-        })}\n`,
-      );
-      written++;
-      eligible++;
-    } catch (error) {
-      if (error instanceof MemoryAlreadyExistsError) rejected++;
-      else throw error;
+    for (const value of operations as unknown[]) {
+      const decision = validateDistilledOperation(value, records, explicitLeads.get(session.id) ?? []);
+      if (decision.status === 'noop') {
+        noops++;
+        continue;
+      }
+      if (decision.status === 'rejected') {
+        rejected++;
+        continue;
+      }
+      if (decision.status === 'candidate') {
+        await appendFile(
+          candidateFile,
+          `${JSON.stringify({ sessionId: session.id, memory: decision.memory, evidence: [decision.evidence] })}\n`,
+        );
+        candidates++;
+        continue;
+      }
+      try {
+        await existing.create(decision.memory);
+        await appendFile(
+          evidenceFile,
+          `${JSON.stringify({
+            sessionId: session.id,
+            memoryId: decision.memory.id,
+            evidence: [decision.evidence],
+            status: decision.status,
+          })}\n`,
+        );
+        written++;
+        eligible++;
+      } catch (error) {
+        if (error instanceof MemoryAlreadyExistsError) rejected++;
+        else throw error;
+      }
     }
   }
+} finally {
+  await client.disposeChatModels();
+  client.dispose();
+  await Promise.all([client.disposeBackgroundShellJobs(), client.disposeBackgroundSubagents()]);
 }
-client.dispose();
-await Promise.all([client.disposeBackgroundShellJobs(), client.disposeBackgroundSubagents()]);
 process.stdout.write(
   `${JSON.stringify(
     {

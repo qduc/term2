@@ -123,6 +123,33 @@ it.sequential('chat caches models by provider and model and clears explicitly', 
   expect(created).toBe(2);
 });
 
+it.sequential('chat disposal closes its cached provider transport', async () => {
+  let closed = 0;
+  const providerId = 'chat-close-provider';
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Chat close provider',
+      createStreamedModel: () => ({
+        ...mockStreamedModel(),
+        async close() {
+          closed++;
+        },
+      }),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+  const service = new AgentChatService({
+    agentConfig: new MockAgentConfig(providerId, 'cached-model') as any,
+    settings: createMockSettings(providerId),
+    logger: mockLogger,
+  });
+  await service.chat('one');
+  await service.dispose();
+  expect(closed).toBe(1);
+});
+
 it.sequential('chat returns extracted response from agent run', async () => {
   lastRunRequest = null;
 

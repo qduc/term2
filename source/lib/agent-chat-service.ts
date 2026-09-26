@@ -34,6 +34,7 @@ export class AgentChatService {
   #deps: AgentChatServiceDeps;
   #modelCache = new Map<string, Promise<StreamedModelTurn>>();
   #activeRunLoops = new Set<ApplicationRunLoop>();
+  #disposePromise?: Promise<void>;
 
   constructor(deps: AgentChatServiceDeps) {
     this.#deps = deps;
@@ -42,6 +43,21 @@ export class AgentChatService {
   /** Clear models created with settings that may no longer be current. */
   clearModelCache(): void {
     this.#modelCache.clear();
+  }
+
+  /** Close direct-chat transports when their owning client ends. */
+  dispose(): Promise<void> {
+    if (this.#disposePromise) return this.#disposePromise;
+    this.abort();
+    const models = [...this.#modelCache.values()];
+    this.#modelCache.clear();
+    this.#disposePromise = Promise.allSettled(
+      models.map(async (cached) => {
+        const model = await cached;
+        await (model as StreamedModelTurn & { close?: () => unknown }).close?.();
+      }),
+    ).then(() => undefined);
+    return this.#disposePromise;
   }
 
   /** Abort every active simple or structured chat operation. */

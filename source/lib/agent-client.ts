@@ -1114,6 +1114,11 @@ export class AgentClient {
     return this.#subagentBridge?.disposeBackgroundSubagents() ?? Promise.resolve();
   }
 
+  /** Await simple-chat provider cleanup in short-lived batch clients. */
+  disposeChatModels(): Promise<void> {
+    return this.#chatService.dispose();
+  }
+
   /** End all session-bound activity and release resources held by this client. */
   dispose(): void {
     if (this.#isDisposed) return;
@@ -1123,7 +1128,7 @@ export class AgentClient {
     this.disposeShellChildren();
     void this.disposeBackgroundShellJobs();
     this.#clearStreamedModelCache();
-    this.#chatService.clearModelCache();
+    void this.disposeChatModels();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
     this.#blockedCompactionRearmAtEstimatedTokens = undefined;

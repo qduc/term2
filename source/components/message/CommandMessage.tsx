@@ -547,7 +547,7 @@ const CommandMessage: FC<Props> = ({
     if (success === false || failureReason) {
       const parsedOutputError = extractErrorMessage(output);
       const errorMsg = failureReason || parsedOutputError || 'failed';
-      const summarizeRawError = !failureReason && isStructuredToolError(output);
+      const summarizeRawError = !failureReason && !isApprovalRejection && isStructuredToolError(output);
       const displayErrorMsg = isSearchLikeTool(toolName, command)
         ? stripRgErrorLines(errorMsg).trim() || 'failed'
         : errorMsg;
@@ -642,19 +642,15 @@ const CommandMessage: FC<Props> = ({
   }
   const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
   const displayed = outputText && outputText !== '(no output)' ? truncateOutputLines(output || '') : outputText;
-
-  if (success === false && !failureReason && isStructuredToolError(output)) {
-    return (
-      <Box flexDirection="column">
-        {renderStandardHeader()}
+  const actionableErrorSummary =
+    success === false && !failureReason && !isApprovalRejection && isStructuredToolError(output) ? (
+      <>
         <Text color={textColor || COLOR_TEXT_MUTED}>Tool failed.</Text>
         <Text color={textColor || COLOR_TEXT_MUTED}>
           Review the error details and retry after correcting the issue.
         </Text>
-        <Text color={COLOR_DANGER}>{extractErrorMessage(output)}</Text>
-      </Box>
-    );
-  }
+      </>
+    ) : null;
 
   // Special handling for apply_patch
   if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {
@@ -669,6 +665,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
+        {actionableErrorSummary}
         {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
         {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -691,6 +688,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
+        {actionableErrorSummary}
         <DiffView diff={diff} />
         {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -703,6 +701,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
+        {actionableErrorSummary}
         {success !== false && <DiffView diff={createFileDiffLines} />}
         {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
         <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
@@ -951,6 +950,7 @@ const CommandMessage: FC<Props> = ({
   return (
     <Box flexDirection="column">
       {renderStandardHeader()}
+      {actionableErrorSummary}
       {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
       <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       {autoApprovalLabel}

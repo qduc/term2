@@ -30,7 +30,11 @@ const exitCode = await buildWithRollback({
   distDir: fileURLToPath(new URL('../dist/', import.meta.url)),
   backupDir: fileURLToPath(new URL('../dist.bak/', import.meta.url)),
   backup: process.env.SKIP_BUILD_BACKUP !== '1',
-  steps: [run('tsc', ['--project', 'tsconfig.build.json']), run('pnpm', ['run', 'post-build'])],
+  steps: [
+    run('tsc', ['--project', 'tsconfig.build.json']),
+    run(process.execPath, ['scripts/write-build-info.mjs']),
+    run('pnpm', ['run', 'post-build']),
+  ],
   log: (message) => console.log(message),
 });
 

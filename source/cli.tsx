@@ -4,6 +4,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { render } from 'ink';
 import meow from 'meow';
+import { createRequire } from 'node:module';
 import App from './app.js';
 import type { SSHInfo } from './services/shell/shell-interaction-session.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
@@ -207,6 +208,15 @@ process.on('exit', () => {
   }
 });
 
+const require = createRequire(import.meta.url);
+let reportedVersion: string | undefined;
+try {
+  const buildInfo = require('./build-info.json') as { version?: string };
+  if (buildInfo.version) reportedVersion = buildInfo.version;
+} catch {
+  // Source checkouts and older/test builds have no generated build identity.
+}
+
 const cli = meow(
   `
     Everyday usage
@@ -307,6 +317,7 @@ const cli = meow(
       $ term2 control status worker-1 --json
   `,
   {
+    ...(reportedVersion ? { version: reportedVersion } : {}),
     importMeta: import.meta,
     argv: controlArgv,
     flags: {

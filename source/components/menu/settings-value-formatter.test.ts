@@ -4,6 +4,7 @@ import {
   formatUsdMicros,
   formatMilestones,
   formatSettingDisplayValue,
+  truncateKeepingTail,
 } from './settings-value-formatter.js';
 import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
@@ -36,6 +37,10 @@ it('formatUsdMicros formats micro-dollars into readable currency', () => {
 it('formatMilestones formats context token milestones', () => {
   expect(formatMilestones([200000, 300000, 400000])).toBe('200k, 300k, 400k');
   expect(formatMilestones([])).toBe('(none)');
+});
+
+it('truncateKeepingTail avoids cutting camel-case setting names in the middle of a word', () => {
+  expect(truncateKeepingTail('agent.runBudget.warningHeadroomActiveTimeMs', 12)).toBe('…TimeMs');
 });
 
 it('formatSettingDisplayValue formats secrets masked or <empty>', () => {

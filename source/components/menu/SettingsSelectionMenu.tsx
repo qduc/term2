@@ -7,7 +7,7 @@ import {
 } from '../../hooks/use-settings-completion.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 import { formatSettingDisplayValue, truncateKeepingTail } from './settings-value-formatter.js';
 
 type Props = {
@@ -35,8 +35,6 @@ function describeSettingState(item: SettingCompletionItem): string {
   parts.push(item.requiresRestart ? 'applies after restart' : 'applies immediately');
   return parts.join(' · ');
 }
-const KEY_COL_WIDTH = 32;
-
 const SettingsSelectionMenu: FC<Props> = ({
   items,
   selectedIndex,
@@ -46,6 +44,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   activeCategoryId,
   categories,
 }) => {
+  const keyColWidth = Math.max(12, Math.min(32, (process.stdout.columns ?? 80) - 48));
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
 
@@ -68,12 +67,10 @@ const SettingsSelectionMenu: FC<Props> = ({
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={VISIBLE_COUNT}
-        borderColor={items.length === 0 ? COLOR_DANGER : COLOR_ACCENT}
+        borderColor={COLOR_ACCENT}
         fallbackText={
           <Box flexDirection="column">
-            <Text bold color={COLOR_DANGER}>
-              No settings found
-            </Text>
+            <Text color={COLOR_TEXT_SUBTLE}>No settings found</Text>
             <Text color={COLOR_TEXT_SUBTLE}>
               No settings match "{query}"{' '}
               {isSearchingAll ? 'in any section' : `in ${activeCategory?.label ?? 'this section'}`}
@@ -117,7 +114,7 @@ const SettingsSelectionMenu: FC<Props> = ({
 
           const valueObj = formatSettingDisplayValue(item.key, item.currentValue);
           // Keep the tail of long keys: the leaf name is what tells siblings apart.
-          const paddedKey = truncateKeepingTail(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ');
+          const paddedKey = truncateKeepingTail(item.key, keyColWidth).padEnd(keyColWidth, ' ') + ' ';
           const isChanged = item.source !== undefined && item.source !== 'default';
 
           return (

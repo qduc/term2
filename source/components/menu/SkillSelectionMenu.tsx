@@ -14,9 +14,12 @@ type Props = {
 const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
   if (items.length === 0) {
     return (
-      <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
-        <Text color={COLOR_TEXT_SUBTLE}>Skills</Text>
-        <Text color={COLOR_TEXT_SUBTLE}>{query ? 'No matching skills' : 'No skills available'}</Text>
+      <Box flexDirection="column">
+        <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
+          <Text color={COLOR_TEXT_SUBTLE}>Skills</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>{query ? 'No matching skills' : 'No skills available'}</Text>
+        </Box>
+        <MenuFooter hints={[['Esc', 'cancel']]} />
       </Box>
     );
   }

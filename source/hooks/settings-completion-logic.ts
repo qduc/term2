@@ -89,7 +89,12 @@ export function filterSettingsByQuery(
       const descriptionScore =
         item.description && hasDescriptionSubstring ? scoreSubsequence(trimmed, item.description) : -Infinity;
 
-      const weightedKey = keyScore === -Infinity ? -Infinity : keyScore * 3;
+      const normalizedQuery = trimmed.toLowerCase();
+      const normalizedKey = item.key.toLowerCase();
+      const exactMatch = normalizedKey === normalizedQuery;
+      const prefixMatch = normalizedKey.startsWith(normalizedQuery);
+      const weightedKey =
+        keyScore === -Infinity ? -Infinity : keyScore * 3 + (exactMatch ? 10_000 : prefixMatch ? 5_000 : 0);
       const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
 
       const score = Math.max(weightedKey, weightedDescription);

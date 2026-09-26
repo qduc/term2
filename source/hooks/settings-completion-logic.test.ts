@@ -1,6 +1,11 @@
 import { it, expect } from 'vitest';
 import { SETTINGS_CATEGORIES, SETTING_DESCRIPTIONS } from './settings-completion-config.js';
-import { clampIndex, filterSettingsByCategory, getSettingCategory } from './settings-completion-logic.js';
+import {
+  clampIndex,
+  filterSettingsByCategory,
+  filterSettingsByQuery,
+  getSettingCategory,
+} from './settings-completion-logic.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
 
 it('settings completion config exposes stable category ids', () => {
@@ -50,6 +55,32 @@ it('filterSettingsByCategory keeps only entries from the requested category', ()
   );
 
   expect(result).toEqual([{ key: 'shell.timeout' }, { key: 'webSearch.provider' }]);
+});
+
+it('filterSettingsByQuery ranks exact and prefix key matches ahead of fuzzy matches', () => {
+  const result = filterSettingsByQuery(
+    [
+      { key: 'shell.backgroundTimeout', description: 'A background timeout' },
+      { key: 'shell.timeout', description: 'The shell command timeout' },
+      { key: 'agent.timeoutPolicy', description: 'Shell timeout behavior' },
+    ],
+    'shell.timeout',
+    10,
+  );
+  expect(result.map((item) => item.key)[0]).toBe('shell.timeout');
+});
+
+it('filterSettingsByQuery ranks a key whose last segment matches the query first', () => {
+  const result = filterSettingsByQuery(
+    [
+      { key: 'codex.websocketFirstFrameTimeoutMs', description: 'First frame timeout' },
+      { key: 'shell.timeout', description: 'The shell command timeout' },
+      { key: 'shell.backgroundTimeout', description: 'A background timeout' },
+    ],
+    'timeout',
+    10,
+  );
+  expect(result.map((item) => item.key)[0]).toBe('shell.timeout');
 });
 
 it('filterSettingsByCategory returns memory entries for the memory category', () => {

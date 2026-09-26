@@ -77,6 +77,48 @@ it.sequential('SettingsValueSelectionMenu renders footer', async () => {
   expect(output.includes('back')).toBe(true);
   expect(output.includes('Tab')).toBe(true);
 });
+
+it.sequential(
+  'SettingsValueSelectionMenu gives effort and approval pickers human titles and useful descriptions',
+  async () => {
+    const effort = await renderInAct(
+      <SettingsValueSelectionMenu
+        settingKey="agent.reasoningEffort"
+        items={[{ value: 'default', description: 'Use the model default' }]}
+        selectedIndex={0}
+        query=""
+        defaultText="default"
+        currentText="default"
+      />,
+    );
+    expect(effort.lastFrame()).toContain('Reasoning effort');
+    expect(effort.lastFrame()).not.toContain('Default: default');
+    expect(effort.lastFrame()).toContain('Use the model default');
+    const approval = await renderInAct(
+      <SettingsValueSelectionMenu
+        settingKey="shell.autoApproveMode"
+        items={[{ value: 'auto', description: 'LLM risk check; workspace edits stay automatic' }]}
+        selectedIndex={0}
+        query=""
+      />,
+    );
+    expect(approval.lastFrame()).toContain('Auto-approve mode');
+    expect(approval.lastFrame()).toContain('LLM risk check');
+  },
+);
+
+it.sequential('SettingsValueSelectionMenu formats duration choices consistently with duration values', async () => {
+  for (const [settingKey, value, formatted] of [
+    ['shell.timeout', '120000', '2m'],
+    ['agent.runBudget.maxActiveTimeMs', '1800000', '30m'],
+  ]) {
+    const { lastFrame } = await renderInAct(
+      <SettingsValueSelectionMenu settingKey={settingKey} items={[{ value }]} selectedIndex={0} query="" />,
+    );
+    expect(lastFrame()).toContain(formatted);
+    expect(lastFrame()).not.toContain(value);
+  }
+});
 it.sequential('SettingsValueSelectionMenu shows a neutral state for free-form string settings', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="webSearch.exa.apiKey" items={[]} selectedIndex={0} query="" />,

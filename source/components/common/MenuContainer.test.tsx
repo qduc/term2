@@ -23,6 +23,28 @@ it.sequential('MenuContainer renders items', async () => {
   expect(output!.includes('c')).toBe(true);
 });
 
+it.sequential('MenuContainer keeps its footer visible in loading, error, and empty states', async () => {
+  for (const props of [
+    { loading: true, loadingText: 'Loading' },
+    { error: 'Could not load: disk unavailable' },
+    { items: [], fallbackText: 'Nothing here' },
+  ]) {
+    const { lastFrame } = await renderInAct(
+      <MenuContainer
+        items={props.items ?? []}
+        selectedIndex={0}
+        loading={props.loading}
+        loadingText={props.loadingText}
+        error={props.error}
+        fallbackText={props.fallbackText}
+        footer={<Text>Esc cancel</Text>}
+        renderItem={(item) => <Text>{String(item)}</Text>}
+      />,
+    );
+    expect(lastFrame()).toContain('Esc cancel');
+  }
+});
+
 it.sequential('MenuContainer uses a scrollbar instead of an item count hint', async () => {
   const { lastFrame } = await renderInAct(
     <MenuContainer

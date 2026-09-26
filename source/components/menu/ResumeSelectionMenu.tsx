@@ -5,7 +5,14 @@ import type { SavedAppMode } from '../../services/conversation/conversation-pers
 import { profileIdFromLegacyMode } from '../../services/profiles/legacy-adapter.js';
 import { getProfileLabel } from '../../services/profiles/labels.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_ACTIVE, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
+import {
+  COLOR_ACCENT,
+  COLOR_BORDER,
+  COLOR_BORDER_ACTIVE,
+  COLOR_DANGER,
+  COLOR_TEXT,
+  COLOR_TEXT_SUBTLE,
+} from '../theme.js';
 
 type Props = {
   items: ConversationListEntry[];
@@ -13,7 +20,7 @@ type Props = {
   scrollOffset?: number;
   query: string;
   loading?: boolean;
-  error?: boolean;
+  error?: string | false;
 };
 
 function formatDate(dateString: string): string {
@@ -35,6 +42,25 @@ function formatDate(dateString: string): string {
   return dateString;
 }
 
+function formatRelativeTime(dateString: string): string {
+  const timestamp = Date.parse(dateString);
+  if (!Number.isFinite(timestamp)) return dateString;
+  const seconds = Math.round((timestamp - Date.now()) / 1000);
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 31_536_000],
+    ['month', 2_592_000],
+    ['week', 604_800],
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+    ['second', 1],
+  ];
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  for (const [unit, size] of units)
+    if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
+  return formatter.format(0, 'second');
+}
+
 function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string {
   return getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode));
 }
@@ -44,15 +70,16 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
     return (
       <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
         <Text color={COLOR_TEXT_SUBTLE}>Resume Conversation</Text>
-        <Text color={COLOR_TEXT_SUBTLE}>
+        <Text color={error ? COLOR_DANGER : COLOR_TEXT_SUBTLE}>
           {loading
             ? 'Loading conversations...'
             : error
-            ? 'Could not load conversations'
+            ? `Could not load conversations: ${error}`
             : query
             ? 'No matching conversations'
             : 'No saved conversations found'}
         </Text>
+        <MenuFooter hints={[['Esc', 'cancel']]} />
       </Box>
     );
   }
@@ -96,7 +123,12 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                     <Box key={entry.id}>
                       <SelectionMarker selected={isSelected} />
                       <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
-                        {entry.id}
+                        {entry.firstUserMessage?.replace(/\s+/g, ' ').trim().slice(0, 60) || 'Untitled conversation'}
+                        {' · '}
+                        {formatRelativeTime(entry.updatedAt)}
+                        {entry.messageCount !== undefined
+                          ? ` · ${entry.messageCount} msg${entry.messageCount === 1 ? '' : 's'}`
+                          : ''}
                       </Text>
                     </Box>
                   );
@@ -147,7 +179,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
         hints={[
           ['↑↓', 'navigate'],
           ['⏎', 'resume'],
-          ['esc', 'cancel'],
+          ['Esc', 'cancel'],
         ]}
       />
     </Box>

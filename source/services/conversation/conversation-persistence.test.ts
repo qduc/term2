@@ -684,6 +684,20 @@ it.sequential('hasConversationContent: returns true for assistant_turn', () => {
   expect(persistenceModule.hasConversationContent(id)).toBe(true);
 });
 
+it.sequential('hasConversationContent: preserves a session whose only semantic content is a durable goal', () => {
+  const id = 'goal-only-session';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    JSON.stringify({
+      v: 3,
+      seq: 1,
+      ts: '2026-01-01T00:00:00.000Z',
+      event: { type: 'goal_changed', version: 1, goal: { id: 'g1', outcome: 'Keep me', status: 'active' } },
+    }) + '\n',
+  );
+  expect(persistenceModule.hasConversationContent(id)).toBe(true);
+});
+
 it.sequential('hasConversationContent: ignores unsupported assistant_final events', () => {
   const id = persistenceModule.generateId();
   const filePath = path.join(testDir, `${id}.jsonl`);

@@ -17,6 +17,7 @@ history (`history-service.ts`), and log decoding and replay recovery
 | C8.5 | Streaming deltas are written to a dedicated sidecar (`.deltas`) without fsync, retained across unsettled orderly closes for replay recovery, and unlinked before lock release upon clean turn settlement (`TURN_SETTLING_EVENTS`). | Loss of in-flight turn context upon orderly close, or unbounded disk accumulation of orphaned sidecar files. |
 | C8.6 | Corrupt, unreadable, or partial persistence state degrades gracefully without silent destruction of prior data or unhandled application crashes. *(Proven: typed unreadable project-load result and corrupt-history quarantine.)* | Overwriting corrupted prompt history with a blank file; crashing startup resume flows with raw `fs` errors on unreadable logs. |
 | C8.7 | Resumed conversations strictly match their originating execution context (project path and SSH host) unless explicitly overridden. | Loading commands and conversation state from one project or remote host into an incompatible local or foreign workspace. |
+| C8.8 | Versioned `goal_changed` events are schema-validated, replay to the latest bounded goal, and are fsynced before user/launcher mutation reports success; older logs without them remain goal-less. | Losing a user-authored durable objective after acknowledging a change, or making legacy sessions unreadable. |
 
 ## 2. Owners
 
@@ -73,6 +74,7 @@ history (`history-service.ts`), and log decoding and replay recovery
   - Active Streaming: `writer.append` (`assistant_journal_delta` -> `.deltas` sidecar, no fsync).
   - Critical Markers: `writer.append` (`tool_started`, `tool_result`, `approval_required`,
     `assistant_journal_item`, `assistant_turn`, `undo` -> `fsyncSync` + `#saveLast`).
+    `goal_changed` is also critical user-authored state and uses the same sync path.
     *Note: `approval_resolved` is persisted as an event but is not a member of `FSYNC_EVENTS`.*
   - Turn Settlement: `assistant_turn`, `undo`, or `session_cleared` (`TURN_SETTLING_EVENTS`)
     marks turn settled (`#hasUnsettledTurn = false`); `writer.close` drops settled sidecar.
@@ -110,7 +112,7 @@ history (`history-service.ts`), and log decoding and replay recovery
 
 - **Success:**
   - Critical events (`FSYNC_EVENTS`: `user_message`, `assistant_turn`, `undo`, `session_init`,
-    `tool_started`, `tool_result`, `approval_required`, `assistant_journal_item`): `writeSync`
+    `tool_started`, `tool_result`, `approval_required`, `assistant_journal_item`, `goal_changed`): `writeSync`
     to `#fd` followed immediately by `fsyncSync` and `#saveLast` update.
   - Streaming deltas: `writeSync` to `#deltaFd` without fsync; turn marked unsettled (`#hasUnsettledTurn = true`).
   - Turn settlement: `assistant_turn`, `undo`, and `session_cleared` (`TURN_SETTLING_EVENTS`)
@@ -149,6 +151,7 @@ history (`history-service.ts`), and log decoding and replay recovery
     crash (canonical gone, delete never ran).
 - **Corruption Resilience:**
   - Replay and decoding skip unparseable or schema-invalid JSON lines, reconstructing state from valid envelopes.
+  - `goal_changed` v1 validates its complete bounded goal record; malformed versions/payloads are skipped without invalidating surrounding session events.
   - Missing sidecar (`conversation-persistence.ts:170-172`) or unreadable sidecar (`:174-181`, e.g. `EISDIR` / read error)
     during resume degrades to settled canonical history without failing the load.
 - **Context Mismatch:**
@@ -168,6 +171,12 @@ history (`history-service.ts`), and log decoding and replay recovery
     (`conversation-log-writer.ts:547-556`).
   - **Once-per-writer Cap:** Telemetry is capped at exactly one log emission per writer instance (`#writeErrorLogged`),
     reset only upon writer rotation (`rotate()`).
+
+## 7. Durable goal mutation boundary
+
+- `/goal set`, `/goal achieved`, `/goal abandon`, and launch flags are the user/launcher mutation surfaces. Each emits the same version-1 `goal_changed` event through `ConversationLogWriter.append`; the latest valid event is the replayed projection. `/goal show` is read-only and reports the current terminal or active state, including an explicit no-goal result.
+- A mutation is reported successful only after the normal critical append (including fsync and failure latching) returns. Append failure leaves the in-memory command projection unchanged and is surfaced to the user; the CLI must not send a first request after an explicit launch-goal append failure.
+- `/clear` retains the objective by appending its current goal record to the newly initialized session log. Absence of launch flags leaves a resumed goal unchanged; explicit flags replace it before the resumed session accepts model work. Legacy logs without a valid goal event replay as `goal: undefined`.
 - **HistoryService Structured Logs:**
   - `load()` failure logs `'Failed to load history'` with `{ error, filePath }` (`history-service.ts:90-94`).
   - `save()` failure logs `'Failed to save history'` with `{ error, filePath, messageCount }` (`history-service.ts:129-135`, quarantine refusal; `:156-161`, write/rename failure).

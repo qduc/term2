@@ -58,6 +58,7 @@ export function classifyStaticCommitBlocker(message: StaticCommitSubject): Stati
         case 'completed':
         case 'failed':
         case 'aborted':
+        case 'unknown':
           return null;
         default:
           status satisfies never;

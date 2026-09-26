@@ -32,7 +32,7 @@ export interface ToolExecutionLifecyclePort {
 export interface CommandMessage {
   id: string;
   sender: 'command';
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'aborted';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'aborted' | 'unknown';
   command: string;
   output: string;
   success?: boolean;

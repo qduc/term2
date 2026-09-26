@@ -11,6 +11,8 @@ import {
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { createClearSlashCommand } from '../commands/clear-command.js';
+import { createGoalSlashCommand } from '../commands/goal-command.js';
+import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 import { createRewindSlashCommand, type RewindDisposition } from '../commands/rewind-command.js';
 import { createRetryToolSlashCommand } from '../commands/retry-tool-command.js';
 import { createQuitSlashCommand } from '../commands/quit-command.js';
@@ -45,6 +47,8 @@ interface UseAppCommandsProps {
   applyRuntimeSetting: (key: string, value: any) => void;
   replaceInput: (input: string) => void;
   clearConversation: () => void | Promise<void>;
+  getGoal?: () => DurableGoal | undefined;
+  setGoal?: (goal: DurableGoal) => void;
   getSessionUsage: () => string;
   refreshProviderUsage?: () => void;
   exit: () => void;
@@ -85,6 +89,8 @@ export const useAppCommands = ({
   applyRuntimeSetting,
   replaceInput,
   clearConversation,
+  getGoal = () => undefined,
+  setGoal = () => undefined,
   getSessionUsage,
   refreshProviderUsage,
   exit,
@@ -143,6 +149,7 @@ export const useAppCommands = ({
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
+      createGoalSlashCommand({ getGoal, setGoal, addSystemMessage }),
       createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage, refreshProviderUsage),
       guardBusyTurn(
@@ -280,6 +287,8 @@ export const useAppCommands = ({
     addSystemMessage,
     applyRuntimeSetting,
     clearConversation,
+    getGoal,
+    setGoal,
     exit,
     getSessionUsage,
     refreshProviderUsage,

@@ -1,0 +1,57 @@
+import type { DurableGoal, GoalStatus } from '../services/logging/conversation-log-events.js';
+import { createDurableGoal } from '../services/conversation/durable-goal.js';
+import type { SlashCommand } from '../slash-commands.js';
+
+export function createGoalSlashCommand(options: {
+  getGoal: () => DurableGoal | undefined;
+  setGoal: (goal: DurableGoal) => void;
+  addSystemMessage: (text: string) => void;
+}): SlashCommand {
+  const show = () => {
+    const goal = options.getGoal();
+    if (!goal) {
+      options.addSystemMessage('No durable goal is set. Use /goal set <outcome> [--criteria <text>].');
+      return;
+    }
+    options.addSystemMessage(
+      `Goal (${goal.status}): ${goal.outcome}${
+        goal.successCriteria ? `\nSuccess criteria: ${goal.successCriteria}` : ''
+      }`,
+    );
+  };
+  return {
+    name: 'goal',
+    description: 'Inspect or update the durable session goal; /clear retains it',
+    expectsArgs: true,
+    action: (rawArgs = '') => {
+      const [action, ...parts] = rawArgs.trim().split(/\s+/);
+      try {
+        if (!action || action === 'show') {
+          show();
+          return true;
+        }
+        if (action === 'set') {
+          const text = parts.join(' ');
+          const criteriaIndex = text.indexOf(' --criteria ');
+          const outcome = criteriaIndex < 0 ? text : text.slice(0, criteriaIndex);
+          const criteria = criteriaIndex < 0 ? undefined : text.slice(criteriaIndex + ' --criteria '.length);
+          options.setGoal(createDurableGoal(outcome, criteria));
+          show();
+          return true;
+        }
+        if (action === 'achieved' || action === 'abandon') {
+          const current = options.getGoal();
+          if (!current) throw new Error('No durable goal is set. Use /goal set <outcome> first.');
+          const status: GoalStatus = action === 'achieved' ? 'achieved' : 'abandoned';
+          options.setGoal({ ...current, status });
+          show();
+          return true;
+        }
+        throw new Error('Usage: /goal [show|set <outcome> [--criteria <text>]|achieved|abandon]');
+      } catch (error) {
+        options.addSystemMessage(`Goal update failed: ${error instanceof Error ? error.message : String(error)}`);
+        return true;
+      }
+    },
+  };
+}

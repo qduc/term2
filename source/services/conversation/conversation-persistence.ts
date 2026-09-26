@@ -863,7 +863,14 @@ export function auditConversation(id: string): SessionAudit | null {
   }
 }
 
-const CONTENT_EVENT_TYPES = new Set(['user_message', 'assistant_turn', 'command_message', 'subagent_started', 'error']);
+const CONTENT_EVENT_TYPES = new Set([
+  'user_message',
+  'assistant_turn',
+  'command_message',
+  'subagent_started',
+  'error',
+  'goal_changed',
+]);
 
 export function hasConversationContent(id: string): boolean {
   const filePath = getConversationPath(id);

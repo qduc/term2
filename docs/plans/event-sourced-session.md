@@ -79,6 +79,26 @@ Add optional `eventId`, immutable stream identity, validation, and deterministic
 
 Inventory and emit semantic events for state currently reconstructed only from provider-history snapshots. Add a pure replay projection that derives transcript, provider-neutral history, metadata, and tool ledger from source events, retaining a compatibility adapter for old snapshots. Keep ephemeral provider chain IDs outside the canonical semantic projection. Distinguish observed completion from dispatched-but-unknown and never auto-dispatch on replay.
 
+#### M2 inventory (verified in the current implementation)
+
+The current replay fold is `replayEvents` in `source/services/conversation/conversation-replay.ts`. It already derives transcript, provider-facing history, tool ledger, usage/cost metadata, goal, session identity, and profile/model/provider metadata from journal events. The live provider-history projection is separately owned by `conversation-state-projector.ts`.
+
+| State | Current durable source | Snapshot-only? | M2 treatment |
+| --- | --- | --- | --- |
+| User transcript | `user_message`; old-format compatibility decoding | No | Keep semantic event as source. |
+| Assistant transcript and portable provider history | `assistant_turn.turn` for settled turns; `assistant_journal_item` / `assistant_journal_delta` for interrupted turns | No, for current event formats | Replay from semantic turn items; characterize old v2 formats. |
+| Tool effect ledger and provider call/result pairs | `tool_started`, `tool_result`, plus assistant-turn items; v2 `assistant_turn.snapshot.toolLedger` is a compatibility override | Partly (legacy v2) | Preserve observed completion and `unknown`; never execute during replay. |
+| Undo-restored provider history, ledger, and previous response anchor | `undo.snapshot` | **Yes** | This is the primary remaining snapshot dependency. A snapshot-free undo event needs an explicit semantic retraction/reset representation; simply dropping the snapshot changes model input and ledger. |
+| Provider chain anchor at successful turn boundary | v3 `assistant_turn.state.previousResponseId`; v2 `assistant_turn.snapshot.previousResponseId` | Legacy only, and not portable semantic state | Exclude from the canonical semantic projection; preserve as provider continuity compatibility input only, then invalidate on restart/model-provider change. |
+| Model/provider and profile metadata | `session_init`, `settings_changed`; legacy turn snapshot model/provider participates in chain invalidation | No for current event formats; legacy snapshot contributes compatibility diagnostics | Derive metadata from explicit events, keep old snapshot decoder. |
+| Approval lifecycle | `approval_required`, `approval_resolved`, tool lifecycle events | No | Replay as history/observation only; never restore a live approval. |
+| Goal | versioned `goal_changed` | No | Already semantic and independent from chat text. |
+| Foreground queued text / pending interaction | Contract 12 sidecar and interaction owner | Not a conversation-log snapshot | Keep outside M2 projection; preserve explicit no-auto-dispatch recovery. |
+
+Observed event inventory already includes semantic `user_message`, `assistant_journal_item`, `assistant_journal_delta`, `tool_started`, `tool_result`, `approval_required`, `approval_resolved`, `settings_changed`, `session_init`, and `goal_changed`. Avoid adding a second generic event-store vocabulary. The remaining event-design work is a narrowly defined undo/retraction operation. Existing `tool_result.status` and assistant-turn tool items now preserve `unknown` through decoding, replay, the ledger, and transcript presentation; regression coverage pins that distinction.
+
+**M2a boundary:** add/characterize semantic coverage and a comparison-only pure projection, with the existing replay authoritative. Keep all old snapshot decoding. A production switch is explicitly out of scope until stored fixtures and the complete read-only corpus have zero categorized mismatches. M2b can then remove new snapshot writes only after undo semantics and provider-history equivalence are proven. Never interpret queue sidecars or provider chain IDs as canonical semantic history.
+
 - Contracts: Contract 08 (event fold and resume), Contract 02 (tool-pair settlement, opaque isolation, chain invalidation), Contract 12 only at its existing queue recovery join; no transfer of queue ownership is implied.
 - Tests: golden old-log/new-log replay equality for transcript and provider input; interrupted turns and approvals; complete/partial parallel tools; unknown effects; model/provider switch; clear, undo, fork, and rollover; provider black-box characterization if run-loop dispatch semantics change.
 - Preservation: stage behind dual-projection comparison; retain old decoder and snapshot handling until stored-session fixtures match. Restart clears unsafe chain anchors and does not resume approvals or effects.

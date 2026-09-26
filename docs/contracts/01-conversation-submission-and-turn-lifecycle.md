@@ -17,11 +17,14 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
 - **Enforcement:** `QueueController` (queue admission and queue-item state);
   `ConversationAdapter` (request identity, executable payload routing, promise
   settlement); `TurnStatusMachine` (turn status legality); `TurnCoordinator`
-  (turn admission and delegation); `ApplicationRunLoop` (steer admission and
-  request boundaries); `ConversationOrchestrator` (projection onto UI).
+  (turn admission and delegation); `ApplicationRunLoop` (request-boundary
+  timing); `TurnInputMailbox` (`source/services/agent-runtime/turn-input-mailbox.ts`,
+  pending steer admission, FIFO/edit/retract, and turn/segment settlement);
+  `ConversationOrchestrator` (projection onto UI).
 - **Recovery:** `ConversationAdapter` settlement paths (`retractSubmission`,
   `discardQueue`, cancel); `TurnCoordinator.abort` (+ `providerContinuity.clear`);
-  `ApplicationRunLoop` steer release/settle on abort and turn close;
+  `TurnInputMailbox` releases pending steers on turn abort/close and preserves
+  them across segment abort;
   `ConversationOrchestrator` pending-row retirement when start observers are
   skipped.
 

@@ -26,8 +26,9 @@ the ledger remains the authoritative per-guard inventory.
   in the run loop; command safety -> `validateCommandSafety`; sandbox ->
   `createSandboxRuntimeConfig`; shell containment -> `ExecuteShellOptions` +
   `boundToolResultText`; background shell -> `BackgroundShellRegistry` +
-  `BackgroundShellOutputStore` + watches; steering -> `SubagentRunControl`
-  mailbox; WebSocket liveness -> `websocket-receive-watchdog`; tool ownership ->
+  `BackgroundShellOutputStore` + watches; subagent steering -> `SubagentRunControl`
+  mailbox and active-turn steer settlement -> `TurnInputMailbox`;
+  WebSocket liveness -> `websocket-receive-watchdog`; tool ownership ->
   `ToolOwnershipRegistry`; repetition/containment -> `GenerationGuard`/
   `ApplicationRunLoop`). The ledger's numbered inventory
   (`guard-ledger.md:559-587` and its repair dispositions `:111-153`, `:270-347`,

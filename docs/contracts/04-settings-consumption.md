@@ -163,19 +163,19 @@ live router or at their documented next-request boundary.
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |
 | Schema-to-consumer classification | `settings-consumer-inventory.ts`, imported by `settings-schema.test.ts` "keeps the structured Contract 04 consumer inventory complete and duplicate-free", classifies every runtime `SETTING_KEYS` export (126 values) and rejects missing, duplicate, or unknown keys | covered |
-| Default value | `settings-service.test.ts:69-92` "initializes with defaults"; targeted `settings-schema.test.ts` cases for context compaction, run-budget policy, sandbox settings, workflow limits, and background timeout | covered |
-| Customized value | `settings-service.test.ts:570-592` "set() modifies runtime-modifiable settings"; `:272-300` "config file overrides defaults" | covered |
+| Default value | `settings-service.test.ts` "SettingsService initializes with defaults"; targeted `settings-schema.test.ts` cases for context compaction, run-budget policy, sandbox settings, workflow limits, and background timeout | covered |
+| Customized value | `settings-service.test.ts` "set() modifies runtime-modifiable settings", "config file overrides defaults" | covered |
 | Minimum bound | `settings-schema.test.ts` cases "context compaction defaults...", "includes agent.maxParallelToolCalls...", "shell.backgroundTimeout defaults...", and "memory settings default..." exercise exact minima and reject below-minimum values | covered |
 | Maximum bound | `settings-schema.test.ts` "accepts the exact maximum mentor samples and mentor pool size" accepts 8 and rejects 9; "context compaction defaults..." covers ratio endpoints | covered |
-| Invalid value rejection | `settings-schema.test.ts` request-deadline, Codex-timeout, compaction, run-budget, parallel-tool, and background-timeout cases; `settings-service.test.ts:620-631` (invalid persistent setting), `:805-852` (startup rejects invalid config) | covered |
-| Migrated value | `settings-service.test.ts:94-106` "migrates the former persisted request-deadline default to disabled"; `:344-498` (custom-provider migrations); `ancillary-settings-migration.ts:8-83` | covered |
-| Root consumer | `agent-client.application-run-loop.test.ts:276+` "applies a changed maxParallelToolCalls setting to the next request" | covered |
+| Invalid value rejection | `settings-schema.test.ts` request-deadline, Codex-timeout, compaction, run-budget, parallel-tool, and background-timeout cases; `settings-service.test.ts` "setPersistent() rejects invalid values", "refuses to start on invalid config file (invalid JSON)", "refuses to start on invalid schema in config file" | covered |
+| Migrated value | `settings-service.test.ts` "migrates the former persisted request-deadline default to disabled", custom-provider migrations ("migrates name-only custom provider to id with underscores", "migrates legacy agent.provider names with spaces to normalized provider id"); `ancillary-settings-migration.ts` | covered |
+| Root consumer | `agent-client.application-run-loop.test.ts` "applies a changed maxParallelToolCalls setting to the next request" | covered |
 | Nested (subagent) consumer | `nested-runner.test.ts` "passes the settings-backed policy to direct nested runs and activates critical tool-free wrap-up" | covered |
 | Mentor consumer | `mentor-runner.test.ts` "samples the mentor N times without letting samples see each other" and "lets the pool override mentorSamples" | covered |
 | Background consumer | `shell.test.ts` "background launches use shell.backgroundTimeout and truncate overflow when timeout_ms is absent" | covered |
 | Workflow consumer | `agent.test.ts` "uses configured workflow limits without exposing them in tool arguments" | covered |
 | Non-interactive consumer | `non-interactive.test.ts` "runNonInteractive exposes configured provider and model through its session lifecycle" | covered |
-| Runtime change at request boundary | `settings-command.test.ts:176-194` "setting agent.maxParallelToolCalls reports that the new limit applies on the next request" (+ reset equivalent); root execution test `agent-client.application-run-loop.test.ts:276+` | covered |
+| Runtime change at request boundary | `settings-command.test.ts` "setting agent.maxParallelToolCalls reports that the new limit applies on the next request" (+ reset equivalent); root execution test `agent-client.application-run-loop.test.ts` | covered |
 
 ## 10. Verification commands
 

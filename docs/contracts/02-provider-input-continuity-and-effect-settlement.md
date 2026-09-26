@@ -2,7 +2,7 @@
 
 Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 `ToolExecutionLedger` + history projection (`conversation-state-projector`),
-`ProviderContinuity`, `SessionInputPlanner`, `ChainedInputFilter`,
+`ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput` (`chained-input-filter.ts`),
 `SessionStreamProcessor` (finalize and debt sync), and retry/recovery policy
 (`retry-classifier`, `recovery-policy`, `DefaultRecoveryExecutor`).
 
@@ -27,7 +27,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   reconciliation rules); `conversation-state-projector.ts` (merging ledger
   pairs into provider history; replacement boundaries); `ProviderContinuity`
   (chain and debt); `SessionInputPlanner` (chain vs full-history decision);
-  `ChainedInputFilter` (delta validation); `SessionStreamProcessor` (finalize,
+  `filterChainedModelInput` in `source/lib/chained-input-filter.ts` (delta validation); `SessionStreamProcessor` (finalize,
   `publishTerminalResponse`, debt sync); retry classification/policy.
 - **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts:84-122`),
   `openAICompatibleMessages` (`openai-chat-completions-model.ts:294-333`), `toPromptMessage`

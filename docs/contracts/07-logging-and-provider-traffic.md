@@ -35,7 +35,7 @@ evaluator lane are accepted behavior, now characterized by green tests.
 - **Application Run Loop & Session Stream:** `source/services/agent-runtime/application-run-loop.ts` and `source/services/session/session-stream-processor.ts` (emitting debug/info/warn/error diagnostics across turn segments, tool dispatches, stall escalation, and stream recovery).
 - **Conversation Logger Error Boundary:** `source/services/logging/conversation-logger.ts:45-56` (catching log sink errors and emitting `conversation_log.sink_failed` via `logger.warn`).
 - **CLI & Non-Interactive Bootstrap:** `source/cli.tsx:399-411` and `source/non-interactive.ts` (instantiating `LoggingService` and injecting it into services, settings, and React Ink root).
-- **UI Diagnostics & Menu Hooks:** `source/hooks/use-conversation.ts`, `use-model-selection.ts`, and `use-mentor-pool-selection.ts` (emitting UI lifecycle and model switch diagnostics).
+- **UI Diagnostics & Menu Hooks:** `source/hooks/use-conversation.ts`, `use-model-selection.ts`, and `use-subagent-pool-selection.ts` (emitting UI lifecycle and model switch diagnostics).
 
 ## 4. Identities and state crossing the boundary
 

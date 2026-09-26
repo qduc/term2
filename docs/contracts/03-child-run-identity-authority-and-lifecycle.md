@@ -160,22 +160,22 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
 
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |
-| Foreground run | `nested-runner.test.ts:419-436` "runs a nested role tool"; `subagent-bridge.background-sink.test.ts:156-186` "keeps synchronous events on the turn sink" | covered |
-| Background run | `subagent-async-registry.test.ts:359-369` "returns the exact running launch handle"; `subagent-bridge.background-sink.test.ts:99-108` "delivers events to the background sink" | covered |
-| Nested child-of-child run | `subagent-bridge.test.ts:340-370` "a nested subagent run scopes under its parent subagent"; `subagent-async-registry.test.ts:1588-1606` | covered |
-| Evaluator traffic | `opencode.provider.test.ts:200+` "createOpencodeSessionInjector gives the auto-approval evaluator its own session ID"; `fetch/composer.test.ts:491+` "createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag" | covered |
-| Continuation of persistent roles | `subagent-async-registry.test.ts:493-505` "reuses the same run id and session only for a completed continuation"; `mentor-runner.test.ts:360+` "keeps the persistent session when sampling is not configured" | covered |
-| Provider session identity | `subagent-provider-session.integration.test.ts:75-153` (foreground distinct, same-scope stable, background continuation stable); `subagent-async-registry.test.ts:1480-1606` | covered |
-| Inherited approval settings | `nested-runner.test.ts:449-462` "honors a parent-approved tool inside the nested run"; `tool-policy.test.ts:356-405` (nested shell approval behavior) | covered |
-| Attenuated capabilities | `tool-policy.test.ts:90-146` "fails closed when finite filesystem scope disables shell", "empty network scope denies network", and "finite non-wildcard host scope rejects web_fetch"; `:272-405` covers the coarse policy modes | covered |
-| Parent abort | `subagent-async-registry.test.ts:538-584`; `subagent-bridge.abort-scope.test.ts:110-130` | covered |
-| Turn abort | `subagent-bridge.abort-scope.test.ts:99-130` (foreground cancelled, background survives) | covered |
-| Adopted transfer | `subagent-async-registry.test.ts:265-356`; `subagent-bridge.background-sink.test.ts:110-129` (transfer pinned to turn sink before async start); `nested-runner.test.ts:249-285` | covered |
-| Explicit stop | `subagent-async-registry.test.ts:519-536` "cancelAllRuns returns before a late successful runner result settles as cancelled"; `nested-runner.test.ts:373-390` | covered |
-| Session dispose | `subagent-async-registry.test.ts:337-356`, `:646-664`; `subagent-bridge.test.ts:173` "dispose cancels session work and clears manager-owned state once" | covered |
-| Duplicate role/name admission | `subagent-async-registry.test.ts:399-410` (invalid/duplicate active names), `:586-590` (fresh run targeting an active shared session), `:507-517` (active continuation restrictions) | covered |
-| Structured error round-trip | `subagent-async-registry.test.ts:399-410`, `:607-615`, `:666-680` (typed registry errors); `subagent-bridge.test.ts:554` "runSubagentAsync preserves a typed duplicate-name rejection without disturbing the active run" | covered |
-| Read-access child memory authority | `source/services/memory/memory-capabilities.test.ts:22-31` "grants %s the expected enabled-memory access" — explorer and worker rows assert `capability.tools` equals exactly `memory_list, memory_get, memory_search, memory_retrieve` (no `memory_create`/`memory_update`/`memory_delete`); `:43` "gives %s on-demand read access without injecting memory context" (explorer/worker) | covered |
+| Foreground run | `nested-runner.test.ts` "runs a nested role tool, executes a tool, and returns a parseable SubagentResult with filesChanged and toolsUsed (F1 pin)"; `subagent-bridge.background-sink.test.ts` "keeps synchronous events on the turn sink and async lifecycle events on the background sink" | covered |
+| Background run | `subagent-async-registry.test.ts` "returns the exact running launch handle and executes with its owned session"; `subagent-bridge.background-sink.test.ts` "delivers events to the background sink when no per-turn sink is attached" | covered |
+| Nested child-of-child run | `subagent-bridge.test.ts` "a nested subagent run scopes under its parent subagent"; `subagent-async-registry.test.ts` "gives concurrent runs their own keys and nests under the launching context" | covered |
+| Evaluator traffic | `opencode.provider.test.ts` "createOpencodeSessionInjector gives the auto-approval evaluator its own session ID"; `fetch/composer.test.ts` "createLoggingMiddleware uses evaluator event prefix when traffic context has evaluator flag" | covered |
+| Continuation of persistent roles | `subagent-async-registry.test.ts` "reuses the same run id and session for a completed %s continuation"; `mentor-runner.test.ts` "keeps the persistent session when sampling is not configured" | covered |
+| Provider session identity | `subagent-provider-session.integration.test.ts` ("foreground subagent requests carry an OpenCode session distinct from the parent conversation", "the same subagent run keeps one OpenCode session across its requests", "a background run keeps one OpenCode session from launch through continuation"); `subagent-async-registry.test.ts` ("keeps one provider history key across launch and continuation of the same run", "gives concurrent runs their own keys and nests under the launching context") | covered |
+| Inherited approval settings | `nested-runner.test.ts` "honors a parent-approved tool inside the nested run (F5 through the runner)"; `tool-policy.test.ts` "does not pause a foreground nested worker shell command in always mode", "preserves the underlying shell approval decision outside always mode" | covered |
+| Attenuated capabilities | `tool-policy.test.ts` "fails closed when $name" ("finite filesystem scope disables shell", "empty network scope denies network", "finite non-wildcard host scope rejects web_fetch"); coarse policy modes covered under describe block "policy modes" | covered |
+| Parent abort | `subagent-async-registry.test.ts` "cancels a run when its parent signal aborts", "runs an already-aborted parent segment so it can settle as cancelled"; `subagent-bridge.abort-scope.test.ts` "cancelBackgroundRuns aborts the background signal and cancels live async runs" | covered |
+| Turn abort | `subagent-bridge.abort-scope.test.ts` ("an ordinary per-turn abort does not cancel background runs", "an ordinary per-turn abort still cancels a foreground mentor run", "an ordinary per-turn abort still cancels a foreground run_subagent run") | covered |
+| Adopted transfer | `subagent-async-registry.test.ts` ("adopts the exact stable lease without starting the async runner and settles from one terminal event", "leaves foreground ownership intact when adoption is rejected and cancels an adopted lease"); `subagent-bridge.background-sink.test.ts` "delivers a transfer event to the turn sink before the async start pins later events"; `nested-runner.test.ts` "reports a background-transferred run that later hits its run budget, instead of settling silently" | covered |
+| Explicit stop | `subagent-async-registry.test.ts` "cancelAllRuns returns before a late successful runner result settles as cancelled"; `nested-runner.test.ts` "emits one async cancellation when an adopted approval pause is stopped" | covered |
+| Session dispose | `subagent-async-registry.test.ts` ("keeps an adopted settlement awaitable through disposal without emitting a late lifecycle event", "dispose signals active work, lets obtained result promises settle, and emits no late lifecycle events"); `subagent-bridge.test.ts` "dispose cancels session work and clears manager-owned state once" | covered |
+| Duplicate role/name admission | `subagent-async-registry.test.ts` ("rejects invalid and already active run names with typed registry errors", "rejects a fresh run targeting an active shared session", "rejects continuation of a %s run") | covered |
+| Structured error round-trip | `subagent-async-registry.test.ts` ("rejects invalid and already active run names with typed registry errors", "reports typed not-found, active, worker, and evicted errors", "returns typed errors for invalid, inactive, and mentor steering targets"); `subagent-bridge.test.ts` "runSubagentAsync preserves a typed duplicate-name rejection without disturbing the active run" | covered |
+| Read-access child memory authority | `source/services/memory/memory-capabilities.test.ts` "grants %s the expected enabled-memory access" — explorer and worker rows assert `capability.tools` equals exactly `memory_list, memory_get, memory_search, memory_retrieve` (no `memory_create`/`memory_update`/`memory_delete`); "gives %s on-demand read access without injecting memory context" (explorer/worker) | covered |
 
 ## 9. Verification commands
 
@@ -207,6 +207,8 @@ and there is no `subagent-event-bus` module), so Vitest silently ran only 2 of
 The evaluator-traffic boundaries cited in the matrix are included as well.
 Classification: **test defect in the baseline record, not a product defect.**
 
+Note on test tiers: with the subsequent test-suite tier split (`slow-test-suite.md` / `33e5e6f2`), integration tests run in their own tier. `source/lib/subagent-provider-session.integration.test.ts` is verified via `NODE_ENV=test pnpm test:integration` (3 passing tests), while the remaining 11 unit files are verified via `NODE_ENV=test pnpm test` (314 passing tests).
+
 Broader gates: `NODE_ENV=test pnpm test`, `pnpm typecheck`, and — for any
 bridge/run-loop/registry change — `NODE_ENV=test pnpm test:provider-black-box`.
 
@@ -216,8 +218,8 @@ All minimum-matrix cells are covered.
 
 **C3.7 classified coverage note (updated 2026-08-16):** the stricter
 on-main-vs-child comparison — `gives %s a strict read-only subset of main
-memory tools` — **is on main** at
-`source/services/memory/memory-capabilities.test.ts:58` (it.each over
+memory tools` — **is on main** in
+`source/services/memory/memory-capabilities.test.ts` (test "gives %s a strict read-only subset of main memory tools", it.each over
 `explorer`/`worker`), merged with the `sb08-memory-local-disposition`
 worktree. The on-main tests pin the exact read tool set for explorer and
 worker and prove strict subset membership against the main subject's set.

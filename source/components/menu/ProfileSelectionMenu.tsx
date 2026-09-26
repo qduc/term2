@@ -15,9 +15,12 @@ type Props = {
 const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex, scrollOffset = 0, query }) => {
   if (items.length === 0) {
     return (
-      <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
-        <Text color={COLOR_TEXT_SUBTLE}>Profiles</Text>
-        <Text color={COLOR_TEXT_SUBTLE}>No matching profiles</Text>
+      <Box flexDirection="column">
+        <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
+          <Text color={COLOR_TEXT_SUBTLE}>Profiles</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>No matching profiles</Text>
+        </Box>
+        <MenuFooter hints={[['Esc', 'cancel']]} />
       </Box>
     );
   }

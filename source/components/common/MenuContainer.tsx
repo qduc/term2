@@ -151,31 +151,27 @@ export function MenuContainer<T>({
   }, [hasScrollDown, hasScrollUp, visibleItems, scrollOffset]);
 
   const titleElement = title ? <Text color={COLOR_TEXT_SUBTLE}>{title}</Text> : null;
+  const renderState = (state: ReactNode, color: string = borderColor) => (
+    <Box flexDirection="column" width="100%">
+      <Box borderStyle="round" borderColor={color} paddingX={1} flexDirection="column">
+        {titleElement}
+        {state}
+      </Box>
+      {footer && (typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer)}
+    </Box>
+  );
 
   if (loading) {
-    return (
-      <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-        {titleElement}
-        <Text color={COLOR_TEXT_SUBTLE}>{loadingText}</Text>
-      </Box>
-    );
+    return renderState(<Text color={COLOR_TEXT_SUBTLE}>{loadingText}</Text>);
   }
 
   if (error) {
-    return (
-      <Box borderStyle="round" borderColor={COLOR_DANGER} paddingX={1} flexDirection="column">
-        {titleElement}
-        <Text color={COLOR_DANGER}>{error}</Text>
-      </Box>
-    );
+    return renderState(<Text color={COLOR_DANGER}>{error}</Text>, COLOR_DANGER);
   }
 
   if (items.length === 0) {
-    return (
-      <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-        {titleElement}
-        {typeof fallbackText === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{fallbackText}</Text> : fallbackText}
-      </Box>
+    return renderState(
+      typeof fallbackText === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{fallbackText}</Text> : fallbackText,
     );
   }
 

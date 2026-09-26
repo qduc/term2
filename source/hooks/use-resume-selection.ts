@@ -27,7 +27,7 @@ export const useResumeSelection = (deps: { listConversations: () => Promise<Conv
   const isOpen = isControllerOpen || mode === 'resume_selection';
   const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
-  const [result, setResult] = useState<{ entries: ConversationListEntry[]; loading: boolean; error: boolean }>({
+  const [result, setResult] = useState<{ entries: ConversationListEntry[]; loading: boolean; error: string | false }>({
     entries: [],
     loading: false,
     error: false,
@@ -40,10 +40,12 @@ export const useResumeSelection = (deps: { listConversations: () => Promise<Conv
       .then(listConversations)
       .then(
         (entries) => {
-          if (current) setResult({ entries, loading: false, error: false });
+          if (current)
+            setResult({ entries: entries.filter((entry) => entry.messageCount !== 0), loading: false, error: false });
         },
-        () => {
-          if (current) setResult({ entries: [], loading: false, error: true });
+        (error: unknown) => {
+          if (current)
+            setResult({ entries: [], loading: false, error: error instanceof Error ? error.message : String(error) });
         },
       );
     return () => {

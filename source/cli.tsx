@@ -71,6 +71,8 @@ import { loadMcpConfig } from './services/mcp/mcp-config.js';
 import { McpConnectionManager } from './services/mcp/mcp-connection-manager.js';
 import { McpOAuthStore } from './services/mcp/mcp-oauth-store.js';
 import { McpConfigController } from './services/mcp/mcp-config-controller.js';
+import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
+import { AutomaticMemoryCanary } from './services/memory/automatic-memory-canary.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -1095,6 +1097,15 @@ if (!forkRequested) {
 
 const conversationService = new ConversationService({
   sessionClientFactory,
+  ...(process.env.TERM2_AUTOMATIC_MEMORY_CANARY === '1' &&
+  settings.get('memory.enabled') &&
+  !executionContext.isRemote()
+    ? {
+        automaticMemory: new AutomaticMemoryCanary(
+          new MemoryCapabilityBuilder(settings).projectStore(executionContext.getCwd()),
+        ),
+      }
+    : {}),
   sessionId: effectiveSessionId,
   sessionStartedAt: effectiveCreatedAt,
   deps: {

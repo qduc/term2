@@ -51,6 +51,25 @@ const advanceTimersInAct = async (ms: number) => {
   });
 };
 
+it('keeps the learned preference and undo visible in concise command mode', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="Automatic memory canary"
+      toolName="automatic_memory"
+      status="completed"
+      success={true}
+      displayMode="concise"
+      output={
+        'Learned (project): For future sessions, I prefer short reports.\nUndo with memory_delete({scope:"project",id:"automatic-one"})'
+      }
+    />,
+  );
+  const output = toVisibleText(lastFrame() ?? '');
+  expect(output).toContain('For future sessions, I prefer short reports.');
+  expect(output).toContain('memory_delete');
+  unmount();
+});
+
 it('CommandMessage renders background subagent notifications as tool activity', async () => {
   const { lastFrame, unmount } = await renderInAct(
     <CommandMessage

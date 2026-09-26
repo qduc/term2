@@ -18,6 +18,7 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import type { SessionIdentity } from '../session/session-identity.js';
+import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
 
 export type ConversationRuntimeBundle = {
   /** The clean session runtime (no adapter). */
@@ -48,6 +49,7 @@ export type CreateConversationRuntimeOptions = {
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;
+  automaticMemory?: AutomaticMemoryCanary;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   hookLifecycle?: HookLifecyclePort;

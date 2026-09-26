@@ -51,6 +51,7 @@ import type {
   NestedApprovalDecisionResult,
 } from '../approval/nested-approval-owner.js';
 import { isClassifiedCancellation } from '../retry/provider-failure-classification.js';
+import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
 import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
 import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
 
@@ -96,6 +97,7 @@ export class ConversationService {
   readonly #activeCancelTimeoutMs?: number;
   readonly #discardOnFailure: boolean;
   readonly #enableNestedApproval: boolean;
+  readonly #automaticMemory?: AutomaticMemoryCanary;
   #eventSink: ConversationEventSink | null = null;
   #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
   #nestedApprovalObserver: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
@@ -119,6 +121,7 @@ export class ConversationService {
     activeCancelTimeoutMs,
     discardOnFailure,
     enableNestedApproval,
+    automaticMemory,
   }: {
     /** Compatibility seam: caller retains ownership of a prebuilt client. */
     agentClient?: ConversationAgentClient;
@@ -146,6 +149,8 @@ export class ConversationService {
     discardOnFailure?: boolean;
     /** Interactive-only capability; gateway and headless services default to fail closed. */
     enableNestedApproval?: boolean;
+    /** Explicit root-only pilot; omitted for headless/gateway sessions. */
+    automaticMemory?: AutomaticMemoryCanary;
   }) {
     if (!sessionClientFactory && !agentClient) {
       throw new Error('ConversationService requires an agentClient or sessionClientFactory');
@@ -159,6 +164,7 @@ export class ConversationService {
     this.#activeCancelTimeoutMs = activeCancelTimeoutMs;
     this.#discardOnFailure = discardOnFailure === true;
     this.#enableNestedApproval = enableNestedApproval === true;
+    this.#automaticMemory = automaticMemory;
     const resolvedSessionStartedAt = sessionStartedAt ?? new Date().toISOString();
     this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default', {
       sessionStartedAt: resolvedSessionStartedAt,
@@ -174,6 +180,7 @@ export class ConversationService {
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
+      automaticMemory: this.#automaticMemory,
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       toolCallMarkers: this.#toolCallMarkers,
@@ -276,6 +283,7 @@ export class ConversationService {
       postExecutePending: this.#clientHandle.postExecutePending,
       postExecutePauseCapability: this.#clientHandle.postExecutePauseCapability,
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
+      automaticMemory: this.#automaticMemory,
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
       toolCallMarkers: this.#toolCallMarkers,

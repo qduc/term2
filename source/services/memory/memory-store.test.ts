@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +26,30 @@ it('persists normalized metadata and Markdown content across store instances', a
   const second = new FileMemoryStore({ root: roots[0] });
   expect(await second.get(input.id)).toMatchObject({ ...input, tags: ['term2', 'architecture'] });
   expect(JSON.parse(await readFile(join(roots[0], 'index.json'), 'utf8')).memories[0]).not.toHaveProperty('content');
+});
+
+it('admits one automatic canary write across store instances and records its source', async () => {
+  const first = await store();
+  const second = new FileMemoryStore({ root: roots[0] });
+  const quote = 'Remember for future sessions: I prefer short reports.';
+  const item = { ...input, id: 'automatic-test', title: quote, summary: quote, content: quote };
+  const results = await Promise.all([
+    first.createAutomatic(item, 'session-1'),
+    second.createAutomatic(item, 'session-1'),
+  ]);
+  expect(results.filter(Boolean)).toHaveLength(1);
+  expect((await second.get(item.id))?.provenance).toMatchObject({ sessionId: 'session-1', reason: quote });
+  expect(await first.createAutomatic({ ...item, id: 'automatic-another' }, 'session-2')).toBeNull();
+});
+
+it('cleans an unindexed automatic item when the index commit fails', async () => {
+  const memory = await store();
+  await memory.list();
+  const write = vi.spyOn(memory as any, 'writeIndex').mockRejectedValueOnce(new MemoryStorageError('failure'));
+  await expect(memory.createAutomatic({ ...input, id: 'automatic-failure' }, 'session-1')).rejects.toThrow('failure');
+  expect(await memory.get('automatic-failure')).toBeNull();
+  await expect(readFile(join(roots[0], 'items', 'automatic-failure.md'))).rejects.toMatchObject({ code: 'ENOENT' });
+  write.mockRestore();
 });
 
 it('validates IDs and inputs before constructing item paths', async () => {

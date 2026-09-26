@@ -82,6 +82,8 @@ import { BackgroundSubagentApprovalController } from '../approval/background-sub
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { registerSessionRuntime } from '../workspace/active-workspace-root.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../approval/nested-approval-owner.js';
+import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
+import { resolveActiveEnforcement } from '../profiles/index.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -209,6 +211,7 @@ export type CreateSessionRuntimeInternalsOptions = {
   postExecutePending?: PostExecutePendingRegistry;
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;
+  automaticMemory?: AutomaticMemoryCanary;
   askUserAnswerSink?: AskUserAnswerSink | null;
   subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
@@ -406,6 +409,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     postExecutePending: suppliedPostExecutePending,
     postExecutePauseCapability,
     sessionAccess,
+    automaticMemory,
     askUserAnswerSink,
     subagentEventSinkHost,
     deps,
@@ -872,6 +876,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     providerContinuity,
     shellAutoApproval,
     sessionId: identity,
+    automaticMemory,
+    automaticMemoryAllowed: () =>
+      !!settingsService?.get('memory.enabled') &&
+      sessionAccess?.isReadOnly !== true &&
+      !resolveActiveEnforcement(settingsService).denials.has('filesystem-mutation'),
     hookLifecycle,
     hookEvents,
   });

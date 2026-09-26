@@ -764,6 +764,7 @@ describe('ConversationLogWriter event fsync classification', () => {
         approval: { callId: 'c2', toolName: 'bash', argumentsText: '{}', agentName: 'root' },
       },
       { type: 'assistant_journal_item', turnId: 't1', seq: 10, item: { type: 'assistant_text', text: 'journal' } },
+      { type: 'goal_changed', version: 1, goal: { id: 'g1', outcome: 'Ship it', status: 'active' } },
     ];
 
     for (const event of criticalEvents) {

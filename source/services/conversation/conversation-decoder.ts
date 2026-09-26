@@ -93,6 +93,23 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return hasString(event, 'id') && hasString(event, 'createdAt');
     case 'settings_changed':
       return hasString(event, 'key');
+    case 'goal_changed': {
+      const goal = event['goal'];
+      if (!isObject(goal)) return false;
+      const id = goal['id'];
+      const outcome = goal['outcome'];
+      const criteria = goal['successCriteria'];
+      return (
+        event['version'] === 1 &&
+        typeof id === 'string' &&
+        id.length > 0 &&
+        typeof outcome === 'string' &&
+        outcome.length > 0 &&
+        outcome.length <= 2000 &&
+        (criteria === undefined || (typeof criteria === 'string' && criteria.length > 0 && criteria.length <= 2000)) &&
+        isOneOf(goal['status'], ['active', 'achieved', 'abandoned'])
+      );
+    }
     case 'user_message':
     case 'command_message':
       return isMessage(event['message']);

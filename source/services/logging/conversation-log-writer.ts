@@ -26,6 +26,7 @@ export const CONVERSATION_FSYNC_EVENTS = new Set<LogEvent['type']>([
   'tool_result',
   'approval_required',
   'assistant_journal_item',
+  'goal_changed',
 ]);
 const MAX_EVENT_BYTES = 256 * 1024;
 

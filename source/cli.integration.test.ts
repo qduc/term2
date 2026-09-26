@@ -163,6 +163,8 @@ it('CLI --help documents the available command-line options', () => {
   );
   expect(help).toContain('-p, --provider <provider>');
   expect(help).toContain('-r, --reasoning <effort>');
+  expect(help).toContain('--goal <text>');
+  expect(help).toContain('--goal-criteria <text>');
   expect(help).toContain('-l, --lite');
   expect(help).toContain('--auto-approve');
   expect(help).toContain('--ssh <user@host>');
@@ -175,6 +177,119 @@ it('CLI --help documents the available command-line options', () => {
   expect(help).toContain('Log in to Grok in a browser');
   expect(help).not.toContain('ChatForge BFF');
   expect(help).not.toContain('exactly as before');
+});
+
+it('CLI validates goal flags before startup', async () => {
+  const { status, stderr } = await spawnCli(
+    [cliPath(), '--goal-criteria', 'must pass'],
+    createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+  );
+  expect(status).toBe(1);
+  expect(stderr).toContain('--goal-criteria requires --goal');
+  const overBound = await spawnCli(
+    [cliPath(), '--goal', 'x'.repeat(2001)],
+    createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+  );
+  expect(overBound.status).toBe(1);
+  expect(overBound.stderr).toContain('Goal outcome must be at most 2000 characters');
+});
+
+it('interactive launch persists the goal before requiring a terminal', async () => {
+  const { status, stderr } = await spawnCli(
+    [cliPath(), '--lite', '--goal', 'Interactive outcome', '--goal-criteria', 'Visible result'],
+    createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+  );
+  expect(status).toBe(1);
+  expect(stderr).toContain('term2 needs an interactive terminal');
+  const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+  expect(logPath, stderr).toBeDefined();
+  const events = fs
+    .readFileSync(path.join(testDir, logPath!), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).event);
+  expect(events.map((event) => event.type)).toEqual(['session_init', 'goal_changed']);
+  expect(events[1]).toMatchObject({
+    version: 1,
+    goal: { outcome: 'Interactive outcome', successCriteria: 'Visible result', status: 'active' },
+  });
+});
+
+it('positional launch durably records its goal before the first provider request', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, provider: 'mockprov', model: 'mock-alpha' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const { status } = await spawnCli(
+      [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
+      createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+    );
+    expect(status).toBe(0);
+    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+    const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+    expect(logPath).toBeDefined();
+    const events = fs
+      .readFileSync(path.join(testDir, logPath!), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).event);
+    const goalIndex = events.findIndex((event) => event.type === 'goal_changed');
+    const firstRequestArtifactIndex = events.findIndex((event) => event.type === 'assistant_journal_item');
+    expect(goalIndex).toBeGreaterThanOrEqual(0);
+    expect(firstRequestArtifactIndex, JSON.stringify(events.map((event) => event.type))).toBeGreaterThan(goalIndex);
+    expect(events[goalIndex].goal).toMatchObject({
+      outcome: 'Noninteractive outcome',
+      successCriteria: 'Provider returns',
+    });
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('resume preserves the replayed goal without flags and replaces it before startup when flags are explicit', async () => {
+  for (const explicit of [false, true]) {
+    const id = explicit ? 'resume-goal-explicit' : 'resume-goal-implicit';
+    const originalGoal = { id: `old-${id}`, outcome: 'Original', status: 'active' };
+    fs.writeFileSync(
+      path.join(testDir, `${id}.jsonl`),
+      [
+        {
+          v: 3,
+          seq: 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          event: { type: 'session_init', id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: process.cwd() },
+        },
+        {
+          v: 3,
+          seq: 2,
+          ts: '2026-01-01T00:00:01.000Z',
+          event: { type: 'goal_changed', version: 1, goal: originalGoal },
+        },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join('\n') + '\n',
+      'utf8',
+    );
+    const args = [cliPath(), '--resume', id, '--lite', ...(explicit ? ['--goal', 'Replacement'] : [])];
+    const { status, stderr } = await spawnCli(
+      args,
+      createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain('term2 needs an interactive terminal');
+    const events = fs
+      .readFileSync(path.join(testDir, `${id}.jsonl`), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).event);
+    const goals = events.filter((event) => event.type === 'goal_changed');
+    expect(goals).toHaveLength(explicit ? 2 : 1);
+    expect(goals.at(-1).goal.outcome).toBe(explicit ? 'Replacement' : 'Original');
+  }
 });
 
 it('CLI supports the advertised -h and -v aliases', () => {

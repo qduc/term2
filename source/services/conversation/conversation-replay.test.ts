@@ -31,6 +31,37 @@ it('replayEvents: empty log produces empty state with no warnings', () => {
   expect(restored.history.length).toBe(0);
   expect(restored.messages.length).toBe(0);
   expect(restored.replayWarnings).toEqual([]);
+  expect(restored.goal).toBeUndefined();
+});
+
+it('decodes only bounded versioned goal records and replays the latest valid event', () => {
+  const active = {
+    type: 'goal_changed',
+    version: 1,
+    goal: { id: 'g1', outcome: 'Ship it', status: 'active' },
+  } as const;
+  const achieved = {
+    type: 'goal_changed',
+    version: 1,
+    goal: { id: 'g1', outcome: 'Ship it', successCriteria: 'Tests pass', status: 'achieved' },
+  } as const;
+  expect(decodeLogEnvelope(env(active))).not.toBeNull();
+  expect(decodeLogEnvelope({ ...env(active), event: { ...active, version: 2 } })).toBeNull();
+  expect(
+    decodeLogEnvelope({ ...env(active), event: { ...active, goal: { ...active.goal, outcome: 'x'.repeat(2001) } } }),
+  ).toBeNull();
+  expect(replayEvents([env(active), env(achieved)]).goal).toEqual(achieved.goal);
+});
+
+it('ignores malformed goal events without affecting other replay state', () => {
+  const valid = env({ type: 'goal_changed', version: 1, goal: { id: 'g1', outcome: 'Keep', status: 'active' } });
+  const malformed = {
+    ...env({ type: 'session_cleared' }),
+    event: { type: 'goal_changed', version: 99 },
+  } as unknown as LogEnvelope;
+  expect(decodeLogEnvelope(malformed)).toBeNull();
+  const decoded = [valid, malformed].map((envelope) => decodeLogEnvelope(envelope)).filter((item) => item !== null);
+  expect(replayEvents(decoded).goal).toEqual(valid.event.type === 'goal_changed' ? valid.event.goal : undefined);
 });
 
 it('replays a memory receipt from the persisted event without adding it to provider history', () => {

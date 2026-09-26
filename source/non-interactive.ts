@@ -24,6 +24,9 @@ import { primeActiveProfileNoticeIfActive } from './services/mode-notices.js';
 import { formatBackgroundSubagentNotifications } from './services/conversation/conversation-orchestrator.js';
 import type { BackgroundSubagentNotificationPort } from './services/subagents/subagent-notification-store.js';
 import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
+import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
+import { getConversationsDir } from './services/conversation/conversation-persistence.js';
+import type { DurableGoal } from './services/logging/conversation-log-events.js';
 
 const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
@@ -47,6 +50,7 @@ export interface NonInteractiveBackgroundWork {
 
 export interface NonInteractiveConfig {
   prompt: string;
+  initialGoal?: DurableGoal;
   autoApprove: boolean;
   quiet?: boolean;
   showReasoning?: boolean;
@@ -544,6 +548,7 @@ export async function runNonInteractive(
   });
 
   let runtime: ReturnType<typeof createConversationRuntime>['runtime'] | undefined;
+  let logWriter: ReturnType<typeof createConversationLogWriter> | undefined;
   let fatal = false;
   try {
     const createdRuntime = createConversationRuntime({
@@ -560,6 +565,22 @@ export async function runNonInteractive(
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
     });
     runtime = createdRuntime.runtime;
+    if (config.initialGoal) {
+      logWriter = createConversationLogWriter({
+        sessionId,
+        dir: getConversationsDir(),
+        logger: config.logger,
+      });
+      logWriter.init({
+        id: sessionId,
+        createdAt: createdRuntime.runtime.sessionStartedAt,
+        projectPath: process.cwd(),
+        model: config.settingsService.get('agent.model'),
+        provider: config.settingsService.get('agent.provider'),
+      });
+      logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+      createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
+    }
     if (config.settingsService) {
       primeActiveProfileNoticeIfActive(config.settingsService, (text) => {
         createdRuntime.runtime.state.queueModeNotice(text);
@@ -618,6 +639,8 @@ export async function runNonInteractive(
       );
     }
     await runtime?.shutdown();
+    runtime?.logs.setLogSink(null);
+    await logWriter?.close();
     clientHandle.dispose();
   }
 }

@@ -1,17 +1,14 @@
 # Durable goal — outcome state separate from plan and execution
 
-Status: **design proposal; no implementation is included in this phase.**
-
 ## Resume here
 
-The repository does not yet have a first-class durable session goal. The existing
-goal wording appears in compaction instructions and rollover handoffs, and a
-completed plan named “Subagent Oversight — Goal” uses goal in its ordinary product
-planning sense; neither is session-owned, replayable objective state. Start with
-Milestone 1 below. Keep the goal record limited to the desired outcome and how
-success is recognized. Do not put a plan, schedule, execution status, or child-run
-topology in it. Persistence is plain session-log events; there is no goal-specific
-database or autonomous retry behavior.
+Milestones M1 and M2 implement the bounded session-owned goal record, replay,
+launch flags, and interactive `/goal` controls described below. The existing goal
+wording in compaction instructions and rollover handoffs remains separate; neither
+is authoritative objective state. Continue with M3. Keep the goal record limited
+to the desired outcome and how success is recognized. Do not put a plan, schedule,
+execution status, or child-run topology in it. Persistence is plain session-log
+events; there is no goal-specific database or autonomous retry behavior.
 
 ## Gap measurement
 
@@ -24,26 +21,25 @@ What exists today:
   8,000-character handoff brief. The brief is written by the model and can be
   omitted or drift; it is not a typed objective attached to the successor session.
 - `RestoredState` and the `ReplayState` projection in
-  `source/services/conversation/conversation-replay.ts` restore messages, provider
-  history, settings, usage, and session lineage, but have no goal field. Existing
-  `session_init` and `LogEvent` in
-  `source/services/logging/conversation-log-events.ts` have no goal event.
+  `source/services/conversation/conversation-replay.ts` restore the latest valid
+  `goal_changed` event as an optional goal. Legacy logs without that event remain
+  goal-less.
 - The CLI's positional prompt enters `runNonInteractive()` (`source/cli.tsx`),
-  while a launch without a positional prompt enters the interactive app. Neither
-  path currently accepts or persists a launch-time goal. This leaves an important
-  gap for orchestrators that start long-running work without a human at the TUI.
+  while a launch without a positional prompt enters the interactive app. Both paths
+  accept `--goal` and optional `--goal-criteria`, persisting an explicit launch
+  goal before the first model request.
 - `forkConversation()` in `source/services/conversation/conversation-persistence.ts`
-  copies the source log and rewrites `session_init` identity/provenance. It would
-  naturally copy goal events once they exist, but currently copies no goal state.
+  copies the source log and rewrites `session_init` identity/provenance, so goal
+  events in the copied history replay as the fork's initial goal state.
 - Subagent task input and oversight are separate concepts: `SubagentStartedLogEvent`
   stores a task string, and `docs/plans/subagent-oversight-goal.md` is a shipped
   feature plan about observability and control. Neither represents the parent
   session's durable objective.
 
-Therefore the request is not already met. Some *summary content* may survive
-compaction or rollover, but there is no small typed value that can be inspected,
-replayed, or carried forward independently of that prose. The plan adds that value
-and its lifecycle, not a new planning or orchestration subsystem.
+The remaining milestones address model-context placement and lifecycle carry-
+forward. Some *summary content* may survive compaction or rollover, but it is not
+authoritative goal state. The implementation adds that value without introducing
+a new planning or orchestration subsystem.
 
 ## Proposed contract
 

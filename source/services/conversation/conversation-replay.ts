@@ -54,6 +54,7 @@ export interface RestoredState {
   replayWarnings: string[];
   forkedFrom?: string;
   rolloverFrom?: string;
+  goal?: import('../logging/conversation-log-events.js').DurableGoal;
 }
 
 const INTERRUPTED_SYSTEM_MESSAGE = 'Previous turn was interrupted — send a message to continue.';
@@ -173,6 +174,7 @@ interface ReplayState {
   reasoningEffort?: string;
   forkedFrom?: string;
   rolloverFrom?: string;
+  goal?: import('../logging/conversation-log-events.js').DurableGoal;
   previousResponseId: string | null;
   history: ProviderInputItem[];
   toolLedger: SavedToolExecution[];
@@ -566,6 +568,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           return;
       }
     }
+    case 'goal_changed':
+      state.goal = cloneValue(event.goal);
+      return;
     case 'user_message': {
       state.messages.push(cloneMessage(event.message));
       state.activeTurnStartIndex = state.messages.length;
@@ -1402,5 +1407,6 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     replayWarnings: state.warnings,
     forkedFrom: state.forkedFrom,
     rolloverFrom: state.rolloverFrom,
+    goal: state.goal,
   };
 }

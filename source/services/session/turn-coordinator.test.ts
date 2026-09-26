@@ -1,9 +1,15 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
-const makeHarness = (hooks?: { lifecycle?: any; events?: any }) => {
+const makeHarness = (hooks?: {
+  lifecycle?: any;
+  events?: any;
+  automaticMemory?: any;
+  sessionId?: any;
+  automaticMemoryAllowed?: () => boolean;
+}) => {
   const statusMachine = new TurnStatusMachine();
 
   const initialCalls: any[] = [];
@@ -89,6 +95,9 @@ const makeHarness = (hooks?: { lifecycle?: any; events?: any }) => {
     approvalFlow,
     providerContinuity,
     shellAutoApproval,
+    automaticMemory: hooks?.automaticMemory,
+    automaticMemoryAllowed: hooks?.automaticMemoryAllowed,
+    sessionId: hooks?.sessionId,
     ...(hooks?.lifecycle && hooks?.events ? { hookLifecycle: hooks.lifecycle, hookEvents: hooks.events } : {}),
   });
 
@@ -106,6 +115,77 @@ const makeHarness = (hooks?: { lifecycle?: any; events?: any }) => {
     getProviderContinuityCleared: () => providerContinuityCleared,
   };
 };
+
+it('records a settled direct user preference and emits a reviewable receipt after the terminal', async () => {
+  const record = vi.fn(async () => ({
+    scope: 'project',
+    id: 'automatic-one',
+    quote: 'quote',
+    sourceSessionId: 'session-1',
+    undo: 'memory_delete({scope:"project",id:"automatic-one"})',
+  }));
+  const { coordinator } = makeHarness({ automaticMemory: { record }, sessionId: { current: 'session-1' } });
+  const events = [];
+  for await (const event of coordinator.start('Remember for future sessions: I prefer short reports.'))
+    events.push(event);
+  expect(record).toHaveBeenCalledOnce();
+  expect(events.map((event: any) => event.type)).toEqual(['final', 'command_message']);
+  expect((events[1] as any).message.output).toContain('automatic-one');
+  expect((events[1] as any).message.output).toContain('memory_delete');
+});
+
+it('does not learn on failure, approval pause, or replayed turns', async () => {
+  const record = vi.fn();
+  const { coordinator, turnWorkflow } = makeHarness({
+    automaticMemory: { record },
+    sessionId: { current: 'session-1' },
+  });
+  turnWorkflow.setNextInitialResult({ kind: 'failed' });
+  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.')) {
+    /* drain */
+  }
+  turnWorkflow.setNextInitialResult({
+    kind: 'approval_required',
+    terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
+  });
+  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.')) {
+    /* drain */
+  }
+  coordinator.abort();
+  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.', {
+    replayFromHistory: true,
+  })) {
+    /* drain */
+  }
+  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.', {
+    skipMemoryRecall: true,
+  })) {
+    /* drain model-only notification */
+  }
+  expect(record).not.toHaveBeenCalled();
+});
+
+it('does not learn while a read-only gate is active or from a mixed attachment', async () => {
+  const record = vi.fn();
+  let allowed = false;
+  const { coordinator } = makeHarness({
+    automaticMemory: { record },
+    sessionId: { current: 'session-1' },
+    automaticMemoryAllowed: () => allowed,
+  });
+  // The composition gate is evaluated at settlement time, not construction time.
+  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.')) {
+    /* drain */
+  }
+  allowed = true;
+  for await (const _ of coordinator.start({
+    text: 'Remember for future sessions: I prefer short reports.',
+    images: [{ id: 'image', data: 'x', mimeType: 'image/png', byteSize: 1, displayNumber: 1 }],
+  })) {
+    /* drain */
+  }
+  expect(record).not.toHaveBeenCalled();
+});
 
 it('does not emit a turn.error hook for an aborted stream', async () => {
   const emitted: any[] = [];

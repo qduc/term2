@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -276,6 +276,49 @@ export class FileMemoryStore implements MemoryStore {
       await writeFile(this.itemPath(memory.id), memory.content, 'utf8');
       await this.writeIndex({ version: 1, memories: [...index.memories, metadata(memory)] });
       return memory;
+    });
+  }
+  /** A non-blocking, cross-process pilot lock; a busy/stale lock fails closed. */
+  async createAutomatic(input: CreateMemoryInput, sessionId: string): Promise<Memory | null> {
+    return this.mutate(async () => {
+      const normalized = normalizeCreate(input);
+      if (!sessionId.trim()) throw new InvalidMemoryError('Automatic memory requires a source session.');
+      await this.initialize();
+      const lock = join(this.root, '.automatic-canary.lock');
+      try {
+        await mkdir(lock);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') return null;
+        throw error;
+      }
+      try {
+        const index = await this.load();
+        if (index.memories.some((memory) => memory.id === normalized.id || memory.title === normalized.title))
+          return null;
+        const timestamp = this.now().toISOString();
+        const memory = {
+          ...normalized,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          provenance: { at: timestamp, sessionId: sessionId.trim(), reason: normalized.content },
+        };
+        await writeFile(this.itemPath(memory.id), memory.content, { encoding: 'utf8', flag: 'wx' });
+        try {
+          await this.writeIndex({ version: 1, memories: [...index.memories, metadata(memory)] });
+        } catch (error) {
+          // The primary index may have committed before its backup failed.
+          // Only discard the item when a readable index proves it was not committed.
+          const committed = await this.load().then(
+            (current) => current.memories.some((entry) => entry.id === memory.id),
+            () => true,
+          );
+          if (!committed) await unlink(this.itemPath(memory.id));
+          throw error;
+        }
+        return memory;
+      } finally {
+        await rmdir(lock);
+      }
     });
   }
   async update(id: MemoryId, input: UpdateMemoryInput, context?: { sessionId?: string }): Promise<Memory> {

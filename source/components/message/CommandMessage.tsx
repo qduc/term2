@@ -393,6 +393,8 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Updated memory');
       case 'memory_delete':
         return renderAction('Deleted memory');
+      case 'automatic_memory':
+        return renderAction(success === false ? 'Automatic memory stopped' : 'Learned memory');
       case 'session_list':
         return renderAction('Listed prior sessions');
       case 'session_search':
@@ -404,7 +406,7 @@ const CommandMessage: FC<Props> = ({
     }
     // Depend on the whole `toolArgs`, not `toolArgs?.runs`: the React Compiler infers the
     // former and refuses to preserve the memo when the declared deps are narrower.
-  }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch]);
+  }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch, success]);
 
   const renderStandardHeader = () => {
     // isApprovalRejection carries no `success` value of its own — it is a distinct
@@ -573,6 +575,15 @@ const CommandMessage: FC<Props> = ({
     }
 
     // Success (one line)
+    if (toolName === 'automatic_memory') {
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          <Text color={textColor || COLOR_TEXT_MUTED}>{output}</Text>
+        </Box>
+      );
+    }
+
     if (toolName === 'ask_user') {
       const responseText = getConciseAskUserResponse(output);
       return (

@@ -85,6 +85,26 @@ Open work, in order:
 
 ## Guard classes
 
+### Interactive automatic-memory canary admission
+
+The local CLI opt-in in `AutomaticMemoryCanary.record()` admits at most one
+direct first-party preference write per session. This is an admission limit,
+not a turn/run-loop budget. It prevents an unvalidated candidate selector from
+silently accumulating many durable writes. The direct signal is a successful
+write on that canary instance; the second eligible input is skipped before any
+storage action. Legitimate additional preferences are deferred to ordinary
+explicit `memory_create` or a later session, not discarded from the conversation.
+The separate 280-character exact-form eligibility filter limits untrusted or
+ambiguous promotion but does not claim broad extraction recall. Configuration is
+the interactive CLI environment opt-in `TERM2_AUTOMATIC_MEMORY_CANARY=1` with
+`memory.enabled`; absent means off. Read-only/plan-mode checks run at settlement.
+No provider request, retry, partial model work, or persisted setting changes are
+introduced. Success and source appear in the receipt; a storage error disables
+the current session's canary and emits a failure card. Undo is the ordinary
+`memory_delete` tool. Roll back by disabling the environment opt-in; the
+memory canary and its root-session wiring are independently removable. Pilot
+contract and verification limits: [automatic-memory-canary.md](./automatic-memory-canary.md).
+
 ### Teammate-memory single-turn checkpoint admission (pilot-only)
 
 Harm prevented: a two-call experimental probe silently expanding into

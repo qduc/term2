@@ -313,6 +313,19 @@ export class MemoryCapabilityBuilder {
     };
   }
 
+  projectStore(projectPath: string): FileMemoryStore {
+    return this.#createStores(
+      {
+        enabled: this.#settings.get('memory.enabled'),
+        directory: this.#settings.get('memory.directory'),
+        contextBudgetChars: this.#settings.get('memory.contextBudgetChars'),
+        searchDefaultLimit: this.#settings.get('memory.searchDefaultLimit'),
+        searchMaxLimit: this.#settings.get('memory.searchMaxLimit'),
+      },
+      projectPath,
+    ).project;
+  }
+
   #resolveProjectId(projectPath: string): string {
     try {
       const commonDir = execSync('git rev-parse --git-common-dir', {

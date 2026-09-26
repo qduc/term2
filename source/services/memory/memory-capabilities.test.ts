@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, afterEach } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
+import { AutomaticMemoryCanary } from './automatic-memory-canary.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MEMORY_RECALL_CLOSE, MEMORY_RECALL_OPEN, recalledMemoryKeys } from '../../prompts/memory-recall-notice.js';
 
@@ -35,6 +36,26 @@ const readTools = ['memory_list', 'memory_get', 'memory_search', 'memory_retriev
 const mutatingTools = new Set(['memory_create', 'memory_update', 'memory_delete']);
 
 describe('MemoryCapabilityBuilder', () => {
+  it('makes an automatic project preference available to a new session and supports undo', async () => {
+    const directory = makeTempDir();
+    const settings = createMockSettingsService({ 'memory.directory': directory });
+    const first = new MemoryCapabilityBuilder(settings);
+    const receipt = await new AutomaticMemoryCanary(first.projectStore(process.cwd())).record(
+      'For future sessions, I prefer short test reports.',
+      'prior-session',
+    );
+    expect(receipt).not.toBeNull();
+    const returning = new MemoryCapabilityBuilder(settings);
+    const selected = await returning.selectForTurn('Please prepare short test reports.', {
+      projectPath: process.cwd(),
+    });
+    expect(selected.memories).toContainEqual(expect.objectContaining({ id: receipt!.id, scope: 'project' }));
+    expect((await returning.projectStore(process.cwd()).get(receipt!.id))?.provenance?.sessionId).toBe('prior-session');
+    await returning.projectStore(process.cwd()).remove(receipt!.id);
+    expect(
+      (await returning.selectForTurn('Please prepare short test reports.', { projectPath: process.cwd() })).memories,
+    ).toEqual([]);
+  });
   it.each([
     ['default', { kind: 'main' as const }, 'write', writeTools],
     ['plan', { kind: 'main' as const }, 'write', writeTools],

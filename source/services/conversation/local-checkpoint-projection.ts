@@ -6,7 +6,9 @@ import { projectModelRequestHistory } from './conversation-state-projector.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 
-type ProjectionResult = { status: 'no_checkpoint' | 'refused' } | { status: 'derived'; history: ProviderInputItem[] };
+type ProjectionResult =
+  | { status: 'no_checkpoint' | 'refused' }
+  | { status: 'derived'; history: ProviderInputItem[]; postCheckpointTurnFinalized: boolean };
 
 const refKey = (ref: EventReference): string => JSON.stringify([ref.logId, ref.eventId]);
 const envelopeKey = (envelope: PersistedLogEnvelope): string | null =>
@@ -14,10 +16,10 @@ const envelopeKey = (envelope: PersistedLogEnvelope): string | null =>
 const clone = <T>(value: T): T => structuredClone(value);
 
 /**
- * Rebuilds the portable request projection from a persisted local checkpoint
- * and source events after it. It only publishes the projection when every
- * checkpoint reference resolves and the result exactly matches the existing
- * replay-derived history; unsupported or stale records keep the safe replay.
+ * Rebuilds portable request history from a persisted local checkpoint, its
+ * uncovered pre-checkpoint hot tail, and finalized source turns after it. It
+ * publishes only when coverage resolves and, when available, the request
+ * snapshot exactly matches; unsupported or stale records keep safe replay.
  */
 export function deriveLocalCheckpointRequestHistory(
   envelopes: readonly PersistedLogEnvelope[],
@@ -82,8 +84,8 @@ export function deriveLocalCheckpointRequestHistory(
   const sourceKeys = orderedSourceRefs as string[];
   if (checkpoint.sourceRefs.length > sourceKeys.length) return { status: 'refused' };
   if (checkpoint.sourceRefs.some((ref, index) => refKey(ref) !== sourceKeys[index])) return { status: 'refused' };
+  const coldPrefixEnvelopes = sourceEnvelopes.slice(0, checkpoint.sourceRefs.length);
   const hotTailEnvelopes = sourceEnvelopes.slice(checkpoint.sourceRefs.length);
-  if (hotTailEnvelopes.length > 0 && hotTailEnvelopes[0]!.event.type !== 'user_message') return { status: 'refused' };
   const completeTurns = (turnEvents: readonly PersistedLogEnvelope[]): boolean => {
     let hasUser = false;
     let hasAssistant = false;
@@ -100,8 +102,10 @@ export function deriveLocalCheckpointRequestHistory(
     }
     return hasUser && hasAssistant;
   };
-  const hotUserCount = hotTailEnvelopes.filter((envelope) => envelope.event.type === 'user_message').length;
-  if (!completeTurns(sourceEnvelopes) || hotUserCount < 2 || !completeTurns(hotTailEnvelopes)) {
+  const hasTrailingCurrentUser = hotTailEnvelopes.at(-1)?.event.type === 'user_message';
+  const completedHotTail = hasTrailingCurrentUser ? hotTailEnvelopes.slice(0, -1) : hotTailEnvelopes;
+  const completedHotUsers = completedHotTail.filter((envelope) => envelope.event.type === 'user_message').length;
+  if (!completeTurns(coldPrefixEnvelopes) || !completeTurns(completedHotTail) || completedHotUsers < 2) {
     return { status: 'refused' };
   }
 
@@ -164,5 +168,11 @@ export function deriveLocalCheckpointRequestHistory(
     const observed = projectModelRequestHistory(replayedHistory);
     if (JSON.stringify(history) !== JSON.stringify(observed)) return { status: 'refused' };
   }
-  return { status: 'derived', history };
+  return {
+    status: 'derived',
+    history,
+    postCheckpointTurnFinalized: afterCheckpoint.some(
+      (envelope) => !isTruncatedLogEvent(envelope.event) && envelope.event.type === 'assistant_turn',
+    ),
+  };
 }

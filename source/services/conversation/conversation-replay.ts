@@ -1363,7 +1363,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   const checkpointProjection = deriveLocalCheckpointRequestHistory(envelopes, state.history);
   if (checkpointProjection.status === 'derived') {
     state.history = checkpointProjection.history;
-    state.previousResponseId = null;
+    if (!checkpointProjection.postCheckpointTurnFinalized) state.previousResponseId = null;
   }
 
   // Cross-model invalidation

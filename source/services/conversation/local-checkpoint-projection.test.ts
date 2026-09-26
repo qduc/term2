@@ -90,6 +90,91 @@ describe('deriveLocalCheckpointRequestHistory', () => {
     expect(deriveLocalCheckpointRequestHistory(events, request)).toEqual({
       status: 'derived',
       history: request,
+      postCheckpointTurnFinalized: true,
+    });
+  });
+
+  it('keeps the current pre-checkpoint user at the hot-tail boundary before and after its final answer', () => {
+    const checkpoint: ProviderInputItem = {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'summary' }],
+      contextSummary: { version: 1, strategy: 'local' },
+    };
+    const hotHistory = [
+      { role: 'user', type: 'message', content: 'hot one' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'answer one' }],
+      },
+      { role: 'user', type: 'message', content: 'hot two' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'answer two' }],
+      },
+    ];
+    const currentUser = { role: 'user', type: 'message', content: 'current request' };
+    const prefix = [
+      envelope(1, 'cold-user', { type: 'user_message', message: { sender: 'user', text: 'cold question' } }),
+      envelope(2, 'cold-assistant', assistantTurn('cold answer')),
+      envelope(3, 'hot-user-1', { type: 'user_message', message: { sender: 'user', text: 'hot one' } }),
+      envelope(4, 'hot-assistant-1', assistantTurn('answer one')),
+      envelope(5, 'hot-user-2', { type: 'user_message', message: { sender: 'user', text: 'hot two' } }),
+      envelope(6, 'hot-assistant-2', assistantTurn('answer two')),
+      envelope(7, 'current-user', { type: 'user_message', message: { sender: 'user', text: 'current request' } }),
+      envelope(8, 'checkpoint', {
+        type: 'context_checkpoint_created',
+        version: 1,
+        artifactId: 'automatic-local',
+        sourceRefs: [
+          { logId: 'session', eventId: 'cold-user' },
+          { logId: 'session', eventId: 'cold-assistant' },
+        ],
+        item: checkpoint,
+      }),
+    ];
+    const interruptedRequest = [checkpoint, ...hotHistory, currentUser];
+    const interrupted = deriveLocalCheckpointRequestHistory(prefix, [
+      { role: 'user', type: 'message', content: 'cold question' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'cold answer' }],
+      },
+      ...hotHistory,
+      currentUser,
+    ]);
+    expect(interrupted).toEqual({
+      status: 'derived',
+      history: interruptedRequest,
+      postCheckpointTurnFinalized: false,
+    });
+
+    const finalizedResponse = {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'current answer' }],
+    };
+    const finalized = deriveLocalCheckpointRequestHistory(
+      [
+        ...prefix,
+        envelope(9, 'current-assistant', {
+          ...assistantTurn('current answer'),
+          providerHistory: [...interruptedRequest, finalizedResponse],
+        }),
+      ],
+      [...interruptedRequest, finalizedResponse],
+    );
+    expect(finalized).toEqual({
+      status: 'derived',
+      history: [...interruptedRequest, finalizedResponse],
+      postCheckpointTurnFinalized: true,
     });
   });
 
@@ -231,6 +316,10 @@ describe('deriveLocalCheckpointRequestHistory', () => {
     ];
 
     const persisted = [turns[0]!, turns[1]!, firstCheckpoint, ...turns.slice(2), secondCheckpoint, ...afterCheckpoint];
-    expect(deriveLocalCheckpointRequestHistory(persisted, request)).toEqual({ status: 'derived', history: request });
+    expect(deriveLocalCheckpointRequestHistory(persisted, request)).toEqual({
+      status: 'derived',
+      history: request,
+      postCheckpointTurnFinalized: true,
+    });
   });
 });

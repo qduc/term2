@@ -818,6 +818,11 @@ it('replay derives a provenance-proven local checkpoint request from the checkpo
     logId: 's',
     eventId: 'hot-assistant-two',
   };
+  const nextUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'next-u', sender: 'user', text: 'next question' } }),
+    logId: 's',
+    eventId: 'next-user',
+  };
   const checkpointEvent = {
     ...env({
       type: 'context_checkpoint_created',
@@ -832,15 +837,11 @@ it('replay derives a provenance-proven local checkpoint request from the checkpo
     logId: 's',
     eventId: 'checkpoint',
   };
-  const nextUserEvent = {
-    ...env({ type: 'user_message', message: { id: 'next-u', sender: 'user', text: 'next question' } }),
-    logId: 's',
-    eventId: 'next-user',
-  };
   const nextAssistantEvent = {
     ...env({
       type: 'assistant_turn',
       turn: { items: [{ type: 'assistant_text', text: 'next answer' }] },
+      state: { previousResponseId: 'post-checkpoint-chain' },
       providerHistory: [checkpoint, hotUser, hotAssistant, secondHotUser, secondHotAssistant, nextUser, nextAssistant],
     }),
     logId: 's',
@@ -854,8 +855,8 @@ it('replay derives a provenance-proven local checkpoint request from the checkpo
     hotAssistantEvent,
     secondHotUserEvent,
     secondHotAssistantEvent,
-    checkpointEvent,
     nextUserEvent,
+    checkpointEvent,
     nextAssistantEvent,
   ]);
 
@@ -868,6 +869,7 @@ it('replay derives a provenance-proven local checkpoint request from the checkpo
     nextUser,
     nextAssistant,
   ]);
+  expect(restored.previousResponseId).toBe('post-checkpoint-chain');
 });
 
 it('replay applies a checkpoint appended just before a crash and severs the prior provider chain', () => {
@@ -917,6 +919,11 @@ it('replay applies a checkpoint appended just before a crash and severs the prio
       eventId: 'hot-assistant-2',
     },
   ];
+  const currentUserEvent = {
+    ...env({ type: 'user_message', message: { id: 'current-u', sender: 'user', text: 'current request' } }),
+    logId: 's',
+    eventId: 'current-user',
+  };
   const checkpointEvent = {
     ...env({
       type: 'context_checkpoint_created',
@@ -932,12 +939,20 @@ it('replay applies a checkpoint appended just before a crash and severs the prio
     eventId: 'checkpoint',
   };
 
-  const restored = replayEvents([sourceUser, sourceAssistant, ...hotUsersAndAssistantEvents, checkpointEvent]);
+  const restored = replayEvents([
+    sourceUser,
+    sourceAssistant,
+    ...hotUsersAndAssistantEvents,
+    currentUserEvent,
+    checkpointEvent,
+  ]);
 
-  expect(restored.history).toHaveLength(5);
+  expect(restored.history).toHaveLength(6);
   expect(restored.history[0]).toEqual(checkpoint);
   expect(JSON.stringify(restored.history)).toContain('hot question one');
   expect(JSON.stringify(restored.history)).toContain('hot question two');
+  expect(JSON.stringify(restored.history)).toContain('current request');
+  expect(JSON.stringify(restored.history)).not.toContain('cold answer');
   expect(restored.previousResponseId).toBeNull();
 });
 

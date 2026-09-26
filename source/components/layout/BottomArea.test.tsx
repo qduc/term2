@@ -572,7 +572,7 @@ it.sequential('BottomArea shows QueuePausedPrompt when queuePaused is true', asy
     queuePauseReason: 'manual',
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('Queue paused: 3 item(s) pending.')).toBe(true);
+  expect(output.includes('Queue paused: 3 items pending.')).toBe(true);
   expect(output.includes('esume')).toBe(true);
   expect(output.includes('iscard')).toBe(true);
   expect(output.includes('❯')).toBe(false);
@@ -589,7 +589,7 @@ it.sequential('BottomArea shows QueuePausedPrompt with failure reason', async ()
     queuePauseReason: 'failure',
   });
   const output = lastFrame() ?? '';
-  expect(output.includes('Queue paused: 1 item(s) pending.')).toBe(true);
+  expect(output.includes('Queue paused: 1 item pending.')).toBe(true);
   expect(output.includes('Last turn failed.')).toBe(true);
   act(() => {
     unmount();

@@ -447,10 +447,6 @@ const InputBox: FC<Props> = ({
           onImagesChange={handleImagesChange}
           onPasteError={handlePasteError}
           pasteThreshold={settingsService.get('ui.pasteThreshold')}
-          formatPastePlaceholder={(displayNumber, pastedText) => {
-            const lineCount = pastedText.split(/\r\n|\r|\n/).length;
-            return `[Paste text #${displayNumber} · ${lineCount} lines]`;
-          }}
           ignoreInput={(input, key) => {
             if (Date.now() >= altEnterSuppressUntilRef.current) consumedAltEnterRef.current = false;
             if (consumedAltEnterRef.current && (input.includes('\x1b\r') || key.return)) {

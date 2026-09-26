@@ -30,4 +30,5 @@ export interface RunCodeCallRecord {
   readonly durationMs: number;
   readonly directlyCallable?: boolean;
   readonly diagnostic?: RunCodeDiagnosticCode;
+  readonly reason?: string;
 }

@@ -95,6 +95,23 @@ const recordSettlement = (value: unknown, onSettled: () => void): Promise<unknow
   });
 
 describe('run_code', () => {
+  it('surfaces the reason when a nested approval policy throws without executing the tool', async () => {
+    const protectedTool = tool({ name: 'protected' });
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    approvalRegistry.register({
+      toolName: 'protected',
+      needsApproval: () => {
+        throw new Error('bad patch: malformed hunk');
+      },
+    });
+
+    const result = await run([protectedTool], "return await tools.protected({ value: 'x' });", {}, approvalRegistry);
+
+    expect(result).toContain('bad patch: malformed hunk');
+    expect(result).toContain('Nothing was executed; correct the arguments and call it again.');
+    expect(result).toContain('Approval policy error (protected): bad patch: malformed hunk');
+  });
+
   it('denies a nested call when the active workspace changes while approval waits', async () => {
     let cwd = '/workspace/one';
     const effects: string[] = [];

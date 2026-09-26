@@ -532,6 +532,10 @@ function renderResult(
   if (policyFailures.length > 0) {
     const names = [...new Set(policyFailures.map((call) => call.tool))].join(', ');
     sections.push(`Unavailable (approval policy refused or failed; no user approval was requested): ${names}`);
+    for (const call of policyFailures) {
+      if (call.outcome === 'policy_error' && call.reason)
+        sections.push(`Approval policy error (${call.tool}): ${call.reason}`);
+    }
   }
   const actionSection = renderActionReceipts(receipts);
   if (actionSection) sections.push(actionSection);

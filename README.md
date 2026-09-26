@@ -16,7 +16,7 @@ Combining a fast React (Ink) terminal interface with an application-owned run lo
 - **Open Source and Local First**: MIT licensed. No mandatory subscriptions, telemetry lock-in, or proprietary walled gardens.
 - **Universal Provider Support**: Native integration with OpenAI (WebSocket Responses and Chat Completions), ChatGPT/Codex OAuth (browser PKCE), Grok Responses API (with encrypted reasoning and OAuth), OpenRouter, Anthropic, Google Gemini, and custom local endpoints (Ollama, llama.cpp, vLLM).
 - **Fine-Grained Sandboxing and Safety**: Sandboxed shell execution with configurable read/write boundaries (`standard`, `strict`) and interactive unified diff previews.
-- **Smart Shell Auto-Approval**: A hybrid heuristic and LLM safety evaluator that auto-approves safe read-only and workspace commands, eliminating prompt fatigue while strictly gating risky operations.
+- **Shell Auto-Approval Modes**: Configure shell approval as `off`, `advisory`, `auto`, or `always`; `always` disables the shell sandbox.
 - **Multi-Agent Orchestration**: Spawn specialized foreground or background subagents (`explorer`, `worker`, `mentor`, `librarian`) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`).
 - **Provider-Neutral Context Compaction**: Intelligently compacts long conversation histories (via `/compact` or automatic thresholds) while preserving cold-prefix architectural facts and hot-tail tool ledger integrity.
 - **Time-Travel Rewind and Forking**: Non-destructive conversation rewinding with discard previews (`/rewind`, `/undo`, `/retry`), session resumption (`/resume`, `--resume`), and session branching (`--fork`).
@@ -186,11 +186,13 @@ Shell commands execute inside an isolated execution boundary:
 - `strict` policy: Locks down file reading to the workspace and safe toolchains, blocking access to the user home directory and system roots (`/etc`, `/var`, `/root`).
 - Toggle sandbox enforcement anytime using `/sandbox`, or configure policies via `sandbox.readPolicy` in `/settings`.
 
-### Smart Shell Auto-Approval Modes (`/auto-approve`)
-- `off` (Default): Every shell command prompts for interactive user confirmation with a unified diff preview.
+### Shell Auto-Approval Modes (`/auto-approve`)
+- `off` (Default): Shell commands are not auto-approved.
 - `advisory`: Commands require confirmation, but include real-time LLM-generated safety and consequence explanations.
 - `auto`: Safe, read-only, and idempotent workspace operations execute automatically; potentially destructive commands (e.g. `rm -rf`, `git reset --hard`, `git push --force`) are strictly blocked for user confirmation.
-- `always`: Unattended execution mode. Disables sandbox boundaries (intended for automated CI environments; use with caution).
+- `always`: Unattended shell execution mode. Disables sandbox boundaries; use only in a trusted environment.
+
+The `--auto-approve` CLI flag is separate: it applies only to non-interactive prompts and allows tool execution without interactive confirmation.
 
 ---
 
@@ -288,6 +290,7 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `/sandbox` | — | Toggle shell sandbox isolation on or off. |
 | `/compact` | — | Manually trigger context compaction. |
 | `/providers` | — | Open interactive provider manager (list, add, edit, remove, switch accounts). |
+| `/mcp` | — | Show configured MCP servers and their connection state. |
 | `/skills` | `[skill-name]` | Activate a skill for the next request. |
 | `/rewind` | `[last\|<turn>] [edit\|resend]` | Rewind conversation history with interactive discard inspection. |
 | `/undo` | — | Alias for `/rewind edit` (places target turn back in input box). |
@@ -313,9 +316,8 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `Alt + Enter` / `Esc + Enter` | Input Box | Queue input while a turn is executing. |
 | `Ctrl + R` | Model Menu | Refresh provider model catalog from API. |
 | `Ctrl + D` | Settings Menu | Reset highlighted setting to its default value. |
-| `Escape` | Input Box | Clear input buffer (when typing). |
-| `Double Escape` | Active Turn | Safely interrupt in-flight generation or tool execution. |
-| `y` / `n` | Approval Prompt | Single-key approve or reject for tool execution. |
+| `Escape` | Composer | First press shows the Escape hint; a second press clears typed text. With an empty composer during a turn, double Escape interrupts the turn. |
+| `y` / `n` | Docker host-control approval | Approve once / reject. Other tool approvals use the numbered choices shown in the prompt. |
 | `Ctrl + C` | Global | Force immediate graceful exit. |
 
 ---

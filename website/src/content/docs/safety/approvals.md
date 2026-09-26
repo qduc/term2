@@ -7,7 +7,7 @@ term2 balances velocity with security by giving you fine-grained control over wh
 
 ## Auto-Approval Modes (`/auto-approve`)
 
-Configure the auto-approval policy using the `/auto-approve` command or via `shell.autoApproveMode`:
+Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. The CLI `--auto-approve` flag is separate and applies only to non-interactive prompts.
 
 | Mode | Command | Behavior | Safety Guarantee |
 | :--- | :--- | :--- | :--- |

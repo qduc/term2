@@ -288,9 +288,13 @@ export async function buildConversationResult(
       });
       approvalFlow.clearPending();
       throw new ModelBehaviorError(
-        `Tool approval policy ${registryDecision.kind} refused ${
-          toolName ?? 'the requested tool'
-        }; execution was not allowed.`,
+        registryDecision.kind === 'error'
+          ? `Tool approval policy failed for ${toolName ?? 'the requested tool'}: ${
+              registryDecision.message
+            }; execution was not allowed.`
+          : `Tool approval policy ${registryDecision.kind} refused ${
+              toolName ?? 'the requested tool'
+            }; execution was not allowed.`,
       );
     }
 

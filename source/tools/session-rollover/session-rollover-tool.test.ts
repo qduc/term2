@@ -73,4 +73,16 @@ describe('session_rollover tool', () => {
     expect(sessionRolloverParameters.safeParse({}).success).toBe(false);
     expect(sessionRolloverParameters.safeParse({ brief: 'done', reason: 'other' }).success).toBe(false);
   });
+
+  it('asks for durable state before the call, in the workspace rather than /tmp', () => {
+    // Most rollovers happen before any milestone reminder fires, so the tool
+    // description is the only save-first guidance every caller sees.
+    const tool = createSessionRolloverToolDefinition(() => ({
+      ok: true,
+      status: 'rollover_requested',
+      rolloverId: 'r',
+    }));
+    expect(tool.description).toContain('Before calling');
+    expect(tool.description).toContain('/tmp');
+  });
 });

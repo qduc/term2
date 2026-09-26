@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -19,7 +20,9 @@ export function normalizeProjectPath(projectPath: string): string {
 /** The git common dir for `dir`, or null when `dir` is not (or no longer) inside a repository. */
 export type GitCommonDirLookup = (dir: string) => string | null;
 
-function readGitCommonDir(dir: string): string | null {
+export function readGitCommonDir(dir: string): string | null {
+  // Most historical session paths are removed worktrees; skip the git spawn.
+  if (!existsSync(dir)) return null;
   try {
     return (
       execFileSync('git', ['rev-parse', '--git-common-dir'], {

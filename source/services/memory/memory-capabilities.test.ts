@@ -76,6 +76,8 @@ describe('MemoryCapabilityBuilder', () => {
       projectPath: process.cwd(),
     });
     expect(selected.memories).toContainEqual(expect.objectContaining({ id: receipt!.id, scope: 'project' }));
+    // The search terms that picked these memories, so a bad recall can be audited from the log.
+    expect(selected.queryTerms?.split(' ')).toEqual(expect.arrayContaining(['short', 'test', 'reports']));
     expect((await returning.projectStore(process.cwd()).get(receipt!.id))?.provenance?.sessionId).toBe('prior-session');
     await returning.projectStore(process.cwd()).remove(receipt!.id);
     expect(

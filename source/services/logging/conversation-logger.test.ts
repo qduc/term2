@@ -73,9 +73,15 @@ it('persists an injection receipt with its turn identity', () => {
   conversationLogger.dispatchEventToLog({
     type: 'memory_injected',
     memories: [{ scope: 'global', id: 'rule', title: 'Rule' }],
+    recall: { source: 'recall_query', terms: 'websocket pool retirement' },
   });
   expect(events).toEqual([
-    { type: 'memory_injected', turnId: 'turn-1', memories: [{ scope: 'global', id: 'rule', title: 'Rule' }] },
+    {
+      type: 'memory_injected',
+      turnId: 'turn-1',
+      memories: [{ scope: 'global', id: 'rule', title: 'Rule' }],
+      recall: { source: 'recall_query', terms: 'websocket pool retirement' },
+    },
   ]);
 });
 

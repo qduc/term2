@@ -841,7 +841,8 @@ export class TurnWorkflow {
    */
   async #recallMemory(attempt: TurnAttempt): Promise<Extract<ConversationEvent, { type: 'memory_injected' }> | null> {
     const select = this.deps.agentClient.selectMemoryForTurn;
-    const query = attempt.submittedTurn.memoryRecallQuery ?? attempt.submittedTurn.text;
+    const { memoryRecallQuery } = attempt.submittedTurn;
+    const query = memoryRecallQuery ?? attempt.submittedTurn.text;
     if (typeof select !== 'function' || !query.trim()) return null;
     const exclude = recalledMemoryKeys(
       this.deps.conversationStore
@@ -854,7 +855,18 @@ export class TurnWorkflow {
       const selection = await select.call(this.deps.agentClient, query, { exclude });
       if (!selection.text) return null;
       attempt.prependToTurnText(selection.text);
-      return { type: 'memory_injected', memories: selection.memories };
+      return {
+        type: 'memory_injected',
+        memories: selection.memories,
+        ...(selection.queryTerms
+          ? {
+              recall: {
+                source: memoryRecallQuery === undefined ? 'turn_text' : 'recall_query',
+                terms: selection.queryTerms,
+              },
+            }
+          : {}),
+      };
     } catch (error) {
       // Recall is advisory; the turn proceeds without it.
       this.deps.logger.warn('Memory recall failed', { error: describeError(error) });

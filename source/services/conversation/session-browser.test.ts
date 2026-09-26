@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createConversationLogWriter } from '../logging/conversation-log-writer.js';
-import { setConversationsDirForTest } from './conversation-persistence.js';
+import { setConversationsDirForTest, setPidAlivenessCheckForTest } from './conversation-persistence.js';
 import { SessionBrowser } from './session-browser.js';
 import { setTrimConfig, getTrimConfig } from '../../utils/output/output-trim.js';
 
@@ -26,6 +26,7 @@ afterEach(() => {
   }
   fs.rmSync(dir, { recursive: true, force: true });
   setConversationsDirForTest(null);
+  setPidAlivenessCheckForTest(null);
 });
 
 function writeSession(id: string, projectPath: string, sshHost?: string, text = 'hello', rolloverFrom?: string) {
@@ -416,6 +417,52 @@ it('falls back from previous to the most recently updated other in-scope session
   const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
 
   expect((browser.read({ id: 'previous' }) as any).session.id).toBe('newer');
+});
+
+const RUNNING_PID = 424_242;
+
+/** Marks a session as held by another live term2 process on this host. */
+function holdSessionLock(id: string) {
+  fs.writeFileSync(
+    path.join(dir, `${id}.lock`),
+    JSON.stringify({ pid: RUNNING_PID, startedAt: '2026-01-01T00:00:00.000Z', host: os.hostname() }),
+  );
+  setPidAlivenessCheckForTest((pid) => pid === RUNNING_PID);
+}
+
+it('skips sessions still running in another process when falling back from previous', () => {
+  // Worktrees share the project scope, so the newest other session is often a
+  // concurrently running sibling rather than anything this session continues.
+  writeSession('finished', '/project');
+  writeSession('running-sibling', '/project/.worktrees/other');
+  writeSession('current', '/project');
+  touchSession('finished', '2030-01-01T00:00:00.000Z');
+  touchSession('running-sibling', '2031-01-01T00:00:00.000Z');
+  touchSession('current', '2032-01-01T00:00:00.000Z');
+  holdSessionLock('running-sibling');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('finished');
+});
+
+it('does not guess previous when every other session in scope is still running', () => {
+  writeSession('running-sibling', '/project');
+  writeSession('current', '/project');
+  holdSessionLock('running-sibling');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect(browser.read({ id: 'previous' })).toMatchObject({
+    error: { code: 'not_found', message: expect.stringContaining('still running') },
+  });
+});
+
+it('still resolves a running rollover predecessor', () => {
+  writeSession('predecessor', '/project');
+  writeSession('current', '/project', undefined, 'current', 'predecessor');
+  holdSessionLock('predecessor');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
 });
 
 it('prefers the rollover predecessor over a more recently updated session', () => {

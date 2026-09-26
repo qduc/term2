@@ -20,7 +20,9 @@ import { deltaSidecarPathFor } from '../../logging/conversation-log-events.js';
 import {
   isBrowsableSession,
   CURRENT_OUT_OF_SCOPE_MESSAGE,
+  isRunningElsewhere,
   NO_OTHER_SESSION_MESSAGE,
+  ONLY_RUNNING_SESSIONS_MESSAGE,
   PREVIOUS_UNAVAILABLE_MESSAGE,
   prefixSnippet,
   projectMessages,
@@ -589,33 +591,34 @@ export class SessionIndexDatabase {
       if (!current?.predecessor_id && !rows.some((row) => row.id === options.currentSessionId)) {
         return { kind: 'not_found', message: CURRENT_OUT_OF_SCOPE_MESSAGE };
       }
-      const previousId =
-        current?.predecessor_id ??
-        (
-          this.#db
-            .prepare(
-              `
-              SELECT id
-              FROM sessions
-              WHERE (project_path IS NOT NULL AND project_path = ?)
-                AND (
-                  (? IS NULL AND ssh_host IS NULL)
-                  OR
-                  (ssh_host IS NOT NULL AND ssh_host = ?)
-                )
-                AND id <> ?
-              ORDER BY updated_at DESC, id ASC
-              LIMIT 1
-            `,
-            )
-            .get(normalizedProject, normalizedHost, normalizedHost, options.currentSessionId) as
-            | { id: string }
-            | undefined
-        )?.id;
-
+      let previousId = current?.predecessor_id ?? undefined;
       if (!previousId) {
-        return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
+        // session_list order; skip siblings another live process is still writing.
+        const others = this.#db
+          .prepare(
+            `
+            SELECT id
+            FROM sessions
+            WHERE (project_path IS NOT NULL AND project_path = ?)
+              AND (
+                (? IS NULL AND ssh_host IS NULL)
+                OR
+                (ssh_host IS NOT NULL AND ssh_host = ?)
+              )
+              AND id <> ?
+            ORDER BY updated_at DESC, id ASC
+          `,
+          )
+          .all(normalizedProject, normalizedHost, normalizedHost, options.currentSessionId) as Array<{ id: string }>;
+        if (others.length === 0) {
+          return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
+        }
+        previousId = others.find((row) => !isRunningElsewhere(row.id))?.id;
+        if (!previousId) {
+          return { kind: 'not_found', message: ONLY_RUNNING_SESSIONS_MESSAGE };
+        }
       }
+
       return {
         kind: 'resolved',
         id: previousId,

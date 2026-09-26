@@ -59,7 +59,11 @@ export class ConversationLogger {
     if (!this.logSink) return;
     switch (event.type) {
       case 'memory_injected':
-        this.log({ type: 'memory_injected', memories: event.memories });
+        this.log({
+          type: 'memory_injected',
+          memories: event.memories,
+          ...(event.recall ? { recall: event.recall } : {}),
+        });
         return;
       case 'usage_update':
         this.turnAccumulator.setDisplayUsage(event.usage);

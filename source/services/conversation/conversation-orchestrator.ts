@@ -1101,52 +1101,52 @@ export class ConversationOrchestrator {
     if (this.#activeTurns > 0) return;
     if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
 
-    const settlesTo = (message: Message): TurnEndSettlement | null => {
-      const reason = classifyStaticCommitBlocker(message);
-      return reason === null ? null : turnEndSettlement(reason);
-    };
+    // Classify inside the updater, not from getMessages(): the settle that
+    // just ran queued the `final` flush and the terminal command rows as
+    // React updates, so the rendered snapshot still shows rows those updates
+    // are about to close. Judging that snapshot reported nearly every turn as
+    // stranded and aborted commands whose completion was merely queued.
+    this.config.messages.setMessages((messages) => {
+      const stranded = messages
+        .map((message) => {
+          const reason = classifyStaticCommitBlocker(message);
+          return { message, settlement: reason === null ? null : turnEndSettlement(reason) };
+        })
+        .filter((entry): entry is { message: Message; settlement: TurnEndSettlement } => entry.settlement !== null);
+      if (stranded.length === 0) return messages;
+      this.#reportStrandedRows(stranded);
 
-    const stranded = this.config.messages
-      .getMessages()
-      .map((message) => ({ message, settlement: settlesTo(message) }))
-      .filter((entry): entry is { message: Message; settlement: TurnEndSettlement } => entry.settlement !== null);
-    if (stranded.length === 0) return;
+      const settled = new Map(stranded.map((entry) => [entry.message.id, entry.settlement]));
+      return messages.map((message) => {
+        const settlement = settled.get(message.id);
+        if (settlement === 'finalize') return { ...message, status: 'finalized' } as Message;
+        if (settlement === 'abort') return { ...message, status: 'aborted' } as Message;
+        return message;
+      });
+    });
+  }
 
+  #reportStrandedRows(stranded: ReadonlyArray<{ message: Message; settlement: TurnEndSettlement }>): void {
     // Turn-owned streaming rows (bot/reasoning tails) can never legitimately
     // outlive their turn: the `final` flush closes them on every settle, and
     // an approval pause finalizes them through computeNextMessages before the
     // turn ends. A live row at this point was abandoned by its producer.
-    const finalizeIds = new Set(
-      stranded.filter((entry) => entry.settlement === 'finalize').map((entry) => entry.message.id),
-    );
-    if (finalizeIds.size > 0) {
-      const rows = stranded
-        .filter((entry) => entry.settlement === 'finalize')
-        .map(({ message, settlement }) => ({
+    const finalizeEntries = stranded.filter((entry) => entry.settlement === 'finalize');
+    if (finalizeEntries.length > 0) {
+      this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
+        ids: finalizeEntries.map((entry) => entry.message.id),
+        sessionId: this.config.conversationService.sessionId,
+        rows: finalizeEntries.map(({ message, settlement }) => ({
           id: message.id,
           sender: message.sender,
           status: 'status' in message ? message.status : undefined,
           settlement,
-        }));
-      this.config.messages.setMessages((messages) =>
-        messages.map((message) =>
-          finalizeIds.has(message.id) ? ({ ...message, status: 'finalized' } as Message) : message,
-        ),
-      );
-      this.config.loggingService.warn('Streaming rows left live at turn end; finalizing them', {
-        ids: [...finalizeIds],
-        sessionId: this.config.conversationService.sessionId,
-        rows,
+        })),
       });
     }
 
     const abortEntries = stranded.filter((entry) => entry.settlement === 'abort');
     if (abortEntries.length === 0) return;
-
-    const abortIds = new Set(abortEntries.map((entry) => entry.message.id));
-    this.config.messages.setMessages((messages) =>
-      messages.map((message) => (abortIds.has(message.id) ? ({ ...message, status: 'aborted' } as Message) : message)),
-    );
 
     const callKey = (entry: (typeof abortEntries)[number]): string =>
       (isCommandMessage(entry.message) ? entry.message.callId : undefined) ?? entry.message.id;

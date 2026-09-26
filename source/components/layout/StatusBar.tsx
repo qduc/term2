@@ -1,3 +1,4 @@
+import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
@@ -289,7 +290,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const smartPool = useSetting(settingsService, 'agent.smartModel');
   // Display uses the pool's first entry; the pool cursor only advances per
   // subagent spawn.
-  const smartModel = Array.isArray(smartPool) ? smartPool[0] : smartPool;
+  const smartModel = toTierModelPoolEntries(smartPool)[0]?.model;
   const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
   const mentorModel = smartModel ?? legacyMentorModel;
   const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';

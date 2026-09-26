@@ -91,6 +91,31 @@ function makeMessagePort(): MessagePort {
   };
 }
 
+/**
+ * A message port with React's semantics: updaters queue until `commit()`, and
+ * `getMessages()` returns the last committed snapshot, as `messagesRef.current`
+ * does in use-conversation.
+ */
+function makeDeferredMessagePort(): MessagePort & { commit: () => void } {
+  let committed: Message[] = [];
+  let queued: Array<(prev: Message[]) => Message[]> = [];
+  return {
+    getMessages: vi.fn(() => committed),
+    setMessages: vi.fn((updater) => {
+      queued.push(updater);
+    }),
+    appendMessages: vi.fn((additions) => {
+      queued.push((prev) => [...prev, ...additions]);
+    }),
+    trimMessages: vi.fn((next) => next),
+    commit: () => {
+      const pending = queued;
+      queued = [];
+      committed = pending.reduce((messages, updater) => updater(messages), committed);
+    },
+  };
+}
+
 function makeUIPort(): UIPort {
   return {
     onTurnStart: vi.fn(),
@@ -230,6 +255,64 @@ describe('ConversationOrchestrator', () => {
     const bots = cfg.messages.getMessages().filter((m) => m.sender === 'bot');
     expect(bots.every((m) => m.status === 'finalized')).toBe(true);
     expect(bots.map((m) => m.text)).toContain('The answer is X');
+  });
+
+  it('does not report a streamed row as stranded when its finalization is still queued', async () => {
+    // Regression: the settle's final flush is a queued React update, but the
+    // turn-end sweep read the last rendered snapshot and flagged the row that
+    // update was about to finalize — the warning fired on nearly every turn.
+    const messages = makeDeferredMessagePort();
+    const cfg = makeConfig({ messages });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'text_delta', delta: 'Done.' });
+      messages.commit();
+      return { type: 'response', finalText: '', commandMessages: [] };
+    });
+
+    await orchestrator.sendUserMessage('hello');
+    messages.commit();
+
+    const bots = messages.getMessages().filter((m) => m.sender === 'bot');
+    expect(bots).toEqual([expect.objectContaining({ status: 'finalized', text: 'Done.' })]);
+    expect(cfg.loggingService.warn).not.toHaveBeenCalledWith(
+      'Streaming rows left live at turn end; finalizing them',
+      expect.anything(),
+    );
+  });
+
+  it('does not abort a command row whose completion is still queued at turn end', async () => {
+    const messages = makeDeferredMessagePort();
+    const cfg = makeConfig({ messages });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'ls' } });
+      messages.commit();
+      options.onEvent({
+        type: 'command_message',
+        message: {
+          id: 'call-1-0',
+          sender: 'command',
+          status: 'completed',
+          callId: 'call-1',
+          toolName: 'shell',
+          command: 'ls',
+          output: 'a',
+          success: true,
+        },
+      });
+      return { type: 'response', finalText: '', commandMessages: [] };
+    });
+
+    await orchestrator.sendUserMessage('hello');
+    messages.commit();
+
+    const commands = messages.getMessages().filter((m) => m.sender === 'command');
+    expect(commands.map((m) => m.status)).toEqual(['completed']);
+    expect(cfg.loggingService.warn).not.toHaveBeenCalledWith(
+      'Command rows left running at turn end; aborting them',
+      expect.anything(),
+    );
   });
 
   it('finalizes the live bot message when the turn ends in a user cancellation', async () => {

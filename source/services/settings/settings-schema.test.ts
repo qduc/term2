@@ -189,6 +189,13 @@ it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
   },
 );
 
+it('tier model pools accept entries that pin their own provider', () => {
+  const pool = ['deepseek-flash', { model: 'gpt-6-luna', provider: 'codex' }];
+
+  expect(SettingsSchema.parse({ agent: { balancedModel: pool } }).agent?.balancedModel).toEqual(pool);
+  expect(() => SettingsSchema.parse({ agent: { balancedModel: [{ provider: 'codex' }] } })).toThrow();
+});
+
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
   const parsed = SettingsSchema.parse({});
   expect(parsed.memory).toMatchObject({

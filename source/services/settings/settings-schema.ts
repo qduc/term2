@@ -21,14 +21,21 @@ const subagentPoolSchema = (description: string) =>
 
 // Tier model settings are model pools: a list of model ids round-robined for
 // subagent spawns (see SubagentRolePoolSelector) and read first-entry for
-// other ancillary consumers. A bare string from older configs (or the legacy
-// migration) normalizes to a single-entry pool.
+// other ancillary consumers. A bare id runs on the tier's provider; an entry
+// picked from another provider's catalog pins it as `{model, provider}`. A
+// bare string from older configs (or the legacy migration) normalizes to a
+// single-entry pool.
+export const TierModelPoolEntrySchema = z.union([
+  z.string().min(1),
+  z.object({ model: z.string().min(1), provider: z.string().min(1).optional() }),
+]);
+export type TierModelPoolSetting = z.infer<typeof TierModelPoolEntrySchema>[];
 const tierModelPoolSchema = (description: string) =>
   z
     .preprocess((value) => {
       if (value === undefined || value === null || value === '') return undefined;
       return Array.isArray(value) ? value : [value];
-    }, z.array(z.string().min(1)).max(MAX_SUBAGENT_POOL_ENTRIES).optional())
+    }, z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).optional())
     .describe(description);
 
 // Define schemas for validation
@@ -722,16 +729,16 @@ export interface SettingsWithSources {
     model: SettingWithSource<string>;
     efficientModel: SettingWithSource<string | undefined>;
     capableModel: SettingWithSource<string | undefined>;
-    smartModel: SettingWithSource<string[] | undefined>;
+    smartModel: SettingWithSource<TierModelPoolSetting | undefined>;
     smartProvider: SettingWithSource<string | undefined>;
     smartReasoningEffort: SettingWithSource<string | undefined>;
-    balancedModel: SettingWithSource<string[] | undefined>;
+    balancedModel: SettingWithSource<TierModelPoolSetting | undefined>;
     balancedProvider: SettingWithSource<string | undefined>;
     balancedReasoningEffort: SettingWithSource<string | undefined>;
-    cheapModel: SettingWithSource<string[] | undefined>;
+    cheapModel: SettingWithSource<TierModelPoolSetting | undefined>;
     cheapProvider: SettingWithSource<string | undefined>;
     cheapReasoningEffort: SettingWithSource<string | undefined>;
-    choreModel: SettingWithSource<string[] | undefined>;
+    choreModel: SettingWithSource<TierModelPoolSetting | undefined>;
     choreProvider: SettingWithSource<string | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;

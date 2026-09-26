@@ -123,6 +123,8 @@ export const useAppCommands = ({
     settingsService,
     transitionService,
     addSystemMessage,
+    messages,
+    requestModeSwitchConfirm,
   });
 
   const slashCommands = useMemo<SlashCommand[]>(() => {

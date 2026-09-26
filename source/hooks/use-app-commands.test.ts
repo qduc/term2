@@ -440,6 +440,29 @@ it.sequential('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard'
   expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
 });
 
+it.sequential('useAppCommands requires the Lite confirmation before Shift+Tab changes profile', async () => {
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:lite']]);
+  const requestModeSwitchConfirm = vi.fn();
+  let hookResult: any;
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'user-1', sender: 'user', text: 'hello' } as any],
+      requestModeSwitchConfirm,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+  await act(async () => hookResult.cycleAppModes());
+  expect(settings.get('app.activeProfileId')).toBe('builtin:lite');
+  expect(requestModeSwitchConfirm).toHaveBeenCalledWith({
+    targetProfileId: 'builtin:plan',
+    modeLabel: 'Plan',
+    targetValue: true,
+  });
+});
+
 it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode', async () => {
   const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
   let hookResult: any;

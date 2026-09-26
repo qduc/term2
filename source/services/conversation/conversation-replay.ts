@@ -482,7 +482,7 @@ function replayAssistantTurn(
 
       const existing = messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === item.callId);
       if (existing) {
-        existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
+        existing.status = item.status;
         existing.output = outputText;
         if (item.status === 'failed') {
           existing.success = false;
@@ -493,7 +493,7 @@ function replayAssistantTurn(
         messages.push({
           id: `command-${item.callId}`,
           sender: 'command',
-          status: item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed',
+          status: item.status,
           command: item.toolName,
           output: outputText,
           success: item.status === 'completed',
@@ -628,7 +628,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         };
         state.toolLedger.push(existing);
       }
-      existing.status = event.status === 'failed' || event.status === 'aborted' ? event.status : 'completed';
+      existing.status = event.status;
       existing.output = event.output;
       existing.completedAt = ts;
       if (event.historyItems) {
@@ -1222,7 +1222,7 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
     if (item.type === 'tool_result') {
       const existing = messages.find((m): m is CommandMessage => m.sender === 'command' && m.callId === item.callId);
       if (existing) {
-        existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
+        existing.status = item.status;
         existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
         if (item.status === 'failed') {
           existing.success = false;
@@ -1233,7 +1233,7 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
         messages.push({
           id: `command-${item.callId}`,
           sender: 'command',
-          status: item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed',
+          status: item.status,
           command: item.toolName,
           output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
           success: item.status === 'completed',

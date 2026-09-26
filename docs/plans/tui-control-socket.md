@@ -48,7 +48,7 @@ The socket module earns a file because deleting it would push framing, directory
 | Turn status legality | `TurnStatusMachine`. The socket does not write it. |
 | Process start and stop, conversation lock | `cli.tsx`, which already constructs `ConversationService` and calls `render`. |
 
-`ConversationService` is the wrong place for the listener. It has no draft, no menu, and no system-message line. `setEventSink` is a single slot the gateway uses (`ServerSession`) and the interactive `cli.tsx` does not call. The control path may **observe** that slot only while it is null, and must fan out instead of replacing a sink someone else set. Steer admission is not an adapter event: `steerActiveTurn` returns a boolean from the run loop, and the orchestrator logs `Steer attempt resolved`. The receipt for a steer comes from that boolean, not from the sink.
+`ConversationService` is the wrong place for the listener. It has no draft, no menu, and no system-message line. `setEventSink` is a single slot. `ServerSession` (the gateway) sets it for the life of a gateway session. `non-interactive.ts` also sets it for the one-shot turn when `supportsPersistentEventSink` is true, and clears it with `setEventSink(null)` when that turn ends. Interactive `cli.tsx` does not call it. The control path exists only on the interactive process, so the slot starts null there. It may observe the slot only while it is null, and must fan out instead of replacing a sink someone else set. Steer admission is not an adapter event: `steerActiveTurn` returns a boolean from the run loop, and the orchestrator logs `Steer attempt resolved`. The receipt for a steer comes from that boolean, not from the sink.
 
 Do not add a `Runner`, `Driver`, or `Coordinator`. One server type and one port interface are the seam.
 
@@ -173,24 +173,35 @@ Maximum concurrent connections: 8. A ninth is accepted and immediately closed wi
 
 ## Discovery
 
-Socket path, when enabled:
+The client that launches the pane chooses the endpoint name. It does not look the pane up afterwards.
+
+The orchestrator that launches these panes reports that `herdr pane list --workspace <id>` returns `pane_id`, `tab_id`, `cwd`, `foreground_cwd`, `terminal_id`, `terminal_title`, and agent fields, and does not return a pid. The process in the pane is the shell, not term2. Two panes often share a cwd. A directory scan by pid or cwd cannot tell that launcher which socket it just started. The name is known because the launcher passed it. This repo does not read `HERDR_*` and does not call herdr.
+
+Flag: `--control-socket[=<name>]`.
+
+- Bare `--control-socket` uses the decimal pid as the name, so a human can still turn the socket on without inventing one.
+- `--control-socket=<name>` and `--control-socket <name>` use that name. The name matches `[A-Za-z0-9_-]{1,64}`. Anything else (empty, too long, slash, dot, space) does not open a socket. The TUI still starts. One system line says the name was rejected.
+- The next argument is a name only when it does not start with `-`. Otherwise the bare form applies and that argument stays with the rest of the CLI.
+
+Paths, when the socket actually binds:
 
 ```text
-$XDG_RUNTIME_DIR/term2/control/<pid>.sock
-$XDG_RUNTIME_DIR/term2/control/<pid>.json
+$XDG_RUNTIME_DIR/term2/control/<name>.sock
+$XDG_RUNTIME_DIR/term2/control/<name>.json
 ```
 
-`<pid>` is `process.pid`. The path is per process, not per session id, because `resetWithNewId` / rollover changes the session id while the process lives (`onSessionIdChange` in `cli.tsx`). Clients that connected stay connected. The advertisement's `sessionId` is rewritten, and milestone 2 emits `session_changed`.
+The name is not the session id. `resetWithNewId` / rollover changes the session id while the process lives (`onSessionIdChange` in `cli.tsx`). Clients that connected stay connected. The advertisement's `sessionId` is rewritten in place, and milestone 2 emits `session_changed`. The socket path does not change.
 
-`$XDG_RUNTIME_DIR` must be present, absolute, owned by the current uid, and mode `0700`. If it is missing or fails that check, the flag does not open a socket and the TUI still starts. One system line says control is off and why. Do not fall back to `/tmp` or to `getConversationsDir()`. `/tmp` is sticky and shared. The conversations directory (`envPaths('term2').data`, overridable by `TERM2_CONVERSATIONS_DIR`) is a durable store, including on SSH, and unix sockets there are the wrong lifetime. No `HERDR_*` variable is read anywhere under `source/` today, so the pane id is not part of the path.
+`$XDG_RUNTIME_DIR` must be present, absolute, owned by the current uid, and mode `0700`. If it is missing or fails that check, the flag does not open a socket and the TUI still starts. One system line says control is off and why. Do not fall back to `/tmp` or to `getConversationsDir()`. `/tmp` is sticky and shared. The conversations directory (`envPaths('term2').data`, overridable by `TERM2_CONVERSATIONS_DIR`) is a durable store, including on SSH, and unix sockets there are the wrong lifetime. No `HERDR_*` variable is read anywhere under `source/` today, and the pane id is not part of the path. The launcher already has the name.
 
-Advertisement `<pid>.json`, mode `0600`, replaced atomically (write temp in the same directory, rename):
+Advertisement `<name>.json`, mode `0600`, replaced atomically (write temp in the same directory, rename):
 
 ```json
 {
   "v": 1,
+  "name": "<name>",
   "pid": 0,
-  "startedAt": "<process start time the reaper compares>",
+  "startedAt": "<starttime token>",
   "sessionId": "<effectiveSessionId>",
   "socketPath": "<absolute path>",
   "cwd": "<process.cwd()>",
@@ -198,20 +209,29 @@ Advertisement `<pid>.json`, mode `0600`, replaced atomically (write temp in the 
 }
 ```
 
-`startedAt` is the kernel process start token, not `Date.now()` at listen. On Linux that token is the starttime field of `/proc/<pid>/stat`. The comm field is parenthesized and may contain spaces, so a whitespace split is wrong. The implementation confirms the field index against `man 5 proc` before trusting it. This environment's `man 5 proc` produced no starttime line, so the index is **not** pinned here.
+`startedAt` is the kernel starttime, not `Date.now()` at listen. proc(5) defines `starttime` as field 22 (1-based) of `/proc/<pid>/stat`. Parse it by taking the substring after the **last** `)` (the comm field is parenthesized and may contain spaces and parentheses), then the 20th whitespace-separated token of what remains (fields 3 through 22). A split of the whole line on whitespace is wrong. The unit-test seam feeds fixture lines, including a comm that contains spaces and a `)`, and does not read a live `/proc` unless a test asks it to.
+
+Bind order:
+
+1. Run stale cleanup (below).
+2. If an advertisement for this name remains, and its pid is alive on this host with the same start token, the name is held. Do not unlink that socket. Do not listen. The TUI still starts. One system line names the holder pid and the name.
+3. If the start token cannot be read, treat a live pid as live and leave its files alone (same as cleanup). The new process then sees the name held and refuses the socket.
+4. If `<name>.sock` exists and is not a socket, refuse to listen and do not unlink it.
+5. If `<name>.sock` exists, is a socket, and no live advertisement owns the name, unlink that socket and bind. This is only the crash window after `listen` and before the advertisement rename, or a reap that removed the json and left the socket. It is not `GatewayServer.start`'s rule of unlinking every socket at a fixed path.
+6. Listen, `chmod 0600`, write the advertisement.
 
 Stale cleanup, run when an enabled TUI starts and when `term2 control list` runs:
 
 - Parse each `*.json` in that directory.
 - If `host` is this host and the pid is not alive, unlink the json and the socket path it names, and nothing else.
 - If the pid is alive but the recorded start token does not match, the pid was reused: unlink both. If the start token cannot be read, leave a live pid's files alone.
-- Never unlink a path that is not a socket, and never unlink outside the control directory. `GatewayServer.start`'s "if it's a socket, unlink" rule is rejected here because the path is not reserved to one process.
+- Never unlink a path that is not a socket, and never unlink outside the control directory.
 
-`term2 control list` is a subcommand beside `serve` and `acp` (`cli.tsx` already branches on `cli.input[0]`). It prints one JSON advertisement per live process and reaps as above. It does not connect. Orchestrators find a pane by pid (the process in that pane), then by `sessionId` or `cwd` if they do not have the pid. How a given multiplexer exposes that pid was not verified in herdr. The protocol does not call herdr.
+`term2 control list` is a subcommand beside `serve` and `acp` (`cli.tsx` already branches on `cli.input[0]`). It prints one JSON advertisement per live process, including `name`, and reaps as above. It does not connect. The launcher does not need it to find the pane it started: it connects to the name it passed. List is for a human or a second tool that did not keep the name. The protocol does not call herdr.
 
 ### `--resume` by two processes
 
-The second `term2 --resume <id>` exits in `cli.tsx` when `isConversationLocked` is `held`, or when `logWriter.init` throws `LockConflictError`. It never binds a socket. The live advertisement is the lock holder's. A `stale` lock is reclaimed by the existing writer path; the new process's startup reap drops the dead pid's socket. `--fork` is a new session id and a new process, so a new socket. The socket cannot attach to a session this process does not own, and it cannot break the lock.
+The second `term2 --resume <id>` exits in `cli.tsx` when `isConversationLocked` is `held`, or when `logWriter.init` throws `LockConflictError`. It never binds a socket. The live advertisement is the lock holder's. A `stale` lock is reclaimed by the existing writer path; the new process's startup reap drops the dead pid's socket. `--fork` is a new session id and a new process. It gets a socket only under its own name: the default pid name differs, and an explicit name still held by the live parent is refused. The socket cannot attach to a session this process does not own, and it cannot break the lock.
 
 ## Security
 
@@ -219,16 +239,18 @@ Threat model: other OS users, and **this** user, including a YOLO agent in the s
 
 | Control | Choice |
 | --- | --- |
-| Enablement | CLI flag `--control-socket`, default off. Not a persisted setting in MVP. A setting in `settings.json` is writable by the agent and would arm the next launch. The flag is visible in the process command line. |
+| Enablement | CLI flag `--control-socket[=<name>]`, default off. Not a persisted setting in MVP. A setting in `settings.json` is writable by the agent and would arm the next launch. The flag, including the name, is visible on the process command line. |
 | Directory | Created `0700`, owner uid must equal `process.getuid()`. If `chmod` does not stick, refuse to listen and leave the TUI up. |
 | Socket | `0600` after `listen`, same owner check. `(mode & 0o077) !== 0` means close and unlink. `GatewayServer` uses `0o660` for a group BFF; this socket has no group peer. |
 | Root | On Linux, mode `0600` does not stop uid 0 from connecting. |
 | `SO_PEERCRED` | The right extra check against uid 0 and against a connection accepted in the window before `chmod`. **Node 24.19.0 in this environment does not expose it:** `net.Socket.prototype` has no peer-credential method, and the connected pipe handle's methods do not include a peer uid. Do not call a fictional `getPeerCredentials`, and do not use `process.binding`. |
 | Approval | Milestones 1–4 cannot answer an approval, a question, a nested approval, or a sandbox prompt, except `interrupt` following the Escape branch above (deny / cancel / stop). That is the human's key, not a yes. |
 | Settings | No write method. The gateway allowlist exists so a new session cannot inherit `shell.autoApproveMode`. This process already has the user's settings. The analogous rule is: the client cannot change them. |
-| Indication | On successful bind, one system line: control is on, with the pid. A pane with no line and no flag is not controllable. |
+| Indication | On successful bind, one system line: control is on, with the name and the pid. A pane with no line and no flag is not controllable. |
 
 Same-uid clients are accepted when the flag is on. Peer credentials would not tell the orchestrator from the agent. That is why the flag is the boundary.
+
+The session's own agent is one of those same-uid clients. Its shell already inherits `$XDG_RUNTIME_DIR`, and `/proc/self/cmdline` shows `--control-socket` and the name, so it can build `<name>.sock` and submit, steer, or interrupt this pane — including the Escape-equivalent interrupt that stops an approval. That self-loop matters: it is the agent dismissing or extending the turn the human is watching, not a separate orchestrator. It does not justify more machinery. A path variable exported into the tool environment would only make the address easier to find; do not export one. A shared secret in argv or in the `0600` advertisement is readable by the same uid, so it does not help. A secret that never touches argv or disk would be a new handshake, and the agent that can already run code in this uid can still do worse than talk to the socket. The flag plus the system line is the mitigation this design accepts.
 
 Milestone 1 ships the mode checks and the root caveat. A native addon or a `getsockopt` helper solely for `SO_PEERCRED` is an open decision, not a hidden dependency of MVP. If it is added later, a peer uid that is not `process.getuid()` closes the connection before hello, including uid 0.
 
@@ -260,7 +282,8 @@ Unit tier (`pnpm test`), colocated. No provider black-box: MVP does not change `
 | Framing | Split chunks, one line, oversize line closes, bad JSON closes, `v` mismatch. |
 | Idempotency | Replay same body; `conflict` on a different body; cap does not drop a pending steer id. |
 | Mode | Directory not `0700` or socket not `0600` refuses to serve. Temp directory, not the real runtime dir. |
-| Reaper | Injected pid-alive and start-token predicates, the same seam style as the conversation lock's pid probe. Does not signal real processes. |
+| Reaper | Injected pid-alive and start-token predicates, the same seam style as the conversation lock's pid probe. Does not signal real processes. Fixture `/proc` stat lines include a comm with spaces and a `)`, and the parser asserts field 22 via the last-`)` rule. |
+| Name | Rejects a name outside `[A-Za-z0-9_-]{1,64}` without killing the process. Bare flag uses the pid. An advertisement whose pid is alive and whose start token matches makes the new process refuse that name and leave the holder's socket in place. |
 | Phase | `projectControlPhase` table, including "do not read `queueStateKind` for the decision". |
 | Port | Fake orchestrator: `submit` uses follow-up when the queue owns the turn; `steer` passes `busyMode: 'steer'`; surge preview refusal does not call `sendUserMessage`; `interrupt` on `ask_user` calls `cancelAskUser` and not `stopProcessing`. |
 | Receipt | `delivery: steering` is returned before a deferred `steerActiveTurn` boolean resolves. |
@@ -273,7 +296,7 @@ Milestone 4 commands that call `compactContext` do not by themselves justify `pn
 
 Each one can merge alone. Later methods stay `unknown_method` until their milestone.
 
-1. **Speak.** Flag, directory and socket modes, advertisement, reaper, `term2 control list`, hello, status, submit, steer, interrupt, in-memory idempotency, system line on bind and on each accepted mutation, surge refusal. Port bound from the interactive hook. Orchestrator returns a receipt at admission without waiting for the provider.
+1. **Speak.** `--control-socket[=<name>]`, directory and socket modes, named advertisement, reaper, `term2 control list`, hello, status, submit, steer, interrupt, in-memory idempotency, system line on bind and on each accepted mutation, surge refusal. A held name leaves the TUI up and the socket down. Port bound from the interactive hook. Orchestrator returns a receipt at admission without waiting for the provider.
 2. **Watch.** Event subscription and `session_changed` when the session id rolls. Orchestrators stop polling report files for turn completion.
 3. **Correct a queue.** Retract and edit by id through the existing submission mutations.
 4. **Runtime commands.** Allowlisted slash commands, no editor typing, no `undoLastUserTurn` shortcut.
@@ -288,12 +311,15 @@ Each one can merge alone. Later methods stay `unknown_method` until their milest
 - **A prompt file the TUI polls.** Polling and no atomic interrupt. Completion-by-file is the current completion bug.
 - **TCP on localhost.** Any local user can connect, so it needs a secret, and the secret is then in the environment of a YOLO agent. The unix mode bits are the smaller door. `term2 serve` already has TLS for a remote BFF.
 - **One well-known `control.sock`.** Two panes unlink each other. That is `GatewayServer.start`'s stale-socket behavior, acceptable for one daemon and not for many TUIs.
+- **Discover the pane by pid or cwd.** The launcher's pane list has no pid, the pane's process is the shell, and a shared cwd matches more than one worker. The launcher already knows the name it put on the command line. Scanning for it afterwards is how the client attaches to the wrong pane.
 - **Server inside `ConversationService`.** Mixes transport, transcript attribution, and menu policy into the session facade.
 - **Persisted `controlSocket.enabled`.** The agent can write settings. The flag cannot be persisted by `settings.set`.
 - **Answer approvals because the client is local.** That removes the prompt the human is looking at. The gateway's `interaction_resolve` is a deliberate BFF feature with its own assertion purpose. It is not the default here.
 - **Non-interactive listener.** Covered above.
 
 ## Open decisions
+
+Endpoint naming is settled, not open: `--control-socket[=<name>]`, name `[A-Za-z0-9_-]{1,64}`, default the decimal pid. The launcher connects to that name. See Discovery.
 
 1. **Enablement flag only, or also a setting later?** Recommendation: flag only until someone has a reason to arm every pane. A setting is a follow-up, default off, and still should not be flipable from inside the session the agent is running.
 2. **No `$XDG_RUNTIME_DIR`.** Recommendation: leave the socket off and start the TUI. Do not invent a home-directory socket path in MVP. SSH sessions without the variable are out of scope until a user hits them.

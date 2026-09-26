@@ -143,6 +143,24 @@ it.sequential('defers empty-buffer Escape to the app interrupt during a turn', a
   expect(lastFrame()!.includes('HINT')).toBe(false);
 });
 
+it.sequential('clears an armed hint when the turn ends', async () => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  const TestHarness = ({ turnInFlight }: { turnInFlight: boolean }) => {
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+    return <TestComponent initialValue="some text" turnInFlight={turnInFlight} />;
+  };
+  const { lastFrame, rerender } = await renderAndFlush(<TestHarness turnInFlight />);
+  await pressEscape(inputEmitter!);
+  expect(lastFrame()!.includes('HINT')).toBe(true);
+  await act(async () => {
+    rerender(<TestHarness turnInFlight={false} />);
+  });
+  await flushReactUpdates(3);
+  expect(lastFrame()!.includes('HINT')).toBe(false);
+});
+
 it.sequential('onEscape callback consuming ESC prevents hint', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   let escConsumed = false;

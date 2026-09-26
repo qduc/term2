@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { LOG_ENVELOPE_VERSION, type LogEnvelope, type LogEvent } from '../logging/conversation-log-events.js';
 import { replayEvents } from './conversation-replay.js';
+import { projectSemanticEvents } from './semantic-replay-projection.js';
 import { decodeLogEnvelope, decodeSavedMessage, resolveEnvelopeIdentities } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
@@ -303,6 +304,187 @@ it('decodeLogEnvelope: accepts an unknown status in a persisted assistant turn i
   expect(decoded).not.toBeNull();
   expect(replayEvents([decoded!]).toolLedger).toMatchObject([{ callId: 'call-unknown', status: 'unknown' }]);
   expect(replayEvents([decoded!]).messages).toMatchObject([{ sender: 'command', status: 'unknown' }]);
+});
+
+it('semantic projection reconstructs interrupted output and approvals without resuming them', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'session_init', id: 'semantic-interrupted', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'continue safely' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 't1',
+      seq: 1,
+      item: { type: 'assistant_text', text: 'Partial answer' },
+    }),
+    env({
+      type: 'approval_required',
+      turnId: 't1',
+      approval: { callId: 'c1', toolName: 'shell', argumentsText: '{"command":"write"}' },
+    }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status !== 'projected') return;
+  expect(
+    result.state.messages.some((message) => message.sender === 'bot' && message.text.includes('Partial answer')),
+  ).toBe(true);
+  expect(
+    result.state.messages.some((message) => message.sender === 'system' && message.text.includes('interrupted')),
+  ).toBe(true);
+  expect(result.state.previousResponseId).toBeNull();
+  expect(result.state.messages.some((message) => message.sender === 'command' && message.status === 'running')).toBe(
+    false,
+  );
+});
+
+it('semantic projection derives parallel complete and partial tool ledger entries from turn items', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'session_init', id: 'semantic-parallel', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run both' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'c1', toolName: 'shell', arguments: { command: 'a' } },
+          { type: 'tool_call', callId: 'c2', toolName: 'shell', arguments: { command: 'b' } },
+          { type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'completed', output: 'a' },
+        ],
+      },
+    }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status !== 'projected') return;
+  expect(result.state.toolLedger).toMatchObject([
+    { callId: 'c1', status: 'completed', output: 'a' },
+    { callId: 'c2', status: 'started' },
+  ]);
+});
+
+it('semantic projection preserves unknown tool effects instead of treating them as completed', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'tool_started', turnId: 't1', toolCallId: 'c-unknown', toolName: 'shell', arguments: 'write' }),
+    env({
+      type: 'tool_result',
+      turnId: 't1',
+      callId: 'c-unknown',
+      toolName: 'shell',
+      status: 'unknown',
+      output: 'Verify before retrying.',
+    }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status === 'projected') {
+    expect(result.state.toolLedger).toMatchObject([{ callId: 'c-unknown', status: 'unknown' }]);
+  }
+});
+
+it('semantic projection strips provider chain anchors but follows provider/model settings', () => {
+  const result = projectSemanticEvents([
+    env({
+      type: 'session_init',
+      id: 'semantic-switch',
+      createdAt: '2026-01-01T00:00:00Z',
+      model: 'model-a',
+      provider: 'provider-a',
+    }),
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'done' }] },
+      state: { previousResponseId: 'ephemeral-chain', model: 'model-a', provider: 'provider-a' },
+    }),
+    env({ type: 'settings_changed', key: 'agent.model', value: 'model-b' }),
+    env({ type: 'settings_changed', key: 'agent.provider', value: 'provider-b' }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status !== 'projected') return;
+  expect(result.state.model).toBe('model-b');
+  expect(result.state.provider).toBe('provider-b');
+  expect(result.state.previousResponseId).toBeNull();
+});
+
+it('semantic projection excludes provider-opaque state from canonical history', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'portable prompt' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'provider_opaque', provider: 'vendor-a', item: { token: 'opaque' } },
+          { type: 'assistant_text', text: 'portable response' },
+        ],
+      },
+    }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status === 'projected') {
+    expect(result.state.history).toEqual([
+      { role: 'user', type: 'message', content: 'portable prompt' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'portable response' }],
+      },
+    ]);
+  }
+});
+
+it('semantic projection reports snapshot-only undo as unsupported', () => {
+  const undo = env({
+    type: 'undo',
+    removedUserTurns: 1,
+    snapshot: { history: [], previousResponseId: null, toolLedger: [] },
+  });
+  expect(projectSemanticEvents([undo])).toEqual({
+    status: 'unsupported',
+    reason: 'legacy_undo_snapshot',
+    seq: undo.seq,
+  });
+});
+
+it('semantic projection preserves storage truncation markers without treating them as source events', () => {
+  const truncated = env({ type: 'assistant_turn', truncated: true, originalSize: 2048 } as unknown as LogEvent);
+  const result = projectSemanticEvents([truncated]);
+  expect(result.status).toBe('projected');
+  if (result.status === 'projected') expect(result.state.replayWarnings).toHaveLength(1);
+});
+
+it('semantic projection derives fork and rollover lineage from session events', () => {
+  const result = projectSemanticEvents([
+    env({
+      type: 'session_init',
+      id: 'child',
+      createdAt: '2026-01-01T00:00:00Z',
+      forkedFrom: 'parent',
+      rolloverFrom: 'predecessor',
+    }),
+  ]);
+  expect(result).toMatchObject({
+    status: 'projected',
+    state: { id: 'child', forkedFrom: 'parent', rolloverFrom: 'predecessor' },
+  });
+});
+
+it('semantic projection treats session_cleared as a settlement marker without replaying or inventing work', () => {
+  const result = projectSemanticEvents([
+    env({ type: 'session_init', id: 'cleared', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'keep the saved source' } }),
+    env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'saved response' }] } }),
+    env({ type: 'session_cleared' }),
+  ]);
+
+  expect(result.status).toBe('projected');
+  if (result.status === 'projected') {
+    expect(result.state.messages).toMatchObject([
+      { sender: 'user', text: 'keep the saved source' },
+      { sender: 'bot', text: 'saved response' },
+    ]);
+    expect(result.state.history).toHaveLength(2);
+  }
 });
 
 it('replayEvents: timed-out partial assistant turn preserves tool history for the next message', () => {

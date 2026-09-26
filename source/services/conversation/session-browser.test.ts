@@ -428,6 +428,38 @@ it('prefers the rollover predecessor over a more recently updated session', () =
   expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
 });
 
+it('treats sessions persisted in the project worktrees as part of the project scope', () => {
+  writeSession('root-session', '/project');
+  writeSession('worktree-session', '/project/.worktrees/feature');
+  writeSession('other-project', '/other');
+
+  const fromRoot: any = new SessionBrowser(() => ({ projectPath: '/project' })).list({});
+  const fromWorktree: any = new SessionBrowser(() => ({ projectPath: '/project/.worktrees/feature' })).list({});
+
+  expect(fromRoot.sessions.map((session: any) => session.id).sort()).toEqual(['root-session', 'worktree-session']);
+  expect(fromWorktree.sessions.map((session: any) => session.id).sort()).toEqual(['root-session', 'worktree-session']);
+});
+
+it('resolves previous from the current session record even when that session is persisted outside the scope', () => {
+  // Rotation inside a worktree used to persist the successor under the
+  // worktree path while the browser scope stayed at the home workspace.
+  writeSession('predecessor', '/project');
+  writeSession('sibling', '/project');
+  writeSession('current', '/elsewhere', undefined, 'current', 'predecessor');
+  touchSession('sibling', '2030-01-01T00:00:00.000Z');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect((browser.read({ id: 'previous' }) as any).session.id).toBe('predecessor');
+});
+
+it('does not guess previous by recency when the current session is outside the scope', () => {
+  writeSession('sibling', '/project');
+  writeSession('current', '/elsewhere');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+
+  expect(browser.read({ id: 'previous' })).toMatchObject({ error: { code: 'not_found' } });
+});
+
 it('does not resolve previous without a known current session or another session', () => {
   writeSession('only', '/project');
 

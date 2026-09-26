@@ -1154,7 +1154,10 @@ const logWriterDir = getConversationsDir();
 collectOrphanedDeltaSidecars();
 const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
 function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
-  const cwd = executionContext?.getCwd();
+  // Persist under the session's home workspace, the same scope SessionBrowser
+  // and --resume read from. The live cwd moves into a worktree during work, so
+  // a rollover or /clear there used to hide the successor from its own scope.
+  const cwd = executionContext?.getHomeWorkspace();
   const persistedRolloverFrom =
     rolloverFrom ?? (resumedConversation?.id === id ? resumedConversation.rolloverFrom : undefined);
   const activeProfileId = settings.get('app.activeProfileId');

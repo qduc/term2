@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { normalizeProjectPath, projectScopeKey } from '../../utils/project-scope.js';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
@@ -154,10 +155,7 @@ export function getConversationsDirectoryVersionReadOnly(): string | null {
   return statVersion(getConversationsDir());
 }
 
-export function normalizeProjectPath(projectPath: string): string {
-  const normalized = path.normalize(projectPath);
-  return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
-}
+export { normalizeProjectPath, projectScopeKey };
 
 export function normalizeSshHost(host: string): string {
   return host.trim().toLowerCase();
@@ -171,7 +169,10 @@ function conversationMatchesProject(
   if (!conversation.projectPath) {
     return false;
   }
-  if (normalizeProjectPath(conversation.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
+  if (
+    projectScopeKey(conversation.projectPath, conversation.sshHost) !==
+    projectScopeKey(expectedProjectPath, expectedSshHost)
+  ) {
     return false;
   }
 
@@ -923,7 +924,7 @@ function matchesEntryContext(
     if (!entry.projectPath) {
       return false;
     }
-    if (normalizeProjectPath(entry.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
+    if (projectScopeKey(entry.projectPath, entry.sshHost) !== projectScopeKey(expectedProjectPath, expectedSshHost)) {
       return false;
     }
   } else if (entry.projectPath) {

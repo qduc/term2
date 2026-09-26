@@ -105,7 +105,7 @@ describe('SessionIndexDatabase', () => {
 
       const meta = index.database.prepare('SELECT key, value FROM index_metadata').all() as any[];
       const metaMap = new Map(meta.map((m) => [m.key, m.value]));
-      expect(metaMap.get('schema_version')).toBe('4');
+      expect(metaMap.get('schema_version')).toBe('5');
       expect(metaMap.get('projection_version')).toBe('1');
       expect(metaMap.get('source_directory')).toBe(convDir);
 
@@ -139,7 +139,7 @@ describe('SessionIndexDatabase', () => {
       const meta = index2.database.prepare("SELECT value FROM index_metadata WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(meta.value).toBe('4');
+      expect(meta.value).toBe('5');
       // The dummy row should be dropped during rebuild
       const rowCount = index2.database.prepare('SELECT COUNT(*) as count FROM source_inventory').get() as {
         count: number;
@@ -147,6 +147,26 @@ describe('SessionIndexDatabase', () => {
       expect(rowCount.count).toBe(0);
     } finally {
       index2.close();
+    }
+  });
+
+  it('scopes sessions persisted in project worktrees to their project', () => {
+    writeSession('root-session', '/project');
+    writeSession('worktree-session', '/project/.worktrees/feature');
+    writeSession('other-project', '/other');
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      expect(
+        index
+          .list({ projectPath: '/project' })
+          .sessions.map((session) => session.id)
+          .sort(),
+      ).toEqual(['root-session', 'worktree-session']);
+      expect(index.readSession('worktree-session', { projectPath: '/project' }).kind).toBe('loaded');
+    } finally {
+      index.close();
     }
   });
 
@@ -472,6 +492,13 @@ describe('SessionIndexDatabase', () => {
 
       // Previous without a known current session, or with no other session in scope
       expect(index.resolveReference('previous', { projectPath: '/project' }).kind).toBe('not_found');
+      // A current session the index cannot place is not replaced by a recency guess
+      expect(
+        index.resolveReference('previous', { projectPath: '/project', currentSessionId: 'unindexed-session' }).kind,
+      ).toBe('not_found');
+      expect(index.resolveReference('previous', { projectPath: '/project', currentSessionId: soloId }).kind).toBe(
+        'not_found',
+      );
       expect(index.resolveReference('previous', { projectPath: '/solo', currentSessionId: soloId }).kind).toBe(
         'not_found',
       );

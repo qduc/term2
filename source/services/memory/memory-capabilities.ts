@@ -4,7 +4,7 @@ import { rankMemorySearchResults } from './memory-search.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { projectScopeKey } from '../../utils/project-scope.js';
 import path from 'node:path';
 import {
   MEMORY_RECALL_OVERHEAD,
@@ -327,20 +327,11 @@ export class MemoryCapabilityBuilder {
   }
 
   #resolveProjectId(projectPath: string): string {
-    try {
-      const commonDir = execSync('git rev-parse --git-common-dir', {
-        cwd: projectPath,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      if (commonDir) {
-        const resolved = path.isAbsolute(commonDir) ? commonDir : path.resolve(projectPath, commonDir);
-        const projectRoot = path.dirname(resolved);
-        return createHash('sha256').update(path.resolve(projectRoot)).digest('hex');
-      }
-    } catch {
-      // Not a git repo or git not available — fall back to path-based id
-    }
-    return createHash('sha256').update(path.resolve(projectPath)).digest('hex');
+    // The store directory name is the on-disk contract: sha256 of the same
+    // project identity that scopes sessions, so a checkout and its worktrees
+    // share one store.
+    return createHash('sha256')
+      .update(projectScopeKey(path.resolve(projectPath)))
+      .digest('hex');
   }
 }

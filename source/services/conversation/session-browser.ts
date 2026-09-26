@@ -3,6 +3,7 @@ import {
   getConversationSourceVersionReadOnly,
   getConversationsDirectoryVersionReadOnly,
   loadConversationForProjectReadOnly,
+  loadConversationUnscopedForIndex,
   resolveConversationReference,
   uniqueConversationShortRefs,
   type RestoredState,
@@ -751,6 +752,8 @@ type SessionReferenceResolution =
 const PREVIOUS_UNAVAILABLE_MESSAGE =
   'The current session is unknown, so "previous" cannot be resolved; use session_list to find the session.';
 const NO_OTHER_SESSION_MESSAGE = 'This session has no rollover predecessor and no other session exists in this scope.';
+const CURRENT_OUT_OF_SCOPE_MESSAGE =
+  'This session has no rollover predecessor and is not in this scope, so "previous" cannot be inferred; use session_list to find the session.';
 
 function resolveSessionReference(
   reference: string,
@@ -763,6 +766,15 @@ function resolveSessionReference(
     if (!currentSessionId) return { kind: 'not_found', message: PREVIOUS_UNAVAILABLE_MESSAGE };
     const current = conversations.find((conversation) => conversation.id === currentSessionId);
     if (current?.rolloverFrom) return { kind: 'resolved', id: current.rolloverFrom };
+    if (!current) {
+      // The live session's own record names its predecessor even when it was
+      // persisted outside this scope; the predecessor read stays scope-checked.
+      const own = loadConversationUnscopedForIndex(currentSessionId);
+      if (own.status === 'loaded' && own.conversation.rolloverFrom)
+        return { kind: 'resolved', id: own.conversation.rolloverFrom };
+      // A recency guess from outside the scope is likely a concurrent sibling.
+      return { kind: 'not_found', message: CURRENT_OUT_OF_SCOPE_MESSAGE };
+    }
     // `conversations` is already ordered most recently updated first, matching session_list.
     const fallback = conversations.find(
       (conversation) =>
@@ -988,4 +1000,5 @@ export {
   prefixSnippet,
   PREVIOUS_UNAVAILABLE_MESSAGE,
   NO_OTHER_SESSION_MESSAGE,
+  CURRENT_OUT_OF_SCOPE_MESSAGE,
 };

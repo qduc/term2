@@ -440,16 +440,36 @@ describe('App orchestration', () => {
       }),
     );
     expect(mocks.clearConversation).toHaveBeenCalledTimes(1);
-    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
-      expect.stringContaining('Previous session: `session-1`'),
-    );
-    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
-      expect.stringContaining('Done: implementation. Open: validation.'),
-    );
-    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
-      expect.stringContaining('Outcome: completed into successor session `session-2`'),
-    );
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledTimes(1);
+    const [briefing] = mocks.sendSessionRolloverBrief.mock.calls[0]!;
+    expect(briefing).toContain('Previous session: `session-1`');
+    expect(briefing).toContain('Done: implementation. Open: validation.');
+    expect(briefing).toContain('Outcome: completed into successor session `session-2`');
     expect(mocks.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it.sequential('keys successor memory recall on the agent brief, not the harness briefing wrapper', async () => {
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.sessionRolloverCallback?.({
+        brief: 'Goal: fix websocket pool retirement.',
+        reason: 'context_pressure',
+        rolloverId: 'rollover-1',
+        requestedAt: Date.now(),
+      });
+    });
+
+    // The composed briefing opens with boilerplate and session UUIDs, which
+    // otherwise exhaust the recall query before the agent's own words.
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
+      expect.stringContaining('# Continuation briefing'),
+      'Goal: fix websocket pool retirement.',
+    );
   });
 
   it.sequential('preflights the in-place rollover before rotating the writer and commits afterwards', async () => {

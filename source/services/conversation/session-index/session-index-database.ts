@@ -11,7 +11,7 @@ import {
 } from './session-index-schema.js';
 import {
   loadConversationUnscopedForIndex,
-  normalizeProjectPath,
+  projectScopeKey,
   normalizeSshHost,
   resolveConversationReference,
   uniqueConversationShortRefs,
@@ -19,6 +19,7 @@ import {
 import { deltaSidecarPathFor } from '../../logging/conversation-log-events.js';
 import {
   isBrowsableSession,
+  CURRENT_OUT_OF_SCOPE_MESSAGE,
   NO_OTHER_SESSION_MESSAGE,
   PREVIOUS_UNAVAILABLE_MESSAGE,
   prefixSnippet,
@@ -326,7 +327,7 @@ export class SessionIndexDatabase {
         } else if (loaded.status === 'loaded' && loaded.conversation.projectPath) {
           // Replayed with a projectPath, but invalid id or createdAt:
           // Scoped invalid session for that specific projectPath/sshHost.
-          sessionProjectPath = normalizeProjectPath(loaded.conversation.projectPath);
+          sessionProjectPath = projectScopeKey(loaded.conversation.projectPath, loaded.conversation.sshHost);
           if (loaded.conversation.sshHost) {
             sessionSshHost = normalizeSshHost(loaded.conversation.sshHost);
           }
@@ -338,7 +339,7 @@ export class SessionIndexDatabase {
       } else {
         const conversation = loaded.conversation;
         if (conversation.projectPath) {
-          sessionProjectPath = normalizeProjectPath(conversation.projectPath);
+          sessionProjectPath = projectScopeKey(conversation.projectPath, conversation.sshHost);
         }
         if (conversation.sshHost) {
           sessionSshHost = normalizeSshHost(conversation.sshHost);
@@ -468,7 +469,7 @@ export class SessionIndexDatabase {
 
   list(options: { projectPath: string; sshHost?: string }): IndexedListResult {
     this.initialize();
-    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedProject = projectScopeKey(options.projectPath, options.sshHost);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
 
     const rows = this.#db
@@ -552,7 +553,7 @@ export class SessionIndexDatabase {
   ): IndexedResolveResult {
     this.initialize();
 
-    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedProject = projectScopeKey(options.projectPath, options.sshHost);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
 
     const rows = this.#db
@@ -580,8 +581,14 @@ export class SessionIndexDatabase {
         .prepare('SELECT predecessor_id FROM sessions WHERE id = ?')
         .get(options.currentSessionId) as { predecessor_id: string | null } | undefined;
 
-      // Without a rollover predecessor, fall back to the most recently updated
-      // other session in scope, in the same order session_list uses.
+      // The predecessor is read from the current session's own row, whatever
+      // its scope. Without one, fall back to the most recently updated other
+      // session in scope, in the same order session_list uses — but only for a
+      // current session inside that scope: otherwise the guess is likely a
+      // concurrent sibling rather than anything this session continues.
+      if (!current?.predecessor_id && !rows.some((row) => row.id === options.currentSessionId)) {
+        return { kind: 'not_found', message: CURRENT_OUT_OF_SCOPE_MESSAGE };
+      }
       const previousId =
         current?.predecessor_id ??
         (
@@ -657,7 +664,7 @@ export class SessionIndexDatabase {
       return { kind: 'not_found' };
     }
 
-    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedProject = projectScopeKey(options.projectPath, options.sshHost);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
 
     if (inv.classification === 'unreadable') {
@@ -765,7 +772,7 @@ export class SessionIndexDatabase {
 
   search(options: SessionIndexSearchOptions): IndexedSearchResult {
     this.initialize();
-    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedProject = projectScopeKey(options.projectPath, options.sshHost);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
 
     // 1. Directory-wide unreadable files
@@ -955,7 +962,7 @@ export class SessionIndexDatabase {
     options: { projectPath: string; sshHost?: string },
   ): { strategy: 'fts5' | 'scoped_text'; plan: Array<{ id: number; parent: number; detail: string }> } {
     this.initialize();
-    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedProject = projectScopeKey(options.projectPath, options.sshHost);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
     const terms = termsFor(query);
     const canUseFts = terms.length > 0 && terms.every((t) => t.length >= 3);

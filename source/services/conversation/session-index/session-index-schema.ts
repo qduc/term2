@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = '4';
+// 5: sessions.project_path holds the project scope key (git project root), not the raw path.
+export const SCHEMA_VERSION = '5';
 export const PROJECTION_VERSION = '1';
 
 export type ProbeCapabilityResult = { ok: true } | { ok: false; reason: string };

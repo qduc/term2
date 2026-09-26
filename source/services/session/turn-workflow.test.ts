@@ -188,6 +188,24 @@ it('recalls memory on the user turn, not the instructions, and reports it before
   expect(composition.conversationStore.getLastUserMessage()).toBe('question');
 });
 
+it('keys recall on the turn memoryRecallQuery instead of harness-composed text', async () => {
+  const queries: string[] = [];
+  const { client, inputs } = recallingClient((query) => {
+    queries.push(query);
+    return { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
+  });
+  const { workflow } = setupWorkflow(client);
+  for await (const _event of workflow.executeInitial({
+    text: '# Continuation briefing\n\nGoal: fix websocket pool retirement.',
+    memoryRecallQuery: 'Goal: fix websocket pool retirement.',
+  }))
+    void _event;
+
+  expect(queries).toEqual(['Goal: fix websocket pool retirement.']);
+  // The model still receives the full turn text; only the recall query changes.
+  expect(JSON.stringify(inputs[0])).toContain('# Continuation briefing');
+});
+
 it('does not recall a memory that is already in the conversation', async () => {
   const excludes: string[][] = [];
   const { client } = recallingClient((_query, exclude) => {

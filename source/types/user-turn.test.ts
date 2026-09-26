@@ -102,3 +102,9 @@ it('normalizeUserTurn() preserves skill attachment', () => {
   expect(turn.skill).toEqual(skill);
   expect(turn.text).toBe('Test message');
 });
+
+it('normalizeUserTurn() preserves the memory recall query so recall can key on it downstream', () => {
+  const turn = normalizeUserTurn({ text: 'Harness-composed wrapper', memoryRecallQuery: 'websocket pool retirement' });
+
+  expect(turn.memoryRecallQuery).toBe('websocket pool retirement');
+});

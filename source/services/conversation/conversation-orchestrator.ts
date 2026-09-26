@@ -1501,11 +1501,6 @@ export class ConversationOrchestrator {
         this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
         this.emitCostSummary();
       }
-      if (eventType === 'background_shell_completed') {
-        if (!this.hasActiveBackgroundWork()) {
-          this.config.notifier?.turnComplete();
-        }
-      }
     };
   }
 

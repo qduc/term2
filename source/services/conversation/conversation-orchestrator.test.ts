@@ -1334,7 +1334,7 @@ describe('ConversationOrchestrator', () => {
       expect(notifier.turnComplete).not.toHaveBeenCalled();
     });
 
-    it('fires turnComplete on background_shell_completed when all tasks settle', async () => {
+    it('does not fire turnComplete when a background shell settles', async () => {
       const cfg = makeConfig();
       const notifier = {
         turnComplete: vi.fn(),
@@ -1370,7 +1370,7 @@ describe('ConversationOrchestrator', () => {
         output: 'done',
       });
 
-      expect(notifier.turnComplete).toHaveBeenCalledTimes(1);
+      expect(notifier.turnComplete).not.toHaveBeenCalled();
     });
   });
 });

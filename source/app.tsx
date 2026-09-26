@@ -67,6 +67,7 @@ import { copyToClipboard } from './utils/clipboard.js';
 import type { CopySelection } from './utils/copy-selections.js';
 import {
   isConversationLocked,
+  getConversationLockPath,
   loadConversationForProject,
   loadLastConversation,
   type ConversationListEntry,
@@ -614,7 +615,11 @@ const App: FC<AppProps> = ({
       if (target) {
         const result = loadConversationForProject(target, resumeProjectPath, resumeSshHost);
         if (result.status === 'project_mismatch') {
-          addSystemMessage(`Conversation ${target} belongs to a different project.`);
+          addSystemMessage(
+            `Conversation ${target} belongs to project ${
+              result.conversation.projectPath ?? 'unknown'
+            }. Resume it from that project directory with term2 --resume ${target}, or use --fork to branch it here.`,
+          );
           return;
         }
         if (result.status === 'ambiguous') {
@@ -648,7 +653,11 @@ const App: FC<AppProps> = ({
           return;
         }
         if (lock?.status === 'corrupt') {
-          addSystemMessage(`Conversation ${restored.id} has a corrupt lockfile and cannot be resumed here.`);
+          addSystemMessage(
+            `Conversation ${restored.id} has a corrupt lockfile at ${getConversationLockPath(
+              restored.id,
+            )}. Remove that file only after confirming no other terminal is using the conversation, or use --fork to continue from a branch.`,
+          );
           return;
         }
       }

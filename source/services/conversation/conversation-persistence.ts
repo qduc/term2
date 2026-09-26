@@ -117,7 +117,7 @@ function getConversationPath(id: string): string {
   return path.join(getConversationsDir(), `${id}.jsonl`);
 }
 
-function getLockPath(id: string): string {
+export function getConversationLockPath(id: string): string {
   return path.join(getConversationsDir(), `${id}.lock`);
 }
 
@@ -552,7 +552,7 @@ export type ConversationLockDiagnostic =
   | { status: 'corrupt' };
 
 export function isConversationLocked(id: string): ConversationLockDiagnostic | null {
-  const lp = getLockPath(id);
+  const lp = getConversationLockPath(id);
   if (!fs.existsSync(lp)) {
     return null;
   }
@@ -584,7 +584,7 @@ export function isConversationLocked(id: string): ConversationLockDiagnostic | n
 
 export function deleteConversation(id: string): boolean {
   const filePath = getConversationPath(id);
-  const lockFile = getLockPath(id);
+  const lockFile = getConversationLockPath(id);
   const deltaFile = deltaSidecarPathFor(filePath);
   let removed = false;
   try {

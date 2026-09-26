@@ -31,6 +31,7 @@ import {
   generateId,
   collectOrphanedDeltaSidecars,
   getConversationsDir,
+  getConversationLockPath,
   getResumeCommand,
   loadConversationForProject,
   loadLastConversation,
@@ -585,6 +586,8 @@ if (resumeRequested) {
           result.conversation.projectPath ?? 'unknown'
         }).`,
       );
+      console.error(`Resume it from that project directory with: term2 --resume ${resumeTarget}`);
+      console.error(`To branch it into the current project instead: term2 --resume ${resumeTarget} --fork`);
       console.error(`Current project path: ${resumeProjectPath ?? 'unknown'}`);
       if (result.conversation.sshHost || expectedSshHost) {
         console.error(`Conversation SSH Host: ${result.conversation.sshHost ?? 'none'}`);
@@ -1083,7 +1086,9 @@ if (!forkRequested) {
   if (lockInfo !== null) {
     if (lockInfo.status === 'corrupt') {
       console.error(
-        `Conversation ${effectiveSessionId} has a corrupt lockfile.\n` +
+        `Conversation ${effectiveSessionId} has a corrupt lockfile at ${getConversationLockPath(
+          effectiveSessionId,
+        )}.\n` +
           `- If another terminal still has it open, close that one first.\n` +
           `- Otherwise delete the lockfile manually, or fork into a new\n` +
           `  conversation that branches from the same state:\n` +

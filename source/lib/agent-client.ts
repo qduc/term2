@@ -487,7 +487,10 @@ export class AgentClient {
       milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
       autoBrief: this.#settings.get('agent.sessionRollover.autoBrief') ?? true,
     };
-    const reminders = this.#contextMilestoneReminder.observe(lastCompletedInputTokens, config);
+    const reminders = this.#contextMilestoneReminder.observe(
+      lastCompletedInputTokens ?? this.#lastCompletedProviderInputTokens,
+      config,
+    );
     for (const reminder of reminders) {
       onReminder(reminder);
     }

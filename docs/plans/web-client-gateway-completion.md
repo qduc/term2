@@ -7,7 +7,7 @@
 **Open follow-ups (not started):**
 - **Codex manual compaction fails on multi-turn sessions.** The final live run got `native_failed` on 3 of 3 three-turn sessions, and success only on a one-turn session. It is reported truthfully, but the native call itself is failing. The CLI's `/compact` shares this path.
 - **Pre-start refusal is unreachable on codex.** The `no_complete_cold_turn` guard lives in the local planner, which codex compaction never reaches.
-- **The live E2E harness is unmerged.** `scripts/e2e/chatforge-live.mjs` is on branch `wg-e2e` (tip `ca2fc243`) and has not been reviewed.
+- **The live E2E harness is unmerged (not present in main).** `scripts/e2e/chatforge-live.mjs` exists only on branch `wg-e2e` (tip `ca2fc243`) and has not been merged or reviewed.
 
 Three rules carried into later milestones, because they were learned the hard way:
 - `createProductionRuntimeFactory` gives each session isolated settings and reads from

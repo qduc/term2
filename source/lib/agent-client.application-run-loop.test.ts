@@ -567,6 +567,8 @@ describe('AgentClient application-run-loop execution', () => {
         'agent.reasoningEffort': 'high',
       },
     );
+    const checkpointEvents: unknown[] = [];
+    instance.setLocalCheckpointSink((input) => checkpointEvents.push(input));
     const input = [
       { role: 'user' as const, type: 'message' as const, content: `cold-${'x'.repeat(5_000)}` },
       { role: 'assistant' as const, type: 'message' as const, content: 'cold answer' },
@@ -584,6 +586,11 @@ describe('AgentClient application-run-loop execution', () => {
     expect(requests[1].input[0]).toMatchObject({ role: 'system' });
     expect(JSON.stringify(requests[1].input)).toContain('fixture local summary');
     expect(JSON.stringify(requests[1].input)).not.toContain('cold-');
+    expect(checkpointEvents).toHaveLength(1);
+    expect(checkpointEvents[0]).toMatchObject({
+      checkpoint: { contextSummary: { strategy: 'local' } },
+      hotTail: expect.arrayContaining([expect.objectContaining({ content: 'hot one' })]),
+    });
     instance.dispose();
 
     requests.length = 0;

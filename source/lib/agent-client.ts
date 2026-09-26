@@ -155,6 +155,11 @@ export class AgentClient {
   #isDisposed = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
   #onToolDispatch?: (callId: string) => void;
+  #localCheckpointSink?: (input: {
+    history: readonly ProviderInputItem[];
+    hotTail: readonly ProviderInputItem[];
+    checkpoint: ProviderInputItem;
+  }) => void;
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
@@ -463,6 +468,11 @@ export class AgentClient {
           return message?.role === 'user' && !message.isSynthetic;
         }).length;
         const preservedUsers = hotUsers === 0 ? genuineUsers : genuineUsers.slice(0, -hotUsers);
+        this.#localCheckpointSink?.({
+          history,
+          hotTail: outcome.hotTail,
+          checkpoint: outcome.checkpoint,
+        });
         return {
           kind: 'compacted' as const,
           history: [...preservedUsers, outcome.checkpoint, ...outcome.hotTail],
@@ -851,6 +861,18 @@ export class AgentClient {
    */
   setOnToolDispatch(handler: ((callId: string) => void) | undefined): void {
     this.#onToolDispatch = handler;
+  }
+
+  setLocalCheckpointSink(
+    sink:
+      | ((input: {
+          history: readonly ProviderInputItem[];
+          hotTail: readonly ProviderInputItem[];
+          checkpoint: ProviderInputItem;
+        }) => void)
+      | undefined,
+  ): void {
+    this.#localCheckpointSink = sink;
   }
 
   setModel(model: string): void {

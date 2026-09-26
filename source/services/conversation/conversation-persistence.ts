@@ -49,6 +49,18 @@ export function getConversationsDirForTest(): string {
   return getConversationsDir();
 }
 
+/** Read one session's canonical log and sidecar with stable event identities. */
+export function readConversationLogEnvelopes(id: string): PersistedLogEnvelope[] | null {
+  if (!SAFE_SESSION_ID.test(id)) return null;
+  const filePath = path.join(getConversationsDir(), id + '.jsonl');
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return readEnvelopes(filePath);
+  } catch {
+    return null;
+  }
+}
+
 export function setConversationsDirForTest(dir: string | null): void {
   conversationsDirOverride = dir;
 }

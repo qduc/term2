@@ -710,6 +710,30 @@ it('semantic projection does not apply a checkpoint that covers a retracted sour
   expect(retracted).toMatchObject({ status: 'projected', state: { history: [] } });
 });
 
+it('semantic projection does not apply a checkpoint whose source ref is missing', () => {
+  const source = {
+    ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'source' } }),
+    logId: 's',
+    eventId: 'e-source',
+  };
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'summary-missing-source',
+      sourceRefs: [{ logId: 's', eventId: 'does-not-exist' }],
+      item: { role: 'system', type: 'message', content: 'must not apply' },
+    }),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  };
+
+  expect(projectSemanticEvents([source, checkpoint])).toMatchObject({
+    status: 'projected',
+    state: { history: [{ role: 'user', content: 'source' }] },
+  });
+});
+
 it('decodeLogEnvelope requires unique, complete references on events_retracted', () => {
   const valid = env({ type: 'events_retracted', version: 1, refs: [{ logId: 's', eventId: 'e1' }] });
   const duplicate = {

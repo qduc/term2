@@ -50,7 +50,7 @@ Native provider compaction is a special case: the semantic log records that a pr
 
 ### What is / is not derivable
 
-- **Derivable after migration:** finalized user and assistant transcript, observed tool calls/results and settled statuses, approvals requested and resolved, settings/profile changes, session/fork/rollover lineage, and application-owned summary checkpoints.
+- **Derivable after migration:** finalized user and assistant transcript, observed tool calls/results and settled statuses, approvals requested and resolved, settings/profile changes, user/launcher-authored bounded goal changes (`goal_changed`), session/fork/rollover lineage, and application-owned summary checkpoints.
 - **Not inherently derivable:** server-side response IDs or provider cache state, unobserved tool effects, transient UI focus/selection, live process handles, pending interactive approval prompts, and in-memory pending steer. Keep chain anchors ephemeral/provider-scoped and clear them on restart unless the existing adapter contract safely resumes them. Record effect ambiguity as `unknown`; do not replay it.
 - **Separate durable sidecars:** the queue sidecar remains owned by Contract 12 until a deliberate migration chooses otherwise. It records admitted text ownership, not completed conversation history. Do not fold it into this project merely to claim a single file.
 
@@ -102,7 +102,7 @@ Record native opaque checkpoint ownership and source coverage only where provabl
 ## Cross-task contracts
 
 - **T2 runtime capability seams:** the session journal offers append/read operations and event-reference resolution, not a runtime plugin registry. Runtime capabilities may observe canonical lifecycle events through an existing session-owned seam; they must not own sequencing, persistence, or redefine event types. T1 does not prescribe T2 interface/module structure.
-- **T3 durable goal:** a future durable-goal projection may reference the same `{logId, eventId}` source events, but goal state is not inferred from arbitrary conversation text and does not become a journal event merely by being durable. T1 provides stable references; it does not define T3's goal schema or lifecycle.
+- **T3 durable goal:** goal changes are user-authored semantic `goal_changed` events appended through the journal's normal append path and receive stable event IDs like any other event. T1 owns sequencing and identity; T3 owns the goal schema and lifecycle. Goal state is never inferred from conversation text.
 - Event types needed across tasks are limited to stable envelope identity, semantic conversation/lifecycle events, checkpoint-created provenance, and branch lineage. Do not couple the shared event format to provider wire types or goal/runtime capability payloads.
 
 ## Open decisions

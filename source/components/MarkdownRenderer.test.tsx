@@ -34,10 +34,11 @@ it.sequential('renders italic text', async () => {
   expect(frame.includes('This is')).toBe(true);
 });
 
-it.sequential('renders inline code with non-breaking space padding', async () => {
+it.sequential('renders inline code with copy-safe regular space padding', async () => {
   const { lastFrame } = await renderInAct(React.createElement(MarkdownRenderer, null, 'Run `npm install` to start'));
   const frame = stripAnsi(lastFrame());
-  expect(frame.includes('\u00A0npm install\u00A0')).toBe(true);
+  expect(frame.includes(' npm install ')).toBe(true);
+  expect(frame.includes(String.fromCharCode(160))).toBe(false);
 });
 
 it.sequential('renders links', async () => {

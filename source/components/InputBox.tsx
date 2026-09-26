@@ -67,6 +67,20 @@ const MODEL_HINTS: ReadonlyArray<MenuHint> = [
   ['Ctrl+T', 'effort'],
 ];
 
+export const getImagePasteErrorMessage = (reason: PasteErrorReason): string => {
+  const message =
+    reason === 'clipboard-empty'
+      ? 'No image found in clipboard'
+      : reason === 'clipboard-unsupported-type'
+      ? 'Clipboard image format is unsupported'
+      : reason === 'image-too-large'
+      ? 'Clipboard image is too large'
+      : reason === 'too-many-images'
+      ? 'Too many images in clipboard'
+      : 'Could not read clipboard image';
+  return `${message} — try copying the image again or paste it as a file path`;
+};
+
 const IDLE_HINTS: ReadonlyArray<MenuHint> = [
   ['/', 'commands'],
   ['@', 'paths'],
@@ -91,6 +105,7 @@ const InputBox: FC<Props> = ({
   isShellMode = false,
   onShellModeEnter,
   onShellModeExit,
+  onSystemMessage,
   historyService,
   promptLabel,
   allowEmptySubmit = false,
@@ -371,8 +386,11 @@ const InputBox: FC<Props> = ({
   }, [cursorOffset, cursorOverride, setCursorOverride]);
 
   const handlePasteError = useCallback(
-    (reason: PasteErrorReason) => loggingService.warn('Image paste failed', { reason }),
-    [loggingService],
+    (reason: PasteErrorReason) => {
+      loggingService.warn('Image paste failed', { reason });
+      onSystemMessage?.(getImagePasteErrorMessage(reason));
+    },
+    [loggingService, onSystemMessage],
   );
   const handleMultilineChange = useCallback(
     (newValue: string) => {

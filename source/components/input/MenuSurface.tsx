@@ -45,9 +45,8 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   const valueFrame = isSettingsValueMenu(activeFrame) ? activeFrame : undefined;
   // A settings_value frame edits a value, not a filter: label the line with
   // the setting key (which the binding text itself omits) instead of "Filter:".
-  const promptLabel =
-    menuPromptLabel ?? (valueFrame ? `${valueFrame.settingKey} = ` : filterFrame ? 'Filter: ' : undefined);
-  const promptText = menuPromptLabel ? input : valueFrame ? valueFrame.binding.query : filterFrame?.binding.query;
+  const promptLabel = valueFrame ? `${valueFrame.settingKey} = ` : filterFrame ? 'Filter: ' : menuPromptLabel;
+  const promptText = valueFrame?.binding.query ?? filterFrame?.binding.query ?? (menuPromptLabel ? input : undefined);
 
   useEffect(() => {
     if (enabled) setCursorOverride(cursorOffset);

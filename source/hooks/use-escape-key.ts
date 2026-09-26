@@ -30,7 +30,7 @@ export const useEscapeKey = ({
   }, []);
 
   useEffect(() => {
-    if (!turnInFlight || value.length > 0) return;
+    if (turnInFlight && value.length === 0) return;
     if (escTimeoutRef.current) {
       clearTimeout(escTimeoutRef.current);
       escTimeoutRef.current = null;

@@ -171,6 +171,12 @@ history (`history-service.ts`), and log decoding and replay recovery
     (`conversation-log-writer.ts:547-556`).
   - **Once-per-writer Cap:** Telemetry is capped at exactly one log emission per writer instance (`#writeErrorLogged`),
     reset only upon writer rotation (`rotate()`).
+
+## 7. Durable goal mutation boundary
+
+- `/goal set`, `/goal achieved`, `/goal abandon`, and launch flags are the user/launcher mutation surfaces. Each emits the same version-1 `goal_changed` event through `ConversationLogWriter.append`; the latest valid event is the replayed projection. `/goal show` is read-only and reports the current terminal or active state, including an explicit no-goal result.
+- A mutation is reported successful only after the normal critical append (including fsync and failure latching) returns. Append failure leaves the in-memory command projection unchanged and is surfaced to the user; the CLI must not send a first request after an explicit launch-goal append failure.
+- `/clear` retains the objective by appending its current goal record to the newly initialized session log. Absence of launch flags leaves a resumed goal unchanged; explicit flags replace it before the resumed session accepts model work. Legacy logs without a valid goal event replay as `goal: undefined`.
 - **HistoryService Structured Logs:**
   - `load()` failure logs `'Failed to load history'` with `{ error, filePath }` (`history-service.ts:90-94`).
   - `save()` failure logs `'Failed to save history'` with `{ error, filePath, messageCount }` (`history-service.ts:129-135`, quarantine refusal; `:156-161`, write/rename failure).

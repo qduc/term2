@@ -144,6 +144,8 @@ interface AppProps {
   controlSocket?: ControlSocketServer;
   controlStartupNotice?: string;
   controlSessionMetadata?: () => ControlSessionMetadata;
+  initialGoal?: import('./services/logging/conversation-log-events.js').DurableGoal;
+  appendGoal?: (goal: import('./services/logging/conversation-log-events.js').DurableGoal) => void;
 }
 
 const App: FC<AppProps> = ({
@@ -176,7 +178,17 @@ const App: FC<AppProps> = ({
   controlSocket,
   controlStartupNotice,
   controlSessionMetadata,
+  initialGoal,
+  appendGoal,
 }) => {
+  const [goal, setGoalState] = useState(initialGoal);
+  const setGoal = useCallback(
+    (nextGoal: import('./services/logging/conversation-log-events.js').DurableGoal) => {
+      appendGoal?.(nextGoal);
+      setGoalState(nextGoal);
+    },
+    [appendGoal],
+  );
   const { exit, waitUntilRenderFlush } = useApp();
   const { stdout } = useStdout();
   const { setInput, replaceInput, setImages } = useInputActions();
@@ -418,10 +430,11 @@ const App: FC<AppProps> = ({
   const clearConversationAndRefreshBanner = useCallback(async () => {
     onPrintUsage?.();
     await clearConversation();
+    if (goal) appendGoal?.(goal);
     setStartupBannerIds(['startup-banner-0']);
     setActiveRestoredStaticMessageIds([]);
     setMessageListEpoch((epoch) => epoch + 1);
-  }, [clearConversation, onPrintUsage]);
+  }, [appendGoal, clearConversation, goal, onPrintUsage]);
 
   sessionRolloverHandlerRef.current = async (request) => {
     const sourceSessionId = sessionId;
@@ -890,6 +903,8 @@ const App: FC<AppProps> = ({
     applyRuntimeSetting,
     replaceInput,
     clearConversation: clearConversationFromCommand,
+    getGoal: () => goal,
+    setGoal,
     getSessionUsage,
     refreshProviderUsage: () => {
       grokCreditUsage.refresh();

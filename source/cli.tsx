@@ -77,6 +77,8 @@ import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.j
 import { AutomaticMemoryCanary } from './services/memory/automatic-memory-canary.js';
 import { ControlSocketServer, isControlSocketName } from './services/control-socket/control-socket.js';
 import { runControlCommand } from './services/control-socket/control-command.js';
+import { createDurableGoal } from './services/conversation/durable-goal.js';
+import type { DurableGoal } from './services/logging/conversation-log-events.js';
 
 const controlArgv: string[] = [];
 let controlSocketRequested = false;
@@ -224,6 +226,8 @@ const cli = meow(
       -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
       -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
+          --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
+          --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
       -l, --lite                           Start in lite mode (minimal context, session-only)
           --auto-approve                   Allow tool execution for a non-interactive prompt
       -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
@@ -320,6 +324,8 @@ const cli = meow(
         type: 'string',
         alias: 'r',
       },
+      goal: { type: 'string' },
+      goalCriteria: { type: 'string' },
       lite: {
         type: 'boolean',
         alias: 'l',
@@ -527,6 +533,16 @@ if (forkRequested && !resumeRequested) {
 
 const positionalPrompt = resumeRequested ? '' : cli.input.join(' ').trim();
 const hasPositionalPrompt = positionalPrompt.length > 0;
+let launchGoal: DurableGoal | undefined;
+try {
+  if (cli.flags.goalCriteria !== undefined && cli.flags.goal === undefined) {
+    throw new Error('--goal-criteria requires --goal.');
+  }
+  if (cli.flags.goal !== undefined) launchGoal = createDurableGoal(cli.flags.goal, cli.flags.goalCriteria);
+} catch (error) {
+  console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
 
 // If the user passed an explicit empty prompt (e.g. `term2 ""`), show help.
 if (!resumeRequested && cli.input.length > 0 && !hasPositionalPrompt) {
@@ -1077,6 +1093,7 @@ if (hasPositionalPrompt) {
     hookLifecycle: hookService,
     mcpAllowlist: mcpConfig.nonInteractiveAllow,
     mcpToolSource: mcpManager,
+    initialGoal: launchGoal,
   });
   process.exit(exitCode);
 }
@@ -1246,6 +1263,15 @@ try {
   }
   throw err;
 }
+if (launchGoal) {
+  try {
+    logWriter.append({ type: 'goal_changed', version: 1, goal: launchGoal });
+  } catch (error) {
+    console.error(`Unable to persist requested goal: ${error instanceof Error ? error.message : String(error)}`);
+    await logWriter.close().catch(() => undefined);
+    process.exit(1);
+  }
+}
 activeLogWriter = logWriter;
 conversationService.setLogSink((event) => logWriter.append(event));
 
@@ -1317,6 +1343,8 @@ const { waitUntilExit } = render(
         onExitUsage={printUsageOnce}
         sessionId={effectiveSessionId}
         initialMessages={initialMessages}
+        initialGoal={launchGoal ?? resumedConversation?.goal}
+        appendGoal={(goal) => logWriter.append({ type: 'goal_changed', version: 1, goal })}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
         onRotateWriter={(newId, createdAt, rolloverFrom) => {

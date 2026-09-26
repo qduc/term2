@@ -12,6 +12,7 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { RESUME_TRIGGER } from './triggers.js';
 
 const inputBoxMounts = { mounted: 0, unmounted: 0 };
 let inputBoxProps: any;
@@ -48,7 +49,16 @@ const historyService = {
   clear: () => {},
 } as unknown as HistoryService;
 
-const slashCommands: SlashCommand[] = [{ name: '/clear', description: 'Clear', action: () => {} }];
+const slashCommands: SlashCommand[] = [
+  { name: 'clear', description: 'Clear', action: () => {} },
+  {
+    name: 'resume',
+    description: 'Browse conversations',
+    action: () => {},
+    expectsArgs: true,
+    completion: { type: 'resume', trigger: RESUME_TRIGGER },
+  },
+];
 
 const renderSurface = async (controller: MenuControllerImpl) => {
   const result = await renderInAct(
@@ -97,6 +107,19 @@ it.sequential('routes Escape through the active slash session and clears the tri
 
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(controller.getSnapshot().editor.text).toBe('');
+});
+
+it.sequential('Escape from the /resume picker clears its command text', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin, unmount } = await renderSurface(controller);
+  act(() => controller.applyEditorEdit({ type: 'set-text', text: RESUME_TRIGGER, cursor: RESUME_TRIGGER.length }));
+  await waitForInputSurface(() => controller.getSnapshot().stack.at(-1)?.kind === 'resume', 'resume menu open');
+  await act(async () => stdin.write('\u001b'));
+  await waitForInputSurface(
+    () => controller.getSnapshot().stack.length === 0 && controller.getSnapshot().editor.text === '',
+    'resume menu close',
+  );
+  act(() => unmount());
 });
 
 it.sequential('Up and Down continue history navigation when a recalled slash entry opens its menu', async () => {

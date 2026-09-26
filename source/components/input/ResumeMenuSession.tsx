@@ -46,7 +46,7 @@ export function ResumeMenuSession({ frame, active, controller, interactions, ser
             };
           }
           case 'escape':
-            return { stack: { type: 'close-top' } };
+            return { buffer: { type: 'clear' }, stack: { type: 'close-top' } };
           default:
             return;
         }

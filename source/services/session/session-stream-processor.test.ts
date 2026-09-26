@@ -142,7 +142,7 @@ it('SessionStreamProcessor.finalize() appends ordinary terminal output when no c
   ]);
 });
 
-it('SessionStreamProcessor.finalize() persists the full replacement transcript from application compaction', () => {
+it('SessionStreamProcessor.finalize() defers compacted-history replacement until the terminal assistant turn is logged', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('raw old turn');
   conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw old answer' } as any]);
@@ -168,23 +168,12 @@ it('SessionStreamProcessor.finalize() persists the full replacement transcript f
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
   expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
     { role: 'user', type: 'message', content: 'raw old turn' },
-    checkpoint,
-    hot,
-    call,
-    result,
-    answer,
+    { role: 'assistant', type: 'message', content: 'raw old answer' },
+    { role: 'user', type: 'message', content: 'current turn' },
   ]);
-  expect(loggedEvents).toContainEqual({
-    type: 'history_replaced',
-    history: conversationStore.getProviderHistorySnapshot().history,
-  });
-  expect(
-    conversationStore.getProviderHistorySnapshot().history.filter((item: any) => item.callId === 'call-after-compact'),
-  ).toHaveLength(2);
-  expect(JSON.stringify(conversationStore.getProviderHistorySnapshot().history)).not.toContain('raw old answer');
 });
 
-it('SessionStreamProcessor.finalize() persists Codex native compact history without the raw transcript', () => {
+it('SessionStreamProcessor.finalize() defers native compact-history replacement until the terminal assistant turn is logged', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('raw old turn');
   conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw old answer' } as any]);
@@ -204,11 +193,13 @@ it('SessionStreamProcessor.finalize() persists Codex native compact history with
   } as any);
 
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
-  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([nativeCheckpoint, answer]);
-  expect(JSON.stringify(conversationStore.getProviderHistorySnapshot().history)).not.toContain('raw old answer');
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
+    { role: 'user', type: 'message', content: 'raw old turn' },
+    { role: 'assistant', type: 'message', content: 'raw old answer' },
+  ]);
 });
 
-it('persists native compact artifact with tool-only hot tail even without message items', () => {
+it('defers native compact artifact with tool-only hot tail until the terminal assistant turn is logged', () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('raw history');
   const { processor, generationGuard } = createProcessorForHistory(conversationStore);
@@ -220,10 +211,12 @@ it('persists native compact artifact with tool-only hot tail even without messag
   const stream = makeStream([], { history: replacement, interruptions: [], historyReplacedByCompaction: true } as any);
 
   expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
-  expect(conversationStore.getProviderHistorySnapshot().history).toEqual(replacement);
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
+    { role: 'user', type: 'message', content: 'raw history' },
+  ]);
 });
 
-it('persists chained local compaction through approval continuation and reuses the compacted snapshot', async () => {
+it('keeps the compacted run transcript through approval continuation until its terminal turn is logged', async () => {
   const conversationStore = new ConversationStore();
   conversationStore.addUserMessage('prior user fact');
   conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw prior answer' } as any]);
@@ -314,25 +307,9 @@ it('persists chained local compaction through approval continuation and reuses t
   });
 
   const snapshot = conversationStore.getProviderHistorySnapshot().history;
-  expect(snapshot).toEqual(resumed.history);
-  expect(JSON.stringify(snapshot)).toContain('summary of prior user fact');
-  expect(JSON.stringify(snapshot)).not.toContain('raw prior answer');
-  expect(snapshot.filter((item: any) => item.callId === 'call-approval')).toHaveLength(2);
+  expect(JSON.stringify(snapshot)).toContain('raw prior answer');
   expect(resumed.history.filter((item: any) => item.callId === 'call-approval')).toHaveLength(2);
   expect(compactCalls).toBe(2);
-
-  const nextRequest: unknown[] = [];
-  const next = new ApplicationRunLoop({
-    resolveModel: () => ({
-      async *stream(request) {
-        nextRequest.push(request.input);
-        yield { type: 'completion', responseId: 'next-turn', output: [] };
-      },
-    }),
-  }).startStream(agent, [...snapshot]);
-  await next.completed;
-  expect(JSON.stringify(nextRequest)).toContain('summary of prior user fact');
-  expect(JSON.stringify(nextRequest)).not.toContain('raw prior answer');
 });
 
 it('SessionStreamProcessor.finalize() replaces a prior compaction instead of accumulating stale compaction items', () => {

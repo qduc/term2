@@ -855,7 +855,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       }
       state.activeTurnStartIndex = state.messages.length;
       const compactState = stateFromAssistantTurn(event);
-      state.history = synthesizeHistoryFromAssistantTurn(state.history, event.turn);
+      state.history = event.providerHistory
+        ? cloneValue(event.providerHistory)
+        : synthesizeHistoryFromAssistantTurn(state.history, event.turn);
       if (event.snapshot) {
         const snap = cloneSnapshot(event.snapshot);
         state.toolLedger = snap.toolLedger;
@@ -904,10 +906,6 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.snapshotProvider = snap.provider ?? state.snapshotProvider;
       state.trailingUserMessage = false;
       state.inFlightToolCalls.clear();
-      return;
-    }
-    case 'history_replaced': {
-      state.history = cloneValue(event.history);
       return;
     }
     case 'session_cleared': {

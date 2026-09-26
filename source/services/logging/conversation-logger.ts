@@ -1,6 +1,11 @@
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { AssistantTurnState, LogEvent } from './conversation-log-events.js';
+import {
+  LOG_ENVELOPE_VERSION,
+  type AssistantTurnState,
+  type LogEnvelope,
+  type LogEvent,
+} from './conversation-log-events.js';
 import { TurnItemAccumulator } from '../session/turn-item-accumulator.js';
 import type {
   PersistedAssistantTurn,
@@ -17,6 +22,8 @@ export class ConversationLogger {
   private getCurrentTurnId?: () => string;
   private getToolLedger?: () => SavedToolExecution[];
   private journal: AssistantTurnJournal;
+  private readonly replayEnvelopes: LogEnvelope[] = [];
+  private onProviderHistoryReplay?: (envelopes: LogEnvelope[]) => void;
 
   constructor(opts: {
     turnAccumulator: TurnItemAccumulator;
@@ -25,6 +32,7 @@ export class ConversationLogger {
     getCurrentTurnId?: () => string;
     getToolLedger?: () => SavedToolExecution[];
     journal: AssistantTurnJournal;
+    onProviderHistoryReplay?: (envelopes: LogEnvelope[]) => void;
   }) {
     this.turnAccumulator = opts.turnAccumulator;
     this.logger = opts.logger;
@@ -32,6 +40,7 @@ export class ConversationLogger {
     this.getCurrentTurnId = opts.getCurrentTurnId;
     this.getToolLedger = opts.getToolLedger;
     this.journal = opts.journal;
+    this.onProviderHistoryReplay = opts.onProviderHistoryReplay;
   }
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
@@ -45,7 +54,18 @@ export class ConversationLogger {
   log(event: LogEvent): void {
     if (!this.logSink) return;
     try {
-      this.logSink(this.#withTurnId(event));
+      const persisted = this.#withTurnId(event);
+      this.logSink(persisted);
+      const envelope: LogEnvelope = {
+        v: LOG_ENVELOPE_VERSION,
+        seq: (this.replayEnvelopes.at(-1)?.seq ?? 0) + 1,
+        ts: new Date().toISOString(),
+        event: persisted,
+      };
+      this.replayEnvelopes.push(envelope);
+      if (persisted.type === 'assistant_turn' && persisted.providerHistory) {
+        this.onProviderHistoryReplay?.([...this.replayEnvelopes]);
+      }
     } catch (err: any) {
       this.logger.warn('Conversation log sink threw', {
         eventType: 'conversation_log.sink_failed',
@@ -255,6 +275,7 @@ export class ConversationLogger {
         this.log({
           type: 'assistant_turn',
           turn,
+          ...(event.providerHistory ? { providerHistory: event.providerHistory } : {}),
           ...(event.usage ? { usage: event.usage } : {}),
           ...(this.turnAccumulator.getDisplayUsage() ? { displayUsage: this.turnAccumulator.getDisplayUsage() } : {}),
           ...(event.costRecords && event.costRecords.length > 0 ? { costRecords: event.costRecords } : {}),

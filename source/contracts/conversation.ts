@@ -165,6 +165,8 @@ export interface FinalTerminal {
   /** Cumulative model-request cost records for the completed run. */
   costRecords?: ModelRequestCost[];
   turnItems?: Item[];
+  /** Canonical provider transcript after a run-local compaction. */
+  providerHistory?: import('./provider-input.js').ProviderInputItem[];
   terminalCause?: RunTerminationCause;
 }
 

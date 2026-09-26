@@ -215,6 +215,8 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
     case 'assistant_turn':
       return (
         isAssistantTurn(event['turn']) &&
+        (event['providerHistory'] === undefined ||
+          (Array.isArray(event['providerHistory']) && event['providerHistory'].every(isObject))) &&
         (event['snapshot'] === undefined || isSnapshot(event['snapshot'])) &&
         (event['state'] === undefined ||
           (isObject(event['state']) &&
@@ -223,8 +225,6 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       );
     case 'undo':
       return hasNumber(event, 'removedUserTurns') && isSnapshot(event['snapshot']);
-    case 'history_replaced':
-      return Array.isArray(event['history']) && (event['turnId'] === undefined || hasString(event, 'turnId'));
     case 'openai_root_selector_parity':
     case 'openai_root_checkpoint_lifecycle':
       return hasNumber(event, 'version');

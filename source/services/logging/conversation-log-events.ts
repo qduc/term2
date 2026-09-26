@@ -327,6 +327,8 @@ export interface AssistantTurnEvent {
   type: 'assistant_turn';
   turnId?: string;
   turn: PersistedAssistantTurn;
+  /** Canonical provider transcript after a run-local compaction. */
+  providerHistory?: ProviderInputItem[];
   /** Whole-run cumulative usage for this assistant turn. */
   usage?: NormalizedUsage;
   /** Footer-compatible usage from the last streamed model turn, when available. */
@@ -342,13 +344,6 @@ export interface UndoEvent {
   type: 'undo';
   removedUserTurns: number;
   snapshot: StateSnapshot;
-}
-
-/** Authoritative provider-history replacement after application-owned compaction. */
-export interface HistoryReplacedEvent {
-  type: 'history_replaced';
-  history: ProviderInputItem[];
-  turnId?: string;
 }
 
 export interface SessionClearedEvent {
@@ -417,7 +412,6 @@ export type LogEvent =
   | AssistantJournalDeltaLogEvent
   | AssistantJournalItemLogEvent
   | UndoEvent
-  | HistoryReplacedEvent
   | SessionClearedEvent
   | SessionRolloverEvent;
 

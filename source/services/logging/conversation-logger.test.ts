@@ -60,6 +60,30 @@ it('setLogSink updates the sink used by log', () => {
   ]);
 });
 
+it('replays the in-memory log after a compacted assistant turn is persisted', () => {
+  const events: any[] = [];
+  const replayed: any[] = [];
+  const providerHistory = [{ type: 'compaction', id: 'native', providerOpaque: { provider: 'openai' } }];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger: makeLoggingService().logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
+    onProviderHistoryReplay: (envelopes) => replayed.push(...envelopes),
+  });
+  conversationLogger.setLogSink((event) => events.push(event));
+  conversationLogger.dispatchEventToLog({
+    type: 'final',
+    finalText: 'answer',
+    providerHistory: providerHistory as any,
+  });
+
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ type: 'assistant_turn', providerHistory });
+  expect(replayed).toHaveLength(1);
+  expect(replayed[0].event).toMatchObject({ type: 'assistant_turn', providerHistory });
+});
+
 it('persists an injection receipt with its turn identity', () => {
   const events: any[] = [];
   const conversationLogger = new ConversationLogger({

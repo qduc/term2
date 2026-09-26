@@ -236,6 +236,7 @@ export interface FinalResponseEvent {
   /** Cumulative cost records for the completed run. */
   costRecords?: ModelRequestCost[];
   turnItems?: PersistedAssistantTurnItem[];
+  providerHistory?: import('../../contracts/provider-input.js').ProviderInputItem[];
   terminalCause?: RunTerminationCause;
 }
 

@@ -43,3 +43,33 @@ it('does not invent coverage when a summarized turn has no persisted assistant t
     }),
   ).toBeNull();
 });
+
+it('does not carry forward a prior checkpoint with mismatched transitive provenance', () => {
+  const priorSummary: ProviderInputItem = {
+    type: 'message',
+    role: 'assistant',
+    content: 'prior summary',
+    contextSummary: { version: 1, strategy: 'local' },
+  };
+  const envelopes = [
+    envelope(1, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'cold' } }),
+    envelope(2, { type: 'assistant_turn', turn: { items: [] } }),
+    envelope(3, {
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'prior',
+      sourceRefs: [
+        { logId: 'session-1', eventId: 'event-1' },
+        { logId: 'session-1', eventId: 'event-2' },
+      ],
+      sourceDigest: `sha256:${'0'.repeat(64)}`,
+      item: priorSummary,
+    }),
+    envelope(4, { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hot 1' } }),
+    envelope(5, { type: 'assistant_turn', turn: { items: [] } }),
+    envelope(6, { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'hot 2' } }),
+    envelope(7, { type: 'assistant_turn', turn: { items: [] } }),
+  ];
+  const history = [priorSummary, user('cold'), user('hot 1'), user('hot 2')];
+  expect(resolveCheckpointSourceRefs({ envelopes, history, hotTail: history.slice(2) })).toBeNull();
+});

@@ -11,7 +11,10 @@ import { estimateContext, type ContextEstimate } from '../agent-runtime/context-
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { replayEvents } from '../conversation/conversation-replay.js';
-import { resolveCheckpointSourceRefs } from '../conversation/conversation-checkpoint-provenance.js';
+import {
+  createCheckpointSourceDigest,
+  resolveCheckpointSourceRefs,
+} from '../conversation/conversation-checkpoint-provenance.js';
 import { readConversationLogEnvelopes, generateId } from '../conversation/conversation-persistence.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -610,11 +613,20 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       });
       return;
     }
+    const sourceDigest = createCheckpointSourceDigest(sourceRefs, envelopes ?? []);
+    if (!sourceDigest) {
+      logger.warn('Local context compaction committed without a provenance event; source payloads were unavailable', {
+        eventType: 'context_compaction.provenance_unavailable',
+        sessionId: identity.current,
+      });
+      return;
+    }
     conversationLogger.log({
       type: 'context_checkpoint_created',
       version: 1,
       artifactId: generateId(),
       sourceRefs,
+      sourceDigest,
       item: input.checkpoint,
     });
   };

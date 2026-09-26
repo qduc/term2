@@ -5,6 +5,7 @@ import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import { projectModelRequestHistory } from './conversation-state-projector.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
+import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
 
 type ProjectionResult =
   | { status: 'no_checkpoint' | 'refused' }
@@ -45,6 +46,12 @@ export function deriveLocalCheckpointRequestHistory(
   }
   const checkpoint = checkpointEnvelope.event;
   if (!checkpoint.artifactId || checkpoint.sourceRefs.length === 0) return { status: 'refused' };
+  if (
+    checkpoint.sourceDigest !== undefined &&
+    createCheckpointSourceDigest(checkpoint.sourceRefs, envelopes) !== checkpoint.sourceDigest
+  ) {
+    return { status: 'refused' };
+  }
 
   const beforeCheckpoint = envelopes.slice(0, checkpointIndex);
   const finalizedTurnsById = new Map<string, { index: number; envelope: PersistedLogEnvelope }[]>();

@@ -133,6 +133,8 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
         typeof artifactId === 'string' &&
         artifactId.length > 0 &&
         isEventReferences(event['sourceRefs']) &&
+        (event['sourceDigest'] === undefined ||
+          (typeof event['sourceDigest'] === 'string' && /^sha256:[0-9a-f]{64}$/.test(event['sourceDigest']))) &&
         isObject(event['item'])
       );
     }

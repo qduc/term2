@@ -327,6 +327,8 @@ export interface AssistantTurnEvent {
   type: 'assistant_turn';
   turnId?: string;
   turn: PersistedAssistantTurn;
+  /** Canonical provider transcript after a run-local compaction. */
+  providerHistory?: ProviderInputItem[];
   /** Whole-run cumulative usage for this assistant turn. */
   usage?: NormalizedUsage;
   /** Footer-compatible usage from the last streamed model turn, when available. */

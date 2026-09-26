@@ -21,6 +21,8 @@ export interface AgentStream {
 
   completed: Promise<unknown>;
   history: unknown[];
+  /** The run's current history is a replacement transcript produced by compaction. */
+  historyReplacedByCompaction?: boolean;
   newItems: unknown[];
   output: unknown[];
   finalOutput?: string;

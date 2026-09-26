@@ -437,6 +437,9 @@ export async function buildConversationResult(
       usage: usage ?? extractUsage(result),
       costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
       turnItems: derivedTurnItems.length > 0 ? derivedTurnItems : input.turnItems,
+      ...(result.historyReplacedByCompaction
+        ? { providerHistory: result.history as import('../../contracts/provider-input.js').ProviderInputItem[] }
+        : {}),
       ...(result.terminalCause ? { terminalCause: result.terminalCause } : {}),
     },
   };
@@ -478,6 +481,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
     ...(result.usage ? { usage: result.usage } : {}),
     ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
     ...(result.turnItems ? { turnItems: result.turnItems } : {}),
+    ...('providerHistory' in result && result.providerHistory ? { providerHistory: result.providerHistory } : {}),
     ...(result.terminalCause ? { terminalCause: result.terminalCause } : {}),
   };
 };

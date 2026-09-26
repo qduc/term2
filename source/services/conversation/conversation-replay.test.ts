@@ -8,6 +8,7 @@ import { decodeLogEnvelope, decodeSavedMessage, resolveEnvelopeIdentities } from
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
+import { ConversationStore } from './conversation-store.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -64,6 +65,101 @@ it('ignores malformed goal events without affecting other replay state', () => {
   const decoded = [valid, malformed].map((envelope) => decodeLogEnvelope(envelope)).filter((item) => item !== null);
   expect(replayEvents(decoded).goal).toEqual(valid.event.type === 'goal_changed' ? valid.event.goal : undefined);
 });
+
+it.each(['openai', 'local'] as const)(
+  'replayEvents restores %s compacted provider history and appends later turns to the replacement',
+  (kind) => {
+    const history =
+      kind === 'openai'
+        ? [
+            {
+              type: 'compaction',
+              id: 'checkpoint-native',
+              encrypted_content: 'opaque',
+              providerOpaque: { provider: 'openai' },
+            },
+          ]
+        : [
+            { role: 'user' as const, type: 'message' as const, content: 'earlier user turn' },
+            {
+              role: 'system' as const,
+              type: 'message' as const,
+              content: 'local summary',
+              contextSummary: { version: 1 as const, strategy: 'local' as const },
+            },
+            { role: 'user' as const, type: 'message' as const, content: 'hot user turn' },
+          ];
+    const coldCall: any = {
+      type: 'function_call',
+      callId: 'call-cold',
+      name: 'cold',
+      arguments: '{"secret":"COLD TOOL PAYLOAD"}',
+    };
+    const coldResult: any = {
+      type: 'function_call_result',
+      callId: 'call-cold',
+      name: 'cold',
+      output: 'COLD TOOL PAYLOAD',
+    };
+    const hotCall: any = { type: 'function_call', callId: 'call-hot', name: 'hot', arguments: '{}' };
+    const hotResult: any = { type: 'function_call_result', callId: 'call-hot', name: 'hot', output: 'ok' };
+    const firstTurn = env({
+      type: 'assistant_turn',
+      turn: {
+        items: [{ type: 'assistant_text', text: 'DISTINCTIVE PRE-COMPACTION ASSISTANT PHRASE' }, coldCall, coldResult],
+      },
+      state: { previousResponseId: 'prior-response' },
+    });
+    const compactedTurn = env({
+      type: 'assistant_turn',
+      turn: {
+        items: [coldCall, coldResult, hotCall, hotResult, { type: 'assistant_text', text: 'post-compaction output' }],
+      },
+      providerHistory: [
+        ...history,
+        hotCall,
+        hotResult,
+        { role: 'assistant', type: 'message', content: 'post-compaction output' },
+      ],
+      state: { previousResponseId: 'after-compaction' },
+    });
+    const providerHistory = (compactedTurn.event as Extract<LogEvent, { type: 'assistant_turn' }>).providerHistory!;
+    const laterUser = env({
+      type: 'user_message',
+      message: { id: 'user-3', sender: 'user', text: 'later turn', timestamp: 't3' } as any,
+    });
+    const laterAnswer = env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'later answer' }] },
+      state: { previousResponseId: 'later-response' },
+    });
+    const restored = replayEvents([
+      env({ type: 'session_init', id: 'compacted-session', createdAt: '2026-09-26T00:00:00Z' }),
+      env({
+        type: 'user_message',
+        message: { id: 'user-1', sender: 'user', text: 'earlier user turn', timestamp: 't1' } as any,
+      }),
+      firstTurn,
+      env({
+        type: 'user_message',
+        message: { id: 'user-2', sender: 'user', text: 'current user turn', timestamp: 't2' } as any,
+      }),
+      compactedTurn,
+      laterUser,
+      laterAnswer,
+    ]);
+
+    expect(JSON.stringify(restored.history)).not.toContain('DISTINCTIVE PRE-COMPACTION ASSISTANT PHRASE');
+    expect(JSON.stringify(restored.history)).not.toContain('COLD TOOL PAYLOAD');
+    expect(restored.history.slice(0, providerHistory.length)).toEqual(providerHistory);
+    expect(JSON.stringify(restored.history.slice(providerHistory.length))).toContain('later turn');
+    expect(JSON.stringify(restored.history.slice(providerHistory.length))).toContain('later answer');
+    expect(restored.history.filter((item: any) => item.callId === 'call-hot')).toHaveLength(2);
+    const store = new ConversationStore();
+    store.replaceHistory(restored.history);
+    expect(store.getProviderHistorySnapshot().history).toEqual(restored.history);
+  },
+);
 
 it('replays a memory receipt from the persisted event without adding it to provider history', () => {
   const record = env({

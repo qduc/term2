@@ -393,7 +393,9 @@ export class SessionStreamProcessor {
           this.deps.conversationStore.getHistory(),
           projectedSnapshot.output,
         );
-        if (replacementHistory) {
+        if (stream.historyReplacedByCompaction && projectedSnapshot.history.length > 0) {
+          // replayEvents applies the replacement when the terminal assistant_turn is logged.
+        } else if (replacementHistory) {
           this.deps.conversationStore.replaceHistory(replacementHistory);
         } else if (inputMode === 'delta') {
           appendWithoutReplayedTools(projectedSnapshot.output);
@@ -423,7 +425,9 @@ export class SessionStreamProcessor {
         // output cannot make a candidate eligible for future ownership work.
         const postCommitSnapshot = this.deps.conversationStore.getProviderHistorySnapshot();
         const candidateWasObserved = this.deps.providerContinuity.checkpoint?.state === 'candidate';
-        const historyCommitted = postCommitSnapshot.revision !== historyRevisionBeforeCommit;
+        const historyCommitted =
+          postCommitSnapshot.revision !== historyRevisionBeforeCommit ||
+          (stream.historyReplacedByCompaction === true && projectedSnapshot.history.length > 0);
         const promoted = this.deps.providerContinuity.publishTerminalResponse(
           snapshot.lastResponseId,
           historyCommitted,

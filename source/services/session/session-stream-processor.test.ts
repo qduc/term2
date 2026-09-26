@@ -59,14 +59,21 @@ const openAICompaction = (id: string) => ({
 
 const createProcessorForHistory = (conversationStore: ConversationStore) => {
   const generationGuard = new GenerationGuard();
+  const loggedEvents: unknown[] = [];
   return {
     generationGuard,
+    loggedEvents,
     processor: new SessionStreamProcessor({
       logger,
       sessionId: 'compaction-history-session',
       toolTracker: new SessionToolTracker(conversationStore),
       conversationStore,
-      conversationLogger: {} as ConversationLogger,
+      conversationLogger: {
+        hasSink: () => true,
+        log: (event: unknown) => {
+          loggedEvents.push(event);
+        },
+      } as unknown as ConversationLogger,
       providerContinuity: new ProviderContinuity(),
       generationGuard,
       journal: makeJournal(),
@@ -133,6 +140,176 @@ it('SessionStreamProcessor.finalize() appends ordinary terminal output when no c
     { role: 'user', type: 'message', content: 'Keep this history' },
     answer,
   ]);
+});
+
+it('SessionStreamProcessor.finalize() defers compacted-history replacement until the terminal assistant turn is logged', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('raw old turn');
+  conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw old answer' } as any]);
+  conversationStore.addUserMessage('current turn');
+  const { processor, generationGuard, loggedEvents } = createProcessorForHistory(conversationStore);
+  const checkpoint = {
+    role: 'system' as const,
+    type: 'message' as const,
+    content: 'summary of old turn',
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const hot = { role: 'user' as const, type: 'message' as const, content: 'current turn' };
+  const answer = { role: 'assistant' as const, type: 'message' as const, content: 'answer' };
+  const call = { type: 'function_call', callId: 'call-after-compact', name: 'echo', arguments: '{}' };
+  const result = { type: 'function_call_result', callId: 'call-after-compact', name: 'echo', output: 'ok' };
+  const stream = makeStream([], {
+    interruptions: [],
+    history: [{ role: 'user', type: 'message', content: 'raw old turn' }, checkpoint, hot, call, result, answer],
+    output: [answer],
+    historyReplacedByCompaction: true,
+  } as any);
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
+    { role: 'user', type: 'message', content: 'raw old turn' },
+    { role: 'assistant', type: 'message', content: 'raw old answer' },
+    { role: 'user', type: 'message', content: 'current turn' },
+  ]);
+});
+
+it('SessionStreamProcessor.finalize() defers native compact-history replacement until the terminal assistant turn is logged', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('raw old turn');
+  conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw old answer' } as any]);
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const nativeCheckpoint = {
+    type: 'compaction',
+    id: 'codex-checkpoint',
+    providerOpaque: { provider: 'openai' },
+    encrypted_content: 'opaque-checkpoint',
+  };
+  const answer = { role: 'assistant', type: 'message', content: 'answer after checkpoint' };
+  const stream = makeStream([], {
+    interruptions: [],
+    history: [nativeCheckpoint, answer],
+    output: [answer],
+    historyReplacedByCompaction: true,
+  } as any);
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
+    { role: 'user', type: 'message', content: 'raw old turn' },
+    { role: 'assistant', type: 'message', content: 'raw old answer' },
+  ]);
+});
+
+it('defers native compact artifact with tool-only hot tail until the terminal assistant turn is logged', () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('raw history');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const replacement = [
+    { type: 'compaction', id: 'codex-tool-only', encrypted_content: 'opaque', providerOpaque: { provider: 'openai' } },
+    { type: 'function_call', callId: 'call-hot', name: 'lookup', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call-hot', name: 'lookup', output: 'ok' },
+  ];
+  const stream = makeStream([], { history: replacement, interruptions: [], historyReplacedByCompaction: true } as any);
+
+  expect(processor.finalize(stream, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'committed' });
+  expect(conversationStore.getProviderHistorySnapshot().history).toEqual([
+    { role: 'user', type: 'message', content: 'raw history' },
+  ]);
+});
+
+it('keeps the compacted run transcript through approval continuation until its terminal turn is logged', async () => {
+  const conversationStore = new ConversationStore();
+  conversationStore.addUserMessage('prior user fact');
+  conversationStore.appendOutput([{ role: 'assistant', type: 'message', content: 'raw prior answer' } as any]);
+  conversationStore.addUserMessage('current user turn');
+  const { processor, generationGuard } = createProcessorForHistory(conversationStore);
+  const checkpoint = {
+    role: 'system' as const,
+    type: 'message' as const,
+    content: 'summary of prior user fact',
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  let requests = 0;
+  let compactCalls = 0;
+  const dispatched: any[] = [];
+  const loop = new ApplicationRunLoop({
+    resolveModel: () => ({
+      async *stream(request) {
+        dispatched.push(request);
+        requests += 1;
+        if (requests === 1) {
+          yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+          yield { type: 'completion', responseId: 'approval-pending', output: [] };
+        } else {
+          yield {
+            type: 'completion',
+            responseId: 'approval-complete',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'finished after approval' }] }],
+          };
+        }
+      },
+    }),
+  });
+  const agent: ApplicationAgent = {
+    name: 'test-agent',
+    instructions: 'Be concise.',
+    model: 'gpt-6-luna',
+    tools: [
+      {
+        name: 'danger',
+        description: 'Requires approval',
+        parameters: z.object({}),
+        needsApproval: () => true,
+        execute: async () => 'approved result',
+      } as any,
+    ],
+  };
+  const boundaryCompaction = {
+    compact: async ({ history }: { history: readonly AgentInputItem[]; automaticCompactionsThisRun: number }) => {
+      compactCalls += 1;
+      if (compactCalls > 1) return { kind: 'unchanged' as const };
+      expect(JSON.stringify(history)).toContain('prior user fact');
+      return {
+        kind: 'compacted' as const,
+        history: [...history.slice(0, 1), checkpoint, ...history.slice(-1)],
+        modelInput: [checkpoint],
+      };
+    },
+  };
+  const first = loop.startStream(agent, 'current user turn', {
+    providerId: 'codex',
+    supportsConversationChaining: true,
+    previousResponseId: 'previous-chain',
+    compactionHistory: conversationStore.getProviderHistorySnapshot().history,
+    boundaryCompaction,
+  });
+  for await (const _event of processor.process(first, {
+    gen: generationGuard.capture(),
+    source: 'startStream',
+    preserveExistingToolArgs: false,
+  })) {
+  }
+  expect(processor.finalize(first, generationGuard.capture(), 'delta', 'startStream')).toEqual({ kind: 'partial' });
+  expect(first.historyReplacedByCompaction).toBe(true);
+  expect(dispatched[0]).not.toHaveProperty('previousResponseId');
+  expect(first.history).not.toEqual(expect.arrayContaining([expect.objectContaining({ content: 'raw prior answer' })]));
+
+  const continuation = first.state as any;
+  continuation.approve?.(first.interruptions![0]);
+  const resumed = loop.continueRunStream(continuation, { boundaryCompaction });
+  for await (const _event of processor.process(resumed, {
+    gen: generationGuard.capture(),
+    source: 'continueRunStream',
+    preserveExistingToolArgs: true,
+  })) {
+  }
+  expect(processor.finalize(resumed, generationGuard.capture(), 'delta', 'continueRunStream')).toEqual({
+    kind: 'committed',
+  });
+
+  const snapshot = conversationStore.getProviderHistorySnapshot().history;
+  expect(JSON.stringify(snapshot)).toContain('raw prior answer');
+  expect(resumed.history.filter((item: any) => item.callId === 'call-approval')).toHaveLength(2);
+  expect(compactCalls).toBe(2);
 });
 
 it('SessionStreamProcessor.finalize() replaces a prior compaction instead of accumulating stale compaction items', () => {

@@ -215,6 +215,8 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
     case 'assistant_turn':
       return (
         isAssistantTurn(event['turn']) &&
+        (event['providerHistory'] === undefined ||
+          (Array.isArray(event['providerHistory']) && event['providerHistory'].every(isObject))) &&
         (event['snapshot'] === undefined || isSnapshot(event['snapshot'])) &&
         (event['state'] === undefined ||
           (isObject(event['state']) &&

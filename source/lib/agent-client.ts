@@ -227,6 +227,7 @@ export class AgentClient {
     history: readonly ProviderInputItem[];
     model: string;
     automaticCompactionsThisRun: number;
+    lastCompletedInputTokens?: number;
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
     manual: boolean;
@@ -246,13 +247,20 @@ export class AgentClient {
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
     });
+    const measuredInputTokens = Math.max(input.lastCompletedInputTokens ?? 0, estimate.renderedInputTokens);
     if (!input.manual) {
-      if (!threshold.available || estimate.renderedInputTokens < threshold.effectiveThreshold) {
+      if (!threshold.available || measuredInputTokens < threshold.effectiveThreshold) {
+        this.#logger.debug('Codex native compaction threshold not reached', {
+          model: input.model,
+          measuredInputTokens,
+          estimatedInputTokens: estimate.renderedInputTokens,
+          effectiveThreshold: threshold.available ? threshold.effectiveThreshold : undefined,
+        });
         return { kind: 'unchanged' };
       }
       const deferred = shouldDeferAutomaticCompaction({
         automaticCompactionsThisRun: input.automaticCompactionsThisRun,
-        renderedInputTokens: estimate.renderedInputTokens,
+        renderedInputTokens: measuredInputTokens,
         hasCompleteNewUserTurn: true,
       });
       if (deferred) return { kind: 'unchanged' };
@@ -325,6 +333,7 @@ export class AgentClient {
             history,
             model,
             automaticCompactionsThisRun,
+            lastCompletedInputTokens,
             signal,
             onStarted,
             manual: false,
@@ -480,8 +489,10 @@ export class AgentClient {
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
     });
+    const measuredHardFitTokens =
+      estimate.hardFitTokens + Math.max(0, (lastCompletedInputTokens ?? 0) - estimate.renderedInputTokens);
     const canSafelyDeferCompaction =
-      catalog?.contextWindow !== undefined && estimate.hardFitTokens <= catalog.contextWindow;
+      catalog?.contextWindow !== undefined && measuredHardFitTokens <= catalog.contextWindow;
     const config = {
       enabled: this.#settings.get('agent.sessionRollover.enabled') ?? true,
       milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
@@ -1370,6 +1381,7 @@ export class AgentClient {
           ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
             ? { previousResponseId: options.previousResponseId }
             : {}),
+          ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
           ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
           ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
           providerId: provider,
@@ -1382,8 +1394,15 @@ export class AgentClient {
           runBudget,
           ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
           ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-          onRequestBoundary: (history, onReminder, observation) =>
-            this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
+          onRequestBoundary: (history, onReminder, observation) => {
+            if (observation.compactionSkipReason) {
+              this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
+                reason: observation.compactionSkipReason,
+                measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
+              });
+            }
+            return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
+          },
         });
       };
       const stream = run();
@@ -1412,6 +1431,7 @@ export class AgentClient {
       ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
         ? { previousResponseId: options.previousResponseId }
         : {}),
+      ...(options.providerHistorySnapshot ? { compactionHistory: options.providerHistorySnapshot.history } : {}),
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
       ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
       providerId: provider,
@@ -1423,8 +1443,15 @@ export class AgentClient {
       runBudget,
       ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
       ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-      onRequestBoundary: (history, onReminder, observation) =>
-        this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
+      onRequestBoundary: (history, onReminder, observation) => {
+        if (observation.compactionSkipReason) {
+          this.#logger.debug('Automatic context compaction skipped without aligned chained history', {
+            reason: observation.compactionSkipReason,
+            measuredInputTokens: observation.lastCompletedInputTokens ?? 0,
+          });
+        }
+        return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
+      },
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

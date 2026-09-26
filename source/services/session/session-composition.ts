@@ -10,6 +10,7 @@ import {
 import { estimateContext, type ContextEstimate } from '../agent-runtime/context-compaction/index.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
+import { replayEvents } from '../conversation/conversation-replay.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod, getToolInfoFromInterruption } from '../interruption-info.js';
@@ -585,6 +586,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
     getToolLedger: () => toolTracker.export(),
     journal,
+    onProviderHistoryReplay: (envelopes) => {
+      conversationStore.replaceHistory(
+        replayEvents(envelopes as import('../conversation/conversation-decoder.js').PersistedLogEnvelope[]).history,
+      );
+    },
   });
   openAIRootFreshTurnSelectorParityObserver?.setEvidenceRecorder?.((evidence) => {
     try {

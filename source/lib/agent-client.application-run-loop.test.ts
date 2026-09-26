@@ -1301,6 +1301,247 @@ describe('AgentClient application-run-loop execution', () => {
 });
 
 describe('AgentClient codex session-history compaction', () => {
+  it.each(['native', 'local'] as const)(
+    'preserves earlier chained-turn context during %s automatic compaction',
+    async (mode) => {
+      providers.add('codex');
+      const requests: any[] = [];
+      let nativeCompactionInput: readonly unknown[] = [];
+      const compactHistory = vi.fn(async (request: { input: readonly unknown[] }) => {
+        nativeCompactionInput = request.input;
+        return { history: [{ type: 'message', role: 'user', content: 'native checkpoint prior-critical-fact' }] };
+      });
+      let ordinaryRequests = 0;
+      registerProvider(
+        {
+          id: 'codex',
+          label: 'Codex full-history compaction fixture',
+          capabilities: { supportsConversationChaining: true },
+          fetchModels: async () => [],
+          createStreamedModel: () => ({
+            compactHistory,
+            async *stream(request: any) {
+              requests.push(request);
+              if (request.instructions?.includes('You compact historical conversation data')) {
+                yield {
+                  type: 'completion' as const,
+                  responseId: 'summary',
+                  output: [
+                    {
+                      type: 'message' as const,
+                      content: [{ type: 'text' as const, text: 'summary of prior-critical-fact' }],
+                    },
+                  ],
+                };
+                return;
+              }
+              ordinaryRequests += 1;
+              yield {
+                type: 'completion' as const,
+                responseId: `full-history-${ordinaryRequests}`,
+                usage: { inputTokens: 250_000 },
+                output:
+                  ordinaryRequests === 1
+                    ? [{ type: 'tool_call' as const, id: 'call-1', name: 'echo', arguments: '{"value":"done"}' }]
+                    : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+              };
+            },
+          }),
+        },
+        { allowOverride: true },
+      );
+      const instance = client(
+        'codex',
+        {
+          agentOverride: {
+            name: 'override',
+            model: 'gpt-6-luna',
+            instructions: 'test',
+            tools: [
+              {
+                name: 'echo',
+                description: 'echo',
+                parameters: z.object({ value: z.string() }),
+                needsApproval: () => false,
+                execute: ({ value }: { value: string }) => value,
+              },
+            ],
+          },
+        },
+        {
+          'agent.contextCompaction.enabled': true,
+          'agent.contextCompaction.mode': mode,
+          'agent.contextCompaction.compactThreshold': 0.8,
+          'agent.contextCompaction.compactThresholdTokens': 1_000,
+        },
+      );
+      const snapshot = {
+        identity: 'test-history',
+        revision: 3,
+        history: [
+          { role: 'user', type: 'message', content: 'prior-critical-fact' },
+          { role: 'assistant', type: 'message', content: 'acknowledged' },
+          { role: 'user', type: 'message', content: 'another earlier user turn' },
+          { role: 'assistant', type: 'message', content: 'another earlier answer' },
+          { role: 'user', type: 'message', content: 'short chained-turn delta' },
+        ],
+      };
+      try {
+        await (
+          await instance.startStream('short chained-turn delta', {
+            previousResponseId: 'prior-response',
+            providerHistorySnapshot: snapshot,
+          } as any)
+        ).completed;
+        if (mode === 'native') {
+          expect(JSON.stringify(nativeCompactionInput)).toContain('prior-critical-fact');
+        } else {
+          const summarization = requests.find((request) =>
+            request.instructions?.includes('You compact historical conversation data'),
+          );
+          expect(summarization).toBeDefined();
+          expect(JSON.stringify(summarization?.input)).toContain('prior-critical-fact');
+        }
+        const continuedRequest = [...requests]
+          .reverse()
+          .find((request) => !request.instructions?.includes('You compact historical conversation data'));
+        expect(JSON.stringify(continuedRequest?.input)).toContain('prior-critical-fact');
+      } finally {
+        instance.dispose();
+      }
+    },
+  );
+
+  it('does not compact a chained delta when its authoritative history snapshot cannot be aligned', async () => {
+    providers.add('codex');
+    const compactHistory = vi.fn(async () => ({
+      history: [{ type: 'message', role: 'user', content: 'compacted' }],
+    }));
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex mismatched snapshot fixture',
+        capabilities: { supportsConversationChaining: true },
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          compactHistory,
+          async *stream() {
+            yield {
+              type: 'completion' as const,
+              responseId: 'unchanged-chain',
+              usage: { inputTokens: 250_000 },
+              output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+            };
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+    const instance = client(
+      'codex',
+      { agentOverride: { name: 'override', model: 'gpt-6-luna', instructions: 'test', tools: [] } },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'auto',
+        'agent.contextCompaction.compactThreshold': 0.8,
+      },
+    );
+    try {
+      await (
+        await instance.startStream('short chained delta', {
+          previousResponseId: 'prior-response',
+          providerHistorySnapshot: {
+            identity: 'mismatched-history',
+            revision: 1,
+            history: [{ role: 'user', type: 'message', content: 'some other user turn' }],
+          },
+        })
+      ).completed;
+      expect(compactHistory).not.toHaveBeenCalled();
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('uses provider-reported prompt size to gate native compaction on chained turns', async () => {
+    providers.add('codex');
+    const calls: string[] = [];
+    let ordinaryRequests = 0;
+    const compactHistory = vi.fn(async () => {
+      calls.push('compact');
+      return { history: [{ type: 'message', role: 'user', content: 'compacted' }] };
+    });
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex chained compaction fixture',
+        capabilities: { supportsConversationChaining: true },
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          compactHistory,
+          async *stream() {
+            calls.push('request');
+            ordinaryRequests += 1;
+            yield {
+              type: 'completion' as const,
+              responseId: `chained-${ordinaryRequests}`,
+              usage: { inputTokens: 250_000 },
+              output:
+                ordinaryRequests === 1
+                  ? [{ type: 'tool_call' as const, id: 'call-1', name: 'echo', arguments: '{"value":"done"}' }]
+                  : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+            };
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+    const instance = client(
+      'codex',
+      {
+        agentOverride: {
+          name: 'override',
+          model: 'gpt-6-luna',
+          instructions: 'test',
+          tools: [
+            {
+              name: 'echo',
+              description: 'echo',
+              parameters: z.object({ value: z.string() }),
+              needsApproval: () => false,
+              execute: ({ value }: { value: string }) => value,
+            },
+          ],
+        },
+      },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'auto',
+        'agent.contextCompaction.compactThreshold': 0.8,
+      },
+    );
+    try {
+      await (
+        await instance.startStream('short chained-turn delta', {
+          previousResponseId: 'earlier-response',
+          providerHistorySnapshot: {
+            identity: 'threshold-history',
+            revision: 3,
+            history: [
+              { role: 'user', type: 'message', content: 'earlier full-history turn' },
+              { role: 'assistant', type: 'message', content: 'earlier answer' },
+              { role: 'user', type: 'message', content: 'short chained-turn delta' },
+            ],
+          },
+        })
+      ).completed;
+      expect(compactHistory).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual(['request', 'compact', 'request']);
+    } finally {
+      instance.dispose();
+    }
+  });
+
   const coldHistory = [
     { role: 'user', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
     { role: 'assistant', type: 'message', content: 'cold answer' },

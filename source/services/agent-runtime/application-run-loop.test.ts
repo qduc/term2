@@ -428,6 +428,7 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
         providerId: 'openai',
         supportsConversationChaining: true,
         previousResponseId: 'stale',
+        compactionHistory: [{ role: 'user', type: 'message', content: 'old' }],
         boundaryCompaction: {
           compact: async () => ({
             kind: 'compacted',
@@ -447,6 +448,58 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
     expect(events).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'context_compaction_completed', strategy: 'local' })]),
     );
+  });
+
+  it('retains the compaction replacement marker across an approval continuation segment', async () => {
+    let calls = 0;
+    const tool: ToolDefinition = {
+      name: 'danger',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'approved result',
+      formatCommandMessage: () => [],
+    };
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          calls += 1;
+          if (calls === 1) {
+            yield { type: 'tool_call', id: 'call-approval', name: 'danger', arguments: '{}' };
+            yield { type: 'completion', responseId: 'approval-pending', output: [] };
+          } else {
+            yield {
+              type: 'completion',
+              responseId: 'approval-complete',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+            };
+          }
+        },
+      }),
+    });
+    const first = loop.startStream({ ...agent, tools: [tool] }, [{ role: 'user', type: 'message', content: 'do it' }], {
+      boundaryCompaction: {
+        compact: async () => ({
+          kind: 'compacted',
+          history: [
+            { role: 'user', type: 'message', content: 'do it' },
+            { role: 'system', type: 'message', content: 'checkpoint' },
+          ],
+          modelInput: [{ role: 'system', type: 'message', content: 'checkpoint' }],
+        }),
+      },
+    });
+    await collect(first);
+    expect(first.interruptions).toHaveLength(1);
+
+    const handle = first.state as any;
+    handle.approve?.(first.interruptions![0]);
+    const resumed = loop.continueRunStream(handle);
+    await resumed.completed;
+
+    expect(resumed.historyReplacedByCompaction).toBe(true);
+    expect(JSON.stringify(resumed.history)).toContain('checkpoint');
+    expect(resumed.history.filter((item: any) => item.callId === 'call-approval')).toHaveLength(2);
   });
 
   it('admits a steer that arrives while compaction is in flight before dispatching the request', async () => {
@@ -513,6 +566,7 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       providerId: 'openai',
       supportsConversationChaining: true,
       previousResponseId: 'still-live',
+      compactionHistory: original,
       boundaryCompaction: {
         compact: async () => ({ kind: 'failed', provider: 'openai' }),
       },

@@ -170,6 +170,47 @@ it('CLI --help documents the available command-line options', () => {
   expect(help).toContain('--ssh-port <port>');
   expect(help).toContain('-R, --resume [conversation-id|ls]');
   expect(help).toContain('--fork');
+  expect(help).toContain('In a chat, type / to see available commands.');
+  expect(help).toContain('settings.json');
+  expect(help).toContain('Log in to Grok in a browser');
+  expect(help).not.toContain('ChatForge BFF');
+  expect(help).not.toContain('exactly as before');
+});
+
+it('CLI supports the advertised -h and -v aliases', () => {
+  const env = createTestChildEnv({ HOME: testDir, DISABLE_LOGGING: '1' });
+  expect(execFileSync('node', [cliPath(), '-h'], { env, encoding: 'utf8' })).toContain('Usage');
+  expect(execFileSync('node', [cliPath(), '-v'], { env, encoding: 'utf8' })).toMatch(/\d+\.\d+/);
+});
+
+it('CLI rejects unknown flags with a clear error', () => {
+  let error: any;
+  try {
+    execFileSync('node', [cliPath(), '--not-a-term2-option'], {
+      env: createTestChildEnv({ HOME: testDir, DISABLE_LOGGING: '1' }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (caught: any) {
+    error = caught;
+  }
+  expect(error?.status).toBe(2);
+  expect(error?.stderr.toString()).toContain('Unknown flag');
+});
+
+it('CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  try {
+    const { status, stderr } = await spawnCli(
+      [cliPath(), '--lite'],
+      createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain('term2 needs an interactive terminal');
+    expect(stderr).toContain('term2 "<prompt>"');
+    expect(stderr).not.toContain('raw mode');
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
 });
 
 it('CLI --resume ls prints list of conversations and exits', () => {
@@ -738,8 +779,8 @@ it('CLI resolves --model <value> as the last argument to the model, not a prompt
 
     expect(stderr).not.toContain('No models match');
     expect(stderr).not.toContain('Multiple models match');
-    expect(stdout).toContain('mock-beta');
-    expect(stdout).not.toContain('mock-alpha');
+    expect(stderr).toContain('term2 needs an interactive terminal');
+    expect(stderr).not.toContain('raw mode');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });
@@ -765,8 +806,8 @@ it('CLI resolves -p <provider> -m <model> with nothing else to the model, not a 
     expect(stderr).not.toContain('No models match');
     expect(stderr).not.toContain('Multiple models match');
     expect(stderr).not.toContain('Unknown provider');
-    expect(stdout).toContain('mock-beta');
-    expect(stdout).not.toContain('mock-alpha');
+    expect(stderr).toContain('term2 needs an interactive terminal');
+    expect(stderr).not.toContain('raw mode');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });
@@ -846,7 +887,8 @@ it('CLI bare --model (no value) is a no-op outside a TTY session, not a picker a
 
     expect(stderr).not.toContain('No models match');
     expect(stderr).not.toContain('Multiple models match');
-    expect(stdout).toContain('mock-alpha');
+    expect(stderr).toContain('term2 needs an interactive terminal');
+    expect(stderr).not.toContain('raw mode');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });

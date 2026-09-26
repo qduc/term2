@@ -19,6 +19,7 @@ import { SSHService, SSHConfig } from './services/ssh-service.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
+import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
 import {
   createSessionCostAccumulator,
@@ -103,6 +104,12 @@ const printUsageOnce = () => {
   if (usagePrinted) return;
   usagePrinted = true;
   printUsage();
+  if (effectiveSessionId && effectiveHasConversationContent && !sessionSummaryPrinted) {
+    sessionSummaryPrinted = true;
+    // Only reachable once the session id exists, after SSH setup has run.
+    const resumeCommand = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
+    process.stdout.write(`\nSession: ${effectiveSessionId}\nTo resume this conversation: ${resumeCommand}\n`);
+  }
 };
 
 type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
@@ -110,6 +117,8 @@ let activeLogWriter: WriterHandle = null;
 let activeSessionBrowser: SessionBrowser | null = null;
 let activeMcpManager: McpConnectionManager | null = null;
 let effectiveSessionId: string | undefined;
+let effectiveHasConversationContent = false;
+let sessionSummaryPrinted = false;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
 process.on('SIGINT', () => {
@@ -174,9 +183,18 @@ process.on('exit', () => {
 
 const cli = meow(
   `
+    Everyday usage
+      $ term2
+      $ term2 "explain this function"
+      $ term2 --resume
+      $ term2 --resume <conversation-id>
+      $ term2 --help
+
     Usage
       $ term2 [options] [prompt...]
       $ term2 [options] --resume [conversation-id|ls]
+
+    In a chat, type / to see available commands.
 
     Options
       -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
@@ -195,9 +213,12 @@ const cli = meow(
           --list-models [search]           Print available models grouped by provider, filtered by an optional search term
           --refresh                        With --list-models, bypass the model catalog cache and re-fetch before listing
       -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
-          --fork                            Fork the resumed conversation into a new session (requires --resume)
+          --fork                           Fork the resumed conversation into a new session (requires --resume)
       -h, --help                           Show help
       -v, --version                        Show version
+
+    Settings
+      Settings file: ${path.join(resolveSettingsDirectory(), 'settings.json')}
 
     Notes
       A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
@@ -206,10 +227,10 @@ const cli = meow(
       -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
       interactive picker in a TTY session with no prompt; the same picker also opens for an
       ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
-      no-op. A value right after -m/--model is always the model, exactly as before.
+      no-op. If no model is selected, term2 starts with the configured default.
 
     Gateway launcher (term2 serve)
-      Runs the private web gateway for the ChatForge BFF until SIGINT/SIGTERM.
+      Runs the local web gateway until SIGINT/SIGTERM.
 
       $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
           [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
@@ -234,9 +255,7 @@ const cli = meow(
       and --auto-approve is rejected. --model is resolved against the model catalog
       non-interactively, so it needs an exact model id or <provider>/<model>.
 
-    Examples
-      $ term2
-      $ term2 "explain this function"
+    More examples
       $ term2 --model gpt-5.4 --provider openai
       $ term2 --model
       $ term2 --lite
@@ -263,6 +282,8 @@ const cli = meow(
         type: 'string',
         alias: 'm',
       },
+      help: { type: 'boolean', alias: 'h', default: false },
+      version: { type: 'boolean', alias: 'v', default: false },
       provider: {
         type: 'string',
         alias: 'p',
@@ -329,6 +350,7 @@ const cli = meow(
         default: false,
       },
     },
+    allowUnknownFlags: process.argv[2] === 'serve' || process.argv[2] === 'acp',
   },
 );
 
@@ -632,10 +654,6 @@ if (resumedConversation) {
   }
 }
 
-if (modelFlag) {
-  cliOverrides.agent = { ...cliOverrides.agent, model: modelFlag };
-}
-
 if (providerFlag) {
   cliOverrides.agent = { ...cliOverrides.agent, provider: providerFlag };
 }
@@ -682,12 +700,11 @@ if (modelFlagGivenWithoutValue && canUseInteractiveModelPicker) {
   const { runModelPickerHost } = await import('./services/models/model-picker-host.js');
   const picked = await runModelPickerHost({ settingsService: settings, loggingService: logger });
   if (picked.status === 'cancelled') {
-    console.error('Cancelled.');
-    process.exit(1);
+    // Escape keeps the configured (or resumed) model and continues startup.
+  } else {
+    settings.set('agent.model', picked.selection.modelId, { persist: false });
+    settings.set('agent.provider', picked.selection.provider, { persist: false });
   }
-  // Same session-only override contract as the --model <pattern> path below.
-  settings.set('agent.model', picked.selection.modelId, { persist: false });
-  settings.set('agent.provider', picked.selection.provider, { persist: false });
 }
 
 if (modelFlag) {
@@ -725,26 +742,29 @@ if (modelFlag) {
   }
 
   if (resolution.status === 'cancelled') {
-    console.error('Cancelled.');
-    process.exit(1);
-  }
-
-  // Surfaces provider catalogs that failed to load while resolution still
-  // proceeded, so a partial outage never silently narrows what was matched.
-  if ('warnings' in resolution && resolution.warnings) {
-    for (const warning of resolution.warnings) {
-      console.error(warning);
+    if (!canUseInteractiveModelPicker) {
+      console.error('Cancelled.');
+      process.exit(1);
     }
-  }
+    // Escape returns to the configured default model instead of aborting startup.
+  } else {
+    // Surfaces provider catalogs that failed to load while resolution still
+    // proceeded, so a partial outage never silently narrows what was matched.
+    if ('warnings' in resolution && resolution.warnings) {
+      for (const warning of resolution.warnings) {
+        console.error(warning);
+      }
+    }
 
-  // --model is a per-session override like every other CLI flag; it must not
-  // rewrite the user's persisted defaults (set() persists by default).
-  settings.set('agent.model', resolution.modelId, { persist: false });
-  if (resolution.provider) {
-    settings.set('agent.provider', resolution.provider, { persist: false });
-  }
-  if (resolution.reasoningEffort && !validatedReasoningEffort) {
-    settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+    // --model is a per-session override like every other CLI flag; it must not
+    // rewrite the user's persisted defaults (set() persists by default).
+    settings.set('agent.model', resolution.modelId, { persist: false });
+    if (resolution.provider) {
+      settings.set('agent.provider', resolution.provider, { persist: false });
+    }
+    if (resolution.reasoningEffort && !validatedReasoningEffort) {
+      settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+    }
   }
 }
 
@@ -1033,8 +1053,6 @@ effectiveSessionId = generateId();
 let effectiveCreatedAt = new Date().toISOString();
 let initialMessages: Message[] = [];
 let restoredStaticMessageIds: string[] = [];
-let effectiveHasConversationContent = false;
-
 if (resumedConversation) {
   effectiveSessionId = resumedConversation.id;
   effectiveCreatedAt = resumedConversation.createdAt;
@@ -1208,6 +1226,11 @@ import { InputProvider } from './context/InputContext.js';
 // individual write() breaks that frame-level atomicity and makes the terminal
 // paint blank/partial intermediate frames — visible flicker while streaming.
 
+if (!hasPositionalPrompt && (!nodeStdin.isTTY || !nodeStdout.isTTY)) {
+  console.error('term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"');
+  process.exit(1);
+}
+
 const { waitUntilExit } = render(
   (
     <InputProvider>
@@ -1268,9 +1291,5 @@ await sessionBrowser.close();
 activeSessionBrowser = null;
 await logWriter.close();
 activeLogWriter = null;
-const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
 printUsageOnce();
-if (effectiveHasConversationContent) {
-  console.log(`\nTo resume this conversation: ${resumeCmd}`);
-}
 process.exit(0);

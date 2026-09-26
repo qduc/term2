@@ -202,6 +202,7 @@ const ModelSelectionMenu: FC<Props> = ({
           </Text>
         </Box>
       )}
+      <Text color={COLOR_TEXT_SUBTLE}>Filter: {query || 'type to filter'}</Text>
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}

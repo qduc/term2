@@ -254,7 +254,7 @@ const ProviderSelectionMenu: FC<Props> = ({
                 ? 'Not logged in on this host · Run `term2 --codex-login`'
                 : 'Run `term2 --codex-login` to login to Codex';
             } else if (item.id === 'grok') {
-              suffix = unavailable ? 'Not logged in on this host · Run `term2 --grok-login`' : '';
+              suffix = unavailable ? 'Not logged in · Browser login: `term2 --grok-login`' : '';
             } else if (unavailable) {
               suffix = 'API key not configured on this host · Enter to configure';
             }

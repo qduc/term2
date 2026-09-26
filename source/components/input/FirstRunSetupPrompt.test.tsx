@@ -21,6 +21,15 @@ it('gives Codex login guidance while the provider is being configured', async ()
   expect(lastFrame()).toContain('retry.');
 });
 
+it('explains that Grok setup uses browser login instead of an API key', async () => {
+  const { lastFrame } = await renderInAct(<FirstRunSetupPrompt phase="provider" provider="grok" />);
+
+  expect(lastFrame()).toContain('Log in to Grok in your browser');
+  expect(lastFrame()).toContain('term2 --grok-login');
+  expect(lastFrame()).not.toContain('API key');
+  expect(lastFrame()).not.toContain('Credential presence');
+});
+
 it('guides the user to model selection after credentials are present', async () => {
   const { lastFrame } = await renderInAct(<FirstRunSetupPrompt phase="model" provider="openai" />);
 

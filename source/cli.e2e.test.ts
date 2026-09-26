@@ -59,4 +59,6 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: TEST_TIME
   const exit = await session.waitForExit(EXIT_TIMEOUT_MS);
   expect(exit.exitCode).toBe(0);
   expect(session.getVisibleOutput()).toContain('Lite');
+  expect(session.getVisibleOutput()).not.toContain('Session:');
+  expect(session.getVisibleOutput()).not.toContain('To resume this conversation:');
 });

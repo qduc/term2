@@ -1364,7 +1364,7 @@ it('CommandMessage renders a unified background launch with its run id', async (
   const output = stripAnsi(lastFrame() ?? '');
 
   expect(output).toContain('Delegated async');
-  expect(output).toContain('RunId: background-1');
+  expect(output).toContain('Run ID: background-1');
 });
 
 it('CommandMessage renders a rejected unified background launch as an error rather than a run id', async () => {
@@ -1385,7 +1385,7 @@ it('CommandMessage renders a rejected unified background launch as an error rath
   const output = stripAnsi(lastFrame() ?? '');
 
   expect(output).toContain('Async subagent name is already active: review');
-  expect(output).not.toContain('RunId:');
+  expect(output).not.toContain('Run ID:');
 });
 
 it('CommandMessage continues to render a legacy asynchronous launch with its run id', async () => {
@@ -1403,7 +1403,7 @@ it('CommandMessage continues to render a legacy asynchronous launch with its run
   const output = stripAnsi(lastFrame() ?? '');
 
   expect(output).toContain('Delegated async');
-  expect(output).toContain('RunId: legacy-background-1');
+  expect(output).toContain('Run ID: legacy-background-1');
 });
 
 it('CommandMessage renders web_search dashboard in standard mode', async () => {

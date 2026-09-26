@@ -30,7 +30,7 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1}>
       <Text color={COLOR_WARNING}>
-        {GLYPH_WARNING} Queue paused: {queueLength} item(s) pending.
+        {GLYPH_WARNING} Queue paused: {queueLength} {queueLength === 1 ? 'item' : 'items'} pending.
         {pauseReason === 'failure' ? ' Last turn failed.' : ''}
       </Text>
       <MenuFooter

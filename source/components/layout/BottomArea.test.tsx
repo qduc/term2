@@ -516,14 +516,14 @@ it.sequential('BottomArea shows processing indicator when busy with vertical spa
   });
 });
 
-it.sequential('BottomArea does not show the interrupt hint alongside the empty-input clear hint state', async () => {
+it.sequential('BottomArea shows the interrupt hint during a run even when the input is empty', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     interruptConfirmVisible: true,
   });
   const output = lastFrame() ?? '';
-  expect(output).not.toContain('Press Esc again to interrupt');
+  expect(output).toContain('Press Esc again to interrupt');
   expect(output).not.toContain('Press ESC');
   act(() => unmount());
 });

@@ -230,7 +230,6 @@ const BottomArea: FC<BottomAreaProps> = ({
 }) => {
   const { controller } = useInputState();
   const terminalColumns = useTerminalColumns();
-  const hasDraftInput = controller.getSnapshot().editor.text.length > 0;
   const [dotCount, setDotCount] = useState(1);
   const [workingElapsedSeconds, setWorkingElapsedSeconds] = useState(0);
   const workStartedAtRef = useRef<number | null>(null);
@@ -445,9 +444,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                   : `Processing · ${workingElapsedSeconds}s`}
               </Text>
             )}
-            {interruptConfirmVisible && hasDraftInput && (
-              <Text color={COLOR_WARNING}>Press Esc again to interrupt</Text>
-            )}
+            {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press Esc again to interrupt</Text>}
             <BackgroundTasksPanel
               tasks={mergeLiveTaskRows({
                 foreground:

@@ -26,7 +26,7 @@ const CopyMenu: FC<Props> = ({ items, selectedIndex }) => (
         hints={[
           ['↑↓', 'navigate'],
           ['⏎', 'copy'],
-          ['esc', 'cancel'],
+          ['Esc', 'cancel'],
         ]}
       />
     }

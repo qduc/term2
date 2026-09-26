@@ -128,7 +128,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           ['⏎', 'apply'],
           ...(canCopySuggestion ? [['Tab', 'use value'] as const] : []),
           ['Ctrl+D', `reset ${defaultText !== undefined ? `to ${defaultText}` : 'to default'}`],
-          ['esc', 'back'],
+          ['Esc', 'back'],
         ]}
       />
     </Box>

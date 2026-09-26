@@ -262,7 +262,7 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
   await writeInput(stdin, '\u001B[A');
   expect(lastFrame()).toContain('❯ second queued');
   expect(lastFrame()).not.toContain('❯ first queued');
-  expect(lastFrame()).toContain('↑↓ navigate │ e edit │ d delete │ esc back');
+  expect(lastFrame()).toContain('↑↓ navigate │ e edit │ d delete │ Esc back');
 
   await writeInput(stdin, 'e');
   expect(lastFrame()).toContain('edit queued ▸');

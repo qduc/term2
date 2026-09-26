@@ -39,7 +39,7 @@ const SELECTING_HINTS: ReadonlyArray<[key: string, action: string]> = [
   ['↑↓', 'navigate'],
   ['e', 'edit'],
   ['d', 'delete'],
-  ['esc', 'back'],
+  ['Esc', 'back'],
 ];
 
 /**

@@ -104,7 +104,7 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
         hints={[
           ['↑↓', 'navigate'],
           ['⏎', 'switch'],
-          ['esc', 'cancel'],
+          ['Esc', 'cancel'],
         ]}
       />
     </Box>

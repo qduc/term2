@@ -20,7 +20,7 @@ const HINTS: ReadonlyArray<[key: string, action: string]> = [
   ['↑↓', 'navigate'],
   ['⏎', 'select'],
   ['y/n', 'answer'],
-  ['esc', 'cancel'],
+  ['Esc', 'cancel'],
 ];
 
 /** The single look and key contract for every binary confirmation above the input. */

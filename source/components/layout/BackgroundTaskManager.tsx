@@ -390,7 +390,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           ['⏎', 'details'],
           ...(selectedForeground ? [['b', 'background'] as const] : []),
           ...(selected && isActive(selected) ? [['x', 'force stop'] as const] : []),
-          ['esc', 'close'],
+          ['Esc', 'close'],
         ]}
       />
     </Box>

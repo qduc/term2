@@ -99,7 +99,7 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
         hints={[
           ['↑↓', 'navigate'],
           ['⏎', 'select'],
-          ['esc', 'cancel'],
+          ['Esc', 'cancel'],
         ]}
       />
     </Box>

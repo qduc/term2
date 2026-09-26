@@ -2,6 +2,7 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 
 export type TurnInputOutcome = 'admitted' | 'released' | 'retracted';
 
+/** A user message waiting for the running turn's next request boundary. */
 type PendingInput = {
   readonly id?: string;
   readonly items: readonly ProviderInputItem[];
@@ -10,11 +11,19 @@ type PendingInput = {
 
 export type TurnInputDiagnostic = (message: string, meta: Record<string, unknown>) => void;
 
-/** Owns the pending-input mailbox and its turn/segment settlement rules. */
+/**
+ * Owns the pending-input mailbox and its turn/segment settlement rules.
+ *
+ * Segment state only covers a running or paused segment. The caller-owned
+ * open-turn state also keeps inputs steerable in gaps where no segment exists,
+ * such as startup before the first request or retry backoff. Only the caller
+ * that opened the turn knows those gaps still belong to it.
+ */
 export class TurnInputMailbox {
   #pending: PendingInput[] = [];
   #turnOpen = false;
   #segmentInFlight = false;
+  /** A paused segment (for example, awaiting approval) can resume at a boundary. */
   #segmentPaused = false;
   readonly #diagnostic?: TurnInputDiagnostic;
 

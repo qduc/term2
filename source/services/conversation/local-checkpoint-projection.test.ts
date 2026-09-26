@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
+import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
+import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
 
 const envelope = (seq: number, eventId: string, event: Record<string, unknown>): PersistedLogEnvelope => ({
   v: 3,
@@ -176,6 +178,174 @@ describe('deriveLocalCheckpointRequestHistory', () => {
       history: [...interruptedRequest, finalizedResponse],
       postCheckpointTurnFinalized: true,
     });
+  });
+
+  it('projects the production compaction plan and provenance resolver event order', () => {
+    const checkpoint: ProviderInputItem = {
+      role: 'system',
+      type: 'message',
+      content: 'summary',
+      contextSummary: { version: 1, strategy: 'local' },
+    };
+    const turn = (n: number): ProviderInputItem[] => [
+      { role: 'user', type: 'message', content: `user-${n}` },
+      { type: 'function_call', callId: `call-${n}`, name: 'read', arguments: '{}' },
+      { type: 'function_call_result', callId: `call-${n}`, name: 'read', output: `result-${n}` },
+      { role: 'assistant', type: 'message', content: `answer-${n}` },
+    ];
+    const history = [...turn(1), ...turn(2), ...turn(3), { role: 'user', type: 'message', content: 'current' }];
+    const plan = planLocalCompaction({ history, usableInputTokens: 64_000 });
+    expect(plan.kind).toBe('planned');
+    if (plan.kind !== 'planned') return;
+    expect(plan.coldPrefix).toEqual([...turn(1), ...turn(2)]);
+    expect(plan.hotTail).toEqual([...turn(3), { role: 'user', type: 'message', content: 'current' }]);
+
+    const persisted = [
+      envelope(1, 'u1', { type: 'user_message', message: { sender: 'user', text: 'user-1' } }),
+      envelope(2, 'a1', {
+        type: 'assistant_turn',
+        turn: {
+          items: [
+            { type: 'tool_call', callId: 'call-1', toolName: 'read', arguments: '{}' },
+            { type: 'tool_result', callId: 'call-1', toolName: 'read', output: 'result-1', status: 'completed' },
+            { type: 'assistant_text', text: 'answer-1' },
+          ],
+        },
+      }),
+      envelope(3, 'u2', { type: 'user_message', message: { sender: 'user', text: 'user-2' } }),
+      envelope(4, 'a2', {
+        type: 'assistant_turn',
+        turn: {
+          items: [
+            { type: 'tool_call', callId: 'call-2', toolName: 'read', arguments: '{}' },
+            { type: 'tool_result', callId: 'call-2', toolName: 'read', output: 'result-2', status: 'completed' },
+            { type: 'assistant_text', text: 'answer-2' },
+          ],
+        },
+      }),
+      envelope(5, 'u3', { type: 'user_message', message: { sender: 'user', text: 'user-3' } }),
+      envelope(6, 'a3', {
+        type: 'assistant_turn',
+        turn: {
+          items: [
+            { type: 'tool_call', callId: 'call-3', toolName: 'read', arguments: '{}' },
+            { type: 'tool_result', callId: 'call-3', toolName: 'read', output: 'result-3', status: 'completed' },
+            { type: 'assistant_text', text: 'answer-3' },
+          ],
+        },
+      }),
+      envelope(7, 'current', { type: 'user_message', message: { sender: 'user', text: 'current' } }),
+    ];
+    const sourceRefs = resolveCheckpointSourceRefs({ envelopes: persisted, history, hotTail: plan.hotTail });
+    expect(sourceRefs).toEqual([
+      { logId: 'session', eventId: 'u1' },
+      { logId: 'session', eventId: 'a1' },
+      { logId: 'session', eventId: 'u2' },
+      { logId: 'session', eventId: 'a2' },
+    ]);
+    const checkpointEvent = envelope(8, 'checkpoint', {
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'production-plan',
+      sourceRefs: sourceRefs!,
+      item: checkpoint,
+    });
+    const persistedHotTail: ProviderInputItem[] = [
+      { role: 'user', type: 'message', content: 'user-3' },
+      { type: 'function_call', callId: 'call-3', name: 'read', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-3', name: 'read', output: 'result-3' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'answer-3' }] },
+      { role: 'user', type: 'message', content: 'current' },
+    ];
+    const interruptedRequest = [checkpoint, ...persistedHotTail];
+    const replayedBefore = [history[0]!, ...history.slice(1)];
+    expect(deriveLocalCheckpointRequestHistory([...persisted, checkpointEvent], replayedBefore)).toMatchObject({
+      status: 'derived',
+      history: interruptedRequest,
+      postCheckpointTurnFinalized: false,
+    });
+
+    const currentAssistant = envelope(9, 'current-assistant', {
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'current answer' }] },
+      providerHistory: [
+        ...interruptedRequest,
+        {
+          role: 'assistant',
+          type: 'message',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'current answer' }],
+        },
+      ],
+    });
+    expect(
+      deriveLocalCheckpointRequestHistory(
+        [...persisted, checkpointEvent, currentAssistant],
+        [
+          ...interruptedRequest,
+          {
+            role: 'assistant',
+            type: 'message',
+            status: 'completed',
+            content: [{ type: 'output_text', text: 'current answer' }],
+          },
+        ],
+      ),
+    ).toMatchObject({ status: 'derived', postCheckpointTurnFinalized: true });
+  });
+
+  it('refuses a one-complete-turn tail without a current user and refuses a lone current user', () => {
+    const checkpoint: ProviderInputItem = {
+      role: 'system',
+      type: 'message',
+      content: 'summary',
+      contextSummary: { version: 1, strategy: 'local' },
+    };
+    const cold = [
+      envelope(1, 'cold-user', { type: 'user_message', message: { sender: 'user', text: 'cold' } }),
+      envelope(2, 'cold-assistant', assistantTurn('cold answer')),
+    ];
+    const hot = [
+      envelope(3, 'hot-user', { type: 'user_message', message: { sender: 'user', text: 'hot' } }),
+      envelope(4, 'hot-assistant', assistantTurn('hot answer')),
+    ];
+    const checkpointEvent = envelope(5, 'checkpoint', {
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'short-tail',
+      sourceRefs: [
+        { logId: 'session', eventId: 'cold-user' },
+        { logId: 'session', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    });
+
+    expect(
+      deriveLocalCheckpointRequestHistory(
+        [...cold, ...hot, checkpointEvent],
+        [checkpoint, { role: 'user', content: 'hot' }],
+      ),
+    ).toEqual({ status: 'refused' });
+    const currentUser = envelope(3, 'current-user', {
+      type: 'user_message',
+      message: { sender: 'user', text: 'current' },
+    });
+    const checkpointAfterCurrent = envelope(4, 'checkpoint', {
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'short-tail-current',
+      sourceRefs: [
+        { logId: 'session', eventId: 'cold-user' },
+        { logId: 'session', eventId: 'cold-assistant' },
+      ],
+      item: checkpoint,
+    });
+    expect(
+      deriveLocalCheckpointRequestHistory(
+        [...cold, currentUser, checkpointAfterCurrent],
+        [checkpoint, { role: 'user', content: 'current' }],
+      ),
+    ).toMatchObject({ status: 'refused' });
   });
 
   it('refuses an unresolved source reference without changing the safe history', () => {

@@ -105,7 +105,17 @@ export function deriveLocalCheckpointRequestHistory(
   const hasTrailingCurrentUser = hotTailEnvelopes.at(-1)?.event.type === 'user_message';
   const completedHotTail = hasTrailingCurrentUser ? hotTailEnvelopes.slice(0, -1) : hotTailEnvelopes;
   const completedHotUsers = completedHotTail.filter((envelope) => envelope.event.type === 'user_message').length;
-  if (!completeTurns(coldPrefixEnvelopes) || !completeTurns(completedHotTail) || completedHotUsers < 2) {
+  // The production planner always protects its two newest user turns. When
+  // replay sees the automatic-compaction boundary, one is the current open
+  // user and only the preceding protected turn is complete. Between turns,
+  // both protected turns are complete. Never accept a shorter suffix than
+  // that planner-defined boundary.
+  const minimumCompletedHotUsers = hasTrailingCurrentUser ? 1 : 2;
+  if (
+    !completeTurns(coldPrefixEnvelopes) ||
+    !completeTurns(completedHotTail) ||
+    completedHotUsers < minimumCompletedHotUsers
+  ) {
     return { status: 'refused' };
   }
 

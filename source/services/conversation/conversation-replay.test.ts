@@ -9,6 +9,8 @@ import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/m
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 import { ConversationStore } from './conversation-store.js';
+import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
+import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -870,6 +872,125 @@ it('replay derives a provenance-proven local checkpoint request from the checkpo
     nextAssistant,
   ]);
   expect(restored.previousResponseId).toBe('post-checkpoint-chain');
+});
+
+it('replays the production planner/provenance automatic checkpoint before and after current-turn finalization', () => {
+  const turn = (n: number) => [
+    { role: 'user' as const, type: 'message' as const, content: `user-${n}` },
+    { role: 'assistant' as const, type: 'message' as const, content: `answer-${n}` },
+  ];
+  const history = [
+    ...turn(1),
+    ...turn(2),
+    ...turn(3),
+    { role: 'user' as const, type: 'message' as const, content: 'current' },
+  ];
+  const plan = planLocalCompaction({ history, usableInputTokens: 64_000 });
+  expect(plan.kind).toBe('planned');
+  if (plan.kind !== 'planned') return;
+
+  const persisted = [
+    {
+      ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'user-1' } }),
+      logId: 's',
+      eventId: 'u1',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'answer-1' }] } }),
+      logId: 's',
+      eventId: 'a1',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'user-2' } }),
+      logId: 's',
+      eventId: 'u2',
+    },
+    {
+      ...env({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'answer-2' }] } }),
+      logId: 's',
+      eventId: 'a2',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'u3', sender: 'user', text: 'user-3' } }),
+      logId: 's',
+      eventId: 'u3',
+    },
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'answer-3' }] },
+        state: { previousResponseId: 'old-chain' },
+      }),
+      logId: 's',
+      eventId: 'a3',
+    },
+    {
+      ...env({ type: 'user_message', message: { id: 'current', sender: 'user', text: 'current' } }),
+      logId: 's',
+      eventId: 'current',
+    },
+  ];
+  const sourceRefs = resolveCheckpointSourceRefs({ envelopes: persisted, history, hotTail: plan.hotTail });
+  expect(sourceRefs).toEqual([
+    { logId: 's', eventId: 'u1' },
+    { logId: 's', eventId: 'a1' },
+    { logId: 's', eventId: 'u2' },
+    { logId: 's', eventId: 'a2' },
+  ]);
+  const checkpoint = {
+    role: 'system',
+    type: 'message',
+    content: 'summary',
+    contextSummary: { version: 1 as const, strategy: 'local' as const },
+  };
+  const checkpointEvent = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'automatic',
+      sourceRefs: sourceRefs!,
+      item: checkpoint,
+    }),
+    logId: 's',
+    eventId: 'checkpoint',
+  };
+  const interruptedRequest = [
+    checkpoint,
+    { role: 'user', type: 'message', content: 'user-3' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'answer-3' }] },
+    { role: 'user', type: 'message', content: 'current' },
+  ];
+  const atCheckpoint = replayEvents([...persisted, checkpointEvent]);
+  expect(atCheckpoint.history).toEqual(interruptedRequest);
+  expect(JSON.stringify(atCheckpoint.history)).not.toContain('answer-1');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('answer-3');
+  expect(JSON.stringify(atCheckpoint.history)).toContain('current');
+  expect(atCheckpoint.history.filter((item) => item.content === 'current')).toHaveLength(1);
+  expect(atCheckpoint.previousResponseId).toBeNull();
+
+  const nextAssistant = {
+    role: 'assistant',
+    type: 'message',
+    content: [{ type: 'output_text', text: 'current answer' }],
+  };
+  const finalized = replayEvents([
+    ...persisted,
+    checkpointEvent,
+    {
+      ...env({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text: 'current answer' }] },
+        state: { previousResponseId: 'new-chain' },
+        providerHistory: [...interruptedRequest, nextAssistant],
+      }),
+      logId: 's',
+      eventId: 'current-assistant',
+    },
+  ]);
+  expect(finalized.history).toEqual([...interruptedRequest, nextAssistant]);
+  expect(finalized.history.filter((item) => item.content === 'current')).toHaveLength(1);
+  expect(JSON.stringify(finalized.history)).not.toContain('answer-1');
+  expect(finalized.previousResponseId).toBe('new-chain');
 });
 
 it('replay applies a checkpoint appended just before a crash and severs the prior provider chain', () => {

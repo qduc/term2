@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, afterEach } from 'vitest';
@@ -36,6 +38,30 @@ const readTools = ['memory_list', 'memory_get', 'memory_search', 'memory_retriev
 const mutatingTools = new Set(['memory_create', 'memory_update', 'memory_delete']);
 
 describe('MemoryCapabilityBuilder', () => {
+  it('shares one on-disk project store between a git checkout and its worktrees', async () => {
+    const directory = makeTempDir();
+    const root = realpathSync(makeTempDir());
+    const repo = join(root, 'repo');
+    const worktree = join(root, 'repo-worktree');
+    execFileSync('git', ['init', '-q', repo], { stdio: 'ignore' });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'i'], {
+      cwd: repo,
+      stdio: 'ignore',
+    });
+    execFileSync('git', ['worktree', 'add', '-q', worktree], { cwd: repo, stdio: 'ignore' });
+    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
+
+    await builder
+      .projectStore(worktree)
+      .create({ id: 'shared-rule', title: 'Shared rule', summary: 'Applies everywhere.', content: 'body' });
+
+    expect(await builder.projectStore(repo).get('shared-rule')).not.toBeNull();
+    // Existing stores are addressed by sha256 of the project root; changing the
+    // key would orphan every memory already written.
+    const projectId = createHash('sha256').update(repo).digest('hex');
+    expect(existsSync(join(directory, 'projects', projectId))).toBe(true);
+  });
+
   it('makes an automatic project preference available to a new session and supports undo', async () => {
     const directory = makeTempDir();
     const settings = createMockSettingsService({ 'memory.directory': directory });

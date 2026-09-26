@@ -2,13 +2,13 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 /**
- * Session scope identity. A session belongs to the git project that owns the
- * directory it was persisted under, so a project's root checkout and all of
- * its worktrees share one scope — the same identity persistent memory uses
- * (`git rev-parse --git-common-dir`). Every scope comparison, in persistence
- * and in the session index, must go through {@link projectScopeKey}: separate
- * call sites choosing their own root is how rotated sessions once became
- * invisible to their own process.
+ * Project identity for sessions and persistent memory. A path belongs to the
+ * git project that owns it (`git rev-parse --git-common-dir`), so a project's
+ * root checkout and all of its worktrees share one scope and one project
+ * memory store. Every project comparison — persistence, the session index, and
+ * the memory store directory — must go through {@link projectScopeKey}:
+ * separate call sites choosing their own root is how rotated sessions once
+ * became invisible to their own process.
  */
 
 export function normalizeProjectPath(projectPath: string): string {

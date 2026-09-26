@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { normalizeProjectPath, projectScopeKey } from './project-scope.js';
+import { normalizeProjectPath, projectScopeKey } from '../../utils/project-scope.js';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';

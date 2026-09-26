@@ -373,7 +373,7 @@ it.sequential('forkConversation: immediately persists the fork identity, provena
   });
 });
 
-it.sequential('loadConversation: skips malformed identities, duplicate IDs, and non-monotonic sequence records', () => {
+it.sequential('loadConversation: deduplicates explicit IDs but retains non-monotonic legacy records', () => {
   const id = persistenceModule.generateId();
   const records = [
     { v: 3, seq: 1, ts: 't', event: { type: 'session_init', id, createdAt: 't' } },
@@ -393,7 +393,7 @@ it.sequential('loadConversation: skips malformed identities, duplicate IDs, and 
     },
     {
       v: 3,
-      seq: 3,
+      seq: 2,
       ts: 't',
       eventId: 'out-of-order',
       event: { type: 'user_message', message: { id: 'u3', sender: 'user', text: 'out of order' } },
@@ -412,7 +412,23 @@ it.sequential('loadConversation: skips malformed identities, duplicate IDs, and 
   );
   expect(
     persistenceModule.loadConversation(id)?.messages.map((message) => ('text' in message ? message.text : undefined)),
-  ).toEqual(['kept', 'also kept', 'Previous turn was interrupted — send a message to continue.']);
+  ).toEqual(['kept', 'out of order', 'also kept', 'Previous turn was interrupted — send a message to continue.']);
+});
+
+it.sequential('loadConversation: replays distinct events after a sequence restart and repeated sequence', () => {
+  const id = persistenceModule.generateId();
+  const records = [
+    { v: 3, seq: 1, ts: 't', event: { type: 'session_init', id, createdAt: 't', model: 'initial' } },
+    { v: 3, seq: 2, ts: 't', event: { type: 'settings_changed', key: 'agent.model', value: 'before-resume' } },
+    { v: 3, seq: 1, ts: 't2', event: { type: 'session_init', id, createdAt: 't', model: 'resumed' } },
+    { v: 3, seq: 2, ts: 't2', event: { type: 'settings_changed', key: 'agent.model', value: 'after-resume' } },
+    { v: 3, seq: 2, ts: 't2', event: { type: 'settings_changed', key: 'agent.provider', value: 'openai' } },
+  ];
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+  );
+  expect(persistenceModule.loadConversation(id)).toMatchObject({ id, model: 'after-resume', provider: 'openai' });
 });
 
 it.sequential('loadConversation: preserves valid legacy envelopes beginning at sequence zero', () => {

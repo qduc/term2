@@ -8,14 +8,43 @@ import type { Message } from '../../types/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
 
-/** Materialize a stable reference for envelopes written before event IDs existed. */
-export function resolveEnvelopeIdentity(envelope: PersistedLogEnvelope, logId: string): PersistedLogEnvelope {
-  const resolvedLogId = envelope.logId ?? logId;
-  return {
-    ...envelope,
-    logId: resolvedLogId,
-    eventId: envelope.eventId ?? `legacy:${resolvedLogId}:${envelope.seq}`,
-  };
+/** Materialize stable references without collapsing distinct legacy records. */
+export function resolveEnvelopeIdentities(
+  envelopes: readonly PersistedLogEnvelope[],
+  fallbackLogId: string,
+  options: { deduplicateExplicitEventIds?: boolean } = {},
+): PersistedLogEnvelope[] {
+  const deduplicateExplicitEventIds = options.deduplicateExplicitEventIds ?? true;
+  const reservedIds = new Set(envelopes.flatMap((envelope) => (envelope.eventId ? [envelope.eventId] : [])));
+  const usedIds = new Set<string>();
+  const seenExplicitIds = new Set<string>();
+  const legacyOccurrences = new Map<string, number>();
+  const resolved: PersistedLogEnvelope[] = [];
+
+  for (const envelope of envelopes) {
+    const logId = envelope.logId ?? fallbackLogId;
+    if (envelope.eventId) {
+      if (deduplicateExplicitEventIds && seenExplicitIds.has(envelope.eventId)) continue;
+      seenExplicitIds.add(envelope.eventId);
+      usedIds.add(envelope.eventId);
+      resolved.push({ ...envelope, logId });
+      continue;
+    }
+
+    const occurrenceKey = JSON.stringify([logId, envelope.seq]);
+    let occurrence = (legacyOccurrences.get(occurrenceKey) ?? 0) + 1;
+    let eventId =
+      occurrence === 1 ? `legacy:${logId}:${envelope.seq}` : `legacy:${logId}:${envelope.seq}:${occurrence}`;
+    while (reservedIds.has(eventId) || usedIds.has(eventId)) {
+      occurrence += 1;
+      eventId = `legacy:${logId}:${envelope.seq}:${occurrence}`;
+    }
+    legacyOccurrences.set(occurrenceKey, occurrence);
+    usedIds.add(eventId);
+    resolved.push({ ...envelope, logId, eventId });
+  }
+
+  return resolved;
 }
 
 type UnknownObject = Record<string, unknown>;

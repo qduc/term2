@@ -10,7 +10,7 @@ import {
   deltaSidecarPathFor,
   isTruncatedLogEvent,
 } from '../logging/conversation-log-events.js';
-import { decodeLogEnvelope, resolveEnvelopeIdentity, type PersistedLogEnvelope } from './conversation-decoder.js';
+import { decodeLogEnvelope, resolveEnvelopeIdentities, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 import { auditSessionLog, type SessionAudit } from './session-audit.js';
 
@@ -199,24 +199,16 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-function decodeEnvelopeLines(content: string, logId: string): PersistedLogEnvelope[] {
+function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
   const lines = content.split('\n');
   const envelopes: PersistedLogEnvelope[] = [];
-  const seenEventIds = new Set<string>();
-  let previousSeq = -1;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       const envelope = decodeLogEnvelope(parsed);
-      if (envelope && Number.isSafeInteger(envelope.seq) && envelope.seq >= 0 && envelope.seq > previousSeq) {
-        const identified = resolveEnvelopeIdentity(envelope, logId);
-        previousSeq = envelope.seq;
-        if (seenEventIds.has(identified.eventId!)) continue;
-        seenEventIds.add(identified.eventId!);
-        envelopes.push(identified);
-      }
+      if (envelope) envelopes.push(envelope);
     } catch {
       // skip corrupt line
     }
@@ -232,39 +224,33 @@ function decodeEnvelopeLines(content: string, logId: string): PersistedLogEnvelo
  * does exist, its deltas are interleaved by `seq` so `applyInterruptedTurnJournals`
  * sees the same ordering it would have seen from a single inline log.
  *
- * Both files share one sequence counter, so the merge is a stable sort. Logs
+ * Both files share one sequence counter, so the merge is a stable sort. Equal
+ * sequence ties retain canonical-file order before sidecar order. Logs
  * written before the sidecar split carry their deltas inline and are unaffected.
  */
 function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
   const logId = path.basename(filePath, '.jsonl');
-  const envelopes = decodeEnvelopeLines(fs.readFileSync(filePath, 'utf-8'), logId);
+  const envelopes = decodeEnvelopeLines(fs.readFileSync(filePath, 'utf-8'));
 
   const sidecarPath = deltaSidecarPathFor(filePath);
   if (!fs.existsSync(sidecarPath)) {
-    return envelopes;
+    return resolveEnvelopeIdentities(envelopes, logId);
   }
 
   let deltas: PersistedLogEnvelope[];
   try {
-    deltas = decodeEnvelopeLines(fs.readFileSync(sidecarPath, 'utf-8'), logId);
+    deltas = decodeEnvelopeLines(fs.readFileSync(sidecarPath, 'utf-8'));
   } catch {
     // An unreadable sidecar degrades an interrupted turn; it must never make
     // an otherwise-loadable conversation fail to open.
-    return envelopes;
+    return resolveEnvelopeIdentities(envelopes, logId);
   }
   if (deltas.length === 0) {
-    return envelopes;
+    return resolveEnvelopeIdentities(envelopes, logId);
   }
 
   const ordered = [...envelopes, ...deltas].sort((a, b) => a.seq - b.seq);
-  const seenIds = new Set<string>();
-  let previousSeq = -1;
-  return ordered.filter((envelope) => {
-    if (envelope.seq < 0 || envelope.seq <= previousSeq || seenIds.has(envelope.eventId!)) return false;
-    previousSeq = envelope.seq;
-    seenIds.add(envelope.eventId!);
-    return true;
-  });
+  return resolveEnvelopeIdentities(ordered, logId);
 }
 
 function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]): string | undefined {
@@ -796,24 +782,33 @@ export function forkConversation(sourceId: string, newId: string): boolean {
     return false;
   }
 
-  const lines = fs.readFileSync(srcPath, 'utf-8').split('\n');
+  const lines = fs
+    .readFileSync(srcPath, 'utf-8')
+    .split('\n')
+    .filter((line) => line.trim());
+  const parsedLines = lines.map((line) => {
+    try {
+      return decodeLogEnvelope(JSON.parse(line) as unknown);
+    } catch {
+      return null;
+    }
+  });
+  const identities = resolveEnvelopeIdentities(
+    parsedLines.filter((envelope): envelope is PersistedLogEnvelope => envelope !== null),
+    sourceId,
+    { deduplicateExplicitEventIds: false },
+  );
+  let identityIndex = 0;
   let latestInit: PersistedLogEnvelope | null = null;
   let highWaterSeq = 0;
-  const forkedLines = lines
-    .filter((line) => line.trim())
-    .map((line) => {
-      try {
-        const parsed = JSON.parse(line) as unknown;
-        const envelope = decodeLogEnvelope(parsed);
-        if (!envelope) return line;
-        if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
-        const identified = resolveEnvelopeIdentity(envelope, sourceId);
-        if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
-        return JSON.stringify(identified);
-      } catch {
-        return line;
-      }
-    });
+  const forkedLines = lines.map((line, index) => {
+    const envelope = parsedLines[index];
+    if (!envelope) return line;
+    const identified = identities[identityIndex++]!;
+    if (Number.isSafeInteger(envelope.seq) && envelope.seq > highWaterSeq) highWaterSeq = envelope.seq;
+    if (!isTruncatedLogEvent(identified.event) && identified.event.type === 'session_init') latestInit = identified;
+    return JSON.stringify(identified);
+  });
   const initEnvelope = latestInit as PersistedLogEnvelope | null;
   if (!initEnvelope || isTruncatedLogEvent(initEnvelope.event) || initEnvelope.event.type !== 'session_init') {
     return false;

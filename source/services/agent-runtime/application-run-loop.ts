@@ -260,7 +260,6 @@ export type ApplicationRunLoopDiagnosticOptions = {
  */
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
-/** A user message waiting for the running turn's next request boundary. */
 type PendingApproval = {
   callId: string;
   toolName: string;

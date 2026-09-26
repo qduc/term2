@@ -147,6 +147,30 @@ export function projectSemanticEvents(
     if (checkpoint.sourceRefs.length === 0) {
       return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
     }
+
+    let resetSeq = -1;
+    for (const envelope of envelopes) {
+      if (envelope.seq >= checkpoint.envelope.seq) continue;
+      if (!isTruncatedLogEvent(envelope.event) && envelope.event.type === 'session_cleared') {
+        resetSeq = Math.max(resetSeq, envelope.seq);
+      }
+    }
+    const eligibleSources = envelopes
+      .filter(
+        (envelope) =>
+          envelope.seq > resetSeq &&
+          envelope.seq < checkpoint.envelope.seq &&
+          !isTruncatedLogEvent(envelope.event) &&
+          (envelope.event.type === 'user_message' || envelope.event.type === 'assistant_turn'),
+      )
+      .sort((left, right) => left.seq - right.seq);
+    const eligibleSourceKeys = eligibleSources.map(envelopeRefKey);
+    if (
+      eligibleSourceKeys.some((key) => key === null || eventsByRef.get(key)?.length !== 1 || retractedRefs.has(key)) ||
+      checkpoint.sourceRefs.some((ref, index) => refKey(ref) !== eligibleSourceKeys[index])
+    ) {
+      return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
+    }
     state.history.push(structuredClone(checkpoint.item) as (typeof state.history)[number]);
   }
   return { status: 'projected', state };

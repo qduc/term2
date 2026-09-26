@@ -67,8 +67,6 @@ export const DENIED_READ_APPROVE_ANSWERS: ReadonlySet<DeniedReadApproveAnswer> =
 export function isDeniedReadApproveAnswer(answer: string | undefined): answer is DeniedReadApproveAnswer {
   return typeof answer === 'string' && DENIED_READ_APPROVE_ANSWERS.has(answer as DeniedReadApproveAnswer);
 }
-/** The deny answer for the denied-read variant (treated as a rejection). */
-export const DENIED_READ_DENY_ANSWER = 'deny';
 
 /**
  * Metadata attached to a shell approval when the sandbox denied a read and the agent

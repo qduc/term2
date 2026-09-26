@@ -44,11 +44,6 @@ function resolveTempDir(): string {
   return join(base, basename(homedir()), appDir);
 }
 
-export function ensureSandboxTempDir(): string {
-  ensurePrivateDir(SANDBOX_TEMP_DIR);
-  return SANDBOX_TEMP_DIR;
-}
-
 export const SANDBOX_TEMP_DIR = resolveTempDir();
 
 export interface SandboxXdgLayout {

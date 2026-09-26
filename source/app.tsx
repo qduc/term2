@@ -98,15 +98,6 @@ function projectNestedApproval(
   }
 }
 
-export {
-  appendStartupBannerId,
-  clearTerminalForRedraw,
-  clearVisibleForResize,
-  messagesHaveNonSystemContent,
-  scheduleExitSideEffects,
-  TERMINAL_REDRAW_CLEAR,
-} from './app-helpers.js';
-
 /**
  * How long the composer must be quiet before the large-uncached-input advisory
  * is recomputed. Long enough that a burst of typing costs one pass instead of

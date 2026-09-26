@@ -1490,7 +1490,7 @@ export class AgentClient {
   }
 }
 
-export function backgroundShellEventToConversationEvent(
+function backgroundShellEventToConversationEvent(
   event: BackgroundShellEvent<BackgroundShellExecutionResult>,
 ): ConversationEvent {
   if (event.type === 'background_shell_started') {

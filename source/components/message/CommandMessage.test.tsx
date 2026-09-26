@@ -45,6 +45,89 @@ afterAll(() => {
 
 const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
+it('summarizes structured raw errors and retains their full diagnostic detail', async () => {
+  const rawError = [
+    '{"error":{"message":"429 Too Many Requests"},"code":"RATE_LIMIT","requestId":"req-123","details":[',
+    '"diagnostic detail line 1",',
+    '"diagnostic detail line 2",',
+    '"diagnostic detail line 3",',
+    '"diagnostic detail line 4",',
+    '"diagnostic detail line 5"]}',
+  ].join('\n');
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="web_search"
+      toolName="web_search"
+      status="completed"
+      success={false}
+      output={rawError}
+      displayMode="standard"
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Tool failed.');
+  expect(output).toContain('Review the error details and retry after correcting the issue.');
+  expect(output).toContain('429 Too Many Requests');
+  expect(output).toContain('RATE_LIMIT');
+  expect(output).toContain('req-123');
+  expect(output).toContain('more lines');
+  expect(output).not.toContain('diagnostic detail line 4');
+  unmount();
+});
+
+it('keeps structured apply_patch failures in their specialized bounded rendering path', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="apply_patch"
+      toolName="apply_patch"
+      toolArgs={{ type: 'modify', path: 'src/file.ts' }}
+      status="completed"
+      success={false}
+      output={'{"error":{"message":"Patch rejected"},"code":"PATCH_INVALID"}'}
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Tool failed.');
+  expect(output).toContain('Patch rejected');
+  expect(output).toContain('PATCH_INVALID');
+  unmount();
+});
+
+it('does not add the generic failure summary to concise approval denials', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="shell: run command"
+      toolName="shell"
+      status="completed"
+      success={false}
+      isApprovalRejection
+      displayMode="concise"
+      output={'{"error":{"message":"User declined this command"}}'}
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('DENIED');
+  expect(output).toContain('User declined this command');
+  expect(output).not.toContain('Tool failed.');
+  unmount();
+});
+
+it('keeps actionable validation failures unchanged', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="apply_patch"
+      toolName="apply_patch"
+      status="failed"
+      success={false}
+      failureReason="Patch context did not match; reread the file and retry with current context."
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Patch context did not match; reread the file and retry with current context.');
+  expect(output).not.toContain('Tool failed.');
+  unmount();
+});
+
 const advanceTimersInAct = async (ms: number) => {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);

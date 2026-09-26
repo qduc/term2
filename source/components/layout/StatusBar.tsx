@@ -328,8 +328,9 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const tokenPieces: string[] = [];
   if (lastUsage?.prompt_tokens != null) tokenPieces.push(`↑${formatStatusBarTokens(lastUsage.prompt_tokens)}`);
+  let speedText = '';
   if (lastUsage?.completion_tokens != null) {
-    let completionPiece = `↓${formatStatusBarTokens(lastUsage.completion_tokens)}`;
+    tokenPieces.push(`↓${formatStatusBarTokens(lastUsage.completion_tokens)}`);
     // A burst-inflated settled rate is hidden outright; falling back to the
     // live rate would show a different turn's number.
     const speed = lastUsage.tokens_per_second_burst
@@ -337,11 +338,10 @@ const StatusBar: FC<StatusBarProps> = ({
       : lastUsage.tokens_per_second ?? liveStreamingSpeed?.tps;
     if (speed != null && speed > 0) {
       const approximate = lastUsage.tokens_per_second != null && Boolean(lastUsage.tokens_per_second_estimated);
-      completionPiece += ` (${formatStatusBarRate(speed, approximate)})`;
+      speedText = `(${formatStatusBarRate(speed, approximate)})`;
     }
-    tokenPieces.push(completionPiece);
   } else if (liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0) {
-    tokenPieces.push(`(${formatStatusBarRate(liveStreamingSpeed.tps, false)})`);
+    speedText = `(${formatStatusBarRate(liveStreamingSpeed.tps, false)})`;
   }
   const tokensText = tokenPieces.join(' ');
 
@@ -586,6 +586,7 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const metricsSegments: StatusSegment[] = [
     { id: 'tokens', text: tokensText, color: usageColor, bold: Boolean(largeUncachedWarning), tier: 4 },
+    { id: 'speed', text: speedText, color: slate, separator: 'metric', tier: 0 },
     {
       id: 'cache',
       text: cacheText,

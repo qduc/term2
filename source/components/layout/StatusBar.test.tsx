@@ -819,10 +819,22 @@ it.sequential('StatusBar preserves the complete model and safety mode across com
     'sandbox.enabled': false,
   });
 
-  for (const columns of [60, 85, 120]) {
+  for (const columns of [44, 60, 85, 120]) {
     let output = '';
     act(() => {
-      output = renderToString(<StatusBar settingsService={settingsService} columns={columns} />, { columns });
+      output = renderToString(
+        <StatusBar
+          settingsService={settingsService}
+          columns={columns}
+          lastUsage={{
+            prompt_tokens: 29_400,
+            completion_tokens: 269,
+            cache_read_tokens: 24_355,
+            tokens_per_second: 48.2,
+          }}
+        />,
+        { columns },
+      );
     });
     expect(output).toContain('Codex/gpt-5.6-luna');
     expect(output).toContain('YOLO');
@@ -926,7 +938,7 @@ it.sequential('StatusBar renders token streaming speed when present in lastUsage
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2t/s)');
+  expect(output).toContain('↓450 · (48.2t/s)');
 });
 
 it.sequential('StatusBar prefixes estimated token speed with a tilde', async () => {
@@ -947,7 +959,7 @@ it.sequential('StatusBar prefixes estimated token speed with a tilde', async () 
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (~48.2t/s)');
+  expect(output).toContain('↓450 · (~48.2t/s)');
 });
 
 it.sequential('StatusBar hides a burst-inflated decode rate', async () => {
@@ -990,7 +1002,7 @@ it.sequential('StatusBar shows a sustained rate', async () => {
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output).toContain('↓450 (48.2t/s)');
+  expect(output).toContain('↓450 · (48.2t/s)');
 });
 
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {

@@ -373,7 +373,19 @@ async function runCell(cell, args, task, prepared) {
   try {
     result = await spawnCommand(
       process.execPath,
-      [cli, '-p', pin.provider, '-m', pin.model, '-r', pin.reasoningEffort, '--auto-approve', '--json', '--quiet', task.prompt],
+      [
+        cli,
+        '-p',
+        pin.provider,
+        '-m',
+        pin.model,
+        '-r',
+        pin.reasoningEffort,
+        '--auto-approve',
+        '--json',
+        '--quiet',
+        task.prompt,
+      ],
       { cwd: prepared.workspace, env: { ...process.env, ...prepared.isolated.env }, timeoutMs: args.timeoutMs },
     );
   } finally {
@@ -391,7 +403,13 @@ async function runCell(cell, args, task, prepared) {
   const rawHeader = snapshotFromRawSidecars(trafficRoot);
   const headerSnapshot = rawHeader.ok
     ? rawHeader
-    : { ...rawHeader, source: rawHeader.source || 'missing-raw', headerFound: false, combinedHeaderBytes: 0, toolNames: [] };
+    : {
+        ...rawHeader,
+        source: rawHeader.source || 'missing-raw',
+        headerFound: false,
+        combinedHeaderBytes: 0,
+        toolNames: [],
+      };
   const metrics = extractCellMetrics({ events, wallTimeMs, headerSnapshot });
   const identityMatch = matchIdentity(metrics.identity, pin);
   const identityOk = identityMatch.ok;
@@ -549,7 +567,9 @@ async function main() {
       );
       process.exitCode = runProcessExitCode({ preflightBlockers: report.blockers, paid });
     } else if (args.command === 'run' && !args.go) {
-      process.stdout.write(JSON.stringify({ skippedPaid: true, reason: 'pass --go after final candidate review' }, null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify({ skippedPaid: true, reason: 'pass --go after final candidate review' }, null, 2) + '\n',
+      );
     }
     if (args.command === 'preflight' && report.blockers.length) process.exitCode = 2;
     return;

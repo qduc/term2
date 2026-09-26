@@ -21,9 +21,7 @@ import path from 'node:path';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const manifestPath = path.join(root, '.github', 'vitest.lane.safe.txt');
 
-const seeds = process.argv[2]
-  ? [process.argv[2]]
-  : ['20260829', '314159'];
+const seeds = process.argv[2] ? [process.argv[2]] : ['20260829', '314159'];
 
 const manifest = readFileSync(manifestPath, 'utf8')
   .split('\n')
@@ -66,7 +64,9 @@ for (const seed of seeds) {
   const code = result.status ?? 1;
   if (result.signal === 'SIGKILL') {
     console.error(
-      `deterministic lane: seed ${seed} exceeded ${SEED_TIMEOUT_MS / 1000}s — likely a leaked keepalive; treat as failure`,
+      `deterministic lane: seed ${seed} exceeded ${
+        SEED_TIMEOUT_MS / 1000
+      }s — likely a leaked keepalive; treat as failure`,
     );
   }
   if (code > worst) worst = code;

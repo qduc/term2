@@ -72,7 +72,9 @@ function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, { encoding: 'utf8', timeout: 600_000, ...opts });
   if (result.error) throw new Error(`${cmd} spawn failed: ${result.error.message}`);
   if (result.status !== 0) {
-    throw new Error(`${cmd} ${args.join(' ')} exited ${result.status}: ${(result.stderr || result.stdout).slice(0, 2000)}`);
+    throw new Error(
+      `${cmd} ${args.join(' ')} exited ${result.status}: ${(result.stderr || result.stdout).slice(0, 2000)}`,
+    );
   }
   return result.stdout;
 }
@@ -171,11 +173,17 @@ function extractSessionCalls(conversationId) {
         result: null,
       });
     }
-    if (event?.type === 'command_message' && ['session_list', 'session_search', 'session_read'].includes(event.message?.toolName)) {
+    if (
+      event?.type === 'command_message' &&
+      ['session_list', 'session_search', 'session_read'].includes(event.message?.toolName)
+    ) {
       if (typeof event.message.callId !== 'string') continue;
       results.set(event.message.callId, {
         status: event.message.status ?? 'unknown',
-        output: typeof event.message.output === 'string' ? event.message.output.slice(0, 600) : JSON.stringify(event.message.output ?? null),
+        output:
+          typeof event.message.output === 'string'
+            ? event.message.output.slice(0, 600)
+            : JSON.stringify(event.message.output ?? null),
       });
     }
   }
@@ -202,10 +210,17 @@ function setupBench(bench) {
     fs.mkdirSync(bench, { recursive: true });
     fs.writeFileSync(
       path.join(bench, 'package.json'),
-      JSON.stringify({ name: 'session-scope-cell', private: true, type: 'module', scripts: { test: 'node --test' } }, null, 2) + '\n',
+      JSON.stringify(
+        { name: 'session-scope-cell', private: true, type: 'module', scripts: { test: 'node --test' } },
+        null,
+        2,
+      ) + '\n',
     );
     fs.mkdirSync(path.join(bench, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(bench, 'src', 'greet.mjs'), 'export function greet(name) {\n  return `Hi, ${name}!`;\n}\n');
+    fs.writeFileSync(
+      path.join(bench, 'src', 'greet.mjs'),
+      'export function greet(name) {\n  return `Hi, ${name}!`;\n}\n',
+    );
     fs.mkdirSync(path.join(bench, 'test'), { recursive: true });
     fs.writeFileSync(
       path.join(bench, 'test', 'greet.test.mjs'),
@@ -280,7 +295,10 @@ function settleAgent(name, timeoutSecs) {
     const status = agentStatus(name);
     if (status === 'blocked') return 'blocked';
     if (status === 'working') sawWorking = true;
-    if ((status === 'idle' || status === 'done') && (sawWorking || Date.now() - deadline + timeoutSecs * 1000 > 90_000)) {
+    if (
+      (status === 'idle' || status === 'done') &&
+      (sawWorking || Date.now() - deadline + timeoutSecs * 1000 > 90_000)
+    ) {
       return status;
     }
     sleep(5_000);
@@ -289,7 +307,17 @@ function settleAgent(name, timeoutSecs) {
 }
 
 function runCell(cli, bench, seedId, label, timeoutSecs, messages) {
-  const tab = herdr('tab', 'create', '--workspace', HERDR_WORKSPACE, '--cwd', bench, '--label', `scope-${label}`, '--no-focus');
+  const tab = herdr(
+    'tab',
+    'create',
+    '--workspace',
+    HERDR_WORKSPACE,
+    '--cwd',
+    bench,
+    '--label',
+    `scope-${label}`,
+    '--no-focus',
+  );
   const tabResult = tab.result ?? tab;
   const tabId = (tabResult.tab ?? {}).tab_id;
   const paneId = (tabResult.root_pane ?? {}).pane_id;
@@ -313,12 +341,23 @@ function runCell(cli, bench, seedId, label, timeoutSecs, messages) {
     }
 
     sleep(3_000);
-    const read = herdr('agent', 'read', agentName, '--source', 'recent-unwrapped', '--lines', '400', '--format', 'text');
+    const read = herdr(
+      'agent',
+      'read',
+      agentName,
+      '--source',
+      'recent-unwrapped',
+      '--lines',
+      '400',
+      '--format',
+      'text',
+    );
     const transcript = read?.result?.text ?? read?.text ?? read?._raw ?? JSON.stringify(read);
 
     const candidates = listProjectSessions(bench).filter(({ mtimeMs }) => mtimeMs >= cellStart - 5_000);
     const cellSession = candidates[candidates.length - 1];
-    if (!cellSession) throw new Error(`cell session not found under project ${bench}; transcript head:\n${transcript.slice(0, 1500)}`);
+    if (!cellSession)
+      throw new Error(`cell session not found under project ${bench}; transcript head:\n${transcript.slice(0, 1500)}`);
 
     return {
       tabId,
@@ -384,7 +423,11 @@ function main() {
   };
   const outPath = path.join(bench, `${args.label}.result.json`);
   fs.writeFileSync(outPath, JSON.stringify(result, null, 2) + '\n');
-  console.log(`cell ${args.label}: session ${cell.sessionId} state ${cell.phaseStates.at(-1)} oracle ${oraclePass ? 'PASS' : 'FAIL'}`);
+  console.log(
+    `cell ${args.label}: session ${cell.sessionId} state ${cell.phaseStates.at(-1)} oracle ${
+      oraclePass ? 'PASS' : 'FAIL'
+    }`,
+  );
   console.log(`result: ${outPath}`);
 }
 

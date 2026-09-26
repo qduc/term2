@@ -33,6 +33,11 @@ import type { HistoryService } from '../services/history-service.js';
 import type { InputSurgeApproval } from '../services/input-surge-approval.js';
 import type { RestoredState } from '../services/conversation/conversation-replay.js';
 import type { PendingSessionRolloverRequest } from '../contracts/session-rollover.js';
+import type { ControlSocketServer } from '../services/control-socket/control-socket.js';
+import {
+  createControlSessionPort,
+  type ControlSessionMetadata,
+} from '../services/control-socket/control-session-port.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -105,6 +110,8 @@ export const useConversation = ({
   onRestoreInput,
   logWriter,
   notifier,
+  controlSocket,
+  controlSessionMetadata,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -128,6 +135,8 @@ export const useConversation = ({
   logWriter?: Pick<ConversationLogWriter, 'append'>;
   /** Optional notifier to fire desktop notifications on approval/completion events. */
   notifier?: ConversationNotifier;
+  controlSocket?: ControlSocketServer;
+  controlSessionMetadata?: () => ControlSessionMetadata;
 }) => {
   const {
     messages,
@@ -652,6 +661,28 @@ export const useConversation = ({
       waitingForRejectionReason,
     ],
   );
+
+  useEffect(() => {
+    const orchestrator = orchestratorRef.current;
+    if (!controlSocket || !orchestrator || !settingsService || !usageAccumulator) return;
+    const port = createControlSessionPort({
+      conversationService,
+      orchestrator,
+      settingsService,
+      usageAccumulator,
+      controlSocket,
+      sessionMetadata:
+        controlSessionMetadata ??
+        (() => ({
+          workspaceRoot: null,
+          version: '',
+          createdAt: conversationService.sessionStartedAt,
+          logPath: '',
+        })),
+    });
+    controlSocket.bind(port);
+    return () => controlSocket.unbind(port);
+  }, [controlSocket, controlSessionMetadata, conversationService, settingsService, usageAccumulator]);
 
   // ── Return object (identical shape to the old monolith) ─────────────────
   return {

@@ -53,9 +53,13 @@ type MutablePendingInteraction = {
   currentAskUserQuestionIndex: number;
 };
 
-type AskUserQuestion = { is_multi_select?: boolean };
+export type AskUserQuestion = {
+  question?: unknown;
+  options?: unknown;
+  is_multi_select?: unknown;
+};
 
-function getAskUserQuestions(approval: PendingApproval): AskUserQuestion[] {
+export function getAskUserQuestions(approval: PendingApproval): AskUserQuestion[] {
   try {
     const parsed = JSON.parse(approval.argumentsText) as { questions?: unknown };
     return Array.isArray(parsed.questions) ? (parsed.questions as AskUserQuestion[]) : [];

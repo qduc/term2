@@ -47,6 +47,12 @@ import { isClassifiedCancellation } from '../retry/provider-failure-classificati
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
+export interface OutstandingSubmission {
+  id: string;
+  text: string;
+  stage: 'pending_steer' | 'queued';
+}
+
 function formatRunBudgetEvidence(event: RunBudgetEvent): string {
   if (event.type === 'tool_stall') {
     return `Repeated tool call: ${event.toolName} (${event.count}/${event.threshold})\narguments: ${event.argumentsText}`;
@@ -435,6 +441,7 @@ export class ConversationOrchestrator {
    * queued awaits.
    */
   #activeTurns = 0;
+  readonly #outstandingSubmissions = new Map<string, OutstandingSubmission>();
   /** True while {@link stopProcessing} is tearing the conversation down. */
   #stoppingByUser = false;
   /** Stranded rows already reported, so the warning stays one per occurrence. */
@@ -459,6 +466,7 @@ export class ConversationOrchestrator {
         if (execution.suppressUserMessageDisplay) {
           // Still retire any matching pending row. A suppressed start is a
           // real delivery; leaving the queued indicator would lie.
+          this.#outstandingSubmissions.delete(execution.requestId);
           this.config.ui.onQueuedMessageStarted?.(execution.requestId);
           return;
         }
@@ -501,6 +509,17 @@ export class ConversationOrchestrator {
     return this.config.costAccumulator?.getSummary() ?? null;
   }
 
+  isTurnActive(): boolean {
+    return this.#activeTurns > 0;
+  }
+
+  listOutstandingSubmissions(): OutstandingSubmission[] {
+    return [...this.#outstandingSubmissions.values()].map((item) => ({
+      ...item,
+      text: item.text.slice(0, 500),
+    }));
+  }
+
   goToPreviousQuestion(): void {
     this.config.conversationService.goToPreviousPendingInteractionQuestion?.();
   }
@@ -534,6 +553,7 @@ export class ConversationOrchestrator {
     }
     this.#retractedSteerIds.clear();
     this.#editedSteerTurns.clear();
+    this.#outstandingSubmissions.clear();
     this.#reportedStrandedCallIds.clear();
   }
 
@@ -638,6 +658,7 @@ export class ConversationOrchestrator {
 
     const result = await service.retractSubmission(id);
     if (result.kind === 'applied') {
+      this.#outstandingSubmissions.delete(id);
       if (result.stage === 'pending_steer') {
         this.#retractedSteerIds.add(id);
         this.#editedSteerTurns.delete(id);
@@ -653,6 +674,12 @@ export class ConversationOrchestrator {
 
     const result = await service.editSubmission(id, turn);
     if (result.kind === 'applied') {
+      const outstanding = this.#outstandingSubmissions.get(id);
+      if (outstanding)
+        this.#outstandingSubmissions.set(id, {
+          ...outstanding,
+          text: formatUserTurnForDisplay(normalizeUserTurn(turn)),
+        });
       if (result.stage === 'pending_steer') {
         this.#editedSteerTurns.set(id, structuredClone(normalizeUserTurn(turn)));
       }
@@ -790,6 +817,11 @@ export class ConversationOrchestrator {
 
     if (queueOwnsSubmission) {
       const delivery: 'steer' | 'follow_up' = options?.busyMode === 'steer' ? 'steer' : 'follow_up';
+      this.#outstandingSubmissions.set(userMessage.id, {
+        id: userMessage.id,
+        text: userMessage.text,
+        stage: delivery === 'steer' ? 'pending_steer' : 'queued',
+      });
 
       // A steer belongs to the turn already running: hand it to that turn so
       // the model reads it at its next request, rather than making the user
@@ -829,6 +861,7 @@ export class ConversationOrchestrator {
           messageId: userMessage.id,
         });
         if (steered) {
+          this.#outstandingSubmissions.delete(userMessage.id);
           const admittedTurn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
           this.#editedSteerTurns.delete(userMessage.id);
           const { skill: _originalSkill, ...messageWithoutSkill } = userMessage;
@@ -847,6 +880,11 @@ export class ConversationOrchestrator {
           return;
         }
         this.#editedSteerTurns.delete(userMessage.id);
+        this.#outstandingSubmissions.set(userMessage.id, {
+          id: userMessage.id,
+          text: userMessage.text,
+          stage: 'queued',
+        });
         this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
       } else {
         this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
@@ -891,6 +929,7 @@ export class ConversationOrchestrator {
       this.logError('Error in sendUserMessage', error);
 
       if (queueOwnsSubmission) {
+        this.#outstandingSubmissions.delete(userMessage.id);
         this.config.ui.onQueuedMessageRemoved?.(userMessage.id);
       }
 
@@ -1634,6 +1673,7 @@ export class ConversationOrchestrator {
    * append, the pending indicator above the input box is cleared.
    */
   private moveQueuedMessageIntoList(messageId: string, fallbackInput?: string | UserTurn): boolean {
+    this.#outstandingSubmissions.delete(messageId);
     // If the message was already appended directly (when no turn was in flight),
     // the queue observer fired after the fact — skip the duplicate append and
     // avoid restarting its UI lifecycle. Still emit message-started so stale

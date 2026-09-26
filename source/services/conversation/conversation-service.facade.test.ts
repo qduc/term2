@@ -926,11 +926,12 @@ it('does not expose session runtime fields on the conversation service', () => {
     'sinks',
     'approval',
     'logs',
-    'sessionStartedAt',
     'generationGuard',
     'conversationStore',
   ]) {
     expect(field in service).toBe(false);
   }
+  expect(service.sessionStartedAt).toEqual(expect.any(String));
+  expect(service.getUnsettledToolExecutions()).toEqual([]);
   service.dispose();
 });

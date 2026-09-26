@@ -78,6 +78,19 @@ export interface SettingsChangedEvent {
   value: unknown;
 }
 
+export type GoalStatus = 'active' | 'achieved' | 'abandoned';
+export interface DurableGoal {
+  id: string;
+  outcome: string;
+  successCriteria?: string;
+  status: GoalStatus;
+}
+export interface GoalChangedEvent {
+  type: 'goal_changed';
+  version: 1;
+  goal: DurableGoal;
+}
+
 export interface UserMessageEvent {
   type: 'user_message';
   message: UserMessage;
@@ -351,6 +364,7 @@ export type LogEvent =
   | MemoryInjectedLogEvent
   | SessionInitEvent
   | SettingsChangedEvent
+  | GoalChangedEvent
   | UserMessageEvent
   | ToolStartedLogEvent
   | ToolResultLogEvent

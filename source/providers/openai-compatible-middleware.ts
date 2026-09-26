@@ -114,23 +114,6 @@ export function createOpenAICompatibleMiddleware(
   };
 }
 
-export function createCacheControlMiddleware(): FetchMiddleware {
-  return async (ctx, next) => {
-    if (typeof ctx.init?.body === 'string') {
-      try {
-        const body = JSON.parse(ctx.init.body);
-        if (Array.isArray(body?.messages)) {
-          addCacheControlToLastTwoMessages(body.messages, body.model);
-          return next({ url: ctx.url, init: { ...ctx.init, body: JSON.stringify(body) } });
-        }
-      } catch {
-        /* fall through */
-      }
-    }
-    return next(ctx);
-  };
-}
-
 export function createOpenAIResponsesMiddleware(
   providerType?: string,
   baseUrl?: string,

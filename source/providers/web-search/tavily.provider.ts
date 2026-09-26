@@ -98,4 +98,4 @@ const tavilyProvider: WebSearchProvider = {
 registerWebSearchProvider(tavilyProvider, { isDefault: true });
 
 // Export for testing purposes
-export { tavilyProvider, searchTavily, isConfigured as isTavilyConfigured };
+export { tavilyProvider, isConfigured as isTavilyConfigured };

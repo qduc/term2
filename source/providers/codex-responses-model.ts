@@ -429,7 +429,7 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
   }
 }
 
-export class OpenAIResponsesWSModel extends OpenAIResponsesModel {
+class OpenAIResponsesWSModel extends OpenAIResponsesModel {
   constructor(client: any, model: string, transport?: CodexResponsesTransport) {
     super(client, model, transport, true);
   }
@@ -648,7 +648,7 @@ const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
 const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';
 const RESPONSES_LITE_MODELS = new Set(['gpt-5.6-luna']);
 
-export function isCodexResponsesLiteModel(model: string): boolean {
+function isCodexResponsesLiteModel(model: string): boolean {
   return RESPONSES_LITE_MODELS.has(model);
 }
 

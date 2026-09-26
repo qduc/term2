@@ -21,9 +21,9 @@ import { ProviderReauthenticationRequiredError } from './common/provider-errors.
  * or client_id outright, so do not "clean them up" into settings without
  * re-registering.
  */
-export const GROK_OIDC_ISSUER = 'https://auth.x.ai';
-export const GROK_OIDC_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
-export const GROK_AUTHORIZE_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/authorize`;
+const GROK_OIDC_ISSUER = 'https://auth.x.ai';
+const GROK_OIDC_CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
+const GROK_AUTHORIZE_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/authorize`;
 export const GROK_TOKEN_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/token`;
 /**
  * auth.x.ai stopped accepting `http://localhost:22255/callback` for this client
@@ -31,10 +31,10 @@ export const GROK_TOKEN_ENDPOINT = `${GROK_OIDC_ISSUER}/oauth2/token`;
  * now sends `http://127.0.0.1:<ephemeral port>/callback`, so the host must be
  * the literal IP and any loopback port is accepted.
  */
-export function grokRedirectUri(port: number): string {
+function grokRedirectUri(port: number): string {
   return `http://127.0.0.1:${port}/callback`;
 }
-export const GROK_SCOPES = [
+const GROK_SCOPES = [
   'openid',
   'profile',
   'email',
@@ -62,7 +62,7 @@ export type GrokTokens = {
 };
 
 /** term2's own credential file. We never write to the grok CLI's store. */
-export function resolveGrokAuthPath(): string {
+function resolveGrokAuthPath(): string {
   const dir = process.env.TERM2_CONFIG_DIR || envPaths('term2').config;
   return path.join(dir, 'grok-auth.json');
 }
@@ -72,7 +72,7 @@ export function resolveGrokAuthPath(): string {
  * host that already ran `grok login` works without a second login. Its store is
  * keyed by `<issuer>::<client_id>` and holds many scopes at once.
  */
-export function resolveGrokCliAuthPath(): string | null {
+function resolveGrokCliAuthPath(): string | null {
   const home = process.env.GROK_HOME || (os.homedir() ? path.join(os.homedir(), '.grok') : null);
   if (!home) return null;
   const candidate = path.join(home, 'auth.json');
@@ -145,7 +145,7 @@ function identifyGrokAccount(tokens: GrokTokens): AccountIdentity {
   return { id: subject || email || fallbackId, label: email || subject || 'Grok account' };
 }
 
-export function createGrokAccountStore(filePath = resolveGrokAuthPath()): OAuthAccountStore<GrokTokens> {
+function createGrokAccountStore(filePath = resolveGrokAuthPath()): OAuthAccountStore<GrokTokens> {
   return new OAuthAccountStore<GrokTokens>({
     filePath,
     identify: identifyGrokAccount,
@@ -333,7 +333,7 @@ export class GrokTokenManager {
   }
 }
 
-export const GROK_PKCE_CONFIG: PkceLoginConfig = {
+const GROK_PKCE_CONFIG: PkceLoginConfig = {
   label: 'Grok',
   clientId: GROK_OIDC_CLIENT_ID,
   authorizeEndpoint: GROK_AUTHORIZE_ENDPOINT,

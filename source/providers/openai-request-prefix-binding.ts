@@ -95,10 +95,6 @@ export const prepareOpenAIRequestPrefixBinding = (
   }
 };
 
-export const consumeOpenAIRequestPrefixBinding = (input: unknown): OpenAIRequestPrefixBinding | undefined => {
-  return consumeOpenAIRequestPrefixBindingWithOutcome(input).binding;
-};
-
 export const consumeOpenAIRequestPrefixBindingWithOutcome = (input: unknown): OpenAIRequestPrefixBindingConsumption => {
   try {
     const scope = scopeStorage.getStore();

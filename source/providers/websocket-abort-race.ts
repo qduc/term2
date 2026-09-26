@@ -27,7 +27,7 @@ export function raceWebSocketAbort<T>(promise: Promise<T>, signal: AbortSignal |
 }
 
 /** Same `AbortError` shape the run loop and retry layer already check for (`error.name === 'AbortError'`). */
-export function webSocketAbortError(reason?: unknown): Error {
+function webSocketAbortError(reason?: unknown): Error {
   // Never mutate a shared reason object (e.g. a signal's DOMException, which
   // other listeners may also read); always hand back a fresh, owned error.
   const message = reason instanceof Error ? reason.message : 'The operation was aborted.';

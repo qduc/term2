@@ -17,9 +17,9 @@ import { getJwtClaims } from './jwt-claims.js';
  * app cannot keep a secret) but load-bearing: the authorization server rejects
  * an unregistered redirect_uri or client_id outright.
  */
-export const CODEX_OAUTH_ISSUER = 'https://auth.openai.com';
+const CODEX_OAUTH_ISSUER = 'https://auth.openai.com';
 export const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
-export const CODEX_AUTHORIZE_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/authorize`;
+const CODEX_AUTHORIZE_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/authorize`;
 export const CODEX_TOKEN_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/token`;
 /**
  * The only loopback ports OpenAI has registered for this client. The codex CLI
@@ -28,18 +28,11 @@ export const CODEX_TOKEN_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/token`;
  * refused, and 1457 exists purely to survive a concurrent `codex login`.
  */
 export const CODEX_REDIRECT_PORTS = [1455, 1457];
-export const CODEX_REDIRECT_PORT = CODEX_REDIRECT_PORTS[0];
-export const codexRedirectUri = (port: number) => `http://localhost:${port}/auth/callback`;
+const CODEX_REDIRECT_PORT = CODEX_REDIRECT_PORTS[0];
+const codexRedirectUri = (port: number) => `http://localhost:${port}/auth/callback`;
 export const CODEX_REDIRECT_URI = codexRedirectUri(CODEX_REDIRECT_PORT);
 /** Matches the codex CLI's scope set exactly; see docs/plans/provider-oauth-independence.md. */
-export const CODEX_SCOPES = [
-  'openid',
-  'profile',
-  'email',
-  'offline_access',
-  'api.connectors.read',
-  'api.connectors.invoke',
-];
+const CODEX_SCOPES = ['openid', 'profile', 'email', 'offline_access', 'api.connectors.read', 'api.connectors.invoke'];
 
 export type CodexTokens = {
   access_token: string;
@@ -176,13 +169,7 @@ export function readCodexCliTokens(filePath: string): CodexTokens | null {
   };
 }
 
-/** True when term2 or the codex CLI has a Codex credential on this host. */
-export function hasCodexLogin(): boolean {
-  if (readStoredCodexTokens()) return true;
-  return resolveCodexTokenPath() !== null;
-}
-
-export const CODEX_PKCE_CONFIG: PkceLoginConfig = {
+const CODEX_PKCE_CONFIG: PkceLoginConfig = {
   label: 'Codex',
   clientId: CODEX_OAUTH_CLIENT_ID,
   authorizeEndpoint: CODEX_AUTHORIZE_ENDPOINT,

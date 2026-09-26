@@ -48,8 +48,7 @@ export type CustomProviderConfig = {
 // reasoning differently, and tagging both `openai-compatible` would let one's
 // fields be replayed into the other's request. `config.name` is already the
 // provider's identity elsewhere (see createOpenAICompatibleProviderDefinition).
-export const opaqueProviderTag = (config: CustomProviderConfig): string =>
-  config.name || config.type || 'openai-compatible';
+const opaqueProviderTag = (config: CustomProviderConfig): string => config.name || config.type || 'openai-compatible';
 
 const DEFAULT_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com/v1',

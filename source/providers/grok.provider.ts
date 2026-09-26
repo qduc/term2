@@ -21,7 +21,7 @@ import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
  * OpenAI chat completions.
  */
 export const GROK_BASE_URL = 'https://cli-chat-proxy.grok.com/v1';
-export const DEFAULT_GROK_MODEL = 'grok-4.6';
+const DEFAULT_GROK_MODEL = 'grok-4.6';
 
 /**
  * The proxy hard-rejects requests whose client version it does not recognise

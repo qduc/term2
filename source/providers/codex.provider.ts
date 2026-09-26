@@ -32,7 +32,7 @@ import { ProviderReauthenticationRequiredError } from './common/provider-errors.
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
 // Re-exported so the provider's existing callers and tests keep one import site.
-export { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
+export { getJwtExpiry } from './jwt-claims.js';
 
 // Extracts accountId from claims in the order of precedence
 export function extractAccountIdFromClaims(claims: any): string | null {

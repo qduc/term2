@@ -81,7 +81,7 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
 }
 
 /** Converts every supported message part without coercing objects to strings. */
-export function toCodexMessagePart(role: 'system' | 'user' | 'assistant', part: StreamedModelMessagePart): unknown {
+function toCodexMessagePart(role: 'system' | 'user' | 'assistant', part: StreamedModelMessagePart): unknown {
   // input_text/output_text appear only in legacy callers; normalize them
   // explicitly instead of treating their object value as an image.
   const rawPart = part as

@@ -48,7 +48,7 @@ export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
 
 export const PROVIDER_NAME_REGEX = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
 
-export const getCustomProviderConfigs = (settingsService: ISettingsService): StoredCustomProviderConfig[] => {
+const getCustomProviderConfigs = (settingsService: ISettingsService): StoredCustomProviderConfig[] => {
   const raw: unknown = settingsService?.getDynamic('providers');
   return decodeStoredCustomProviderConfigs(raw);
 };

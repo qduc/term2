@@ -57,6 +57,7 @@ import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model
 import { buildFailureObservation } from '../decision-shadow/failure-observation.js';
 import type { DecisionShadowObserver } from '../decision-shadow/decision-shadow-observer.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
+import { TurnInputMailbox } from './turn-input-mailbox.js';
 
 /**
  * Tool results may carry provider-neutral content parts (for example the
@@ -260,12 +261,6 @@ export type ApplicationRunLoopDiagnosticOptions = {
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
 /** A user message waiting for the running turn's next request boundary. */
-type PendingSteer = {
-  readonly id?: string;
-  readonly items: readonly ProviderInputItem[];
-  readonly resolve: (outcome: SteerOutcome) => void;
-};
-
 type PendingApproval = {
   callId: string;
   toolName: string;
@@ -409,34 +404,16 @@ const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 3;
 export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
   readonly #contextCompactionSessionState: ContextCompactionSessionState;
+  readonly #turnInputMailbox: TurnInputMailbox;
   #activeAbortController: AbortController | null = null;
-  #runInFlight = false;
   #segmentGeneration = 0;
-  /**
-   * Set when a segment ends holding approvals, meaning the turn is pausing
-   * rather than finishing. Injections offered during the pause wait here for
-   * the continuation segment instead of being refused for want of a run.
-   */
-  #turnPaused = false;
-  /**
-   * Set while a caller that owns turn boundaries has a turn open, from before
-   * its first request is built until after its last one settles.
-   *
-   * `#runInFlight` and `#turnPaused` only ever describe a *segment*, so between
-   * them they leave every gap in a turn where no run exists yet: the startup
-   * before the first request (provider model discovery, hooks, input
-   * preparation) and the backoff before a retry restarts the stream. A turn is
-   * steerable across those gaps, and only the caller that opened the turn knows
-   * they belong to it.
-   */
-  #turnOpen = false;
-  #pendingSteers: PendingSteer[] = [];
   /** The run whose budget an out-of-band grant applies to, held across a pause. */
   #activeRunBudgetState: RunState | undefined;
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
     this.#contextCompactionSessionState = deps.contextCompactionSessionState ?? { disabled: false };
+    this.#turnInputMailbox = new TurnInputMailbox((message, meta) => this.#deps.logDiagnostic?.(message, meta));
   }
 
   #observeTerminalFailure(
@@ -472,9 +449,7 @@ export class ApplicationRunLoop {
    * be admitted now.
    */
   openTurn(): void {
-    this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
-    this.#turnOpen = true;
-    this.#turnPaused = false;
+    this.#turnInputMailbox.openTurn();
   }
 
   /**
@@ -482,17 +457,13 @@ export class ApplicationRunLoop {
    * it is handed back for the caller to send as its own turn.
    */
   closeTurn(): void {
-    this.#turnOpen = false;
-    this.#turnPaused = false;
-    this.#releasePendingSteers({ reason: 'turn_closed' });
+    this.#turnInputMailbox.closeTurn();
   }
 
   abort(): void {
     this.abortSegment();
     // An aborted turn will not resume, so nothing may keep waiting on it.
-    this.#turnOpen = false;
-    this.#turnPaused = false;
-    this.#releasePendingSteers({ reason: 'aborted' });
+    this.#turnInputMailbox.abortTurn();
   }
 
   /**
@@ -562,30 +533,22 @@ export class ApplicationRunLoop {
    * only released or admitted.
    */
   steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
-    if (items.length === 0) return Promise.resolve('released');
-    if (!this.#turnOpen && !this.#runInFlight && !this.#turnPaused) return Promise.resolve('released');
-    return new Promise<SteerOutcome>((resolve) => {
-      this.#pendingSteers.push({ id: options?.id, items, resolve });
-    });
+    return this.#turnInputMailbox.offer(items, options);
   }
 
   /**
    * Drop a still-waiting steer before it reaches a request boundary. Returns
    * `false` when the id is unknown, including when it was already admitted.
    *
-   * Invariant: this and `#admitPendingSteers` are both synchronous, and the
-   * latter drains `#pendingSteers` in a single pass — so the two can never
+   * Invariant: this and `TurnInputMailbox.admitAtRequestBoundary` are both synchronous,
+   * and the latter drains the mailbox in a single pass — so the two can never
    * interleave. A retraction is decided in the same tick against whatever is
-   * currently in `#pendingSteers`; once an item has been admitted it is no
+   * currently pending; once an item has been admitted it is no
    * longer in that array for this method to find. No locking is needed to
    * close the race between "the user retracts" and "the turn admits".
    */
   retractSteer(id: string): boolean {
-    const index = this.#pendingSteers.findIndex((steer) => steer.id === id);
-    if (index < 0) return false;
-    const [steer] = this.#pendingSteers.splice(index, 1);
-    steer!.resolve('retracted');
-    return true;
+    return this.#turnInputMailbox.retract(id);
   }
 
   /**
@@ -595,20 +558,7 @@ export class ApplicationRunLoop {
    * same synchronicity invariant as `retractSteer`.
    */
   editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
-    const index = this.#pendingSteers.findIndex((steer) => steer.id === id);
-    if (index < 0) return false;
-    this.#pendingSteers[index] = { ...this.#pendingSteers[index]!, items };
-    return true;
-  }
-
-  /** Settle every steer this run did not admit so callers stop waiting on it. */
-  #releasePendingSteers(reason: Record<string, unknown> = {}): void {
-    const pending = this.#pendingSteers;
-    this.#pendingSteers = [];
-    if (pending.length > 0) {
-      this.#deps.logDiagnostic?.('Steer released at run end', { released: pending.length, ...reason });
-    }
-    for (const steer of pending) steer.resolve('released');
+    return this.#turnInputMailbox.edit(id, items);
   }
 
   /**
@@ -618,24 +568,6 @@ export class ApplicationRunLoop {
    * folded into a tool result — so the provider sees the user speaking after
    * the tool results of the round that was in flight when they typed.
    */
-  #admitPendingSteers(state: RunState, stream: AgentStream, queue: EventQueue): void {
-    if (this.#pendingSteers.length === 0) return;
-    const admitted = this.#pendingSteers;
-    this.#pendingSteers = [];
-    this.#deps.logDiagnostic?.('Steer admitted at request boundary', {
-      admitted: admitted.length,
-      turnCount: state.turnCount,
-    });
-    for (const steer of admitted) {
-      for (const item of steer.items) {
-        state.history.push(item);
-        state.input.push(...normalizeApplicationInput([item]));
-        outputPush(stream, queue, { type: 'item', item });
-      }
-      steer.resolve('admitted');
-    }
-  }
-
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
     // Without a declared turn scope, a fresh stream is the only evidence this
     // loop gets that a new turn has begun: anything still waiting belonged to
@@ -643,8 +575,7 @@ export class ApplicationRunLoop {
     // With one, this call may equally be the same turn restarting after a
     // retry, which the loop cannot tell apart — so `openTurn`/`closeTurn` own
     // the decision instead.
-    this.#turnPaused = false;
-    if (!this.#turnOpen) this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
+    this.#turnInputMailbox.startStream();
     const state: RunState = {
       agent,
       recoveryBudget: options.recoveryBudget,
@@ -784,10 +715,8 @@ export class ApplicationRunLoop {
     this.abortSegment();
     const controller = new AbortController();
     this.#activeAbortController = controller;
-    this.#runInFlight = true;
+    this.#turnInputMailbox.startSegment();
     state.runBudget?.resume();
-    // This segment is running, so the turn is no longer paused between them.
-    this.#turnPaused = false;
     if (options.signal) {
       if (options.signal.aborted) controller.abort();
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -845,7 +774,6 @@ export class ApplicationRunLoop {
         state.runBudget?.pause();
         if (segmentGeneration !== this.#segmentGeneration) return;
         if (this.#activeAbortController === controller) this.#activeAbortController = null;
-        this.#runInFlight = false;
         // A segment that ends holding approvals has paused the turn, not ended
         // it: the caller resumes through continueRunStream, which offers
         // another request boundary. Injections wait for it. Only a segment
@@ -854,20 +782,19 @@ export class ApplicationRunLoop {
         const pendingApprovals = state.pendingApprovals?.length ?? 0;
         const pendingBudgetInteraction = state.pendingRunBudgetInteraction !== undefined;
         const cancelled = stream.cancelled === true;
-        this.#turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
-        if (this.#turnPaused) return;
-        if (this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
-        // A declared turn outlives its segments — this one may be about to be
-        // retried, or resumed past a post-execute gate. Its owner says when it
-        // is over.
-        if (this.#turnOpen) return;
-        this.#releasePendingSteers({
-          pendingApprovals,
-          pendingBudgetInteraction,
-          cancelled,
-          error: exitError instanceof Error ? exitError.name : exitError ? String(exitError) : undefined,
-          turnCount: state.turnCount,
+        const turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
+        this.#turnInputMailbox.settleSegment({
+          paused: turnPaused,
+          reason: {
+            pendingApprovals,
+            pendingBudgetInteraction,
+            cancelled,
+            error: exitError instanceof Error ? exitError.name : exitError ? String(exitError) : undefined,
+            turnCount: state.turnCount,
+          },
         });
+        if (turnPaused) return;
+        if (this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
       });
     this.#activeRunBudgetState = state.runBudget ? state : undefined;
     return stream;
@@ -875,10 +802,15 @@ export class ApplicationRunLoop {
 
   /** Route boundary advice through the same admission lane as mode notices. */
   #queuePendingSystemNotice(text: string): void {
-    this.#pendingSteers.push({
-      items: [{ type: 'message', role: 'user', content: `[Mode Notice] ${text}` }],
-      resolve: () => undefined,
-    });
+    this.#turnInputMailbox.enqueueInternal({ type: 'message', role: 'user', content: `[Mode Notice] ${text}` });
+  }
+
+  #admitPendingSteers(state: RunState, stream: AgentStream, queue: EventQueue): void {
+    this.#turnInputMailbox.admitAtRequestBoundary((item) => {
+      state.history.push(item);
+      state.input.push(...normalizeApplicationInput([item]));
+      outputPush(stream, queue, { type: 'item', item });
+    }, state.turnCount);
   }
 
   async #execute(
@@ -937,7 +869,6 @@ export class ApplicationRunLoop {
         await this.#settleToolPlan(state, stream, queue, toolContext);
         stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
         if (state.pendingApprovals.length > 0) {
-          this.#turnPaused = true;
           return finish(stream, state, queue);
         }
         // Nothing is outstanding, so this segment is terminal — see
@@ -954,7 +885,6 @@ export class ApplicationRunLoop {
         await this.#settleToolPlan(state, stream, queue, toolContext);
         if (state.pendingApprovals?.length) {
           stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
-          this.#turnPaused = true;
           return finish(stream, state, queue);
         }
       }
@@ -1351,7 +1281,6 @@ export class ApplicationRunLoop {
         if (state.terminateAfterToolExecution) return finish(stream, state, queue);
         if (state.pendingApprovals && state.pendingApprovals.length > 0) {
           stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
-          this.#turnPaused = true;
           return finish(stream, state, queue);
         }
         continue;
@@ -1519,7 +1448,6 @@ export class ApplicationRunLoop {
 
       if (state.pendingApprovals.length > 0) {
         stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
-        this.#turnPaused = true;
         return finish(stream, state, queue);
       }
       if (!sawToolCall) {
@@ -1921,7 +1849,6 @@ export class ApplicationRunLoop {
     const interaction = state.pendingRunBudgetInteraction;
     if (!interaction) return finish(stream, state, queue);
     stream.interruptions = [interaction];
-    this.#turnPaused = true;
     return finish(stream, state, queue);
   }
 

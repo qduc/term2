@@ -72,7 +72,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           ['↑↓', 'navigate'],
           ['⏎', 'edit provider (enable/disable, API key)'],
           ['Del', 'delete custom provider'],
-          ['esc', 'close'],
+          ['Esc', 'close'],
         ];
         break;
       case 'accounts':
@@ -80,7 +80,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           ['↑↓', 'navigate'],
           ['⏎', 'use from next session'],
           ['Del', 'sign out'],
-          ['esc', 'back'],
+          ['Esc', 'back'],
         ];
         break;
       case 'confirm_delete':
@@ -89,14 +89,14 @@ const ProviderSelectionMenu: FC<Props> = ({
         hints = [
           ['↑↓', 'navigate'],
           ['⏎', 'select'],
-          ['esc', 'back'],
+          ['Esc', 'back'],
         ];
         break;
       case 'edit_fields':
         hints = [
           ['↑↓', 'navigate'],
           ['⏎', 'modify field / save'],
-          ['esc', 'cancel'],
+          ['Esc', 'cancel'],
         ];
         break;
       case 'wizard_name':
@@ -105,7 +105,7 @@ const ProviderSelectionMenu: FC<Props> = ({
         hints = [
           ['type', 'value below'],
           ['⏎', 'confirm'],
-          ['esc', 'back'],
+          ['Esc', 'back'],
         ];
         break;
       default:
@@ -286,7 +286,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           } else if (item.kind === 'account') {
             // "in use" is what this session is authenticating as right now;
             // "next session" is a selection that has not taken effect yet.
-            prefix = item.isInUse ? '● ' : item.isSelected ? '○ ' : '  ';
+            prefix = item.isInUse ? '● ' : item.isSelected ? '◉ ' : '  ';
             color = item.isInUse
               ? COLOR_SUCCESS
               : item.isSelected

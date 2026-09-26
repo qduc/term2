@@ -362,16 +362,17 @@ it('resetting agent.maxParallelToolCalls reports that the default applies on the
   expect(deps.messages.some((msg) => msg.includes('takes effect on the next request'))).toBe(true);
 });
 
-it('refuses to set startup-only values at runtime', () => {
+it('persists startup-only values and reports the restart requirement', () => {
   const deps = createDeps({
     isRuntimeModifiable: (key) => key !== 'agent.maxTurns',
   });
   const command = createSettingsCommand(deps);
   command.action('agent.maxTurns 40');
 
-  expect(deps.setCalls).toEqual([]);
+  expect(deps.setCalls).toEqual([{ key: 'agent.maxTurns', value: 40 }]);
   expect(deps.applied).toEqual([]);
-  expect(deps.messages[0].toLowerCase().includes('restart')).toBe(true);
+  expect(deps.messages[0]).toContain('Set agent.maxTurns to 40');
+  expect(deps.messages[1]).toContain('takes effect after restarting Term2');
 });
 
 it('reset restores defaults and reports action', () => {

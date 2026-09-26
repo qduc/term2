@@ -97,7 +97,7 @@ const SettingsSelectionMenu: FC<Props> = ({
                 ['type', 'to search all sections'],
                 ['↑↓', 'navigate'],
                 ['⏎', 'edit'],
-                ['esc', 'close'],
+                ['Esc', 'close'],
                 ['●', 'changed', COLOR_WARNING],
                 ['↻', 'needs restart'],
               ]}

@@ -44,7 +44,7 @@ export function McpSelectionMenu({
               hints={[
                 ['↑↓', 'navigate'],
                 ['⏎', 'select'],
-                ['esc', 'back'],
+                ['Esc', 'back'],
               ]}
             />
           }

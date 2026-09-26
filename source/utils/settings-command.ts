@@ -551,13 +551,14 @@ export function createSettingsCommand({
         return true;
       }
 
-      if (!settingsService.isRuntimeModifiable(key)) {
-        addSystemMessage(`Cannot modify '${key}' at runtime. Restart required.`);
-        return true;
-      }
-
       const canonical = canonicalProfileSetting(settingsService, key, parsedValue);
       let durableResult: DurableWriteResult | undefined;
+      if (!settingsService.isRuntimeModifiable(key)) {
+        durableResult = settingsService.setPersistentDynamic(key, parsedValue);
+        addSystemMessage(formatDurableSetMessage(durableResult, key, parsedValue));
+        addSystemMessage(`${key} takes effect after restarting Term2.`);
+        return true;
+      }
       const profileTransitionAlreadyApplied =
         applyRuntimeSetting &&
         canonical.key === 'app.activeProfileId' &&

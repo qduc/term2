@@ -75,7 +75,7 @@ const RewindMenu: FC<Props> = ({
         ['↑↓', 'navigate'],
         ['⏎', disposition === 'edit' ? 'rewind & edit' : 'rewind & resend'],
         ['⇥', disposition === 'edit' ? 'resend instead' : 'edit instead'],
-        ['esc', 'cancel'],
+        ['Esc', 'cancel'],
       ]}
     />
   );

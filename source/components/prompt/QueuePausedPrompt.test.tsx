@@ -11,10 +11,20 @@ it.sequential('QueuePausedPrompt renders queue count and resume/discard options'
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Queue paused: 3 item(s) pending.')).toBe(true);
+  expect(output.includes('Queue paused: 3 items pending.')).toBe(true);
   expect(output.includes('r resume')).toBe(true);
   expect(output.includes('x discard')).toBe(true);
   expect(output.includes('⏸')).toBe(false);
+  act(() => {
+    unmount();
+  });
+});
+
+it.sequential('QueuePausedPrompt uses singular item for a one-entry queue', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <QueuePausedPrompt queueLength={1} pauseReason="manual" onResume={() => {}} onDiscard={() => {}} />,
+  );
+  expect(lastFrame()).toContain('Queue paused: 1 item pending.');
   act(() => {
     unmount();
   });

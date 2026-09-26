@@ -36,7 +36,7 @@ it.sequential('ConfirmPrompt renders question, default Yes/No options, and the s
   expect(output).toContain('Proceed?');
   expect(output).toContain('❯ Yes');
   expect(output).toContain('  No');
-  expect(output).toContain('↑↓ navigate │ ⏎ select │ y/n answer │ esc cancel');
+  expect(output).toContain('↑↓ navigate │ ⏎ select │ y/n answer │ Esc cancel');
   act(() => unmount());
 });
 

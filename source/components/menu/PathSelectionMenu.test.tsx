@@ -55,7 +55,7 @@ it('PathSelectionMenu marks directories with a trailing slash instead of emoji i
   expect(frame).toContain('source/');
   expect(frame).toContain('source/app.ts');
   expect(frame).not.toMatch(/📁|📄/);
-  expect(frame).toContain('↑↓ navigate │ ⏎ insert │ Tab insert w/o space │ esc cancel');
+  expect(frame).toContain('↑↓ navigate │ ⏎ insert │ Tab insert w/o space │ Esc cancel');
 
   await act(async () => {
     unmount();

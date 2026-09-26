@@ -25,6 +25,7 @@ import {
   GLYPH_FAVORITE,
 } from '../theme.js';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
+import { formatDurationMs } from '../menu/settings-value-formatter.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -172,7 +173,7 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
       )}
       {args.timeout_ms && (
         <Box>
-          <Text color={COLOR_TEXT_SUBTLE}>Timeout: {args.timeout_ms}ms</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>Timeout: {formatDurationMs(args.timeout_ms)}</Text>
         </Box>
       )}
       {args.max_output_length && (

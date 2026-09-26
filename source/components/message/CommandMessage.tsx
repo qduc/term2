@@ -790,7 +790,7 @@ const CommandMessage: FC<Props> = ({
         <Box flexDirection="column">
           {renderStandardHeader()}
           <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={COLOR_TEXT_SUBTLE}>RunId: </Text>
+            <Text color={COLOR_TEXT_SUBTLE}>Run ID: </Text>
             <Text color={COLOR_TEXT_MUTED}>{runId || output}</Text>
           </Box>
         </Box>

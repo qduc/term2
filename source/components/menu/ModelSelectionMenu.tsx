@@ -217,10 +217,10 @@ const ModelSelectionMenu: FC<Props> = ({
         fallbackText={
           isNicknamesTab && !query ? (
             <Text color={COLOR_TEXT_SUBTLE}>
-              No nicknames yet — switch to All and press ctrl+n on a model to name it.
+              No nicknames yet — switch to All and press Ctrl+N on a model to name it.
             </Text>
           ) : isFavoritesTab && !query ? (
-            <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press ctrl+f on a model to add one.</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press Ctrl+F on a model to add one.</Text>
           ) : (
             <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>
           )

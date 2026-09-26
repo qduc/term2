@@ -65,7 +65,7 @@ it.sequential('a Tab binding must record the standing decision that gives it its
 
 it.sequential('bindingHints strips commands and rationale and preserves order', () => {
   expect(bindingHints(MODEL_MENU_PROVIDER_TAB_BINDINGS)).toEqual([['←→', 'provider']]);
-  expect(bindingHints(SLASH_MENU_BINDINGS).map(([key]) => key)).toEqual(['↑↓', '⏎', 'Tab', 'esc']);
+  expect(bindingHints(SLASH_MENU_BINDINGS).map(([key]) => key)).toEqual(['↑↓', '⏎', 'Tab', 'Esc']);
 });
 
 it.sequential('SlashCommandMenu footer renders exactly the declared slash bindings', async () => {

@@ -68,7 +68,7 @@ export type MenuBindingTable = readonly MenuBinding[];
 
 /** Derive the [key, action] hint rows MenuFooter renders from a table. */
 export const bindingHints = (bindings: MenuBindingTable): [string, string][] =>
-  bindings.map(({ key, action }) => [key, action]);
+  bindings.map(({ key, action }) => [key === 'esc' ? 'Esc' : key, action]);
 
 /** Slash-command picker. Owned by createSlashMenuInteraction (SlashMenuSession). */
 export const SLASH_MENU_BINDINGS: MenuBindingTable = [

@@ -79,7 +79,7 @@ function SubagentPoolSelectionMenu({
             {GLYPH_WARNING} {errorMessage}
           </Text>
         )}
-        <MenuFooter hints={[['esc', 'back']]} />
+        <MenuFooter hints={[['Esc', 'back']]} />
       </Box>
     );
   }
@@ -92,18 +92,18 @@ function SubagentPoolSelectionMenu({
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
               ['Del', 'delete'],
-              ['esc', 'save & close'],
+              ['Esc', 'save & close'],
             ]
           : phase === 'edit_fields'
           ? [
               ['↑↓', 'navigate'],
               ['⏎', 'edit field / save'],
-              ['esc', 'cancel'],
+              ['Esc', 'cancel'],
             ]
           : [
               ['↑↓', 'navigate'],
               ['⏎', 'select'],
-              ['esc', 'back'],
+              ['Esc', 'back'],
             ]
       }
     />

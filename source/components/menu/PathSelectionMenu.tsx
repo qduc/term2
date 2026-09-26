@@ -44,7 +44,7 @@ const PathSelectionMenu: FC<Props> = ({
               ['↑↓', 'navigate'],
               ['⏎', 'insert'],
               ['Tab', 'insert w/o space'],
-              ['esc', 'cancel'],
+              ['Esc', 'cancel'],
             ]}
           />
         }

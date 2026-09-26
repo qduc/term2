@@ -1500,9 +1500,6 @@ export class ConversationOrchestrator {
         }
         this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
         this.emitCostSummary();
-        if (!this.hasActiveBackgroundWork()) {
-          this.config.notifier?.turnComplete();
-        }
       }
       if (eventType === 'background_shell_completed') {
         if (!this.hasActiveBackgroundWork()) {

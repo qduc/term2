@@ -441,7 +441,7 @@ it.sequential('keeps ticking now while a background task is still live', async (
   }
 });
 
-it.sequential('triggers notifier.approvalNeeded when background subagent approvals are pending', async () => {
+it.sequential('does not trigger notifier.approvalNeeded for background subagent approvals', async () => {
   let subscriber: (() => void) | null = null;
   let snapshot: any = { pendingCount: 0, pending: [] };
   const conversationService = {
@@ -485,7 +485,7 @@ it.sequential('triggers notifier.approvalNeeded when background subagent approva
   snapshot = { pendingCount: 1, pending: [{ id: 'p1' } as any] };
   act(() => subscriber?.());
 
-  expect(notifier.approvalNeeded).toHaveBeenCalledTimes(1);
+  expect(notifier.approvalNeeded).not.toHaveBeenCalled();
 
   act(() => renderer.unmount());
 });

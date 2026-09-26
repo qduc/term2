@@ -1295,7 +1295,7 @@ describe('ConversationOrchestrator', () => {
   });
 
   describe('terminal notifications with background tasks', () => {
-    it('suppresses turnComplete when background tasks are still running on turn settlement', async () => {
+    it('does not fire turnComplete when a background subagent settles', async () => {
       const cfg = makeConfig();
       const notifier = {
         turnComplete: vi.fn(),
@@ -1330,8 +1330,8 @@ describe('ConversationOrchestrator', () => {
         result: { agentId: 'sub-1', role: 'explorer', status: 'completed' },
       });
 
-      // Now turnComplete is fired!
-      expect(notifier.turnComplete).toHaveBeenCalledTimes(1);
+      // Subagent lifecycle is not a user-facing response completion.
+      expect(notifier.turnComplete).not.toHaveBeenCalled();
     });
 
     it('fires turnComplete on background_shell_completed when all tasks settle', async () => {

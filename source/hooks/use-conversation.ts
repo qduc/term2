@@ -302,9 +302,6 @@ export const useConversation = ({
           setBackgroundRejectionEntry(null);
         }
       }
-      if (snapshot.pendingCount > 0) {
-        notifier?.approvalNeeded();
-      }
     });
   }, [conversationService, readBackgroundApproval, notifier, nestedRejectionRequestId, backgroundRejectionEntry]);
 

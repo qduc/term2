@@ -841,7 +841,7 @@ export class TurnWorkflow {
    */
   async #recallMemory(attempt: TurnAttempt): Promise<Extract<ConversationEvent, { type: 'memory_injected' }> | null> {
     const select = this.deps.agentClient.selectMemoryForTurn;
-    const query = attempt.submittedTurn.text;
+    const query = attempt.submittedTurn.memoryRecallQuery ?? attempt.submittedTurn.text;
     if (typeof select !== 'function' || !query.trim()) return null;
     const exclude = recalledMemoryKeys(
       this.deps.conversationStore

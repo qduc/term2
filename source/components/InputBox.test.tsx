@@ -4,6 +4,7 @@ import { it, expect, vi } from 'vitest';
 import React, { useEffect, useRef, useState, act } from 'react';
 import { Box, Text, useStdin } from 'ink';
 import ApplicationInputSurface from './input/ApplicationInputSurface.js';
+import { getImagePasteErrorMessage } from './InputBox.js';
 import { getProviderWizardPromptLabel } from './input/ProviderMenuSession.js';
 import ModelSelectionMenu from './menu/ModelSelectionMenu.js';
 import SettingsSelectionMenu from './menu/SettingsSelectionMenu.js';
@@ -27,6 +28,12 @@ import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 
 const InputBox = ApplicationInputSurface;
+
+it('provides actionable image-paste feedback for empty and unsupported clipboard data', () => {
+  expect(getImagePasteErrorMessage('clipboard-empty')).toContain('No image found in clipboard');
+  expect(getImagePasteErrorMessage('clipboard-unsupported-type')).toContain('format is unsupported');
+  expect(getImagePasteErrorMessage('clipboard-read-error')).toContain('copying the image again');
+});
 
 vi.mock('../services/file-service.js', () => ({
   getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),

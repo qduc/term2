@@ -31,6 +31,7 @@ import {
   generateId,
   collectOrphanedDeltaSidecars,
   getConversationsDir,
+  getResumeCommand,
   loadConversationForProject,
   loadLastConversation,
   forkConversation,
@@ -105,9 +106,9 @@ const printUsageOnce = () => {
   printUsage();
   if (effectiveSessionId && effectiveHasConversationContent && !sessionSummaryPrinted) {
     sessionSummaryPrinted = true;
-    process.stdout.write(
-      `\nSession: ${effectiveSessionId}\nTo resume this conversation: term2 --resume ${effectiveSessionId}\n`,
-    );
+    // Only reachable once the session id exists, after SSH setup has run.
+    const resumeCommand = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
+    process.stdout.write(`\nSession: ${effectiveSessionId}\nTo resume this conversation: ${resumeCommand}\n`);
   }
 };
 

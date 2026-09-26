@@ -681,7 +681,7 @@ it('semantic projection cannot retract a rollover predecessor that is outside th
   });
 });
 
-it('semantic projection does not apply a checkpoint that covers a retracted source', () => {
+it('semantic projection refuses a checkpoint that covers a retracted source', () => {
   const source = {
     ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'source' } }),
     logId: 's',
@@ -693,7 +693,12 @@ it('semantic projection does not apply a checkpoint that covers a retracted sour
       version: 1,
       artifactId: 'summary-1',
       sourceRefs: [{ logId: 's', eventId: 'e-source' }],
-      item: { role: 'system', type: 'message', content: 'summary should not apply' },
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary should not apply' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
     }),
     logId: 's',
     eventId: 'e-checkpoint',
@@ -708,12 +713,16 @@ it('semantic projection does not apply a checkpoint that covers a retracted sour
 
   expect(valid).toMatchObject({
     status: 'projected',
-    state: { history: [{ role: 'user', content: 'source' }, { content: 'summary should not apply' }] },
+    state: { history: [{ role: 'user', content: 'source' }, { content: [{ text: 'summary should not apply' }] }] },
   });
-  expect(retracted).toMatchObject({ status: 'projected', state: { history: [] } });
+  expect(retracted).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
 });
 
-it('semantic projection does not apply a checkpoint whose source ref is missing', () => {
+it('semantic projection refuses a checkpoint whose source ref is missing', () => {
   const source = {
     ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'source' } }),
     logId: 's',
@@ -725,15 +734,65 @@ it('semantic projection does not apply a checkpoint whose source ref is missing'
       version: 1,
       artifactId: 'summary-missing-source',
       sourceRefs: [{ logId: 's', eventId: 'does-not-exist' }],
-      item: { role: 'system', type: 'message', content: 'must not apply' },
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'must not apply' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
     }),
     logId: 's',
     eventId: 'e-checkpoint',
   };
 
-  expect(projectSemanticEvents([source, checkpoint])).toMatchObject({
-    status: 'projected',
-    state: { history: [{ role: 'user', content: 'source' }] },
+  expect(projectSemanticEvents([source, checkpoint])).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
+});
+
+it('semantic projection refuses checkpoint refs that are duplicated or out of source order', () => {
+  const first = {
+    ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'first' } }),
+    logId: 's',
+    eventId: 'e-first',
+  };
+  const second = {
+    ...env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'second' } }),
+    logId: 's',
+    eventId: 'e-second',
+  };
+  const checkpointEvent = (sourceRefs: { logId: string; eventId: string }[]) => ({
+    ...env({
+      type: 'context_checkpoint_created' as const,
+      version: 1 as const,
+      artifactId: 'summary-invalid-order',
+      sourceRefs,
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'summary' }],
+        contextSummary: { version: 1 as const, strategy: 'local' as const },
+      },
+    }),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  });
+  const refs = [
+    { logId: 's', eventId: 'e-first' },
+    { logId: 's', eventId: 'e-second' },
+  ];
+  const duplicate = checkpointEvent([refs[0], refs[0]]);
+  const wrongOrder = checkpointEvent([...refs].reverse());
+
+  expect(projectSemanticEvents([first, second, duplicate])).toMatchObject({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+  });
+  expect(projectSemanticEvents([first, second, wrongOrder])).toMatchObject({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
   });
 });
 
@@ -756,7 +815,12 @@ it('semantic projection refuses a checkpoint whose source payload no longer matc
       artifactId: 'digest-check',
       sourceRefs: refs,
       sourceDigest: digest,
-      item: { role: 'system', type: 'message', content: 'unverified' },
+      item: {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: 'unverified' }],
+        contextSummary: { version: 1, strategy: 'local' },
+      },
     } as const),
     logId: 's',
     eventId: 'e-checkpoint',

@@ -2,6 +2,7 @@ import { isTruncatedLogEvent, type PersistedLogEvent } from '../logging/conversa
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
+import { isLocalContextSummary } from '../../contracts/provider-input.js';
 
 export type SemanticReplayProjection =
   | { status: 'projected'; state: RestoredState }
@@ -60,19 +61,21 @@ export function projectSemanticEvents(
   const legacyUndo = envelopes.find((envelope) => envelope.event.type === 'undo');
   if (legacyUndo) return { status: 'unsupported', reason: 'legacy_undo_snapshot', seq: legacyUndo.seq };
 
-  const eventByRef = new Map(
-    envelopes.flatMap((envelope) => {
-      const key = envelopeRefKey(envelope);
-      return key ? [[key, envelope] as const] : [];
-    }),
-  );
+  const eventsByRef = new Map<string, PersistedLogEnvelope[]>();
+  for (const envelope of envelopes) {
+    const key = envelopeRefKey(envelope);
+    if (!key) continue;
+    const matches = eventsByRef.get(key) ?? [];
+    matches.push(envelope);
+    eventsByRef.set(key, matches);
+  }
   const retractedRefs = new Set<string>();
   for (const envelope of envelopes) {
     if (isTruncatedLogEvent(envelope.event)) continue;
     if (envelope.event.type !== 'events_retracted') continue;
     for (const ref of envelope.event.refs) {
       const key = refKey(ref);
-      const target = eventByRef.get(key);
+      const target = eventsByRef.get(key)?.[0];
       if (!target || target.event.type === 'events_retracted' || target.seq >= envelope.seq) {
         return { status: 'unsupported', reason: 'unresolved_retraction_refs', seq: envelope.seq };
       }
@@ -108,6 +111,11 @@ export function projectSemanticEvents(
 
   const state = replayEvents(semanticEnvelopes);
   for (const checkpoint of checkpoints) {
+    if (isProviderOpaqueItem(checkpoint.item)) continue;
+    if (!isLocalContextSummary(checkpoint.item)) {
+      return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
+    }
+
     if (
       !isTruncatedLogEvent(checkpoint.envelope.event) &&
       checkpoint.envelope.event.type === 'context_checkpoint_created' &&
@@ -116,14 +124,28 @@ export function projectSemanticEvents(
     ) {
       return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
     }
-    const coversRetractedSource = checkpoint.sourceRefs.some((ref) => retractedRefs.has(refKey(ref)));
-    const sourceRefsPrecedeCheckpoint = checkpoint.sourceRefs.every((ref) => {
-      const source = eventByRef.get(refKey(ref));
-      return source !== undefined && source.seq < checkpoint.envelope.seq;
-    });
-    if (!coversRetractedSource && sourceRefsPrecedeCheckpoint && !isProviderOpaqueItem(checkpoint.item)) {
-      state.history.push(structuredClone(checkpoint.item) as (typeof state.history)[number]);
+    const seenRefs = new Set<string>();
+    let previousSourceSeq = -1;
+    for (const ref of checkpoint.sourceRefs) {
+      const key = refKey(ref);
+      const matches = eventsByRef.get(key);
+      const source = matches?.length === 1 ? matches[0] : undefined;
+      if (
+        seenRefs.has(key) ||
+        !source ||
+        source.seq <= previousSourceSeq ||
+        source.seq >= checkpoint.envelope.seq ||
+        retractedRefs.has(key)
+      ) {
+        return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
+      }
+      seenRefs.add(key);
+      previousSourceSeq = source.seq;
     }
+    if (checkpoint.sourceRefs.length === 0) {
+      return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
+    }
+    state.history.push(structuredClone(checkpoint.item) as (typeof state.history)[number]);
   }
   return { status: 'projected', state };
 }

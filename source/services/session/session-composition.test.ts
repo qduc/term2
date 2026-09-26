@@ -204,6 +204,10 @@ it('journals exact summarized source events and replays the checkpoint with the 
     const sourceRefs = (
       checkpointEvents[0].event as Extract<(typeof after)[number]['event'], { type: 'context_checkpoint_created' }>
     ).sourceRefs;
+    const sourceDigest = (
+      checkpointEvents[0].event as Extract<(typeof after)[number]['event'], { type: 'context_checkpoint_created' }>
+    ).sourceDigest;
+    expect(sourceDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     const summarized = before.slice(1, 5).map(({ logId, eventId }) => ({ logId, eventId }));
     expect(sourceRefs).toEqual(summarized);
     expect(after.filter((entry) => sourceRefs.some((ref) => ref.eventId === entry.eventId))).toHaveLength(4);

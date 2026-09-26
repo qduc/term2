@@ -109,6 +109,7 @@ export interface ContextCheckpointCreatedEvent {
   version: 1;
   artifactId: string;
   sourceRefs: EventReference[];
+  sourceDigest?: string;
   item: ProviderInputItem;
 }
 

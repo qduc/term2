@@ -1,10 +1,15 @@
 import { isTruncatedLogEvent, type PersistedLogEvent } from '../logging/conversation-log-events.js';
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
+import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
 
 export type SemanticReplayProjection =
   | { status: 'projected'; state: RestoredState }
-  | { status: 'unsupported'; reason: 'legacy_undo_snapshot' | 'unresolved_retraction_refs'; seq: number };
+  | {
+      status: 'unsupported';
+      reason: 'legacy_undo_snapshot' | 'unresolved_retraction_refs' | 'unverifiable_checkpoint';
+      seq: number;
+    };
 
 const refKey = (ref: { logId: string; eventId: string }): string => JSON.stringify([ref.logId, ref.eventId]);
 const envelopeRefKey = (envelope: PersistedLogEnvelope): string | null =>
@@ -76,7 +81,11 @@ export function projectSemanticEvents(
   }
 
   const semanticEnvelopes: PersistedLogEnvelope[] = [];
-  const checkpoints: Array<{ seq: number; sourceRefs: { logId: string; eventId: string }[]; item: unknown }> = [];
+  const checkpoints: Array<{
+    envelope: PersistedLogEnvelope;
+    sourceRefs: { logId: string; eventId: string }[];
+    item: unknown;
+  }> = [];
   for (const envelope of envelopes) {
     if (isTruncatedLogEvent(envelope.event)) {
       semanticEnvelopes.push(envelope);
@@ -86,7 +95,7 @@ export function projectSemanticEvents(
     if (key && retractedRefs.has(key)) continue;
     if (envelope.event.type === 'events_retracted') continue;
     if (envelope.event.type === 'context_checkpoint_created') {
-      checkpoints.push({ seq: envelope.seq, sourceRefs: envelope.event.sourceRefs, item: envelope.event.item });
+      checkpoints.push({ envelope, sourceRefs: envelope.event.sourceRefs, item: envelope.event.item });
       continue;
     }
     const event = withoutProviderOpaqueItems(
@@ -99,10 +108,18 @@ export function projectSemanticEvents(
 
   const state = replayEvents(semanticEnvelopes);
   for (const checkpoint of checkpoints) {
+    if (
+      !isTruncatedLogEvent(checkpoint.envelope.event) &&
+      checkpoint.envelope.event.type === 'context_checkpoint_created' &&
+      checkpoint.envelope.event.sourceDigest !== undefined &&
+      createCheckpointSourceDigest(checkpoint.sourceRefs, envelopes) !== checkpoint.envelope.event.sourceDigest
+    ) {
+      return { status: 'unsupported', reason: 'unverifiable_checkpoint', seq: checkpoint.envelope.seq };
+    }
     const coversRetractedSource = checkpoint.sourceRefs.some((ref) => retractedRefs.has(refKey(ref)));
     const sourceRefsPrecedeCheckpoint = checkpoint.sourceRefs.every((ref) => {
       const source = eventByRef.get(refKey(ref));
-      return source !== undefined && source.seq < checkpoint.seq;
+      return source !== undefined && source.seq < checkpoint.envelope.seq;
     });
     if (!coversRetractedSource && sourceRefsPrecedeCheckpoint && !isProviderOpaqueItem(checkpoint.item)) {
       state.history.push(structuredClone(checkpoint.item) as (typeof state.history)[number]);

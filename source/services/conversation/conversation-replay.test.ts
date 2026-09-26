@@ -10,7 +10,7 @@ import { normalizeApplicationInput } from '../agent-runtime/application-run-loop
 import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 import { ConversationStore } from './conversation-store.js';
 import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
-import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
+import { createCheckpointSourceDigest, resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 
 let seq = 0;
@@ -737,6 +737,37 @@ it('semantic projection does not apply a checkpoint whose source ref is missing'
   });
 });
 
+it('semantic projection refuses a checkpoint whose source payload no longer matches its digest', () => {
+  const source = {
+    ...env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'original' } }),
+    logId: 's',
+    eventId: 'e-source',
+  };
+  const refs = [{ logId: 's', eventId: 'e-source' }];
+  const digest = createCheckpointSourceDigest(refs, [source])!;
+  const changedSource = {
+    ...source,
+    event: { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'mutated' } },
+  } as typeof source;
+  const checkpoint = {
+    ...env({
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'digest-check',
+      sourceRefs: refs,
+      sourceDigest: digest,
+      item: { role: 'system', type: 'message', content: 'unverified' },
+    } as const),
+    logId: 's',
+    eventId: 'e-checkpoint',
+  };
+  expect(projectSemanticEvents([changedSource, checkpoint])).toEqual({
+    status: 'unsupported',
+    reason: 'unverifiable_checkpoint',
+    seq: checkpoint.seq,
+  });
+});
+
 it('replay derives a provenance-proven local checkpoint request from the checkpoint and uncovered source events', () => {
   const checkpoint = {
     role: 'assistant',
@@ -1181,6 +1212,19 @@ it('decodeLogEnvelope requires unique, complete references on events_retracted',
   expect(decodeLogEnvelope(valid)?.event).toEqual(valid.event);
   expect(decodeLogEnvelope(duplicate)).toBeNull();
   expect(decodeLogEnvelope(incomplete)).toBeNull();
+});
+
+it('decodeLogEnvelope accepts legacy checkpoints but rejects malformed present source digests', () => {
+  const base = {
+    type: 'context_checkpoint_created' as const,
+    version: 1 as const,
+    artifactId: 'checkpoint',
+    sourceRefs: [{ logId: 's', eventId: 'e1' }],
+    item: { type: 'message', role: 'assistant', content: 'summary' },
+  };
+  expect(decodeLogEnvelope(env(base))).not.toBeNull();
+  expect(decodeLogEnvelope(env({ ...base, sourceDigest: 'sha256:not-a-digest' }))).toBeNull();
+  expect(decodeLogEnvelope(env({ ...base, sourceDigest: 'sha256:' + 'a'.repeat(64) }))).not.toBeNull();
 });
 
 it('legacy replay output is unchanged when it encounters a semantic retraction event', () => {

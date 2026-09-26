@@ -4,6 +4,7 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import { planLocalCompaction } from '../agent-runtime/context-compaction/index.js';
 import { resolveCheckpointSourceRefs } from './conversation-checkpoint-provenance.js';
+import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
 
 const envelope = (seq: number, eventId: string, event: Record<string, unknown>): PersistedLogEnvelope => ({
   v: 3,
@@ -24,6 +25,46 @@ describe('deriveLocalCheckpointRequestHistory', () => {
     expect(deriveLocalCheckpointRequestHistory([], [{ role: 'user', content: 'legacy' }])).toEqual({
       status: 'no_checkpoint',
     });
+  });
+
+  it('refuses a present digest when a covered source payload has changed', () => {
+    const item: ProviderInputItem = {
+      type: 'message',
+      role: 'assistant',
+      content: 'summary',
+      contextSummary: { version: 1, strategy: 'local' },
+    };
+    const sources = [
+      envelope(1, 'u1', { type: 'user_message', message: { sender: 'user', text: 'original' } }),
+      envelope(2, 'a1', assistantTurn('cold answer')),
+      envelope(3, 'u2', { type: 'user_message', message: { sender: 'user', text: 'hot one' } }),
+      envelope(4, 'a2', assistantTurn('hot answer one')),
+      envelope(5, 'u3', { type: 'user_message', message: { sender: 'user', text: 'hot two' } }),
+      envelope(6, 'a3', assistantTurn('hot answer two')),
+    ];
+    const sourceRefs = [
+      { logId: 'session', eventId: 'u1' },
+      { logId: 'session', eventId: 'a1' },
+    ];
+    const digest = createCheckpointSourceDigest(sourceRefs, sources);
+    expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const checkpoint = envelope(7, 'checkpoint', {
+      type: 'context_checkpoint_created',
+      version: 1,
+      artifactId: 'c1',
+      sourceRefs,
+      sourceDigest: digest,
+      item,
+    });
+    const tampered = [
+      {
+        ...sources[0]!,
+        event: { type: 'user_message', message: { sender: 'user', text: 'changed' } } as PersistedLogEnvelope['event'],
+      },
+      ...sources.slice(1),
+      checkpoint,
+    ];
+    expect(deriveLocalCheckpointRequestHistory(tampered, [item])).toEqual({ status: 'refused' });
   });
 
   it('derives checkpoint plus uncovered source turns and requires exact snapshot agreement', () => {

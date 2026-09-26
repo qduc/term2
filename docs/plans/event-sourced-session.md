@@ -39,7 +39,7 @@ Retain the JSONL envelope and monotonic sequence. Add an optional persisted `eve
 Derived artifact records are append-only events in the same journal. A `context_checkpoint_created` event contains:
 
 - stable `artifactId` and checkpoint kind (`local_summary` or `provider_opaque`);
-- `sourceRefs`: exact source event references covered, sorted by source-log sequence, and `sourceDigest` over the ordered references (and canonical payload bytes where practical);
+- `sourceRefs`: exact source event references covered, sorted by source-log sequence. New local checkpoints also carry `sourceDigest`, encoded as `sha256:<64 lowercase hex>`: SHA-256 over UTF-8 `term2-local-checkpoint-source-v1\0` followed by canonical JSON for `{version:1,sources:[{ref,event},...]}` in `sourceRefs` order. Canonical JSON sorts object keys recursively, preserves array order and JSON scalar values; `ref` contains only `logId` and `eventId`, and `event` is the complete source event payload (not envelope `v`, `seq`, or `ts`). This binds content as well as identities while remaining stable across JSON key ordering, v3 envelopes, replay, and copied forks. A present malformed or mismatched digest refuses checkpoint projection. Legacy checkpoints with no digest remain readable under the prior safe-ref checks; they have weaker identity-only provenance, and replay must not synthesize a digest for them.
 - the checkpoint's portable summary body for local summaries; provider identity and a separately stored opaque artifact reference for native state;
 - `createdAtRevision` only as optional diagnostics, never as provenance;
 - algorithm/version and estimates as non-authoritative metadata.

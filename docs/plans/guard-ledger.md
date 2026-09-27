@@ -2560,3 +2560,27 @@ Local `no_complete_cold_turn` advice is admitted once per run as synthetic conte
 it does not manufacture a genuine user turn or authorize discarding active work.
 The host byte caps still apply before final rendering. Artifact lifetime remains
 that of the existing temporary tool-output store, not permanent archival.
+
+## Native provider-history switch refusal (T1-M4 interim)
+
+Harm prevented: sending a different provider a silently truncated history after
+native compaction removed portable source turns. Scope is the shared
+`SessionInputPlanner` full-history/chained-input plan and every session path that
+uses `InitialInputPreparer`; this is an admission refusal, not a context-size or
+time guard. A foreign opaque compaction marker is direct evidence that the selected adapter will
+not replay the item; lack of verified source coverage means reconstruction is
+not safe to guess. `InitialInputPreparer` rejects before `startStream`, removes
+the just-added user turn, restores its text through the existing error event,
+and advises switching back to the source provider or starting a fresh
+conversation. Same-provider opaque continuity, non-compaction foreign opaque
+items, and provider changes without foreign compaction are preserved. No request retry, fallback, provider
+history rewrite, semantic reconstruction, or persisted-setting change is added.
+
+Red proof: the supplied base-wire assertion established the foreign provider
+request contained no pre-compaction assistant content despite dispatch; the new
+black-box scenario asserts the refusal is visible and the fake provider receives
+no second request. Focused unit tests cover refusal, same-provider preservation,
+and user-input restoration. Rollback is confined to the planner refusal,
+preparer presentation, and these tests. The unresolved source-event coverage,
+legacy undo/snapshot equivalence, and portable reconstruction remain M2/M4 work;
+this interim refusal does not close those semantic gaps.

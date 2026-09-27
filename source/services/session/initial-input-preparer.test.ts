@@ -77,6 +77,39 @@ it('records the dispatch model after attaching the built input', () => {
   expect(recorded).toBe(1);
 });
 
+it('refuses non-portable provider history before dispatch and restores the user input', () => {
+  let removed = 0;
+  let recorded = 0;
+  const attempt = createAttempt();
+  const preparer = new InitialInputPreparer({
+    conversationStore: { addUserTurn: () => {}, removeLastUserMessage: () => removed++ } as any,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: {
+      build: () => ({
+        streamInput: [],
+        inputSurgeKind: 'full_history',
+        effectiveTurn: attempt.turn,
+        refusal: { kind: 'foreign_provider_opaque_history', sourceProvider: 'openai', targetProvider: 'openrouter' },
+      }),
+      recordDispatchModel: () => recorded++,
+    } as any,
+    logger: { warn: () => {}, getCorrelationId: () => 'trace-1' } as any,
+    sessionId: 'session-1',
+    state: { pendingModeNotice: null } as any,
+  });
+
+  const result = preparer.prepare(attempt, false);
+
+  expect(result.kind).toBe('blocked');
+  if (result.kind !== 'blocked') return;
+  expect(result.event.kind).toBe('foreign_provider_opaque_history');
+  expect(result.event.message).toContain('Switch back to openai to continue');
+  expect(result.event.message).toContain('start a fresh conversation');
+  expect(result.event.droppedUserMessage).toEqual({ text: 'hello', imageCount: 1 });
+  expect(removed).toBe(1);
+  expect(recorded).toBe(0);
+});
+
 it('rolls back an inserted user turn when the surge guard blocks', () => {
   let removed = 0;
   const attempt = createAttempt();

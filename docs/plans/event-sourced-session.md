@@ -121,10 +121,11 @@ Replace local summary's revision-only provenance with exact `sourceRefs` and dig
 
 ### M4 — native checkpoint and branch lineage
 
-Record native opaque checkpoint ownership and source coverage only where provable; otherwise retain provider-scoped opaque state as an adjunct and force safe full-history rebuilding when switching providers. Make future fork creation add branch lineage without rewriting source event identities. Keep rollover's predecessor semantics.
+Record native opaque checkpoint ownership and source coverage only where provable; otherwise retain provider-scoped opaque state as an adjunct and refuse a foreign-provider request that would silently omit that history. Safe full-history rebuilding remains deferred until semantic replay proves legacy undo and tool-pair equivalence. Make future fork creation add branch lineage without rewriting source event identities. Keep rollover's predecessor semantics.
 
 - Contracts: Contract 02 (provider-scoped opaque state and chain), Contract 08 (fork atomicity, lineage and backward compatibility), rollover plan (`session_init.rolloverFrom`) at the shared session identity seam.
 - Tests: same-provider opaque preservation and foreign-provider non-serialization; unknown-coverage refusal; fork bytes and parent immutability; nested fork provenance; rollover parent lookup and legacy session-init replay.
+- Interim behavior (T1-M4): `SessionInputPlanner` refuses before dispatch when reconciled history contains a foreign provider-opaque compaction checkpoint with unknown source coverage. The uncommitted user input is restored with guidance to switch back to the source provider or start a fresh conversation. Same-provider opaque continuity and provider changes without a foreign compaction checkpoint remain unchanged. This is a safety refusal, not semantic reconstruction; `projectSemanticEvents` remains comparison-only and legacy undo cases remain unresolved.
 - Preservation: no change to provider adapters' fail-closed policy, fork visible transcript, or rollover interaction/settlement guards. Do not claim native summary provenance unsupported by an adapter.
 
 ## Cross-task contracts

@@ -108,6 +108,68 @@ it('uses self-contained full history for a partial parallel tool batch', () => {
   expect(continuity.previousResponseId).toBe(null);
 });
 
+it('refuses a foreign provider switch when opaque history has no portable coverage', () => {
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openrouter', supportsConversationChaining: () => false } as any,
+    toolTracker: {
+      getReconciledHistory: () => [
+        { role: 'user', type: 'message', content: 'before compaction' },
+        { type: 'compaction', encrypted_content: 'opaque', providerOpaque: { provider: 'openai' } },
+      ],
+    } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toMatchObject({ kind: 'foreign_provider_opaque_history', sourceProvider: 'openai' });
+});
+
+it('preserves same-provider native opaque continuity', () => {
+  const opaque = { type: 'compaction', encrypted_content: 'opaque', providerOpaque: { provider: 'openai' } };
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => false } as any,
+    toolTracker: { getReconciledHistory: () => [opaque] } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toBeUndefined();
+  expect(plan.streamInput).toContain(opaque);
+});
+
+it('allows a provider change when history has no opaque native state', () => {
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openrouter', supportsConversationChaining: () => false } as any,
+    toolTracker: {
+      getReconciledHistory: () => [{ role: 'assistant', type: 'message', content: 'portable history' }],
+    } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toBeUndefined();
+  expect(plan.streamInput).toContainEqual({ role: 'assistant', type: 'message', content: 'portable history' });
+});
+
+it('allows a provider change when foreign opaque history is not a compaction checkpoint', () => {
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openrouter', supportsConversationChaining: () => false } as any,
+    toolTracker: {
+      getReconciledHistory: () => [
+        { type: 'reasoning', text: 'private reasoning', providerOpaque: { provider: 'openai' } },
+      ],
+    } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toBeUndefined();
+});
+
 // A held previous_response_id was minted by whatever model produced it. If the
 // user switches models mid-conversation, every other chaining check still
 // passes locally, but the provider 400s ("Invalid previous_response_id")

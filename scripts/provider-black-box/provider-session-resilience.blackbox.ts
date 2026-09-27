@@ -412,12 +412,9 @@ describe('application-owned context compaction black-box lifecycle', () => {
     });
   });
 
-  // Switching providers leaves the previous lane's opaque compaction item in
-  // history forever -- nothing but compaction removes it. Refusing to serialize
-  // it therefore did not merely lose the item, it made every later turn on the
-  // new provider fail, permanently. The item must be dropped so the rest of the
-  // history still reaches the wire.
-  it('drops an OpenAI compaction item and still reaches the wire after switching providers', async () => {
+  // Unknown native coverage means dropping the opaque item would silently
+  // truncate history. The shared input boundary must refuse before dispatch.
+  it('refuses a switched-provider request when native compaction coverage is unknown', async () => {
     const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'compaction-restart' });
     activeHttpServers.push(server);
     const workspace = await createWorkspace(COMPACTION_ROUTE, server);
@@ -450,24 +447,20 @@ describe('application-owned context compaction black-box lifecycle', () => {
     }
     await switched.waitForIdleInput();
     await submitPrompt(switched, 'try the switched provider');
-
-    // The alternate provider is a different wire family pointed at the same
-    // fixture, so the turn cannot succeed. What matters is that the request is
-    // now built and sent at all, carrying none of the foreign ciphertext.
     try {
-      await switched.waitForState(
-        (snapshot) => server.requests.length > 1 || /error/i.test(snapshot.visibleOutput),
-        DEFAULT_TIMEOUT_MS,
-      );
+      await switched.waitForVisibleOutput('Cannot switch this conversation');
     } catch (error) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)} output=${switched.getVisibleOutput()}`,
       );
     }
 
-    expect(server.requests.length).toBeGreaterThan(1);
-    expect(JSON.stringify(server.requests.slice(1))).not.toContain(COMPACTION_CIPHERTEXT);
-    expect(switched.getVisibleOutput()).not.toMatch(/provider_opaque|opaque item/i);
+    const refusalOutput = switched.getVisibleOutput().replace(/\s+/g, ' ');
+    expect(refusalOutput).toContain('native provider history has no verified portable coverage');
+    expect(refusalOutput).toContain('start a fresh conversation');
+    expect(server.requests).toHaveLength(1);
+    expect(JSON.stringify(server.requests)).not.toContain('try the switched provider');
+    expect(JSON.stringify(server.requests)).not.toContain(COMPACTION_CIPHERTEXT);
     await switched.write('\u0003');
     await switched.waitForExit(DEFAULT_TIMEOUT_MS);
   });

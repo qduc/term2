@@ -64,7 +64,7 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
   // on screen every session; a full box around it competes with the conversation
   // below for attention and costs four lines to say four short facts.
   return (
-    <Box flexDirection="column" width="100%" marginBottom={1}>
+    <Box flexDirection="column" width="100%" paddingTop={1} marginBottom={1}>
       <Box>
         <Text color={COLOR_WARNING} bold>
           ▌

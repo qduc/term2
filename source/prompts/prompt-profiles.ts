@@ -14,51 +14,14 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     matches: ({ liteMode }) => liteMode,
   },
   {
-    id: 'gpt-6',
-    basePromptFile: 'gpt-5.6.md',
-    fragmentFiles: ['fragments/gpt-6.md', 'fragments/skill-instruction-conflicts.md'],
-    matches: ({ normalizedModel }) => /gpt-6-(astra|sol|luna)(?:$|[-:])/.test(normalizedModel),
+    id: 'gpt',
+    basePromptFile: 'gpt.md',
+    matches: ({ normalizedModel }) => isGpt5OrGpt6Model(normalizedModel),
   },
   {
     id: 'anthropic',
     basePromptFile: 'anthropic.md',
     matches: ({ normalizedModel }) => normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'),
-  },
-  {
-    id: 'gpt-5.3-codex',
-    basePromptFile: 'codex.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.3') && normalizedModel.includes('codex'),
-  },
-  {
-    id: 'gpt-5-codex',
-    basePromptFile: 'codex.md',
-    matches: ({ normalizedModel }) => isGpt5OrGpt6Model(normalizedModel) && normalizedModel.includes('codex'),
-  },
-  {
-    id: 'gpt-5.6',
-    basePromptFile: 'gpt-5.6.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.6'),
-  },
-  {
-    id: 'gpt-5.5',
-    basePromptFile: 'gpt-5.5.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.5'),
-  },
-  {
-    id: 'gpt-5.4-small',
-    basePromptFile: 'gpt-5.4-mini.md',
-    matches: ({ normalizedModel }) =>
-      normalizedModel.includes('gpt-5.4') && (normalizedModel.includes('mini') || normalizedModel.includes('nano')),
-  },
-  {
-    id: 'gpt-5.4',
-    basePromptFile: 'gpt-5-modern.md',
-    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.4'),
-  },
-  {
-    id: 'gpt-5-modern',
-    basePromptFile: 'gpt-5-modern.md',
-    matches: ({ normalizedModel }) => isGpt5OrGpt6Model(normalizedModel),
   },
   {
     id: 'kimi',

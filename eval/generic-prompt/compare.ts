@@ -43,7 +43,10 @@ const prompts = join(import.meta.dirname, '../../source/prompts');
 const readPrompt = (file: string) => readFileSync(join(prompts, file), 'utf8');
 const control = readFileSync(join(import.meta.dirname, 'simple_v4.md'), 'utf8');
 const candidate = readPrompt('gpt.md');
-const models = [{ provider: 'zai', model: 'glm-5.3-flash' }, { provider: 'DeepSeek', model: 'deepseek-flash' }];
+const group = process.env.PROMPT_AB_GROUP === 'gpt' ? 'gpt' : 'generic';
+const models = group === 'gpt'
+  ? [{ provider: 'codex', model: 'gpt-5.6-luna' }, { provider: 'codex', model: 'gpt-6-luna' }]
+  : [{ provider: 'zai', model: 'glm-5.3-flash' }, { provider: 'DeepSeek', model: 'deepseek-flash' }];
 const settings = new SettingsService({ disableFilePersistence: true, disableLogging: true });
 settings.set('agent.transport', 'http');
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -58,15 +61,17 @@ if (process.argv[2] === '--dry-run') {
   for (const s of specs) console.log(JSON.stringify({ provider: s.provider, model: s.model,
     registered: Boolean(getProvider(s.provider)?.createStreamedModel), baseFile: s.baseFile,
     controlHash: hash(s.controlInstructions), candidateHash: hash(s.candidateInstructions),
-    commonRestHash: hash(s.rest), cases: cases.map(c => c.id), trials: 2, effort: 'medium' }));
+    commonRestHash: hash(s.rest), cases: cases.map(c => c.id), trials: 2, effort: 'medium', group }));
 } else if (process.argv[2] === '--go') {
-  const selected = specs.filter(s => !process.argv[3] || s.provider === process.argv[3]);
+  const selected = specs.filter(s => !process.argv[3] || s.model === process.argv[3]);
   const selectedCases = cases.filter(c => !process.argv[4] || c.id === process.argv[4]);
   if (!selected.length || !selectedCases.length) throw new Error('Unknown provider or case');
   for (const s of selected) {
     const provider = getProvider(s.provider);
     if (!provider?.createStreamedModel) throw new Error(`Provider unavailable: ${s.provider}`);
-    if (s.baseFile !== 'simple_v4.md') throw new Error(`Unexpected generic base: ${s.baseFile}`);
+    if (s.baseFile !== (group === 'gpt' ? 'gpt.md' : 'simple_v4.md')) {
+      throw new Error(`Unexpected ${group} base: ${s.baseFile}`);
+    }
     for (let trial = 0; trial < 2; trial++) {
       for (const c of selectedCases) {
         for (const arm of trial === 0 ? ['control', 'candidate'] as const : ['candidate', 'control'] as const) {
@@ -79,7 +84,8 @@ if (process.argv[2] === '--dry-run') {
             let completed = false;
             for await (const event of streamed.stream({
               instructions: arm === 'control' ? s.controlInstructions : s.candidateInstructions,
-              tools: mainProbeTools, input: [...c.input], reasoning: { effort: 'medium' },
+              tools: mainProbeTools, input: c.input.filter(item => s.provider !== 'codex' || item.type !== 'reasoning'),
+              reasoning: { effort: 'medium' },
               providerOptions: { store: false },
             })) {
               if (event.type !== 'completion') continue;

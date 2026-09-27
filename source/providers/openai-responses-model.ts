@@ -435,6 +435,7 @@ function toTurnOutput(item: any, lane: string = OPENAI_RESPONSES_OPAQUE_TAG): St
   return {
     type: 'provider_opaque',
     provider: lane,
+    sourceProvider: lane,
     item,
   };
 }

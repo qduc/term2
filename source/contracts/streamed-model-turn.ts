@@ -182,6 +182,7 @@ export type StreamedModelTurnInput =
        */
       readonly type: 'provider_opaque';
       readonly provider: string;
+      readonly sourceProvider?: string;
       readonly item: Readonly<Record<string, unknown>>;
     };
 
@@ -260,6 +261,7 @@ export type StreamedModelTurnOutput =
       /** Provider-native output item, carried untouched; see StreamedModelTurnInput. */
       readonly type: 'provider_opaque';
       readonly provider: string;
+      readonly sourceProvider?: string;
       readonly item: Readonly<Record<string, unknown>>;
     };
 

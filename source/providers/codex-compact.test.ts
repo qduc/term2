@@ -24,7 +24,7 @@ it('marks the compact endpoint compaction item as OpenAI-lane opaque history', (
       type: 'compaction',
       id: 'cmp_1',
       encrypted_content: 'cipher',
-      providerOpaque: { provider: OPENAI_RESPONSES_OPAQUE_TAG },
+      providerOpaque: { provider: OPENAI_RESPONSES_OPAQUE_TAG, sourceProvider: 'codex' },
     },
   ]);
   expect(toCodexResponsesInput(normalizeApplicationInput(history))).toEqual([

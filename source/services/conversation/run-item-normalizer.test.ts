@@ -143,6 +143,7 @@ it('normalizes a raw provider_opaque output item (StreamedModelTurnOutput shape)
   const rawOpaque = {
     type: 'provider_opaque',
     provider: 'openai',
+    sourceProvider: 'codex',
     item: {
       id: 'comp_1',
       type: 'compaction',
@@ -156,6 +157,7 @@ it('normalizes a raw provider_opaque output item (StreamedModelTurnOutput shape)
     {
       type: 'provider_opaque',
       provider: 'openai',
+      sourceProvider: 'codex',
       item: {
         id: 'comp_1',
         type: 'compaction',

@@ -15,6 +15,7 @@ import {
   GROK_RESPONSES_OPAQUE_TAG,
   OPENAI_RESPONSES_OPAQUE_TAG,
   isForeignProviderOpaque,
+  providerOpaqueSourceOf,
   providerOpaqueTagOf,
 } from '../../providers/provider-opaque-compatibility.js';
 import { getProfileLabel } from '../profiles/labels.js';
@@ -217,23 +218,24 @@ export class SessionInputPlanner {
         : targetProvider === 'grok'
         ? GROK_RESPONSES_OPAQUE_TAG
         : targetProvider === 'codex'
-        ? null
+        ? OPENAI_RESPONSES_OPAQUE_TAG
         : targetProvider;
     const foreignOpaque = history.find(
       (item) =>
         isOpaqueCompactionItem(item) &&
         providerOpaqueTagOf(item) !== undefined &&
-        (targetOpaqueLane === null || isForeignProviderOpaque(item, targetOpaqueLane)),
+        isForeignProviderOpaque(item, targetOpaqueLane, targetProvider),
     );
-    const foreignOpaqueTag = foreignOpaque && providerOpaqueTagOf(foreignOpaque);
-    if (foreignOpaqueTag) {
+    const foreignOpaqueSource =
+      foreignOpaque && (providerOpaqueSourceOf(foreignOpaque) ?? providerOpaqueTagOf(foreignOpaque));
+    if (foreignOpaqueSource) {
       return {
         streamInput: [],
         inputSurgeKind: 'full_history',
         effectiveTurn: turn,
         refusal: {
           kind: 'foreign_provider_opaque_history',
-          sourceProvider: foreignOpaqueTag,
+          sourceProvider: foreignOpaqueSource,
           targetProvider,
         },
         providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),

@@ -18,7 +18,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | C2.5 | Never-dispatched effects settle as `aborted`; dispatched-but-unobserved effects settle as `unknown` and are never blindly re-executed. | Blindly re-running a command whose execution outcome is unknown (duplicate side effects, data loss). |
 | C2.6 | Provider-native opaque state remains provider-scoped. | Another provider reserializes opaque state it does not understand and corrupts the conversation or breaks resume. |
 | C2.6a | A foreign `provider_opaque` item never serializes into another provider's request. | Resume/compaction blob sent to the wrong vendor; provider 400 or silent history corruption. |
-| C2.6b | Same-provider opaque is allowed **only** on adapters that own an opaque lane: OpenAI Responses (`provider === 'openai'`) and Chat Completions / runtime-compatible (`tag === providerId` **or** legacy `'openai-compatible'`). Codex and AI SDK do not own an opaque lane: their public adapters drop every `provider_opaque` item before serialization, while their lower-level serializers reject a bypassed item. | “Allow own tag” on Codex/AI SDK would be a lie: they have no opaque round-trip. The four adapter/converter proofs below establish fail-closed non-serialization; Codex output conversion also rejects unknown item types (`codex-responses-model.ts:326-349`) and never emits `provider_opaque`. |
+| C2.6b | Same-backend opaque is allowed only on adapters that own an opaque lane. OpenAI Responses and Codex both use the `openai` lane, but newly recorded items also carry `sourceProvider` so an OpenAI API blob cannot cross into chatgpt.com Codex or vice versa. Legacy `openai` items without origin evidence remain replayable on either backend because v0.27.0 Codex compactions used that spelling. Chat Completions / runtime-compatible accepts `tag === providerId` or legacy `'openai-compatible'`; AI SDK owns no opaque lane. | The lane tag alone cannot distinguish the two OpenAI-backed Responses services. Explicit backend provenance keeps detectable switches fail-closed without permanently refusing ambiguous legacy Codex sessions. |
 | C2.6c | Production turns use `stream()`. Missing `getResponse` is not a defect. If `getResponse` exists, it must apply the **same** splice/non-serialization rules and must not treat `failed`/`incomplete` as success. | Unary success on a failed Responses body would look like a completed turn to any future caller. |
 | C2.6d | Before input planning, refuse a provider switch when reconciled history contains a foreign opaque `compaction` checkpoint whose portable source coverage is unknown. Do not send a silently truncated request; preserve same-provider native continuity and ordinary switches without a foreign compaction checkpoint. | A foreign adapter's safe-to-drop compaction item may be the only surviving provider history for earlier turns after native compaction. |
 | C2.7 | A retry that omits `previous_response_id` must send self-contained full history. A caller-supplied chained delta is never retried without its anchor by the run loop or the Codex adapter. | Follow-up turns look amnesiac: the model sees only the newest sentence ("This.") and asks for context it already had. |
@@ -33,9 +33,9 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   `filterChainedModelInput` in `source/lib/chained-input-filter.ts` (delta validation); `SessionStreamProcessor` (finalize,
   `publishTerminalResponse`, debt sync); retry classification/policy.
 - **C2.6 request admission (enforcement):** `SessionInputPlanner.build` detects foreign opaque history before chained/full-history dispatch. `InitialInputPreparer` restores the unsubmitted user turn and surfaces actionable recovery guidance. Adapter-level non-serialization remains independently enforced.
-- **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts:84-122`),
+- **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts`),
   `openAICompatibleMessages` (`openai-chat-completions-model.ts:294-333`), `toPromptMessage`
-  (`ai-sdk-streamed-model.ts:260-284`), and `toCodexResponsesItem` (`codex-turn-converter.ts:17-50`).
+  (`ai-sdk-streamed-model.ts:260-284`), and `toCodexResponsesInput` (`codex-turn-converter.ts`).
   History carry is `ApplicationRunLoop` (`application-run-loop.ts:1159-1166`), which turns
   terminal opaque output into `provider_opaque` input items (`:1864-1867`).
 - **Recovery:** `DefaultRecoveryExecutor` (`resume_stream`, `replay_turn`,
@@ -74,7 +74,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   results (`session-tool-tracker.ts:78-86`).
 - Replacement boundary: an OpenAI opaque `compaction` item or a local context
   summary (`conversation-state-projector.ts:35-55`).
-- `ProviderInputItem.providerOpaque?: { provider }` and persisted
+- `ProviderInputItem.providerOpaque?: { provider, sourceProvider? }` and persisted
   `provider_opaque` items (`source/contracts/provider-input.ts:20-42`;
   `conversation-turn-items.ts:94-105`).
 - `inputSurgeKind: 'delta'` for chained input (`session-input-planner.ts:211-230`).
@@ -83,12 +83,15 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   A Responses adapter splices only its own lane tag, which it takes as a parameter
   (`OPENAI_RESPONSES_OPAQUE_TAG = 'openai'` by default, `GROK_RESPONSES_OPAQUE_TAG = 'grok'`
   for Grok — a second vendor on the same wire shape whose ciphertext is not interchangeable);
+  Codex also uses the `openai` lane for its native compaction wire item, so
+  `sourceProvider` records whether a new item came from `openai` or `codex`.
+  Missing provenance is the legacy spelling and remains ambiguous by design.
   `acceptsProviderOpaqueTag` refuses the legacy shared tag only for the lane tagged
   `openai` — a Grok-tagged lane still accepts `'openai-compatible'` items, which looks
   unintended (`provider-opaque-compatibility.ts:32-80`, esp. `:79`). Chat Completions
   splices `tag === providerId` or legacy `'openai-compatible'`, where the runtime-compatible
   tag is `opaqueProviderTag(config)` = `config.name || config.type || 'openai-compatible'`
-  (`openai-compatible.provider.ts:51-52`); AI SDK and Codex drop every tag at their public request boundary, with lower-level serializer guards for bypasses.
+  (`openai-compatible.provider.ts:51-52`); AI SDK drops every tag at its public request boundary. Codex replays only the OpenAI lane when its recorded source is Codex (or the legacy source is absent), with a lower-level serializer guard for bypasses.
 
 ## 5. Settlement semantics
 
@@ -163,8 +166,8 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   splice and foreign-item drop), `openai-chat-completions-model.test.ts` (foreign
   and same-type/different-id drops), `openai-compatible.provider.test.ts`
   (runtime-compatible tag = config name), `ai-sdk-streamed-model.test.ts` (unary
-  foreign-item drop), and `codex-turn-converter.test.ts` (foreign/own-tag drops
-  plus direct converter rejection). These four adapter/converter files are the
+  foreign-item drop), and `codex-turn-converter.test.ts` (OpenAI-lane replay,
+  source-origin filtering, and direct converter rejection). These adapter/converter files are the
   fail-closed provider_opaque proofs; `retrying-model.test.ts` covers stream retry
   and unary absence.
 
@@ -207,10 +210,10 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | Chat Completions own-tag splice | `openai-chat-completions-model.test.ts:751` "splices a trailing opaque payload onto its own turn, not an earlier assistant message"; `:788` "replaces reconstructed reasoning_content with the payload spelling rather than sending both" | covered |
 | Runtime-compatible tag = config name | `openai-compatible.provider.test.ts:414` / `:455` emit `provider: 'provider-test'` | covered |
 | AI SDK fail-closed handling | `ai-sdk-streamed-model.test.ts:355` "drops a provider_opaque item and still sends the rest of the history"; `ai-sdk-streamed-model.ts:228-244` filters before both stream/unary call options, while `:289-294` rejects a bypass | covered |
-| Codex fail-closed handling | `codex-turn-converter.test.ts:126` / `:136` drop foreign and own-tag items; `:146` "still refuses a provider_opaque item handed straight to the per-item converter"; `codex-turn-converter.ts:13-17,46-55` filters then guards bypasses | covered |
+| Codex fail-closed handling | `codex-turn-converter.test.ts` replays Codex-owned OpenAI-lane compaction, drops foreign lanes/origin-tagged OpenAI backend items, and keeps the per-item bypass guard | covered |
 | RetryingModel unary absence (green characterization) | `retrying-model.test.ts:179` "RetryingModel does not expose getResponse when the wrapped model has none" | covered |
 | Persistence/replay of opaque items | `conversation-replay.test.ts:2075` "a provider_opaque item round-trips byte-identical through persistence and replay"; `:2122` "two provider_opaque items across turns both survive independently"; `application-run-loop.test.ts:27` "carries a providerOpaque-marked item through untouched as provider_opaque" | covered |
-| Unknown-coverage foreign opaque history | `session-input-planner.test.ts` refusal/same-provider cases; `provider-session-resilience.blackbox.ts` asserts refusal surfaced and no second request reached the wire | covered (interim refusal; reconstruction deferred) |
+| Unknown-coverage foreign opaque history | `session-input-planner.test.ts` covers Codex live and v0.27.0-shaped replay plus origin-proven cross-backend refusal; `provider-session-resilience.blackbox.ts` covers refusal before wire dispatch and Codex native compact → next turn | covered (interim refusal; reconstruction deferred) |
 
 ## 9. Verification commands
 

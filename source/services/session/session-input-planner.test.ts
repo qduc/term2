@@ -4,6 +4,9 @@ import type { ProviderHistorySnapshot } from '../conversation/conversation-store
 import { getSerializedInputBytes } from '../large-uncached-input-guard.js';
 import { combineHistoryAndDraftBytes, SessionInputPlanner } from './session-input-planner.js';
 import { getProvider } from '../../providers/index.js';
+import { compactOutputToProviderHistory } from '../../providers/codex-compact.js';
+import { decodeLogEnvelope, resolveEnvelopeIdentities } from '../conversation/conversation-decoder.js';
+import { replayEvents } from '../conversation/conversation-replay.js';
 
 it('carries the authoritative immutable history snapshot alongside the unchanged input plan', () => {
   const snapshot: ProviderHistorySnapshot = Object.freeze({
@@ -137,6 +140,94 @@ it('preserves same-provider native opaque continuity', () => {
 
   expect(plan.refusal).toBeUndefined();
   expect(plan.streamInput).toContain(opaque);
+});
+
+it('preserves live Codex native compaction continuity', () => {
+  const history = compactOutputToProviderHistory([{ type: 'compaction', id: 'cmp-live', encrypted_content: 'opaque' }]);
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'codex', supportsConversationChaining: () => false } as any,
+    toolTracker: { getReconciledHistory: () => history } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toBeUndefined();
+  expect(history[0]?.providerOpaque).toEqual({ provider: 'openai', sourceProvider: 'codex' });
+  expect(plan.streamInput).toContain(history[0]);
+});
+
+it('allows Codex to resume a legacy Codex compaction without origin evidence', () => {
+  const decoded = [
+    {
+      v: 3,
+      seq: 1,
+      ts: '2026-01-01T00:00:00.000Z',
+      event: { type: 'session_init', id: 'legacy-codex', createdAt: '2026-01-01T00:00:00.000Z' },
+    },
+    {
+      v: 3,
+      seq: 2,
+      ts: '2026-01-01T00:00:01.000Z',
+      event: {
+        type: 'assistant_turn',
+        turn: {
+          items: [
+            {
+              type: 'provider_opaque',
+              provider: 'openai',
+              item: { type: 'compaction', id: 'cmp-v027', encrypted_content: 'opaque' },
+            },
+          ],
+        },
+        state: { previousResponseId: null, provider: 'codex', model: 'gpt-5' },
+      },
+    },
+  ].map(decodeLogEnvelope);
+  expect(decoded.every((entry) => entry !== null)).toBe(true);
+  const replayed = replayEvents(
+    resolveEnvelopeIdentities(decoded as NonNullable<(typeof decoded)[number]>[], 'legacy-codex'),
+  );
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'codex', supportsConversationChaining: () => false } as any,
+    toolTracker: { getReconciledHistory: () => replayed.history } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toBeUndefined();
+  expect(plan.streamInput).toContainEqual(
+    expect.objectContaining({
+      type: 'compaction',
+      id: 'cmp-v027',
+      providerOpaque: { provider: 'openai' },
+    }),
+  );
+});
+
+it('refuses an OpenAI-to-Codex switch when compaction origin is recorded', () => {
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'codex', supportsConversationChaining: () => false } as any,
+    toolTracker: {
+      getReconciledHistory: () => [
+        {
+          type: 'compaction',
+          encrypted_content: 'opaque',
+          providerOpaque: { provider: 'openai', sourceProvider: 'openai' },
+        },
+      ],
+    } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.refusal).toEqual({
+    kind: 'foreign_provider_opaque_history',
+    sourceProvider: 'openai',
+    targetProvider: 'codex',
+  });
 });
 
 it('allows a provider change when history has no opaque native state', () => {

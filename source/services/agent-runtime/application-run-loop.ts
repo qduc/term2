@@ -1378,7 +1378,10 @@ export class ApplicationRunLoop {
         if (item.type !== 'provider_opaque') continue;
         const historyItem: ProviderInputItem = {
           ...item.item,
-          providerOpaque: { provider: item.provider },
+          providerOpaque: {
+            provider: item.provider,
+            ...(item.sourceProvider ? { sourceProvider: item.sourceProvider } : {}),
+          },
         };
         state.history.push(historyItem);
         state.input.push(item);
@@ -1972,7 +1975,7 @@ function normalizeReasoningText(value: unknown): string {
 /** True when the adapter marked this item as provider-native and opaque. */
 function isProviderOpaque(
   item: ProviderInputItem,
-): item is ProviderInputItem & { providerOpaque: { provider: string } } {
+): item is ProviderInputItem & { providerOpaque: { provider: string; sourceProvider?: string } } {
   const marker = item.providerOpaque;
   return typeof marker?.provider === 'string' && marker.provider.length > 0;
 }
@@ -1980,7 +1983,14 @@ function isProviderOpaque(
 function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
   if (isProviderOpaque(item)) {
     const { providerOpaque: _marker, ...providerItem } = item;
-    return [{ type: 'provider_opaque', provider: item.providerOpaque.provider, item: providerItem }];
+    return [
+      {
+        type: 'provider_opaque',
+        provider: item.providerOpaque.provider,
+        ...(item.providerOpaque.sourceProvider ? { sourceProvider: item.providerOpaque.sourceProvider } : {}),
+        item: providerItem,
+      },
+    ];
   }
   if (item.type === 'function_call' || item.type === 'custom_tool_call') {
     return [

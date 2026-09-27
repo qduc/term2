@@ -238,9 +238,15 @@ const asProviderOpaqueItem = (value: unknown): ProviderOpaqueItem | null => {
   const record = asRecord(value);
   if (!record || record.type !== 'provider_opaque') return null;
   const provider = getString(record.provider);
+  const sourceProvider = getString(record.sourceProvider);
   const payload = asRecord(record.item);
   if (!provider || !payload) return null;
-  return { type: 'provider_opaque', provider, item: clone(payload) };
+  return {
+    type: 'provider_opaque',
+    provider,
+    ...(sourceProvider ? { sourceProvider } : {}),
+    item: clone(payload),
+  };
 };
 
 /** Converts raw provider run items to serializable domain items at the conversation boundary. */

@@ -166,6 +166,7 @@ describe('provider_opaque handling', () => {
         {
           type: 'provider_opaque',
           provider: 'openai',
+          sourceProvider: 'codex',
           item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
         },
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] },
@@ -174,6 +175,31 @@ describe('provider_opaque handling', () => {
       { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
     ]);
+  });
+
+  it('replays a legacy OpenAI-lane compaction item with no backend provenance', () => {
+    expect(
+      toCodexResponsesInput([
+        {
+          type: 'provider_opaque',
+          provider: 'openai',
+          item: { type: 'compaction', id: 'cmp_legacy', encrypted_content: 'legacy-cipher' },
+        },
+      ]),
+    ).toEqual([{ type: 'compaction', id: 'cmp_legacy', encrypted_content: 'legacy-cipher' }]);
+  });
+
+  it('drops an OpenAI API compaction whose backend provenance is not Codex', () => {
+    expect(
+      toCodexResponsesInput([
+        {
+          type: 'provider_opaque',
+          provider: 'openai',
+          sourceProvider: 'openai',
+          item: { type: 'compaction', encrypted_content: 'openai-api-blob' },
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it('drops a foreign provider_opaque item and still serializes the rest', () => {

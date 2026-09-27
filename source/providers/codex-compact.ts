@@ -31,7 +31,7 @@ export function compactOutputToProviderHistory(output: readonly unknown[]): Prov
     if (record.type === 'compaction') {
       return {
         ...record,
-        providerOpaque: { provider: OPENAI_RESPONSES_OPAQUE_TAG },
+        providerOpaque: { provider: OPENAI_RESPONSES_OPAQUE_TAG, sourceProvider: 'codex' },
       };
     }
     return record as ProviderInputItem;

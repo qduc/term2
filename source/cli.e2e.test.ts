@@ -46,6 +46,8 @@ it.sequential('starts the terminal UI and exits on the second Ctrl+C', { timeout
       TERM2_CONVERSATIONS_DIR: tempConversationsDir,
       DISABLE_LOGGING: '1',
       [HARNESS_IDLE_ENV]: idlePath,
+      // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
+      CI: 'false',
     },
   });
 

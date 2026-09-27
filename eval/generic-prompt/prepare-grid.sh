@@ -8,8 +8,14 @@ if [[ $# -ne 1 ]]; then
 fi
 repo=$(realpath "$(dirname "$0")/../..")
 root=$(realpath -m "$1")
+runtime=${GRID_DIST_DIR:-$repo/dist}
+if [[ ${GRID_MODEL:-} == sol ]]; then
+  arms=(sol-simple sol-gpt)
+else
+  arms=(deepseek-simple deepseek-gpt luna-gpt luna-simple)
+fi
 skill=/home/qduc/.agents/skills/model-benchmark
-if [[ -e "$root" || ! -d "$repo/dist/prompts" ]]; then
+if [[ -e "$root" || ! -d "$runtime/prompts" ]]; then
   echo "Expected a new output directory and a built runtime" >&2
   exit 2
 fi
@@ -27,12 +33,12 @@ for task in c11-d5-batch-denial-tristate r-settings-secret-display r-retry-abort
     mkdir -p "$run/control"
     cp "$task_dir/task.json" "$task_dir/prompt.txt" "$task_dir/evaluator.test.ts" "$run/control/"
     printf '%s\n' "$(git -C "$repo" rev-parse "$base")" > "$run/control/base_commit"
-    node - "$run/control/meta.json" "$task" <<'JS'
+    node - "$run/control/meta.json" "$task" "$(IFS=,; echo "${arms[*]}")" <<'JS'
 const fs = require('node:fs');
 fs.writeFileSync(process.argv[2], JSON.stringify({task_id: process.argv[3],
-  candidates: ['deepseek-simple','deepseek-gpt','luna-gpt','luna-simple']}, null, 2));
+  candidates: process.argv[4].split(',')}, null, 2));
 JS
-    for arm in deepseek-simple deepseek-gpt luna-gpt luna-simple; do
+    for arm in "${arms[@]}"; do
       candidate="$root/candidates/$task/rep-$rep/$arm"
       mkdir -p "$candidate"
       git -C "$repo" archive "$base" | tar -x -C "$candidate"
@@ -43,10 +49,10 @@ JS
         fi
       done
       cp "$run/control/prompt.txt" "$candidate/BENCH-TASK.md"
-      cp -a "$repo/dist" "$candidate/dist"
+      cp -a "$runtime" "$candidate/dist"
       case "$arm" in
         deepseek-gpt) cp "$repo/source/prompts/gpt.md" "$candidate/dist/prompts/simple_v4.md" ;;
-        luna-simple) cp "$repo/eval/generic-prompt/simple_v4.md" "$candidate/dist/prompts/gpt.md" ;;
+        luna-simple|sol-simple) cp "$repo/eval/generic-prompt/simple_v4.md" "$candidate/dist/prompts/gpt.md" ;;
       esac
       # Shallow dependency links keep candidate installs from replacing the
       # shared node_modules directory while reusing the local pnpm store.

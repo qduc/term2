@@ -237,6 +237,22 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   expect(rejected).toBe(true);
 });
 
+it.sequential('ApprovalPrompt does not approve Docker host control with the 1 shortcut', async () => {
+  let answer: string | undefined;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
+  };
+  const { stdin, lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+
+  expect(lastFrame()).not.toContain('1. allow once');
+  await writeInput(stdin, '1');
+  expect(answer).toBeUndefined();
+});
+
 it.sequential('ApprovalPrompt ignores Docker y/n shortcuts', async () => {
   let approved = false;
   let rejected = false;

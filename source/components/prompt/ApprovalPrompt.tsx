@@ -397,7 +397,6 @@ const APPROVAL_FOOTER_HINTS: [string, string][] = [
 
 const DOCKER_APPROVAL_FOOTER_HINTS: [string, string][] = [
   ['↑↓', 'navigate'],
-  ['1', 'allow once'],
   ['⏎', 'select'],
   ['Esc', 'interrupts the turn'],
 ];
@@ -741,7 +740,10 @@ const ApprovalPrompt: FC<Props> = ({
       const targetIndex = Number(input) - 1;
       if (targetIndex < askUserMenuItems.length) {
         const selected = askUserMenuItems[targetIndex];
-        if (targetIndex === 0 || selected === 'Deny' || selected === 'Reject') {
+        if (
+          (isDockerHostControlApproval && selected === 'Deny') ||
+          (!isDockerHostControlApproval && (targetIndex === 0 || selected === 'Deny' || selected === 'Reject'))
+        ) {
           handleStandardSelection(selected, targetIndex);
         }
         return;

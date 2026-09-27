@@ -47,6 +47,33 @@ const cases = [
     input: [message('user', 'Can you fix the typo in README.md? Replace Welcom with Welcome.'), ...baseline],
   },
   {
+    id: 'indirect-edit-desired-state',
+    role: 'main',
+    expectedTool: 'apply_patch',
+    input: [message('user', 'I want README.md to say Welcome instead of Welcom.'), ...baseline],
+  },
+  {
+    id: 'indirect-edit-problem-statement',
+    role: 'main',
+    expectedTool: 'apply_patch',
+    input: [message('user', 'README.md currently says Welcom, but it should say Welcome.'), ...baseline],
+  },
+  {
+    id: 'question-framed-edit',
+    role: 'main',
+    expectedTool: 'apply_patch',
+    input: [message('user', 'How can we make README.md say Welcome instead of Welcom?'), ...baseline],
+  },
+  {
+    id: 'explicit-read-only',
+    role: 'main',
+    expectedTool: null,
+    input: [
+      message('user', 'Do not edit files. Just explain how to replace Welcom with Welcome in README.md.'),
+      ...baseline,
+    ],
+  },
+  {
     id: 'skill-conflict',
     role: 'main',
     expectedTool: 'apply_patch',
@@ -145,7 +172,7 @@ const cases = [
   },
 ] as const;
 
-const [providerId, model] = process.argv.slice(2);
+const [providerId, model, caseId] = process.argv.slice(2);
 if (providerId === '--list') {
   console.log(JSON.stringify(cases, null, 2));
 } else {
@@ -183,7 +210,9 @@ if (providerId === '--list') {
   const settings = new SettingsService({ disableFilePersistence: true, disableLogging: true });
   settings.set('agent.transport', 'http');
   const provider = getProvider(providerId)!;
-  for (const probe of cases) {
+  const selectedCases = caseId ? cases.filter((probe) => probe.id === caseId) : cases;
+  if (selectedCases.length === 0) throw new Error(`Unknown probe: ${caseId}`);
+  for (const probe of selectedCases) {
     const started = Date.now();
     try {
       const streamed = await provider.createStreamedModel!(model, {

@@ -25,6 +25,12 @@ describe('unified main-agent GPT prompt', () => {
     expect(spec.fragmentFiles).not.toContain('fragments/skill-instruction-conflicts.md');
   });
 
+  it.each(['gpt-4o', 'deepseek-chat', 'unknown-model'])('uses the shared base for generic model %s', (model) => {
+    const spec = buildPromptSpec({ model, profile: standard });
+    expect(spec.basePromptFile).toBe('gpt.md');
+    expect(spec.fragmentFiles).toContain('approval-model.md');
+  });
+
   it('keeps the action, approval, verification, and skill-conflict rules in the base', () => {
     const text = readFileSync(join(import.meta.dirname, 'gpt.md'), 'utf8');
     expect(text).toContain('Default to action');

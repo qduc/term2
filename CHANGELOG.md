@@ -1,3 +1,28 @@
+## [0.28.0] - 2026-09-27
+
+### Features
+- Added durable session goals: set one at launch with `--goal` (and optional `--goal-criteria`) or in chat with `/goal`. The goal persists across resume and session rollover and is included in request context.
+- Added an opt-in local control socket for a live TUI session (`--control-socket[=<name>]`) and a `term2 control` command to read status and submit, steer, or interrupt turns from another process.
+- Sessions and project memory are now scoped by git project, so a checkout and its worktrees share one session list, resume history, and project memory.
+- Mistyped slash commands now suggest close matches instead of being sent to the model.
+
+### Bug Fixes
+- Fixed Codex sessions refusing every turn after native context compaction, including resumed sessions that were compacted in earlier versions.
+- Compacted conversation history now persists across turns and resumes correctly; switching providers after native compaction is refused only when the compacted history came from a different backend.
+- An oversized tool call is recovered by asking the model to split the work instead of failing the turn.
+- Resuming a session whose working directory was deleted, and recovering a locked session, now work and explain what happened.
+- Session rollover fails safely when the log writer fails, and keeps durable goals and usage reminders.
+- The control socket survives misbehaving or disconnecting clients instead of crashing the TUI.
+- Image paste failures now show a notice; large paste markers show the logical line count.
+- Restart-required settings changed with slash commands are now saved.
+
+### Improvements
+- Ctrl+C now clears the draft or interrupts the running turn first; press it again to exit. Ctrl+\ exits immediately. Scripts or terminal automation that stopped term2 with a single Ctrl+C must now send it twice, or use Ctrl+\.
+- Approval prompts have clearer actions and labels. Deny stays the second option, and number keys can only allow once or deny, never grant a session or project-wide permission. Docker host control cannot be approved with a single keystroke.
+- Provider and tool errors are more readable and actionable; key hints, working indicators, and status-bar priorities are more consistent.
+- Polished CLI startup help and the exit summary, which keeps the SSH-aware resume command.
+- Removed unused code and the `import-jsx` dev dependency.
+
 ## [0.27.0] - 2026-09-26
 
 ### Features

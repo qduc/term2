@@ -96,7 +96,9 @@ it('buildPromptSpec selects the profile identity and model-family base prompt', 
   expect(buildPromptSpec({ model: 'claude-3-sonnet', profile: profile('builtin:standard') }).basePromptFile).toBe(
     'anthropic.md',
   );
-  expect(buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard') }).basePromptFile).toBe('gpt.md');
+  expect(buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard') }).basePromptFile).toBe(
+    'simple_v4.md',
+  );
 });
 
 it('buildPromptSpec keeps all non-lite built-in profiles prompt-spec equivalent', () => {

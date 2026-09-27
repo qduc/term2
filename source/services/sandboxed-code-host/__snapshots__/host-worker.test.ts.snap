@@ -276,7 +276,7 @@ function installContextBindings() {
   function factoryBinding(name) {
     return (config) => Object.freeze({ run(input) { return call(name, { config, input }).promise; } });
   }
-  function namespaceBinding(name, members) {
+  function namespaceBinding(name, members, unknownMemberHints) {
     const namespace = Object.create(null);
     for (const member of members) {
       const callable = (params) => {
@@ -310,7 +310,10 @@ function installContextBindings() {
       get(target, prop) {
         if (prop in target) return target[prop];
         if (typeof prop === 'string') {
-           const unknown = new Error('Unknown tool "' + prop + '". Available: ' + members.join(', '));
+           const hint = unknownMemberHints && Object.prototype.hasOwnProperty.call(unknownMemberHints, prop)
+             ? '. ' + unknownMemberHints[prop]
+             : '';
+           const unknown = new Error('Unknown tool "' + prop + '". Available: ' + members.join(', ') + hint);
            unknown.code = 'unknown_tool';
            throw unknown;
         }
@@ -323,7 +326,7 @@ function installContextBindings() {
     // Assignment gives the magic global __proto__ name prototype-mutating
     // semantics. Define an own data property for every capability name.
     Object.defineProperty(globalThis, capability.name, {
-      value: capability.kind === 'namespace' ? namespaceBinding(capability.name, capability.members) : factoryBinding(capability.name),
+      value: capability.kind === 'namespace' ? namespaceBinding(capability.name, capability.members, capability.unknownMemberHints) : factoryBinding(capability.name),
       configurable: true,
       enumerable: true,
       writable: true,

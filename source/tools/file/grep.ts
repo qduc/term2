@@ -333,7 +333,12 @@ export const createGrepToolDefinition = (
       }
 
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        throw new Error(`Search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
+        const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
+        const regexHint =
+          !fixed_strings && /regex parse error/i.test(detail)
+            ? '\nThe pattern is a regular expression; pass fixed_strings: true for literal text or escape the metacharacters.'
+            : '';
+        throw new Error(`Search failed: ${detail}${regexHint}`);
       }
 
       const filteredStdout = result.stdout;

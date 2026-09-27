@@ -40,6 +40,26 @@ it.sequential('outside-workspace read approval offers session folder access', as
   expect(answer).toBe('allow-folder-session');
 });
 
+it.sequential('outside-workspace read digit shortcut cannot grant session access', async () => {
+  let answer: string | undefined;
+  let rejected = false;
+  const result = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={(value) => {
+        answer = value;
+      }}
+      onReject={() => {
+        rejected = true;
+      }}
+    />,
+  );
+
+  await writeInput(result.stdin, '2');
+  expect(answer).toBeUndefined();
+  expect(rejected).toBe(false);
+});
+
 it.sequential('Escape on a regular (non-ask_user) approval cancels the prompt', async () => {
   let cancelled = false;
   const result = await renderInAct(

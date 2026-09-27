@@ -137,7 +137,9 @@ it.sequential('Ctrl+C shows an exit hint when idle with an empty draft', async (
 
 it.sequential('Ctrl+\\ remains an immediate emergency exit', async () => {
   await renderHarness();
-  await fireInput('\\', { ctrl: true });
+  // Ink decodes the physical Ctrl+\\ byte as a control character without
+  // setting key.ctrl.
+  await fireInput('\x1c', { ctrl: false });
   expect(mocks.exitWithUsage).toHaveBeenCalledTimes(1);
 });
 
@@ -312,14 +314,28 @@ it.sequential('does NOT fire Escape or Shift+Tab shortcuts while the background 
   expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 
-it.sequential('Ctrl+C still exits (global) while a prompt owns input', async () => {
-  await renderHarness({ inputOwner: { kind: 'approval' } });
-  const before = mocks.exitWithUsage.mock.calls.length;
+it.sequential('Ctrl+C remains global for every input owner', async () => {
+  const ownersByKind = {
+    'handoff-confirm': { kind: 'handoff-confirm' },
+    'standard-mode-confirm': { kind: 'standard-mode-confirm' },
+    'mode-switch-confirm': { kind: 'mode-switch-confirm' },
+    'input-surge': { kind: 'input-surge' },
+    'large-uncached': { kind: 'large-uncached' },
+    approval: { kind: 'approval' },
+    'queue-paused': { kind: 'queue-paused' },
+    'background-tasks': { kind: 'background-tasks' },
+    'first-run-setup': { kind: 'first-run-setup' },
+    menu: { kind: 'menu' },
+    input: { kind: 'input' },
+  } satisfies Record<InputOwner['kind'], InputOwner>;
 
-  await fireInput('c', { ctrl: true });
-  await fireInput('c', { ctrl: true });
-
-  expect(mocks.exitWithUsage.mock.calls.length).toBe(before + 1);
+  for (const inputOwner of Object.values(ownersByKind)) {
+    mocks.exitWithUsage.mockClear();
+    await renderHarness({ inputOwner });
+    await fireInput('c', { ctrl: true });
+    await fireInput('c', { ctrl: true });
+    expect(mocks.exitWithUsage, inputOwner.kind).toHaveBeenCalledTimes(1);
+  }
 });
 
 it.sequential('app shortcuts remain active when owner is input', async () => {
@@ -343,6 +359,17 @@ it.sequential('rejects exactly once and bridges an immediate rejection reason be
   expect(mocks.replaceInput).toHaveBeenCalledWith('needs review');
   expect(mocks.submitRejectionReason).toHaveBeenCalledTimes(1);
   expect(mocks.submitRejectionReason).toHaveBeenCalledWith('needs review');
+});
+
+it.sequential('Ctrl+C clears a bridged rejection reason before the editor is ready', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForRejectionReason: true });
+
+  await fireInput('nunsafe change', {});
+  await fireInput('c', { ctrl: true });
+  await fireInput('', { return: true });
+
+  expect(mocks.replaceInput).toHaveBeenLastCalledWith('');
+  expect(mocks.submitRejectionReason).toHaveBeenCalledWith('');
 });
 
 it.sequential('drops an orphaned bridged reason so y approves the replacement approval head', async () => {

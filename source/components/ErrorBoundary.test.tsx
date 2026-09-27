@@ -42,7 +42,7 @@ it.sequential('ErrorBoundary catches errors and displays fallback UI', async () 
     expect(output!.includes('/clear')).toBe(false);
     expect(output!.includes('/quit')).toBe(false);
     expect(output!.includes('Restart the application')).toBe(true);
-    expect(output!.includes('Press Ctrl+C to force quit')).toBe(true);
+    expect(output!.includes('Press Ctrl+C twice to quit')).toBe(true);
   } finally {
     console.error = originalError;
   }

@@ -389,8 +389,21 @@ export function deniedReadOptionColor(item: string): string {
 
 const APPROVAL_FOOTER_HINTS: [string, string][] = [
   ['↑↓', 'navigate'],
-  ['1-9', 'select'],
+  ['1', 'allow once'],
   ['y/n', 'answer'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
+
+const DOCKER_APPROVAL_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
+
+const CHECK_IN_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['1/2', 'answer'],
   ['⏎', 'select'],
   ['Esc', 'interrupts the turn'],
 ];
@@ -575,20 +588,20 @@ const ApprovalPrompt: FC<Props> = ({
 
   const deniedReadMenuItems = React.useMemo(() => {
     if (!deniedRead) return [];
-    const items = ['Allow once'];
+    const items = ['Allow once', 'Deny'];
     if (!deniedRead.sensitive) {
       items.push('Allow and remember this path');
     }
-    items.push('Run unsandboxed once', 'Deny');
+    items.push('Run unsandboxed once');
     return items;
   }, [deniedRead]);
 
   const askUserMenuItems = React.useMemo(() => {
     if (isDockerHostControlApproval) {
-      return ['Allow this command', 'Allow for this session', 'Always allow for this project', 'Deny'];
+      return ['Allow this command', 'Deny', 'Allow for this session', 'Always allow for this project'];
     }
     if (isSandboxNetworkApproval) {
-      return ['Allow once', 'Allow host for this session', 'Always allow host for this project', 'Deny'];
+      return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
       return isOutsideWorkspaceEdit
@@ -669,12 +682,6 @@ const ApprovalPrompt: FC<Props> = ({
       return;
     }
 
-    if (isDockerHostControlApproval && (input.toLowerCase() === 'y' || input.toLowerCase() === 'n')) {
-      if (input.toLowerCase() === 'y') onApprove('docker-allow-once');
-      else onReject();
-      return;
-    }
-
     if (isAskUser) {
       // Question navigation with p / n or left / right arrow keys
       if (hasMultipleQuestions) {
@@ -732,7 +739,13 @@ const ApprovalPrompt: FC<Props> = ({
     if (!isAskUser && !approval.checkIn && /^[1-9]$/.test(input)) {
       const targetIndex = Number(input) - 1;
       if (targetIndex < askUserMenuItems.length) {
-        handleStandardSelection(askUserMenuItems[targetIndex], targetIndex);
+        const selected = askUserMenuItems[targetIndex];
+        if (
+          (isDockerHostControlApproval && selected === 'Deny') ||
+          (!isDockerHostControlApproval && (targetIndex === 0 || selected === 'Deny' || selected === 'Reject'))
+        ) {
+          handleStandardSelection(selected, targetIndex);
+        }
         return;
       }
     }
@@ -837,7 +850,7 @@ const ApprovalPrompt: FC<Props> = ({
             </Box>
           </Box>
           <Box marginTop={1} marginLeft={1}>
-            <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+            <MenuFooter hints={CHECK_IN_FOOTER_HINTS} />
           </Box>
         </Box>
       </Box>
@@ -1101,7 +1114,7 @@ const ApprovalPrompt: FC<Props> = ({
         </Box>
       )}
       <Box marginTop={1} marginLeft={1}>
-        <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+        <MenuFooter hints={isDockerHostControlApproval ? DOCKER_APPROVAL_FOOTER_HINTS : APPROVAL_FOOTER_HINTS} />
       </Box>
     </Box>
   );

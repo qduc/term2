@@ -156,6 +156,10 @@ it.sequential('ApprovalPrompt renders the Docker host-control menu without ordin
   expect(output).toContain('Always allow for this project');
   expect(output).not.toContain('Run unsandboxed once');
   expect(output).not.toContain('Approve');
+  expect(output.indexOf('1. Allow this command')).toBeLessThan(output.indexOf('2. Deny'));
+  expect(output.indexOf('2. Deny')).toBeLessThan(output.indexOf('3. Allow for this session'));
+  expect(output.indexOf('3. Allow for this session')).toBeLessThan(output.indexOf('4. Always allow for this project'));
+  expect(toVisibleText(output)).not.toContain('y/n answer');
   // Docker's danger border draws a "│" on every wrapped line of its body, so
   // normalize that border glyph away too, not just whitespace, before checking
   // the sentence reads as one contiguous line.
@@ -197,6 +201,7 @@ it.sequential('ApprovalPrompt sends the Docker session grant answer', async () =
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
   await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('docker-allow-session');
 });
@@ -211,7 +216,7 @@ it.sequential('ApprovalPrompt sends the Docker project grant answer', async () =
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  for (let index = 0; index < 2; index++) await writeInput(stdin, '\u001B[B');
+  for (let index = 0; index < 3; index++) await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('docker-allow-project');
 });
@@ -226,12 +231,93 @@ it.sequential('ApprovalPrompt denies a Docker host-control request', async () =>
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
   );
-  // Deny is last, after all available grants.
-  await writeInput(stdin, '\u001B[B');
-  await writeInput(stdin, '\u001B[B');
+  // Deny remains the muscle-memory-safe second option.
   await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(rejected).toBe(true);
+});
+
+it.sequential('ApprovalPrompt does not approve Docker host control with the 1 shortcut', async () => {
+  let answer: string | undefined;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
+  };
+  const { stdin, lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
+  );
+
+  expect(lastFrame()).not.toContain('1. allow once');
+  await writeInput(stdin, '1');
+  expect(answer).toBeUndefined();
+});
+
+it.sequential('ApprovalPrompt ignores Docker y/n shortcuts', async () => {
+  let approved = false;
+  let rejected = false;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
+  };
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={() => {
+        approved = true;
+      }}
+      onReject={() => {
+        rejected = true;
+      }}
+    />,
+  );
+
+  await writeInput(stdin, 'y');
+  await writeInput(stdin, 'n');
+  expect(approved).toBe(false);
+  expect(rejected).toBe(false);
+});
+
+it.sequential('ApprovalPrompt Docker digit 2 denies and broader grant digits are ignored', async () => {
+  let answer: string | undefined;
+  let rejected = false;
+  const approval = {
+    ...baseApproval,
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'docker ps' }),
+  };
+  const first = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={(value) => {
+        answer = value;
+      }}
+      onReject={() => {
+        rejected = true;
+      }}
+    />,
+  );
+
+  await writeInput(first.stdin, '2');
+  expect(rejected).toBe(true);
+  expect(answer).toBeUndefined();
+
+  rejected = false;
+  const second = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={(value) => {
+        answer = value;
+      }}
+      onReject={() => {
+        rejected = true;
+      }}
+    />,
+  );
+  await writeInput(second.stdin, '3');
+  expect(rejected).toBe(false);
+  expect(answer).toBeUndefined();
 });
 
 it.sequential('ApprovalPrompt renders the Docker menu for a command that does not read as Docker', async () => {
@@ -782,6 +868,11 @@ it.sequential('ApprovalPrompt renders network access approval menu options', asy
   const frame = lastFrame() ?? '';
   expect(frame).toContain('Allow host for this session');
   expect(frame).toContain('Always allow host for this project');
+  expect(frame.indexOf('1. Allow once')).toBeLessThan(frame.indexOf('2. Deny'));
+  expect(frame.indexOf('2. Deny')).toBeLessThan(frame.indexOf('3. Allow host for this session'));
+  expect(frame.indexOf('3. Allow host for this session')).toBeLessThan(
+    frame.indexOf('4. Always allow host for this project'),
+  );
 });
 
 it.sequential('ApprovalPrompt sends allow-session for network access approval', async () => {
@@ -795,7 +886,8 @@ it.sequential('ApprovalPrompt sends allow-session for network access approval', 
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  // Navigate to 'Allow host for this session', after Allow once.
+  // Navigate to 'Allow host for this session', after Allow once and Deny.
+  await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('allow-session');
@@ -812,8 +904,8 @@ it.sequential('ApprovalPrompt sends allow-project for network access approval', 
   const { stdin } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
-  // Navigate to 'Always allow host for this project' (index 2).
-  for (let idx = 0; idx < 2; idx++) await writeInput(stdin, '\u001B[B');
+  // Navigate to 'Always allow host for this project' (index 3).
+  for (let idx = 0; idx < 3; idx++) await writeInput(stdin, '\u001B[B');
   await writeInput(stdin, '\r');
   expect(answer).toBe('allow-project');
 });

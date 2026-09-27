@@ -56,9 +56,12 @@ describe('upstream apply_patch contract', () => {
     expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok\n+*** End Patch')).toThrow(
       'found "+*** End Patch". Remove the extra prefix or trailing whitespace so the line is exactly \'*** End Patch\'.',
     );
-    expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok\n*** End Patch   ')).toThrow(
-      'found "*** End Patch   "',
-    );
+    expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok')).toThrow('found "+ok"');
+  });
+
+  it('preserves whitespace tolerance around patch boundary markers', () => {
+    const expected = { operations: [{ type: 'create_file', path: 'x', diff: '+ok' }] };
+    expect(parseUpstreamApplyPatch('  *** Begin Patch\n*** Add File: x\n+ok\n*** End Patch   ')).toEqual(expected);
   });
 
   it('exports the upstream grammar as a Lark custom-tool definition', () => {

@@ -117,12 +117,21 @@ describe('run_code', () => {
       loggingService: logging(),
       settingsService: createMockSettingsService(),
     });
+    const approvalNeedsApproval = vi.fn(() => {
+      throw new Error("Invalid patch: expected '*** End Patch'.");
+    });
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    approvalRegistry.register({
+      toolName: 'apply_patch',
+      parameters: patchTool.parameters,
+      needsApproval: approvalNeedsApproval,
+    });
     const logger = logging();
     const definition = createRunCodeToolDefinition({
       loggingService: logger,
       getToolRegistry: () => [patchTool],
       getCwd: () => workspace,
-      approvalPolicyRegistry: makeApprovalRegistry([patchTool]),
+      approvalPolicyRegistry: approvalRegistry,
     });
     const result = String(
       await definition.execute({
@@ -135,6 +144,7 @@ describe('run_code', () => {
     expect(result).toContain('found "+*** End Patch"');
     expect(result).not.toContain('approval policy refused or failed');
     expect(result).not.toContain('Approval policy error (apply_patch)');
+    expect(approvalNeedsApproval).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       'run_code completed',
       expect.objectContaining({

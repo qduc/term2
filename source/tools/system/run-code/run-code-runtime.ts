@@ -631,6 +631,8 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           }
           normalized = parsed.data;
         }
+        // Parse the freeform envelope before approval evaluation: the policy
+        // intentionally requires approval when it cannot inspect malformed input.
         if (name === 'apply_patch' && typeof (normalized as { patch?: unknown })?.patch === 'string') {
           try {
             parseUpstreamApplyPatch((normalized as { patch: string }).patch);

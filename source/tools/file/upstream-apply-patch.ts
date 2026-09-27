@@ -44,12 +44,14 @@ const MOVE_TO = '*** Move to: ';
 /** Parse the complete freeform payload into the application's executable shape. */
 export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams {
   const lines = normalizePatchLines(input);
-  if (lines[0] !== BEGIN_PATCH) throw new Error(`Invalid patch: expected '${BEGIN_PATCH}'.`);
+  if (lines[0] !== BEGIN_PATCH) {
+    throw new Error(`Invalid patch: expected '${BEGIN_PATCH}' but found ${describeFoundLine(lines[0])}.`);
+  }
   if (lines[lines.length - 1] !== END_PATCH) {
     const found = lines[lines.length - 1];
-    const nearMatch = found.trim() === END_PATCH || found.trimStart().startsWith('+*** End Patch');
+    const nearMatch = found.trimStart().startsWith('+*** End Patch');
     throw new Error(
-      `Invalid patch: expected '${END_PATCH}' but found ${JSON.stringify(found)}.${
+      `Invalid patch: expected '${END_PATCH}' but found ${describeFoundLine(found)}.${
         nearMatch ? ` Remove the extra prefix or trailing whitespace so the line is exactly '${END_PATCH}'.` : ''
       }`,
     );
@@ -118,7 +120,7 @@ export function extractPatchPaths(patch: unknown): string[] {
 }
 
 function normalizePatchLines(input: string): string[] {
-  const normalized = input.replace(/\r\n?/g, '\n').replace(/^\s*\n|\n+$/g, '');
+  const normalized = input.replace(/\r\n?/g, '\n').trim();
   const lines = normalized.split('\n');
 
   // Upstream's lenient parser accepts the heredoc wrapper produced by a few
@@ -128,6 +130,13 @@ function normalizePatchLines(input: string): string[] {
     lines.pop();
   }
   return lines;
+}
+
+function describeFoundLine(line: string | undefined): string {
+  if (line === undefined) return '<no line>';
+  const maxLength = 120;
+  const displayed = line.length <= maxLength ? line : `${line.slice(0, maxLength - 1)}…`;
+  return JSON.stringify(displayed);
 }
 
 function isOperationHeader(line: string): boolean {

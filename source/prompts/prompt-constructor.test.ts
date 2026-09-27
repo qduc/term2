@@ -28,13 +28,19 @@ it('names only editors on the active run_code editing surface and identifies she
     model: 'gpt-5.6',
     profile: profile('builtin:standard'),
     runCodeEnabled: true,
-    patchEditingSurface: true,
+    editorSurface: 'patch',
   }).inlineSections.join('\n');
   const otherSurface = buildPromptSpec({
     model: 'claude-3.7-sonnet',
     profile: profile('builtin:standard'),
     runCodeEnabled: true,
-    patchEditingSurface: false,
+    editorSurface: 'editors',
+  }).inlineSections.join('\n');
+  const noWriteSurface = buildPromptSpec({
+    model: 'claude-3.7-sonnet',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    editorSurface: 'none',
   }).inlineSections.join('\n');
 
   expect(patchSurface).toContain('`tools.apply_patch`');
@@ -43,6 +49,16 @@ it('names only editors on the active run_code editing surface and identifies she
   expect(patchSurface).toContain('create new files with a `*** Add File:` patch');
   expect(otherSurface).toContain('`tools.create_file`');
   expect(otherSurface).toContain('`tools.search_replace`');
+  expect(otherSurface).not.toContain('`tools.apply_patch`');
+  expect(noWriteSurface).not.toContain('`tools.apply_patch`');
+  expect(noWriteSurface).not.toContain('`tools.create_file`');
+  expect(noWriteSurface).not.toContain('`tools.search_replace`');
+  for (const surface of [patchSurface, otherSurface, noWriteSurface]) {
+    expect(surface).toContain('`tools.shell` does not exist inside `run_code`');
+  }
+  expect(patchSurface).toContain('Do not write files with');
+  expect(otherSurface).toContain('Do not write files with');
+  expect(noWriteSurface).not.toContain('Do not write files with');
   expect(patchSurface).toContain('`shell` is a direct tool');
   expect(patchSurface).toContain('`tools.shell` does not exist inside `run_code`');
 });

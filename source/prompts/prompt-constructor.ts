@@ -6,6 +6,7 @@ import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getShellSandboxAddendum } from './shell-sandbox.js';
 import { getBackgroundShellAddendum } from './background-shell.js';
 import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
+import type { ScriptEditorSurface } from './tool-surface-guidance.js';
 
 export type PromptConstructorOptions = {
   model: string;
@@ -24,8 +25,8 @@ export type PromptConstructorOptions = {
   executionContext?: ExecutionContext;
   /** Same effective-shell gate that registers run_code. */
   runCodeEnabled?: boolean;
-  /** Whether file editing uses the native patch tool instead of file editors. */
-  patchEditingSurface?: boolean;
+  /** Editors registered for this agent, matching its filesystem-write capability. */
+  editorSurface?: ScriptEditorSurface;
 };
 
 export type PromptSpec = {
@@ -55,7 +56,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     sessionBrowserEnabled = false,
     executionContext,
     runCodeEnabled = false,
-    patchEditingSurface = false,
+    editorSurface = 'editors',
   } = options;
 
   const liteMode = isLiteProfile(profile);
@@ -129,9 +130,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(memoryGuidance);
   }
 
-  inlineSections.push(
-    runCodeEnabled ? getScriptPrimaryToolsAddendum({ patchEditingSurface }) : getDirectEditorToolsAddendum(),
-  );
+  inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum(editorSurface) : getDirectEditorToolsAddendum());
 
   return {
     ...(liteMode

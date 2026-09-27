@@ -1639,7 +1639,12 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
     // Search is read-gated, not write-gated: disabling fileWrite leaves
     // grep/glob registered. The coupling recorded in the design doc's
     // Acknowledged gaps was repaired after Phase 1.
-    { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace'] },
+    {
+      key: 'tools.fileWrite.enabled',
+      absent: ['create_file', 'search_replace'],
+      // The editor guidance must follow the registered write surface too.
+      markers: ['Edit with `tools.search_replace` or `tools.create_file`'],
+    },
     {
       key: 'tools.memory.enabled',
       absent: baselineNames.filter((name) => name.startsWith('memory_')),

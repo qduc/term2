@@ -8,7 +8,7 @@ import { getBackgroundShellAddendum } from './background-shell.js';
 import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
 import type { ScriptEditorSurface } from './tool-surface-guidance.js';
 
-export type PromptConstructorOptions = {
+type PromptConstructorBaseOptions = {
   model: string;
   profile: ResolvedProfile;
   searchViaShell?: boolean;
@@ -23,11 +23,14 @@ export type PromptConstructorOptions = {
   memoryGuidance?: string;
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
-  /** Same effective-shell gate that registers run_code. */
-  runCodeEnabled?: boolean;
-  /** Editors registered for this agent, matching its filesystem-write capability. */
-  editorSurface?: ScriptEditorSurface;
 };
+
+export type PromptConstructorOptions = PromptConstructorBaseOptions &
+  (
+    | { runCodeEnabled: true; editorSurface: ScriptEditorSurface }
+    | { runCodeEnabled?: false; editorSurface?: never }
+    | { runCodeEnabled: boolean; editorSurface: ScriptEditorSurface }
+  );
 
 export type PromptSpec = {
   basePromptFile?: string;
@@ -56,7 +59,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     sessionBrowserEnabled = false,
     executionContext,
     runCodeEnabled = false,
-    editorSurface = 'editors',
+    editorSurface = 'none',
   } = options;
 
   const liteMode = isLiteProfile(profile);

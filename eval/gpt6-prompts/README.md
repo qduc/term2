@@ -11,16 +11,18 @@ List the synthetic cases without contacting a provider:
 pnpm exec tsx source/scripts/eval-gpt6-prompts.ts --list
 ```
 
-The runner accepts `codex` or `openai`, followed by an exact model ID. Run each
-of `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` separately through an available
-provider. Each invocation makes eight independent requests at low reasoning
+The runner accepts `codex` or `openai`, followed by an exact model ID and an
+optional case ID to run just one probe. Run each of `gpt-6-astra`, `gpt-6-sol`,
+and `gpt-6-luna` separately through an available provider. A full invocation
+makes twelve independent requests at low reasoning
 effort. It writes one JSON result per case to stdout, including usage and elapsed
 time, and exits nonzero on a failed probe or provider error. Provider errors stop
 that invocation and are not model-behavior failures.
 
-Cases cover authorized edits, skill conflicts, status interruptions, explicit
-cancellation, completed checks, inert worker changes, required worker checks,
-and accepting an inert worker result without redundant testing.
+Cases cover authorized and indirect edits, a question-framed edit, explicit
+read-only intent, skill conflicts, status interruptions, explicit cancellation,
+completed checks, inert worker changes, required worker checks, and accepting
+an inert worker result without redundant testing.
 
 The automatic score checks tool selection or a text-only finish. Review the
 recorded text and arguments too: a status answer must acknowledge progress and

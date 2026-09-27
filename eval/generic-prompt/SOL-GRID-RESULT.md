@@ -43,9 +43,11 @@ workspace passes. The retry evaluator failed for all four partial workspaces.
 Cost totals sum `cost_update` request records only; cached tokens are part of
 input totals. A timed-out partial evaluator pass is not a completed pass.
 Filtered transcripts, evaluator outputs, and candidate diffs are retained
-locally in ignored `.coord/generic-prompt-sol-grid/`; reproduce the metrics
-with `GRID_MODEL=sol node eval/generic-prompt/summarize-grid.mjs
-.coord/generic-prompt-sol-grid`.
+locally in the isolated worktree at
+`.worktrees/sol-prompt-grid/.coord/generic-prompt-sol-grid/` (ignored by git).
+From the main checkout, reproduce the metrics with
+`GRID_MODEL=sol node eval/generic-prompt/summarize-grid.mjs
+.worktrees/sol-prompt-grid/.coord/generic-prompt-sol-grid`.
 
 The safety signal favors the simple base on this task, but the mostly timed-out
 grid cannot establish a reliable Sol completion advantage or justify a prompt

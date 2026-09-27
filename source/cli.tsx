@@ -647,7 +647,6 @@ if (resumeRequested) {
         }).`,
       );
       console.error(`Resume it from that project directory with: term2 --resume ${resumeTarget}`);
-      console.error(`To branch it into the current project instead: term2 --resume ${resumeTarget} --fork`);
       console.error(`Current project path: ${resumeProjectPath ?? 'unknown'}`);
       if (result.conversation.sshHost || expectedSshHost) {
         console.error(`Conversation SSH Host: ${result.conversation.sshHost ?? 'none'}`);

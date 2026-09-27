@@ -20,6 +20,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | C2.6a | A foreign `provider_opaque` item never serializes into another provider's request. | Resume/compaction blob sent to the wrong vendor; provider 400 or silent history corruption. |
 | C2.6b | Same-provider opaque is allowed **only** on adapters that own an opaque lane: OpenAI Responses (`provider === 'openai'`) and Chat Completions / runtime-compatible (`tag === providerId` **or** legacy `'openai-compatible'`). Codex and AI SDK do not own an opaque lane: their public adapters drop every `provider_opaque` item before serialization, while their lower-level serializers reject a bypassed item. | “Allow own tag” on Codex/AI SDK would be a lie: they have no opaque round-trip. The four adapter/converter proofs below establish fail-closed non-serialization; Codex output conversion also rejects unknown item types (`codex-responses-model.ts:326-349`) and never emits `provider_opaque`. |
 | C2.6c | Production turns use `stream()`. Missing `getResponse` is not a defect. If `getResponse` exists, it must apply the **same** splice/non-serialization rules and must not treat `failed`/`incomplete` as success. | Unary success on a failed Responses body would look like a completed turn to any future caller. |
+| C2.6d | Before input planning, refuse a provider switch when reconciled history contains a foreign opaque `compaction` checkpoint whose portable source coverage is unknown. Do not send a silently truncated request; preserve same-provider native continuity and ordinary switches without a foreign compaction checkpoint. | A foreign adapter's safe-to-drop compaction item may be the only surviving provider history for earlier turns after native compaction. |
 | C2.7 | A retry that omits `previous_response_id` must send self-contained full history. A caller-supplied chained delta is never retried without its anchor by the run loop or the Codex adapter. | Follow-up turns look amnesiac: the model sees only the newest sentence ("This.") and asks for context it already had. |
 
 ## 2. Owners
@@ -31,6 +32,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   (chain and debt); `SessionInputPlanner` (chain vs full-history decision);
   `filterChainedModelInput` in `source/lib/chained-input-filter.ts` (delta validation); `SessionStreamProcessor` (finalize,
   `publishTerminalResponse`, debt sync); retry classification/policy.
+- **C2.6 request admission (enforcement):** `SessionInputPlanner.build` detects foreign opaque history before chained/full-history dispatch. `InitialInputPreparer` restores the unsubmitted user turn and surfaces actionable recovery guidance. Adapter-level non-serialization remains independently enforced.
 - **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts:84-122`),
   `openAICompatibleMessages` (`openai-chat-completions-model.ts:294-333`), `toPromptMessage`
   (`ai-sdk-streamed-model.ts:260-284`), and `toCodexResponsesItem` (`codex-turn-converter.ts:17-50`).
@@ -54,6 +56,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 - Adapter serialize/splice of persisted `provider_opaque` items (C2.6a–c): OpenAI Responses
   HTTP + WS + unary `getResponse`, Chat Completions (built-in and runtime-compatible), AI SDK
   unary + stream, Codex HTTP + WS.
+- Provider-switch refusal before wire dispatch when unknown-coverage opaque history would be dropped (C2.6d).
 - Complete and partial parallel tool-call batches.
 - Pre-stream and mid-stream transport failure; failure before and after
   dispatch.
@@ -207,6 +210,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | Codex fail-closed handling | `codex-turn-converter.test.ts:126` / `:136` drop foreign and own-tag items; `:146` "still refuses a provider_opaque item handed straight to the per-item converter"; `codex-turn-converter.ts:13-17,46-55` filters then guards bypasses | covered |
 | RetryingModel unary absence (green characterization) | `retrying-model.test.ts:179` "RetryingModel does not expose getResponse when the wrapped model has none" | covered |
 | Persistence/replay of opaque items | `conversation-replay.test.ts:2075` "a provider_opaque item round-trips byte-identical through persistence and replay"; `:2122` "two provider_opaque items across turns both survive independently"; `application-run-loop.test.ts:27` "carries a providerOpaque-marked item through untouched as provider_opaque" | covered |
+| Unknown-coverage foreign opaque history | `session-input-planner.test.ts` refusal/same-provider cases; `provider-session-resilience.blackbox.ts` asserts refusal surfaced and no second request reached the wire | covered (interim refusal; reconstruction deferred) |
 
 ## 9. Verification commands
 

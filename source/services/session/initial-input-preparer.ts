@@ -41,6 +41,39 @@ export class InitialInputPreparer {
       pendingModeNotice: this.deps.state.pendingModeNotice,
       replayFromHistory: options?.replayFromHistory,
     });
+    if (plan.refusal) {
+      let droppedUserMessage: { text: string; imageCount: number } | undefined;
+      if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
+        this.deps.conversationStore.removeLastUserMessage();
+        droppedUserMessage = {
+          text: stripMemoryRecall(attempt.turn.text),
+          imageCount: attempt.turn.images?.length ?? 0,
+        };
+      }
+      const { sourceProvider, targetProvider } = plan.refusal;
+      const message =
+        `Cannot switch this conversation from ${sourceProvider} to ${targetProvider}: native provider history ` +
+        `has no verified portable coverage, so sending it would omit earlier context. Switch back to ${sourceProvider} ` +
+        `to continue, or start a fresh conversation on ${targetProvider}.`;
+      this.deps.logger.warn('Provider switch refused because native history is not portable', {
+        eventType: 'provider_history.switch_refused',
+        category: 'provider',
+        phase: 'request_start',
+        sessionId: resolveSessionId(this.deps.sessionId),
+        traceId: this.deps.logger.getCorrelationId(),
+        sourceProvider,
+        targetProvider,
+      });
+      return {
+        kind: 'blocked',
+        event: {
+          type: 'error',
+          kind: plan.refusal.kind,
+          message,
+          ...(droppedUserMessage ? { droppedUserMessage } : {}),
+        },
+      };
+    }
     attempt.attachInput(plan);
     this.deps.inputPlanner.recordDispatchModel();
 

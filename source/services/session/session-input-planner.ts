@@ -11,6 +11,12 @@ import {
   type LargeUncachedInputDecision,
 } from '../large-uncached-input-guard.js';
 import { getProvider } from '../../providers/index.js';
+import {
+  GROK_RESPONSES_OPAQUE_TAG,
+  OPENAI_RESPONSES_OPAQUE_TAG,
+  isForeignProviderOpaque,
+  providerOpaqueTagOf,
+} from '../../providers/provider-opaque-compatibility.js';
 import { getProfileLabel } from '../profiles/labels.js';
 import { getMethod } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
@@ -23,6 +29,14 @@ import {
 const supportsConversationChaining = (providerId: string): boolean => {
   const providerDef = getProvider(providerId);
   return providerDef?.capabilities?.supportsConversationChaining ?? false;
+};
+
+const isOpaqueCompactionItem = (item: unknown): boolean => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const record = item as Record<string, unknown>;
+  if (record.type === 'compaction') return true;
+  if (record.type !== 'provider_opaque' || !record.item || typeof record.item !== 'object') return false;
+  return (record.item as Record<string, unknown>).type === 'compaction';
 };
 
 /**
@@ -41,6 +55,7 @@ export type SessionInputPlan = {
   streamInput: ProviderInput;
   inputSurgeKind: 'delta' | 'full_history';
   effectiveTurn: UserTurn;
+  refusal?: { kind: 'foreign_provider_opaque_history'; sourceProvider: string; targetProvider: string };
   /** Stage 0 observation only; never used to select or alter wire input. */
   providerHistorySnapshot?: ProviderHistorySnapshot;
 };
@@ -195,6 +210,35 @@ export class SessionInputPlanner {
       ? dynamicSupportsChaining.call(this.#agentClient)
       : supportsConversationChaining(provider);
     const history = this.#toolTracker.getReconciledHistory();
+    const targetProvider = provider;
+    const targetOpaqueLane =
+      targetProvider === 'openai'
+        ? OPENAI_RESPONSES_OPAQUE_TAG
+        : targetProvider === 'grok'
+        ? GROK_RESPONSES_OPAQUE_TAG
+        : targetProvider === 'codex'
+        ? null
+        : targetProvider;
+    const foreignOpaque = history.find(
+      (item) =>
+        isOpaqueCompactionItem(item) &&
+        providerOpaqueTagOf(item) !== undefined &&
+        (targetOpaqueLane === null || isForeignProviderOpaque(item, targetOpaqueLane)),
+    );
+    const foreignOpaqueTag = foreignOpaque && providerOpaqueTagOf(foreignOpaque);
+    if (foreignOpaqueTag) {
+      return {
+        streamInput: [],
+        inputSurgeKind: 'full_history',
+        effectiveTurn: turn,
+        refusal: {
+          kind: 'foreign_provider_opaque_history',
+          sourceProvider: foreignOpaqueTag,
+          targetProvider,
+        },
+        providerHistorySnapshot: this.#getProviderHistorySnapshot?.(),
+      };
+    }
     if (options.replayFromHistory) {
       const statelessHistory = sanitizeMalformedToolCallArguments(dropUnpairedFunctionCalls(history));
       return {

@@ -24,6 +24,8 @@ export type PromptConstructorOptions = {
   executionContext?: ExecutionContext;
   /** Same effective-shell gate that registers run_code. */
   runCodeEnabled?: boolean;
+  /** Whether file editing uses the native patch tool instead of file editors. */
+  patchEditingSurface?: boolean;
 };
 
 export type PromptSpec = {
@@ -53,6 +55,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     sessionBrowserEnabled = false,
     executionContext,
     runCodeEnabled = false,
+    patchEditingSurface = false,
   } = options;
 
   const liteMode = isLiteProfile(profile);
@@ -126,7 +129,9 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(memoryGuidance);
   }
 
-  inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum() : getDirectEditorToolsAddendum());
+  inlineSections.push(
+    runCodeEnabled ? getScriptPrimaryToolsAddendum({ patchEditingSurface }) : getDirectEditorToolsAddendum(),
+  );
 
   return {
     ...(liteMode

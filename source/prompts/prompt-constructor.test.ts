@@ -23,6 +23,30 @@ it('guides run_code exact searches and syntax-sensitive data', () => {
   expect(guidance).toContain('pass it through the `run_code` `inputs` parameter');
 });
 
+it('names only editors on the active run_code editing surface and identifies shell as direct-only', () => {
+  const patchSurface = buildPromptSpec({
+    model: 'gpt-5.6',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    patchEditingSurface: true,
+  }).inlineSections.join('\n');
+  const otherSurface = buildPromptSpec({
+    model: 'claude-3.7-sonnet',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    patchEditingSurface: false,
+  }).inlineSections.join('\n');
+
+  expect(patchSurface).toContain('`tools.apply_patch`');
+  expect(patchSurface).not.toContain('`tools.create_file`');
+  expect(patchSurface).not.toContain('`tools.search_replace`');
+  expect(patchSurface).toContain('create new files with a `*** Add File:` patch');
+  expect(otherSurface).toContain('`tools.create_file`');
+  expect(otherSurface).toContain('`tools.search_replace`');
+  expect(patchSurface).toContain('`shell` is a direct tool');
+  expect(patchSurface).toContain('`tools.shell` does not exist inside `run_code`');
+});
+
 const fullCapabilityLogging = {
   debug: () => {},
   info: () => {},

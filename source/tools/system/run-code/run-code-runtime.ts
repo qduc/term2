@@ -116,12 +116,16 @@ export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boole
   return RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
 }
 
-function createUnknownToolHints(allTools: ToolRegistry): Readonly<Record<string, string>> {
+function createUnknownToolHints(
+  allTools: ToolRegistry,
+  directToolNames: readonly string[],
+): Readonly<Record<string, string>> {
   const names = new Set(allTools.map((tool) => tool.name));
-  const hints: Record<string, string> = {};
-  // shell is a verified top-level tool excluded from scripts; other prohibited
-  // names are runtime/control capabilities and are not necessarily tools.
-  hints.shell = 'This is a direct tool; call it outside run_code instead.';
+  const hints = Object.create(null) as Record<string, string>;
+  for (const name of directToolNames) {
+    if (name !== TOOL_NAME_RUN_CODE && RUN_CODE_PROHIBITED_TOOLS.has(name))
+      hints[name] = 'This is a direct tool; call it outside run_code instead.';
+  }
   if (names.has('apply_patch')) {
     for (const name of ['create_file', 'search_replace']) {
       if (!names.has(name)) hints[name] = 'Use apply_patch instead (use *** Add File: to create a file).';
@@ -137,7 +141,7 @@ function createUnknownToolHints(allTools: ToolRegistry): Readonly<Record<string,
 
 function unknownToolMessage(name: string, registry: ToolRegistry, hints: Readonly<Record<string, string>>): string {
   const available = registry.map((entry) => entry.name).join(', ');
-  const hint = hints[name] ? ` ${hints[name]}` : '';
+  const hint = Object.hasOwn(hints, name) ? ` ${hints[name]}` : '';
   return `Unknown tool "${name}". Available: ${available}.${hint}`;
 }
 
@@ -441,6 +445,8 @@ const createBridgeRunId = (() => {
 
 export interface RunCodeRuntimeOptions {
   registry: ToolRegistry;
+  /** Names known to exist on the direct surface but filtered from scripts. */
+  directToolNames?: readonly string[];
   /** Identity of the complete wrapped graph used by approval revalidation. */
   graphIdentity?: object;
   loggingService: ILoggingService;
@@ -491,7 +497,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
   // Snapshot and filter once. Discovery and dispatch therefore cannot drift
   // if a caller mutates its registry while an invocation is in flight.
   const registry = options.registry.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
-  const unknownToolHints = createUnknownToolHints(options.registry);
+  const unknownToolHints = createUnknownToolHints(options.registry, options.directToolNames ?? []);
 
   const discovery = (): ToolRegistry => registry;
 

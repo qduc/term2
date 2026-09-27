@@ -310,7 +310,10 @@ function installContextBindings() {
       get(target, prop) {
         if (prop in target) return target[prop];
         if (typeof prop === 'string') {
-           const unknown = new Error('Unknown tool "' + prop + '". Available: ' + members.join(', ') + (unknownMemberHints && unknownMemberHints[prop] ? '. ' + unknownMemberHints[prop] : ''));
+           const hint = unknownMemberHints && Object.prototype.hasOwnProperty.call(unknownMemberHints, prop)
+             ? '. ' + unknownMemberHints[prop]
+             : '';
+           const unknown = new Error('Unknown tool "' + prop + '". Available: ' + members.join(', ') + hint);
            unknown.code = 'unknown_tool';
            throw unknown;
         }

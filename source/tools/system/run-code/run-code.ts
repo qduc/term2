@@ -376,6 +376,9 @@ export function createRunCodeToolDefinition(
   const createRuntime = (registry: ToolRegistry) =>
     createRunCodeRuntime({
       registry,
+      directToolNames: (options.getToolRegistry?.() ?? boundRegistry ?? [])
+        .filter((tool) => RUN_CODE_PROHIBITED_TOOLS.has(tool.name) && tool.name !== TOOL_NAME_RUN_CODE)
+        .map((tool) => tool.name),
       graphIdentity: boundRegistry ?? registry,
       loggingService,
       approvalPolicyRegistry: approvalRegistry,
@@ -496,11 +499,18 @@ function renderResult(
         : `Script failed: ${message}`,
     );
     const successfulNestedCalls = calls.filter((call) => call.outcome === 'ok').length;
-    if (successfulNestedCalls > 0) {
+    const hasFailedNestedCall = calls.some((call) => call.outcome !== 'ok' && call.outcome !== 'describe');
+    if (
+      code !== 'timeout' &&
+      code !== 'deadline' &&
+      code !== 'cancellation' &&
+      successfulNestedCalls > 0 &&
+      hasFailedNestedCall
+    ) {
       sections.push(
         `${successfulNestedCalls} nested tool call${
           successfulNestedCalls === 1 ? '' : 's'
-        } succeeded before the script failed; Promise.all discarded those results. Use Promise.allSettled to preserve successful sibling results.`,
+        } completed successfully, but their results were lost because the script failed. If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch to keep the other results.`,
       );
     }
   } else if (execution.script.voidOutput) {

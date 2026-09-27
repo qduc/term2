@@ -38,11 +38,12 @@ export type HostResult = { ok: true; output: JsonValue; voidOutput?: boolean } |
  *   the script rather than resolving to an error value.
  *
  * Only these two shapes exist, and both live verbatim in the worker template;
- * generating a capability injects its *name* (and member names), never code.
+ * generating a capability injects its name, member names, and host-constant
+ * hint strings, never code or host objects.
  */
 export type CapabilityKind = 'factory' | 'namespace';
 
-/** The generated part of the worker source: names only. */
+/** Plain-data capability definition serialized into the worker template. */
 export type CapabilityBinding =
   | { name: string; kind: 'factory' }
   | {

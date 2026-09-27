@@ -1447,6 +1447,7 @@ describe('run_code', () => {
 
     expect(output).toContain('Unknown tool "shell". Available: echo');
     expect(output).toContain('Unknown tool "missing". Available: echo');
+    expect(output).not.toContain('This is a direct tool');
   });
 
   it('guides direct-only namespace access and replaced editor descriptions', async () => {
@@ -1474,6 +1475,18 @@ describe('run_code', () => {
     expect(output).not.toContain('apply_patch');
   });
 
+  it('does not treat inherited object properties as tools or hint entries', async () => {
+    const output = await run(
+      [tool({ name: 'echo' }), tool({ name: 'shell' })],
+      `try { tools.constructor(); } catch (error) { console.log(error.message); }
+       try { await tools.describe("toString"); } catch (error) { console.log(error.message); }`,
+      { include_console: true },
+    );
+    expect(output).toContain('Unknown tool "constructor". Available: echo, describe');
+    expect(output).toContain('Unknown tool "toString". Available: echo.');
+    expect(output).not.toContain('[native code]');
+  });
+
   it('does not advise a non-direct conditional tool to be called directly', async () => {
     const output = await run(
       [tool({ name: 'conditional', needsApproval: ({ value }) => value === 'outside' })],
@@ -1497,8 +1510,29 @@ describe('run_code', () => {
       [tool({ name: 'fast' }), tool({ name: 'broken', execute: () => Promise.reject(new Error('failure')) })],
       'await Promise.all([tools.fast({ value: "ok" }), tools.broken({ value: "bad" })]);',
     );
-    expect(output).toContain('nested tool call succeeded before the script failed');
-    expect(output).toContain('Promise.all discarded those results. Use Promise.allSettled');
+    expect(output).toContain(
+      'nested tool call completed successfully, but their results were lost because the script failed',
+    );
+    expect(output).toContain(
+      'If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch',
+    );
+  });
+
+  it('does not claim successful nested results were lost when later script code throws', async () => {
+    const output = await run(
+      [tool({ name: 'fast' })],
+      'await tools.fast({ value: "ok" }); throw new TypeError("later script error");',
+    );
+    expect(output).toContain('later script error');
+    expect(output).not.toContain('nested tool call completed successfully');
+  });
+
+  it('does not claim successful nested results were lost when the script times out', async () => {
+    const output = await run([tool({ name: 'fast' })], 'await tools.fast({ value: "ok" }); while (true) {}', {
+      timeout_ms: 50,
+    });
+    expect(output).toContain('Script timed out');
+    expect(output).not.toContain('nested tool call completed successfully');
   });
 
   describe('admitted nested-call settlement', () => {

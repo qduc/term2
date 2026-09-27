@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { decodeLogEnvelope } from './conversation-decoder.js';
 import { createConversationLogWriter } from '../logging/conversation-log-writer.js';
 import { replayEvents } from './conversation-replay.js';
+import { loadLastConversation, saveLastConversation, setConversationsDirForTest } from './conversation-persistence.js';
 import { rotateSessionLog } from './session-log-lifecycle.js';
 
 const dirs: string[] = [];
@@ -17,6 +18,7 @@ function tempDir(): string {
 }
 
 afterEach(() => {
+  setConversationsDirForTest(null);
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   vi.clearAllMocks();
 });
@@ -68,11 +70,15 @@ it('rejects failed goal transfer after rotation so caller cannot commit the succ
   writer.append({ type: 'goal_changed', version: 1, goal });
   const failingWriter = {
     ...writer,
-    append: (event: Parameters<typeof writer.append>[0]) => {
-      if (event.type === 'goal_changed') throw new Error('goal fsync failed');
-      writer.append(event);
+    append: writer.append.bind(writer),
+    rotate: (
+      newId: string,
+      meta: Parameters<typeof writer.rotate>[1],
+      initialEvents?: Parameters<typeof writer.rotate>[2],
+    ) => {
+      writer.rotate(newId, meta);
+      if (initialEvents?.some((event) => event.type === 'goal_changed')) throw new Error('goal fsync failed');
     },
-    rotate: writer.rotate.bind(writer),
   };
 
   expect(() =>
@@ -90,4 +96,63 @@ it('rejects failed goal transfer after rotation so caller cannot commit the succ
   expect(sourceEvents.map(({ event }) => event.type)).toEqual(['session_init', 'goal_changed', 'session_cleared']);
   expect(successorEvents.map(({ event }) => event.type)).toEqual(['session_init']);
   expect(replayEvents(successorEvents).goal).toBeUndefined();
+});
+
+it('keeps default resume on the source when successor goal durability fails, including after close', async () => {
+  const dir = tempDir();
+  setConversationsDirForTest(dir);
+  const sourceId = 'source-last-pointer';
+  const successorId = 'successor-last-pointer';
+  const goal = { id: 'goal-last-pointer', outcome: 'Resume must keep this', status: 'active' as const };
+  const fsyncError = new Error('successor goal fsync failed');
+  const saveLastCalls: string[] = [];
+  let goalWritePending = false;
+  const fileSystem = {
+    ...fs,
+    writeSync: ((...args: Parameters<typeof fs.writeSync>) => {
+      if (
+        typeof args[1] === 'string' &&
+        args[1].includes(`"logId":"${successorId}"`) &&
+        args[1].includes('goal_changed')
+      ) {
+        goalWritePending = true;
+      }
+      return (fs.writeSync as (...inner: Parameters<typeof fs.writeSync>) => number)(...args);
+    }) as typeof fs.writeSync,
+    fsyncSync(fd: number) {
+      if (goalWritePending) {
+        goalWritePending = false;
+        throw fsyncError;
+      }
+      fs.fsyncSync(fd);
+    },
+  };
+  const writer = createConversationLogWriter({
+    sessionId: sourceId,
+    dir,
+    logger,
+    fileSystem,
+    saveLast: (id, projectPath, sshHost) => {
+      saveLastCalls.push(id);
+      saveLastConversation(id, projectPath, sshHost);
+    },
+  });
+  writer.init({ id: sourceId, createdAt: '2026-09-27T00:00:00.000Z' });
+  writer.append({ type: 'goal_changed', version: 1, goal });
+  expect(loadLastConversation()?.id).toBe(sourceId);
+
+  expect(() =>
+    rotateSessionLog(
+      writer,
+      successorId,
+      { id: successorId, createdAt: '2026-09-27T00:01:00.000Z', rolloverFrom: sourceId },
+      goal,
+    ),
+  ).toThrow(fsyncError);
+  expect(saveLastCalls).not.toContain(successorId);
+  expect(loadLastConversation()?.id).toBe(sourceId);
+  await expect(writer.close()).rejects.toBe(fsyncError);
+  expect(saveLastCalls).not.toContain(successorId);
+  expect(loadLastConversation()?.id).toBe(sourceId);
+  expect(loadLastConversation()?.goal).toEqual(goal);
 });

@@ -36,7 +36,7 @@ export interface ConversationLogWriter {
   readonly sessionId: string;
   init(meta: Omit<SessionInitEvent, 'type'>): void;
   append(event: LogEvent): void;
-  rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>): void;
+  rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>, initialEvents?: readonly LogEvent[]): void;
   flush(): Promise<void>;
   close(): Promise<void>;
 }
@@ -348,6 +348,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #closed = false;
   #failure: unknown = null;
   #writeErrorLogged = false;
+  #deferLastConversationPublication = false;
   #projectPath: string | undefined;
   #sshHost: string | undefined;
   #isPidAlive: (pid: number) => boolean;
@@ -440,7 +441,9 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       this.#fileSystem.writeSync(this.#fd, line);
       if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
         this.#fileSystem.fsyncSync(this.#fd);
-        this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+        if (!this.#deferLastConversationPublication) {
+          this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+        }
       }
     } catch (err: unknown) {
       if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
@@ -514,7 +517,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     }
   }
 
-  rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>): void {
+  rotate(newSessionId: string, meta: Omit<SessionInitEvent, 'type'>, initialEvents: readonly LogEvent[] = []): void {
     this.#throwIfFailed();
     let rotateFailure: unknown = null;
     if (this.#fd !== null) {
@@ -543,7 +546,16 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#seq = 0;
     this.#hasUnsettledTurn = false;
     this.#writeErrorLogged = false;
-    this.#initialize(meta, false);
+    this.#deferLastConversationPublication = true;
+    try {
+      this.#initialize(meta, false);
+      for (const event of initialEvents) this.append(event);
+      this.#deferLastConversationPublication = false;
+      this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
+    } catch (err: unknown) {
+      this.#recordFailure(err);
+      throw err;
+    }
   }
 
   async flush(): Promise<void> {

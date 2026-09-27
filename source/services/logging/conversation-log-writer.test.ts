@@ -514,6 +514,39 @@ describe('ConversationLogWriter durability failures', () => {
     await expect(writer.close()).rejects.toBe(rotateError);
   });
 
+  it('latches a successor initialization failure so later critical appends cannot be silently dropped', async () => {
+    const initializationError = new Error('successor open denied');
+    const dir = tempDir();
+    const fileSystem = {
+      ...fs,
+      openSync: ((...args: Parameters<typeof fs.openSync>) => {
+        const [filePath] = args;
+        if (String(filePath).endsWith('new-session.jsonl')) throw initializationError;
+        return fs.openSync(...args);
+      }) as typeof fs.openSync,
+    };
+    const writer = createConversationLogWriter({
+      sessionId: 'old-session',
+      dir,
+      logger,
+      fileSystem,
+      saveLast: vi.fn(),
+    });
+    writer.init({ id: 'old-session', createdAt: '2026-06-01T00:00:00.000Z' });
+
+    expect(() => writer.rotate('new-session', { id: 'new-session', createdAt: '2026-06-02T00:00:00.000Z' })).toThrow(
+      initializationError,
+    );
+    expect(writer.sessionId).toBe('new-session');
+    expect(() =>
+      writer.append({
+        type: 'user_message',
+        message: { id: 'u-after-failure', sender: 'user', text: 'must not dispatch' },
+      }),
+    ).toThrow(initializationError);
+    await expect(writer.close()).rejects.toBe(initializationError);
+  });
+
   it('preserves a critical write failure when close cleanup also fails', async () => {
     const writeError = new Error('disk write failed');
     const cleanupError = new Error('close failed');

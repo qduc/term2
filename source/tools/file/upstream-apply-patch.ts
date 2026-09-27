@@ -45,7 +45,15 @@ const MOVE_TO = '*** Move to: ';
 export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams {
   const lines = normalizePatchLines(input);
   if (lines[0] !== BEGIN_PATCH) throw new Error(`Invalid patch: expected '${BEGIN_PATCH}'.`);
-  if (lines[lines.length - 1] !== END_PATCH) throw new Error(`Invalid patch: expected '${END_PATCH}'.`);
+  if (lines[lines.length - 1] !== END_PATCH) {
+    const found = lines[lines.length - 1];
+    const nearMatch = found.trim() === END_PATCH || found.trimStart().startsWith('+*** End Patch');
+    throw new Error(
+      `Invalid patch: expected '${END_PATCH}' but found ${JSON.stringify(found)}.${
+        nearMatch ? ` Remove the extra prefix or trailing whitespace so the line is exactly '${END_PATCH}'.` : ''
+      }`,
+    );
+  }
 
   let index = 1;
   if (lines[index]?.startsWith(ENVIRONMENT_ID)) {
@@ -110,7 +118,7 @@ export function extractPatchPaths(patch: unknown): string[] {
 }
 
 function normalizePatchLines(input: string): string[] {
-  const normalized = input.replace(/\r\n?/g, '\n').trim();
+  const normalized = input.replace(/\r\n?/g, '\n').replace(/^\s*\n|\n+$/g, '');
   const lines = normalized.split('\n');
 
   // Upstream's lenient parser accepts the heredoc wrapper produced by a few

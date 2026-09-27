@@ -112,6 +112,37 @@ describe('run_code', () => {
     expect(result).toContain('Approval policy error (protected): bad patch: malformed hunk');
   });
 
+  it('reports malformed nested apply_patch arguments as invalid params, not policy failures', async () => {
+    const patchTool = createApplyPatchToolDefinition({
+      loggingService: logging(),
+      settingsService: createMockSettingsService(),
+    });
+    const logger = logging();
+    const definition = createRunCodeToolDefinition({
+      loggingService: logger,
+      getToolRegistry: () => [patchTool],
+      getCwd: () => workspace,
+      approvalPolicyRegistry: makeApprovalRegistry([patchTool]),
+    });
+    const result = String(
+      await definition.execute({
+        code: 'return await tools.apply_patch({ patch: "*** Begin Patch\\n*** Add File: broken.txt\\n+hello\\n+*** End Patch" });',
+        description: 'invalid patch',
+        timeout_ms: 60_000,
+      } as never),
+    );
+
+    expect(result).toContain('found "+*** End Patch"');
+    expect(result).not.toContain('approval policy refused or failed');
+    expect(result).not.toContain('Approval policy error (apply_patch)');
+    expect(logger.info).toHaveBeenCalledWith(
+      'run_code completed',
+      expect.objectContaining({
+        nested: expect.objectContaining({ invalidParams: 1, otherFailures: 0 }),
+      }),
+    );
+  });
+
   it('denies a nested call when the active workspace changes while approval waits', async () => {
     let cwd = '/workspace/one';
     const effects: string[] = [];

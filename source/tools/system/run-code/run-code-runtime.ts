@@ -631,6 +631,19 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           }
           normalized = parsed.data;
         }
+        if (name === 'apply_patch' && typeof (normalized as { patch?: unknown })?.patch === 'string') {
+          try {
+            parseUpstreamApplyPatch((normalized as { patch: string }).patch);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+            if (isActionTool(name)) {
+              rejectedSeq += 1;
+              recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', message);
+            }
+            return failed(`Invalid parameters for "${name}": ${message}`);
+          }
+        }
         const authorityRoot = options.getCwd();
         const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
         if (authority.kind === 'denied') {
@@ -769,7 +782,12 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
               : decision.kind === 'interceptor_denied'
               ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
               : decision.kind === 'error'
-              ? `"${prepared.tool.name}" was not run: checking its arguments for approval failed: ${decision.message}. Nothing was executed; correct the arguments and call it again.`
+              ? `"${
+                  prepared.tool.name
+                }" was not run: checking its arguments for approval failed: ${decision.message.replace(
+                  /[.!?]+$/,
+                  '',
+                )}. Nothing was executed; correct the arguments and call it again.`
               : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'not_applied', message);
           return failed(message);

@@ -116,6 +116,20 @@ export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boole
   return RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
 }
 
+// These are exposed by the top-level tool surface but intentionally absent
+// from run_code's script namespace.
+const DIRECT_ONLY_TOOL_NAMES = new Set(['shell', 'bash', 'enter_worktree', 'exit_worktree']);
+
+function unknownToolMessage(name: string, registry: ToolRegistry): string {
+  const available = registry.map((entry) => entry.name).join(', ');
+  const hint = DIRECT_ONLY_TOOL_NAMES.has(name)
+    ? ` This is a direct tool; call it outside run_code instead.`
+    : name === 'create_file' || name === 'search_replace'
+    ? ' Use apply_patch instead (use *** Add File: to create a file).'
+    : '';
+  return `Unknown tool "${name}". Available: ${available}.${hint}`;
+}
+
 export function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
   const targetSchema = tool.canonicalParameters ?? tool.parameters;
@@ -584,9 +598,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           const described = registry.find((candidate) => candidate.name === payload.params);
           if (!described) {
             rejectedUnknownName = payload.params;
-            return failed(
-              `Unknown tool "${payload.params}". Available: ${registry.map((entry) => entry.name).join(', ')}`,
-            );
+            return failed(unknownToolMessage(payload.params, registry));
           }
           record(name, 'describe', started);
           const describedValue = isMcpToolDefinition(described)
@@ -600,7 +612,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             rejectedSeq += 1;
             recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Unknown tool "${name}"`);
           }
-          return failed(`Unknown tool "${name}". Available: ${registry.map((entry) => entry.name).join(', ')}`);
+          return failed(unknownToolMessage(name, registry));
         }
         const targetSchema = tool.canonicalParameters ?? tool.parameters;
         let normalized: unknown = payload.params ?? {};

@@ -495,6 +495,14 @@ function renderResult(
         ? `Script was cancelled. ${message}`
         : `Script failed: ${message}`,
     );
+    const successfulNestedCalls = calls.filter((call) => call.outcome === 'ok').length;
+    if (successfulNestedCalls > 0) {
+      sections.push(
+        `${successfulNestedCalls} nested tool call${
+          successfulNestedCalls === 1 ? '' : 's'
+        } succeeded before the script failed; Promise.all discarded those results. Use Promise.allSettled to preserve successful sibling results.`,
+      );
+    }
   } else if (execution.script.voidOutput) {
     sections.push('Script returned no result. Return a value from the script to send it to the model.');
   } else {

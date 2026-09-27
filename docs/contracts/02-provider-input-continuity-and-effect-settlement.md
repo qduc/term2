@@ -1,6 +1,7 @@
 # Contract 02 — Provider input, continuity, and effect settlement
 
 Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
+`ToolCallExecution` (response-scoped planning and ordered call/result emission),
 `ToolExecutionLedger` + history projection (`conversation-state-projector`),
 `ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput` (`chained-input-filter.ts`),
 `SessionStreamProcessor` (finalize and debt sync), and retry/recovery policy
@@ -23,7 +24,8 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 
 ## 2. Owners
 
-- **Enforcement:** `ToolExecutionLedger` (call/result pairing, statuses,
+- **Enforcement:** `ToolCallExecution` (the ephemeral ordered response plan and
+  invocation lifecycle; it does not own durable effect state); `ToolExecutionLedger` (call/result pairing, statuses,
   reconciliation rules); `conversation-state-projector.ts` (merging ledger
   pairs into provider history; replacement boundaries); `ProviderContinuity`
   (chain and debt); `SessionInputPlanner` (chain vs full-history decision);

@@ -21,17 +21,10 @@ import type {
   StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
-import type {
-  AnyToolDefinition,
-  ToolExecutionLifecycleContext,
-  ToolExecutionLifecyclePort,
-  ToolRegistry,
-} from '../../tools/types.js';
+import type { AnyToolDefinition, ToolExecutionLifecyclePort, ToolRegistry } from '../../tools/types.js';
 import { getRunCodeExecutionResult, runCodeExecutionMetadata } from '../../tools/system/run-code/run-code-execution.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { Term2HookScope } from '../hooks/hook-contracts.js';
-import { normalizeToolParameters } from '../../lib/tool-invoke.js';
-import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
 import {
@@ -58,6 +51,7 @@ import { buildFailureObservation } from '../decision-shadow/failure-observation.
 import type { DecisionShadowObserver } from '../decision-shadow/decision-shadow-observer.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
 import { TurnInputMailbox } from './turn-input-mailbox.js';
+import { ToolCallExecution, type ToolPlanEntry } from './tool-call-execution.js';
 
 /**
  * Tool results may carry provider-neutral content parts (for example the
@@ -265,26 +259,6 @@ export type ApplicationRunLoopDiagnosticOptions = {
  */
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
-type PendingApproval = {
-  callId: string;
-  toolName: string;
-  argumentsText: string;
-  interruption: Record<string, unknown>;
-  definition: AnyToolDefinition;
-  params: unknown;
-  plan: ToolPlanEntry;
-};
-
-type ToolPlanEntry = {
-  readonly event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>;
-  readonly definition?: AnyToolDefinition;
-  params?: unknown;
-  parallelSafe: boolean;
-  status: 'ready' | 'approval_pending' | 'completed';
-  output?: string;
-  result?: unknown;
-};
-
 type RunState = {
   agent: ApplicationAgent;
   recoveryBudget?: RetryRecoveryBudget;
@@ -293,8 +267,7 @@ type RunState = {
   compactionHistory?: readonly ProviderInputItem[];
   usesDeltaHistory?: boolean;
   compactedDuringRun?: boolean;
-  pendingApproval?: PendingApproval;
-  pendingApprovals?: PendingApproval[];
+  toolExecution: ToolCallExecution;
   approvalDecision?: 'approved' | 'rejected';
   approvalDecisionCallId?: string;
   approvalMessage?: string;
@@ -348,10 +321,6 @@ type RunState = {
   sessionId?: string;
   turnId?: string;
   hookScope?: Term2HookScope;
-  toolAttempts?: Map<string, number>;
-  toolPlan?: ToolPlanEntry[];
-  /** A terminal tool has settled and no follow-up model request is needed. */
-  terminateAfterToolExecution?: boolean;
   approve?: (_interruption?: unknown) => void;
   reject?: (_interruption?: unknown, options?: { message?: string }) => void;
 };
@@ -401,8 +370,6 @@ class EventQueue {
  * turns and silently drop later turns' records.
  */
 let nextCostRequestSeq = 0;
-let nextToolBatchSeq = 0;
-const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 3;
 
 /**
  * Small provider-neutral agent loop. It owns model-turn sequencing and tool
@@ -515,6 +482,16 @@ export class ApplicationRunLoop {
     return state.runBudget.grantExtension('parent').granted;
   }
 
+  #createToolCallExecution(): ToolCallExecution {
+    return new ToolCallExecution({
+      toolLifecycle: this.#deps.toolLifecycle,
+      getOnToolDispatch: this.#deps.getOnToolDispatch,
+      resolveMaxParallelToolCalls: this.#deps.resolveMaxParallelToolCalls,
+      isMaxTurnsExceeded: (error) => error instanceof MaxTurnsExceededError,
+      logDiagnostic: this.#deps.logDiagnostic,
+    });
+  }
+
   /**
    * Hand the running turn a user message to send with its next model request.
    *
@@ -585,6 +562,7 @@ export class ApplicationRunLoop {
     this.#turnInputMailbox.startStream();
     const state: RunState = {
       agent,
+      toolExecution: this.#createToolCallExecution(),
       recoveryBudget: options.recoveryBudget,
       input: normalizeInput(input),
       history: normalizeHistory(input),
@@ -598,7 +576,6 @@ export class ApplicationRunLoop {
         options.supportsConversationChaining === true
           ? options.previousResponseId ?? undefined
           : undefined,
-      pendingApprovals: [],
       supportsConversationChaining: options.supportsConversationChaining === true,
       currentProviderId: options.providerId,
       responseProviderId:
@@ -661,10 +638,7 @@ export class ApplicationRunLoop {
     if (!state.approvals) state.approvals = new ApprovalLedger();
     // A continuation handle from before approval batching carried only the
     // current pending item. Normalize it into the queue used by current runs.
-    if (!state.pendingApprovals) state.pendingApprovals = state.pendingApproval ? [state.pendingApproval] : [];
-    if (!state.pendingApproval && state.pendingApprovals.length > 0) {
-      state.pendingApproval = state.pendingApprovals[0];
-    }
+    if (!state.toolExecution) state.toolExecution = this.#createToolCallExecution();
     // Handles created before cost accounting existed have no record list.
     if (!state.costRecords) state.costRecords = [];
     if (!state.runBudget && options.runBudget) {
@@ -789,7 +763,7 @@ export class ApplicationRunLoop {
         // another request boundary. Injections wait for it. Only a segment
         // that ends with nothing outstanding has truly finished the turn, and
         // then anything still waiting has to be sent as its own turn instead.
-        const pendingApprovals = state.pendingApprovals?.length ?? 0;
+        const pendingApprovals = state.toolExecution.pendingApprovals.length;
         const pendingBudgetInteraction = state.pendingRunBudgetInteraction !== undefined;
         const cancelled = stream.cancelled === true;
         const turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
@@ -848,37 +822,19 @@ export class ApplicationRunLoop {
         }
       }
 
-      state.pendingApprovals ??= state.pendingApproval ? [state.pendingApproval] : [];
-      if (state.pendingApprovals.length > 0 && state.approvalDecision) {
-        const selectedIndex = state.approvalDecisionCallId
-          ? state.pendingApprovals.findIndex(
-              (pending) => getInterruptionCallId(pending.interruption) === state.approvalDecisionCallId,
-            )
-          : -1;
-        if (state.approvalDecisionCallId && selectedIndex < 0) {
-          throw new Error(`Approval decision references unknown pending tool call: ${state.approvalDecisionCallId}`);
-        }
-        const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;
-        const pending = state.pendingApprovals[pendingIndex];
-        const approved = state.approvalDecision === 'approved';
-        if (approved) {
-          state.approvals.approveTool({ toolName: pending.toolName, callId: pending.callId });
-        } else {
-          state.approvals.rejectTool(
-            { toolName: pending.toolName, callId: pending.callId },
-            { message: state.approvalMessage },
-          );
-        }
-        pending.plan.status = 'ready';
-        if (!approved) pending.plan.output = state.approvalMessage ?? 'rejected';
-        state.pendingApprovals.splice(pendingIndex, 1);
-        state.pendingApproval = state.pendingApprovals[0];
+      if (state.toolExecution.pendingApprovals.length > 0 && state.approvalDecision) {
+        state.toolExecution.resolveApproval(
+          state.approvalDecisionCallId,
+          state.approvalDecision,
+          state.approvalMessage,
+          state.approvals,
+        );
         state.approvalDecision = undefined;
         state.approvalDecisionCallId = undefined;
         state.approvalMessage = undefined;
-        await this.#settleToolPlan(state, stream, queue, toolContext);
-        stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
-        if (state.pendingApprovals.length > 0) {
+        await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
+        stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
+        if (state.toolExecution.pendingApprovals.length > 0) {
           return finish(stream, state, queue);
         }
         // Nothing is outstanding, so this segment is terminal — see
@@ -891,10 +847,10 @@ export class ApplicationRunLoop {
       // A budget interaction can park a response after its tool calls are
       // recorded but before any body runs. Resume those retained calls only
       // after processing an ordinary approval decision for that same plan.
-      if (state.toolPlan) {
-        await this.#settleToolPlan(state, stream, queue, toolContext);
-        if (state.pendingApprovals?.length) {
-          stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+      if (state.toolExecution.hasPlan) {
+        await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
+        if (state.toolExecution.pendingApprovals.length) {
+          stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
           return finish(stream, state, queue);
         }
       }
@@ -1300,9 +1256,9 @@ export class ApplicationRunLoop {
           return finish(stream, state, queue);
         }
         await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
-        if (state.terminateAfterToolExecution) return finish(stream, state, queue);
-        if (state.pendingApprovals && state.pendingApprovals.length > 0) {
-          stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+        if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
+        if (state.toolExecution.pendingApprovals.length > 0) {
+          stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
           return finish(stream, state, queue);
         }
         continue;
@@ -1459,7 +1415,7 @@ export class ApplicationRunLoop {
         await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
       }
 
-      if (state.terminateAfterToolExecution) return finish(stream, state, queue);
+      if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
 
       // A critical subagent gets exactly this final tool-free model call.
       if (criticalWrapUp) return finish(stream, state, queue);
@@ -1468,8 +1424,8 @@ export class ApplicationRunLoop {
         return this.#pauseForRunBudgetInteraction(state, stream, queue);
       }
 
-      if (state.pendingApprovals.length > 0) {
-        stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+      if (state.toolExecution.pendingApprovals.length > 0) {
+        stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
         return finish(stream, state, queue);
       }
       if (!sawToolCall) {
@@ -1488,206 +1444,50 @@ export class ApplicationRunLoop {
     events: readonly Extract<StreamedModelTurnEvent, { type: 'tool_call' }>[],
     toolContext: ToolInvocationContext,
   ): Promise<void> {
-    const plan: ToolPlanEntry[] = events.map((event): ToolPlanEntry => {
-      const definition = state.agent.tools.find((tool) => tool.name === event.name);
-      const callItem: ProviderInputItem = {
-        type: event.toolType === 'custom' ? 'custom_tool_call' : 'function_call',
-        callId: event.id,
-        name: event.name,
-        ...(event.toolType === 'custom' ? { input: event.arguments } : { arguments: event.arguments }),
-      };
-      state.history.push(callItem);
-      state.input.push({
-        type: 'tool_call',
-        id: event.id,
-        name: event.name,
-        arguments: event.arguments,
-        ...(event.toolType ? { toolType: event.toolType } : {}),
-      });
-      outputPush(stream, queue, { type: 'item', item: callItem });
-      return {
-        event,
-        definition,
-        parallelSafe: false,
-        status: 'ready' as const,
-      };
-    });
-    state.toolPlan = plan;
-
-    for (const entry of plan) {
-      const { event, definition } = entry;
-      if (!definition) {
-        entry.output = `Unknown tool: ${event.name}`;
-        continue;
-      }
-
-      // Keep the raw-model invocation contract: normalization repairs the
-      // accepted object shape but intentionally does not Zod-parse it, which
-      // would apply schema defaults before execute. web_fetch relies on its
-      // executor fallbacks on the strict JSON-schema path.
-      try {
-        const parsedArguments = definition.parseModelArguments
-          ? definition.parseModelArguments(event.arguments)
-          : parseArguments(event.arguments);
-        entry.params = normalizeToolParameters(parsedArguments, definition.parameters);
-      } catch (error) {
-        entry.output = `Error: Invalid patch: ${error instanceof Error ? error.message : String(error)}`;
-        continue;
-      }
-      const stallEvent = state.runBudget?.observeToolCall({
-        name: event.name,
-        argumentsText: event.arguments,
-        effect: definition.effect,
-      });
-      if (stallEvent) {
-        this.#emitRunBudgetEvent(state, stallEvent, 'Tool stall evidence', stream, queue);
-      }
-
-      // Consult this run's ledger before prompting: a decision already taken
-      // (in the parent run and replayed in, or earlier in this run) must not
-      // prompt again. This is what makes approval replay observable.
-      const alreadyDecided = state.approvals.isToolApproved({ toolName: event.name, callId: event.id });
-      if (alreadyDecided === false) {
-        entry.output = state.approvals.getRejectionMessage(event.name, event.id) ?? 'Tool execution was not approved.';
-        continue;
-      }
-
-      if (alreadyDecided !== true && (await definition.needsApproval(entry.params, toolContext))) {
-        entry.status = 'approval_pending';
-        const pending: PendingApproval = {
-          callId: event.id,
-          toolName: event.name,
-          argumentsText: event.arguments,
-          interruption: {
-            type: 'tool_approval_item',
-            rawItem: { type: 'function_call', callId: event.id, name: event.name, arguments: event.arguments },
-            callId: event.id,
-            name: event.name,
-            arguments: event.arguments,
-          },
-          definition,
-          params: entry.params,
-          plan: entry,
-        };
-        state.pendingApprovals ??= [];
-        state.pendingApprovals.push(pending);
-        continue;
-      }
-
-      entry.parallelSafe = await isParallelSafe(definition, entry.params, toolContext);
-    }
-
-    state.pendingApproval = state.pendingApprovals?.[0];
-    stream.interruptions = (state.pendingApprovals ?? []).map((item) => item.interruption);
-    this.#deps.logDiagnostic?.(
-      'tool parallel eligibility',
-      {
-        decisions: plan.map((entry) => ({
-          callId: entry.event.id,
-          toolName: entry.event.name,
-          parallelSafe: entry.parallelSafe,
-          approvalPending: entry.status === 'approval_pending',
-        })),
-      },
-      { severity: 'debug', eventType: 'tool.parallel.eligibility' },
-    );
-    // A main-agent budget escalation is a real boundary: retain the planned
-    // calls, but do not execute one more tool while human judgement is pending.
-    if (!state.pendingRunBudgetInteraction) {
-      await this.#settleToolPlan(state, stream, queue, toolContext);
-    }
+    const context = this.#toolCallContext(state, stream, queue, toolContext);
+    await state.toolExecution.plan(events, context);
+    stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
+    if (!state.pendingRunBudgetInteraction) await state.toolExecution.settle(context);
   }
 
-  async #settleToolPlan(
-    state: RunState,
-    stream: AgentStream,
-    queue: EventQueue,
-    toolContext: ToolInvocationContext,
-  ): Promise<void> {
-    const plan = state.toolPlan;
-    if (!plan) return;
-    const maxParallelToolCalls = Math.max(
-      1,
-      Math.floor(this.#deps.resolveMaxParallelToolCalls?.() ?? DEFAULT_MAX_PARALLEL_TOOL_CALLS),
-    );
-
-    while (true) {
-      const firstPending = plan.find((entry) => entry.status !== 'completed');
-      if (!firstPending) {
-        state.toolPlan = undefined;
-        return;
-      }
-      if (firstPending.status === 'approval_pending') return;
-
-      const group: ToolPlanEntry[] = [];
-      for (const entry of plan) {
-        if (entry.status === 'completed') continue;
-        if (entry.status === 'approval_pending') break;
-        if (group.length > 0 && (!entry.parallelSafe || !group[0].parallelSafe || group.length >= maxParallelToolCalls))
-          break;
-        group.push(entry);
-        if (!entry.parallelSafe) break;
-      }
-
-      const batchId = `tool-batch-${++nextToolBatchSeq}`;
-      this.#deps.logDiagnostic?.(
-        'tool batch dispatched',
-        {
-          batchId,
-          callIds: group.map((entry) => entry.event.id),
-          parallel: group.length > 1,
-          maxParallelToolCalls,
-          dispatchOrder: group.map((entry) => entry.event.id),
-        },
-        { severity: 'debug', eventType: 'tool.batch.dispatched' },
-      );
-      for (const entry of group) {
+  #toolCallContext(state: RunState, stream: AgentStream, queue: EventQueue, toolContext: ToolInvocationContext) {
+    return {
+      tools: state.agent.tools,
+      approvals: state.approvals,
+      toolContext,
+      sessionId: state.sessionId,
+      turnId: state.turnId,
+      hookScope: state.hookScope,
+      onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => {
+        const callItem: ProviderInputItem = {
+          type: event.toolType === 'custom' ? 'custom_tool_call' : 'function_call',
+          callId: event.id,
+          name: event.name,
+          ...(event.toolType === 'custom' ? { input: event.arguments } : { arguments: event.arguments }),
+        };
+        state.history.push(callItem);
+        state.input.push({
+          type: 'tool_call',
+          id: event.id,
+          name: event.name,
+          arguments: event.arguments,
+          ...(event.toolType ? { toolType: event.toolType } : {}),
+        });
+        outputPush(stream, queue, { type: 'item', item: callItem });
+      },
+      onDispatch: (entry: ToolPlanEntry) => {
         outputPush(stream, queue, {
           type: 'tool_call_dispatched',
           callId: entry.event.id,
           toolName: entry.event.name,
         });
-      }
-      if (group.length > 1) {
-        const results = await Promise.allSettled(
-          group.map((entry) => this.#invokePlannedTool(entry, toolContext, state)),
-        );
-        const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-        if (rejected) throw rejected.reason;
-        for (const [index, result] of results.entries()) {
-          const value = (result as PromiseFulfilledResult<unknown>).value;
-          group[index].result = value;
-          this.#appendToolResult(state, stream, queue, group[index], value);
-        }
-      } else {
-        const result = await this.#invokePlannedTool(group[0], toolContext, state);
-        group[0].result = result;
-        this.#appendToolResult(state, stream, queue, group[0], result);
-      }
-      this.#deps.logDiagnostic?.(
-        'tool batch settled',
-        {
-          batchId,
-          settlementOrder: group.map((entry) => entry.event.id),
-        },
-        { severity: 'debug', eventType: 'tool.batch.settled' },
-      );
-      if (group.some((entry) => shouldTerminateAfterExecution(entry.definition, entry.result))) {
-        state.terminateAfterToolExecution = true;
-        state.toolPlan = undefined;
-        return;
-      }
-    }
-  }
-
-  async #invokePlannedTool(
-    entry: ToolPlanEntry,
-    toolContext: ToolInvocationContext,
-    state: RunState,
-  ): Promise<unknown> {
-    entry.status = 'completed';
-    if (entry.output !== undefined) return entry.output;
-    return this.#invokeTool(entry.definition!, entry.params, toolContext, entry.event.id, state);
+      },
+      onToolStall: (input: { name: string; argumentsText: string; effect: AnyToolDefinition['effect'] }) => {
+        const stallEvent = state.runBudget?.observeToolCall(input);
+        if (stallEvent) this.#emitRunBudgetEvent(state, stallEvent, 'Tool stall evidence', stream, queue);
+      },
+      onResult: (entry: ToolPlanEntry, result: unknown) => this.#appendToolResult(state, stream, queue, entry, result),
+    };
   }
 
   #appendToolResult(
@@ -1722,70 +1522,6 @@ export class ApplicationRunLoop {
     });
     outputPush(stream, queue, { type: 'item', item: resultItem });
     this.#evaluateRunBudget(state, stream, queue);
-  }
-
-  /**
-   * A tool that throws must not take the run down with it.
-   *
-   * Most tools already report failure by returning `Error: ...` as their
-   * output, which the model reads and acts on. The handful that throw got the
-   * opposite treatment for no principled reason: the exception escaped to
-   * `#execute`, closed the event queue, and ended the turn — so the model never
-   * saw a recoverable problem like a path that does not exist, and the caller
-   * lost the whole turn. Worse, `#handleToolCall` pushes the `function_call`
-   * into history before executing, so an escape leaves a call with no matching
-   * result.
-   *
-   * Errors are therefore normalized into tool output, with two exceptions that
-   * must still propagate: cancellation (the run is ending on purpose) and
-   * `HarnessInvariantError` (a bug here, which the model cannot act on).
-   */
-  async #invokeTool(
-    definition: AnyToolDefinition,
-    params: unknown,
-    toolContext: ToolInvocationContext,
-    callId: string,
-    state?: RunState,
-  ): Promise<unknown> {
-    const startedAt = Date.now();
-    const attempt = state
-      ? ((state.toolAttempts ??= new Map()).set(callId, (state.toolAttempts.get(callId) ?? 0) + 1),
-        state.toolAttempts.get(callId)!)
-      : 1;
-    const lifecycleContext: ToolExecutionLifecycleContext = {
-      ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
-      ...(state?.turnId ? { turnId: state.turnId } : {}),
-      toolCallId: callId,
-      toolName: definition.name,
-      normalizedArguments: params,
-      attempt,
-      scope: state?.hookScope ?? 'root',
-    };
-    // Dispatch mark must run before execute so a mid-tool stream failure can
-    // settle the ledger as unknown rather than aborted.
-    this.#deps.getOnToolDispatch?.()?.(callId);
-    await this.#notifyToolLifecycle(() => this.#deps.toolLifecycle?.before(lifecycleContext));
-    try {
-      const result = await definition.execute(params, toolContext, { toolCall: { callId } });
-      await this.#notifyToolLifecycle(() =>
-        this.#deps.toolLifecycle?.after(lifecycleContext, result, Date.now() - startedAt),
-      );
-      return result;
-    } catch (error) {
-      if (isCancellationError(error) || isHarnessInvariantError(error) || error instanceof MaxTurnsExceededError) {
-        await this.#notifyToolLifecycle(() =>
-          this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, false),
-        );
-        throw error;
-      }
-
-      const message = error instanceof Error ? error.message : String(error);
-      const result = `Error: ${message}`;
-      await this.#notifyToolLifecycle(() =>
-        this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, true),
-      );
-      return result;
-    }
   }
 
   #nextRequestId(): string {
@@ -1873,27 +1609,6 @@ export class ApplicationRunLoop {
     stream.interruptions = [interaction];
     return finish(stream, state, queue);
   }
-
-  async #notifyToolLifecycle(operation: (() => void | Promise<void>) | undefined): Promise<void> {
-    if (!operation) return;
-    try {
-      await operation();
-    } catch {
-      // Lifecycle observers are passive. A broken observer must not alter tool
-      // execution or turn recovery semantics.
-    }
-  }
-}
-
-function shouldTerminateAfterExecution(definition: AnyToolDefinition | undefined, result: unknown): boolean {
-  const policy = definition?.terminateAfterExecution;
-  if (typeof policy === 'boolean') return policy;
-  if (!policy) return false;
-  try {
-    return policy(result);
-  } catch {
-    return false;
-  }
 }
 
 function isLunaChainedRequest(state: RunState, request: StreamedModelTurnRequest): boolean {
@@ -1905,6 +1620,12 @@ function isLunaChainedRequest(state: RunState, request: StreamedModelTurnRequest
     request.input.length === 1 &&
     request.input[0]?.type === 'tool_result'
   );
+}
+
+function getInterruptionCallId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const callId = (value as { callId?: unknown }).callId;
+  return typeof callId === 'string' ? callId : undefined;
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {
@@ -2039,35 +1760,6 @@ function normalizeModelUsage(usage: unknown) {
     reasoningTokens:
       (rawUsage as { outputTokens?: { reasoning?: unknown } }).outputTokens?.reasoning ?? rawUsage.reasoningTokens,
   });
-}
-
-function parseArguments(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
-  }
-}
-
-async function isParallelSafe(
-  definition: AnyToolDefinition,
-  params: unknown,
-  context: ToolInvocationContext,
-): Promise<boolean> {
-  if (typeof definition.parallelSafe === 'function') {
-    try {
-      return await definition.parallelSafe(params as never, context);
-    } catch {
-      return false;
-    }
-  }
-  return definition.parallelSafe === true;
-}
-
-function getInterruptionCallId(value: unknown): string | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const callId = (value as { callId?: unknown }).callId;
-  return typeof callId === 'string' ? callId : undefined;
 }
 
 function toModelTools(tools: ToolRegistry): StreamedModelToolDefinition[] {

@@ -520,7 +520,7 @@ const App: FC<AppProps> = ({
       request,
       taskInventory,
     });
-    await sendSessionRolloverBrief(briefing, request.brief);
+    await sendSessionRolloverBrief(briefing);
   };
 
   const handoff = useHandoffFlow({

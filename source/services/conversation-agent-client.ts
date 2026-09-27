@@ -3,7 +3,6 @@ import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
-import type { TurnMemorySelection } from './memory/memory-capabilities.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 import type { SteerOutcome } from './agent-runtime/application-run-loop.js';
@@ -105,7 +104,6 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
    * Memory summaries relevant to a user message, as a block for the user turn.
    * `exclude` lists `recallKey`s already in the conversation.
    */
-  selectMemoryForTurn?(query: string, options: { exclude: ReadonlySet<string> }): Promise<TurnMemorySelection>;
   continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
   /**
@@ -134,6 +132,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   consumeSessionRolloverRequest?(): SessionRolloverConsumption;
   /** Reset only the root request/agent context; retained background clients live on. */
   rolloverRootContext?(): void;
+  /** Re-snapshot pinned global instructions when the retained root starts a new session. */
+  resetMemoryContextForNewSession?(): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 

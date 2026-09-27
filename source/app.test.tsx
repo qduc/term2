@@ -621,12 +621,7 @@ describe('App orchestration', () => {
       });
     });
 
-    // The composed briefing opens with boilerplate and session UUIDs, which
-    // otherwise exhaust the recall query before the agent's own words.
-    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
-      expect.stringContaining('# Continuation briefing'),
-      'Goal: fix websocket pool retirement.',
-    );
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(expect.stringContaining('# Continuation briefing'));
   });
 
   it.each([

@@ -5,9 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, afterEach } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
-import { AutomaticMemoryCanary } from './automatic-memory-canary.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
-import { MEMORY_RECALL_CLOSE, MEMORY_RECALL_OPEN, recalledMemoryKeys } from '../../prompts/memory-recall-notice.js';
 
 const tempDirs: string[] = [];
 function makeTempDir(): string {
@@ -62,28 +60,6 @@ describe('MemoryCapabilityBuilder', () => {
     expect(existsSync(join(directory, 'projects', projectId))).toBe(true);
   });
 
-  it('makes an automatic project preference available to a new session and supports undo', async () => {
-    const directory = makeTempDir();
-    const settings = createMockSettingsService({ 'memory.directory': directory });
-    const first = new MemoryCapabilityBuilder(settings);
-    const receipt = await new AutomaticMemoryCanary(first.projectStore(process.cwd())).record(
-      'For future sessions, I prefer short test reports.',
-      'prior-session',
-    );
-    expect(receipt).not.toBeNull();
-    const returning = new MemoryCapabilityBuilder(settings);
-    const selected = await returning.selectForTurn('Please prepare short test reports.', {
-      projectPath: process.cwd(),
-    });
-    expect(selected.memories).toContainEqual(expect.objectContaining({ id: receipt!.id, scope: 'project' }));
-    // The search terms that picked these memories, so a bad recall can be audited from the log.
-    expect(selected.queryTerms?.split(' ')).toEqual(expect.arrayContaining(['short', 'test', 'reports']));
-    expect((await returning.projectStore(process.cwd()).get(receipt!.id))?.provenance?.sessionId).toBe('prior-session');
-    await returning.projectStore(process.cwd()).remove(receipt!.id);
-    expect(
-      (await returning.selectForTurn('Please prepare short test reports.', { projectPath: process.cwd() })).memories,
-    ).toEqual([]);
-  });
   it.each([
     ['default', { kind: 'main' as const }, 'write', writeTools],
     ['plan', { kind: 'main' as const }, 'write', writeTools],
@@ -168,10 +144,10 @@ describe('MemoryCapabilityBuilder', () => {
 
     expect(capability.guidance).toContain('memory_retrieve');
     expect(capability.guidance).toContain('cursor when a large memory is paged');
-    expect(capability.guidance).toContain('Before finishing a task');
-    expect(capability.guidance).toContain('explicit durable');
+    expect(capability.guidance).toContain('durable user preference');
+    expect(capability.guidance).toContain('note the date');
     expect(capability.guidance).toContain('ordinary conversation');
-    expect(capability.guidance).toContain('facts easily recovered by reading the repository');
+    expect(capability.guidance).toContain('facts already recorded in repo docs or git');
   });
 
   it('injects summary context for a main agent with write access', () => {
@@ -202,7 +178,7 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.context).toContain('Inject this for the main agent.');
   });
 
-  it('isolates project memories by project path and injects both scopes', async () => {
+  it('isolates project memories by project path without pinning them', async () => {
     const directory = makeTempDir();
     const first = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
       { kind: 'main' },
@@ -231,8 +207,8 @@ describe('MemoryCapabilityBuilder', () => {
       { kind: 'main' },
       { projectPath: '/workspace/first' },
     );
-    expect(rebuilt.context).toContain('Project scope');
-    expect(rebuilt.context).toContain('Only for the first project.');
+    expect(rebuilt.context).not.toContain('Project scope');
+    expect(rebuilt.context).not.toContain('Only for the first project.');
   });
 
   it.each([
@@ -259,232 +235,22 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.guidance).toContain('memory librarian');
   });
 
-  it('states the recall contract in the main guidance and the on-demand contract for subagents', () => {
-    const main = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
+  it('states the pinned-global and on-demand-project contract without automatic recall', () => {
+    const main = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': makeTempDir() })).build({
+      kind: 'main',
+    });
     const explorer = new MemoryCapabilityBuilder(createMockSettingsService()).build({
       kind: 'subagent',
       role: 'explorer',
     });
 
-    expect(main.guidance).toContain('<memory-recall> block ahead of that message');
-    expect(main.guidance).toContain('not a complete index');
-    expect(main.guidance).toContain('read the full memory with memory_get');
+    expect(main.guidance).not.toContain('Global memories are listed in your instructions');
+    expect(main.guidance).toContain('Search or retrieve global and project memories');
+    expect(main.guidance).not.toContain('<memory-recall>');
     expect(explorer.guidance).not.toContain('concise index');
   });
 
-  it('selects an older task-relevant decision ahead of newer unrelated memories without leaking content', async () => {
-    const directory = makeTempDir();
-    const settings = createMockSettingsService({ 'memory.directory': directory, 'memory.contextBudgetChars': 800 });
-    const builder = new MemoryCapabilityBuilder(settings);
-    const create = builder
-      .build({ kind: 'main' }, { projectPath: '/workspace/recall' })
-      .tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'project',
-      id: 'nested-chain',
-      title: 'Codex nested-chain incident',
-      summary: 'Child runs need distinct physical WebSocket identity; preserve root cache affinity and chaining.',
-      content: 'Do not disable chaining.',
-    });
-    for (let i = 0; i < 25; i++) {
-      await create.execute({
-        scope: 'project',
-        id: `release-${i}`,
-        title: 'Release notes',
-        summary: 'Unrelated release-note work.',
-        content: 'No socket decision.',
-      });
-    }
-    const recencyIndex = builder.build({ kind: 'main' }, { projectPath: '/workspace/recall' }).context;
-    expect(recencyIndex).not.toContain('distinct physical WebSocket identity');
-    const selected = await builder.contextForTurn('The nested Codex 400s are back. What should we avoid?', {
-      projectPath: '/workspace/recall',
-    });
-    expect(selected).toContain('distinct physical WebSocket identity');
-    expect(selected).not.toContain('Unrelated release-note work');
-    expect(selected).not.toContain('Do not disable chaining.');
-    expect(selected.length).toBeLessThanOrEqual(800);
-    expect(
-      (
-        await builder.selectForTurn('The nested Codex 400s are back. What should we avoid?', {
-          projectPath: '/workspace/recall',
-        })
-      ).memories,
-    ).toEqual([{ scope: 'project', id: 'nested-chain', title: 'Codex nested-chain incident' }]);
-  });
-
-  it('renders a bounded recall block for the user turn and skips already-recalled memories', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    for (const id of ['socket-a', 'socket-b', 'socket-c', 'socket-d', 'socket-e']) {
-      await create.execute({
-        scope: 'project',
-        id,
-        title: `Socket rule ${id}`,
-        summary: `Socket guidance ${id}.`,
-        content: 'details',
-      });
-    }
-
-    const first = await builder.selectForTurn('socket');
-    expect(first.memories).toHaveLength(3);
-    expect(first.text.startsWith(MEMORY_RECALL_OPEN)).toBe(true);
-    expect(first.text.endsWith(MEMORY_RECALL_CLOSE)).toBe(true);
-    expect([...recalledMemoryKeys([first.text])]).toEqual(
-      first.memories.map((memory) => `${memory.scope}:${memory.id}`),
-    );
-
-    const second = await builder.selectForTurn('socket', { exclude: recalledMemoryKeys([first.text]) });
-    expect(second.memories).toHaveLength(2);
-    expect(second.memories.map((memory) => memory.id)).not.toContain(first.memories[0]!.id);
-    const third = await builder.selectForTurn('socket', {
-      exclude: recalledMemoryKeys([first.text, second.text]),
-    });
-    expect(third).toEqual({ text: '', memories: [] });
-  });
-
-  it('does not inject an unrelated lexical match or memories when disabled', async () => {
-    const directory = makeTempDir();
-    const enabled = createMockSettingsService({ 'memory.directory': directory });
-    const builder = new MemoryCapabilityBuilder(enabled);
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'global',
-      id: 'cost-policy',
-      title: 'Cost policy',
-      summary: 'Always report experiment costs.',
-      content: 'Include costs.',
-    });
-    expect(await builder.contextForTurn('The cost of this?')).toContain('Always report experiment costs.');
-    expect(await builder.contextForTurn('How is the socket?')).toBe('');
-    expect(
-      await new MemoryCapabilityBuilder(
-        createMockSettingsService({ 'memory.directory': directory, 'memory.enabled': false }),
-      ).contextForTurn('cost'),
-    ).toBe('');
-  });
-
-  it('does not inject memories for a context-dependent follow-up with no topical query', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'project',
-      id: 'provider-feature',
-      title: 'Provider feature',
-      summary: 'The feature was implemented and merged.',
-      content: 'One feature was changed.',
-    });
-    expect((await builder.selectForTurn('Refine that feature.')).memories).toEqual([]);
-    expect((await builder.selectForTurn('What were we doing?')).memories).toEqual([]);
-  });
-
-  it('requires an exact topical match instead of substring or generic wording noise', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'project',
-      id: 'memory-index',
-      title: 'Memory index',
-      summary: 'Memory index budget was changed.',
-      content: 'The index has a larger budget.',
-    });
-    await create.execute({
-      scope: 'project',
-      id: 'injection-relevance',
-      title: 'Memory injection relevance',
-      summary: 'Only inject memories with evidence for the current question.',
-      content: 'Generic words are not enough.',
-    });
-    await create.execute({
-      scope: 'project',
-      id: 'feature-showcase',
-      title: 'Feature showcase',
-      summary: 'A showcase of an unrelated memory feature.',
-      content: 'Only a generic term matches.',
-    });
-
-    const selected = await builder.selectForTurn('Can you reduce memory injection noise?', {
-      projectPath: process.cwd(),
-    });
-    expect(selected.memories.map((memory) => memory.id)).toEqual(['injection-relevance']);
-    expect(selected.text).not.toContain('Memory index budget');
-    expect((await builder.selectForTurn('Show the memory-index decision')).memories.map((memory) => memory.id)).toEqual(
-      ['memory-index'],
-    );
-  });
-
-  it('keeps a one-topic summary match despite conversational padding', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'project',
-      id: 'transport-rule',
-      title: 'Transport rule',
-      summary: 'The WebSocket needs a distinct physical child identity.',
-      content: 'Preserve root affinity.',
-    });
-    const direct = await builder.selectForTurn('WebSocket?');
-    const conversational = await builder.selectForTurn('What did we decide about WebSocket?');
-    expect(conversational.memories).toEqual(direct.memories);
-    expect(conversational.memories.map((memory) => memory.id)).toEqual(['transport-rule']);
-  });
-
-  it('does not inject memories on a UI follow-up whose only matches are generic wording', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
-    await create.execute({
-      scope: 'project',
-      id: 'unrelated-fix',
-      title: 'Unrelated fix',
-      summary: 'The fix was a little noisy in the old UI.',
-      content: 'No relevant decision.',
-    });
-    expect((await builder.selectForTurn('It is a little noisy in the UI, can you fix that?')).memories).toEqual([]);
-  });
-
-  it('never injects a superseded summary from a corrected memory', async () => {
-    const directory = makeTempDir();
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }));
-    const tools = builder.build({ kind: 'main' }).tools;
-    await tools
-      .find((tool) => tool.name === 'memory_create')!
-      .execute({
-        scope: 'global',
-        id: 'policy',
-        title: 'Rule',
-        summary: 'obsoleteprotocol',
-        content: 'obsoleteprotocol',
-      });
-    await tools
-      .find((tool) => tool.name === 'memory_update')!
-      .execute({
-        scope: 'global',
-        id: 'policy',
-        summary: 'newprotocol',
-        content: 'newprotocol',
-        supersede: { reason: 'User correction' },
-      });
-    expect(await builder.contextForTurn('obsoleteprotocol')).toBe('');
-    expect((await builder.selectForTurn('newprotocol')).memories).toMatchObject([{ id: 'policy' }]);
-  });
-
-  it('fails open and warns when the memory index cannot be read', async () => {
-    const directory = makeTempDir();
-    writeFileSync(join(directory, 'index.json'), '{ malformed');
-    const warnings: string[] = [];
-    const builder = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }), {
-      onWarning: (warning) => warnings.push(warning),
-    });
-    expect(await builder.contextForTurn('release notes')).toBe('');
-    expect(warnings).toEqual([expect.stringMatching(/memory retrieval could not be loaded/i)]);
-  });
-
-  it('donates unused global scope budget to a project scope that exceeds its fair share', async () => {
+  it('pins only global summaries and reports globals omitted by the 3000-char cap', async () => {
     const directory = makeTempDir();
     const settings = createMockSettingsService({
       'memory.directory': directory,
@@ -512,8 +278,31 @@ describe('MemoryCapabilityBuilder', () => {
     }
 
     const context = builder('/workspace/donation').context;
-    expect(context).toContain('Global scope:');
-    expect(context).toContain('60 memories · 60 summarized · 0 title-only · 0 not listed.');
-    expect(context).toContain('`project-mem-59`');
+    expect(builder('/workspace/donation').guidance).toContain('Global memories are listed in your instructions');
+    expect(context).toContain('Global memories');
+    expect(context).not.toContain('## Persistent memory');
+    expect(context).not.toContain('Load full memories selectively with memory_get');
+    expect(context).toContain('Cross-project preference.');
+    expect(context).not.toContain('Project summary');
+    expect(context.length).toBeLessThanOrEqual(3000);
+  });
+
+  it('counts omitted global memories within the configured instruction budget', async () => {
+    const directory = makeTempDir();
+    const settings = createMockSettingsService({ 'memory.directory': directory, 'memory.contextBudgetChars': 500 });
+    const builder = new MemoryCapabilityBuilder(settings);
+    const create = builder.build({ kind: 'main' }).tools.find((tool) => tool.name === 'memory_create')!;
+    for (let i = 0; i < 40; i++) {
+      await create.execute({
+        scope: 'global',
+        id: `rule-${i}`,
+        title: `Rule ${i}`,
+        summary: 'A durable preference with details.',
+        content: 'body',
+      });
+    }
+    const context = builder.build({ kind: 'main' }).context;
+    expect(context).toMatch(/\+ \d+ more global memories exist; find them with memory_search\./);
+    expect(context.length).toBeLessThanOrEqual(500);
   });
 });

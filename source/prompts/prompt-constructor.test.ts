@@ -195,7 +195,7 @@ it('buildPromptSpec composes file fragments in stable order', () => {
 it('does not teach loaded run_code instruction surfaces to call script-only tools directly', () => {
   const tools = fullCapabilityTools();
   const scriptOnly = tools.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)).map((tool) => tool.name);
-  const surfaces = ['lite.md', 'memory.md', 'session-browser.md', 'orchestrator.md', 'gpt.md'].map((file) =>
+  const surfaces = ['lite.md', 'session-browser.md', 'orchestrator.md', 'gpt.md'].map((file) =>
     readFileSync(join(import.meta.dirname, file), 'utf8'),
   );
   surfaces.push(
@@ -339,22 +339,20 @@ it('buildPromptSpec tells the model to wait for background shell completion inst
   expect(guidance.toLowerCase()).toContain('do not run `sleep` merely to wait');
 });
 
-it('adds persistent-memory guidance only when memory tools are enabled', () => {
+it('includes one memory guidance section and gates the pinned context by regular memory mode', () => {
+  const args = {
+    model: 'gpt-4o',
+    profile: profile('builtin:standard'),
+    memoryGuidance: 'Memory guidance',
+    memoryContext: 'Global-only index',
+  };
+  const enabled = buildPromptSpec({ ...args, memoryEnabled: true });
+  expect(enabled.inlineSections.filter((section) => section === 'Memory guidance')).toHaveLength(1);
+  expect(enabled.inlineSections).toContain('Global-only index');
+  expect(buildPromptSpec({ ...args, memoryEnabled: false }).inlineSections).not.toContain('Global-only index');
   expect(
-    buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard'), memoryEnabled: true }).fragmentFiles,
-  ).toContain('memory.md');
-  expect(
-    buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard'), memoryEnabled: false }).fragmentFiles,
-  ).not.toContain('memory.md');
-});
-
-it('memory.md fragment describes per-turn recall, not a session-start index', () => {
-  const fragment = readFileSync(join(import.meta.dirname, 'memory.md'), 'utf8');
-
-  expect(fragment).toContain('`<memory-recall>` block ahead of that message');
-  expect(fragment).toContain('not a complete index');
-  expect(fragment).toContain('read the full memory with `tools.memory_get(...)`');
-  expect(fragment).not.toContain('The initial index lists');
+    buildPromptSpec({ ...args, profile: profile('builtin:lite'), memoryEnabled: true }).inlineSections,
+  ).not.toContain('Global-only index');
 });
 
 it('buildPromptSpec includes unified background delegation guidance when background execution is enabled', () => {

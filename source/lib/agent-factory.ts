@@ -92,6 +92,7 @@ export interface AgentFactoryDeps {
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
   mcpToolSource?: McpToolSource;
+  snapshotGlobalMemoryContext?: (read: () => string) => string;
 }
 
 export interface AgentBuildResult {
@@ -508,6 +509,7 @@ export function buildAgent(
       configureTaskCheckIn: deps.configureTaskCheckIn,
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,
       mcpToolSource: deps.mcpToolSource,
+      snapshotGlobalMemoryContext: deps.snapshotGlobalMemoryContext,
     },
     resolvedModel,
   );

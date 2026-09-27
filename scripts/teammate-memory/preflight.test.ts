@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 it.skipIf(!isSnapshotAvailable())(
-  'prepares isolated history-free R1 workspaces and proves the A/B retrieval contrast',
+  'prepares isolated history-free R1 workspaces with a supplied historical decision contrast',
   async () => {
     const root = mkdtempSync(join(tmpdir(), 'teammate-r1-'));
     roots.push(root);

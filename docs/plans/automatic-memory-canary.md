@@ -26,9 +26,9 @@ index before retrying, because index/backup settlement may be ambiguous. The
 pilot lock does **not** serialize ordinary manual writes from another process:
 avoid parallel writers to the same memory directory during this pilot.
 
-The deterministic returning-session test creates a canary record, selects it
-from a fresh `MemoryCapabilityBuilder`, then removes it and verifies recall
-stops. This checks storage/retrieval/undo, **not** behavioral gain from a real
+The deterministic returning-session test creates a canary record, retrieves it
+from the project store, then removes it and verifies retrieval stops. This
+checks storage/retrieval/undo, **not** behavioral gain from a real
 returning assistant. The additional model cost on this path is zero; runtime
 filesystem overhead and natural novel-write precision are not yet measured.
 Before broader rollout, observe actual write yield, independently review every

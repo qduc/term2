@@ -967,6 +967,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       // provider/turn continuity are freshened.
       state.resetSession({ clearConversations: false, rollover: true });
       identity.replace(newSessionId, newStartedAt);
+      agentClient.resetMemoryContextForNewSession?.();
     };
   };
   const rollover = (newSessionId: string, newStartedAt = new Date().toISOString()): void => {

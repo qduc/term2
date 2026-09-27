@@ -16,12 +16,6 @@ export type UserTurn = {
   text: string;
   images?: UserTurnImage[];
   skill?: SkillAttachment;
-  /**
-   * Text to key memory recall on when `text` is harness-composed. A rollover
-   * briefing opens with boilerplate and session UUIDs that would otherwise
-   * fill the bounded recall query before the agent's own words.
-   */
-  memoryRecallQuery?: string;
 };
 
 const IMAGE_SENTINEL_PATTERN = /\uE000[^\uE000\uE001]*\uE001\s*/g;
@@ -40,7 +34,6 @@ export function normalizeUserTurn(input: string | UserTurn): UserTurn {
     text: stripImageSentinels(input.text ?? ''),
     ...(input.images?.length ? { images: input.images } : {}),
     ...(input.skill ? { skill: input.skill } : {}),
-    ...(input.memoryRecallQuery ? { memoryRecallQuery: input.memoryRecallQuery } : {}),
   };
 }
 

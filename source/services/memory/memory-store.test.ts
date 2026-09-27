@@ -428,6 +428,11 @@ it('stays within its budget across regimes while keeping the status line visible
   }
 });
 
+it('omits the index when even its counted floor exceeds the budget', async () => {
+  const memory = await storeWithSeeds([{ id: 'one', title: 'One', summary: 'Summary', day: 1 }]);
+  for (const budget of [0, 1, 20, 80]) expect(memory.contextSync(budget).length).toBeLessThanOrEqual(budget);
+});
+
 it('degrades the newest summary first and lists older entries titles-only within a tiny budget', async () => {
   const memory = await store();
   await memory.create(input);

@@ -555,8 +555,8 @@ export class ConversationAdapter {
       inputSurgeApproval,
       replayFromHistory,
       preferredMessageId,
-      suppressUserMessageDisplay,
       busyMode,
+      suppressUserMessageDisplay,
     }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const queue = this.#queue;
@@ -953,10 +953,7 @@ export class ConversationAdapter {
         if (replayFromHistory) {
           startOptions.replayFromHistory = true;
         }
-        if (suppressUserMessageDisplay) {
-          // Model-only input (background notifications) carries no user intent to recall against.
-          startOptions.skipMemoryRecall = true;
-        }
+        if (suppressUserMessageDisplay) startOptions.modelOnlyInput = true;
         result = await this.#collectTerminalResult(
           this.#turnFlow.start(input, startOptions),
           {

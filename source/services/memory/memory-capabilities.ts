@@ -1,17 +1,10 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import { FileMemoryStore } from './memory-store.js';
-import { rankMemorySearchResults } from './memory-search.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
 import { projectScopeKey } from '../../utils/project-scope.js';
 import path from 'node:path';
-import {
-  MEMORY_RECALL_OVERHEAD,
-  recallKey,
-  renderMemoryRecall,
-  renderRecallLine,
-} from '../../prompts/memory-recall-notice.js';
 
 export type MemoryAccess = 'none' | 'read' | 'write';
 
@@ -23,12 +16,9 @@ export type MemoryCapability = {
   guidance: string;
   context: string;
 };
-
+// Retained for decoding and rendering historical memory_injected events.
 export type InjectedMemory = { scope: 'global' | 'project'; id: string; title: string };
-/** Why a turn recalled what it did: which text keyed the search, and its search terms. */
 export type MemoryRecallProvenance = { source: 'turn_text' | 'recall_query'; terms: string };
-/** `queryTerms` is present whenever memories were selected. */
-export type TurnMemorySelection = { text: string; memories: InjectedMemory[]; queryTerms?: string };
 
 type MemorySettings = {
   enabled: boolean;
@@ -40,18 +30,13 @@ type MemorySettings = {
 
 const READ_TOOL_COUNT = 4;
 
-/**
- * Per-turn recall now stays in history, so every recalled line is paid for on
- * every later request of the session. Keep it to the few best matches.
- */
-const TURN_RECALL_MAX_MEMORIES = 3;
-const TURN_RECALL_MAX_CHARS = 1500;
+const GLOBAL_CONTEXT_BUDGET_CHARS = 3000;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory. When memories look relevant to a user message, the harness adds their summaries in a <memory-recall> block ahead of that message; the user did not write it. Each memory is recalled at most once per conversation, and the block is not a complete index; when a relevant item is absent, use memory_search or memory_list. Treat summaries as retrieval triggers, not verified facts; read the full memory with memory_get when it could affect your decision.
+You have access to persistent memory. {{GLOBAL_LOOKUP}} Treat summaries as leads, not authoritative facts.
 
-Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
+Memory has two scopes: global for cross-project user preferences, and project for all other durable memories. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
 
 When you encounter uncertainty about prior conversations, user preferences, project decisions, or established conventions, retrieve relevant memories before making assumptions. Prefer memory_retrieve for ordinary retrieval: it returns complete ranked memories that fit and reports omissions. Use memory_search to inspect ranked metadata and excerpts, then memory_get for a specific memory; repeat memory_get with its cursor when a large memory is paged. Retrieve memory when it could materially improve correctness or avoid repeating work — not mechanically.
 
@@ -59,7 +44,7 @@ After reading a memory, treat it as normal context for the remainder of the task
 
 Use memory_retrieve for one focused lookup. When the task depends on several memories, terminology may vary, or prior decisions may conflict or be stale, run memory_retrieve with several distinct search angles and synthesize the returned evidence in your own reasoning.
 
-Before finishing a task, briefly review whether the user established an explicit durable preference, accepted a lasting project decision, or corrected an existing memory. Persist or update only those high-confidence outcomes; do not create memory merely because a turn completed. Do not duplicate facts easily recovered by reading the repository; when useful, retain the hard-to-recover decision or lesson and point to its canonical source.
+Create or update memory only for a durable user preference, correction, or decision the user actually stated (quote or closely paraphrase it and note the date), or an operational lesson that cannot be derived from repo docs or git history. Never store progress snapshots, milestone/status updates, commit or implementation summaries, or facts already recorded in repo docs or git. Before creating, check for an existing memory and update it instead. Use global scope only for cross-project user preferences; everything else is project scope.
 
 Validate any memory proposals from subagents before acting on them. Persist only durable, useful information, and merge or update an existing memory rather than creating a duplicate when appropriate. Do not store temporary task state, intermediate reasoning, ordinary conversation details, duplicates, secrets, or sensitive data unless the user explicitly requests persistence.`;
 
@@ -67,7 +52,7 @@ const SUBAGENT_GUIDANCE = `### Persistent memory
 
 You can read persistent memory from previous sessions, but cannot change it. No index is injected into your context; use memory_search and memory_get on demand.
 
-Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together.
+Memory has global and project scopes. Global holds cross-project user preferences; project holds other durable memories. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together.
 
 When you encounter uncertainty about prior context, user preferences, or project decisions, consider searching memory before making assumptions. memory_retrieve returns complete ranked memories that fit; use memory_search and cursor-paged memory_get when you need to inspect an omitted or large memory. Retrieve memory when it could materially improve correctness or avoid repeating work.
 
@@ -85,72 +70,7 @@ For **memory maintenance** tasks, review the memory store and existing memories,
 
 Always cite source memory IDs so the caller can trace claims to their sources. Treat all memory as potentially stale. Never fabricate memory content. Do not store temporary task state, intermediate reasoning, or sensitive data.`;
 
-const QUERY_STOP_WORDS = new Set([
-  'the',
-  'can',
-  'we',
-  'were',
-  'doing',
-  'these',
-  'those',
-  'refine',
-  'feature',
-  'memory',
-  'memories',
-  'session',
-  'project',
-  'did',
-  'it',
-  'decide',
-  'decision',
-  'see',
-  'message',
-  'little',
-  'noisy',
-  'fix',
-  'please',
-  'help',
-  'show',
-  'tell',
-  'know',
-  'remember',
-  'and',
-  'for',
-  'are',
-  'was',
-  'with',
-  'from',
-  'this',
-  'that',
-  'what',
-  'when',
-  'where',
-  'which',
-  'should',
-  'would',
-  'could',
-  'have',
-  'about',
-  'into',
-  'back',
-  'how',
-  'why',
-  'our',
-  'your',
-  'you',
-  'they',
-  'them',
-  'its',
-  'not',
-]);
-
-function retrievalQuery(text: string): string {
-  return [...new Set((text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((term) => !QUERY_STOP_WORDS.has(term)))]
-    .slice(0, 24)
-    .join(' ');
-}
-
-/** Resolves role-specific memory authority and the bounded root-turn working set. */
+/** Resolves role-specific memory authority and the bounded session-start global index. */
 export class MemoryCapabilityBuilder {
   #settings: ISettingsService;
   #onWarning: (message: string) => void;
@@ -160,83 +80,13 @@ export class MemoryCapabilityBuilder {
     this.#onWarning = options.onWarning ?? (() => {});
   }
 
-  /** A per-turn, summary-only working set; search tools remain authoritative. */
-  async contextForTurn(query: string, options: { projectPath?: string } = {}): Promise<string> {
-    return (await this.selectForTurn(query, options)).text;
-  }
-
-  /**
-   * The recall block for one user turn. `exclude` holds `recallKey`s already
-   * recalled into this conversation, so a memory is sent at most once.
-   */
-  async selectForTurn(
-    query: string,
-    options: { projectPath?: string; exclude?: ReadonlySet<string> } = {},
-  ): Promise<TurnMemorySelection> {
-    const empty = (): TurnMemorySelection => ({ text: '', memories: [] });
-    if (!this.#settings.get('memory.enabled')) return empty();
-    const terms = retrievalQuery(query);
-    if (!terms) return empty();
-    const queryWords = terms.split(' ');
-    const budget = Math.min(this.#settings.get('memory.contextBudgetChars'), TURN_RECALL_MAX_CHARS);
-    try {
-      const stores = this.#createStores(
-        {
-          enabled: true,
-          directory: this.#settings.get('memory.directory'),
-          contextBudgetChars: budget,
-          searchDefaultLimit: this.#settings.get('memory.searchDefaultLimit'),
-          searchMaxLimit: this.#settings.get('memory.searchMaxLimit'),
-        },
-        options.projectPath ?? process.cwd(),
-      );
-      // Search wide: already-recalled memories are filtered out after ranking and
-      // must not use up the result window.
-      const limit = this.#settings.get('memory.searchMaxLimit');
-      const [global, project] = await Promise.all([
-        stores.global.search(terms, { limit }),
-        stores.project.search(terms, { limit }),
-      ]);
-      // A content-only hit has no relevant summary to show as turn guidance.
-      const ranked = rankMemorySearchResults([
-        ...global.map((result) => ({ ...result, scope: 'global' as const })),
-        ...project.map((result) => ({ ...result, scope: 'project' as const })),
-      ]).filter(({ scope, memory }) => {
-        // Require evidence in the injected metadata, not a substring hit in full content.
-        // Known conversational padding cannot make a topical match more or less eligible.
-        // Ambiguous follow-ups can still use memory tools instead of a guessed summary.
-        const words = new Set(
-          [memory.id, memory.title, ...memory.tags, memory.summary]
-            .join(' ')
-            .toLowerCase()
-            .match(/[a-z0-9]+/g) ?? [],
-        );
-        return queryWords.some((word) => words.has(word)) && !options.exclude?.has(recallKey(scope, memory.id));
-      });
-      let used = MEMORY_RECALL_OVERHEAD;
-      const lines: string[] = [];
-      const memories: InjectedMemory[] = [];
-      for (const { scope, memory } of ranked) {
-        if (memories.length >= TURN_RECALL_MAX_MEMORIES) break;
-        const title = memory.title.slice(0, 120);
-        const line = renderRecallLine({ scope, id: memory.id, title, summary: memory.summary });
-        if (used + line.length + 1 <= budget) {
-          used += line.length + 1;
-          lines.push(line);
-          memories.push({ scope, id: memory.id, title });
-        }
-      }
-      return memories.length ? { text: renderMemoryRecall(lines), memories, queryTerms: terms } : empty();
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      this.#onWarning(`Persistent memory retrieval could not be loaded: ${detail}`);
-      return empty();
-    }
-  }
-
   build(
     subject: MemoryCapabilitySubject,
-    options: { projectPath?: string; includeContext?: boolean } = {},
+    options: {
+      projectPath?: string;
+      includeContext?: boolean;
+      snapshotGlobalContext?: (read: () => string) => string;
+    } = {},
   ): MemoryCapability {
     const access = this.#accessFor(subject);
     const enabled = this.#settings.get('memory.enabled');
@@ -256,37 +106,22 @@ export class MemoryCapabilityBuilder {
     const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
     if (subject.kind === 'main' && access === 'write' && options.includeContext !== false) {
-      try {
-        // Floor-and-reallocate: each scope gets half the budget. A scope that
-        // rendered everything it has under its share donates the unused
-        // remainder to the other scope instead of stranding it while the
-        // other scope truncates.
-        const fairShare = Math.max(1, Math.floor(settings.contextBudgetChars / 2));
-        const globalLabel = 'Global scope:\n';
-        const projectLabel = 'Project scope:\n';
-        const budgetAfterLabel = (label: string) => Math.max(1, fairShare - label.length);
-        const globalBudget = budgetAfterLabel(globalLabel);
-        const projectBudget = budgetAfterLabel(projectLabel);
-        const globalFirst = stores.global.contextSync(globalBudget);
-        const projectFirst = stores.project.contextSync(projectBudget);
-        const slack = (text: string, budget: number) => (text.length < budget ? budget - text.length : 0);
-        const globalContext = stores.global.contextSync(globalBudget + slack(projectFirst, projectBudget));
-        const projectContext = stores.project.contextSync(projectBudget + slack(globalFirst, globalBudget));
-        context = [
-          globalContext && `Global scope:\n${globalContext}`,
-          projectContext && `Project scope:\n${projectContext}`,
-        ]
-          .filter(Boolean)
-          .join('\n\n');
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : 'unknown storage error';
-        this.#onWarning(`Persistent memory context could not be loaded: ${detail}`);
-      }
+      const read = () => {
+        try {
+          const budget = Math.min(settings.contextBudgetChars, GLOBAL_CONTEXT_BUDGET_CHARS);
+          return budget > 0 ? stores.global.contextSync(budget, { pinnedGlobal: true }) : '';
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'unknown storage error';
+          this.#onWarning(`Persistent memory context could not be loaded: ${detail}`);
+          return '';
+        }
+      };
+      context = options.snapshotGlobalContext ? options.snapshotGlobalContext(read) : read();
     }
     return {
       access,
       tools: access === 'read' ? tools.slice(0, READ_TOOL_COUNT) : tools,
-      guidance: this.#guidanceFor(subject),
+      guidance: this.#guidanceFor(subject, Boolean(context)),
       // Subagents (including the librarian) search on demand.
       context,
     };
@@ -298,8 +133,14 @@ export class MemoryCapabilityBuilder {
     return ['explorer', 'worker'].includes(subject.role) ? 'read' : 'none';
   }
 
-  #guidanceFor(subject: MemoryCapabilitySubject): string {
-    if (subject.kind === 'main') return MAIN_GUIDANCE;
+  #guidanceFor(subject: MemoryCapabilitySubject, hasGlobalContext: boolean): string {
+    if (subject.kind === 'main')
+      return MAIN_GUIDANCE.replace(
+        '{{GLOBAL_LOOKUP}}',
+        hasGlobalContext
+          ? 'Global memories are listed in your instructions; do not fetch them unless you need their history or full body. Search or retrieve project memories when relevant.'
+          : 'No global index is included in your instructions. Search or retrieve global and project memories when relevant.',
+      );
     if (subject.role === 'librarian') return LIBRARIAN_GUIDANCE;
     return SUBAGENT_GUIDANCE;
   }

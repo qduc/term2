@@ -110,6 +110,7 @@ export class AgentConfiguration implements AgentSource {
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
   #mcpToolSource?: TurnStableMcpToolSource;
+  #globalMemoryContextSnapshot?: string;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -289,6 +290,10 @@ export class AgentConfiguration implements AgentSource {
       configureTaskCheckIn: this.#configureTaskCheckIn,
       setTaskCheckInPolicy: this.#setTaskCheckInPolicy,
       mcpToolSource: this.#mcpToolSource,
+      snapshotGlobalMemoryContext: (read) => {
+        if (this.#globalMemoryContextSnapshot === undefined) this.#globalMemoryContextSnapshot = read();
+        return this.#globalMemoryContextSnapshot;
+      },
     };
   }
 
@@ -322,6 +327,12 @@ export class AgentConfiguration implements AgentSource {
     this.#model = buildResult.resolvedModel;
     this.#approvalPolicyRegistry = approvalPolicyRegistry;
     if (this.#nestedApprovalOwner) bindRunCodeNestedApprovalOwner(this.#agent.tools, this.#nestedApprovalOwner);
+  }
+
+  /** Rollover retains this client but starts a new instruction-cache lifetime. */
+  resetMemoryContextForNewSession(): void {
+    this.#globalMemoryContextSnapshot = undefined;
+    this.rebuildAgent();
   }
 
   /** Subscribe to settings changes that affect agent definition and rebuild automatically. */

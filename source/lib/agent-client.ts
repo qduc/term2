@@ -13,7 +13,6 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import { AgentConfiguration } from './agent-configuration.js';
-import { MemoryCapabilityBuilder, type TurnMemorySelection } from '../services/memory/memory-capabilities.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
@@ -147,8 +146,6 @@ export class AgentClient {
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
-  #memoryCapabilityBuilder: MemoryCapabilityBuilder;
-  #executionContext?: ExecutionContext;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #subagentBridge: SubagentBridge | null = null;
@@ -691,10 +688,6 @@ export class AgentClient {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
-    this.#executionContext = deps.executionContext;
-    this.#memoryCapabilityBuilder = new MemoryCapabilityBuilder(deps.settings, {
-      onWarning: (message) => deps.logger.warn(message),
-    });
     this.#sessionContextService = deps.sessionContextService;
     this.#toolLifecycle = toolLifecycle;
     this.#hookScope = hookScope ?? 'root';
@@ -881,6 +874,10 @@ export class AgentClient {
   setModel(model: string): void {
     this.#agentConfig.setModel(model);
     this.#agentConfig.refreshAgent();
+  }
+
+  resetMemoryContextForNewSession(): void {
+    this.#agentConfig.resetMemoryContextForNewSession();
   }
 
   setReasoningEffort(effort?: ReasoningEffortSetting): void {
@@ -1361,16 +1358,6 @@ export class AgentClient {
       // Keep the handoff alive through the complete async model invocation.
       run: (operation) => runWithOpenAIRequestPrefixBindingScope(operation),
     };
-  }
-
-  async selectMemoryForTurn(query: string, options: { exclude: ReadonlySet<string> }): Promise<TurnMemorySelection> {
-    if (!this.#agentConfig.getApplicationAgent().memoryContextEnabled) return { text: '', memories: [] };
-    const selection = await this.#memoryCapabilityBuilder.selectForTurn(query, {
-      projectPath: this.#executionContext?.getCwd() ?? process.cwd(),
-      exclude: options.exclude,
-    });
-    if (selection.text) this.#logger.debug('Task-relevant memory recalled', { chars: selection.text.length });
-    return selection;
   }
 
   async startStream(userInput: ProviderInput, options: ChainedRunOptions = {}): Promise<AgentStream> {

@@ -27,8 +27,7 @@ export type TurnStartOptions = Pick<
   | 'resumeState'
   | 'resumePreviousResponseId'
   | 'inputSurgeApproval'
-  | 'skipMemoryRecall'
-> & { origin?: 'user' | 'queued' };
+> & { origin?: 'user' | 'queued'; modelOnlyInput?: boolean };
 
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
@@ -89,7 +88,7 @@ export class TurnCoordinator {
         turnOutcome.kind === 'response' &&
         !options.replayFromHistory &&
         !options.skipUserMessage &&
-        !options.skipMemoryRecall
+        !options.modelOnlyInput
       ) {
         yield* this.#recordAutomaticMemory(input);
       }

@@ -4,6 +4,11 @@ import { registerProvider } from '../providers/registry.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import { FileMemoryStore } from '../services/memory/memory-store.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ========== Mock Utilities ==========
 
@@ -194,6 +199,39 @@ it.sequential('rebuildAgent updates agent and model after setModel', () => {
 
   expect(newAgent, 'agent reference changed after rebuild').not.toBe(originalAgent);
   expect(newModel, 'model was updated').toBe('gpt-4o-mini');
+});
+
+it.sequential('pins global memories across rebuilds and refreshes them for a new session', async () => {
+  ensureProviderRegistered();
+  const directory = mkdtempSync(join(tmpdir(), 'term2-config-memory-'));
+  try {
+    const settings = createMockSettingsService({
+      'memory.directory': directory,
+      'agent.provider': 'mock-provider-for-config',
+    });
+    const { deps } = createDeps();
+    deps.settings = settings;
+    const store = new FileMemoryStore({ root: directory });
+    await store.create({
+      id: 'preference',
+      title: 'Preference',
+      summary: 'Original preference.',
+      content: 'Original.',
+    });
+    const config = new AgentConfiguration({}, deps);
+    const before = config.getAgent().instructions;
+    expect(before).toContain('Original preference.');
+
+    await store.update('preference', { summary: 'Changed preference.' });
+    config.refreshAgent();
+    expect(config.getAgent().instructions).toBe(before);
+    expect(new AgentConfiguration({}, deps).getAgent().instructions).toContain('Changed preference.');
+
+    config.resetMemoryContextForNewSession();
+    expect(config.getAgent().instructions).toContain('Changed preference.');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 it.sequential('rebuildAgent gives the new graph a policy registry without mutating the old graph', async () => {

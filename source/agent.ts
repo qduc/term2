@@ -162,7 +162,7 @@ export interface AgentDefinition {
   resolveInstructionsForRequest?: () => string;
   tools: ToolRegistry;
   model: string;
-  /** Enable task-relevant memory injection only for profiles exposing root memory context. */
+  /** Enable pinned global memory context only for profiles exposing root memory context. */
   memoryContextEnabled: boolean;
 }
 
@@ -263,6 +263,7 @@ export const getAgentDefinition = (
     ) => void;
     /** Root-session-only MCP source; subagent definitions intentionally omit it. */
     mcpToolSource?: McpToolSource;
+    snapshotGlobalMemoryContext?: (read: () => string) => string;
   },
   model?: string,
 ): AgentDefinition => {
@@ -372,7 +373,14 @@ export const getAgentDefinition = (
   const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
-  }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd(), includeContext: false });
+  }).build(
+    { kind: 'main' },
+    {
+      projectPath: executionContext?.getCwd() ?? process.cwd(),
+      includeContext: memoryContextEnabled && !liteMode && hasCapability('memory'),
+      snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
+    },
+  );
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     profile,
@@ -385,7 +393,8 @@ export const getAgentDefinition = (
     backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
     memoryEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
-    memoryGuidance: memoryCapability.guidance,
+    memoryGuidance: hasCapability('memory') ? memoryCapability.guidance : '',
+    memoryContext: memoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
     runCodeEnabled: hasCapability('shell'),

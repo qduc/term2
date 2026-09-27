@@ -3,12 +3,9 @@ import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MemoryCapabilityBuilder } from '../../source/services/memory/memory-capabilities.js';
 import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
-import { createMockSettingsService } from '../../source/services/settings/settings-service.mock.js';
 
 const SNAPSHOT = 'a1142650';
-const QUERY = 'The nested Codex 400s are back. What is the smallest next diagnostic and what should we avoid changing?';
 const BUDGET = 800;
 
 async function archiveInto(ref: string, directory: string): Promise<void> {
@@ -102,15 +99,14 @@ export async function prepareR1(outputDirectory: string) {
         content: 'No socket decision.',
       });
     }
-    const settings = createMockSettingsService({
-      'memory.directory': memory,
-      'memory.contextBudgetChars': BUDGET,
-    });
-    const builder = new MemoryCapabilityBuilder(settings);
+    // Historical R1 fixture: B is supplied the known prior decision, not the
+    // now-retired runtime per-turn selector. This preserves the contrast while
+    // making no claim that current Term2 retrieves it automatically.
+    const priorDecision = await store.get('nested-chain');
     contexts[arm] =
       arm === 'A'
-        ? builder.build({ kind: 'main' }, { projectPath: workspace }).context
-        : await builder.contextForTurn(QUERY, { projectPath: workspace });
+        ? store.contextSync(BUDGET)
+        : `- \`nested-chain\` — ${priorDecision?.title} — ${priorDecision?.summary}`;
   }
   const valid =
     !contexts.A.includes('distinct physical WebSocket') &&

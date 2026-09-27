@@ -472,6 +472,39 @@ it('CLI --resume prints message and exits when no conversation is found', () => 
   expect(stderr.includes('Run "term2 --resume ls" to list available conversations.')).toBe(true);
 });
 
+it('CLI --resume does not suggest --fork for a conversation from another project', async () => {
+  const conversationId = 'c22d4fae-7dec-11d0-a765-00a0c91e6bf6';
+  fs.writeFileSync(
+    path.join(testDir, `${conversationId}.jsonl`),
+    `${JSON.stringify({
+      v: 1,
+      seq: 1,
+      ts: '2026-05-28T14:40:16.000Z',
+      event: {
+        type: 'session_init',
+        id: conversationId,
+        createdAt: '2026-05-28T14:40:16.000Z',
+        projectPath: '/another/project',
+      },
+    })}\n`,
+    'utf8',
+  );
+
+  const { status, stderr } = await spawnCli(
+    [cliPath(), '--resume', conversationId],
+    createTestChildEnv({
+      HOME: testDir,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    }),
+  );
+
+  expect(status).toBe(1);
+  expect(stderr).toContain('belongs to a different project path');
+  expect(stderr).toContain(`term2 --resume ${conversationId}`);
+  expect(stderr).not.toContain('--fork');
+});
+
 it('CLI --list-models combined with --resume errors instead of misreading the resume id as a search term', () => {
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   let error: any;

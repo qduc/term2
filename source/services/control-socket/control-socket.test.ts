@@ -433,6 +433,64 @@ describe('control socket', () => {
     unauthorized.destroy();
   });
 
+  it('stops processing pipelined requests after a terminal rejection', async () => {
+    const server = new ControlSocketServer({
+      name: 'terminal-rejection',
+      runtimeDir: runtimeDirectory(),
+      sessionId: () => 'session',
+      port: fakePort(),
+    });
+    servers.push(server);
+    await server.listen();
+    const socket = connect(server.socketPath);
+    socket.on('error', () => {});
+    await once(socket, 'connect');
+    const received: Buffer[] = [];
+    socket.on('data', (chunk) => received.push(chunk));
+    socket.write('{"v":1,"id":"first","method":"status"}\n' + '{"v":1,"id":"second","method":"status"}\n');
+    await once(socket, 'close');
+
+    const replies = Buffer.concat(received)
+      .toString('utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({ id: 'first', ok: false, error: { code: 'unauthorized' } });
+  });
+
+  it('survives an abrupt client disconnect while replies are queued', async () => {
+    const largePort: ControlSessionPort = {
+      status: () => ({ phase: 'idle' }),
+      get: (topic) => ({ topic, padding: 'x'.repeat(50_000) }),
+    };
+    const server = new ControlSocketServer({
+      name: 'client-reset',
+      runtimeDir: runtimeDirectory(),
+      sessionId: () => 'session',
+      port: largePort,
+    });
+    servers.push(server);
+    await server.listen();
+    const socket = connect(server.socketPath);
+    socket.on('error', () => {});
+    await once(socket, 'connect');
+    socket.write(
+      '{"v":1,"id":"hello","method":"hello"}\n' +
+        Array.from(
+          { length: 50 },
+          (_, index) => `{"v":1,"id":"get-${index}","method":"get","params":{"topic":"model"}}\n`,
+        ).join(''),
+    );
+    socket.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const survivor = connect(server.socketPath);
+    await once(survivor, 'connect');
+    expect((await request(survivor, { v: 1, id: 'hello', method: 'hello' })).ok).toBe(true);
+    survivor.destroy();
+  });
+
   it('refuses unsafe runtime and socket modes without leaving a serving socket', async () => {
     const runtimeDir = runtimeDirectory();
     fs.chmodSync(runtimeDir, 0o755);

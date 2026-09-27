@@ -6,6 +6,7 @@ const root = process.argv[2];
 const arms = process.env.GRID_MODEL === 'sol' ? ['sol-simple', 'sol-gpt'] : ['deepseek-simple', 'deepseek-gpt', 'luna-gpt', 'luna-simple'];
 const rows = [];
 for (const task of ['c11-d5-batch-denial-tristate', 'r-settings-secret-display', 'r-retry-abort-backoff']) {
+  if (process.env.GRID_TASK && task !== process.env.GRID_TASK) continue;
   for (const rep of [1, 2]) {
     const control = join(root, 'runs', task, `rep-${rep}`, 'control');
     for (const arm of arms) {

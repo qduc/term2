@@ -49,6 +49,13 @@ const mocks = vi.hoisted(() => ({
   cycleAppModes: vi.fn(),
   clearConversation: vi.fn(),
   resetConversationPresentation: vi.fn(),
+  restoreConversation: vi.fn(),
+  resumeConversationCallback: null as null | ((target?: string) => Promise<void>),
+  getGoal: null as null | (() => any),
+  onGoalRestore: vi.fn(),
+  loadConversationForProject: vi.fn(),
+  loadLastConversation: vi.fn(),
+  isConversationLocked: vi.fn(() => null),
   handoff: {
     handoffState: null as any,
     startHandoff: vi.fn(),
@@ -94,6 +101,16 @@ vi.mock('./utils/output/terminal-title.js', async (importOriginal) => {
   return {
     ...actual,
     setTerminalTitle: mocks.setTerminalTitle,
+  };
+});
+
+vi.mock('./services/conversation/conversation-persistence.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./services/conversation/conversation-persistence.js')>();
+  return {
+    ...actual,
+    loadConversationForProject: mocks.loadConversationForProject,
+    loadLastConversation: mocks.loadLastConversation,
+    isConversationLocked: mocks.isConversationLocked,
   };
 });
 
@@ -188,6 +205,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
       onTypeAnswer: vi.fn(),
       clearConversation: mocks.clearConversation,
       resetConversationPresentation: mocks.resetConversationPresentation,
+      restoreConversation: mocks.restoreConversation,
       stopProcessing: mocks.stopProcessing,
       stopProcessingWithNotice: mocks.stopProcessingWithNotice,
       undoLastUserMessage: vi.fn(),
@@ -247,13 +265,19 @@ vi.mock('./hooks/use-app-commands.js', () => ({
     clearConversation,
     onSkillSelected,
     requestModeSwitchConfirm,
+    getGoal,
+    resumeConversation,
   }: {
     clearConversation: () => Promise<void>;
     onSkillSelected: (skill: any) => void;
     requestModeSwitchConfirm?: (pending: any) => void;
+    getGoal?: () => any;
+    resumeConversation?: (target?: string) => Promise<void>;
   }) => {
     mocks.clearConversationCallback = clearConversation;
     mocks.requestModeSwitchConfirmCallback = requestModeSwitchConfirm ?? null;
+    mocks.getGoal = getGoal ?? null;
+    mocks.resumeConversationCallback = resumeConversation ?? null;
     if (mocks.selectedSkill) {
       onSkillSelected(mocks.selectedSkill);
     }
@@ -341,6 +365,14 @@ beforeEach(() => {
   mocks.submitConversationTurn.mockReset();
   mocks.submitConversationTurn.mockResolvedValue(false);
   mocks.conversationOptions = null;
+  mocks.restoreConversation.mockReset();
+  mocks.resumeConversationCallback = null;
+  mocks.getGoal = null;
+  mocks.onGoalRestore.mockReset();
+  mocks.loadConversationForProject.mockReset();
+  mocks.loadLastConversation.mockReset();
+  mocks.isConversationLocked.mockReset();
+  mocks.isConversationLocked.mockReturnValue(null);
   mocks.setWaitingForRejectionReason.mockReset();
   mocks.setWaitingForAskUserAnswer.mockReset();
   mocks.resolveBackgroundSubagentApproval.mockReset();
@@ -406,6 +438,128 @@ beforeEach(() => {
 });
 
 describe('App orchestration', () => {
+  it.sequential('publishes a restored active/terminal goal to UI and prompt state on live resume', async () => {
+    const services = createServices();
+    const restoredGoal = { id: 'goal-b', outcome: 'Goal B', status: 'achieved' as const };
+    mocks.loadConversationForProject.mockReturnValue({
+      status: 'loaded',
+      conversation: {
+        id: 'session-b',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        goal: restoredGoal,
+        messages: [],
+        replayWarnings: [],
+      },
+    });
+
+    await renderInAct(
+      <App
+        {...services}
+        sessionId="session-a"
+        initialGoal={{ id: 'goal-a', outcome: 'Goal A', status: 'active' }}
+        onGoalRestore={mocks.onGoalRestore}
+        terminalTitleBase="term2"
+        generateId={() => 'session-next'}
+      />,
+    );
+    await act(async () => {
+      await mocks.resumeConversationCallback?.('session-b');
+    });
+
+    expect(mocks.restoreConversation).toHaveBeenCalledWith(expect.objectContaining({ goal: restoredGoal }));
+    expect(mocks.onGoalRestore).toHaveBeenCalledWith(restoredGoal);
+    expect(mocks.getGoal?.()).toEqual(restoredGoal);
+  });
+
+  it.sequential('clears the live goal after successfully resuming a goal-less session', async () => {
+    const services = createServices();
+    mocks.loadConversationForProject.mockReturnValue({
+      status: 'loaded',
+      conversation: {
+        id: 'session-b',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        messages: [],
+        replayWarnings: [],
+      },
+    });
+
+    await renderInAct(
+      <App
+        {...services}
+        sessionId="session-a"
+        initialGoal={{ id: 'goal-a', outcome: 'Goal A', status: 'active' }}
+        onGoalRestore={mocks.onGoalRestore}
+        terminalTitleBase="term2"
+        generateId={() => 'session-next'}
+      />,
+    );
+    await act(async () => {
+      await mocks.resumeConversationCallback?.('session-b');
+    });
+
+    expect(mocks.onGoalRestore).toHaveBeenCalledWith(undefined);
+    expect(mocks.getGoal?.()).toBeUndefined();
+  });
+
+  it.sequential(
+    'does not publish a resumed goal after refusal, restore failure, or during an in-flight turn',
+    async () => {
+      const services = createServices();
+      const goalA = { id: 'goal-a', outcome: 'Goal A', status: 'active' as const };
+      const goalB = { id: 'goal-b', outcome: 'Goal B', status: 'active' as const };
+      const restored = {
+        id: 'session-b',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        goal: goalB,
+        messages: [],
+        replayWarnings: [],
+      };
+      mocks.loadConversationForProject.mockReturnValue({ status: 'loaded', conversation: restored });
+
+      const app = () => (
+        <App
+          {...services}
+          sessionId="session-a"
+          initialGoal={goalA}
+          onGoalRestore={mocks.onGoalRestore}
+          terminalTitleBase="term2"
+          generateId={() => 'session-next'}
+        />
+      );
+      const view = await renderInAct(app());
+
+      mocks.loadConversationForProject.mockReturnValue({
+        status: 'project_mismatch',
+        conversation: { projectPath: '/other-project' },
+      });
+      await act(async () => {
+        await mocks.resumeConversationCallback?.('session-b');
+      });
+      expect(mocks.onGoalRestore).not.toHaveBeenCalled();
+      expect(mocks.getGoal?.()).toEqual(goalA);
+
+      mocks.loadConversationForProject.mockReturnValue({ status: 'loaded', conversation: restored });
+      mocks.restoreConversation.mockImplementationOnce(() => {
+        throw new Error('restore failed');
+      });
+      await act(async () => {
+        await mocks.resumeConversationCallback?.('session-b');
+      });
+      expect(mocks.onGoalRestore).not.toHaveBeenCalled();
+      expect(mocks.getGoal?.()).toEqual(goalA);
+
+      const resetsBeforeInFlightResume = services.conversationService.resetWithNewId.mock.calls.length;
+      mocks.conversationState.isProcessing = true;
+      await rerenderInAct(view, app());
+      await act(async () => {
+        await mocks.resumeConversationCallback?.('session-b');
+      });
+      expect(services.conversationService.resetWithNewId).toHaveBeenCalledTimes(resetsBeforeInFlightResume);
+      expect(mocks.onGoalRestore).not.toHaveBeenCalled();
+      expect(mocks.getGoal?.()).toEqual(goalA);
+    },
+  );
+
   it.sequential('rotates a requested rollover and sends a marked protocol briefing into the new session', async () => {
     const services = createServices();
 

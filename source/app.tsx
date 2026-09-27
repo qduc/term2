@@ -146,6 +146,7 @@ interface AppProps {
   controlSessionMetadata?: () => ControlSessionMetadata;
   initialGoal?: import('./services/logging/conversation-log-events.js').DurableGoal;
   appendGoal?: (goal: import('./services/logging/conversation-log-events.js').DurableGoal) => void;
+  onGoalRestore?: (goal?: import('./services/logging/conversation-log-events.js').DurableGoal) => void;
 }
 
 const App: FC<AppProps> = ({
@@ -180,6 +181,7 @@ const App: FC<AppProps> = ({
   controlSessionMetadata,
   initialGoal,
   appendGoal,
+  onGoalRestore,
 }) => {
   const [goal, setGoalState] = useState(initialGoal);
   const setGoal = useCallback(
@@ -639,6 +641,10 @@ const App: FC<AppProps> = ({
 
   const resumeConversation = useCallback(
     async (target?: string) => {
+      if (isProcessing) {
+        addSystemMessage('Wait for the current turn to finish before resuming another conversation.');
+        return;
+      }
       let restored: RestoredState | null = null;
       if (target) {
         const result = loadConversationForProject(target, resumeProjectPath, resumeSshHost);
@@ -725,6 +731,8 @@ const App: FC<AppProps> = ({
           addSystemMessage(`Conversation replay: ${warning}`);
         }
         addSystemMessage(`Resumed conversation: ${restored.id}`);
+        onGoalRestore?.(restored.goal);
+        setGoalState(restored.goal);
       } catch (error: unknown) {
         addSystemMessage(`Failed to resume conversation: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -733,7 +741,9 @@ const App: FC<AppProps> = ({
       addSystemMessage,
       configurationService,
       conversationService,
+      isProcessing,
       onRotateWriter,
+      onGoalRestore,
       onSessionIdChange,
       redrawMessageList,
       restoreConversation,

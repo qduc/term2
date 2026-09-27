@@ -1368,6 +1368,9 @@ const { waitUntilExit } = render(
           logWriter.append({ type: 'goal_changed', version: 1, goal });
           currentGoalState.current = goal;
         }}
+        onGoalRestore={(goal) => {
+          currentGoalState.current = goal;
+        }}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
         onRotateWriter={(newId, createdAt, rolloverFrom) => {

@@ -89,7 +89,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           </Box>
 
           <Box flexDirection="column" marginLeft={2}>
-            <Text>• Press Ctrl+C to force quit</Text>
+            <Text>• Press Ctrl+C twice to quit</Text>
             <Text>• Restart the application</Text>
           </Box>
 

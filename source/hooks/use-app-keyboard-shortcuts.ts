@@ -195,7 +195,9 @@ export const useAppKeyboardShortcuts = ({
         return;
       }
 
-      if (current.inputValue.length > 0) {
+      const bridgedRejectionReason = rejectionReasonBridgeRef.current;
+      if (current.inputValue.length > 0 || (bridgedRejectionReason?.length ?? 0) > 0) {
+        if (bridgedRejectionReason !== null) rejectionReasonBridgeRef.current = '';
         current.replaceInput('');
       } else if (current.isProcessing || current.waitingForApproval) {
         current.stopProcessing();
@@ -211,7 +213,7 @@ export const useAppKeyboardShortcuts = ({
       return;
     }
     // SIGQUIT-style escape hatch when the app is wedged and cannot interrupt.
-    if (key.ctrl && input === '\\') {
+    if (input === '\x1c' || (key.ctrl && input === '\\')) {
       current.exitWithUsage();
       return;
     }

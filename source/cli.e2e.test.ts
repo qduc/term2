@@ -33,7 +33,7 @@ afterEach(() => {
   tempHome = '';
 });
 
-it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: TEST_TIMEOUT_MS }, async () => {
+it.sequential('starts the terminal UI and exits on the second Ctrl+C', { timeout: TEST_TIMEOUT_MS }, async () => {
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
   tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
@@ -54,6 +54,8 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: TEST_TIME
   await session.waitForOutput('LITE', STARTUP_TIMEOUT_MS);
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
+  session.write('\x03');
+  await session.waitForOutput('Press Ctrl+C again to exit', EXIT_TIMEOUT_MS);
   session.write('\x03');
 
   const exit = await session.waitForExit(EXIT_TIMEOUT_MS);

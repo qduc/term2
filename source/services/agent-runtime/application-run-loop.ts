@@ -20,6 +20,7 @@ import type {
   StreamedModelToolDefinition,
   StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
+import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../contracts/streamed-model-turn.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import type { AnyToolDefinition, ToolExecutionLifecyclePort, ToolRegistry } from '../../tools/types.js';
 import { getRunCodeExecutionResult, runCodeExecutionMetadata } from '../../tools/system/run-code/run-code-execution.js';
@@ -980,6 +981,7 @@ export class ApplicationRunLoop {
         let provisionalReasoningCharacters = 0;
         let provisionalTextDeltas = 0;
         let provisionalReasoningDeltas = 0;
+        let lastTextPartId: string | undefined;
 
         criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
         if (criticalWrapUp) state.criticalWrapUpDispatched = true;
@@ -1084,11 +1086,18 @@ export class ApplicationRunLoop {
                 continue;
               }
               if (event.type === 'text_delta') {
+                const startsNewPart =
+                  event.partId !== undefined &&
+                  lastTextPartId !== undefined &&
+                  event.partId !== lastTextPartId &&
+                  event.text.length > 0;
+                if (event.partId !== undefined && event.text.length > 0) lastTextPartId = event.partId;
+                const text = startsNewPart ? `${ASSISTANT_TEXT_PART_SEPARATOR}${event.text}` : event.text;
                 toolArgumentRunaway?.observeText();
-                generationGuard.observeText(event.text);
-                provisionalTextCharacters += event.text.length;
+                generationGuard.observeText(text);
+                provisionalTextCharacters += text.length;
                 provisionalTextDeltas++;
-                outputPush(stream, queue, { type: 'text_delta', text: event.text });
+                outputPush(stream, queue, { type: 'text_delta', text });
                 continue;
               }
               if (event.type === 'codex_rate_limits') {
@@ -1395,7 +1404,8 @@ export class ApplicationRunLoop {
         // must not enter the canonical history: the truthy check used to let
         // "\n\n" through, accumulating junk in model context.
         .map((part) => part.text)
-        .join('')
+        .filter((text) => text.length > 0)
+        .join(ASSISTANT_TEXT_PART_SEPARATOR)
         .trim();
       if (assistantText) {
         stream.finalOutput = assistantText;

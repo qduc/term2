@@ -1,6 +1,7 @@
 import { it, expect, beforeAll, afterAll, onTestFinished, vi } from 'vitest';
 import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';
 import type { StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
+import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1464,6 +1465,67 @@ it.sequential('Codex provider stream() serializes assistant history as output_te
     { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
     { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello there' }] },
   ]);
+});
+
+it.sequential('Codex provider stream() tags text deltas with their message part so parts stay distinct', async () => {
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.output_text.delta', item_id: 'msg_1', output_index: 0, content_index: 0, delta: 'First.' },
+    { type: 'response.output_text.delta', item_id: 'msg_2', output_index: 1, content_index: 0, delta: 'Second.' },
+    {
+      type: 'response.completed',
+      response: {
+        id: 'resp_parts',
+        output: [
+          { type: 'message', content: [{ text: 'First.' }] },
+          { type: 'message', content: [{ text: 'Second.' }] },
+        ],
+        usage: {},
+      },
+    },
+  ]);
+  const model = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, transport);
+  const events: any[] = [];
+  for await (const event of model.stream(
+    typedRequest({ input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+  )) {
+    events.push(event);
+  }
+  expect(events.filter((event) => event.type === 'text_delta')).toEqual([
+    { type: 'text_delta', partId: 'msg_1:0', text: 'First.' },
+    { type: 'text_delta', partId: 'msg_2:0', text: 'Second.' },
+  ]);
+});
+
+it.sequential('two Codex message items in one response reach the run loop as separated text', async () => {
+  const transport = new FakeCodexResponsesTransport([
+    { type: 'response.output_text.delta', item_id: 'msg_1', output_index: 0, content_index: 0, delta: 'Preamble.' },
+    { type: 'response.output_text.delta', item_id: 'msg_2', output_index: 1, content_index: 0, delta: 'Answer.' },
+    {
+      type: 'response.completed',
+      response: {
+        id: 'resp_two_messages',
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: 'Preamble.' }] },
+          { type: 'message', content: [{ type: 'output_text', text: 'Answer.' }] },
+        ],
+        usage: {},
+      },
+    },
+  ]);
+  const model = new CodexResponsesWSModel({} as any, 'gpt-5.3-codex', fakeCodexTokenManager, transport);
+  const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+    { name: 'test-agent', instructions: 'Be concise.', model: 'gpt-5.3-codex', tools: [] },
+    'hi',
+  );
+  const events: any[] = [];
+  for await (const event of stream) events.push(event);
+
+  const streamed = events
+    .filter((event) => event.type === 'text_delta')
+    .map((event) => event.text)
+    .join('');
+  expect(streamed).toBe('Preamble.\n\nAnswer.');
+  expect(stream.finalOutput).toBe('Preamble.\n\nAnswer.');
 });
 
 it.sequential(

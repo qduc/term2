@@ -80,7 +80,16 @@ export function createAiSdkStreamedModel(
       const reasoning = new Map<string, { text: string; providerMetadata?: Record<string, unknown> }>();
       const toolCalls = new Map<string, { name: string; argumentCharCount: number }>();
       let pendingTrivialWhitespace = '';
+      let pendingTrivialWhitespacePartId: string | undefined;
+      let lastTextPartId: string | undefined;
       let hasMaterialOutput = false;
+      const textDelta = (text: string, partId: string | undefined): StreamedModelTurnEvent => {
+        if (text) {
+          appendText(output, text, partId !== undefined && lastTextPartId !== undefined && partId !== lastTextPartId);
+          if (partId !== undefined) lastTextPartId = partId;
+        }
+        return { type: 'text_delta', ...(partId !== undefined ? { partId } : {}), text };
+      };
       // Providers can emit a one-character placeholder immediately before an
       // in-band error. Keep only a bounded leading prefix uncommitted so the
       // RetryingModel's any-yield-is-committed invariant remains unchanged.
@@ -88,9 +97,8 @@ export function createAiSdkStreamedModel(
         if (!pendingTrivialWhitespace) return undefined;
         const text = pendingTrivialWhitespace;
         pendingTrivialWhitespace = '';
-        appendText(output, text);
         hasMaterialOutput = true;
-        return { type: 'text_delta', text };
+        return textDelta(text, pendingTrivialWhitespacePartId);
       };
 
       for await (const part of result.stream) {
@@ -108,13 +116,13 @@ export function createAiSdkStreamedModel(
             pendingTrivialWhitespace.length + part.delta.length <= MAX_TRIVIAL_WHITESPACE_LENGTH
           ) {
             pendingTrivialWhitespace += part.delta;
+            pendingTrivialWhitespacePartId = part.id;
             continue;
           }
           const flushedWhitespace = flushPendingWhitespace();
           if (flushedWhitespace) yield flushedWhitespace;
-          appendText(output, part.delta);
           if (part.delta) hasMaterialOutput = true;
-          yield { type: 'text_delta', text: part.delta };
+          yield textDelta(part.delta, part.id);
           continue;
         }
         if (part.type === 'reasoning-start') {
@@ -426,9 +434,9 @@ function mediaType(value: string): string {
   return value.match(/^data:([^;,]+)/)?.[1] ?? 'image/*';
 }
 
-function appendText(output: StreamedModelTurnOutput[], text: string) {
+function appendText(output: StreamedModelTurnOutput[], text: string, startsNewPart: boolean) {
   const last = output.at(-1);
-  if (last?.type === 'message') {
+  if (last?.type === 'message' && !startsNewPart) {
     const part = last.content.at(-1);
     if (part) (part as { text: string }).text += text;
     return;

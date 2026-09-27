@@ -296,7 +296,7 @@ it('translates one application turn to an AI SDK stream and publishes its author
   });
   expect(events).toEqual([
     { type: 'reasoning_delta', id: 'thought-1', text: 'Think.', providerMetadata: { anthropic: { signature: 'sig' } } },
-    { type: 'text_delta', text: 'Done.' },
+    { type: 'text_delta', partId: 'text-1', text: 'Done.' },
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 11 },
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 },
     { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
@@ -674,4 +674,34 @@ it('extracts upstream provider from stream completion providerMetadata', async (
   const completion = events.find((e: any) => e.type === 'completion') as any;
   expect(completion).toBeDefined();
   expect(completion.providerMetadata?.openrouter?.provider).toBe('Novita');
+});
+
+it('keeps distinct text blocks as distinct parts in deltas and completion output', async () => {
+  const events = await collect(
+    modelFor([
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'First ' },
+      { type: 'text-delta', id: 'text-1', delta: 'block.' },
+      { type: 'text-end', id: 'text-1' },
+      { type: 'text-start', id: 'text-2' },
+      { type: 'text-delta', id: 'text-2', delta: 'Second block.' },
+      { type: 'text-end', id: 'text-2' },
+      {
+        type: 'finish',
+        finishReason: { unified: 'stop' },
+        usage: { inputTokens: { total: 1 }, outputTokens: { total: 2 } },
+      },
+    ]).stream(testRequest),
+  );
+
+  expect(events.filter((event: any) => event.type === 'text_delta')).toEqual([
+    { type: 'text_delta', partId: 'text-1', text: 'First ' },
+    { type: 'text_delta', partId: 'text-1', text: 'block.' },
+    { type: 'text_delta', partId: 'text-2', text: 'Second block.' },
+  ]);
+  const completion = events.find((event: any) => event.type === 'completion') as any;
+  expect(completion.output).toEqual([
+    { type: 'message', content: [{ type: 'text', text: 'First block.' }] },
+    { type: 'message', content: [{ type: 'text', text: 'Second block.' }] },
+  ]);
 });

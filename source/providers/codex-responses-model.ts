@@ -43,7 +43,7 @@ import {
   findWebSocketClosedEarly,
   readWebSocketCloseFrame,
 } from './websocket-close-evidence.js';
-import { markContextCompactionFailure } from './openai-responses-model.js';
+import { markContextCompactionFailure, responsesTextDelta } from './openai-responses-model.js';
 import { compactOutputToProviderHistory } from './codex-compact.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
@@ -450,7 +450,7 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
       const rateLimits = event.rate_limits ?? event;
       if (rateLimits && typeof rateLimits === 'object') yield { type: 'codex_rate_limits', rateLimits };
     } else if (event?.type === 'response.output_text.delta') {
-      yield { type: 'text_delta', text: String(event.delta ?? '') };
+      yield responsesTextDelta(event);
     } else if (event?.type === 'response.reasoning_summary_text.delta') {
       const text = String(event.delta ?? '');
       if (text) {

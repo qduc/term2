@@ -132,6 +132,26 @@ it('normalizes streamed Responses tool argument progress for the UI', () => {
   ).toEqual({ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 17 });
 });
 
+it('tags Responses text deltas with their message part identity', () => {
+  const state = createResponseEventNormalizationState();
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.output_text.delta', item_id: 'msg_1', content_index: 0, delta: 'First.' },
+      state,
+    ),
+  ).toEqual({ type: 'text_delta', partId: 'msg_1:0', text: 'First.' });
+  expect(
+    normalizeResponseEvent(
+      { type: 'response.output_text.delta', item_id: 'msg_2', content_index: 1, delta: 'Second.' },
+      state,
+    ),
+  ).toEqual({ type: 'text_delta', partId: 'msg_2:1', text: 'Second.' });
+  expect(normalizeResponseEvent({ type: 'response.output_text.delta', delta: 'untagged' }, state)).toEqual({
+    type: 'text_delta',
+    text: 'untagged',
+  });
+});
+
 it('normalizes response.reasoning_text.delta as a live reasoning delta (opencode variant)', () => {
   const state = createResponseEventNormalizationState();
   expect(

@@ -540,6 +540,14 @@ function compactionIndex(event: any, item: any): number | string {
   return typeof item?.id === 'string' ? item.id : 0;
 }
 
+/** Convert a Responses `output_text.delta` into a text delta tagged with its message part. */
+export function responsesTextDelta(event: any): StreamedModelTurnEvent {
+  const text = String(event?.delta ?? '');
+  if (typeof event?.item_id !== 'string') return { type: 'text_delta', text };
+  const contentIndex = typeof event.content_index === 'number' ? event.content_index : 0;
+  return { type: 'text_delta', partId: `${event.item_id}:${contentIndex}`, text };
+}
+
 /** Convert one native OpenAI Responses event to the application turn protocol. */
 export function normalizeResponseEvent(
   event: any,
@@ -547,7 +555,7 @@ export function normalizeResponseEvent(
   lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
 ): StreamedModelTurnEvent | null {
   if (!event || typeof event.type !== 'string') return null;
-  if (event.type === 'response.output_text.delta') return { type: 'text_delta', text: event.delta ?? '' };
+  if (event.type === 'response.output_text.delta') return responsesTextDelta(event);
   const reasoningDelta = (id: string | undefined, text: string): StreamedModelTurnEvent | null => {
     if (!text) return null;
     if (id !== undefined) state.reasoningEmittedItemIds.add(id);

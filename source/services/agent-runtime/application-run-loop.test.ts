@@ -3813,3 +3813,76 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     });
   });
 });
+
+describe('ApplicationRunLoop assistant text parts', () => {
+  function twoPartModel(): StreamedModelTurn {
+    return {
+      async *stream() {
+        yield { type: 'text_delta', partId: 'msg_1:0', text: 'First ' };
+        yield { type: 'text_delta', partId: 'msg_1:0', text: 'part.' };
+        yield { type: 'text_delta', partId: 'msg_2:0', text: 'Second part.' };
+        yield {
+          type: 'completion',
+          responseId: 'two-parts',
+          output: [
+            { type: 'message', content: [{ type: 'text', text: 'First part.' }] },
+            { type: 'message', content: [{ type: 'text', text: 'Second part.' }] },
+          ],
+        };
+      },
+    };
+  }
+
+  it('separates distinct streamed text parts with a blank line', async () => {
+    const stream = new ApplicationRunLoop({ resolveModel: () => twoPartModel() }).startStream(agent, 'prompt');
+    const events = await collect(stream);
+
+    const streamed = events
+      .filter((event: any) => event.type === 'text_delta')
+      .map((event: any) => event.text)
+      .join('');
+    expect(streamed).toBe('First part.\n\nSecond part.');
+  });
+
+  it('commits the same separated text to history and final output', async () => {
+    const stream = new ApplicationRunLoop({ resolveModel: () => twoPartModel() }).startStream(agent, 'prompt');
+    const events = await collect(stream);
+
+    const assistantItems = events.filter(
+      (event: any) => event.type === 'item' && event.item?.type === 'message' && event.item.role === 'assistant',
+    );
+    expect(assistantItems).toEqual([
+      {
+        type: 'item',
+        item: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'First part.\n\nSecond part.' }],
+        },
+      },
+    ]);
+    expect(stream.finalOutput).toBe('First part.\n\nSecond part.');
+  });
+
+  it('does not separate deltas that share a part or carry no part identity', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta', text: 'Hello ' };
+        yield { type: 'text_delta', text: 'world.' };
+        yield {
+          type: 'completion',
+          responseId: 'one-part',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Hello world.' }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+    const events = await collect(stream);
+
+    expect(events.filter((event: any) => event.type === 'text_delta').map((event: any) => event.text)).toEqual([
+      'Hello ',
+      'world.',
+    ]);
+    expect(stream.finalOutput).toBe('Hello world.');
+  });
+});

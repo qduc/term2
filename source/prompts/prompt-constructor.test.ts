@@ -16,11 +16,65 @@ import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
 
 it('guides run_code exact searches and syntax-sensitive data', () => {
-  const guidance = getScriptPrimaryToolsAddendum();
+  const guidance = getScriptPrimaryToolsAddendum('editors');
 
   expect(guidance).toContain('fixed_strings: true');
   expect(guidance).toContain('pattern` is a regular expression');
   expect(guidance).toContain('pass it through the `run_code` `inputs` parameter');
+  expect(guidance).toContain(
+    '- For multiline edit text or data containing quotes, backticks, or `${...}`, pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.',
+  );
+});
+
+it('names only editors on the active run_code editing surface and identifies shell as direct-only', () => {
+  const patchSurface = buildPromptSpec({
+    model: 'gpt-5.6',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    editorSurface: 'patch',
+  }).inlineSections.join('\n');
+  const otherSurface = buildPromptSpec({
+    model: 'claude-3.7-sonnet',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    editorSurface: 'editors',
+  }).inlineSections.join('\n');
+  const noWriteSurface = buildPromptSpec({
+    model: 'claude-3.7-sonnet',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+    editorSurface: 'none',
+  }).inlineSections.join('\n');
+
+  expect(patchSurface).toContain('`tools.apply_patch`');
+  expect(patchSurface).not.toContain('`tools.create_file`');
+  expect(patchSurface).not.toContain('`tools.search_replace`');
+  expect(patchSurface).toContain('create new files with a `*** Add File:` patch');
+  expect(otherSurface).toContain('`tools.create_file`');
+  expect(otherSurface).toContain('`tools.search_replace`');
+  expect(otherSurface).not.toContain('`tools.apply_patch`');
+  expect(noWriteSurface).not.toContain('`tools.apply_patch`');
+  expect(noWriteSurface).not.toContain('`tools.create_file`');
+  expect(noWriteSurface).not.toContain('`tools.search_replace`');
+  for (const surface of [patchSurface, otherSurface, noWriteSurface]) {
+    expect(surface).toContain('`tools.shell` does not exist inside `run_code`');
+  }
+  expect(patchSurface).toContain('Do not write files with');
+  expect(otherSurface).toContain('Do not write files with');
+  expect(patchSurface).toContain('heredocs, Python, or other shell tricks');
+  expect(otherSurface).toContain('heredocs, Python, or other shell tricks');
+  for (const surface of [patchSurface, otherSurface, noWriteSurface]) {
+    expect(surface).toContain('Do not use Python to read files when `tools.read_file` is available');
+  }
+  expect(noWriteSurface).not.toContain('Do not write files with');
+  expect(noWriteSurface).toContain('## File, search, and web tools');
+  expect(noWriteSurface).toContain('tools.grep({ pattern, fixed_strings: true })');
+  expect(noWriteSurface).not.toContain('\\n\\n');
+  expect(patchSurface).toContain('`shell` is a direct tool');
+  expect(patchSurface).toContain('File, search, web, and edit tools are not on your direct tool list.');
+  expect(otherSurface).toContain('File, search, web, and edit tools are not on your direct tool list.');
+  expect(noWriteSurface).toContain('File, search, and web tools are not on your direct tool list.');
+  expect(patchSurface).toContain('`tools.shell` does not exist inside `run_code`');
 });
 
 const fullCapabilityLogging = {
@@ -145,7 +199,7 @@ it('does not teach loaded run_code instruction surfaces to call script-only tool
     readFileSync(join(import.meta.dirname, file), 'utf8'),
   );
   surfaces.push(
-    getScriptPrimaryToolsAddendum(),
+    getScriptPrimaryToolsAddendum('editors'),
     getBackgroundShellAddendum(),
     getSubagentDelegationAddendum({ backgroundEnabled: true, controlsEnabled: true, foregroundEnabled: false }),
   );
@@ -166,16 +220,17 @@ it('selects script-primary vs direct-editor guidance from runCodeEnabled', () =>
     model: 'gpt-5.6',
     profile: profile('builtin:standard'),
     runCodeEnabled: true,
+    editorSurface: 'patch',
   });
   const disabled = buildPromptSpec({
     model: 'gpt-5.6',
     profile: profile('builtin:standard'),
     runCodeEnabled: false,
   });
-  expect(enabled.inlineSections.join('\n')).toContain(getScriptPrimaryToolsAddendum());
+  expect(enabled.inlineSections.join('\n')).toContain(getScriptPrimaryToolsAddendum('patch'));
   expect(enabled.inlineSections.join('\n')).not.toContain(getDirectEditorToolsAddendum());
   expect(disabled.inlineSections.join('\n')).toContain(getDirectEditorToolsAddendum());
-  expect(disabled.inlineSections.join('\n')).not.toContain(getScriptPrimaryToolsAddendum());
+  expect(disabled.inlineSections.join('\n')).not.toContain(getScriptPrimaryToolsAddendum('patch'));
 });
 
 it('buildPromptSpec ships the approval mechanism to every non-lite profile', () => {

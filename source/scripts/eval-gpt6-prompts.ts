@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildPromptSpec } from '../prompts/prompt-constructor.js';
+import { shouldPreferPatchEditingModel } from '../lib/tool-selection-policy.js';
 import { withSteeringNotice } from '../prompts/steering-notice.js';
 import { resolveProfile } from '../services/profiles/index.js';
 import { getProvider } from '../providers/index.js';
@@ -202,6 +203,7 @@ if (providerId === '--list') {
     profile: resolveProfile('builtin:standard'),
     sandboxEnabled: false,
     runCodeEnabled: true,
+    editorSurface: shouldPreferPatchEditingModel(model) ? 'patch' : 'editors',
   });
   const mainInstructions = [
     readPrompt(spec.basePromptFile!),

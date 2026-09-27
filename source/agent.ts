@@ -389,6 +389,7 @@ export const getAgentDefinition = (
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
     runCodeEnabled: hasCapability('shell'),
+    editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 

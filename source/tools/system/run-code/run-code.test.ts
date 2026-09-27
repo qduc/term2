@@ -1552,7 +1552,7 @@ describe('run_code', () => {
       'await Promise.all([tools.fast({ value: "ok" }), tools.broken({ value: "bad" })]);',
     );
     expect(output).toContain(
-      'nested tool call completed successfully, but their results were lost because the script failed',
+      '1 nested tool call completed successfully, but its result was lost because the script failed',
     );
     expect(output).toContain(
       'If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch',

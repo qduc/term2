@@ -510,7 +510,9 @@ function renderResult(
       sections.push(
         `${successfulNestedCalls} nested tool call${
           successfulNestedCalls === 1 ? '' : 's'
-        } completed successfully, but their results were lost because the script failed. If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch to keep the other results.`,
+        } completed successfully, but ${
+          successfulNestedCalls === 1 ? 'its result was' : 'their results were'
+        } lost because the script failed. If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch to keep the other results.`,
       );
     }
   } else if (execution.script.voidOutput) {

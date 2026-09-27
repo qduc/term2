@@ -148,7 +148,24 @@ it('keeps the dedicated search tools on a read-only full-mode surface', () => {
     // surface, absent editing tools — must not remove grep/glob.
     expect(toolNames).toEqual(expect.arrayContaining(['read_file', 'grep', 'glob']));
     expect(toolNames).not.toEqual(expect.arrayContaining(['create_file', 'search_replace', 'apply_patch']));
+    expect(definition.instructions).toContain('- File editing tools are not available in this session.');
+    expect(definition.instructions).not.toContain('Edit with `tools.apply_patch`');
+    expect(definition.instructions).not.toContain('Edit with `tools.create_file`');
   }
+});
+
+it('registers and names only apply_patch on a writable GPT-5 patch surface', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5.6' }),
+    loggingService: mockLogger,
+  });
+  const toolNames = definition.tools.map((tool) => tool.name);
+
+  expect(toolNames).toContain('apply_patch');
+  expect(toolNames).not.toContain('create_file');
+  expect(toolNames).not.toContain('search_replace');
+  expect(definition.instructions).toContain('`tools.apply_patch`');
+  expect(definition.instructions).not.toContain('`tools.create_file`');
 });
 
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
@@ -1639,7 +1656,12 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
     // Search is read-gated, not write-gated: disabling fileWrite leaves
     // grep/glob registered. The coupling recorded in the design doc's
     // Acknowledged gaps was repaired after Phase 1.
-    { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace'] },
+    {
+      key: 'tools.fileWrite.enabled',
+      absent: ['create_file', 'search_replace'],
+      // The editor guidance must follow the registered write surface too.
+      markers: ['Edit with `tools.search_replace` or `tools.create_file`'],
+    },
     {
       key: 'tools.memory.enabled',
       absent: baselineNames.filter((name) => name.startsWith('memory_')),

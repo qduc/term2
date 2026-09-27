@@ -27,6 +27,7 @@ import {
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
+import { TOOL_NAME_APPLY_PATCH } from '../../tool-names.js';
 import { saveOutputArtifact } from '../../../utils/shell/shell-output.js';
 import { getRunCodeExecutionResult } from './run-code-execution.js';
 import type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
@@ -662,6 +663,21 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           }
           normalized = parsed.data;
         }
+        // Parse the freeform envelope before approval evaluation: the policy
+        // intentionally requires approval when it cannot inspect malformed input.
+        if (name === TOOL_NAME_APPLY_PATCH && typeof (normalized as { patch?: unknown })?.patch === 'string') {
+          try {
+            parseUpstreamApplyPatch((normalized as { patch: string }).patch);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            record(name, 'invalid_params', started, undefined, undefined, 'invalid_nested_input');
+            if (isActionTool(name)) {
+              rejectedSeq += 1;
+              recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Invalid parameters: ${message}`);
+            }
+            return failed(`Invalid parameters for "${name}": ${message}`);
+          }
+        }
         const authorityRoot = options.getCwd();
         const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
         if (authority.kind === 'denied') {
@@ -800,7 +816,12 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
               : decision.kind === 'interceptor_denied'
               ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
               : decision.kind === 'error'
-              ? `"${prepared.tool.name}" was not run: checking its arguments for approval failed: ${decision.message}. Nothing was executed; correct the arguments and call it again.`
+              ? `"${
+                  prepared.tool.name
+                }" was not run: checking its arguments for approval failed: ${decision.message.replace(
+                  /[.!?]+$/,
+                  '',
+                )}. Nothing was executed; correct the arguments and call it again.`
               : `"${prepared.tool.name}" requires approval and is unavailable from inside a script.`;
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'not_applied', message);
           return failed(message);

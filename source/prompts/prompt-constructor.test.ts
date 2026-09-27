@@ -21,6 +21,9 @@ it('guides run_code exact searches and syntax-sensitive data', () => {
   expect(guidance).toContain('fixed_strings: true');
   expect(guidance).toContain('pattern` is a regular expression');
   expect(guidance).toContain('pass it through the `run_code` `inputs` parameter');
+  expect(guidance).toContain(
+    '- For multiline edit text or data containing quotes, backticks, or `${...}`, pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.',
+  );
 });
 
 it('names only editors on the active run_code editing surface and identifies shell as direct-only', () => {
@@ -68,6 +71,9 @@ it('names only editors on the active run_code editing surface and identifies she
   expect(noWriteSurface).toContain('tools.grep({ pattern, fixed_strings: true })');
   expect(noWriteSurface).not.toContain('\\n\\n');
   expect(patchSurface).toContain('`shell` is a direct tool');
+  expect(patchSurface).toContain('File, search, web, and edit tools are not on your direct tool list.');
+  expect(otherSurface).toContain('File, search, web, and edit tools are not on your direct tool list.');
+  expect(noWriteSurface).toContain('File, search, and web tools are not on your direct tool list.');
   expect(patchSurface).toContain('`tools.shell` does not exist inside `run_code`');
 });
 

@@ -19,11 +19,12 @@ export function getScriptPrimaryToolsAddendum(editorSurface: ScriptEditorSurface
     '- Inspect files with `tools.read_file`, `tools.grep`, `tools.glob`, and code-context tools when present.',
     '- For an exact substring or code symbol, call `tools.grep({ pattern, fixed_strings: true })`; otherwise `pattern` is a regular expression, so regex metacharacters must be escaped.',
     ...editorBullets,
-    "- For multiline edit text or data containing quotes, backticks, or ${'${'}..., pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.",
+    '- For multiline edit text or data containing quotes, backticks, or `${...}`, pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.',
     '- Web: `tools.web_search` and `tools.web_fetch`.',
     '- `shell` is a direct tool for terminal commands, builds, git, and scripts; `tools.shell` does not exist inside `run_code`. Do not use Python to read files when `tools.read_file` is available.',
   ];
-  return `${header}\n\nFile, search, and web tools are not on your direct tool list. Call them as \`tools.<name>(params)\` inside \`run_code\`. Use \`tools.describe(name)\` when you need a schema.\n\n${bullets.join(
+  const toolsIntro = editorSurface === 'none' ? 'File, search, and web tools' : 'File, search, web, and edit tools';
+  return `${header}\n\n${toolsIntro} are not on your direct tool list. Call them as \`tools.<name>(params)\` inside \`run_code\`. Use \`tools.describe(name)\` when you need a schema.\n\n${bullets.join(
     '\n',
   )}`;
 }

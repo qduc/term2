@@ -84,7 +84,6 @@ import type { SessionAccessState } from './session-access-state.js';
 import { extractFinalizationSnapshot } from '../stream-snapshot.js';
 import { lastOpenAICompaction } from './session-stream-processor.js';
 import { contextCompactionFailureCategory } from '../../providers/openai-responses-model.js';
-import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
@@ -112,8 +111,6 @@ export interface TurnWorkflowDeps {
   planApplier: ContinuationPlanApplier;
   continuationRecoveryHandler: ContinuationRecoveryHandler;
   providerContinuity: ProviderContinuity;
-  /** Omitted for caller-owned, nested, and transient clients. */
-  openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
@@ -487,11 +484,6 @@ export class TurnWorkflow {
             resumeState: currentResumeState,
             resumePreviousResponseId: currentResumePreviousResponseId,
             disableChainingForAttempt: currentDisableChainingForAttempt,
-            observeOpenAIRootSelectorParity:
-              !options.replayFromHistory &&
-              !currentResumeState &&
-              !currentResumePreviousResponseId &&
-              this.#isFirstAttempt(attempt.retryCounts),
           });
           currentDisableChainingForAttempt = false;
           if (cycleResult.kind === 'stale') {
@@ -592,7 +584,6 @@ export class TurnWorkflow {
       resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
       disableChainingForAttempt?: boolean;
-      observeOpenAIRootSelectorParity: boolean;
     },
   ): AsyncGenerator<
     ConversationEvent,
@@ -880,7 +871,6 @@ export class TurnWorkflow {
       resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
       disableChainingForAttempt?: boolean;
-      observeOpenAIRootSelectorParity: boolean;
     },
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
@@ -900,34 +890,7 @@ export class TurnWorkflow {
 
     const legacyPreviousResponseId =
       attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null;
-    let selectedPreviousResponseId = legacyPreviousResponseId;
-    if (
-      options.observeOpenAIRootSelectorParity &&
-      this.deps.agentClient.getProvider?.() === 'openai' &&
-      legacyPreviousResponseId &&
-      attempt.providerHistorySnapshot
-    ) {
-      try {
-        const observation = this.deps.openAIRootFreshTurnSelectorParityObserver?.observe({
-          legacyPreviousResponseId,
-          plannedSnapshot: attempt.providerHistorySnapshot,
-        });
-        // This is intentionally an equality-gated ownership handoff: a
-        // checkpoint can only become the selector when it has proved the same
-        // ID the established legacy selector would send for this exact
-        // snapshot. Any absent, ineligible, mismatched, or faulty observation
-        // retains legacy selection.
-        if (
-          observation?.eligible &&
-          observation.matches &&
-          observation.acceptedCheckpointResponseId === legacyPreviousResponseId
-        ) {
-          selectedPreviousResponseId = observation.acceptedCheckpointResponseId;
-        }
-      } catch {
-        // Parity must never change the established request path on failure.
-      }
-    }
+    const selectedPreviousResponseId = legacyPreviousResponseId;
     const sessionId = resolveSessionId(this.deps.sessionId);
     const promptCacheKey = resolvePromptCacheKey(this.deps.sessionId);
     const startOptions: AgentClientRunOptions = {
@@ -944,15 +907,6 @@ export class TurnWorkflow {
       enumerable: this.deps.providerContinuity.lineage !== 0,
     });
     return (await this.deps.agentClient.startStream(attempt.streamInput!, startOptions)) as AgentStream;
-  }
-
-  #isFirstAttempt(retryCounts: RetryCounts): boolean {
-    return (
-      retryCounts.transientRetryCount === 0 &&
-      retryCounts.serviceTierFallbackCount === 0 &&
-      retryCounts.modelRetryCount === 0 &&
-      retryCounts.transportDowngradeCount === 0
-    );
   }
 
   async #waitBeforeRetry(attempt: TurnAttempt, delayMs: number): Promise<void> {

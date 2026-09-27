@@ -12,7 +12,6 @@ import type { PostExecutePendingRegistry } from '../session/post-execute-pending
 import type { PostExecutePauseCapability } from '../session/post-execute-pause-capability.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
-import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
@@ -42,7 +41,6 @@ export type CreateConversationRuntimeOptions = {
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
   providerContinuity?: ProviderContinuity;
-  openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
   approvalPolicyRegistry?: ToolApprovalPolicyRegistry;

@@ -37,7 +37,6 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
-import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
 import { BackgroundCheckInScheduler } from './background-check-in-scheduler.js';
@@ -208,8 +207,6 @@ export type CreateSessionRuntimeInternalsOptions = {
   agentClient: ConversationAgentClient;
   /** Handle-owned continuity shared with the root provider observer. */
   providerContinuity?: ProviderContinuity;
-  /** Owned-root-only, observation-only selector parity seam. */
-  openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Owned-root OpenAI checkpoint diagnostic seam. */
   openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
@@ -411,7 +408,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionStartedAt,
     agentClient,
     providerContinuity: suppliedProviderContinuity,
-    openAIRootFreshTurnSelectorParityObserver,
     openAIRootCheckpointLifecycleObserver,
     toolOwnership,
     approvalPolicyRegistry: suppliedApprovalPolicyRegistry,
@@ -640,13 +636,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     ],
     void
   >(agentClient, 'setLocalCheckpointSink')?.call(agentClient, appendLocalCheckpoint);
-  openAIRootFreshTurnSelectorParityObserver?.setEvidenceRecorder?.((evidence) => {
-    try {
-      conversationLogger.log(evidence);
-    } catch {
-      // Selector-parity diagnostics must never affect the request path.
-    }
-  });
   openAIRootCheckpointLifecycleObserver?.setEvidenceRecorder?.((evidence) => {
     try {
       conversationLogger.log(evidence);
@@ -916,7 +905,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     planApplier,
     continuationRecoveryHandler,
     providerContinuity,
-    openAIRootFreshTurnSelectorParityObserver,
     sessionAccess,
     approvalPolicyRegistry,
     postExecutePending,

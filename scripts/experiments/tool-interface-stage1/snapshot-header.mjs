@@ -30,7 +30,7 @@ export async function snapshotRunCodeHeader(distRoot, { settingsDir, model, prov
     moduleAt('services/approval/tool-approval-policy-registry.js'),
     moduleAt('lib/editor-impl.js'),
     moduleAt('services/skills/skills-service.js'),
-    moduleAt('tools/system/run-code/index.js'),
+    moduleAt('tools/system/run-code/run-code-runtime.js'),
     moduleAt('lib/tool-selection-policy.js'),
   ]);
   const logger = new LoggingService({ disableLogging: true, suppressConsoleOutput: true });

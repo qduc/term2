@@ -146,6 +146,27 @@ export interface PtyChildDriver {
   dispose(options?: { signal?: NodeJS.Signals; graceMs?: number; timeoutMs?: number }): Promise<void>;
 }
 
+/** Exit an interactive CLI using its user-facing two-press Ctrl+C contract. */
+export const exitInteractive = async (child: PtyChildDriver): Promise<ChildExit> => {
+  const revision = child.readComposerRevision();
+  const outputOffset = child.getVisibleOutput().length;
+  await child.write('\u0003');
+  // A clean composer displays the hint; clearing a draft or interrupting work
+  // instead advances the composer revision to an acknowledged empty value.
+  // Both are valid first-press acknowledgments; don't depend on render timing.
+  await Promise.any([
+    child
+      .waitForState(
+        (snapshot) => snapshot.visibleOutput.slice(outputOffset).includes('Press Ctrl+C again to exit'),
+        DEFAULT_TIMEOUT_MS,
+      )
+      .then(() => undefined),
+    child.waitForComposerValue('', { afterRevision: revision, timeoutMs: DEFAULT_TIMEOUT_MS }),
+  ]);
+  await child.write('\u0003');
+  return await child.waitForExit(DEFAULT_TIMEOUT_MS);
+};
+
 export interface ChildLaunchOptions {
   /** Defaults to the current Node executable and the built CLI in `cwd`. */
   command?: string;

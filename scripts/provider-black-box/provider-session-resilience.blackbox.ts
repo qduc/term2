@@ -6,6 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import {
   createIsolatedWorkspaceLease,
   DEFAULT_TIMEOUT_MS,
+  exitInteractive,
   writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type IsolatedWorkspacePaths,
@@ -306,8 +307,7 @@ describe('application-owned provider restart continuity', () => {
     await first.waitForVisibleOutput('restart-answer-1');
     await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
-    await first.write('\u0003');
-    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(first);
 
     const resumed = await startInteractive(workspace, route, ['--resume']);
     await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
@@ -318,8 +318,7 @@ describe('application-owned provider restart continuity', () => {
     await submitPrompt(resumed, 'fresh chained prompt');
     await resumed.waitForVisibleOutput('restart-answer-3');
     await resumed.waitForIdleInput({ after: chainedIdle });
-    await resumed.write('\u0003');
-    await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(resumed);
 
     expect(server.requests).toHaveLength(3);
     const firstBody = asRecord(server.requests[0]?.body);
@@ -364,8 +363,7 @@ describe('application-owned provider restart continuity', () => {
     await submitPrompt(resumed, 'repair interrupted tool history');
     await resumed.waitForVisibleOutput('restart-repaired-answer');
     await resumed.waitForIdleInput({ after: resumedIdle });
-    await resumed.write('\u0003');
-    await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(resumed);
 
     expect(server.requests).toHaveLength(2);
     const resumedBody = asRecord(server.requests[1]?.body);
@@ -397,8 +395,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     const persisted = await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
     expect(persisted).toContain('provider_opaque');
     expect(persisted).toContain(COMPACTION_CIPHERTEXT);
-    await first.write('\u0003');
-    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(first);
 
     const resumed = await startInteractive(workspace, COMPACTION_ROUTE, ['--resume', conversationId]);
     await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
@@ -406,8 +403,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await submitPrompt(resumed, 'continue after saved compaction');
     await resumed.waitForVisibleOutput('COMPACTION-RESUMED');
     await resumed.waitForIdleInput({ after: resumedIdle });
-    await resumed.write('\u0003');
-    await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(resumed);
 
     expect(server.requests).toHaveLength(2);
     expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 217_600 }]);
@@ -444,8 +440,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await submitPrompt(child, 'continue after Codex native compaction');
     await child.waitForVisibleOutput('CODEX-AFTER-COMPACTION');
     await child.waitForIdleInput({ after: nextIdle });
-    await child.write('\u0003');
-    await child.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(child);
 
     expect(server.requests).toHaveLength(3);
     expect(inputItems(asRecord(server.requests[1]?.body)?.input)).toContainEqual({ type: 'compaction_trigger' });
@@ -473,8 +468,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
     await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
-    await first.write('\u0003');
-    await first.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(first);
 
     const switched = await startInteractive(
       workspace,
@@ -507,8 +501,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     expect(server.requests).toHaveLength(1);
     expect(JSON.stringify(server.requests)).not.toContain('try the switched provider');
     expect(JSON.stringify(server.requests)).not.toContain(COMPACTION_CIPHERTEXT);
-    await switched.write('\u0003');
-    await switched.waitForExit(DEFAULT_TIMEOUT_MS);
+    await exitInteractive(switched);
   });
 
   it('does not re-execute a tool after its turn is replaced by compaction', async () => {

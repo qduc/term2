@@ -44,8 +44,18 @@ const MOVE_TO = '*** Move to: ';
 /** Parse the complete freeform payload into the application's executable shape. */
 export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams {
   const lines = normalizePatchLines(input);
-  if (lines[0] !== BEGIN_PATCH) throw new Error(`Invalid patch: expected '${BEGIN_PATCH}'.`);
-  if (lines[lines.length - 1] !== END_PATCH) throw new Error(`Invalid patch: expected '${END_PATCH}'.`);
+  if (lines[0] !== BEGIN_PATCH) {
+    throw new Error(`Invalid patch: expected '${BEGIN_PATCH}' but found ${describeFoundLine(lines[0])}.`);
+  }
+  if (lines[lines.length - 1] !== END_PATCH) {
+    const found = lines[lines.length - 1];
+    const nearMatch = found.trimStart().startsWith('+*** End Patch');
+    throw new Error(
+      `Invalid patch: expected '${END_PATCH}' but found ${describeFoundLine(found)}.${
+        nearMatch ? ` Remove the leading '+' so the line is exactly '${END_PATCH}'.` : ''
+      }`,
+    );
+  }
 
   let index = 1;
   if (lines[index]?.startsWith(ENVIRONMENT_ID)) {
@@ -120,6 +130,14 @@ function normalizePatchLines(input: string): string[] {
     lines.pop();
   }
   return lines;
+}
+
+function describeFoundLine(line: string | undefined): string {
+  if (line === undefined) return '<no line>';
+  if (line === '') return '<empty line>';
+  const maxLength = 120;
+  const displayed = line.length <= maxLength ? line : `${line.slice(0, maxLength - 1)}…`;
+  return JSON.stringify(displayed);
 }
 
 function isOperationHeader(line: string): boolean {

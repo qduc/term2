@@ -52,6 +52,18 @@ describe('upstream apply_patch contract', () => {
     expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok')).toThrow('*** End Patch');
   });
 
+  it('explains near-miss end markers and how to correct them', () => {
+    expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok\n+*** End Patch')).toThrow(
+      "found \"+*** End Patch\". Remove the leading '+' so the line is exactly '*** End Patch'.",
+    );
+    expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok')).toThrow('found "+ok"');
+  });
+
+  it('preserves whitespace tolerance around patch boundary markers', () => {
+    const expected = { operations: [{ type: 'create_file', path: 'x', diff: '+ok' }] };
+    expect(parseUpstreamApplyPatch('  *** Begin Patch\n*** Add File: x\n+ok\n*** End Patch   ')).toEqual(expected);
+  });
+
   it('exports the upstream grammar as a Lark custom-tool definition', () => {
     expect(UPSTREAM_APPLY_PATCH_GRAMMAR).toContain('start: begin_patch hunk+ end_patch');
     expect(UPSTREAM_APPLY_PATCH_GRAMMAR).toContain('*** Add File: ');

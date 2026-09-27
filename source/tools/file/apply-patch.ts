@@ -246,8 +246,14 @@ export function createApplyPatchToolDefinition(deps: {
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
       if (settingsService.get('shell.autoApproveMode') === 'always') {
+        let operationCount: number | undefined;
+        try {
+          operationCount = getApplyPatchOperations(params).length;
+        } catch {
+          // YOLO skips approval even for malformed input; execute reports the parse error.
+        }
         loggingService.security('apply_patch needsApproval: auto-approved in YOLO mode', {
-          operationCount: getApplyPatchOperations(params).length,
+          ...(operationCount === undefined ? {} : { operationCount }),
         });
         return false;
       }
@@ -415,7 +421,8 @@ export function createApplyPatchToolDefinition(deps: {
       try {
         operations = getApplyPatchOperations(params);
       } catch (error: any) {
-        const message = `Error: Invalid patch: ${error?.message || String(error)}`;
+        const detail = error?.message || String(error);
+        const message = `Error: ${detail.startsWith('Invalid patch:') ? detail : `Invalid patch: ${detail}`}`;
         return (await boundToolResultText({ fullText: message, maxBytes: resolveResultMaxBytesForCall(context) })).text;
       }
 

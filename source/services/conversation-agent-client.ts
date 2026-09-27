@@ -132,6 +132,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   consumeSessionRolloverRequest?(): SessionRolloverConsumption;
   /** Reset only the root request/agent context; retained background clients live on. */
   rolloverRootContext?(): void;
+  /** Re-snapshot pinned global instructions when the retained root starts a new session. */
+  resetMemoryContextForNewSession?(): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 

@@ -263,6 +263,7 @@ export const getAgentDefinition = (
     ) => void;
     /** Root-session-only MCP source; subagent definitions intentionally omit it. */
     mcpToolSource?: McpToolSource;
+    snapshotGlobalMemoryContext?: (read: () => string) => string;
   },
   model?: string,
 ): AgentDefinition => {
@@ -374,7 +375,11 @@ export const getAgentDefinition = (
     onWarning: (message) => loggingService.warn(message),
   }).build(
     { kind: 'main' },
-    { projectPath: executionContext?.getCwd() ?? process.cwd(), includeContext: memoryContextEnabled && !liteMode },
+    {
+      projectPath: executionContext?.getCwd() ?? process.cwd(),
+      includeContext: memoryContextEnabled && !liteMode && hasCapability('memory'),
+      snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
+    },
   );
   const promptSpec = buildPromptSpec({
     model: resolvedModel,

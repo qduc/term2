@@ -236,14 +236,16 @@ describe('MemoryCapabilityBuilder', () => {
   });
 
   it('states the pinned-global and on-demand-project contract without automatic recall', () => {
-    const main = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
+    const main = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': makeTempDir() })).build({
+      kind: 'main',
+    });
     const explorer = new MemoryCapabilityBuilder(createMockSettingsService()).build({
       kind: 'subagent',
       role: 'explorer',
     });
 
-    expect(main.guidance).toContain('Global memories are listed in your instructions');
-    expect(main.guidance).toContain('Search or retrieve project memories');
+    expect(main.guidance).not.toContain('Global memories are listed in your instructions');
+    expect(main.guidance).toContain('Search or retrieve global and project memories');
     expect(main.guidance).not.toContain('<memory-recall>');
     expect(explorer.guidance).not.toContain('concise index');
   });
@@ -276,7 +278,10 @@ describe('MemoryCapabilityBuilder', () => {
     }
 
     const context = builder('/workspace/donation').context;
+    expect(builder('/workspace/donation').guidance).toContain('Global memories are listed in your instructions');
     expect(context).toContain('Global memories');
+    expect(context).not.toContain('## Persistent memory');
+    expect(context).not.toContain('Load full memories selectively with memory_get');
     expect(context).toContain('Cross-project preference.');
     expect(context).not.toContain('Project summary');
     expect(context.length).toBeLessThanOrEqual(3000);

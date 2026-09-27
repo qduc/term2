@@ -34,7 +34,7 @@ const GLOBAL_CONTEXT_BUDGET_CHARS = 3000;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory. Global memories are listed in your instructions; do not fetch them unless you need their history or full body. Search or retrieve project memories when relevant. Treat summaries as leads, not authoritative facts.
+You have access to persistent memory. {{GLOBAL_LOOKUP}} Treat summaries as leads, not authoritative facts.
 
 Memory has two scopes: global for cross-project user preferences, and project for all other durable memories. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
 
@@ -82,7 +82,11 @@ export class MemoryCapabilityBuilder {
 
   build(
     subject: MemoryCapabilitySubject,
-    options: { projectPath?: string; includeContext?: boolean } = {},
+    options: {
+      projectPath?: string;
+      includeContext?: boolean;
+      snapshotGlobalContext?: (read: () => string) => string;
+    } = {},
   ): MemoryCapability {
     const access = this.#accessFor(subject);
     const enabled = this.#settings.get('memory.enabled');
@@ -102,29 +106,22 @@ export class MemoryCapabilityBuilder {
     const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
     if (subject.kind === 'main' && access === 'write' && options.includeContext !== false) {
-      try {
-        const heading = '### Global memories\n';
-        const budget = Math.min(settings.contextBudgetChars, GLOBAL_CONTEXT_BUDGET_CHARS);
-        // This snapshot is taken only when the agent is built. Memory writes
-        // during a session must not change its cached instruction prefix.
-        const globalContext =
-          budget > heading.length + 100 ? stores.global.contextSync(budget - heading.length - 40) : '';
-        context = globalContext
-          ? heading +
-            globalContext.replace(
-              /\+ (\d+) not listed — memory_list or memory_search for the full index\./,
-              '+ $1 more global memories exist; find them with memory_search.',
-            )
-          : '';
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : 'unknown storage error';
-        this.#onWarning(`Persistent memory context could not be loaded: ${detail}`);
-      }
+      const read = () => {
+        try {
+          const budget = Math.min(settings.contextBudgetChars, GLOBAL_CONTEXT_BUDGET_CHARS);
+          return budget > 0 ? stores.global.contextSync(budget, { pinnedGlobal: true }) : '';
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'unknown storage error';
+          this.#onWarning(`Persistent memory context could not be loaded: ${detail}`);
+          return '';
+        }
+      };
+      context = options.snapshotGlobalContext ? options.snapshotGlobalContext(read) : read();
     }
     return {
       access,
       tools: access === 'read' ? tools.slice(0, READ_TOOL_COUNT) : tools,
-      guidance: this.#guidanceFor(subject),
+      guidance: this.#guidanceFor(subject, Boolean(context)),
       // Subagents (including the librarian) search on demand.
       context,
     };
@@ -136,8 +133,14 @@ export class MemoryCapabilityBuilder {
     return ['explorer', 'worker'].includes(subject.role) ? 'read' : 'none';
   }
 
-  #guidanceFor(subject: MemoryCapabilitySubject): string {
-    if (subject.kind === 'main') return MAIN_GUIDANCE;
+  #guidanceFor(subject: MemoryCapabilitySubject, hasGlobalContext: boolean): string {
+    if (subject.kind === 'main')
+      return MAIN_GUIDANCE.replace(
+        '{{GLOBAL_LOOKUP}}',
+        hasGlobalContext
+          ? 'Global memories are listed in your instructions; do not fetch them unless you need their history or full body. Search or retrieve project memories when relevant.'
+          : 'No global index is included in your instructions. Search or retrieve global and project memories when relevant.',
+      );
     if (subject.role === 'librarian') return LIBRARIAN_GUIDANCE;
     return SUBAGENT_GUIDANCE;
   }

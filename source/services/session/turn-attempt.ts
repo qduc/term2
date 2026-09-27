@@ -74,15 +74,6 @@ export class TurnAttempt {
     return this.#turn;
   }
 
-  /**
-   * Put harness-owned model context ahead of the turn text. Only valid before
-   * the turn enters history, so every later request replays the same bytes.
-   */
-  prependToTurnText(text: string): void {
-    if (this.#addedUserMessage) throw new Error('Cannot change a turn already added to history.');
-    this.#turn = { ...this.#turn, text: this.#turn.text ? `${text}\n\n${this.#turn.text}` : text };
-  }
-
   get submittedTurn(): UserTurn {
     return this.#submittedTurn;
   }

@@ -921,6 +921,7 @@ export class ConversationAdapter {
       hallucinationRetryCount = 0,
       inputSurgeApproval,
       replayFromHistory,
+      suppressUserMessageDisplay,
     }: SendMessageOptions = {},
     requestId?: string | null,
   ): Promise<ConversationTerminal> {
@@ -952,6 +953,7 @@ export class ConversationAdapter {
         if (replayFromHistory) {
           startOptions.replayFromHistory = true;
         }
+        if (suppressUserMessageDisplay) startOptions.modelOnlyInput = true;
         result = await this.#collectTerminalResult(
           this.#turnFlow.start(input, startOptions),
           {

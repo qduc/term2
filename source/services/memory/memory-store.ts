@@ -91,6 +91,7 @@ const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SUMMARY_LIMIT = 1_000;
 const INDEX_HEADER = '## Persistent memory\n\n';
 const INDEX_RETRIEVAL_HINT = 'Load full memories selectively with memory_get.';
+export type MemoryIndexRenderOptions = { pinnedGlobal?: boolean };
 // Rendered title cap: the full title stays in storage and tool results; only
 // the injected index line is bounded.
 const TITLE_RENDER_CAP = 120;
@@ -112,7 +113,11 @@ export type MemoryIndexRender = {
  * the status line, and nothing is dropped silently: unlisted memories are
  * counted and pointed at the retrieval tools.
  */
-function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): MemoryIndexRender {
+function renderMemoryIndex(
+  memories: MemoryMetadata[],
+  budgetChars: number,
+  options: MemoryIndexRenderOptions = {},
+): MemoryIndexRender {
   if (!memories.length) return { text: '', total: 0, summarized: 0, titleOnly: 0, notListed: 0 };
   const sorted = [...memories].sort(byRecent);
   const total = sorted.length;
@@ -126,19 +131,23 @@ function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): Mem
     titlePrefix.push(titlePrefix[index] + titleLines[index].length);
     summaryPrefix.push(summaryPrefix[index] + SUMMARY_EXTENSION.length + sorted[index].summary.length);
   }
+  const header = options.pinnedGlobal ? '### Global memories\n\n' : INDEX_HEADER;
+  const hint = options.pinnedGlobal ? '' : ` ${INDEX_RETRIEVAL_HINT}`;
   const pointer = (count: number) =>
-    count > 0 ? `+ ${count} not listed — memory_list or memory_search for the full index.\n` : '';
+    count > 0
+      ? options.pinnedGlobal
+        ? `+ ${count} more global memories exist; find them with memory_search.\n`
+        : `+ ${count} not listed — memory_list or memory_search for the full index.\n`
+      : '';
   for (let listed = total; listed >= 1; listed -= 1) {
     const notListed = total - listed;
     const pointerLine = pointer(notListed);
     for (let summarized = listed; summarized >= 0; summarized -= 1) {
       const titleOnly = listed - summarized;
-      const status =
-        `${total} memories · ${summarized} summarized · ${titleOnly} title-only · ${notListed} not listed. ` +
-        `${INDEX_RETRIEVAL_HINT}\n\n`;
+      const status = `${total} memories · ${summarized} summarized · ${titleOnly} title-only · ${notListed} not listed.${hint}\n\n`;
       const divider = summarized > 0 && titleOnly > 0 ? INDEX_DIVIDER : '';
       const length =
-        INDEX_HEADER.length +
+        header.length +
         status.length +
         titlePrefix[listed] +
         summaryPrefix[summarized] +
@@ -152,7 +161,7 @@ function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): Mem
         )
         .join('');
       return {
-        text: `${INDEX_HEADER}${status}${body}${divider}${pointerLine}`,
+        text: `${header}${status}${body}${divider}${pointerLine}`,
         total,
         summarized,
         titleOnly,
@@ -160,12 +169,12 @@ function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): Mem
       };
     }
   }
-  // No entry fits. Keep the counts visible rather than rendering nothing.
+  // No entry fits. Show counted omissions only if even the floor fits.
   const notListed = total;
-  const floor = `${INDEX_HEADER}${total} memories · 0 summarized · 0 title-only · ${notListed} not listed. ${INDEX_RETRIEVAL_HINT}\n\n${pointer(
+  const floor = `${header}${total} memories · 0 summarized · 0 title-only · ${notListed} not listed.${hint}\n\n${pointer(
     notListed,
   )}`;
-  return { text: floor, total, summarized: 0, titleOnly: 0, notListed: total };
+  return { text: floor.length <= budgetChars ? floor : '', total, summarized: 0, titleOnly: 0, notListed: total };
 }
 
 const SUMMARY_EXTENSION = ' — ';
@@ -372,10 +381,10 @@ export class FileMemoryStore implements MemoryStore {
       return true;
     });
   }
-  async context(budgetChars: number): Promise<string> {
-    return renderMemoryIndex([...(await this.load()).memories], budgetChars).text;
+  async context(budgetChars: number, options?: MemoryIndexRenderOptions): Promise<string> {
+    return renderMemoryIndex([...(await this.load()).memories], budgetChars, options).text;
   }
-  contextSync(budgetChars: number): string {
+  contextSync(budgetChars: number, options?: MemoryIndexRenderOptions): string {
     let index: Index;
     try {
       index = validateIndex(JSON.parse(readFileSync(this.indexPath, 'utf8')));
@@ -383,7 +392,7 @@ export class FileMemoryStore implements MemoryStore {
       if (error?.code === 'ENOENT') return '';
       throw new MemoryStorageError('Memory index.json is corrupted or unreadable.');
     }
-    return renderMemoryIndex([...index.memories], budgetChars).text;
+    return renderMemoryIndex([...index.memories], budgetChars, options).text;
   }
   private itemPath(id: string) {
     validateId(id);

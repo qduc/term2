@@ -351,11 +351,13 @@ it('rollover updates the session start timestamp used by the retained runtime id
 
 it('rollover resets root history and continuity through the owned client seam while retaining background controls', () => {
   const rolloverRootContext = vi.fn();
+  const resetMemoryContextForNewSession = vi.fn();
   const backgroundStatuses = [{ runId: 'worker-1', role: 'worker', status: 'running', task: 'hold' }];
   const runtime = createSessionRuntime({
     sessionId: 'before-rollover',
     agentClient: makeMockClient({
       rolloverRootContext,
+      resetMemoryContextForNewSession,
       listBackgroundSubagentStatuses: () => backgroundStatuses,
     }),
     deps: { logger: makeLogger(), sessionContextService },
@@ -370,6 +372,7 @@ it('rollover resets root history and continuity through the owned client seam wh
   expect(runtime.sessionId).toBe('after-rollover');
   expect(runtime.state.getCurrentSnapshot().history).toEqual([]);
   expect(rolloverRootContext).toHaveBeenCalledTimes(1);
+  expect(resetMemoryContextForNewSession).toHaveBeenCalledTimes(1);
   expect(runtime.backgroundTaskControl).toBeDefined();
   expect(backgroundStatuses).toHaveLength(1);
   runtime.dispose();

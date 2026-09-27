@@ -134,6 +134,15 @@ it('records a settled direct user preference and emits a reviewable receipt afte
   expect((events[1] as any).message.output).toContain('memory_delete');
 });
 
+it('does not learn from model-only notifications even when they resemble preferences', async () => {
+  const record = vi.fn();
+  const { coordinator } = makeHarness({ automaticMemory: { record }, sessionId: { current: 'session-1' } });
+  for await (const _ of coordinator.start('PREFERENCE: I prefer notifications.', { modelOnlyInput: true })) {
+    /* drain */
+  }
+  expect(record).not.toHaveBeenCalled();
+});
+
 it('does not learn on failure, approval pause, or replayed turns', async () => {
   const record = vi.fn();
   const { coordinator, turnWorkflow } = makeHarness({

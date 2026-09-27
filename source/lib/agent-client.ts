@@ -876,6 +876,10 @@ export class AgentClient {
     this.#agentConfig.refreshAgent();
   }
 
+  resetMemoryContextForNewSession(): void {
+    this.#agentConfig.resetMemoryContextForNewSession();
+  }
+
   setReasoningEffort(effort?: ReasoningEffortSetting): void {
     this.#agentConfig.setReasoningEffort(effort);
     this.#agentConfig.refreshAgent();

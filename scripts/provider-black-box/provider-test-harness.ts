@@ -149,14 +149,20 @@ export interface PtyChildDriver {
 /** Exit an interactive CLI using its user-facing two-press Ctrl+C contract. */
 export const exitInteractive = async (child: PtyChildDriver): Promise<ChildExit> => {
   const revision = child.readComposerRevision();
+  const outputOffset = child.getVisibleOutput().length;
   await child.write('\u0003');
-  try {
-    await child.waitForVisibleOutput('Press Ctrl+C again to exit', 100);
-  } catch {
-    // Clearing a draft or interrupting a turn arms the same second-press exit,
-    // but the UI only displays the hint when Ctrl+C arrives with no work to clear.
-    await child.waitForComposerValue('', { afterRevision: revision });
-  }
+  // A clean composer displays the hint; clearing a draft or interrupting work
+  // instead advances the composer revision to an acknowledged empty value.
+  // Both are valid first-press acknowledgments; don't depend on render timing.
+  await Promise.any([
+    child
+      .waitForState(
+        (snapshot) => snapshot.visibleOutput.slice(outputOffset).includes('Press Ctrl+C again to exit'),
+        DEFAULT_TIMEOUT_MS,
+      )
+      .then(() => undefined),
+    child.waitForComposerValue('', { afterRevision: revision, timeoutMs: DEFAULT_TIMEOUT_MS }),
+  ]);
   await child.write('\u0003');
   return await child.waitForExit(DEFAULT_TIMEOUT_MS);
 };

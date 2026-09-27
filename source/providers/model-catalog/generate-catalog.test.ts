@@ -40,6 +40,23 @@ describe('generateCatalogSource', () => {
     expect(gpt4oMini).toBeGreaterThan(gpt4o);
   });
 
+  it('strips the chat kind prefix and drops other model kinds', () => {
+    const kinded: Record<string, PiProviderData> = {
+      openrouter: {
+        'openai-completions': {
+          'chat:openai/gpt-5': { contextWindow: 400000, maxTokens: 128000 },
+          'classifier:typesafe/jev-1.13': { contextWindow: 32000 },
+          'moonshotai/kimi-k3': { contextWindow: 256000 },
+        },
+      },
+    };
+    const source = generateCatalogSource(kinded, META);
+    expect(source).toContain("'openai/gpt-5': { contextWindow: 400000, maxTokens: 128000 }");
+    expect(source).toContain("'moonshotai/kimi-k3': { contextWindow: 256000 }");
+    expect(source).not.toContain('jev-1.13');
+    expect(source).not.toMatch(/'[a-z]+:[^']*': \{/);
+  });
+
   it('skips entries without a context window', () => {
     const source = generateCatalogSource(piData, META);
     expect(source).not.toContain('no-context-entry');

@@ -43,6 +43,7 @@ import {
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
 import { listRecentConversations } from './services/conversation/recent-conversations.js';
+import { rotateSessionLog } from './services/conversation/session-log-lifecycle.js';
 import { formatResumeList } from './utils/resume-list.js';
 import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
@@ -1373,9 +1374,16 @@ const { waitUntilExit } = render(
         }}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
-        onRotateWriter={(newId, createdAt, rolloverFrom) => {
-          logWriter.append({ type: 'session_cleared' });
-          logWriter.rotate(newId, buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom));
+        onRotateWriter={(newId, createdAt, rolloverFrom, rolloverGoal) => {
+          rotateSessionLog(
+            logWriter,
+            newId,
+            buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom),
+            rolloverGoal,
+          );
+          if (rolloverFrom && rolloverGoal) {
+            currentGoalState.current = rolloverGoal;
+          }
           effectiveHasConversationContent = false;
         }}
         generateId={generateId}

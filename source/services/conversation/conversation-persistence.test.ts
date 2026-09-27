@@ -333,14 +333,16 @@ it.sequential('lock: writer init against existing corrupt lockfile still throws 
   expect(() => writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' })).toThrow(LockConflictError);
 });
 
-it.sequential('forkConversation: immediately persists the fork identity, provenance, and source history', () => {
+it.sequential('forkConversation: inherits the goal at the fork point and later goal changes diverge', async () => {
   const srcId = persistenceModule.generateId();
   const dstId = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
   writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/source' });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
   writer.append(assistantTurn('A'));
-  void writer.close();
+  const sourceGoal = { id: 'g1', outcome: 'Source objective', status: 'active' } as const;
+  writer.append({ type: 'goal_changed', version: 1, goal: sourceGoal });
+  await writer.close();
 
   expect(persistenceModule.forkConversation(srcId, dstId)).toBe(true);
   const restored = persistenceModule.loadConversation(dstId);
@@ -352,6 +354,7 @@ it.sequential('forkConversation: immediately persists the fork identity, provena
   });
   expect(restored!.history).toHaveLength(2);
   expect(restored!.messages).toMatchObject([{ text: 'hello' }, { text: 'A' }]);
+  expect(restored!.goal).toEqual(sourceGoal);
   const sourceEnvelopes = fs
     .readFileSync(path.join(testDir, `${srcId}.jsonl`), 'utf8')
     .trim()
@@ -371,6 +374,17 @@ it.sequential('forkConversation: immediately persists the fork identity, provena
     logId: dstId,
     event: { id: dstId, forkedFrom: srcId },
   });
+
+  const sourceWriter = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
+  sourceWriter.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/source' });
+  sourceWriter.append({
+    type: 'goal_changed',
+    version: 1,
+    goal: { id: 'g2', outcome: 'Source replacement', status: 'active' },
+  });
+  await sourceWriter.close();
+  expect(persistenceModule.loadConversation(srcId)!.goal?.outcome).toBe('Source replacement');
+  expect(persistenceModule.loadConversation(dstId)!.goal).toEqual(sourceGoal);
 });
 
 it.sequential('loadConversation: deduplicates explicit IDs but retains non-monotonic legacy records', () => {

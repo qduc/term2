@@ -2,10 +2,11 @@
 
 ## Resume here
 
-Milestones M1 and M2 implement the bounded session-owned goal record, replay,
-launch flags, and interactive `/goal` controls described below. The existing goal
+Milestones M1-M3 implement the bounded session-owned goal record, replay, launch
+flags, interactive `/goal` controls, and fixed-suffix prompt context described
+below. The existing goal
 wording in compaction instructions and rollover handoffs remains separate; neither
-is authoritative objective state. Continue with M3. Keep the goal record limited
+is authoritative objective state. Continue with M4. Keep the goal record limited
 to the desired outcome and how success is recognized. Do not put a plan, schedule,
 execution status, or child-run topology in it. Persistence is plain session-log
 events; there is no goal-specific database or autonomous retry behavior.

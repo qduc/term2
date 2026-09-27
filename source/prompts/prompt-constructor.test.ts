@@ -91,74 +91,13 @@ function fullCapabilityTools() {
 
 const profile = (id: string) => resolveProfile(id);
 
-it.each([
-  'gpt-6-astra',
-  'openai/gpt-6-astra',
-  ' GPT-6-ASTRA-2026-09-05 ',
-  'gpt-6-sol',
-  'openai/gpt-6-sol',
-  'gpt-6-luna',
-  'openai/gpt-6-luna',
-])('buildPromptSpec gives %s the shared coding base and GPT-6 guidance', (model) => {
-  const spec = buildPromptSpec({ model, profile: profile('builtin:standard') });
-  expect(spec.basePromptFile).toBe('gpt-5.6.md');
-  expect(spec.fragmentFiles).toContain('fragments/gpt-6.md');
-  expect(spec.fragmentFiles).toContain('fragments/skill-instruction-conflicts.md');
-  expect(spec.fragmentFiles).toContain('approval-model.md');
-  for (const mode of ['plan', 'mentor', 'orchestrator']) {
-    expect(buildPromptSpec({ model, profile: profile(`builtin:${mode}`) })).toEqual(spec);
-  }
-});
-
-it('buildPromptSpec confines GPT-6 guidance to non-lite GPT-6 prompts', () => {
-  for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
-    const lite = buildPromptSpec({ model, profile: profile('builtin:lite') });
-    expect(lite.basePromptContent).toBeTruthy();
-    expect(lite.fragmentFiles).not.toContain('fragments/gpt-6.md');
-    expect(lite.fragmentFiles).not.toContain('fragments/skill-instruction-conflicts.md');
-  }
-  for (const model of ['gpt-5.6-sol', 'gpt-5.5', 'unknown-model']) {
-    expect(buildPromptSpec({ model, profile: profile('builtin:standard') }).fragmentFiles).not.toContain(
-      'fragments/gpt-6.md',
-    );
-  }
-});
-
 it('buildPromptSpec selects the profile identity and model-family base prompt', () => {
   expect(buildPromptSpec({ model: 'gpt-5.5', profile: profile('builtin:lite') }).basePromptContent).toBeTruthy();
-  expect(buildPromptSpec({ model: 'gpt-5.5', profile: profile('builtin:standard') }).basePromptFile).toBe('gpt-5.5.md');
   expect(buildPromptSpec({ model: 'claude-3-sonnet', profile: profile('builtin:standard') }).basePromptFile).toBe(
     'anthropic.md',
   );
-  expect(buildPromptSpec({ model: 'gpt-5.3-codex', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'codex.md',
-  );
   expect(buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard') }).basePromptFile).toBe(
     'simple_v4.md',
-  );
-});
-
-it('buildPromptSpec routes gpt-5.6 to its own base prompt without capturing other gpt-5 versions', () => {
-  expect(buildPromptSpec({ model: 'gpt-5.6', profile: profile('builtin:standard') }).basePromptFile).toBe('gpt-5.6.md');
-  expect(buildPromptSpec({ model: 'gpt-5.6-2026-07-01', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'gpt-5.6.md',
-  );
-
-  expect(buildPromptSpec({ model: 'gpt-5.5', profile: profile('builtin:standard') }).basePromptFile).toBe('gpt-5.5.md');
-  expect(buildPromptSpec({ model: 'gpt-5.4', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'gpt-5-modern.md',
-  );
-  expect(buildPromptSpec({ model: 'gpt-5.2', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'gpt-5-modern.md',
-  );
-  expect(buildPromptSpec({ model: 'gpt-6', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'gpt-5-modern.md',
-  );
-});
-
-it('buildPromptSpec keeps gpt-5.6 codex variants on the codex base prompt', () => {
-  expect(buildPromptSpec({ model: 'gpt-5.6-codex', profile: profile('builtin:standard') }).basePromptFile).toBe(
-    'codex.md',
   );
 });
 
@@ -171,30 +110,6 @@ it('buildPromptSpec keeps all non-lite built-in profiles prompt-spec equivalent'
   expect(specs[3]).toEqual(specs[0]);
   expect(buildPromptSpec({ model: 'gpt-5.6', profile: profile('builtin:lite') })).not.toEqual(specs[0]);
 });
-
-// it('buildPromptSpec adds GPT version fragments without changing the base GPT prompt fallback', () => {
-//   const gpt55 = buildPromptSpec({ model: 'gpt-5.5-2026-04-23', liteMode: false });
-//   expect(gpt55.basePromptFile).toBe('gpt-5-modern.md');
-//   expect(gpt55.fragmentFiles.includes('fragments/gpt-5.5.md')).toBe(true);
-//
-//   const gpt54 = buildPromptSpec({ model: 'gpt-5.4', liteMode: false });
-//   expect(gpt54.basePromptFile).toBe('gpt-5-modern.md');
-//   expect(gpt54.fragmentFiles.includes('fragments/gpt-5.4.md')).toBe(true);
-//   expect(gpt54.fragmentFiles.includes('fragments/gpt-5.4-small.md')).toBe(false);
-//
-//   const gpt54Mini = buildPromptSpec({ model: 'gpt-5.4-mini', liteMode: false });
-//   expect(gpt54Mini.basePromptFile).toBe('gpt-5-modern.md');
-//   expect(gpt54Mini.fragmentFiles.includes('fragments/gpt-5.4.md')).toBe(true);
-//   expect(gpt54Mini.fragmentFiles.includes('fragments/gpt-5.4-small.md')).toBe(true);
-//
-//   const gpt53Codex = buildPromptSpec({ model: 'gpt-5.3-codex', liteMode: false });
-//   expect(gpt53Codex.basePromptFile).toBe('codex.md');
-//   expect(gpt53Codex.fragmentFiles.includes('fragments/gpt-5.3-codex.md')).toBe(true);
-//
-//   const genericGpt5 = buildPromptSpec({ model: 'gpt-5.2', liteMode: false });
-//   expect(genericGpt5.basePromptFile).toBe('gpt-5-modern.md');
-//   expect(genericGpt5.fragmentFiles.some((fragment) => fragment.startsWith('fragments/gpt-5.'))).toBe(false);
-// });
 
 it('buildPromptSpec composes file fragments in stable order', () => {
   const spec = buildPromptSpec({
@@ -218,17 +133,9 @@ it('buildPromptSpec composes file fragments in stable order', () => {
 it('does not teach loaded run_code instruction surfaces to call script-only tools directly', () => {
   const tools = fullCapabilityTools();
   const scriptOnly = tools.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)).map((tool) => tool.name);
-  const surfaces = [
-    'lite.md',
-    'memory.md',
-    'session-browser.md',
-    'orchestrator.md',
-    'gpt-5-modern.md',
-    'gpt-5.4-mini.md',
-    'gpt-5.5.md',
-    'gpt-5.6.md',
-    'codex.md',
-  ].map((file) => readFileSync(join(import.meta.dirname, file), 'utf8'));
+  const surfaces = ['lite.md', 'memory.md', 'session-browser.md', 'orchestrator.md', 'gpt.md'].map((file) =>
+    readFileSync(join(import.meta.dirname, file), 'utf8'),
+  );
   surfaces.push(
     getScriptPrimaryToolsAddendum(),
     getBackgroundShellAddendum(),

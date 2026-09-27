@@ -30,7 +30,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   },
   {
     id: 'default',
-    basePromptFile: 'simple_v4.md',
+    basePromptFile: 'gpt.md',
     matches: () => true,
   },
 ];

@@ -62,9 +62,10 @@ pnpm post-build`, prepare fresh task workspaces using the model-benchmark
 skill's `prepare-benchmark.sh` and the four arm names in
 [`run-executed.sh`](run-executed.sh), execute that script, then run the skill's
 `run-evaluator.sh` and [`summarize-pilot.mjs`](summarize-pilot.mjs). The locally
-generated, ignored `.coord/prompt-ab-tristate/control/` holds the original
-filtered event logs, candidate diffs, and evaluator outputs until this
-worktree is removed. **Pin the next task archive to `358fd042` rather than
+generated, ignored `.coord/generic-prompt-executed/control/` holds copies of
+the filtered event logs, candidate diffs, and evaluator outputs; these local
+artifacts are not part of the committed repository. **Pin the next task
+archive to `358fd042` rather than
 `HEAD`: this report itself describes the answer and must not enter a future
 candidate workspace.** Next run should reverse arm order and use at least one
 additional task shape before reconsidering the prompt routing.

@@ -116,17 +116,28 @@ export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boole
   return RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
 }
 
-// These are exposed by the top-level tool surface but intentionally absent
-// from run_code's script namespace.
-const DIRECT_ONLY_TOOL_NAMES = new Set(['shell', 'bash', 'enter_worktree', 'exit_worktree']);
+function createUnknownToolHints(allTools: ToolRegistry): Readonly<Record<string, string>> {
+  const names = new Set(allTools.map((tool) => tool.name));
+  const hints: Record<string, string> = {};
+  // shell is a verified top-level tool excluded from scripts; other prohibited
+  // names are runtime/control capabilities and are not necessarily tools.
+  hints.shell = 'This is a direct tool; call it outside run_code instead.';
+  if (names.has('apply_patch')) {
+    for (const name of ['create_file', 'search_replace']) {
+      if (!names.has(name)) hints[name] = 'Use apply_patch instead (use *** Add File: to create a file).';
+    }
+  }
+  if (!names.has('apply_patch') && (names.has('create_file') || names.has('search_replace'))) {
+    hints.apply_patch = `This tool is unavailable; use ${['create_file', 'search_replace']
+      .filter((name) => names.has(name))
+      .join(' or ')} instead.`;
+  }
+  return hints;
+}
 
-function unknownToolMessage(name: string, registry: ToolRegistry): string {
+function unknownToolMessage(name: string, registry: ToolRegistry, hints: Readonly<Record<string, string>>): string {
   const available = registry.map((entry) => entry.name).join(', ');
-  const hint = DIRECT_ONLY_TOOL_NAMES.has(name)
-    ? ` This is a direct tool; call it outside run_code instead.`
-    : name === 'create_file' || name === 'search_replace'
-    ? ' Use apply_patch instead (use *** Add File: to create a file).'
-    : '';
+  const hint = hints[name] ? ` ${hints[name]}` : '';
   return `Unknown tool "${name}". Available: ${available}.${hint}`;
 }
 
@@ -480,6 +491,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
   // Snapshot and filter once. Discovery and dispatch therefore cannot drift
   // if a caller mutates its registry while an invocation is in flight.
   const registry = options.registry.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
+  const unknownToolHints = createUnknownToolHints(options.registry);
 
   const discovery = (): ToolRegistry => registry;
 
@@ -554,6 +566,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         name: 'tools',
         kind: 'namespace',
         members: [...new Set([...registry.map((tool) => tool.name), TOOL_NAME_DESCRIBE])],
+        unknownMemberHints: unknownToolHints,
       },
       limits: {
         maxCalls: RUN_CODE_LIMITS.maxCalls,
@@ -598,7 +611,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           const described = registry.find((candidate) => candidate.name === payload.params);
           if (!described) {
             rejectedUnknownName = payload.params;
-            return failed(unknownToolMessage(payload.params, registry));
+            return failed(unknownToolMessage(payload.params, registry, unknownToolHints));
           }
           record(name, 'describe', started);
           const describedValue = isMcpToolDefinition(described)
@@ -612,7 +625,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             rejectedSeq += 1;
             recordReceipt(`${bridgeRunId}:rejected-${rejectedSeq}`, name, 'failed', `Unknown tool "${name}"`);
           }
-          return failed(unknownToolMessage(name, registry));
+          return failed(unknownToolMessage(name, registry, unknownToolHints));
         }
         const targetSchema = tool.canonicalParameters ?? tool.parameters;
         let normalized: unknown = payload.params ?? {};

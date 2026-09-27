@@ -154,6 +154,34 @@ it.sequential('execute: regex mode supports parsed escaped dot patterns', async 
   });
 });
 
+it.sequential('execute: regex parse failures explain fixed_strings without retrying', async () => {
+  const commands: string[] = [];
+  const sshService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (commandString: string) => {
+      commands.push(commandString);
+      if (commandString === 'rg --version')
+        return { stdout: 'ripgrep 14.0.0', stderr: '', exitCode: 0, timedOut: false };
+      return {
+        stdout: '',
+        stderr: 'rg: regex parse error:\n    (foo\n    ^\nunclosed group',
+        exitCode: 2,
+        timedOut: false,
+      };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+  const executionContext = new ExecutionContext(sshService);
+  await expect(createGrepToolDefinition({ executionContext }).execute({ pattern: 'name(', path: '.' })).rejects.toThrow(
+    'The pattern is a regular expression; pass fixed_strings: true for literal text or escape the metacharacters.',
+  );
+  expect(commands.filter((command) => command.startsWith('rg --line-number'))).toHaveLength(1);
+});
+
 it.sequential('execute: enables rg multiline mode for newline regex escapes', async () => {
   const commands: string[] = [];
   const sshService = {

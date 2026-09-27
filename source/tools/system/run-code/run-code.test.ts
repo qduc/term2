@@ -1449,6 +1449,31 @@ describe('run_code', () => {
     expect(output).toContain('Unknown tool "missing". Available: echo');
   });
 
+  it('guides direct-only namespace access and replaced editor descriptions', async () => {
+    const output = await run(
+      [tool({ name: 'echo' }), tool({ name: 'apply_patch' }), tool({ name: 'shell' })],
+      `try { tools.shell({ command: "pwd" }); } catch (error) { console.log(error.message); }
+       try { await tools.describe("create_file"); } catch (error) { console.log(error.message); }`,
+      { include_console: true },
+    );
+
+    expect(output).toContain(
+      'Unknown tool "shell". Available: echo, apply_patch, describe. This is a direct tool; call it outside run_code instead.',
+    );
+    expect(output).toContain(
+      'tools.describe failed: Unknown tool "create_file". Available: echo, apply_patch. Use apply_patch instead (use *** Add File: to create a file).',
+    );
+  });
+
+  it('does not suggest an editor replacement absent from the registry', async () => {
+    const output = await run(
+      [tool({ name: 'create_file' })],
+      'try { await tools.describe("search_replace"); } catch (error) { return error.message; }',
+    );
+    expect(output).toContain('Unknown tool "search_replace". Available: create_file');
+    expect(output).not.toContain('apply_patch');
+  });
+
   it('does not advise a non-direct conditional tool to be called directly', async () => {
     const output = await run(
       [tool({ name: 'conditional', needsApproval: ({ value }) => value === 'outside' })],
@@ -1465,6 +1490,15 @@ describe('run_code', () => {
 
     expect(output).toContain('Script failed');
     expect(output).toContain('script failed on purpose');
+  });
+
+  it('reports successful nested calls whose Promise.all result was discarded', async () => {
+    const output = await run(
+      [tool({ name: 'fast' }), tool({ name: 'broken', execute: () => Promise.reject(new Error('failure')) })],
+      'await Promise.all([tools.fast({ value: "ok" }), tools.broken({ value: "bad" })]);',
+    );
+    expect(output).toContain('nested tool call succeeded before the script failed');
+    expect(output).toContain('Promise.all discarded those results. Use Promise.allSettled');
   });
 
   describe('admitted nested-call settlement', () => {

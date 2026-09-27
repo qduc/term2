@@ -45,7 +45,12 @@ export type CapabilityKind = 'factory' | 'namespace';
 /** The generated part of the worker source: names only. */
 export type CapabilityBinding =
   | { name: string; kind: 'factory' }
-  | { name: string; kind: 'namespace'; members: readonly string[] };
+  | {
+      name: string;
+      kind: 'namespace';
+      members: readonly string[];
+      unknownMemberHints?: Readonly<Record<string, string>>;
+    };
 
 /** A call that passed `prepare` and is waiting to be invoked. */
 export interface CapabilityCallContext {

@@ -8,10 +8,6 @@ import type { ISettingsService } from '../service-interfaces.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import { OpenAICandidateObserver } from '../openai-candidate-observer.js';
 import {
-  ProviderContinuityOpenAIRootSelectorParityObserver,
-  type OpenAIRootFreshTurnSelectorParityObserver,
-} from '../openai-root-selector-parity-observer.js';
-import {
   DefaultOpenAIRootCheckpointLifecycleObserver,
   type OpenAIRootCheckpointLifecycleObserver,
 } from '../openai-root-checkpoint-lifecycle-observer.js';
@@ -37,8 +33,6 @@ export type SessionClientHandle = {
   readonly sessionIdentity?: SessionIdentity;
   /** The sole continuity instance shared by this handle's root client and runtime. */
   readonly providerContinuity?: ProviderContinuity;
-  /** Present only for an owned root session handle. */
-  readonly openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Present only for an owned root OpenAI session handle. */
   readonly openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   /** Compatibility selection fixed when this handle's client was created. */
@@ -155,15 +149,6 @@ export function createOwnedSessionClientFactory(
             };
           })()
         : undefined;
-      const openAIRootFreshTurnSelectorParityObserver =
-        continuationProjectionMode === 'openai-provider'
-          ? new ProviderContinuityOpenAIRootSelectorParityObserver(
-              providerContinuity,
-              () => settings.get('agent.model'),
-              undefined,
-              () => openAIRootProviderIdentity.current,
-            )
-          : undefined;
       const agentClient = createClient(
         sessionId,
         toolOwnership,
@@ -184,7 +169,6 @@ export function createOwnedSessionClientFactory(
         agentClient,
         sessionIdentity,
         providerContinuity,
-        openAIRootFreshTurnSelectorParityObserver,
         openAIRootCheckpointLifecycleObserver,
         continuationProjectionMode,
         toolOwnership,

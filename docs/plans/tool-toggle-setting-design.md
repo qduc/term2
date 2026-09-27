@@ -335,7 +335,7 @@ complete over the built-ins:
 | `builtin:orchestrator` | `subagents` | `orchestrator.md:23` instructs `run_subagent` delegation |
 | `builtin:mentor` | `mentor` | mentor workflow addon; `ask_mentor` gated at `agent.ts:547-550` |
 | `builtin:lite` | `shell`, `filesystem-read-workspace`, `filesystem-write`, `web` | `lite.md:11-19` names `Shell`, `read_file`, `apply_patch`, `create_file`, `search_replace`, `web_search`, `web_fetch` |
-| `builtin:standard` (and plan, which inherits its identity) | `filesystem-write`, `subagents` | model-family base prompts name `apply_patch` (e.g. `gpt-5.6.md:26`) and `run_subagent` (e.g. `gpt-5.6.md:34`, `kimi.md:11`) |
+| `builtin:standard` (and plan, which inherits its identity) | `filesystem-write`, `subagents` | `getScriptPrimaryToolsAddendum()` names script-facing editors; `gpt.md` and `kimi.md` name `run_subagent` |
 | non-builtin ids | any disabling change | conservative until custom Profiles carry dependency metadata (open question) |
 
 Delivery must compose, not overwrite. `queueModeNotice` is a single-string

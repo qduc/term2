@@ -88,8 +88,10 @@ async function startModelMock(modelIds: string[]): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
   capturedModels: () => string[];
+  capturedRequests: () => Record<string, unknown>[];
 }> {
   const requestedModels: string[] = [];
+  const requestedBodies: Record<string, unknown>[] = [];
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -102,7 +104,9 @@ async function startModelMock(modelIds: string[]): Promise<{
     });
     req.on('end', () => {
       try {
-        requestedModels.push(String(JSON.parse(body).model));
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        requestedModels.push(String(parsed.model));
+        requestedBodies.push(parsed);
       } catch {
         // Non-chat POSTs are recorded as unknown and ignored.
         requestedModels.push('<unparseable>');
@@ -127,6 +131,7 @@ async function startModelMock(modelIds: string[]): Promise<{
     baseUrl: `http://127.0.0.1:${port}/v1`,
     close: () => new Promise((resolve) => server.close(() => resolve())),
     capturedModels: () => [...requestedModels],
+    capturedRequests: () => [...requestedBodies],
   };
 }
 
@@ -229,6 +234,10 @@ it('positional launch durably records its goal before the first provider request
     );
     expect(status).toBe(0);
     expect(mock.capturedModels()).toEqual(['mock-alpha']);
+    const sentRequest = JSON.stringify(mock.capturedRequests()[0]);
+    expect(sentRequest).toContain('Noninteractive outcome');
+    expect(sentRequest).toContain('Provider returns');
+    expect(sentRequest).toContain('not user approval, authorization, permission, a plan');
     const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
     expect(logPath).toBeDefined();
     const events = fs

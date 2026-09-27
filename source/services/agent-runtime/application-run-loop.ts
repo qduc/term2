@@ -96,6 +96,8 @@ export interface AgentModelSettings {
 export interface ApplicationAgent {
   readonly name: string;
   readonly instructions: string;
+  /** Resolve session-dynamic instruction context once at each provider request boundary. */
+  readonly resolveInstructionsForRequest?: () => string;
   readonly model: string;
   readonly memoryContextEnabled?: boolean;
   modelSettings?: AgentModelSettings;
@@ -993,10 +995,11 @@ export class ApplicationRunLoop {
         const abortRequest = (): void => requestSignal.abort();
         if (options.signal?.aborted) requestSignal.abort();
         else options.signal?.addEventListener('abort', abortRequest, { once: true });
+        const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
         const request: StreamedModelTurnRequest = {
           instructions: criticalWrapUp
-            ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
-            : state.agent.instructions,
+            ? `${requestInstructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
+            : requestInstructions,
           ...(state.supportsConversationChaining &&
           !disableChaining &&
           state.responseId &&

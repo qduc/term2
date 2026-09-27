@@ -42,10 +42,13 @@ import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspaceP
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
+import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
   logger: ILoggingService;
+  /** Reads the latest successfully persisted session goal at request time. */
+  getGoal?: () => DurableGoal | undefined;
   executionContext?: ExecutionContext;
   editor: ReturnType<typeof createEditorImpl>;
   providerId: string;
@@ -471,12 +474,14 @@ export function buildAgent(
   const {
     name,
     instructions,
+    resolveInstructionsForRequest,
     memoryContextEnabled,
     tools: toolDefinitions,
   } = getAgentDefinition(
     {
       settingsService: deps.settings,
       loggingService: deps.logger,
+      ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
       executionContext: deps.executionContext,
       approvalPolicyRegistry: deps.approvalPolicyRegistry,
       askMentor: deps.createMentor,
@@ -544,6 +549,7 @@ export function buildAgent(
     model: resolvedModel,
     ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
     instructions,
+    ...(resolveInstructionsForRequest ? { resolveInstructionsForRequest } : {}),
     memoryContextEnabled,
     tools,
   };

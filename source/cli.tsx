@@ -1042,6 +1042,10 @@ const localHookRuntime = createRootHookRuntime({
 const { hookService } = localHookRuntime;
 await hookService.initialize();
 
+// Shared by the owned root client and the interactive goal command callback.
+// Mutations become visible to later provider requests only after the event append succeeds.
+const currentGoalState: { current: DurableGoal | undefined } = { current: resumedConversation?.goal };
+
 const sessionClientFactory = createOwnedSessionClientFactory(
   settings,
   (
@@ -1066,6 +1070,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       deps: {
         logger: logger,
         settings: settings,
+        getGoal: () => currentGoalState.current,
         executionContext: executionContext,
         sessionContextService,
         skillsService,
@@ -1105,6 +1110,9 @@ if (hasPositionalPrompt) {
     mcpAllowlist: mcpConfig.nonInteractiveAllow,
     mcpToolSource: mcpManager,
     initialGoal: launchGoal,
+    onGoalPersisted: (goal) => {
+      currentGoalState.current = goal;
+    },
   });
   process.exit(exitCode);
 }
@@ -1277,6 +1285,7 @@ try {
 if (launchGoal) {
   try {
     logWriter.append({ type: 'goal_changed', version: 1, goal: launchGoal });
+    currentGoalState.current = launchGoal;
   } catch (error) {
     console.error(`Unable to persist requested goal: ${error instanceof Error ? error.message : String(error)}`);
     await logWriter.close().catch(() => undefined);
@@ -1355,7 +1364,13 @@ const { waitUntilExit } = render(
         sessionId={effectiveSessionId}
         initialMessages={initialMessages}
         initialGoal={launchGoal ?? resumedConversation?.goal}
-        appendGoal={(goal) => logWriter.append({ type: 'goal_changed', version: 1, goal })}
+        appendGoal={(goal) => {
+          logWriter.append({ type: 'goal_changed', version: 1, goal });
+          currentGoalState.current = goal;
+        }}
+        onGoalRestore={(goal) => {
+          currentGoalState.current = goal;
+        }}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
         onRotateWriter={(newId, createdAt, rolloverFrom) => {

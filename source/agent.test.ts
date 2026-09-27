@@ -7,6 +7,7 @@ import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 import { SessionBrowser } from './services/conversation/session-browser.js';
 import { builtinProfileRegistry, type ProfileDefinition } from './services/profiles/index.js';
+import type { DurableGoal } from './services/logging/conversation-log-events.js';
 
 // search-via-shell probes `rg` availability with spawnSync while assembling
 // the prompt. Tests below pin that probe instead of inheriting whichever
@@ -102,6 +103,36 @@ it('omits worktree switching from a read-only local agent surface', () => {
   });
 
   expect(definition.tools.map((tool) => tool.name)).not.toContain('enter_worktree');
+});
+
+it('keeps the base instructions stable while resolving the latest goal for each request', () => {
+  let currentGoal: DurableGoal | undefined = {
+    id: 'first-id',
+    outcome: 'Ship the feature',
+    status: 'active',
+  };
+  const build = () =>
+    getAgentDefinition({
+      settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+      loggingService: mockLogger,
+      getGoal: () => currentGoal,
+    });
+
+  const first = build();
+  const initialRequestInstructions = first.resolveInstructionsForRequest?.();
+  expect(first.instructions).not.toContain('Ship the feature');
+  expect(initialRequestInstructions).toContain('Ship the feature');
+  expect(build().resolveInstructionsForRequest?.()).toBe(initialRequestInstructions);
+
+  currentGoal = { ...currentGoal!, id: 'second-id', outcome: 'Ship a different feature', status: 'achieved' };
+  const changedRequestInstructions = first.resolveInstructionsForRequest?.();
+  expect(first.instructions).toBe(build().instructions);
+  expect(changedRequestInstructions?.startsWith(first.instructions)).toBe(true);
+  expect(changedRequestInstructions).toContain('Ship a different feature');
+  expect(changedRequestInstructions).not.toContain('Ship the feature');
+
+  currentGoal = undefined;
+  expect(first.resolveInstructionsForRequest?.()).toBe(first.instructions);
 });
 
 it('keeps the dedicated search tools on a read-only full-mode surface', () => {

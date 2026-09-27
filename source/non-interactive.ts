@@ -51,6 +51,8 @@ export interface NonInteractiveBackgroundWork {
 export interface NonInteractiveConfig {
   prompt: string;
   initialGoal?: DurableGoal;
+  /** Publish the goal to request-time prompt readers only after its event append succeeds. */
+  onGoalPersisted?: (goal: DurableGoal) => void;
   autoApprove: boolean;
   quiet?: boolean;
   showReasoning?: boolean;
@@ -579,6 +581,7 @@ export async function runNonInteractive(
         provider: config.settingsService.get('agent.provider'),
       });
       logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+      config.onGoalPersisted?.(config.initialGoal);
       createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
     }
     if (config.settingsService) {

@@ -23,6 +23,7 @@ import type { NestedApprovalOwner } from '../services/approval/nested-approval-o
 import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-code.js';
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import { TurnStableMcpToolSource } from '../services/mcp/turn-stable-mcp-tool-source.js';
+import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -34,6 +35,7 @@ export interface AgentSource {
 export interface AgentConfigurationDeps {
   logger: ILoggingService;
   settings: ISettingsService;
+  getGoal?: () => DurableGoal | undefined;
   sessionContextService: ISessionContextService;
   executionContext?: ExecutionContext;
   toolInterceptorRegistry: ToolInterceptorRegistry;
@@ -84,6 +86,7 @@ export class AgentConfiguration implements AgentSource {
 
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #getGoal?: () => DurableGoal | undefined;
   #executionContext?: ExecutionContext;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #askUserAnswerStore: AskUserAnswerStore;
@@ -128,6 +131,7 @@ export class AgentConfiguration implements AgentSource {
     // Store deps
     this.#logger = deps.logger;
     this.#settings = deps.settings;
+    this.#getGoal = deps.getGoal;
     this.#executionContext = deps.executionContext;
     this.#toolInterceptorRegistry = deps.toolInterceptorRegistry;
     this.#askUserAnswerStore = deps.askUserAnswerStore;
@@ -242,6 +246,7 @@ export class AgentConfiguration implements AgentSource {
     return {
       settings: this.#settings,
       logger: this.#logger,
+      ...(this.#getGoal ? { getGoal: this.#getGoal } : {}),
       executionContext: this.#executionContext,
       editor: this.#editor,
       approvalPolicyRegistry,

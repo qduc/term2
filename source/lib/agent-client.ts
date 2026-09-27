@@ -55,6 +55,7 @@ import {
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { MIN_CHECK_IN_INTERVAL_SECONDS, MIN_NEXT_CHECK_IN_SECONDS } from '../tools/agent/configure-task-check-in.js';
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
+import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 import type {
   SubagentCancelAcknowledgement,
   SubagentRunHandle,
@@ -494,7 +495,7 @@ export class AgentClient {
     const agent = this.#agentConfig.getApplicationAgent();
     const estimate = estimateContext({
       history,
-      instructions: agent.instructions,
+      instructions: agent.resolveInstructionsForRequest?.() ?? agent.instructions,
       tools: agent.tools,
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
@@ -651,6 +652,7 @@ export class AgentClient {
     deps: {
       logger: ILoggingService;
       settings: ISettingsService;
+      getGoal?: () => DurableGoal | undefined;
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
@@ -707,6 +709,7 @@ export class AgentClient {
       {
         logger: deps.logger,
         settings: deps.settings,
+        ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
         sessionContextService: deps.sessionContextService,
         executionContext: deps.executionContext,
         toolInterceptorRegistry: this.#toolInterceptorRegistry,

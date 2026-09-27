@@ -75,6 +75,8 @@ import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from './co
 import { ToolApprovalPolicyRegistry } from './services/approval/tool-approval-policy-registry.js';
 import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
 import type { McpToolSource } from './services/mcp/mcp-tool-source.js';
+import type { DurableGoal } from './services/logging/conversation-log-events.js';
+import { renderDurableGoalContext } from './prompts/durable-goal-context.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -157,6 +159,7 @@ export function getAgentsInstructions(cwd: string): string {
 export interface AgentDefinition {
   name: string;
   instructions: string;
+  resolveInstructionsForRequest?: () => string;
   tools: ToolRegistry;
   model: string;
   /** Enable task-relevant memory injection only for profiles exposing root memory context. */
@@ -208,6 +211,7 @@ export const getAgentDefinition = (
   deps: {
     settingsService: ISettingsService;
     loggingService: ILoggingService;
+    getGoal?: () => DurableGoal | undefined;
     executionContext?: ExecutionContext;
     approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
     askMentor?: (question: string) => Promise<string>;
@@ -651,12 +655,16 @@ export const getAgentDefinition = (
 
   registerToolFormatters(tools);
 
+  const instructions = `${prompt}\n\n${
+    environmentEnabled ? `Environment: ${envInfo}` : ''
+  }${agentsInstructions}${skillsInstructions}`;
   return {
     name: 'Terminal Assistant',
     memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
-    instructions: `${prompt}\n\n${
-      environmentEnabled ? `Environment: ${envInfo}` : ''
-    }${agentsInstructions}${skillsInstructions}`,
+    instructions,
+    ...(deps.getGoal
+      ? { resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}` }
+      : {}),
     tools,
     model: resolvedModel,
   };

@@ -64,6 +64,31 @@ describe('normalizeApplicationInput opaque lane', () => {
   });
 });
 
+describe('request-time instruction resolution', () => {
+  it('resolves one instruction snapshot per request and preserves exact base bytes when unchanged', async () => {
+    const requests: string[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request.instructions ?? '');
+        yield { type: 'completion', responseId: `response-${requests.length}`, output: [] };
+      },
+    };
+    let suffix = '';
+    const dynamicAgent: ApplicationAgent = {
+      ...agent,
+      resolveInstructionsForRequest: () => `${agent.instructions}${suffix}`,
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+
+    await loop.startStream(dynamicAgent, [{ role: 'user', type: 'message', content: 'first' }]).completed;
+    suffix = '\n\n[current goal: first]';
+    await loop.startStream(dynamicAgent, [{ role: 'user', type: 'message', content: 'second' }]).completed;
+    await loop.startStream(dynamicAgent, [{ role: 'user', type: 'message', content: 'third' }]).completed;
+
+    expect(requests).toEqual([agent.instructions, `${agent.instructions}${suffix}`, `${agent.instructions}${suffix}`]);
+  });
+});
+
 describe('ApplicationRunLoop request-boundary compaction', () => {
   it('terminates only when a result-aware rollover tool accepts the request', async () => {
     let requests = 0;

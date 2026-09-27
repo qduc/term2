@@ -9,11 +9,19 @@ fi
 root=$(realpath "$1")
 repo=$(realpath "$(dirname "$0")/../..")
 for task in c11-d5-batch-denial-tristate r-settings-secret-display r-retry-abort-backoff; do
+  if [[ -n ${GRID_TASK:-} && "$task" != "$GRID_TASK" ]]; then continue; fi
   case "$task" in
     c11-d5-*) limit=180 ;;
     r-settings-*) limit=240 ;;
     r-retry-*) limit=360 ;;
   esac
+  if [[ -n ${GRID_CAP_SECONDS:-} ]]; then
+    if [[ ! $GRID_CAP_SECONDS =~ ^[1-9][0-9]*$ ]]; then
+      echo "GRID_CAP_SECONDS must be a positive integer" >&2
+      exit 2
+    fi
+    limit=$GRID_CAP_SECONDS
+  fi
   for rep in 1 2; do
     run="$root/runs/$task/rep-$rep"
     prompt=$(<"$run/control/prompt.txt")

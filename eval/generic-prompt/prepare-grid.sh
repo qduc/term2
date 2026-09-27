@@ -21,6 +21,7 @@ if [[ -e "$root" || ! -d "$runtime/prompts" ]]; then
 fi
 mkdir -p "$root/runs" "$root/candidates"
 for task in c11-d5-batch-denial-tristate r-settings-secret-display r-retry-abort-backoff; do
+  if [[ -n ${GRID_TASK:-} && "$task" != "$GRID_TASK" ]]; then continue; fi
   task_dir="$skill/tasks/$task"
   if [[ "$task" == c11-d5-batch-denial-tristate ]]; then
     base=358fd042e807c37004f1755d2f43c6d53e03df9c

@@ -4,8 +4,9 @@
 `codex/gpt-6-sol`. **Decision:** Do not extend the Luna rollout recommendation
 to Sol yet. The simple base produced safer credential-picker workspaces and
 one completed, semantic-pass turn, but 11/12 Sol turns timed out at the
-original grid caps. Keep Sol's current `gpt.md` routing until a longer-cap
-replication can measure completed tasks. No production routing changed.
+original grid caps. A subsequent longer-cap approval-task replication tied on
+completed correctness (2/2 each), without resolving the credential or retry
+tasks. Keep Sol's current `gpt.md` routing; no production routing changed.
 
 ## Method and outcome
 
@@ -49,11 +50,34 @@ From the main checkout, reproduce the metrics with
 `GRID_MODEL=sol node eval/generic-prompt/summarize-grid.mjs
 .worktrees/sol-prompt-grid/.coord/generic-prompt-sol-grid`.
 
-The safety signal favors the simple base on this task, but the mostly timed-out
-grid cannot establish a reliable Sol completion advantage or justify a prompt
-route change. Caps sized for Luna were evidently too short for these Sol
-turns. A next comparison should predefine longer Sol caps, preserve paired
-order reversal, and retain both strict and semantic credential scores. The
+The safety signal favors the simple base on the credential task, but the
+mostly timed-out initial grid cannot establish a reliable Sol completion
+advantage or justify a prompt route change. Caps sized for Luna were too short
+for the approval task, as the follow-up below confirms. The
 prior grid's isolation caveat still applies: git history was locally reset,
 but candidates were not filesystem-sandboxed from sibling control files; no
 such access was observed. This experiment did not test Sol Pro or GPT-5.6 Sol.
+
+## Cost-bounded longer-cap approval follow-up
+
+Fresh paired Sol workspaces were prepared for **only** the approval tri-state
+task, at the same pinned commit and prompt hashes. The cap increased from 180
+to 360 seconds; repetition 2 reversed arm order. All four turns completed,
+typechecked, and passed the official evaluator:
+
+| Repetition | Simple: time, cost | GPT: time, cost |
+| --- | --- | --- |
+| 1 | 218s, $0.253574 | 254s, $0.247476 |
+| 2 | 244s, $0.260756 | 247s, $0.363475 |
+
+Simple took 462s and $0.514330 across the two runs; GPT took 501s and
+$0.610951. The small time and catalog-cost differences are not a quality
+result on two pairs. The completion tie replaces the misleading initial
+approval partial-workspace separation, but says nothing about completion on
+credential or retry with longer caps. The deliberate stop after this stage
+avoided paying for eight additional long-cap runs. A further decision would
+need a prespecified budget and a longer-cap credential/security comparison,
+not just more approval repetitions. Local artifacts live at
+`.coord/generic-prompt-sol-approval-360/` in the isolated worktree; summarize
+with `GRID_MODEL=sol GRID_TASK=c11-d5-batch-denial-tristate node
+eval/generic-prompt/summarize-grid.mjs .coord/generic-prompt-sol-approval-360`.

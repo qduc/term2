@@ -52,7 +52,7 @@ export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams
     const nearMatch = found.trimStart().startsWith('+*** End Patch');
     throw new Error(
       `Invalid patch: expected '${END_PATCH}' but found ${describeFoundLine(found)}.${
-        nearMatch ? ` Remove the extra prefix or trailing whitespace so the line is exactly '${END_PATCH}'.` : ''
+        nearMatch ? ` Remove the leading '+' so the line is exactly '${END_PATCH}'.` : ''
       }`,
     );
   }
@@ -134,6 +134,7 @@ function normalizePatchLines(input: string): string[] {
 
 function describeFoundLine(line: string | undefined): string {
   if (line === undefined) return '<no line>';
+  if (line === '') return '<empty line>';
   const maxLength = 120;
   const displayed = line.length <= maxLength ? line : `${line.slice(0, maxLength - 1)}…`;
   return JSON.stringify(displayed);

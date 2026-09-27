@@ -141,7 +141,7 @@ describe('run_code', () => {
       } as never),
     );
 
-    expect(result).toContain('found "+*** End Patch"');
+    expect(result).toContain('found "+*** End Patch". Remove the leading \'+\'');
     expect(result).not.toContain('approval policy refused or failed');
     expect(result).not.toContain('Approval policy error (apply_patch)');
     expect(approvalNeedsApproval).not.toHaveBeenCalled();

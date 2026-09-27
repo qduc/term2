@@ -54,7 +54,7 @@ describe('upstream apply_patch contract', () => {
 
   it('explains near-miss end markers and how to correct them', () => {
     expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok\n+*** End Patch')).toThrow(
-      'found "+*** End Patch". Remove the extra prefix or trailing whitespace so the line is exactly \'*** End Patch\'.',
+      "found \"+*** End Patch\". Remove the leading '+' so the line is exactly '*** End Patch'.",
     );
     expect(() => parseUpstreamApplyPatch('*** Begin Patch\n*** Add File: x\n+ok')).toThrow('found "+ok"');
   });

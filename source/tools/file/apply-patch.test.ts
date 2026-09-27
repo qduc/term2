@@ -366,6 +366,16 @@ it.sequential('needsApproval: yolo mode bypasses outside-workspace write approva
   });
 });
 
+it.sequential('needsApproval: YOLO mode lets malformed patches reach execute diagnostics', async () => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }));
+    const params = { patch: '*** Begin Patch\n*** Add File: broken.txt\n+hello\n+*** End Patch' };
+
+    await expect(tool.needsApproval(params)).resolves.toBe(false);
+    await expect(tool.execute(params)).resolves.toContain("Error: Invalid patch: expected '*** End Patch'");
+  });
+});
+
 it.sequential('needsApproval: auto-approves for create/update inside cwd', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());

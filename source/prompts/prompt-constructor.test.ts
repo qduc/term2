@@ -15,6 +15,14 @@ import { getBackgroundShellAddendum } from './background-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
 
+it('guides run_code exact searches and syntax-sensitive data', () => {
+  const guidance = getScriptPrimaryToolsAddendum();
+
+  expect(guidance).toContain('fixed_strings: true');
+  expect(guidance).toContain('pattern` is a regular expression');
+  expect(guidance).toContain('pass it through the `run_code` `inputs` parameter');
+});
+
 const fullCapabilityLogging = {
   debug: () => {},
   info: () => {},

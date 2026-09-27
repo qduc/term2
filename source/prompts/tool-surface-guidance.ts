@@ -6,7 +6,9 @@ export function getScriptPrimaryToolsAddendum(): string {
 File, search, web, and edit tools are not on your direct tool list. Call them as \`tools.<name>(params)\` inside \`run_code\`. Use \`tools.describe(name)\` when you need a schema.
 
 - Inspect files with \`tools.read_file\`, \`tools.grep\`, \`tools.glob\`, and code-context tools when present.
+- For an exact substring or code symbol, call \`tools.grep({ pattern, fixed_strings: true })\`; otherwise \`pattern\` is a regular expression, so regex metacharacters must be escaped.
 - Edit with \`tools.apply_patch\`, \`tools.search_replace\`, or \`tools.create_file\` as available in the script namespace. Do not write files with \`cat\`, heredocs, or other shell tricks when those editors exist. Formatting commands and bulk mechanical rewrites do not need an editor tool.
+- For multiline edit text or data containing quotes, backticks, or \`${'${'}...\`, pass it through the \`run_code\` \`inputs\` parameter instead of embedding it in JavaScript source.
 - Web: \`tools.web_search\` and \`tools.web_fetch\`.
 - \`shell\` remains a direct tool for terminal commands, builds, git, and scripts. Do not use Python for file I/O when \`tools.read_file\` or a script editor can do the job.`;
 }

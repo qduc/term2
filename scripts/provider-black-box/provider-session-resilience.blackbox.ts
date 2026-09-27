@@ -34,7 +34,8 @@ type HttpScenario =
   | 'restart-completed'
   | 'interrupted-tool'
   | 'compaction-restart'
-  | 'compaction-tool';
+  | 'compaction-tool'
+  | 'codex-compaction-next-turn';
 
 type CapturedHttpRequest = {
   method: string;
@@ -169,6 +170,14 @@ const COMPACTION_ROUTE: ProviderRoute = {
   baseUrlSuffix: '/v1',
   contextCompaction: true,
   alternateProvider: 'fixture-other-provider',
+};
+
+const CODEX_COMPACTION_ROUTE: ProviderRoute = {
+  rowId: 'codex-compaction-http',
+  provider: 'codex',
+  model: 'gpt-5.6-luna',
+  baseUrlEnv: 'CODEX_BASE_URL',
+  baseUrlSuffix: '/backend-api/codex',
 };
 
 const PROMPT = 'fixture resilience prompt';
@@ -410,6 +419,43 @@ describe('application-owned context compaction black-box lifecycle', () => {
       id: COMPACTION_ITEM_ID,
       encrypted_content: COMPACTION_CIPHERTEXT,
     });
+  });
+
+  it('sends the next Codex turn after native compaction', async () => {
+    const server = await startResilienceHttpServer({
+      family: 'codex-responses',
+      scenario: 'codex-compaction-next-turn',
+    });
+    activeHttpServers.push(server);
+    const workspace = await createWorkspace(CODEX_COMPACTION_ROUTE, server);
+    activeWorkspaces.push(workspace);
+
+    const child = await startInteractive(workspace, CODEX_COMPACTION_ROUTE);
+    const firstIdle = await child.waitForIdleInput();
+    await submitPrompt(child, 'create Codex history before native compaction');
+    await child.waitForVisibleOutput('CODEX-BEFORE-COMPACTION');
+    await child.waitForIdleInput({ after: firstIdle });
+
+    await submitPrompt(child, '/compact');
+    await child.waitForVisibleOutput('Context compacted locally');
+    await server.waitForRequests(2);
+
+    const nextIdle = await child.waitForIdleInput();
+    await submitPrompt(child, 'continue after Codex native compaction');
+    await child.waitForVisibleOutput('CODEX-AFTER-COMPACTION');
+    await child.waitForIdleInput({ after: nextIdle });
+    await child.write('\u0003');
+    await child.waitForExit(DEFAULT_TIMEOUT_MS);
+
+    expect(server.requests).toHaveLength(3);
+    expect(inputItems(asRecord(server.requests[1]?.body)?.input)).toContainEqual({ type: 'compaction_trigger' });
+    expect(inputItems(asRecord(server.requests[2]?.body)?.input)).toContainEqual(
+      expect.objectContaining({
+        type: 'compaction',
+        id: COMPACTION_ITEM_ID,
+        encrypted_content: COMPACTION_CIPHERTEXT,
+      }),
+    );
   });
 
   // Unknown native coverage means dropping the opaque item would silently
@@ -883,7 +929,7 @@ async function startResilienceHttpServer(options: {
       body: parseJson(body),
     };
     requests.push(captured);
-    const frames = responseFramesFor(options.family, options.scenario, requests.length);
+    const frames = responseFramesFor(options.family, options.scenario, requests.length, captured.body);
     responseFrames.push(frames);
     if (options.scenario === 'early-close') {
       response.destroy();
@@ -973,7 +1019,12 @@ async function startResilienceWebSocketServer(options: {
   };
 }
 
-function responseFramesFor(family: HttpWireFamily, scenario: HttpScenario, requestNumber: number): HttpResponseFrame[] {
+function responseFramesFor(
+  family: HttpWireFamily,
+  scenario: HttpScenario,
+  requestNumber: number,
+  body?: unknown,
+): HttpResponseFrame[] {
   if (scenario === 'native-error') return nativeErrorFrames(family);
   if (scenario === 'incomplete') return incompleteFrames(family);
   if (scenario === 'reasoning') return reasoningFrames(family);
@@ -997,6 +1048,17 @@ function responseFramesFor(family: HttpWireFamily, scenario: HttpScenario, reque
       return [openAiCompletedFrame('resp_compaction_tool', 'COMPACTION-TOOL-FINAL', { compaction: true })];
     }
     return [openAiCompletedFrame('resp_compaction_tool_resumed', 'COMPACTION-TOOL-RESUMED')];
+  }
+  if (scenario === 'codex-compaction-next-turn') {
+    if (inputItems(asRecord(body)?.input).some((item) => item.type === 'compaction_trigger')) {
+      return codexCompactionFrames();
+    }
+    return [
+      openAiCompletedFrame(
+        `resp_codex_compaction_${requestNumber}`,
+        requestNumber === 1 ? 'CODEX-BEFORE-COMPACTION' : 'CODEX-AFTER-COMPACTION',
+      ),
+    ];
   }
   if (scenario === 'restart-completed') {
     const responseId = `resp_restart_${requestNumber}`;
@@ -1222,6 +1284,19 @@ function compactionOutput(): Record<string, unknown> {
     encrypted_content: COMPACTION_CIPHERTEXT,
     created_by: 'fixture',
   };
+}
+
+function codexCompactionFrames(): HttpResponseFrame[] {
+  const item = compactionOutput();
+  return [
+    { data: { type: 'response.output_item.done', output_index: 0, item } },
+    {
+      data: {
+        type: 'response.completed',
+        response: { id: 'resp_codex_compacted', status: 'completed', output: [item] },
+      },
+    },
+  ];
 }
 
 function compactionToolCallFrames(): HttpResponseFrame[] {

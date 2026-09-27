@@ -722,6 +722,7 @@ it('turns an unknown Responses output item into provider_opaque instead of throw
         {
           type: 'provider_opaque',
           provider: 'openai',
+          sourceProvider: 'openai',
           item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
         },
         { type: 'message', content: [{ type: 'text', text: 'answer' }] },
@@ -781,6 +782,37 @@ it('drops a non-openai provider_opaque item and still replays the rest of the hi
   });
 
   expect(JSON.stringify(capturedBody.input)).not.toContain('foreign-blob');
+  expect(capturedBody.input).toEqual([
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'still here' }] },
+  ]);
+});
+
+it('drops a Codex-origin provider_opaque item from the shared openai lane', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_1', output: [], usage: {} };
+      },
+    },
+  };
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+
+  await model.getResponse({
+    input: [
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        sourceProvider: 'codex',
+        item: { type: 'compaction', encrypted_content: 'codex-blob' },
+      },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'still here' }] },
+    ],
+    tools: [],
+  });
+
+  expect(JSON.stringify(capturedBody.input)).not.toContain('codex-blob');
   expect(capturedBody.input).toEqual([
     { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'still here' }] },
   ]);

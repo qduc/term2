@@ -249,6 +249,7 @@ it('projectPersistedAssistantItemToProviderHistory restores the provider_opaque 
   const item: ProviderOpaqueItem = {
     type: 'provider_opaque',
     provider: 'openai',
+    sourceProvider: 'codex',
     item: {
       id: 'comp_1',
       type: 'compaction',
@@ -264,7 +265,7 @@ it('projectPersistedAssistantItemToProviderHistory restores the provider_opaque 
     encrypted_content: 'ciphertext-blob',
     created_by: 'model',
     some_unknown_field: { nested: true },
-    providerOpaque: { provider: 'openai' },
+    providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
   });
 });
 

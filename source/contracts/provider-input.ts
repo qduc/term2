@@ -38,7 +38,7 @@ export interface ProviderInputItem {
    * other provider may re-serialize it. Absent for all application-modeled
    * items.
    */
-  providerOpaque?: { provider: string };
+  providerOpaque?: { provider: string; sourceProvider?: string };
   /** Application-owned portable replacement checkpoint. */
   contextSummary?: ContextSummaryMarker;
   [key: string]: unknown;

@@ -37,13 +37,14 @@ describe('normalizeApplicationInput opaque lane', () => {
         type: 'compaction',
         id: 'cmp_1',
         encrypted_content: 'opaque-blob',
-        providerOpaque: { provider: 'openai' },
+        providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
       },
     ] as any;
     expect(normalizeApplicationInput(history)).toEqual([
       {
         type: 'provider_opaque',
         provider: 'openai',
+        sourceProvider: 'codex',
         item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' },
       },
     ]);
@@ -2061,9 +2062,19 @@ describe('ApplicationRunLoop', () => {
           type: 'completion',
           responseId: 'resp-compacted',
           output: [
-            { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-1' } },
+            {
+              type: 'provider_opaque',
+              provider: 'openai',
+              sourceProvider: 'codex',
+              item: { type: 'compaction', id: 'cmp-1' },
+            },
             { type: 'message', content: [{ type: 'text', text: 'Done.' }] },
-            { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-2' } },
+            {
+              type: 'provider_opaque',
+              provider: 'openai',
+              sourceProvider: 'codex',
+              item: { type: 'compaction', id: 'cmp-2' },
+            },
           ],
         };
       },
@@ -2080,18 +2091,36 @@ describe('ApplicationRunLoop', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'item',
-          item: { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-1' } },
+          item: {
+            type: 'provider_opaque',
+            provider: 'openai',
+            sourceProvider: 'codex',
+            item: { type: 'compaction', id: 'cmp-1' },
+          },
         }),
         expect.objectContaining({
           type: 'item',
-          item: { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', id: 'cmp-2' } },
+          item: {
+            type: 'provider_opaque',
+            provider: 'openai',
+            sourceProvider: 'codex',
+            item: { type: 'compaction', id: 'cmp-2' },
+          },
         }),
       ]),
     );
     expect(stream.history).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'compaction', id: 'cmp-1', providerOpaque: { provider: 'openai' } }),
-        expect.objectContaining({ type: 'compaction', id: 'cmp-2', providerOpaque: { provider: 'openai' } }),
+        expect.objectContaining({
+          type: 'compaction',
+          id: 'cmp-1',
+          providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
+        }),
+        expect.objectContaining({
+          type: 'compaction',
+          id: 'cmp-2',
+          providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
+        }),
       ]),
     );
   });

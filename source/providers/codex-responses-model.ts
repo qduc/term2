@@ -580,6 +580,7 @@ function toCodexOutputItem(item: any): any {
     return {
       type: 'provider_opaque',
       provider: OPENAI_RESPONSES_OPAQUE_TAG,
+      sourceProvider: 'codex',
       item,
     };
   }

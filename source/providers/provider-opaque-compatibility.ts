@@ -64,11 +64,26 @@ export function providerOpaqueTagOf(item: unknown): string | undefined {
   return typeof provider === 'string' ? provider : undefined;
 }
 
+/** Reads the backend origin when it was recorded separately from the lane tag. */
+export function providerOpaqueSourceOf(item: unknown): string | undefined {
+  if (!item || typeof item !== 'object') return undefined;
+  const record = item as Record<string, unknown>;
+  if (record.type === 'provider_opaque' && typeof record.sourceProvider === 'string') {
+    return record.sourceProvider;
+  }
+  const marker = record.providerOpaque;
+  if (!marker || typeof marker !== 'object' || Array.isArray(marker)) return undefined;
+  const sourceProvider = (marker as Record<string, unknown>).sourceProvider;
+  return typeof sourceProvider === 'string' ? sourceProvider : undefined;
+}
+
 /** True when `item` is opaque and belongs to a lane other than `laneTag`. */
-export function isForeignProviderOpaque(item: unknown, laneTag: string): boolean {
+export function isForeignProviderOpaque(item: unknown, laneTag: string, targetProvider: string = laneTag): boolean {
   const tag = providerOpaqueTagOf(item);
   if (tag === undefined) return false;
-  return !acceptsProviderOpaqueTag(tag, laneTag);
+  if (!acceptsProviderOpaqueTag(tag, laneTag)) return true;
+  const sourceProvider = providerOpaqueSourceOf(item);
+  return sourceProvider !== undefined && sourceProvider !== targetProvider;
 }
 
 /** True when a lane may replay an opaque item carrying `tag`. */

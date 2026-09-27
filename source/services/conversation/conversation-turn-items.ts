@@ -100,7 +100,10 @@ export function projectPersistedAssistantItemToProviderHistory(item: PersistedAs
     // the tree sets this marker on replay.
     return {
       ...clone(item.item),
-      providerOpaque: { provider: item.provider },
+      providerOpaque: {
+        provider: item.provider,
+        ...(item.sourceProvider ? { sourceProvider: item.sourceProvider } : {}),
+      },
     };
   }
 

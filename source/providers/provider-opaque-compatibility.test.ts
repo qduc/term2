@@ -4,6 +4,7 @@ import {
   OPENAI_RESPONSES_OPAQUE_TAG,
   acceptsProviderOpaqueTag,
   isForeignProviderOpaque,
+  providerOpaqueSourceOf,
   providerOpaqueTagOf,
 } from './provider-opaque-compatibility.js';
 
@@ -22,6 +23,29 @@ describe('providerOpaqueTagOf', () => {
     expect(providerOpaqueTagOf({ type: 'message', role: 'user' })).toBeUndefined();
     expect(providerOpaqueTagOf({ providerOpaque: 'not-an-object' })).toBeUndefined();
     expect(providerOpaqueTagOf(null)).toBeUndefined();
+  });
+});
+
+describe('providerOpaqueSourceOf', () => {
+  it('reads explicit backend provenance from envelopes and restored markers', () => {
+    expect(
+      providerOpaqueSourceOf({
+        type: 'provider_opaque',
+        provider: 'openai',
+        sourceProvider: 'codex',
+        item: {},
+      }),
+    ).toBe('codex');
+    expect(
+      providerOpaqueSourceOf({
+        type: 'compaction',
+        providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
+      }),
+    ).toBe('codex');
+  });
+
+  it('leaves legacy opaque items without backend provenance ambiguous', () => {
+    expect(providerOpaqueSourceOf({ type: 'provider_opaque', provider: 'openai', item: {} })).toBeUndefined();
   });
 });
 
@@ -59,5 +83,16 @@ describe('isForeignProviderOpaque', () => {
     const foreign = { type: 'provider_opaque', provider: 'codex', item: {} };
     expect(isForeignProviderOpaque(own, OPENAI_RESPONSES_OPAQUE_TAG)).toBe(false);
     expect(isForeignProviderOpaque(foreign, OPENAI_RESPONSES_OPAQUE_TAG)).toBe(true);
+  });
+
+  it('distinguishes backends that share the OpenAI Responses lane when provenance exists', () => {
+    const codex = {
+      type: 'provider_opaque',
+      provider: OPENAI_RESPONSES_OPAQUE_TAG,
+      sourceProvider: 'codex',
+      item: {},
+    };
+    expect(isForeignProviderOpaque(codex, OPENAI_RESPONSES_OPAQUE_TAG, 'codex')).toBe(false);
+    expect(isForeignProviderOpaque(codex, OPENAI_RESPONSES_OPAQUE_TAG, 'openai')).toBe(true);
   });
 });

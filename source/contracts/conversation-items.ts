@@ -43,6 +43,8 @@ export interface ToolResult {
 export interface ProviderOpaqueItem {
   type: 'provider_opaque';
   provider: string;
+  /** Backend that produced the item when it differs from the opaque wire lane. */
+  sourceProvider?: string;
   item: Record<string, unknown>;
 }
 

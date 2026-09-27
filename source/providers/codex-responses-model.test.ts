@@ -522,7 +522,7 @@ it.each([
         type: 'compaction',
         id: 'cmp_1',
         encrypted_content: 'cipher',
-        providerOpaque: { provider: 'openai' },
+        providerOpaque: { provider: 'openai', sourceProvider: 'codex' },
       },
     ]);
   },

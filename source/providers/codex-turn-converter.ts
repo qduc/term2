@@ -17,7 +17,7 @@ export function toCodexResponsesInput(input: readonly StreamedModelTurnInput[]):
   // switch: drop it and keep replaying the rest. See
   // `provider-opaque-compatibility.ts`.
   return input
-    .filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG))
+    .filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG, 'codex'))
     .map((item) => (item.type === 'provider_opaque' ? item.item : toCodexResponsesItem(item)))
     .map((item) => {
       // Codex Responses 400s with "System messages are not allowed". The

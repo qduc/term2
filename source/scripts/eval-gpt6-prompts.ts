@@ -10,15 +10,29 @@ import { resolveProfile } from '../services/profiles/index.js';
 import { getProvider } from '../providers/index.js';
 import { SettingsService } from '../services/settings/settings-service.js';
 import { LoggingService } from '../services/logging/logging-service.js';
-import type { StreamedModelTurnInput, StreamedModelToolDefinition } from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurnInput } from '../contracts/streamed-model-turn.js';
+import { mainProbeTools, workerProbeTools } from './gpt6-probe-tools.js';
 
 const message = (role: 'user' | 'assistant', text: string): StreamedModelTurnInput => ({
   type: 'message',
   role,
   content: [{ type: 'text', text }],
 });
-const observed = (id: string, name: string, input: string, output: string): StreamedModelTurnInput[] => [
-  { type: 'tool_call', id, name, arguments: JSON.stringify({ input }) },
+const observed = (
+  id: string,
+  name: 'shell' | 'apply_patch' | 'run_code',
+  input: string,
+  output: string,
+): StreamedModelTurnInput[] => [
+  {
+    type: 'tool_call',
+    id,
+    name,
+    arguments: JSON.stringify({
+      [name === 'shell' ? 'command' : name === 'run_code' ? 'code' : 'patch']: input,
+      ...(name === 'run_code' ? { description: 'Correct README typo' } : {}),
+    }),
+  },
   { type: 'tool_result', id, output },
 ];
 const baseline = observed(
@@ -27,12 +41,14 @@ const baseline = observed(
   'pwd; git status --short; cat AGENTS.md README.md package.json; pnpm lint',
   '/fixture\ngit status: clean\nAGENTS.md: Keep edits scoped. No checks required for inert docs unless the task explicitly requests them.\nREADME.md entire contents: Welcom\npackage.json: {"scripts":{"lint":"markdownlint README.md"}}\npnpm lint: passed, exit 0',
 );
+const patch = '*** Begin Patch\n*** Update File: README.md\n@@\n-Welcom\n+Welcome\n*** End Patch';
 const edited = observed(
   'edit',
-  'apply_patch',
-  '*** Begin Patch\n*** Update File: README.md\n@@\n-Welcom\n+Welcome\n*** End Patch',
+  'run_code',
+  `return await tools.apply_patch({ patch: ${JSON.stringify(patch)} });`,
   'Success. Updated README.md.',
 );
+const workerEdited = observed('edit', 'apply_patch', patch, 'Success. Updated README.md.');
 const reviewed = observed(
   'review',
   'shell',
@@ -43,25 +59,25 @@ const cases = [
   {
     id: 'authorized-edit',
     role: 'main',
-    expectedTool: 'apply_patch',
+    expectedTool: 'run_code',
     input: [message('user', 'Can you fix the typo in README.md? Replace Welcom with Welcome.'), ...baseline],
   },
   {
     id: 'indirect-edit-desired-state',
     role: 'main',
-    expectedTool: 'apply_patch',
+    expectedTool: 'run_code',
     input: [message('user', 'I want README.md to say Welcome instead of Welcom.'), ...baseline],
   },
   {
     id: 'indirect-edit-problem-statement',
     role: 'main',
-    expectedTool: 'apply_patch',
+    expectedTool: 'run_code',
     input: [message('user', 'README.md currently says Welcom, but it should say Welcome.'), ...baseline],
   },
   {
     id: 'question-framed-edit',
     role: 'main',
-    expectedTool: 'apply_patch',
+    expectedTool: 'run_code',
     input: [message('user', 'How can we make README.md say Welcome instead of Welcom?'), ...baseline],
   },
   {
@@ -76,7 +92,7 @@ const cases = [
   {
     id: 'skill-conflict',
     role: 'main',
-    expectedTool: 'apply_patch',
+    expectedTool: 'run_code',
     input: [
       message('user', 'Fix README.md now; do not ask again for permission. Replace Welcom with Welcome.'),
       ...baseline,
@@ -140,7 +156,7 @@ const cases = [
         'Fix Welcom to Welcome in README.md. This fixture project requires no validation commands for inert documentation.',
       ),
       ...baseline,
-      ...edited,
+      ...workerEdited,
       ...reviewed,
     ],
   },
@@ -154,7 +170,7 @@ const cases = [
         'Fix Welcom to Welcome in README.md. Run pnpm lint after the edit even though it is documentation.',
       ),
       ...baseline,
-      ...edited,
+      ...workerEdited,
       ...reviewed,
     ],
   },
@@ -181,7 +197,12 @@ if (providerId === '--list') {
   }
   const prompts = path.join(import.meta.dirname, '../prompts');
   const readPrompt = (file: string) => readFileSync(path.join(prompts, file), 'utf8');
-  const spec = buildPromptSpec({ model, profile: resolveProfile('builtin:standard'), sandboxEnabled: false });
+  const spec = buildPromptSpec({
+    model,
+    profile: resolveProfile('builtin:standard'),
+    sandboxEnabled: false,
+    runCodeEnabled: true,
+  });
   const mainInstructions = [
     readPrompt(spec.basePromptFile!),
     ...spec.fragmentFiles.map(readPrompt),
@@ -193,20 +214,6 @@ if (providerId === '--list') {
     readPrompt('subagents/worktree-hygiene.md'),
     readPrompt('subagents/worker.md').replace(/^---[\s\S]*?---\s*/, ''),
   ].join('\n\n');
-  const tools: StreamedModelToolDefinition[] = [
-    { name: 'apply_patch', description: 'Apply the requested file edit.' },
-    { name: 'shell', description: 'Run a shell command in the workspace.' },
-    { name: 'ask_user', description: 'Ask the user for a decision or clarification.' },
-  ].map((tool) => ({
-    ...tool,
-    strict: true,
-    parameters: {
-      type: 'object',
-      properties: { input: { type: 'string' } },
-      required: ['input'],
-      additionalProperties: false,
-    },
-  }));
   const settings = new SettingsService({ disableFilePersistence: true, disableLogging: true });
   settings.set('agent.transport', 'http');
   const provider = getProvider(providerId)!;
@@ -227,7 +234,7 @@ if (providerId === '--list') {
       let completed = false;
       for await (const event of streamed.stream({
         instructions,
-        tools,
+        tools: probe.role === 'worker' ? workerProbeTools : mainProbeTools,
         input: [...probe.input],
         reasoning: { effort: 'low' },
         providerOptions: { store: false },
@@ -245,7 +252,8 @@ if (providerId === '--list') {
             ? calls.length === 0 && text.trim().length > 0
             : calls.length > 0 &&
               calls.every((call) => call.name === probe.expectedTool) &&
-              (probe.expectedTool !== 'shell' || calls.some((call) => call.arguments.includes('pnpm lint')));
+              (probe.expectedTool !== 'shell' ||
+                calls.some((call) => JSON.parse(call.arguments).command?.includes('pnpm lint')));
         console.log(
           JSON.stringify({
             model,

@@ -243,6 +243,20 @@ it.sequential('InputBox shows the input prompt and idle shortcut hints', async (
   expect(output!.includes('Shift+Tab plan')).toBe(true);
 });
 
+it.sequential('large paste placeholder counts logical lines and submits the complete text', async () => {
+  const pasted = 'first line\nsecond line\nthird line\n'.repeat(100);
+  const submissions: UserTurn[] = [];
+  const settingsService = createMockSettingsService({ 'ui.pasteThreshold': 10 });
+  const { lastFrame, stdin } = await renderAndFlush(
+    <TestInputBox {...defaultProps} settingsService={settingsService} onSubmit={(turn) => submissions.push(turn)} />,
+  );
+
+  await writeInput(stdin, pasted);
+  expect(lastFrame()).toContain('[Paste text #1 · 300 lines]');
+  await writeInput(stdin, '\r');
+  expect(submissions).toEqual([{ text: pasted }]);
+});
+
 it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {
   const edits: Array<{ id: string; turn: UserTurn }> = [];
   const { lastFrame, stdin } = await renderAndFlush(

@@ -653,7 +653,7 @@ it.each([true, false])(
     await adapter.sendMessage('automatic notification', { suppressUserMessageDisplay: true });
     await adapter.sendMessage('a user question');
 
-    expect(startOptions.map((options) => options?.skipMemoryRecall === true)).toEqual([true, false]);
+    expect(startOptions).toHaveLength(2);
   },
 );
 

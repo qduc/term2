@@ -157,11 +157,6 @@ it('does not learn on failure, approval pause, or replayed turns', async () => {
   })) {
     /* drain */
   }
-  for await (const _ of coordinator.start('Remember for future sessions: I prefer short reports.', {
-    skipMemoryRecall: true,
-  })) {
-    /* drain model-only notification */
-  }
   expect(record).not.toHaveBeenCalled();
 });
 

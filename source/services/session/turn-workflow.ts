@@ -9,8 +9,6 @@ import type { AgentClientRunOptions, ConversationAgentClient } from '../conversa
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
-import { recalledMemoryKeys } from '../../prompts/memory-recall-notice.js';
-import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 import { getMethod, getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import { issueInputSurgeApproval } from '../input-surge-approval.js';
@@ -386,18 +384,6 @@ export class TurnWorkflow {
         return { kind: 'stale' };
       }
       attempt = creation.attempt;
-      if (
-        !options.skipUserMessage &&
-        !options.replayFromHistory &&
-        !options.abortedContext &&
-        !options.skipMemoryRecall
-      ) {
-        const injected = await this.#recallMemory(attempt);
-        if (!this.deps.generationGuard.isCurrent(attempt.token)) {
-          return { kind: 'stale' };
-        }
-        if (injected) yield injected;
-      }
     }
     // Continuation attempts driven from within this same logical turn (tool
     // approvals, abort resolution) reuse this budget instead of getting their
@@ -823,46 +809,6 @@ export class TurnWorkflow {
         ids: [entry.id],
       },
     });
-  }
-
-  /**
-   * Adds relevant memory summaries to a new user turn before it enters
-   * history. Recall rides on the turn, never on the instructions: changing
-   * instructions per turn discards the provider's cached prefix.
-   */
-  async #recallMemory(attempt: TurnAttempt): Promise<Extract<ConversationEvent, { type: 'memory_injected' }> | null> {
-    const select = this.deps.agentClient.selectMemoryForTurn;
-    const { memoryRecallQuery } = attempt.submittedTurn;
-    const query = memoryRecallQuery ?? attempt.submittedTurn.text;
-    if (typeof select !== 'function' || !query.trim()) return null;
-    const exclude = recalledMemoryKeys(
-      this.deps.conversationStore
-        .getHistory()
-        .map((item) => projectConversationMessage(item))
-        .filter((message) => message?.role === 'user')
-        .map((message) => message!.allText),
-    );
-    try {
-      const selection = await select.call(this.deps.agentClient, query, { exclude });
-      if (!selection.text) return null;
-      attempt.prependToTurnText(selection.text);
-      return {
-        type: 'memory_injected',
-        memories: selection.memories,
-        ...(selection.queryTerms
-          ? {
-              recall: {
-                source: memoryRecallQuery === undefined ? 'turn_text' : 'recall_query',
-                terms: selection.queryTerms,
-              },
-            }
-          : {}),
-      };
-    } catch (error) {
-      // Recall is advisory; the turn proceeds without it.
-      this.deps.logger.warn('Memory recall failed', { error: describeError(error) });
-      return null;
-    }
   }
 
   async #startInitialStream(

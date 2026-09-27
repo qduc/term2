@@ -10,7 +10,6 @@ import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-reg
 import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
 import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
-import { renderMemoryRecall, renderRecallLine } from '../../prompts/memory-recall-notice.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
@@ -136,109 +135,21 @@ it('executes initial turn successfully', async () => {
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
-const recallBlock = renderMemoryRecall([
-  renderRecallLine({ scope: 'project', id: 'rule', title: 'Project rule', summary: 'Follow the rule.' }),
-]);
-
-function recallingClient(select: (query: string, exclude: ReadonlySet<string>) => unknown) {
+it('starts new turns without recall injection or memory_injected events', async () => {
   const inputs: unknown[] = [];
-  return {
-    inputs,
-    client: {
-      getProvider: () => 'openai',
-      selectMemoryForTurn: async (query: string, options: { exclude: ReadonlySet<string> }) =>
-        select(query, options.exclude),
-      startStream: async (input: unknown) => {
-        inputs.push(input);
-        const stream = new MockStream([{ type: 'text_delta', text: 'answer' }]);
-        stream.finalOutput = 'answer';
-        return stream;
-      },
+  const { workflow, composition } = setupWorkflow({
+    getProvider: () => 'openai',
+    startStream: async (input: unknown) => {
+      inputs.push(input);
+      const stream = new MockStream([{ type: 'text_delta', text: 'answer' }]);
+      stream.finalOutput = 'answer';
+      return stream;
     },
-  };
-}
-
-it('recalls memory on the user turn, not the instructions, and reports it before the response', async () => {
-  const queries: string[] = [];
-  const { client, inputs } = recallingClient((query) => {
-    queries.push(query);
-    return {
-      text: recallBlock,
-      memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
-      queryTerms: 'question',
-    };
   });
-  const { workflow, composition } = setupWorkflow(client);
   const events: any[] = [];
   for await (const event of workflow.executeInitial('question')) events.push(event);
-
-  expect(queries).toEqual(['question']);
-  expect(events[0]).toEqual({
-    type: 'memory_injected',
-    memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
-    recall: { source: 'turn_text', terms: 'question' },
-  });
-  expect(events.some((event) => event.type === 'text_delta')).toBe(true);
-  // The block is part of the persisted user turn, so later requests replay the
-  // same bytes and keep the prefix cached.
-  const userItem = composition.conversationStore.getHistory().find((item: any) => item.role === 'user') as any;
-  expect(userItem.content).toBe(`${recallBlock}\n\nquestion`);
-  expect(JSON.stringify(inputs[0])).toContain('<memory-recall>');
+  expect(events.some((event) => event.type === 'memory_injected')).toBe(false);
   expect(composition.conversationStore.getLastUserMessage()).toBe('question');
-});
-
-it('keys recall on the turn memoryRecallQuery instead of harness-composed text', async () => {
-  const queries: string[] = [];
-  const { client, inputs } = recallingClient((query) => {
-    queries.push(query);
-    return {
-      text: recallBlock,
-      memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }],
-      queryTerms: 'websocket pool retirement',
-    };
-  });
-  const { workflow } = setupWorkflow(client);
-  const events: any[] = [];
-  for await (const event of workflow.executeInitial({
-    text: '# Continuation briefing\n\nGoal: fix websocket pool retirement.',
-    memoryRecallQuery: 'Goal: fix websocket pool retirement.',
-  }))
-    events.push(event);
-
-  expect(queries).toEqual(['Goal: fix websocket pool retirement.']);
-  expect(events.find((event) => event.type === 'memory_injected')?.recall).toEqual({
-    source: 'recall_query',
-    terms: 'websocket pool retirement',
-  });
-  // The model still receives the full turn text; only the recall query changes.
-  expect(JSON.stringify(inputs[0])).toContain('# Continuation briefing');
-});
-
-it('does not recall a memory that is already in the conversation', async () => {
-  const excludes: string[][] = [];
-  const { client } = recallingClient((_query, exclude) => {
-    excludes.push([...exclude]);
-    return exclude.has('project:rule')
-      ? { text: '', memories: [] }
-      : { text: recallBlock, memories: [{ scope: 'project', id: 'rule', title: 'Project rule' }] };
-  });
-  const { workflow } = setupWorkflow(client);
-  const second: any[] = [];
-  for await (const _event of workflow.executeInitial('first')) void _event;
-  for await (const event of workflow.executeInitial('second')) second.push(event);
-
-  expect(excludes).toEqual([[], ['project:rule']]);
-  expect(second.some((event) => event.type === 'memory_injected')).toBe(false);
-});
-
-it('skips recall for a turn that no user message started', async () => {
-  const select = vi.fn(() => ({ text: recallBlock, memories: [] }));
-  const { client, inputs } = recallingClient(select);
-  const { workflow } = setupWorkflow(client);
-  for await (const _event of workflow.executeInitial('Background subagent finished.', { skipMemoryRecall: true }))
-    void _event;
-
-  expect(select).not.toHaveBeenCalled();
   expect(JSON.stringify(inputs[0])).not.toContain('<memory-recall>');
 });
 

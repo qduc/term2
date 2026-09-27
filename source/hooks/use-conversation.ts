@@ -462,8 +462,7 @@ export const useConversation = ({
     [sendThroughOrchestrator],
   );
   const sendSessionRolloverBrief = useCallback(
-    (briefing: string, memoryRecallQuery: string) =>
-      sendThroughOrchestrator({ text: briefing, memoryRecallQuery }, { presentation: 'session_rollover' }),
+    (briefing: string) => sendThroughOrchestrator({ text: briefing }, { presentation: 'session_rollover' }),
     [sendThroughOrchestrator],
   );
 

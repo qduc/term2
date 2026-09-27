@@ -2221,6 +2221,13 @@ store-policy decision.
 
 ### Root-turn automatic memory selection precision
 
+**2026-09-27:** This is a historical incident and retired guard, not current
+root-turn behavior. Per-turn auto-recall was removed after the blind-labeled
+100-turn/638-pair experiment (artifacts under
+`~/.local/state/coordinator/tasks/fa67e1fbbc964722be65d74df34a2371/artifacts/`).
+The root agent now pins global summaries at construction; project memories
+require on-demand retrieval. Old recall blocks remain readable in sessions.
+
 User-visible incident (2026-09-25): short turns such as "What were we doing?",
 "It is a little noisy in the UI, can you fix that?", and "Refine that feature"
 injected unrelated project summaries (up to seven in a recorded turn). The

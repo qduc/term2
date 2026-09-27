@@ -28,8 +28,6 @@ export type InitialTurnRunOptions = {
   disableChainingForAttempt?: boolean;
   inputSurgeApproval?: InputSurgeApproval;
   recoveryBudget?: RetryRecoveryBudget;
-  /** The turn was not written by the user (for example a background notification). */
-  skipMemoryRecall?: boolean;
 };
 
 export type TurnAttemptFactoryDeps = {

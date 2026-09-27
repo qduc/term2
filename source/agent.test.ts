@@ -209,7 +209,16 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
       'memory_delete',
     ]);
     expect(enabled.memoryContextEnabled).toBe(true);
-    expect(enabled.instructions).not.toContain('Durable rules.');
+    expect(enabled.instructions).toContain('Global memories');
+    expect(enabled.instructions).toContain('Durable rules.');
+    await writeFile(join(root, 'index.json'), JSON.stringify({ version: 1, memories: [] }));
+    expect(enabled.instructions).toContain('Durable rules.');
+    expect(
+      getAgentDefinition({
+        settingsService: createMockSettingsService({ 'memory.directory': root }),
+        loggingService: mockLogger,
+      }).instructions,
+    ).not.toContain('Durable rules.');
     expect(enabled.instructions).not.toContain('full memory content');
     expect(disabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([]);
     expect(disabled.instructions).not.toContain('## Persistent memory');
@@ -275,7 +284,7 @@ it('advertises librarian delegation only when persistent memory is enabled', () 
   expect(disabled.instructions).not.toContain('`librarian`');
 });
 
-it('defers loading a corrupt memory index until a relevant turn', async () => {
+it('fails open with a warning if the global index is corrupt at agent construction', async () => {
   const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -291,7 +300,7 @@ it('defers loading a corrupt memory index until a relevant turn', async () => {
 
     expect(definition.tools.map((tool) => tool.name)).toContain('memory_search');
     expect(definition.instructions).not.toContain('The following memories are summaries');
-    expect(warn).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/context could not be loaded/));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1665,9 +1674,8 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
     {
       key: 'tools.memory.enabled',
       absent: baselineNames.filter((name) => name.startsWith('memory_')),
-      // Sentence unique to the memory.md fragment (heading levels also appear
-      // in some base prompts).
-      markers: ['Use global for cross-project preferences and reusable knowledge'],
+      // Sentence unique to memory capability guidance.
+      markers: ['Global memories are listed in your instructions'],
     },
     {
       key: 'tools.sessions.enabled',

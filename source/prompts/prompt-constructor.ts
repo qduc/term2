@@ -21,6 +21,7 @@ type PromptConstructorBaseOptions = {
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
   memoryGuidance?: string;
+  memoryContext?: string;
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
 };
@@ -56,6 +57,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     sandboxEnabled = true,
     memoryEnabled = false,
     memoryGuidance = '',
+    memoryContext = '',
     sessionBrowserEnabled = false,
     executionContext,
     runCodeEnabled = false,
@@ -121,10 +123,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     fragmentFiles.push('orchestrator-mode-stub.md');
   }
 
-  if (memoryEnabled && isRegularMode) {
-    fragmentFiles.push('memory.md');
-  }
-
   if (sessionBrowserEnabled) {
     fragmentFiles.push('session-browser.md');
   }
@@ -132,6 +130,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   if (memoryGuidance) {
     inlineSections.push(memoryGuidance);
   }
+  if (memoryContext && isRegularMode && memoryEnabled) inlineSections.push(memoryContext);
 
   inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum(editorSurface) : getDirectEditorToolsAddendum());
 

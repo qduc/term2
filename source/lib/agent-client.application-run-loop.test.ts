@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
-  it('recalls task-relevant memory for the user turn while instructions stay byte-identical', async () => {
+  it('keeps instructions byte-identical across turns without selecting memory', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'term2-memory-turn-'));
     const provider = 'memory-turn-provider';
     providers.add(provider);
@@ -122,15 +122,6 @@ describe('AgentClient application-run-loop execution', () => {
           'memory.searchMaxLimit': 50,
         },
       );
-      const socket = await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set() });
-      const release = await instance.selectMemoryForTurn('release calendar', { exclude: new Set() });
-      expect(socket.memories).toEqual([{ scope: 'global', id: 'socket', title: 'Nested socket incident' }]);
-      expect(socket.text).toContain('Keep child socket identity distinct.');
-      expect(socket.text).not.toContain('private socket notes');
-      expect(release.text).toContain('Ship release notes weekly.');
-      expect(
-        (await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set(['global:socket']) })).memories,
-      ).toEqual([]);
       await (
         await instance.startStream('first')
       ).completed;
@@ -138,7 +129,7 @@ describe('AgentClient application-run-loop execution', () => {
         await instance.startStream('second')
       ).completed;
       expect(requests).toHaveLength(2);
-      // Per-turn recall must never reach the cached prefix.
+      // Neither turn changes the cached prefix.
       expect(requests[0].instructions).toBe('stable base');
       expect(requests[1].instructions).toBe('stable base');
       expect(agent.instructions).toBe('stable base');
@@ -165,10 +156,6 @@ describe('AgentClient application-run-loop execution', () => {
     });
     const instance = client(provider, {
       agentOverride: { name: 'transient', model: 'test-model', instructions: 'no memory', tools: [] },
-    });
-    expect(await instance.selectMemoryForTurn('nested socket issue', { exclude: new Set() })).toEqual({
-      text: '',
-      memories: [],
     });
     await (
       await instance.startStream('text')

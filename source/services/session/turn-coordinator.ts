@@ -27,7 +27,6 @@ export type TurnStartOptions = Pick<
   | 'resumeState'
   | 'resumePreviousResponseId'
   | 'inputSurgeApproval'
-  | 'skipMemoryRecall'
 > & { origin?: 'user' | 'queued' };
 
 export interface TurnCoordinatorDeps {
@@ -85,12 +84,7 @@ export class TurnCoordinator {
       if (failureEvent) yield failureEvent;
 
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
-      if (
-        turnOutcome.kind === 'response' &&
-        !options.replayFromHistory &&
-        !options.skipUserMessage &&
-        !options.skipMemoryRecall
-      ) {
+      if (turnOutcome.kind === 'response' && !options.replayFromHistory && !options.skipUserMessage) {
         yield* this.#recordAutomaticMemory(input);
       }
     } catch (error) {

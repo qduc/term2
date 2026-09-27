@@ -1,5 +1,15 @@
 # Background memory without model tool calls: survey and a Term2 design
 
+**2026-09-27 implementation note:** The read-path description below is historical
+(`e34f208a`), not current behavior. A blind-labeled offline experiment of 100
+turns and 638 memory/turn pairs found per-turn auto-recall below 20% precision
+for lexical, tuned lexical, embeddings, and LLM gating. Current root-agent
+instructions pin a bounded global-scope index once when built; project memories
+remain on-demand through memory tools. New turns no longer select or emit
+`memory_injected` receipts. Historical recall blocks and event decoding remain
+supported for old sessions. Experiment artifacts:
+`~/.local/state/coordinator/tasks/fa67e1fbbc964722be65d74df34a2371/artifacts/`.
+
 Status: **research and recommendation; no implementation.** Written 2026-09-25
 against source at `e34f208a`. Every external source in the Sources section was
 fetched and read in this session unless it is marked otherwise. This note builds
@@ -69,7 +79,7 @@ poison the agent?
 - **[Paper]** A primary paper. Results are the authors' own unless stated.
 - **[Inference]** My design reasoning. Not measured.
 
-## 1. What Term2 does today
+## 1. What Term2 did at the research snapshot (2026-09-25)
 
 ### 1.1 Read path [Term2 code]
 

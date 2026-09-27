@@ -43,6 +43,9 @@ it.sequential('ApprovalPrompt denied-read renders all 4 options for non-sensitiv
   expect(frame).toContain('Allow and remember this path');
   expect(frame).toContain('Run unsandboxed once');
   expect(frame).not.toContain('sensitive path');
+  expect(frame.indexOf('1. Allow once')).toBeLessThan(frame.indexOf('2. Deny'));
+  expect(frame.indexOf('2. Deny')).toBeLessThan(frame.indexOf('3. Allow and remember this path'));
+  expect(frame.indexOf('3. Allow and remember this path')).toBeLessThan(frame.indexOf('4. Run unsandboxed once'));
 });
 
 it.sequential(
@@ -56,7 +59,7 @@ it.sequential(
     expect(deniedReadOptionColor('Deny')).toBe(COLOR_DANGER);
     expect(deniedReadOptionColor('Allow once')).toBe(COLOR_SUCCESS);
     expect(toVisibleText(frame)).toContain(
-      '↑↓ navigate │ 1-9 select │ y/n answer │ ⏎ select │ Esc interrupts the turn',
+      '↑↓ navigate │ 1 allow once │ y/n answer │ ⏎ select │ Esc interrupts the turn',
     );
   },
 );
@@ -73,8 +76,24 @@ it.sequential('ApprovalPrompt denied-read number keys select the matching action
     />,
   );
 
-  await writeInput(result.stdin, '4');
+  await writeInput(result.stdin, '2');
   expect(rejected).toBe(true);
+});
+
+it.sequential('ApprovalPrompt denied-read number keys cannot grant broader access', async () => {
+  let approveArg: string | undefined;
+  const result = await renderInAct(
+    <ApprovalPrompt
+      approval={makeDeniedReadApproval(false)}
+      onApprove={(answer) => {
+        approveArg = answer;
+      }}
+      onReject={() => {}}
+    />,
+  );
+
+  await writeInput(result.stdin, '3');
+  expect(approveArg).toBeUndefined();
 });
 
 it.sequential('ApprovalPrompt check-in shows the shared footer and number keys continue or stop', async () => {
@@ -94,7 +113,7 @@ it.sequential('ApprovalPrompt check-in shows the shared footer and number keys c
   );
 
   expect(toVisibleText(result.lastFrame() ?? '')).toContain(
-    '↑↓ navigate │ 1-9 select │ y/n answer │ ⏎ select │ Esc interrupts the turn',
+    '↑↓ navigate │ 1/2 answer │ ⏎ select │ Esc interrupts the turn',
   );
   await writeInput(result.stdin, '2');
   expect(continued).toBe(false);
@@ -116,6 +135,8 @@ it.sequential('ApprovalPrompt denied-read suppresses "Allow and remember" for se
   expect(frame).not.toContain('Allow and remember this path');
   // Sensitive-path notice should appear.
   expect(frame).toContain('sensitive path');
+  expect(frame.indexOf('1. Allow once')).toBeLessThan(frame.indexOf('2. Deny'));
+  expect(frame.indexOf('2. Deny')).toBeLessThan(frame.indexOf('3. Run unsandboxed once'));
 });
 
 it.sequential('ApprovalPrompt denied-read Enter on "Allow once" calls onApprove with allow-once', async () => {
@@ -145,10 +166,8 @@ it.sequential('ApprovalPrompt denied-read Enter on "Deny" calls onReject', async
       }}
     />,
   );
-  // Deny is last, after the one-time and broader grants.
+  // Deny remains the muscle-memory-safe second option.
   await writeInput(result.stdin, '\u001B[B'); // down arrow
-  await writeInput(result.stdin, '\u001B[B');
-  await writeInput(result.stdin, '\u001B[B');
   await writeInput(result.stdin, '\r'); // Enter
   expect(rejected).toBe(true);
 });
@@ -194,9 +213,10 @@ it.sequential('ApprovalPrompt denied-read navigates to and selects "Run unsandbo
       onReject={() => {}}
     />,
   );
-  // Allow once → Allow and remember → Run unsandboxed once
-  await writeInput(result.stdin, '\u001B[B'); // down → Allow once
-  await writeInput(result.stdin, '\u001B[B'); // down → Allow and remember
+  // Allow once → Deny → Allow and remember → Run unsandboxed once
+  await writeInput(result.stdin, '\u001B[B');
+  await writeInput(result.stdin, '\u001B[B');
+  await writeInput(result.stdin, '\u001B[B');
   await writeInput(result.stdin, '\r'); // Enter
   expect(approveArg).toBe('unsandboxed-once');
 });

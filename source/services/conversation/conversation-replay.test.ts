@@ -58,6 +58,13 @@ it('decodes only bounded versioned goal records and replays the latest valid eve
   expect(replayEvents([env(active), env(achieved)]).goal).toEqual(achieved.goal);
 });
 
+it('retains the current goal across a session-cleared event', () => {
+  const goal = { id: 'g-clear', outcome: 'Retain after clear', status: 'active' } as const;
+  expect(
+    replayEvents([env({ type: 'goal_changed', version: 1, goal }), env({ type: 'session_cleared' })]).goal,
+  ).toEqual(goal);
+});
+
 it('ignores malformed goal events without affecting other replay state', () => {
   const valid = env({ type: 'goal_changed', version: 1, goal: { id: 'g1', outcome: 'Keep', status: 'active' } });
   const malformed = {

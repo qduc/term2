@@ -629,7 +629,10 @@ describe('App orchestration', () => {
     );
   });
 
-  it.sequential('preflights the in-place rollover before rotating the writer and commits afterwards', async () => {
+  it.each([
+    { id: 'goal-1', outcome: 'Ship the lifecycle', status: 'active' as const },
+    { id: 'goal-2', outcome: 'Ship the lifecycle', status: 'abandoned' as const },
+  ])('persists the current $status goal before committing in-place rollover', async (goal) => {
     const services = createServices();
     const order: string[] = [];
     const commit = vi.fn(() => order.push('commit'));
@@ -644,6 +647,7 @@ describe('App orchestration', () => {
       <App
         {...services}
         sessionId="session-1"
+        initialGoal={goal}
         terminalTitleBase="term2"
         generateId={() => 'session-2'}
         onRotateWriter={onRotateWriter}
@@ -659,7 +663,7 @@ describe('App orchestration', () => {
     });
 
     expect(order).toEqual(['preflight', 'writer', 'commit']);
-    expect(onRotateWriter).toHaveBeenCalledWith('session-2', expect.any(String), 'session-1');
+    expect(onRotateWriter).toHaveBeenCalledWith('session-2', expect.any(String), 'session-1', goal);
     expect(services.conversationService.resetWithNewId).not.toHaveBeenCalled();
   });
 

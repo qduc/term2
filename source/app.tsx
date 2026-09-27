@@ -128,7 +128,12 @@ interface AppProps {
   initialMessages?: Message[];
   restoredStaticMessageIds?: string[];
   logWriter?: { append: (event: any) => void };
-  onRotateWriter?: (newSessionId: string, createdAt?: string, rolloverFrom?: string) => void;
+  onRotateWriter?: (
+    newSessionId: string,
+    createdAt?: string,
+    rolloverFrom?: string,
+    goal?: import('./services/logging/conversation-log-events.js').DurableGoal,
+  ) => void;
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
@@ -431,8 +436,9 @@ const App: FC<AppProps> = ({
 
   const clearConversationAndRefreshBanner = useCallback(async () => {
     onPrintUsage?.();
+    const isRollover = rolloverSourceSessionIdRef.current !== undefined;
     await clearConversation();
-    if (goal) appendGoal?.(goal);
+    if (goal && !isRollover) appendGoal?.(goal);
     setStartupBannerIds(['startup-banner-0']);
     setActiveRestoredStaticMessageIds([]);
     setMessageListEpoch((epoch) => epoch + 1);
@@ -470,7 +476,7 @@ const App: FC<AppProps> = ({
       onPrintUsage?.();
       if (canRolloverInPlace) {
         if (onRotateWriter) {
-          onRotateWriter(plannedSuccessorId, successorCreatedAt, sourceSessionId);
+          onRotateWriter(plannedSuccessorId, successorCreatedAt, sourceSessionId, goal);
         }
         commitRollover?.();
       } else {

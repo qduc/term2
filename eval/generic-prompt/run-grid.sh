@@ -17,7 +17,11 @@ for task in c11-d5-batch-denial-tristate r-settings-secret-display r-retry-abort
   for rep in 1 2; do
     run="$root/runs/$task/rep-$rep"
     prompt=$(<"$run/control/prompt.txt")
-    if [[ "$rep" == 1 ]]; then
+    if [[ ${GRID_MODEL:-} == sol && "$rep" == 1 ]]; then
+      order=(sol-simple sol-gpt)
+    elif [[ ${GRID_MODEL:-} == sol ]]; then
+      order=(sol-gpt sol-simple)
+    elif [[ "$rep" == 1 ]]; then
       order=(deepseek-gpt luna-simple deepseek-simple luna-gpt)
     else
       order=(luna-gpt deepseek-simple luna-simple deepseek-gpt)
@@ -31,6 +35,7 @@ for task in c11-d5-batch-denial-tristate r-settings-secret-display r-retry-abort
       case "$arm" in
         deepseek-*) provider=DeepSeek; model=deepseek-flash ;;
         luna-*) provider=codex; model=gpt-6-luna ;;
+        sol-*) provider=codex; model=gpt-6-sol ;;
       esac
       echo "Starting $task rep-$rep $arm (cap ${limit}s)"
       start=$(date +%s)

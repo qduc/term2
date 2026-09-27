@@ -9,13 +9,18 @@ fi
 root=$(realpath "$1")
 repo=$(realpath "$(dirname "$0")/../..")
 evaluator=/home/qduc/.agents/skills/model-benchmark/scripts/run-evaluator.sh
+if [[ ${GRID_MODEL:-} == sol ]]; then
+  arms=(sol-simple sol-gpt)
+else
+  arms=(deepseek-simple deepseek-gpt luna-gpt luna-simple)
+fi
 for rep in 1 2; do
   alternative="$root/semantic/r-settings-secret-display/rep-$rep"
   mkdir -p "$alternative/control"
   cp "$root/runs/r-settings-secret-display/rep-$rep/control/task.json" \
     "$root/runs/r-settings-secret-display/rep-$rep/control/meta.json" "$alternative/control/"
   cp "$repo/eval/generic-prompt/credential-semantic.test-template.txt" "$alternative/control/evaluator.test.ts"
-  for arm in deepseek-simple deepseek-gpt luna-gpt luna-simple; do
+  for arm in "${arms[@]}"; do
     ln -s "$root/candidates/r-settings-secret-display/rep-$rep/$arm" "$alternative/$arm"
   done
   "$evaluator" --benchmark-dir "$alternative" | grep -E 'Evaluating Candidate|RESULT:|Evaluation complete'

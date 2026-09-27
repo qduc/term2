@@ -174,7 +174,7 @@ function error(code: ControlErrorCode, message: string): { code: ControlErrorCod
 }
 
 function send(socket: Socket, value: unknown): void {
-  if (!socket.destroyed) socket.write(`${JSON.stringify(value)}\n`);
+  if (!socket.destroyed && !socket.writableEnded) socket.write(`${JSON.stringify(value)}\n`);
 }
 
 function isSocketAcceptingConnections(socketPath: string): Promise<boolean> {
@@ -390,6 +390,15 @@ export class ControlSocketServer {
   }
 
   #accept(socket: Socket): void {
+    let closed = false;
+    socket.on('error', () => {
+      closed = true;
+      socket.destroy();
+    });
+    socket.on('close', () => {
+      closed = true;
+      this.#connections.delete(socket);
+    });
     if (this.#connections.size >= CONTROL_MAX_CONNECTIONS) {
       socket.end(
         `${JSON.stringify({ v: 1, id: '', ok: false, error: error('unavailable', 'Connection limit reached') })}\n`,
@@ -401,15 +410,15 @@ export class ControlSocketServer {
     let helloSeen = false;
     const inFlight = new Set<string>();
     let requests = Promise.resolve();
-    socket.on('close', () => this.#connections.delete(socket));
     socket.on('data', (chunk) => {
+      if (closed || socket.destroyed || socket.writableEnded) return;
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.length > CONTROL_MAX_FRAME_BYTES && !buffer.includes(0x0a)) {
         socket.destroy();
         return;
       }
       let newline: number;
-      while ((newline = buffer.indexOf(0x0a)) >= 0) {
+      while (!closed && (newline = buffer.indexOf(0x0a)) >= 0) {
         const frame = buffer.subarray(0, newline);
         buffer = buffer.subarray(newline + 1);
         if (frame.length > CONTROL_MAX_FRAME_BYTES) {
@@ -424,7 +433,9 @@ export class ControlSocketServer {
           return;
         }
         requests = requests.then(async () => {
+          if (closed || socket.destroyed || socket.writableEnded) return;
           helloSeen = await this.#request(socket, request, helloSeen, inFlight);
+          if (socket.destroyed || socket.writableEnded) closed = true;
         });
       }
     });

@@ -391,7 +391,6 @@ export class AgentConfiguration implements AgentSource {
       'agent.subagentLibrarianReasoningEffort',
       'logging.logLevel',
       'logging.suppressConsoleOutput',
-      'shell.useRtkCompression',
     ];
 
     if (typeof this.#settings.onChange !== 'function') return;

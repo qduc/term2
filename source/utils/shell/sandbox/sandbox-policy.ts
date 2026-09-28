@@ -439,8 +439,6 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const workspaceRoot = fs.realpathSync(options.cwd ?? getActiveWorkspaceRoot());
   const tmpDir = options.tmpDir ?? SANDBOX_TEMP_DIR;
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
-  const rtkConfigDir = path.join(home, '.config', 'rtk');
-  const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
   const safeHomeReadPaths = [
     path.join(home, '.gitconfig'),
     path.join(home, '.config', 'git'),
@@ -508,8 +506,6 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
           workspaceRoot,
           tmpDir,
           appCacheDir,
-          rtkConfigDir,
-          rtkDataDir,
           ...safeHomeReadPaths,
           ...allowReadExtra,
           ...dockerSocketReadException,

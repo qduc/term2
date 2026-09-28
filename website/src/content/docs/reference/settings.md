@@ -115,7 +115,6 @@ term2 settings can be configured via:
 | `shell.maxOutputLines` | `number` | `1000` | ✓ Yes | — | Maximum lines of shell output to capture |
 | `shell.maxOutputChars` | `number` | `40000` | ✓ Yes | — | Maximum characters of shell output to capture |
 | `shell.autoApproveMode` | `off \\| advisory \\| auto \\| always` | `"off"` | ✓ Yes | — | Mode for tool approval; always bypasses permission prompts except ask_user and disables sandbox.enabled |
-| `shell.useRtkCompression` | `boolean` | `false` | ✓ Yes | — | Use RTK to compress shell command output |
 | `sandbox.enabled` | `boolean` | `true` | ✓ Yes | — | Enable sandbox mode for safer command execution (true\|false) |
 | `sandbox.readPolicy` | `standard \\| strict` | `"standard"` | ✓ Yes | — | File read policy for sandbox (standard\|strict) |
 | `sandbox.allowReadExtra` | `array` | `[]` | ✓ Yes | — | Additional paths allowed for sandbox file reads (comma-separated) |

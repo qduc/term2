@@ -348,7 +348,6 @@ export const ShellSettingsSchema = z.object({
     .describe(
       'Mode for tool approval; always bypasses permission prompts except ask_user and disables sandbox.enabled',
     ),
-  useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 
 export const SandboxSettingsSchema = z.object({
@@ -814,7 +813,6 @@ export interface SettingsWithSources {
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto' | 'always'>;
-    useRtkCompression: SettingWithSource<boolean>;
   };
   sandbox: {
     enabled: SettingWithSource<boolean>;
@@ -979,7 +977,6 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
-  SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
   SANDBOX_ENABLED: 'sandbox.enabled',
   SANDBOX_READ_POLICY: 'sandbox.readPolicy',
   SANDBOX_ALLOW_READ_EXTRA: 'sandbox.allowReadExtra',
@@ -1133,7 +1130,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
-  SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
   SETTING_KEYS.SANDBOX_ENABLED,
   SETTING_KEYS.SANDBOX_READ_POLICY,
   SETTING_KEYS.SANDBOX_ALLOW_READ_EXTRA,
@@ -1286,7 +1282,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputLines: 1000,
     maxOutputChars: 40000,
     autoApproveMode: 'off',
-    useRtkCompression: false,
   },
   sandbox: {
     enabled: true,

@@ -102,7 +102,6 @@ export const SETTINGS_SOURCE_KEYS = {
     maxOutputLines: 'shell.maxOutputLines',
     maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',
-    useRtkCompression: 'shell.useRtkCompression',
   },
   sandbox: {
     enabled: 'sandbox.enabled',

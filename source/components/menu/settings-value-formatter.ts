@@ -1,11 +1,9 @@
-import fs from 'node:fs';
 import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
 import {
   isDurationSetting,
   isSecretSetting,
   isUsdMicrosSetting,
 } from '../../services/settings/settings-ui-metadata.js';
-import { getRtkBinaryPath } from '../../services/rtk-service.js';
 import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 export interface FormattedSettingValue {
@@ -94,10 +92,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
 
   // 2. Booleans
   if (typeof value === 'boolean') {
-    let text = value ? 'ON' : 'OFF';
-    if (value && key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION && fs.existsSync(getRtkBinaryPath())) {
-      text += ' (installed)';
-    }
+    const text = value ? 'ON' : 'OFF';
     return {
       text,
       color: value ? COLOR_SUCCESS : COLOR_DANGER,

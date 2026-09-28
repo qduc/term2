@@ -37,7 +37,7 @@ Read `docs/test-audit/calibration-report.md` for the calibration verdict, the M3
 artifacts under `docs/test-audit/artifacts/` for reviewer records, and
 `docs/test-audit/shards.md` for domain boundaries. Milestone 3 is closed;
 coordinator override decisions live in `graph.yaml` primary decisions (reviewer
-`test-audit-coordinator`) for rtk-service, worktree-transition,
+`test-audit-coordinator`) for the historical rtk-service review, worktree-transition,
 conversation-event-handler.tools, token-usage, build-output.e2e, cli.integration,
 and use-settings-completion. Milestone 4 cleanup batches and the follow-up rewrite
 are complete on `main` (`a2b56bd6`); each landed in an isolated worktree with

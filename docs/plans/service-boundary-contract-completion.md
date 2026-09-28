@@ -40,6 +40,8 @@ characterization merged with `sb08-memory-local-disposition` (on-disk at
 Program closed and all residual decisions resolved 2026-08-16 (see the
 owner-decision block in the header). Nothing is dispatched or in flight. The
 long workstream narratives below are the dated audit record; treat their
+SB-08 RTK packet and inventory row as historical only: the RTK feature is
+removed from Term2 in this change, so its former ownership question is moot.
 pre-close "awaiting owner decisions" wording as historical.
 
 - **Reviewed implementation awaiting owner decisions/integration:** SB-02 —
@@ -303,13 +305,11 @@ pre-close "awaiting owner decisions" wording as historical.
   cache cleanup in `finally`; final review PASS. Provider black-box is not
   required for this hook-test/audit-only diff. Full suite retained only the
   known settings-schema baseline plus this expected failure.
-- **Reviewed implementation awaiting owner decision:** SB-08 RTK shell-boundary
-  packet in `.worktrees/sb08-rtk-boundary` on branch `sb08-rtk-boundary`. It
-  adds only injected post-approval `shell.execute` characterizations and an
-  audit note; it deliberately leaves Contract 05 extension versus local RTK
-  ownership unresolved, changes no production source or contract record, and
-  adds no retained product red.
-- **SB-08 RTK verification:** the coordinator independently ran all non-Git
+- **Historical SB-08 RTK packet (retired 2026-09-28):** the former shell-boundary
+  characterization and ownership choice are moot because Term2 no longer ships
+  or downloads RTK. The old evidence remains below as a record of the removed
+  implementation; it is not current production behavior.
+- **Historical SB-08 RTK verification:** the coordinator independently ran all non-Git
   gates with `pnpm --dir /home/qduc/term2/.worktrees/sb08-rtk-boundary`:
   focused `NODE_ENV=test` passed 2 files / 126 tests; typecheck, Prettier, and
   diff check passed. The full suite retained only the known settings-schema
@@ -417,7 +417,7 @@ Use a separate `docs/contracts/NN-*.md` draft only when this full structure is e
 | SB-05 | Logging and provider-traffic ports | reviewed; awaiting owner | Accepted metadata, response variants, write-failure behavior, redaction, observability, boundary-level `any`, and schema enforcement are mapped with verified test citations. | Draft Contract 07 plus 89 focused tests in `sb05-logging-contract-tests` |
 | SB-06 | SSH transport lifecycle | reviewed; awaiting owner | Current connect/disconnect/`executeCommand` behavior, timeout/cancellation gaps, command wrapping, error outcomes, consumers, and test coverage form a draft lifecycle matrix. | Draft Contract 06 plus 47 public-boundary tests in `sb06-ssh-contract-tests` |
 | SB-07 | Provider registry fetch and unary response types | reviewed; awaiting owner | Adapter opaque-lane ownership, unary behavior, retry decoration, catalog fetch typing, provider implementations, and black-box coverage are inventoried; three missing green public-boundary proofs now protect C2.6. | Reviewed Contract 02 C2.6 extension plus 170 focused tests in `sb07-c26-adapter-isolation` |
-| SB-08 | Peripheral service disposition | closed | Handoff, model/provider management, file/workspace discovery, skills, notifications, cost, memory, RTK, and local shell sessions each have deletion/two-adapter evaluations and verified test citations. | Dispositions recorded; memory C3.7 + Contract 09 landed docs-only 2026-08-16 (slice I); hooks disposition tracker-only; RTK/provider-cache packets landed; G2/G5/G6 + memory strict-subset characterizations merged 2026-08-16 |
+| SB-08 | Peripheral service disposition | closed | Handoff, model/provider management, file/workspace discovery, skills, notifications, cost, memory, and local shell sessions each have deletion/two-adapter evaluations and verified test citations. RTK was subsequently removed from Term2 on 2026-09-28; its old disposition remains historical. | Dispositions recorded; memory C3.7 + Contract 09 landed docs-only 2026-08-16 (slice I); hooks disposition tracker-only; provider-cache packet landed; G2/G5/G6 + memory strict-subset characterizations merged 2026-08-16 |
 
 ---
 
@@ -465,7 +465,6 @@ this is not evidence that no governing contract exists elsewhere.
 | `openai-root-provider-identity.ts` | `isOpenAIRootProvider` | **Not a seam** | Pure provider string matching utility. Source evidence: `source/services/openai-root-provider-identity.ts:1-12`. Tested indirectly through root observer suites. |
 | `plan-mode-interceptor.ts` | `createPlanModeInterceptor` | **Local interface is sufficient** | Intercepts tool calls in plan mode. Source evidence: `source/services/plan-mode-interceptor.ts:1-40`. Verified test: `source/services/plan-mode-interceptor.test.ts:4` (`it('installPlanModeInterceptor rejects mutating tools when planMode is true')`). |
 | `provider-continuity.ts` | `ProviderContinuity` | **Contract 02** | Tracks upstream response IDs and chain settlement. Source evidence: `source/services/provider-continuity.ts:1-210`. Verified test: `source/services/provider-continuity.test.ts:4` (`it('initial state is clear')`), `source/services/provider-continuity.test.ts:82` (`it('keeps a candidate checkpoint separate from existing previousResponseId behavior until terminal acceptance')`). |
-| `rtk-service.ts` | `ensureRtkInstalled`, `wrapWithRtk` | **SB-08 (Local interface sufficient / External-effect)** | Downloads binaries, verifies SHA-256 checksums, extracts tarballs, and rewrites AST commands. Source evidence: `source/services/rtk-service.ts:148-259`. Verified test: `source/services/rtk-service.test.ts:156` (`it('wrapWithRtk prefixes a single command with quoted rtkPath')`), `source/services/rtk-service.test.ts:207` (`it.sequential('ensureRtkInstalled returns path when binary already exists')`), `source/services/rtk-service.test.ts:296` (`it.sequential('ensureRtkInstalled returns null and does not install when checksum does not match')`), `source/services/rtk-service.test.ts:321` (`it.sequential('ensureRtkInstalled returns binary path on successful install')`). |
 | `runtime-setting-router.ts` | `RuntimeSettingRouter` | **Contract 04** | Dispatches runtime setting changes to session controllers. Source evidence: `source/services/runtime-setting-router.ts:1-45`. Verified test: `source/services/runtime-setting-router.test.ts:25` (`it('applies all runtime changes through one settings transaction before runtime effects')`). |
 | `service-interfaces.ts` | Port interface definitions | **SB-05 / SB-06** | Defines `ILoggingService`, `ISSHService`, and `IProviderTraffic`. Source evidence: `source/services/service-interfaces.ts:1-139`. Type declarations only. |
 | `ssh-service.ts` | `SSHService` | **SB-06 (Formal contract draft)** | Manages remote SSH connection lifecycle and `executeCommand`. Source evidence: `source/services/ssh-service.ts:14-150`. Verified test: `source/services/ssh-service.test.ts:66` (`it('connect: establishes connection successfully')`), `source/services/ssh-service.test.ts:140` (`it('executeCommand: executes command and returns result')`). |

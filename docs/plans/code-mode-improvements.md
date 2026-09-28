@@ -236,11 +236,12 @@ added with the fix exercises the wrapped path. A unit test that bypasses the
 layer a bug lives in will pass for the wrong reason — the same mistake as E1's
 `maxResultBytes` patch, which was inert and also passed its unit test.
 
-## E5 — does code-mode improve quality, speed, or cost? (in flight)
+## E5 — does code-mode improve quality, speed, or cost? (completed 2026-09-04)
 
-The release question, and the gap all three outside reviewers named: three
-rounds of field testing produced **no cost or latency data**, despite
-"cost/latency gets worse on ordinary turns" being a declared revert trigger.
+The release question. When E5 was proposed, three rounds of field testing had
+produced **no cost or latency data**, despite "cost/latency gets worse on
+ordinary turns" being a declared revert trigger. E5 records the first paired
+cost/latency measurements; their limits and conclusions follow below.
 
 Paired design: the same tasks and models run against
 `.worktrees/e5-nocodemode` (detached at `ab5938cb` = `2ab57206^1`, the
@@ -285,3 +286,33 @@ confound.
 **Caveat on cost-after-cache:** prompt caching is prefix-dependent and the two
 builds have different prefixes, so cached-token counts are not comparable
 across arms in a single run. Raw input tokens are the primary metric here.
+
+### Recorded result and disposition
+
+E5 completed all 18 planned cells (three tasks × three models × two arms),
+with one run per cell. The full tables, repeat measurements, quality notes,
+and data-integrity corrections are recorded in
+[`.coord/field-test/e5/RESULTS.md`](../../.coord/field-test/e5/RESULTS.md).
+
+- Across the nine paired task/model cells, codemode used 5,355,622 input
+  tokens versus 6,084,480 for no-codemode (-12.0%). The initial 18-cell
+  comparison took 1,411 seconds versus 1,347 seconds (+4.8%, slower).
+- All six task-B cells found the seeded defect and wrote equivalent regression
+  tests. This supports parity on that task, not a general quality conclusion.
+- The per-cell sample was too small for reliable comparisons. Repeats exposed
+  substantial within-arm variation; in the repeated task-B/glm comparison the
+  arms overlapped, reversing the apparent one-run regression. Treat the
+  aggregate token reduction as preliminary, not a settled effect; speed was a
+  wash at this sample size.
+- No task demonstrated fan-out amortisation: none required scripting to win.
+  Whether codemode pays off on its intended fan-out workload remains open.
+- The run also exposed a harness race because both arms shared one worktree;
+  reset/diff capture raced and one diff had to be recovered from the reflog.
+  Any follow-up comparison must isolate the arms in separate worktrees or
+  serialize their resets.
+
+**Disposition:** E5's planned comparison is complete; no additional E5 cells
+are currently running. The broader release question is not closed: fan-out
+benefit remains unmeasured, and the small/noisy sample does not establish a
+reliable cost or latency effect. A follow-up should prioritize representative
+fan-out tasks and repeated paired cells, with the worktree race removed.

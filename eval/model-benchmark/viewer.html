@@ -18,7 +18,10 @@
     .stat { padding: 16px 20px; }
     .stat b { font-size: 27px; display: block; letter-spacing: -.03em; }
     .stat span { color: #53645d; font-size: 13px; }
-    .panel { overflow: hidden; }
+    .panel { overflow: hidden; margin-bottom: 18px; }
+    .comparison-heading { padding: 18px 18px 0; }
+    .comparison-heading h2 { margin: 0 0 6px; font-size: 21px; }
+    .comparison-heading p { margin: 0; color: #586b60; font-size: 13px; line-height: 1.5; }
     .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 18px; border-bottom: 1px solid #e4e9e4; }
     label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: #435b50; }
     input, select { font: inherit; font-size: 14px; color: #182924; background: #fff; border: 1px solid #c8d6cc; border-radius: 7px; padding: 9px 10px; min-width: 155px; }
@@ -51,6 +54,13 @@
       <div class="stat"><b id="evaluated">—</b><span>Evaluated</span></div>
       <div class="stat"><b id="judged">—</b><span>Judged</span></div>
     </div>
+    <section class="panel" aria-label="Same-run comparison">
+      <div class="comparison-heading"><h2>Compare candidates in one run</h2>
+        <p>One task and one run at a time. Evaluator outcome, judge score, elapsed time, and captured cost are separate measures; this is not an overall model ranking.</p></div>
+      <div class="toolbar"><label>Run <select id="comparison-run" aria-label="Comparison run"></select></label>
+        <span class="count" id="comparison" role="status">Loading…</span></div>
+      <div class="scroll"><table><thead><tr><th>Candidate</th><th>Model / effort</th><th>Run</th><th>Evaluator</th><th>Judge (samples)</th><th>Duration</th><th>Cost</th></tr></thead><tbody id="comparison-rows"></tbody></table></div>
+    </section>
     <section class="panel" aria-label="Benchmark results">
       <div class="toolbar">
         <label>Search <input id="search" type="search" placeholder="Task, candidate, model…"></label>
@@ -80,6 +90,45 @@
       item.value = item.textContent = value;
       return item;
     };
+    function renderComparison() {
+      const cohort = data.filter(r => String(r.run_id) === $('comparison-run').value);
+      const body = $('comparison-rows');
+      body.replaceChildren();
+      if (!cohort.length) {
+        $('comparison').textContent = 'No run selected';
+        return;
+      }
+      const evaluated = cohort.filter(r => r.evaluator_status != null).length;
+      const judged = cohort.filter(r => r.judge_mean != null).length;
+      const complete = cohort.length > 1 && evaluated === cohort.length && judged === cohort.length;
+      $('comparison').textContent = `${cohort[0].task_id} · run #${cohort[0].run_id} · ${evaluated}/${cohort.length} evaluated · ${judged}/${cohort.length} judged. ${complete ? 'Full coverage in this run; no overall winner from one task.' : 'Inconclusive: missing coverage or fewer than two candidates.'}`;
+      const fragment = document.createDocumentFragment();
+      for (const r of cohort) {
+        const tr = document.createElement('tr');
+        cell(tr, r.name);
+        cell(tr, [r.model_id, r.effort, r.harness].filter(Boolean).join(' · '));
+        cell(tr, r.run_status);
+        cell(tr, r.evaluator_status);
+        cell(tr, r.judge_mean == null ? null : `${r.judge_mean.toFixed(2)} / 10 (${r.judge_samples || 1} samples)`);
+        cell(tr, r.duration_seconds == null ? null : `${Math.round(r.duration_seconds)}s`);
+        cell(tr, r.cost_usd == null ? null : `$${r.cost_usd.toFixed(3)}`);
+        fragment.append(tr);
+      }
+      body.append(fragment);
+    }
+    function updateComparisonRuns() {
+      const select = $('comparison-run');
+      const previous = select.value;
+      const matching = data.filter(r => !$('task').value || r.task_id === $('task').value);
+      const runs = [...new Map(matching.map(r => [String(r.run_id), r])).values()];
+      select.replaceChildren(...runs.map(r => {
+        const item = option(`${r.task_id} · ${r.created_at ? r.created_at.slice(0, 10) : 'Undated'} · run #${r.run_id} (${r.comparison_mode || 'unknown mode'})`);
+        item.value = String(r.run_id);
+        return item;
+      }));
+      select.value = runs.some(r => String(r.run_id) === previous) ? previous : String(runs[0]?.run_id || '');
+      renderComparison();
+    }
     function render() {
       const query = $('search').value.trim().toLowerCase();
       const filtered = data.filter(r =>
@@ -116,6 +165,8 @@
       $('count').textContent = `${filtered.length} of ${data.length} candidates`;
     }
     controls.forEach(control => control.addEventListener('input', render));
+    $('task').addEventListener('input', updateComparisonRuns);
+    $('comparison-run').addEventListener('input', renderComparison);
     fetch('/api/results').then(response => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
@@ -128,6 +179,7 @@
       for (const [id, key] of [['task', 'task_id'], ['model', 'model_id']]) {
         [...new Set(rows.map(r => r[key]).filter(Boolean))].sort().forEach(value => $(id).append(option(value)));
       }
+      updateComparisonRuns();
       render();
     }).catch(error => { $('count').textContent = `Could not load results: ${error.message}`; });
   </script>

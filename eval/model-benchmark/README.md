@@ -1,7 +1,23 @@
 # Model benchmark results index
 
 `results.sqlite` is a committed snapshot of the local `model-benchmark` skill's
-saved runs. To refresh it after a new run or a late evaluator/judge result:
+saved runs.
+
+## View in a browser
+
+```bash
+python3 scripts/model-benchmark-viewer.py
+```
+
+Open `http://127.0.0.1:8765/`. The viewer binds only to localhost, reads
+SQLite in read-only mode, and exposes a results JSON endpoint at
+`/api/results`. Use `--port 0` for an automatically assigned port or `--db`
+to view a different index. Search and filter by task, model, or evaluator
+outcome. Stop with Ctrl-C. No Python packages or web build are needed.
+
+## Refresh the index
+
+To refresh after a new run or a late evaluator/judge result:
 
 ```bash
 python3 scripts/model-benchmark-db.py ingest "$BENCH_DIR"

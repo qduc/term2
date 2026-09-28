@@ -1,6 +1,6 @@
 # Event-sourced session and provenance
 
-Status: **design with comparison-only M2 implementation; production replay remains unchanged.**
+Status: **closed as descoped (2026-09-28). The M2 semantic projection stays comparison-only, and `replayEvents` remains the production authority.** M1, the M3 checkpoint work, and the interim M4 refusal of provider switches after native compaction are merged. The switch of production authority to the semantic projection and portable M4 reconstruction were not built. The reason: legacy undo records store a snapshot with no references to the events they removed, and native compaction records no source-event coverage. Reopening this would require forward-only provenance: new undos write exact retraction refs, and a log switches to the projection only once all of its history is covered.
 
 ## Resume here
 

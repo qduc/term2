@@ -1,13 +1,9 @@
 #!/usr/bin/env node
 import './env-setup.js';
-import React from 'react';
 import type { ReactNode } from 'react';
-import { render } from 'ink';
 import meow from 'meow';
 import { createRequire } from 'node:module';
-import App from './app.js';
 import type { SSHInfo } from './services/shell/shell-interaction-session.js';
-import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { AgentClient } from './lib/agent-client.js';
 import { ConversationService } from './services/conversation/conversation-service.js';
 import { SettingsService, buildEnvOverrides } from './services/settings/settings-service.js';
@@ -1301,8 +1297,6 @@ settings.onChange((key) => {
   logWriter.append({ type: 'settings_changed', key, value: settings.getDynamic(key) });
 });
 
-import { InputProvider } from './context/InputContext.js';
-
 // Do NOT wrap stdout writes with DEC Mode 2026 synchronized-output markers here.
 // Ink 7.0.1 already wraps each interactive frame in `\x1b[?2026h … \x1b[?2026l`
 // natively (node_modules/ink/build/write-synchronized.js). Re-wrapping each
@@ -1336,6 +1330,15 @@ if (controlSocketRequested) {
     }
   }
 }
+
+const [{ default: React }, { render }, { default: App }, { InputProvider }, { getInkRenderOptions }] =
+  await Promise.all([
+    import('react'),
+    import('ink'),
+    import('./app.js'),
+    import('./context/InputContext.js'),
+    import('./utils/ink-render-options.js'),
+  ]);
 
 const { waitUntilExit } = render(
   (

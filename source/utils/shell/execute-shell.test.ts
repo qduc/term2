@@ -76,6 +76,32 @@ it('executeShellCommand merges env for exec implementation and sets TMPDIR', asy
   expect(receivedEnv?.TMPDIR).toBe(SANDBOX_TEMP_DIR);
 });
 
+it('executeShellCommand omits HERDR_ENV but preserves other herdr identifiers', async () => {
+  let receivedEnv: NodeJS.ProcessEnv | undefined;
+
+  await executeShellCommand('uses-herdr-env', {
+    env: {
+      PATH: '/bin',
+      HERDR_ENV: '1',
+      HERDR_PANE_ID: 'pane-1',
+      HERDR_WORKSPACE_ID: 'workspace-1',
+      HERDR_SOCKET_PATH: '/tmp/herdr.sock',
+    },
+    execImpl: (_command, options, callback) => {
+      receivedEnv = options.env;
+      queueMicrotask(() => callback(null, 'ok', ''));
+      return createFakeChildProcess();
+    },
+  });
+
+  expect(receivedEnv?.HERDR_ENV).toBeUndefined();
+  expect(receivedEnv).toMatchObject({
+    HERDR_PANE_ID: 'pane-1',
+    HERDR_WORKSPACE_ID: 'workspace-1',
+    HERDR_SOCKET_PATH: '/tmp/herdr.sock',
+  });
+});
+
 it('executeShellCommand sets TMPDIR when env is omitted', async () => {
   let receivedEnv: NodeJS.ProcessEnv | undefined;
 

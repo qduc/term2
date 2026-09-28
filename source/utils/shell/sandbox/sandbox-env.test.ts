@@ -60,6 +60,21 @@ it('preserves TMUX so commands target the caller session server', () => {
   expect(env.TMUX).toBe('/private/tmp/tmux-501/default,12345,0');
 });
 
+it('does not pass herdr environment variables into sandboxed shells', () => {
+  const env = createSandboxEnvironment({
+    PATH: '/usr/bin:/bin',
+    HERDR_ENV: '1',
+    HERDR_PANE_ID: 'pane-1',
+    HERDR_WORKSPACE_ID: 'workspace-1',
+    HERDR_SOCKET_PATH: '/tmp/herdr.sock',
+  });
+
+  expect(env.HERDR_ENV).toBeUndefined();
+  expect(env.HERDR_PANE_ID).toBeUndefined();
+  expect(env.HERDR_WORKSPACE_ID).toBeUndefined();
+  expect(env.HERDR_SOCKET_PATH).toBeUndefined();
+});
+
 it('synthesizes private sandbox XDG paths in strict mode', () => {
   const cwd = process.cwd();
   const env = createSandboxEnvironment(

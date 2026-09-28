@@ -1,3 +1,8 @@
+## [0.29.1] - 2026-09-28
+
+### Bug Fixes
+- Provider-state rejections during a tool continuation now recover the conversation chain when all live-turn tools have completed, instead of failing the user's turn.
+
 ## [0.29.0] - 2026-09-28
 
 ### Bug Fixes

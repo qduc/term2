@@ -1629,6 +1629,130 @@ describe('gateway startup and assertion verifier', () => {
     }
   });
 
+  it('ends the turn when a web client cancels an ask_user interaction', async () => {
+    // Parity with the TUI's Escape: cancelling means the user speaks next, so
+    // the model must not be handed another turn that resumes the plan.
+    const root = makeTemp();
+    const manifestPath = path.join(root, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+    const persistence = new GatewayPersistenceCoordinator(createGatewayStorageLayout(path.join(root, 'data')));
+    let continuationCalls = 0;
+    let continuationOptions: Record<string, unknown> | undefined;
+    const runtimeFactory = new RuntimeFactory({
+      tmpDir: path.join(root, 'runtime'),
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      sandboxAvailable: true,
+      createAgentClient: () =>
+        ({
+          chat: async () => '',
+          abort: () => {},
+          setModel: () => {},
+          addToolInterceptor: () => () => {},
+          startStream: async () => {
+            const stream = createMockStream([]);
+            stream.interruptions = [
+              {
+                name: 'ask_user',
+                callId: 'ask-cancel-1',
+                agent: { name: 'Agent' },
+                arguments: JSON.stringify({
+                  questions: [{ question: 'Proceed?', options: [{ label: 'Yes' }], is_multi_select: false }],
+                }),
+              },
+            ];
+            stream.state = { kind: 'continuation', approve: () => undefined, reject: () => undefined };
+            return stream;
+          },
+          continueRunStream: async (_state: unknown, options?: Record<string, unknown>) => {
+            continuationCalls += 1;
+            continuationOptions = options;
+            const stream = createMockStream([{ type: 'final', finalText: 'continued' }]);
+            stream.finalOutput = 'continued';
+            return stream;
+          },
+        } as ConversationAgentClient),
+    });
+    const gateway = Term2Gateway.create({
+      enabled: true,
+      socketPath: path.join(root, 'gateway.sock'),
+      manifestPath,
+      manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+      replayDbPath: path.join(root, 'replay.sqlite'),
+      issuer: 'chatforge-bff',
+      audience: 'term2-gateway',
+      publicKeys: { active: publicKey },
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      workerSandboxAvailable: true,
+      workspaceBoundaryProbe: boundaryProbe,
+      allowWrite: true,
+      auditWriter: async () => undefined,
+      tmpDir: path.join(root, 'tmp'),
+      runtimeFactory,
+      persistence,
+    });
+    const token = (purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'active',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'user-a',
+        purpose,
+        workspaceId: 'workspace-a',
+        ...(sessionId ? { sessionId } : {}),
+      });
+    try {
+      await gateway.start();
+      const socketPath = path.join(root, 'gateway.sock');
+      const created = await rpc(
+        socketPath,
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      const sessionId = (created.body as { session: { id: string } }).session.id;
+      const submitted = await rpc(
+        socketPath,
+        token('message_submit', sessionId),
+        { text: 'ask', clientRequestId: 'cancel-client' },
+        `/private/agent/v1/sessions/${sessionId}/messages`,
+      );
+      expect(submitted.status).toBe(202);
+
+      let pending: Record<string, any> | undefined;
+      for (let attempt = 0; attempt < 30 && !pending; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const read = await rpc(
+          socketPath,
+          token('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        pending = (read.body as { session: { interaction?: { interaction?: Record<string, any> } } }).session
+          .interaction?.interaction;
+      }
+      expect(pending).toMatchObject({ kind: 'ask_user', revision: 1 });
+
+      const resolved = await rpc(
+        socketPath,
+        token('interaction_resolve', sessionId),
+        { revision: 1, answer: 'cancel' },
+        `/private/agent/v1/sessions/${sessionId}/interactions/${pending!.interactionId}`,
+      );
+      expect(resolved.status).toBe(202);
+      // Cancelling must end the turn: the run loop is told to stop after it
+      // records the unanswered result, so it issues no further model request.
+      expect(continuationCalls).toBe(1);
+      expect(continuationOptions?.stopAfterApprovalResolution).toBe(true);
+    } finally {
+      await gateway.shutdown(100);
+      persistence.closeIndex();
+      await runtimeFactory.shutdown();
+    }
+  });
+
   it('rejects a recovered interaction through the real gateway route', async () => {
     const root = makeTemp();
     const manifest = makeManifest(root);

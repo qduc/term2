@@ -886,4 +886,36 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(h.sentTexts()[2]).toContain('run-1');
     expect(h.store.pendingCount).toBe(0);
   });
+
+  it('carries the ask_user cancellation into a background report delivered after the cancel', async () => {
+    // The report was already queued when the user cancelled the question; the
+    // idle delivery starts a fresh turn that would otherwise read as permission
+    // to resume the cancelled plan.
+    const h = makeHarness();
+    const interaction = h.service.presentPendingInteraction({
+      agentName: 'agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({ questions: [{ question: 'one' }] }),
+      rawInterruption: null,
+      callId: 'ask-1',
+    });
+
+    await h.orchestrator.cancelAskUser(interaction.interactionId);
+    h.emit(completion());
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    expect(h.sentTexts()[0]).toContain('<system-notice>');
+    expect(h.sentTexts()[0]).toContain('cancelled the pending question');
+    expect(h.sentTexts()[0]).toContain('found the bug');
+  });
+
+  it('does not mark a background report when no ask_user cancel preceded it', async () => {
+    const h = makeHarness();
+
+    h.emit(completion());
+    await settle();
+
+    expect(h.sentTexts()[0]).not.toContain('<system-notice>');
+  });
 });

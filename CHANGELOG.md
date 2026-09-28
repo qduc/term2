@@ -1,3 +1,20 @@
+## [0.29.0] - 2026-09-28
+
+### Bug Fixes
+- The startup banner now shows the same version string as `term2 --version`, including the build identity of a build made from a checkout, instead of only the package version.
+- Input released after cancelling an `ask_user` prompt (a steer or a settled background run) no longer lets the model resume the plan the user just cancelled. Cancelling from the web client now ends the turn too, as Escape does in the terminal.
+- Distinct assistant message parts no longer render, persist, and replay to the model as one run-on sentence.
+- Agent-run shell commands no longer claim the herdr pane that launched term2. herdr routing metadata is still passed through, so helper commands keep working.
+- Model catalog refreshes no longer drop context windows and pricing when the upstream catalog keys models as `<kind>:<id>`.
+- A malformed patch applied in YOLO mode now reports the patch problem instead of failing the turn.
+
+### Improvements
+- All GPT-5 and GPT-6 main-agent models now share one base prompt, and other models keep the simpler prompt; the per-model prompt files were removed.
+- Global memories are pinned into a session's instructions once per session, replacing per-turn automatic recall.
+- Removed the RTK shell-output compression integration and its `shell.useRtkCompression` setting.
+- `run_code`, `grep`, and patch failures now explain what to do next instead of surfacing a raw tool error.
+- Interactive startup is faster: the terminal UI is imported only when a session actually starts.
+
 ## [0.28.0] - 2026-09-27
 
 ### Features

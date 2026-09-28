@@ -53,6 +53,29 @@ export interface OutstandingSubmission {
   stage: 'pending_steer' | 'queued';
 }
 
+/**
+ * Prefix attached to the first turn the orchestrator starts on its own right
+ * after the user Escape-cancelled an `ask_user` question.
+ *
+ * The cancelled turn ends with the question recorded and no answer, but input
+ * that had already been offered to it (a steer, a settled background run) is
+ * released at run end and delivered as a fresh turn. Without this notice the
+ * model reads that released input as permission to resume the plan the user
+ * just abandoned. It is committed to history with the turn, so later turns in
+ * the same burst already see it.
+ */
+const ASK_USER_CANCEL_NOTICE =
+  '<system-notice>\n' +
+  'The user cancelled the pending question without answering (they pressed Escape). ' +
+  'Do not resume, continue, or restate the plan or work that was in progress when you asked; treat it as dropped. ' +
+  'Act only on the genuinely new input in this turn.\n' +
+  '</system-notice>';
+
+/** Prefix a delivered turn's text with the ask_user cancellation notice, if any. */
+function withAskUserCancelNotice(notice: string | null, text: string): string {
+  return notice ? `${notice}\n\n${text}` : text;
+}
+
 function formatRunBudgetEvidence(event: RunBudgetEvent): string {
   if (event.type === 'tool_stall') {
     return `Repeated tool call: ${event.toolName} (${event.count}/${event.threshold})\narguments: ${event.argumentsText}`;
@@ -444,6 +467,12 @@ export class ConversationOrchestrator {
   readonly #outstandingSubmissions = new Map<string, OutstandingSubmission>();
   /** True while {@link stopProcessing} is tearing the conversation down. */
   #stoppingByUser = false;
+  /**
+   * Set by {@link cancelAskUser}, consumed by the first turn this orchestrator
+   * starts on its own afterwards so the model knows the user abandoned the
+   * pending question rather than inviting a resumption of the cancelled plan.
+   */
+  #askUserCancelPending = false;
   /** Stranded rows already reported, so the warning stays one per occurrence. */
   readonly #reportedStrandedCallIds = new Set<string>();
   /** Live tok/s char ratio, calibrated from completed requests in this conversation. */
@@ -782,6 +811,12 @@ export class ConversationOrchestrator {
       return;
     }
 
+    // A message the user types as a normal turn closes the post-cancel window:
+    // they are speaking deliberately, so a later automatic turn must not keep
+    // claiming they just cancelled. A steer is left armed because it may itself
+    // be the released input this notice exists for.
+    if (options?.busyMode !== 'steer') this.#askUserCancelPending = false;
+
     const userMessage: UserMessage = {
       id: this.createMessageId(),
       sender: 'user',
@@ -790,6 +825,7 @@ export class ConversationOrchestrator {
       ...(options?.presentation ? { presentation: options.presentation } : {}),
     };
     let admissionReported = false;
+    let releasedSteerFollowUp = false;
     const reportAdmission = (delivery: 'started' | 'queued' | 'steering') => {
       if (admissionReported) return;
       admissionReported = true;
@@ -896,6 +932,10 @@ export class ConversationOrchestrator {
           stage: 'queued',
         });
         this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
+        // The running turn ended without taking this steer, so it will start a
+        // fresh turn of its own — the one case that must carry the ask_user
+        // cancellation context if the user just cancelled.
+        releasedSteerFollowUp = true;
       } else {
         this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
         reportAdmission('queued');
@@ -927,7 +967,11 @@ export class ConversationOrchestrator {
     }
 
     try {
-      const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
+      const baseTurn = turn.skill ? injectSkillIntoTurn(turn) : turn;
+      const cancelNotice = releasedSteerFollowUp ? this.#takeAskUserCancelNotice() : null;
+      const turnToSend = cancelNotice
+        ? { ...baseTurn, text: withAskUserCancelNotice(cancelNotice, baseTurn.text) }
+        : baseTurn;
       const sendPromise = this.config.conversationService.sendMessage(turnToSend, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
         inputSurgeApproval: options?.inputSurgeApproval,
@@ -1129,9 +1173,20 @@ export class ConversationOrchestrator {
    * cancelling means the user speaks next.
    */
   async cancelAskUser(expectedInteractionId: number): Promise<void> {
+    // Arm the one-shot cancellation context before the turn resolves: the
+    // release it triggers happens inside this call, and the released input is
+    // delivered as a fresh turn immediately after.
+    this.#askUserCancelPending = true;
     return this.handleApprovalDecision('y', undefined, ASK_USER_NO_ANSWER_RESULT, expectedInteractionId, {
       stopAfterApprovalResolution: true,
     });
+  }
+
+  /** Consume the one-shot "user just Escape-cancelled ask_user" flag. */
+  #takeAskUserCancelNotice(): string | null {
+    if (!this.#askUserCancelPending) return null;
+    this.#askUserCancelPending = false;
+    return ASK_USER_CANCEL_NOTICE;
   }
 
   /** Open a turn this orchestrator owns, and its streaming session. */
@@ -1416,7 +1471,14 @@ export class ConversationOrchestrator {
 
     const injected = await this.config.conversationService
       .injectIntoActiveTurn([
-        { type: 'message', role: 'user', content: formatBackgroundSubagentNotifications(notifications) },
+        {
+          type: 'message',
+          role: 'user',
+          content: withAskUserCancelNotice(
+            this.#takeAskUserCancelNotice(),
+            formatBackgroundSubagentNotifications(notifications),
+          ),
+        },
       ])
       .catch((error) => {
         this.logError('Error delivering background subagent notifications', error);
@@ -1457,7 +1519,7 @@ export class ConversationOrchestrator {
     let delivered = false;
     try {
       const result = await this.config.conversationService.sendMessage(
-        formatBackgroundSubagentNotifications(notifications),
+        withAskUserCancelNotice(this.#takeAskUserCancelNotice(), formatBackgroundSubagentNotifications(notifications)),
         {
           onEvent: this.createOnEventHandler(applyConversationEvent),
           suppressUserMessageDisplay: true,

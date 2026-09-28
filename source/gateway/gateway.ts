@@ -1780,6 +1780,11 @@ export class Term2Gateway {
         }
         await session.service.handleApprovalDecision(decision.answer, decision.rejectionReason, {
           approvalAnswer: decision.approvalAnswer,
+          // Cancelling an ask_user question ends the turn, exactly as Escape
+          // does in the TUI: the question and its unanswered result stay in
+          // history, and the user speaks next. Without this the web client's
+          // cancel let the model take another turn and resume the plan.
+          ...(decision.outcome === 'cancelled' ? { stopAfterApprovalResolution: true } : {}),
         });
       } catch (error) {
         this.#countInteraction('interaction_continuation_failed');

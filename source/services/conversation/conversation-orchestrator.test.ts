@@ -734,6 +734,105 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.getPendingInteractionSnapshot()).toBeNull();
   });
 
+  it('carries the ask_user cancellation into a steer the cancelled turn released', async () => {
+    // Regression: a steer offered while the ask_user prompt was parked sat in
+    // the turn-input mailbox and was released at run end. The orchestrator then
+    // re-queued it as its own turn, and the model read it as permission to
+    // resume the plan the user had just cancelled.
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const interaction = cfg.conversationService.presentPendingInteraction({
+      agentName: 'agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({ questions: [{ question: 'one' }] }),
+      rawInterruption: null,
+      callId: 'ask-1',
+    });
+
+    await orchestrator.cancelAskUser(interaction.interactionId);
+    await orchestrator.sendUserMessage('carry on with the plan', { busyMode: 'steer' });
+
+    const sent = vi.mocked(cfg.conversationService.sendMessage).mock.calls.at(-1)![0] as { text: string };
+    expect(sent.text).toContain('<system-notice>');
+    expect(sent.text).toContain('cancelled the pending question');
+    expect(sent.text).toContain('carry on with the plan');
+  });
+
+  it('does not mark a released steer when no ask_user cancel preceded it', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('change direction', { busyMode: 'steer' });
+
+    const sent = vi.mocked(cfg.conversationService.sendMessage).mock.calls.at(-1)![0] as { text: string };
+    expect(sent.text).toBe('change direction');
+  });
+
+  it('does not mark input released by an ordinary approval resolve', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const interaction = cfg.conversationService.presentPendingInteraction({
+      agentName: 'agent',
+      toolName: 'shell',
+      argumentsText: 'ls',
+      rawInterruption: null,
+      callId: 'shell-1',
+    });
+
+    await orchestrator.handleApprovalDecision('y', undefined, undefined, interaction.interactionId);
+    await orchestrator.sendUserMessage('after the approval', { busyMode: 'steer' });
+
+    const sent = vi.mocked(cfg.conversationService.sendMessage).mock.calls.at(-1)![0] as { text: string };
+    expect(sent.text).toBe('after the approval');
+  });
+
+  it('closes the cancel window once the user sends an ordinary message', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const interaction = cfg.conversationService.presentPendingInteraction({
+      agentName: 'agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({ questions: [{ question: 'one' }] }),
+      rawInterruption: null,
+      callId: 'ask-1',
+    });
+
+    await orchestrator.cancelAskUser(interaction.interactionId);
+    await orchestrator.sendUserMessage('never mind, do this instead');
+    await orchestrator.sendUserMessage('later steer', { busyMode: 'steer' });
+
+    const sent = vi.mocked(cfg.conversationService.sendMessage).mock.calls.at(-1)![0] as { text: string };
+    expect(sent.text).toBe('later steer');
+  });
+
   it('ignores a late approval A decision after continuation presents approval B', async () => {
     const cfg = makeConfig();
     const orchestrator = new ConversationOrchestrator(cfg);

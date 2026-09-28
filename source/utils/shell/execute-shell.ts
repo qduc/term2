@@ -363,6 +363,9 @@ async function executeShellCommandUnleased(
     ...(gatewayMode ? env! : env ?? process.env),
     TMPDIR: gatewayMode ? env!.TMPDIR : env?.TMPDIR ?? SANDBOX_TEMP_DIR,
   };
+  // Child commands may use herdr routing helpers, but must not claim ownership
+  // of the interactive pane that launched term2.
+  delete childEnv.HERDR_ENV;
 
   // Latched the moment the deadline fires. A command that is killed and then
   // happens to exit 0 is still a timeout, so this is never cleared.

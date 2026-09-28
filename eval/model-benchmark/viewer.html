@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model benchmark | Term2</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, sans-serif; background: #f5f6f3; color: #182924; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #102d29; color: #f3f6ee; padding: 32px max(24px, calc((100vw - 1300px) / 2)); }
+    header .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #9dd1bb; }
+    h1 { margin: 8px 0; font-size: clamp(30px, 4vw, 46px); letter-spacing: -.04em; }
+    header p { margin: 0; color: #c2d4cb; max-width: 760px; line-height: 1.5; }
+    main { max-width: 1348px; padding: 24px; margin: auto; }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat, .panel { background: #fff; border: 1px solid #dde5df; border-radius: 12px; box-shadow: 0 4px 18px #142d2510; }
+    .stat { padding: 16px 20px; }
+    .stat b { font-size: 27px; display: block; letter-spacing: -.03em; }
+    .stat span { color: #53645d; font-size: 13px; }
+    .panel { overflow: hidden; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 18px; border-bottom: 1px solid #e4e9e4; }
+    label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: #435b50; }
+    input, select { font: inherit; font-size: 14px; color: #182924; background: #fff; border: 1px solid #c8d6cc; border-radius: 7px; padding: 9px 10px; min-width: 155px; }
+    input { min-width: min(300px, 80vw); }
+    input:focus-visible, select:focus-visible { outline: 2px solid #158766; outline-offset: 2px; }
+    .count { margin-left: auto; font-size: 13px; color: #576960; padding-bottom: 10px; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 1060px; font-size: 13px; }
+    th { text-align: left; background: #f0f5f0; color: #3b5248; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    td, th { border-bottom: 1px solid #e8eee9; padding: 12px 11px; vertical-align: top; }
+    tr:hover td { background: #f8fbf8; }
+    .task { font-weight: 700; }
+    .muted { color: #77867e; }
+    .sub { display: block; margin-top: 3px; color: #708178; font-size: 11px; }
+    .badge { display: inline-block; padding: 3px 7px; border-radius: 5px; font-weight: 700; font-size: 11px; }
+    .pass { background: #dff4e8; color: #176845; }
+    .fail { background: #fde9e3; color: #9b3c27; }
+    .other { background: #f4eedc; color: #705621; }
+    .note { line-height: 1.5; font-size: 13px; color: #586b60; padding: 10px 2px; }
+    @media (max-width: 680px) { .stats { grid-template-columns: repeat(2, 1fr); } .count { margin-left: 0; width: 100%; } }
+  </style>
+</head>
+<body>
+  <header><div class="eyebrow">Term2 / Research archive</div><h1>Model benchmark</h1>
+    <p>Explore saved candidate runs. Missing evaluations and judge scores are shown as missing, not counted as failures.</p></header>
+  <main>
+    <div class="stats" aria-label="Database totals">
+      <div class="stat"><b id="runs">—</b><span>Runs</span></div>
+      <div class="stat"><b id="candidates">—</b><span>Candidates</span></div>
+      <div class="stat"><b id="evaluated">—</b><span>Evaluated</span></div>
+      <div class="stat"><b id="judged">—</b><span>Judged</span></div>
+    </div>
+    <section class="panel" aria-label="Benchmark results">
+      <div class="toolbar">
+        <label>Search <input id="search" type="search" placeholder="Task, candidate, model…"></label>
+        <label>Task <select id="task"><option value="">All tasks</option></select></label>
+        <label>Model <select id="model"><option value="">All models</option></select></label>
+        <label>Evaluator <select id="outcome"><option value="">All results</option><option>PASS</option><option>FAIL</option><option value="missing">Not evaluated</option></select></label>
+        <span class="count" id="count" role="status">Loading…</span>
+      </div>
+      <div class="scroll"><table><thead><tr><th>Task / run</th><th>Candidate</th><th>Model / effort</th><th>Run</th><th>Evaluator</th><th>Judge</th><th>Duration</th><th>Cost</th></tr></thead><tbody id="rows"></tbody></table></div>
+    </section>
+    <p class="note">Judge scores may use different rubrics; compare within a matched task and cohort. Cost is shown only where captured. This viewer reads the committed SQLite snapshot and cannot edit it.</p>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const controls = ['search', 'task', 'model', 'outcome'].map($);
+    let data = [];
+    const plain = value => value == null || value === '' ? '—' : String(value);
+    const cell = (row, text, className) => {
+      const td = document.createElement('td');
+      td.textContent = plain(text);
+      if (className) td.className = className;
+      row.append(td);
+      return td;
+    };
+    const option = value => {
+      const item = document.createElement('option');
+      item.value = item.textContent = value;
+      return item;
+    };
+    function render() {
+      const query = $('search').value.trim().toLowerCase();
+      const filtered = data.filter(r =>
+        (!query || [r.task_id, r.name, r.model_id, r.harness, r.provider].some(v => (v || '').toLowerCase().includes(query))) &&
+        (!$('task').value || r.task_id === $('task').value) &&
+        (!$('model').value || r.model_id === $('model').value) &&
+        (!$('outcome').value || ($('outcome').value === 'missing' ? r.evaluator_status == null : r.evaluator_status === $('outcome').value)));
+      const body = $('rows');
+      body.replaceChildren();
+      const fragment = document.createDocumentFragment();
+      for (const r of filtered) {
+        const tr = document.createElement('tr');
+        const task = cell(tr, r.task_id, 'task');
+        const date = document.createElement('span');
+        date.className = 'sub';
+        date.textContent = [r.created_at ? r.created_at.slice(0, 10) : 'Undated', `run #${r.run_id}`].join(' · ');
+        task.append(date);
+        cell(tr, r.name);
+        const model = cell(tr, r.model_id);
+        if (r.effort || r.harness) {
+          const detail = document.createElement('span');
+          detail.className = 'sub';
+          detail.textContent = [r.effort, r.harness].filter(Boolean).join(' · ');
+          model.append(detail);
+        }
+        cell(tr, r.run_status, r.run_status === 'OK' ? 'pass' : r.run_status ? 'other' : 'muted');
+        cell(tr, r.evaluator_status, r.evaluator_status === 'PASS' ? 'pass' : r.evaluator_status === 'FAIL' ? 'fail' : 'muted');
+        cell(tr, r.judge_mean == null ? null : `${r.judge_mean.toFixed(2)} / 10${r.judge_samples ? ` (${r.judge_samples})` : ''}`);
+        cell(tr, r.duration_seconds == null ? null : `${Math.round(r.duration_seconds)}s`);
+        cell(tr, r.cost_usd == null ? null : `$${r.cost_usd.toFixed(3)}`);
+        fragment.append(tr);
+      }
+      body.append(fragment);
+      $('count').textContent = `${filtered.length} of ${data.length} candidates`;
+    }
+    controls.forEach(control => control.addEventListener('input', render));
+    fetch('/api/results').then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }).then(rows => {
+      data = rows;
+      $('runs').textContent = new Set(rows.map(r => r.run_id)).size;
+      $('candidates').textContent = rows.length;
+      $('evaluated').textContent = rows.filter(r => r.evaluator_status != null).length;
+      $('judged').textContent = rows.filter(r => r.judge_mean != null).length;
+      for (const [id, key] of [['task', 'task_id'], ['model', 'model_id']]) {
+        [...new Set(rows.map(r => r[key]).filter(Boolean))].sort().forEach(value => $(id).append(option(value)));
+      }
+      render();
+    }).catch(error => { $('count').textContent = `Could not load results: ${error.message}`; });
+  </script>
+</body>
+</html>

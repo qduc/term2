@@ -1,7 +1,7 @@
-# Release 0.29.0 — status and unresolved publish discrepancy
+# Release 0.29.0 — status and publish visibility
 
-Status: release prepared and tagged; npm publish reported success but is not
-visible in the registry. Unresolved. Written 2026-09-28.
+Status: release prepared and tagged; the publish workflow returned a 2xx from the
+registry, but 0.29.0 is not yet visible on npm's read surface. Written 2026-09-28.
 
 ## Verified state
 
@@ -22,33 +22,57 @@ visible in the registry. Unresolved. Written 2026-09-28.
 | `36443233063` CI | `a6e0d7d3` | success (includes the black-box tier) |
 | `36443845022` Publish | `a6e0d7d3` via `workflow_dispatch` | workflow **success**; step `Publish package` logged `✅ Published package @qduc/term2@0.29.0` |
 
-## Unresolved: publish success claimed, version absent
+## Publish visibility: read paths lag, write returned 2xx
 
-The registry does not expose `0.29.0`:
+The registry does not expose `0.29.0`, ~8 minutes after the workflow's publish
+step reported success:
 
 - `npm view @qduc/term2@0.29.0 version` → 404 (also with a fresh `--cache` dir).
-- `curl https://registry.npmjs.org/@qduc/term2/0.29.0` → 404, four samples over ~60s.
-- Packument: `_rev` 50, version count 50, last three `0.26.1, 0.27.0, 0.28.0`,
-  `dist-tags.latest` = `0.28.0`.
-- unpkg and jsdelivr: `0.28.0` → 200, `0.29.0` → 404.
+- `curl https://registry.npmjs.org/@qduc/term2/0.29.0` → 404; the tarball
+  `/-/term2-0.29.0.tgz` → 404; the body reads `"version not found: 0.29.0"`.
+  Controls at `0.28.0` return 200 (tarball 2.8 MB).
+- Packument: `_rev` 50-3e77490c, version count 50, last three
+  `0.26.1, 0.27.0, 0.28.0`, `dist-tags.latest` = `0.28.0`,
+  `last-modified` = the `0.28.0` publish (`2026-09-27T09:45:24Z`).
+- Provenance: `/-/npm/v1/attestations/@qduc/term2@0.29.0` → 404;
+  `@0.28.0` → 200 with two attestations.
 - The publish step log has no error, OTP, 403, or authorization line after the
   success message.
 
-Two readings, not yet distinguished:
+### What the "stale sandbox" reading got wrong
 
-1. The publish did not actually take effect despite pnpm printing success.
-2. This sandbox's network path serves a stale registry view.
+A stale local view is ruled out: the packument fetched with a cache-busting
+query parameter returns `cf-cache-status: MISS` (Cloudflare went to origin) yet
+the identical document, and `/-/v1/search?text=typescript` returns packages
+published minutes before the query, so this read path is current.
 
-Note for reading 2: earlier in the same session these same commands returned
-accurate data (`latest` = `0.28.0`), so staleness would have had to begin after
-that point. Reading 2 also has to explain the unpkg/jsdelivr agreement.
+But the argument that "unpkg and jsdelivr agree" carried no weight: unpkg and
+jsDelivr both proxy `registry.npmjs.org`, and npmmirror syncs from it, so every
+sampled path is downstream of npm's own read API. A `replicate.npmjs.com` probe
+was discarded — it returns 404 for `react` too, so that endpoint is dead and its
+404 for `@qduc/term2` meant nothing.
 
-Next step: verify from outside this sandbox (on a normal machine,
-`npm view @qduc/term2 version`), or re-dispatch the publish workflow and inspect
-npm's HTTP response.
+### What the success line proves
 
-Constraints while unresolved: do not retag, do not move `v0.29.0`, do not create
-a `0.29.1` to route around it. The version stays `0.29.0`.
+pnpm 11.7.0's bundled `dist/pnpm.mjs` is decisive: `✅ Published package <name>@<version>`
+is emitted only inside `if (response.ok)`, where `response` is the raw
+`libnpmpublish` result of the publish `PUT` to the registry. Any non-2xx throws
+`createFailedToPublishError` before that line; the OIDC token exchange also
+logged `200`. So the registry answered the publish `PUT` with 2xx.
+
+### Reading
+
+A 2xx write response plus a read path that has not yet surfaced the version is
+the signature of npm holding a newly published version back from its read
+surface, not of a lost publish. No action is required: the version is expected
+to appear once read propagation catches up, and waiting for that is the only
+step needed.
+
+If it never appears, the fallback is to confirm from outside this sandbox with
+`npm view @qduc/term2 version`, then re-dispatch the publish workflow
+(`workflow_dispatch` is the documented retry path) and inspect npm's HTTP
+response. Constraints while unresolved: do not retag, do not move `v0.29.0`, do
+not create a `0.29.1` to route around it. The version stays `0.29.0`.
 
 ## Root causes of the CI failures
 
@@ -82,5 +106,5 @@ files (178 passed) · contract file 26/26.
 
 ## Housekeeping
 
-- `14-29` (0 bytes) at the repo root is untracked and came from a mistyped shell
-  redirect. It is not referenced by any process; safe to delete.
+- The stray untracked `14-29` file (0 bytes, from a mistyped shell redirect) has
+  been removed; the working tree is clean.

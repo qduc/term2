@@ -1674,8 +1674,11 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
     {
       key: 'tools.memory.enabled',
       absent: baselineNames.filter((name) => name.startsWith('memory_')),
-      // Sentence unique to memory capability guidance.
-      markers: ['Global memories are listed in your instructions'],
+      // Must be a sentence whose wording does not depend on host state. The
+      // global-context sentence does: it appears only when a global memory
+      // store exists, so on a machine without one this baseline assertion
+      // failed. The conditional wording is covered by memory-capabilities.
+      markers: ['Treat summaries as leads, not authoritative facts.'],
     },
     {
       key: 'tools.sessions.enabled',

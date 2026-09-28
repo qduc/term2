@@ -448,9 +448,11 @@ describe('provider boundary contracts through the registry', () => {
     expect(result.events.at(-1)).toBe(completions[0]);
     expect(completions[0]).toMatchObject({ type: 'completion', output: [{ type: 'message' }] });
     expect(completions[0]?.output?.[0]?.content?.[0]?.text).toBe('hello');
-    expect(result.events.filter((event) => event.type === 'text_delta')).toEqual([
-      { type: 'text_delta', text: 'hello' },
-    ]);
+    // Assert the delivered text rather than the whole event: a delta's part id
+    // is fixture-specific (an Anthropic content-block index is present, a
+    // Responses fixture without an item_id is not). Part identity is pinned by
+    // the provider unit tests.
+    expect(result.events.filter((event) => event.type === 'text_delta').map((event) => event.text)).toEqual(['hello']);
   });
 
   it.each(providerCases)(
@@ -631,7 +633,7 @@ describe('provider boundary contracts through the registry', () => {
     const model = new RetryingModel(providerModel, { retryAttempts: 1, sleep: async () => {} });
     const events = await collect(model.stream(requestFor(providerCase)));
 
-    expect(events.filter((event) => event.type === 'text_delta')).toEqual([{ type: 'text_delta', text: 'hello' }]);
+    expect(events.filter((event) => event.type === 'text_delta').map((event) => event.text)).toEqual(['hello']);
     expect(events.at(-1)).toMatchObject({ type: 'completion' });
     expect(server.requests).toHaveLength(2);
   });

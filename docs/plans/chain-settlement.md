@@ -66,3 +66,29 @@ WebSocket connections in `CodexResponsesTransport` and `OpenAIResponsesWSModelWi
 - **Application layer vs Provider layer**: That is true of the *application* layer only. The Codex provider layer holds its own anchor in `#lastLogicalRequestByKey` (`source/providers/codex-responses-model.ts`), and that is what actually writes `previous_response_id` onto the wire. `disableChaining` is one-shot — the run loop clears it after a single attempt — and `#forgetCodexResponseId()` clears the anchor, but `#rememberCodexResponseId()` re-arms it (and resets `#serverHistoryReuseDisabled`) on the next response. So on the Codex lane a chain recovery yields one genuinely full-history request, after which the model re-anchors and trims the app's full history back to a delta. 
 - A retry that omits `previous_response_id` must be self-contained full history. `ApplicationRunLoop` and `CodexResponsesWSModel` must not retry a caller-supplied chained delta without that anchor: the run loop only has the delta, and the Codex unchained fallback would send the same one-item input. Session recovery (`retry_fresh` + `full_history` + `disableChainingForAttempt`) is the path that actually has the transcript. (`codexPreviousResponseIds` looks like the anchor but is written and cleared and never read.)
 
+## 2026-09-28: provider-state rejection admission (settle-then-recover)
+
+Status note — the recovery *contract* changed for provider-state rejections
+(`Invalid previous_response_id`, `previous_response_not_found`, missing/orphaned
+chained tool output) on a stream that already committed output.
+
+Previously the classifier admitted `chain_recovery` only via
+`isSettledCommittedToolContinuation`, which required
+`completedPairsPresentInHistory` — computed from the *projected* provider
+request. A provider compaction boundary (`projectProviderHistory`'s replacement
+boundary) makes that projection refuse to insert durable completed pairs behind
+the boundary, so a healthy mid-turn continuation was misclassified
+`unrecoverable` and killed the turn
+(`docs/bugs/2026-09-28-midturn-invalid-previous-response-id.md`).
+
+Now a provider-state rejection is admitted whenever every live-turn tool has
+completed locally (`completedToolCount > 0 && allToolsCompleted`,
+`admitsProviderStateRejectionRecovery` in `committed-tool-continuation.ts`); the
+request-scoped presence check is no longer required for this cause. The
+open/unknown guard is unchanged, and the connection-interruption path keeps the
+stricter `isSettledCommittedToolContinuation` rule. The recovery handlers settle
+the completed pairs into history (`reconcileAndUpdateHistory()`) before the
+decision, then break the chain and rebuild full history (`retry_fresh` +
+`full_history` + `disableChainingForAttempt`). No tool is re-executed. Premise 1
+(drop the chain) and Premise 3 (self-contained full-history replay) still hold.
+

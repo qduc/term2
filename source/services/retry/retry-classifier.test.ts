@@ -204,7 +204,7 @@ it('classify chain-recovers a provider state rejection after every live-turn too
   expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'provider_state_rejected' });
 });
 
-it('still refuses provider state recovery when tool settlement is not proven', () => {
+it('chain-recovers a provider state rejection after every live-turn tool completed even when a compaction boundary keeps the durable pairs out of the projected request', () => {
   const classifier = makeClassifier();
   const stream = {
     completed: Promise.resolve(undefined),
@@ -220,6 +220,35 @@ it('still refuses provider state recovery when tool settlement is not proven', (
       committedToolContinuation: {
         completedToolCount: 1,
         allToolsCompleted: true,
+        completedPairsPresentInHistory: false,
+      },
+    }),
+  );
+
+  // The provider refused the chained request before accepting it, so chain
+  // recovery cannot replay committed work. Every live-turn tool completed
+  // locally, and a compaction boundary legitimately keeps the durable pairs
+  // out of the projected request -- that projection detail must not kill the
+  // turn.
+  expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'provider_state_rejected' });
+});
+
+it('still refuses provider state recovery when a live-turn tool is not completed', () => {
+  const classifier = makeClassifier();
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: invalidPreviousResponseError(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: {
+        completedToolCount: 1,
+        allToolsCompleted: false,
         completedPairsPresentInHistory: false,
       },
     }),

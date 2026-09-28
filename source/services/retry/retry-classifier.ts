@@ -16,7 +16,10 @@ import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } fro
 import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 import { streamHasCommittedOutput } from '../agent-stream.js';
 import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
-import { isSettledCommittedToolContinuation } from './committed-tool-continuation.js';
+import {
+  isSettledCommittedToolContinuation,
+  admitsProviderStateRejectionRecovery,
+} from './committed-tool-continuation.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -71,12 +74,21 @@ export class DefaultRetryClassifier {
     // Open or unknown calls, missing pairs, and committed text with no
     // completed tools stay closed.
     if (context.hasCommittedOutput || (stream && streamHasCommittedOutput(stream))) {
-      if (isSettledCommittedToolContinuation(context.committedToolContinuation)) {
+      const providerStateRejected = isProviderStateRejection(error);
+      // A provider *state* rejection is not a replay (the server refused the
+      // chained request before accepting it), so it is admitted once every
+      // live-turn tool has completed locally, even when a compaction boundary
+      // keeps the durable pairs out of the projected request -- see
+      // admitsProviderStateRejectionRecovery. Every other case still needs the
+      // request-scoped settled evidence.
+      const recovered =
+        (providerStateRejected && admitsProviderStateRejectionRecovery(context.committedToolContinuation)) ||
+        isSettledCommittedToolContinuation(context.committedToolContinuation);
+      if (recovered) {
         const connectionInterrupted =
           error instanceof UnsentWebSocketRequestError ||
           (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) ||
           isRecoverableIncompleteStreamClose(error);
-        const providerStateRejected = isProviderStateRejection(error);
         if (connectionInterrupted || providerStateRejected) {
           const nextAttempt = retryCounts.transientRetryCount + 1;
           if (nextAttempt > maxTransientRetries) {

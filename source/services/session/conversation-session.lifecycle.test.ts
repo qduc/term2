@@ -893,6 +893,115 @@ it('rebuilds full history instead of retrying a chained delta after Invalid prev
   });
 });
 
+it('chain-recovers a mid-turn tool continuation that fails with Invalid previous_response_id after every live-turn tool completed', async () => {
+  // Production c2446a9e: the run loop completed its tool calls, then the
+  // chained continuation request was rejected with 400. The completed pairs
+  // were durable in the ledger but could not be projected into the request
+  // because a compaction boundary sat between them and the live turn. The turn
+  // died as 'Error in sendUserMessage' instead of severing the dead chain.
+  const toolCallId = 'call_rc';
+  const productionMessage =
+    'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}';
+
+  class ToolThenFailStream extends MockStream {
+    constructor() {
+      super([]);
+      this.lastResponseId = 'resp-old';
+    }
+    async *[Symbol.asyncIterator]() {
+      const call = {
+        type: 'item',
+        item: { rawItem: { type: 'function_call', id: 'fc_1', callId: toolCallId, name: 'run_code', arguments: '{}' } },
+      };
+      const result = {
+        type: 'item',
+        item: {
+          rawItem: { type: 'function_call_result', id: 'fcr_1', callId: toolCallId, name: 'run_code', output: 'ok' },
+        },
+      };
+      this.output.push(call, result);
+      this.newItems.push(call, result);
+      yield call;
+      yield result;
+      throw new Error(productionMessage);
+    }
+  }
+
+  const recoveredStream = new MockStream([{ type: 'text_delta', text: 'Recovered reply' }]);
+  recoveredStream.finalOutput = 'Recovered reply';
+  recoveredStream.lastResponseId = 'resp-2';
+
+  const calls: { input: unknown; opts?: any }[] = [];
+  const warnings: Array<{ message: string; fields: Record<string, unknown> }> = [];
+  const recoveryLogger = {
+    ...mockLogger,
+    warn(message: string, fields: Record<string, unknown>) {
+      warnings.push({ message, fields });
+    },
+  };
+  const mockClient = createMockAgentClient({
+    getProvider() {
+      return 'codex';
+    },
+    supportsConversationChaining() {
+      return true;
+    },
+    async startStream(input: unknown, opts?: any) {
+      calls.push({ input, opts });
+      return calls.length === 1 ? new ToolThenFailStream() : recoveredStream;
+    },
+  });
+
+  const bundle = createConversationSession({
+    sessionId: 's1',
+    agentClient: mockClient,
+    deps: {
+      logger: recoveryLogger,
+      sessionContextService,
+      settingsService: createMockSettingsService([
+        ['agent.retryAttempts', 2],
+        ['agent.transport', 'websocket'],
+      ]),
+    },
+  });
+  const { turnCoordinator, stateFacade } = bundle;
+
+  // A compacted session: the local tool pairs are durable in the ledger but
+  // sit behind the provider replacement boundary, so the projector refuses to
+  // inject them into the request.
+  stateFacade.importState({
+    history: [
+      { type: 'compaction', providerOpaque: { provider: 'openai', id: 'cmp_1' } },
+      { role: 'user', type: 'message', content: 'earlier' },
+    ],
+    previousResponseId: 'resp-old',
+    toolLedger: [],
+  });
+
+  const emitted: ConversationEvent[] = [];
+  for await (const event of turnCoordinator.start('run it')) {
+    emitted.push(event);
+  }
+
+  expect(emitted.some((event) => event.type === 'final')).toBe(true);
+  expect(calls.length).toBe(2);
+  expect(calls[1].opts?.previousResponseId).toBeFalsy();
+  expect(calls[1].opts?.disableChainingForAttempt).toBe(true);
+  expect(Array.isArray(calls[1].input)).toBe(true);
+  expect(JSON.stringify(calls[1].input)).toContain('run it');
+  expect(warnings).toContainEqual({
+    message: 'Provider continuity invalidated; rebuilding from full history',
+    fields: {
+      eventType: 'conversation.chaining_broken',
+      category: 'provider',
+      phase: 'retry',
+      sessionId: 's1',
+      reason: 'provider_state_rejected',
+      configuredTransport: 'websocket',
+    },
+  });
+});
+
 it('aborting a streaming turn clears provider continuity and forces full history replay on the next turn', async () => {
   const stream1 = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   stream1.finalOutput = 'First reply';

@@ -37,7 +37,7 @@ export type InitialTurnRecoveryHandlerDeps = {
   retryEventPresenter: RetryEventPresenter;
   sessionId: SessionIdSource;
   provider?: string;
-  toolTracker?: Pick<SessionToolTracker, 'inspectCommittedToolContinuation'>;
+  toolTracker?: Pick<SessionToolTracker, 'inspectCommittedToolContinuation' | 'reconcileAndUpdateHistory'>;
 };
 
 export class InitialTurnRecoveryHandler {
@@ -54,6 +54,12 @@ export class InitialTurnRecoveryHandler {
       return { kind: 'stale' };
     }
 
+    // Settle the live-turn tool evidence into history before classifying -- see
+    // the matching comment in continuation-recovery-handler.ts. This matters
+    // for the initial path too: a mid-turn tool continuation that fails while
+    // the run loop is still draining the initial stream reaches this handler
+    // with completed pairs that may not yet be committed.
+    this.deps.toolTracker?.reconcileAndUpdateHistory?.();
     const committedToolContinuation = this.deps.toolTracker?.inspectCommittedToolContinuation();
     let classified = this.deps.retryClassifier.classify({
       error,

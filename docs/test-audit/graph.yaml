@@ -404,10 +404,6 @@ seams:
   label: Profile transition planning, persistence, rebuild, and notices.
 - id: platform-services-b-provider-continuity
   label: Chaining state, checkpoint lifecycle, debt, and successor proof.
-- id: platform-services-b-rtk-installation
-  label: RTK platform assets, checksums, and installation outcomes.
-- id: platform-services-b-rtk-command-wrapping
-  label: RTK command eligibility and shell wrapper boundaries.
 - id: platform-services-b-runtime-settings-routing
   label: Runtime settings transaction and conversation side-effect routing.
 - id: platform-services-b-rollover-brief
@@ -1450,12 +1446,6 @@ risks:
   severity: high
 - id: platform-services-b-risk-continuity-debt
   label: Stale chaining state, unpaid tool debt, or weak successor proof causes unsafe replay.
-  severity: high
-- id: platform-services-b-risk-rtk-install-integrity
-  label: RTK installation accepts an unsupported, unverifiable, or failed asset.
-  severity: high
-- id: platform-services-b-risk-rtk-command-boundary
-  label: RTK rewrites an unsafe command or changes pipeline/subshell semantics.
   severity: high
 - id: platform-services-b-risk-settings-order
   label: Runtime effects run before settings commit or legacy mode writes diverge.
@@ -2743,7 +2733,7 @@ contracts:
   - shell-safety-bypass
 - id: shell-sandbox-and-approval
   statement: Shell execution follows sandbox availability, mode, approval, Docker authorization, SSH,
-    RTK, and plan-mode policy without executing a command when a required guard fails.
+    and plan-mode policy without executing a command when a required guard fails.
   seamIds:
   - shell-tool
   riskIds:
@@ -5041,20 +5031,6 @@ contracts:
   - platform-services-b-provider-continuity
   riskIds:
   - platform-services-b-risk-continuity-debt
-- id: platform-services-b-contract-rtk-installation
-  statement: RTK resolves supported assets and installs only after successful fetch, extraction, and SHA-256
-    verification, returning null on unsupported or failed setup.
-  seamIds:
-  - platform-services-b-rtk-installation
-  riskIds:
-  - platform-services-b-risk-rtk-install-integrity
-- id: platform-services-b-contract-rtk-command-wrapping
-  statement: RTK wraps only eligible top-level commands while preserving ineligible commands and pipeline/subshell/redirection
-    boundaries.
-  seamIds:
-  - platform-services-b-rtk-command-wrapping
-  riskIds:
-  - platform-services-b-risk-rtk-command-boundary
 - id: platform-services-b-contract-runtime-settings
   statement: Runtime setting changes commit through one transaction before effects, and profile/legacy
     mode writes route the correct notices and rebuild behavior.
@@ -10386,15 +10362,6 @@ tests:
   - platform-services-b-contract-provider-continuity
   fixtureIds: []
 - kind: file
-  id: platform-services-rtk-service-test
-  file: source/services/rtk-service.test.ts
-  domainId: platform-services
-  suiteId: unit
-  contractIds:
-  - platform-services-b-contract-rtk-installation
-  - platform-services-b-contract-rtk-command-wrapping
-  fixtureIds: []
-- kind: file
   id: platform-services-runtime-setting-router-test
   file: source/services/runtime-setting-router.test.ts
   domainId: platform-services
@@ -13594,7 +13561,7 @@ decisions:
   recommendation: keep
   confidence: high
   reason: 'Retention unanimous. The adversarial second opinion adds architecture_signal: the production
-    shell tool owns background jobs, watches, sandbox routing, Docker grants, RTK/SSH, correlation, and
+    shell tool owns background jobs, watches, sandbox routing, Docker grants, SSH, correlation, and
     plan-mode policy in one construction seam. Ownership adjudication is queued for the milestone-3 tools-domain
     artifact; it does not change retention.'
   evidence:
@@ -13618,7 +13585,7 @@ decisions:
   - source/tools/system/shell.test.ts asserts immediate background acknowledgement, retained tail, cancellation
     signal, lifecycle events, deferred cleanup, timeout status, and output caps using BackgroundShellRegistry
     and BackgroundShellWatches.
-  - The file asserts Docker host authorization isolation, sandbox availability failures, SSH/RTK routing,
+  - The file asserts Docker host authorization isolation, sandbox availability failures, SSH routing,
     plan-mode mutation blocking, correlation restoration, and foreground-to-background adoption without
     a second execution.
   - The file asserts strict denied-read retry metadata and one-shot overrides, while a missing SDK call
@@ -13633,7 +13600,7 @@ decisions:
   recommendation: architecture_signal
   confidence: high
   reason: The tests are meaningful boundary evidence, but the production shell tool owns background jobs,
-    output watches, sandbox routing, Docker host grants, denied-read recovery, RTK, SSH, correlation,
+    output watches, sandbox routing, Docker host grants, denied-read recovery, SSH, correlation,
     and plan-mode policy in one construction seam; the test setup has to inject and reset all of those
     owners.
   evidence:
@@ -13643,9 +13610,8 @@ decisions:
   - source/tools/system/shell.test.ts:142-344 asserts background monitor registration, retained tails,
     setup failure, and settlement; source/tools/system/shell.ts exports createBackgroundShellJobToolDefinitions
     and createShellToolDefinition as one tool boundary.
-  - source/tools/system/shell.test.ts:1129-1613 and 1765-2187 separately exercise Docker, sandbox availability,
-    RTK, plan mode, denied reads, and held-call overrides, showing policy ownership is concentrated rather
-    than a single shell execution rule.
+  - The remaining shell tests exercise Docker, sandbox availability, plan mode, denied reads, and held-call
+    overrides, showing policy ownership is concentrated rather than a single shell execution rule.
   - If this evidence disappeared, a denied read could loop without a bounded retry, an approved Docker
     grant could leak to another session, or a command could execute unsandboxed after availability degraded.
   - 'I ruled out deletion, consolidation, and retiering: background lifecycle, sandbox safety, Docker
@@ -21263,22 +21229,6 @@ decisions:
     revision, and history cases.
   - Lines 275-401 assert strict eligibility matrix and rejection without proof or after reset.
   - Lines 421-496 assert retirement after reset/supersession, exact binding mismatch, and chaining break.
-  replacementTestIds: []
-  status: proposed
-- id: platform-services-rtk-service-test-r1
-  testId: platform-services-rtk-service-test
-  role: second_opinion
-  reviewer: platform-services-b-m3
-  sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
-  recommendation: rewrite_candidate
-  confidence: high
-  reason: The file has substantial useful RTK coverage, but contains assertions that verify nothing and
-    should be removed or replaced with an observable postcondition.
-  evidence:
-  - Lines 289-304 assert extraction failure returns null and logs a warning with meaningful outcomes.
-  - Lines 331-354 assert successful installation creates a binary path.
-  - Lines 342, 391, and 407 contain standalone expect(true).toBe(true) statements in writeFile/mkdir success
-    tests; these add no assertion beyond awaiting completion and are exact tautologies.
   replacementTestIds: []
   status: proposed
 - id: platform-services-runtime-setting-router-test-r1
@@ -29111,27 +29061,6 @@ decisions:
     revision, and history cases.
   - Lines 275-401 assert strict eligibility matrix and rejection without proof or after reset.
   - Lines 421-496 assert retirement after reset/supersession, exact binding mismatch, and chaining break.
-  replacementTestIds: []
-  status: reviewed
-- id: platform-services-rtk-service-test-primary
-  testId: platform-services-rtk-service-test
-  role: primary
-  reviewer: test-audit-coordinator
-  sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: keep
-  confidence: high
-  reason: "Coordinator OVERRIDE of the reviewer rewrite_candidate: the cited evidence is fabricated \u2014\
-    \ it names expect(true).toBe(true) at lines 342/391/407, but this 354-line file contains no expect(true)\
-    \ anywhere (those lines belong to ssh-service.test.ts and were copy-pasted). Every test here asserts\
-    \ real behavior: allowlist command matrix, quoting/wrapping, checksum verification, fetch/extract\
-    \ failure paths against real temp dirs. File is healthy; keep."
-  evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - Lines 289-304 assert extraction failure returns null and logs a warning with meaningful outcomes.
-  - Lines 331-354 assert successful installation creates a binary path.
-  - Lines 342, 391, and 407 contain standalone expect(true).toBe(true) statements in writeFile/mkdir success
-    tests; these add no assertion beyond awaiting completion and are exact tautologies.
   replacementTestIds: []
   status: reviewed
 - id: platform-services-runtime-setting-router-test-primary

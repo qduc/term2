@@ -89,8 +89,6 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
   const home = os.homedir();
   const workspaceRoot = fs.realpathSync(process.cwd());
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
-  const rtkConfigDir = path.join(home, '.config', 'rtk');
-  const rtkDataDir = path.join(home, '.local', 'share', 'rtk');
   const gitConfigFile = path.join(home, '.gitconfig');
   const gitConfigDir = path.join(home, '.config', 'git');
   const npmCacheDir = path.join(home, '.npm');
@@ -109,8 +107,6 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
       workspaceRoot,
       SANDBOX_TEMP_DIR,
       appCacheDir,
-      rtkConfigDir,
-      rtkDataDir,
       gitConfigFile,
       gitConfigDir,
       npmCacheDir,

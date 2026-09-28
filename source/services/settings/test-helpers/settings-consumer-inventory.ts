@@ -100,7 +100,6 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'shell.maxOutputLines',
     'shell.maxOutputChars',
     'shell.autoApproveMode',
-    'shell.useRtkCompression',
   ],
   'Sandbox policy — next tool invocation': [
     'sandbox.enabled',

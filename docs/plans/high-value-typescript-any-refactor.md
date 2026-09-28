@@ -7,6 +7,9 @@
 
 ## Resume here
 
+- **Later product removal:** RTK was removed from Term2 on 2026-09-28. The
+  completed WS5 record below includes historical RTK AST work; it is not a
+  current runtime capability. Shell command-safety AST support remains.
 - **P0a resolution:** Verified `source/services/agent-runtime/legacy-compat.ts` was renamed/reorganized to `source/services/agent-runtime/legacy-adapter.ts` on base, with `bridgeBackToTurn` exported in `source/providers/agents-model-bridge.ts`.
 - **Wave 1 Complete:**
   - **WS0 OpenAI streamed-model contract:** Merged (commit `4ca11ade`).

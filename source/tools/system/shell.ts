@@ -20,7 +20,6 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
-import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
@@ -508,18 +507,6 @@ function stripRedundantCd(command: string, cwd: string): string {
   return command;
 }
 
-/**
- * Strip RTK's "No hook installed" warning from stderr output.
- * The rtk binary prints this banner to stderr when its git hook is not installed.
- */
-function stripRtkWarning(text: string): string {
-  if (!text) return text;
-  return text
-    .split('\n')
-    .filter((line) => !line.includes('[rtk] /!\\ No hook installed'))
-    .join('\n');
-}
-
 function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
   return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
 }
@@ -685,7 +672,6 @@ export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
-  rtkInstaller?: typeof ensureRtkInstalled;
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
   dockerHostControlFactory?: () => DockerHostControl;
@@ -719,7 +705,6 @@ export function createShellToolDefinition(deps: {
     loggingService,
     settingsService,
     executionContext,
-    rtkInstaller = ensureRtkInstalled,
     executeShellCommandImpl = executeShellCommand,
     shellSandboxRunner = getDefaultShellSandboxRunner(),
     dockerHostControlFactory = createDockerHostControl,
@@ -981,16 +966,6 @@ export function createShellToolDefinition(deps: {
 
         let commandToRun = optimizedCommand;
         let sandboxAvailability: SandboxAvailability | undefined;
-        if (!sshService && settingsService.get('shell.useRtkCompression') && isRtkSupportedCommand(optimizedCommand)) {
-          const rtkPath = await rtkInstaller({ loggingService });
-          if (rtkPath) {
-            commandToRun = wrapWithRtk(optimizedCommand, rtkPath);
-            loggingService.debug(
-              'Wrapped command with rtk',
-              withExecutionCorrelation({ rtkPath, original: optimizedCommand }),
-            );
-          }
-        }
 
         // Consume any execution override set by a denied-read approval decision.
         // This is a one-shot override for this single execution only.
@@ -1125,7 +1100,7 @@ export function createShellToolDefinition(deps: {
           });
 
           const stdout = result.stdout ?? '';
-          const rawStderr = stripRtkWarning(result.stderr ?? '');
+          const rawStderr = result.stderr ?? '';
           const annotatedStderr = sandboxed
             ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
             : rawStderr;

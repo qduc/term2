@@ -1,8 +1,12 @@
 # SB-08 RTK shell-boundary owner-decision packet
 
-Status: **owner decision pending.** This is an audit note and test packet, not a
-Contract 05 record. The evidence below deliberately leaves **Contract 05
-extension versus local RTK ownership unresolved**.
+**Status: retired 2026-09-28.** The RTK feature was removed from Term2; the
+ownership decision below is moot. This packet is retained as historical evidence
+for the former implementation and its shell-boundary tests.
+
+At the time this packet was created, the owner decision was pending. This is an
+audit note and test packet, not a Contract 05 record. The evidence below
+deliberately left **Contract 05 extension versus local RTK ownership unresolved**.
 
 ## Scope and boundary
 

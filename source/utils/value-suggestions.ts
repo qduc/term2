@@ -228,10 +228,6 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'on', description: 'Always use shell commands (ripgrep/find) for search' },
     { value: 'off', description: 'Always use built-in search tools' },
   ],
-  'shell.useRtkCompression': [
-    { value: 'true', description: 'Enable RTK compression (downloaded automatically if needed)' },
-    { value: 'false', description: 'Use normal shell output' },
-  ],
 };
 
 /**

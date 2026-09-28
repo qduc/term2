@@ -9,11 +9,25 @@ saved runs.
 python3 scripts/model-benchmark-viewer.py
 ```
 
-Open `http://127.0.0.1:8765/`. The viewer binds only to localhost, reads
-SQLite in read-only mode, and exposes a results JSON endpoint at
+Open `http://127.0.0.1:8765/`. By default the viewer binds only to localhost.
+To view it from another device on your trusted local network, explicitly bind
+all IPv4 interfaces:
+
+```bash
+python3 scripts/model-benchmark-viewer.py --host 0.0.0.0
+```
+
+On the other device open `http://<this-computer's-LAN-IP>:8765/` (not
+`0.0.0.0`). You can instead pass a specific LAN IPv4 address to `--host`.
+Your firewall must permit inbound TCP on that port. **There is no login or
+TLS:** anyone who can reach the port can read benchmark results; do not
+expose it to the public internet or untrusted networks. Stop the server with
+Ctrl-C when done.
+
+The viewer reads SQLite in read-only mode and exposes a results JSON endpoint at
 `/api/results`. Use `--port 0` for an automatically assigned port or `--db`
 to view a different index. Search and filter by task, model, or evaluator
-outcome. Stop with Ctrl-C. No Python packages or web build are needed.
+outcome. No Python packages or web build are needed.
 
 ## Refresh the index
 

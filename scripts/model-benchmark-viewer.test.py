@@ -18,6 +18,10 @@ spec.loader.exec_module(viewer)
 
 
 class ViewerTest(unittest.TestCase):
+    def test_localhost_is_default_and_lan_binding_requires_explicit_host(self):
+        self.assertEqual(viewer.parse_args([]).host, "127.0.0.1")
+        self.assertEqual(viewer.parse_args(["--host", "0.0.0.0"]).host, "0.0.0.0")
+
     def test_results_and_page_are_read_only_and_missing_values_stay_null(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "results.sqlite"

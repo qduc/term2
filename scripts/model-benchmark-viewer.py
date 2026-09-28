@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the committed benchmark index on localhost without write endpoints."""
+"""Serve the benchmark index read-only; LAN binding requires explicit opt-in."""
 
 import argparse
 import json
@@ -54,17 +54,25 @@ def handler_for(db_path):
     return Handler
 
 
-def main():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
+    parser.add_argument("--host", default="127.0.0.1", help="IPv4 bind address (0.0.0.0 for LAN access)")
+    return parser.parse_args(argv)
+
+
+def main():
+    args = parse_args()
     if not args.db.is_file():
-        parser.error(f"Database not found: {args.db}")
+        raise SystemExit(f"Database not found: {args.db}")
     # Fail before serving if this is not a readable benchmark database.
     results(args.db)
-    with ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(args.db)) as server:
-        print(f"Model benchmark viewer: http://127.0.0.1:{server.server_port}/", flush=True)
+    with ThreadingHTTPServer((args.host, args.port), handler_for(args.db)) as server:
+        address = "<this-computer's-LAN-IP>" if args.host == "0.0.0.0" else args.host
+        print(f"Model benchmark viewer: http://{address}:{server.server_port}/", flush=True)
+        if args.host not in ("127.0.0.1", "localhost"):
+            print("LAN access enabled: no authentication or TLS; use only on a trusted network.", flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:

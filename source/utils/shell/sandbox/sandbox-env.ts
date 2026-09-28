@@ -46,12 +46,6 @@ export function createSandboxEnvironment(
     env[key] = value;
   }
 
-  // These identify the caller for routing/helper safety, not agent ownership.
-  for (const key of ['HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'HERDR_SOCKET_PATH'] as const) {
-    const value = source[key];
-    if (value !== undefined) env[key] = value;
-  }
-
   if (options.tmpDir) env.TMPDIR = options.tmpDir;
 
   if (options.readPolicy === 'strict') {

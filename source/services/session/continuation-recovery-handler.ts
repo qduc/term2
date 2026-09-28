@@ -50,6 +50,12 @@ export class ContinuationRecoveryHandler {
     const maxTransientRetries = this.deps.resolveRetryLimit();
     const retryStream = state.lastStream;
 
+    // Settle the live-turn tool evidence into history before classifying.
+    // Completed pairs are durable in the ledger; committing them to the store
+    // first lets the admission gate see them where the projection permits, and
+    // leaves the full-history rebuild self-contained. Open/unknown calls are
+    // unaffected and stay guarded by allToolsCompleted.
+    this.deps.toolTracker.reconcileAndUpdateHistory?.();
     const committedToolContinuation = this.deps.toolTracker.inspectCommittedToolContinuation?.();
     const classified = this.deps.retryClassifier.classify({
       error,

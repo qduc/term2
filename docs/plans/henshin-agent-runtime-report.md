@@ -2,7 +2,7 @@
 
 ## Resume here
 
-Phase 1 implemented in branch `henshin-agent-runtime` with plan commit `951cfa1e`, implementation `769a8959`, and cross-review correction `0df0acc6`. This report is written before integration so its merge commit can be recorded after merging. Phase 2 is queued in `/tmp/henshin-phase2-brief.md`; do not start it until this branch is merged and this report updated with the actual merge result.
+Phase 1 merged into `main` at `70e9ba3e`, incorporating plan commit `951cfa1e`, implementation `769a8959`, cross-review correction `0df0acc6` and report commit `b0286525`. Phase 2 is queued in `/tmp/henshin-phase2-brief.md` and may start after this report update.
 
 ## Delivered
 
@@ -24,6 +24,6 @@ Phase 1 implemented in branch `henshin-agent-runtime` with plan commit `951cfa1e
 
 ## Merge
 
-Pending integration. Update this section with the actual merge commit and post-merge status before opening phase 2.
+Merged with `git merge --no-ff henshin-agent-runtime` into `main` at `70e9ba3e`; primary checkout was clean immediately after the merge. Validation above ran on the branch head before integration; no production changes were made after those gates.
 
-Progress: 5/6 phase-1 stages (assessment, plan, implementation, cross-review and correction/gates); merge/report finalization remains.
+Progress: 6/6 phase-1 stages (assessment, plan, implementation, cross-review, correction/gates, merge/report).

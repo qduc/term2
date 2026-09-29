@@ -3,7 +3,7 @@ import { ProviderContinuity } from '../provider-continuity.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 import { getSerializedInputBytes } from '../large-uncached-input-guard.js';
 import { combineHistoryAndDraftBytes, SessionInputPlanner } from './session-input-planner.js';
-import { getProvider } from '../../providers/index.js';
+import { createProviderRegistry, getProvider } from '../../providers/index.js';
 import { compactOutputToProviderHistory } from '../../providers/codex-compact.js';
 import { decodeLogEnvelope, resolveEnvelopeIdentities } from '../conversation/conversation-decoder.js';
 import { replayEvents } from '../conversation/conversation-replay.js';
@@ -39,6 +39,34 @@ it('uses provider chaining policy when the client omits its chaining capability'
   const plan = planner.build({ text: 'hello' }, { includeTurn: true, pendingModeNotice: null });
 
   expect(plan.inputSurgeKind).toBe(registrySupportsChaining ? 'delta' : 'full_history');
+});
+
+it('uses the supplied provider registry when the client omits its chaining capability', () => {
+  const providerId = 'session-input-planner-registry-test';
+  const chainedRegistry = createProviderRegistry();
+  const statelessRegistry = createProviderRegistry();
+  for (const [registry, supportsConversationChaining] of [
+    [chainedRegistry, true],
+    [statelessRegistry, false],
+  ] as const) {
+    registry.upsertProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [],
+      capabilities: { supportsConversationChaining },
+    });
+  }
+
+  const buildPlan = (providerRegistry: typeof chainedRegistry) =>
+    new SessionInputPlanner({
+      agentClient: { getProvider: () => providerId } as any,
+      toolTracker: { getReconciledHistory: () => [] } as any,
+      providerContinuity: new ProviderContinuity(),
+      providerRegistry,
+    }).build({ text: 'hello' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(buildPlan(chainedRegistry).inputSurgeKind).toBe('delta');
+  expect(buildPlan(statelessRegistry).inputSurgeKind).toBe('full_history');
 });
 
 it('uses full history when the client explicitly disables chaining', () => {

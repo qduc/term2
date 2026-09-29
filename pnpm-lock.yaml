@@ -384,6 +384,40 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
 
+  packages/core:
+    dependencies:
+      '@openrouter/ai-sdk-provider':
+        specifier: ^2.9.0
+        version: 2.9.0(ai@6.0.177(zod@4.6.5))(zod@4.6.5)
+      ai:
+        specifier: ^6.0.177
+        version: 6.0.177(zod@4.6.5)
+      env-paths:
+        specifier: ^3.0.0
+        version: 3.0.0
+      fast-deep-equal:
+        specifier: ^3.1.3
+        version: 3.1.3
+      openai:
+        specifier: ^6.9.1
+        version: 6.37.0(ws@8.21.0)(zod@4.6.5)
+      unbash:
+        specifier: ^3.0.0
+        version: 3.0.0
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
+      zod:
+        specifier: ^4.1.13
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.1
+        version: '@typescript/typescript6@6.0.1'
+
   packages/wire:
     devDependencies:
       '@types/node':
@@ -3131,10 +3165,6 @@ packages:
     resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
     engines: {node: ^10 || ^12 || >=14}
 
-  postcss@8.5.15:
-    resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
-    engines: {node: ^10 || ^12 || >=14}
-
   postcss@8.5.28:
     resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
     engines: {node: ^10 || ^12 || >=14}
@@ -3944,6 +3974,13 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.1.13
 
+  '@ai-sdk/gateway@3.0.112(zod@4.6.5)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.6.5)
+      '@vercel/oidc': 3.2.0
+      zod: 4.6.5
+
   '@ai-sdk/google@3.0.72(zod@4.1.13)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
@@ -3956,6 +3993,13 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 4.1.13
+
+  '@ai-sdk/provider-utils@4.0.27(zod@4.6.5)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.6.5
 
   '@ai-sdk/provider@3.0.10':
     dependencies:
@@ -4482,6 +4526,11 @@ snapshots:
       ai: 6.0.177(zod@4.1.13)
       zod: 4.1.13
 
+  '@openrouter/ai-sdk-provider@2.9.0(ai@6.0.177(zod@4.6.5))(zod@4.6.5)':
+    dependencies:
+      ai: 6.0.177(zod@4.6.5)
+      zod: 4.6.5
+
   '@opentelemetry/api@1.9.0': {}
 
   '@oxc-project/types@0.133.0': {}
@@ -4920,6 +4969,14 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.1.13)
       '@opentelemetry/api': 1.9.0
       zod: 4.1.13
+
+  ai@6.0.177(zod@4.6.5):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.112(zod@4.6.5)
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.27(zod@4.6.5)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.6.5
 
   ajv@6.15.0:
     dependencies:
@@ -6488,6 +6545,11 @@ snapshots:
       ws: 8.21.0
       zod: 4.1.13
 
+  openai@6.37.0(ws@8.21.0)(zod@4.6.5):
+    optionalDependencies:
+      ws: 8.21.0
+      zod: 4.6.5
+
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -6566,12 +6628,6 @@ snapshots:
   possible-typed-array-names@1.1.0: {}
 
   postcss@8.4.31:
-    dependencies:
-      nanoid: 3.3.15
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.15:
     dependencies:
       nanoid: 3.3.15
       picocolors: 1.1.1
@@ -7236,7 +7292,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
-      postcss: 8.5.15
+      postcss: 8.5.28
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:

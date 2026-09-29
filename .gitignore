@@ -7,6 +7,7 @@ dist.bak
 *.tsbuildinfo
 *.js.map
 *.d.ts
+qduc-agent-core-0.0.0.tgz
 coverage/
 .nyc_output/
 

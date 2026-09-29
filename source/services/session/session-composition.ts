@@ -89,6 +89,7 @@ import { registerSessionRuntime } from '../workspace/active-workspace-root.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../approval/nested-approval-owner.js';
 import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js';
 import { resolveActiveEnforcement } from '../profiles/index.js';
+import type { ProviderRegistry } from '../../providers/registry.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -207,6 +208,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   agentClient: ConversationAgentClient;
   /** Handle-owned continuity shared with the root provider observer. */
   providerContinuity?: ProviderContinuity;
+  /** Optional runtime-scoped provider definitions for chaining decisions. */
+  providerRegistry?: ProviderRegistry;
   /** Owned-root OpenAI checkpoint diagnostic seam. */
   openAIRootCheckpointLifecycleObserver?: OpenAIRootCheckpointLifecycleObserver;
   toolOwnership: ToolOwnershipRegistry;
@@ -408,6 +411,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionStartedAt,
     agentClient,
     providerContinuity: suppliedProviderContinuity,
+    providerRegistry,
     openAIRootCheckpointLifecycleObserver,
     toolOwnership,
     approvalPolicyRegistry: suppliedApprovalPolicyRegistry,
@@ -563,6 +567,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     agentClient,
     toolTracker,
     providerContinuity,
+    providerRegistry,
     getProviderHistorySnapshot: () => conversationStore.getProviderHistorySnapshot(),
     getHistoryIdentity: () => conversationStore.getProviderHistoryIdentity().identity,
   });

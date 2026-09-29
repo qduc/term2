@@ -35,7 +35,7 @@ import type { ContinuationProjectionMode } from './continuation-projection-mode.
 import type { AgentStream } from '../services/agent-stream.js';
 import type { ProviderInput, ProviderInputItem } from '../contracts/provider-input.js';
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider, type ProviderRegistry } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 import { randomUUID } from 'node:crypto';
 import { fetchModels } from '../services/model-service.js';
@@ -148,6 +148,7 @@ export class AgentClient {
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
+  #providerRegistry?: ProviderRegistry;
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
@@ -659,6 +660,8 @@ export class AgentClient {
       sessionBrowser?: import('../services/conversation/session-browser.js').SessionBrowser;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
+      /** Provider definitions scoped to this client/runtime. */
+      providerRegistry?: ProviderRegistry;
       /** Explicit gateway read-only posture; omitted for CLI sessions. */
       readOnly?: boolean;
       allowUnsandboxed?: boolean;
@@ -691,6 +694,7 @@ export class AgentClient {
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
+    this.#providerRegistry = deps.providerRegistry;
     this.#toolLifecycle = toolLifecycle;
     this.#hookScope = hookScope ?? 'root';
     this.#backgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
@@ -904,7 +908,10 @@ export class AgentClient {
   }
 
   supportsConversationChaining(): boolean {
-    return getProvider(this.#agentConfig.getProvider())?.capabilities?.supportsConversationChaining ?? false;
+    return (
+      getProvider(this.#agentConfig.getProvider(), this.#providerRegistry)?.capabilities
+        ?.supportsConversationChaining ?? false
+    );
   }
 
   setAskUserAnswer(callId: string, answer: string): void {

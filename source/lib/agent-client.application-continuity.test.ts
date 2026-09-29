@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { AgentClient } from './agent-client.js';
-import { registerProvider, unregisterProvider } from '../providers/registry.js';
+import { createProviderRegistry, registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import { RetryingModel } from '../providers/retrying-model.js';
 import { z } from 'zod';
@@ -83,6 +83,46 @@ it('application-owned HTTP Responses providers retain their chaining capability'
   });
 
   expect(client.supportsConversationChaining()).toBe(true);
+});
+
+it('uses the supplied provider registry for the chaining capability', () => {
+  const providerId = 'agent-client-registry-chaining';
+  registerProvider(
+    {
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [],
+      capabilities: { supportsConversationChaining: true },
+    },
+    { allowOverride: true },
+  );
+  const providerRegistry = createProviderRegistry();
+  providerRegistry.upsertProvider({
+    id: providerId,
+    label: providerId,
+    fetchModels: async () => [],
+    capabilities: { supportsConversationChaining: false },
+  });
+
+  try {
+    const client = new AgentClient({
+      providerOverride: providerId,
+      deps: {
+        logger,
+        settings,
+        sessionContextService: {
+          runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+          getContext: () => null,
+        } as any,
+        providerRegistry,
+      },
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+
+    expect(client.supportsConversationChaining()).toBe(false);
+  } finally {
+    unregisterProvider(providerId);
+  }
 });
 
 it.sequential('does not retain a cached provider model that has no reset seam across rollover', async () => {

@@ -1,13 +1,13 @@
 import path from 'node:path';
 import { getConversationsDir } from '../conversation-persistence.js';
 import type { SessionBrowserContext } from '../session-browser.js';
-import {
+import type {
   SessionIndexDatabase,
-  type IndexedListResult,
-  type IndexedReadSessionResult,
-  type IndexedResolveResult,
-  type IndexedSearchResult,
-  type ReconcileResult,
+  IndexedListResult,
+  IndexedReadSessionResult,
+  IndexedResolveResult,
+  IndexedSearchResult,
+  ReconcileResult,
 } from './session-index-database.js';
 import { SessionIndexWorkerClient } from './session-index-worker-client.js';
 
@@ -66,6 +66,7 @@ export class SessionIndexService {
 
     try {
       if (this.#backend === 'direct') {
+        const { SessionIndexDatabase } = await import('./session-index-database.js');
         this.#directDb = new SessionIndexDatabase(this.#dbPath, this.#conversationsDir);
         const probe = this.#directDb.probeCapability();
         if (!probe.ok) {

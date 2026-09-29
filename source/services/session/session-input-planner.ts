@@ -11,6 +11,7 @@ import {
   type LargeUncachedInputDecision,
 } from '../large-uncached-input-guard.js';
 import { getProvider } from '../../providers/index.js';
+import type { ProviderRegistry } from '../../providers/registry.js';
 import {
   GROK_RESPONSES_OPAQUE_TAG,
   OPENAI_RESPONSES_OPAQUE_TAG,
@@ -26,11 +27,6 @@ import {
   hasMalformedToolCallArguments,
   sanitizeMalformedToolCallArguments,
 } from '../tool-execution-ledger.js';
-
-const supportsConversationChaining = (providerId: string): boolean => {
-  const providerDef = getProvider(providerId);
-  return providerDef?.capabilities?.supportsConversationChaining ?? false;
-};
 
 const isOpaqueCompactionItem = (item: unknown): boolean => {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -86,6 +82,7 @@ export class SessionInputPlanner {
   #agentClient: ConversationAgentClient;
   #toolTracker: SessionToolTracker;
   #providerContinuity: ProviderContinuity;
+  #providerRegistry?: ProviderRegistry;
   #getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
   /** Cheap history identity — must not clone the transcript. */
   #getHistoryIdentity?: () => string;
@@ -100,6 +97,7 @@ export class SessionInputPlanner {
     agentClient: ConversationAgentClient;
     toolTracker: SessionToolTracker;
     providerContinuity: ProviderContinuity;
+    providerRegistry?: ProviderRegistry;
     getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
     getHistoryIdentity?: () => string;
   }) {
@@ -107,6 +105,7 @@ export class SessionInputPlanner {
     this.#agentClient = deps.agentClient;
     this.#toolTracker = deps.toolTracker;
     this.#providerContinuity = deps.providerContinuity;
+    this.#providerRegistry = deps.providerRegistry;
     this.#getProviderHistorySnapshot = deps.getProviderHistorySnapshot;
     this.#getHistoryIdentity = deps.getHistoryIdentity;
   }
@@ -209,7 +208,7 @@ export class SessionInputPlanner {
     const dynamicSupportsChaining = getMethod<[], boolean>(this.#agentClient, 'supportsConversationChaining');
     const supportsChaining = dynamicSupportsChaining
       ? dynamicSupportsChaining.call(this.#agentClient)
-      : supportsConversationChaining(provider);
+      : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
     const history = this.#toolTracker.getReconciledHistory();
     const targetProvider = provider;
     const targetOpaqueLane =
@@ -395,7 +394,7 @@ export class SessionInputPlanner {
     const dynamicSupportsChaining = getMethod<[], boolean>(this.#agentClient, 'supportsConversationChaining');
     const supportsChaining = dynamicSupportsChaining
       ? dynamicSupportsChaining.call(this.#agentClient)
-      : supportsConversationChaining(provider);
+      : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
     const history = this.#toolTracker.getReconciledHistory();
     // The draft user turn is never a function_call, so malformed-arg detection
     // on history alone matches build(includeTurn: true).

@@ -42,6 +42,8 @@ Sequential full `pnpm test:provider-black-box` rerun completed successfully (20 
 
 The sequential full `pnpm test:integration` rerun also completed successfully (12 files, 106 passed, 1 skipped; 49.25-second command runtime). Broad `pnpm test` unit gate is running because the shared sandbox host and cross-module agent execution contracts changed. These successful gates do not waive the unimplemented foreground child approval continuation or evidence-gated direct-tool retirement.
 
+The broad `pnpm test` run reported 684 files passing (9333 passed, 3 expected fail, 2 skipped); confirm terminal exit before marking this gate complete. Acceptance still requires interactive approved/denied child proof, prompt/catalog migration and cost measurement, evidence-gated retirement, different-model final review, and merge/report. Passing tests for the current partial capability do not prove the intended end state.
+
 ## Script-only agent capability (2026-09-29)
 
 Implemented in the `henshin-p2-capability` worktree. `run_code` scripts now see a flat `agent` global with members `run`/`start`/`status`/`result`/`cancel`, built by `createRunCodeAgentCapability` in `source/tools/system/run-code/run-code-agent-capability.ts`. Naming deviation from the `tools.agent.*` fallback considered below: the worker template binds every capability as a flat top-level namespace global, so the second capability is `agent`, not `tools.agent.*` or `tools.agent_run(spec)`; the template's member-failure message now names the capability instead of a hardcoded `tools.` prefix.

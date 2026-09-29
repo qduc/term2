@@ -3,6 +3,12 @@ import type { SubagentDefinition, SupportedSubagentRole } from './types.js';
 import { getAncillaryTierForRole, getSubagentPoolSettingKeyForRole } from './subagent-pool-config.js';
 import { resolveTierProvider, toTierModelPoolEntries } from '../agent-runtime/model-resolver.js';
 
+export const POOL_ENTRY_COOLDOWN_MS = 10 * 60 * 1000;
+export type PoolEntryFailure = 'balance' | 'authentication';
+
+const entryKey = (entry: Pick<SubagentDefinition, 'provider' | 'model'>): string =>
+  JSON.stringify([entry.provider, entry.model]);
+
 /**
  * Session-scoped round-robin cursor over each role's tier model pool (the
  * role's `agent.<tier>Model` setting), one cursor per role.
@@ -24,8 +30,13 @@ import { resolveTierProvider, toTierModelPoolEntries } from '../agent-runtime/mo
  */
 export class SubagentRolePoolSelector {
   #cursors = new Map<string, number>();
+  #unhealthy = new Map<string, { until: number; failure: PoolEntryFailure }>();
 
-  constructor(private readonly settings: ISettingsService) {}
+  constructor(private readonly settings: ISettingsService, private readonly now: () => number = Date.now) {}
+
+  markUnhealthy(entry: Pick<SubagentDefinition, 'provider' | 'model'>, failure: PoolEntryFailure): void {
+    this.#unhealthy.set(entryKey(entry), { until: this.now() + POOL_ENTRY_COOLDOWN_MS, failure });
+  }
 
   resolveForSpawn(role: SupportedSubagentRole, definition: SubagentDefinition): SubagentDefinition {
     // Mentor fans a question out across every `agent.mentorPool` entry
@@ -38,17 +49,27 @@ export class SubagentRolePoolSelector {
     const entries = toTierModelPoolEntries(this.settings.getDynamic(settingKey));
     if (entries.length === 0) return definition;
 
-    const cursor = this.#cursors.get(role) ?? 0;
-    const entry = entries[cursor % entries.length]!;
-    this.#cursors.set(role, cursor + 1);
-
     // loadRoleDefinition pairs the definition with the first entry, so its
     // provider is the tier's only when that entry is bare.
     const tierProvider =
       entries[0]!.provider === undefined
         ? definition.provider
         : resolveTierProvider(getAncillaryTierForRole(role), this.settings);
-    return { ...definition, model: entry.model, provider: entry.provider ?? tierProvider };
+    const cursor = this.#cursors.get(role) ?? 0;
+    const failures: string[] = [];
+    for (let offset = 0; offset < entries.length; offset++) {
+      const index = (cursor + offset) % entries.length;
+      const entry = entries[index]!;
+      const candidate = { ...definition, model: entry.model, provider: entry.provider ?? tierProvider };
+      const health = this.#unhealthy.get(entryKey(candidate));
+      if (health && health.until > this.now()) {
+        failures.push(`${candidate.provider}/${candidate.model}: ${health.failure}`);
+        continue;
+      }
+      this.#cursors.set(role, index + 1);
+      return candidate;
+    }
+    throw new Error(`No healthy model in ${settingKey} pool: ${failures.join('; ')}`);
   }
 
   /** True when the role has a configured, non-empty pool right now. */

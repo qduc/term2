@@ -60,6 +60,24 @@ describe('SubagentRolePoolSelector', () => {
     expect(third).toMatchObject({ model: 'model-a', provider: 'base-provider' });
   });
 
+  it('skips an unhealthy provider/model across roles and admits it after cooldown', () => {
+    let now = 1000;
+    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['a', 'b'] }), () => now);
+    const first = selector.resolveForSpawn('explorer', baseDefinition);
+    selector.markUnhealthy(first, 'balance');
+    expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('b');
+    expect(selector.resolveForSpawn('librarian', baseDefinition).model).toBe('b');
+    now += 10 * 60 * 1000;
+    expect(selector.resolveForSpawn('librarian', baseDefinition).model).toBe('a');
+  });
+
+  it('reports every failed entry when the pool has no healthy option', () => {
+    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['a', 'b'] }));
+    selector.markUnhealthy(selector.resolveForSpawn('explorer', baseDefinition), 'balance');
+    selector.markUnhealthy(selector.resolveForSpawn('explorer', baseDefinition), 'authentication');
+    expect(() => selector.resolveForSpawn('explorer', baseDefinition)).toThrow(/a.*balance.*b.*authentication/);
+  });
+
   it('keeps separate cursors per role and maps roles to their tiers', () => {
     const selector = new SubagentRolePoolSelector(
       settings({

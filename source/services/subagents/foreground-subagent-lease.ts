@@ -43,7 +43,7 @@ export type BackgroundSubagentApprovalPauseSink = (pause: BackgroundSubagentAppr
 export class ForegroundSubagentLease {
   readonly #controller = new AbortController();
   readonly #runId: string;
-  readonly #model: { provider: string; id: string } | undefined;
+  #model: { provider: string; id: string } | undefined;
   readonly #onPendingApprovalReleased: ((interruption: unknown) => void) | undefined;
   #detachParentAbort: (() => void) | undefined;
   #adopted = false;
@@ -100,6 +100,12 @@ export class ForegroundSubagentLease {
 
   get model(): { provider: string; id: string } | undefined {
     return this.#model;
+  }
+
+  /** Update the launch model only before ownership transfers to the background registry. */
+  setModel(model: { provider: string; id: string }): void {
+    if (this.#adopted || this.#settled) throw new Error('Cannot change the model of an adopted subagent');
+    this.#model = model;
   }
 
   get settled(): boolean {

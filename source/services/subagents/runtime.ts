@@ -17,6 +17,7 @@ import { NestedToolCompatibilityState } from '../session/nested-tool-compatibili
 import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
 import type { SessionBrowser } from '../conversation/session-browser.js';
+import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -120,18 +121,42 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
 
   // Reviewer explorers are fresh, contained child runs: their events are not
   // forwarded, so they never surface as orphan activity in the parent session.
-  toolFactory.setExplorerRunner((task, signal) => {
+  toolFactory.setExplorerRunner(async (task, signal) => {
     const agentId = randomUUID();
-    const definition = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
-    return executionRunner.runInSession(
-      agentId,
-      { role: 'explorer', task, signal, parentTool: 'run_explorer' },
-      definition,
-      new SubagentSession(agentId, 'explorer'),
-      undefined,
-      signal,
-      () => {},
-    );
+    const session = new SubagentSession(agentId, 'explorer');
+    let definition = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
+    for (;;) {
+      let receivedOutput = false;
+      const result = await executionRunner.runInSession(
+        agentId,
+        { role: 'explorer', task, signal, parentTool: 'run_explorer' },
+        definition,
+        session,
+        undefined,
+        signal,
+        (event) => {
+          if (event.type === 'subagent_streaming_text' || event.type === 'subagent_tool_started') receivedOutput = true;
+        },
+      );
+      const failure = result.status === 'failed' ? classifyPoolEntryFailure(result.error) : undefined;
+      if (
+        !failure ||
+        receivedOutput ||
+        result.toolsUsed.length > 0 ||
+        signal?.aborted ||
+        !rolePoolSelector.hasPool('explorer')
+      )
+        return result;
+      rolePoolSelector.markUnhealthy(definition, failure);
+      const next = rolePoolSelector.resolveForSpawn('explorer', loadRoleDefinition('explorer', deps.settings));
+      deps.logger.warn('Subagent pool failover', {
+        role: 'explorer',
+        from: `${definition.provider}/${definition.model}`,
+        failure,
+        to: `${next.provider}/${next.model}`,
+      });
+      definition = next;
+    }
   });
 
   const mentorSession = new SubagentSession('mentor', 'mentor');
@@ -183,6 +208,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
       const base = loadRoleDefinition(role as SupportedSubagentRole, deps.settings);
       return rolePoolSelector.resolveForSpawn(role as SupportedSubagentRole, base);
     },
+    markPoolEntryUnhealthy: (definition, failure) => rolePoolSelector.markUnhealthy(definition, failure),
+    hasModelPool: (role) => rolePoolSelector.hasPool(role as SupportedSubagentRole),
     modelForRole: (role) => {
       const mentorPool = role === 'mentor' ? deps.settings.get('agent.mentorPool') : undefined;
       if (Array.isArray(mentorPool) && mentorPool.length > 0) return undefined;

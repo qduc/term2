@@ -85,6 +85,33 @@ Open work, in order:
 
 ## Guard classes
 
+### Subagent tier-pool entry health (branch-local implementation)
+
+Harm prevented: a first-request billing or credential rejection for one
+configured tier-pool entry failing a delegated task when another configured
+entry can execute it. Scope: fresh foreground `NestedSubagentRunner.runAsTool`
+calls, fresh background `SubagentAsyncRegistry.startRun` segments, and
+reviewer-owned explorer dispatches, excluding mentor fanout, continuations,
+and the root agent. Class: temporary admission
+filter; `SubagentRolePoolSelector` owns session-scoped provider/model health
+and `NestedSubagentRunner` / `SubagentAsyncRegistry` / `createSubagentRuntime`
+own their respective
+first-request recovery. The direct signal is an HTTP 402, HTTP 401/403, or
+recognized insufficient-balance/credit/quota code/message; transient 429 and
+5xx are excluded. A provider that recovers early may be skipped until the
+fixed 10-minute cooldown expires; every entry remains eligible afterward.
+No setting or migration is introduced. Fresh configured pools are read live;
+there is no independent environment override. An eligible failed entry is
+marked unhealthy, the next healthy entry is selected at most once per pool
+entry, and an exhausted pool returns an error listing entries and failure
+classes. A committed stream, tool action, continuation, cancellation, or
+adopted foreground run is not replayed. The background status model and
+pre-adoption foreground lease model update on takeover; a privacy-safe warning
+contains role, provider/model IDs, and failure class, not provider response
+bodies or secrets. Rollback: revert the selector health, classification, and
+the two spawn-path fallback changes together. This branch has focused
+regression tests; final validation is recorded in the assignment report.
+
 ### Interactive automatic-memory canary admission
 
 The local CLI opt-in in `AutomaticMemoryCanary.record()` admits at most one

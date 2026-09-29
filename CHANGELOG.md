@@ -1,3 +1,16 @@
+## [0.30.0] - 2026-09-29
+
+### Features
+- Subagents can now be launched from a per-invocation agent specification (goal, context, tools, constraints, completion criterion, model policy, and budget) instead of only a fixed role. Existing roles remain as thin presets, and existing `run_subagent` callers keep working.
+- `run_code` scripts can start and compose child agents with `agent.run`, `agent.start`, `agent.status`, `agent.result`, and `agent.cancel`. Child permissions are narrowed to the parent's authority, worktree scope is pinned, and runs are bounded by call, concurrency, and start budgets. When a script's child agent needs tool approval, the request goes through the session's normal approval prompt and the child resumes after the decision.
+- Added a `propose_goal` tool so the agent can suggest a session goal; proposals always require the user's approval.
+- Added Firecrawl and SearXNG web search providers, configurable in settings.
+
+### Improvements
+- A subagent tier-pool entry that is unhealthy now fails over to the next entry.
+- The web gateway covers more of the client API, routes its session lifecycle through a session handle, and closes new admissions cleanly during abort and shutdown.
+- Web search settings from environment overrides are preserved, and provider options are forwarded correctly.
+
 ## [0.29.1] - 2026-09-28
 
 ### Bug Fixes

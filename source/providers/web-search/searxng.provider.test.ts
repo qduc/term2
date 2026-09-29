@@ -37,6 +37,18 @@ it('builds a SearXNG request and normalizes results', async () => {
   });
 });
 
+it('preserves a SearXNG base path prefix', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [] }), { status: 200 }));
+  vi.stubGlobal('fetch', fetch);
+
+  await searxngProvider.search('q', {
+    settingsService: settings({ 'webSearch.searxng.baseUrl': 'https://host.example/searx/' }),
+    loggingService: logging,
+  });
+
+  expect(new URL(fetch.mock.calls[0][0]).pathname).toBe('/searx/search');
+});
+
 it('rejects missing or unsafe base URLs and maps HTTP errors', async () => {
   expect(isSearxngConfigured({ settingsService: settings() })).toBe(false);
   await expect(searxngProvider.search('q', { settingsService: settings(), loggingService: logging })).rejects.toThrow(

@@ -18,7 +18,8 @@ async function searchSearxng(
   } catch (error) {
     throw new Error(`Invalid SearXNG base URL: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const url = new URL('/search', baseUrl);
+  if (!baseUrl.pathname.endsWith('/')) baseUrl.pathname += '/';
+  const url = new URL('search', baseUrl);
   url.searchParams.set('q', options.site ? `${query} site:${options.site}` : query);
   url.searchParams.set('format', 'json');
   if (options.engines) url.searchParams.set('engines', options.engines);

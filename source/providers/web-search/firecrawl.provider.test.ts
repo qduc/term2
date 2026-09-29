@@ -41,8 +41,8 @@ it('normalizes Firecrawl results and forwards options', async () => {
   );
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(
     expect.objectContaining({
-      query: 'query',
-      searchOptions: { limit: 3 },
+      query: 'query site:example.test',
+      limit: 3,
     }),
   );
   expect(result.results[0]).toEqual({
@@ -51,6 +51,31 @@ it('normalizes Firecrawl results and forwards options', async () => {
     content: 'desc',
     publishedDate: undefined,
   });
+});
+
+it('normalizes the nested Firecrawl response shape', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: { web: [{ title: 'Nested', url: 'https://nested.test', markdown: 'body' }] } }),
+        {
+          status: 200,
+        },
+      ),
+    ),
+  );
+
+  const result = await firecrawlProvider.search(
+    'query',
+    { settingsService: settings({ 'webSearch.firecrawl.apiKey': 'key' }), loggingService: logging },
+    { excludeDomains: ['blocked.test'] },
+  );
+
+  expect(JSON.parse((fetch as any).mock.calls[0][1].body)).toEqual({
+    query: 'query -site:blocked.test',
+  });
+  expect(result.results[0]).toMatchObject({ title: 'Nested', url: 'https://nested.test', content: 'body' });
 });
 
 it('supports a configured Firecrawl base URL and maps API errors', async () => {
@@ -69,9 +94,19 @@ it('supports a configured Firecrawl base URL and maps API errors', async () => {
 
 it('reports missing credentials and propagates abort', async () => {
   expect(isFirecrawlConfigured({ settingsService: settings() })).toBe(false);
+  expect(
+    isFirecrawlConfigured({ settingsService: settings({ 'webSearch.firecrawl.baseUrl': 'http://localhost:3002' }) }),
+  ).toBe(true);
   await expect(firecrawlProvider.search('q', { settingsService: settings(), loggingService: logging })).rejects.toThrow(
-    /API key/,
+    /configured/,
   );
+  const selfHostedFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+  vi.stubGlobal('fetch', selfHostedFetch);
+  await firecrawlProvider.search('q', {
+    settingsService: settings({ 'webSearch.firecrawl.baseUrl': 'http://localhost:3002' }),
+    loggingService: logging,
+  });
+  expect(selfHostedFetch.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
   const controller = new AbortController();
   controller.abort();
   const fetch = vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError'));

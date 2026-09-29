@@ -97,8 +97,9 @@ export class SubagentManager {
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
     if (request.agentSpec || request.resolvedDefinition) {
-      const resolvedDefinition =
-        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
+      const resolvedDefinition = request.resolvedDefinition
+        ? { ...request.resolvedDefinition, isScriptGeneric: true }
+        : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
       return this.#runtime.nestedRunner.runAsTool(
         { ...request, role: 'agent', task: request.agentSpec?.goal ?? request.task, resolvedDefinition },
         context,
@@ -167,6 +168,7 @@ export class SubagentManager {
       });
     const adapted = {
       ...adaptLegacyDefinition(definition, budget),
+      isScriptGeneric: true,
       isRootExecution: inheritedBudget === undefined,
     };
     return adapted;
@@ -198,7 +200,9 @@ export class SubagentManager {
       }
       const hasResolvedAgent = request.agentSpec !== undefined || request.resolvedDefinition !== undefined;
       const resolvedDefinition = hasResolvedAgent
-        ? request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec!, request.executionBudget)
+        ? request.resolvedDefinition
+          ? { ...request.resolvedDefinition, isScriptGeneric: true }
+          : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget)
         : undefined;
       const result = hasResolvedAgent
         ? await this.#runtime.executionRunner.run(
@@ -256,8 +260,9 @@ export class SubagentManager {
       throw new SubagentRegistryError('already_active', 'Mentor session is already active');
     }
     if (request.agentSpec || request.resolvedDefinition) {
-      const resolvedDefinition =
-        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
+      const resolvedDefinition = request.resolvedDefinition
+        ? { ...request.resolvedDefinition, isScriptGeneric: true }
+        : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
       return this.#runtime.asyncRegistry.startRun({
         ...request,
         role: 'agent',

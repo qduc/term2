@@ -107,10 +107,13 @@ export interface SubagentDefinition {
   description?: string;
   /**
    * Optional allowlist of tool names. When set, SubagentToolFactory
-   * only provisions tools whose names appear in this list.
-   * Undefined/empty = all tools implied by coarse permission flags.
+   * only provisions tools whose names appear in this list for legacy
+   * definitions. Undefined/empty retains the legacy coarse-flag behavior;
+   * script-generic definitions always use an exact list, including empty.
    */
   tools?: string[];
+  /** Generic AgentSpec child: provision only exact script-resolved tool names. */
+  isScriptGeneric?: boolean;
   /**
    * Resolved fine-grained filesystem scopes.
    * Undefined = no restriction (legacy coarse-flag behavior).

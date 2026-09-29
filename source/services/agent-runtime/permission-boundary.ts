@@ -42,6 +42,7 @@ export interface AgentPermissionBoundaryParent {
   readonly networkScope?: ResolvedNetworkScope;
   readonly limits: AgentLimits;
   readonly worktreeScope?: ReadonlyArray<string>;
+  readonly worktreePaths?: Readonly<Record<string, string>>;
 }
 
 /** Host-owned snapshot bound to a script-capable root. */
@@ -59,6 +60,7 @@ export interface RootAgentAuthoritySnapshotOptions {
   readonly filesystemScope?: ResolvedFilesystemScope;
   readonly networkScope?: ResolvedNetworkScope;
   readonly worktreeScope?: ReadonlyArray<string>;
+  readonly worktreePaths?: Readonly<Record<string, string>>;
   readonly readOnly?: boolean;
   readonly planMode?: boolean;
 }
@@ -93,6 +95,7 @@ export type AgentSpecBoundaryResult =
       readonly config: AgentConfig;
       readonly definition: ResolvedAgentDefinition;
       readonly worktree?: string;
+      readonly authorizedWorktreePath?: string;
     }
   | {
       readonly ok: false;
@@ -107,8 +110,13 @@ export type AgentSpecBoundaryResult =
  */
 export function parentAuthorityFromDefinition(
   definition: ResolvedAgentDefinition,
-  options: { worktreeScope?: ReadonlyArray<string> } = {},
+  options: {
+    worktreeScope?: ReadonlyArray<string>;
+    worktreePaths?: Readonly<Record<string, string>>;
+  } = {},
 ): AgentPermissionBoundaryParent {
+  const worktreePaths =
+    options.worktreePaths ?? ((options.worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
   return {
     tools: [...definition.tools],
     permissions: { ...definition.permissions },
@@ -120,6 +128,7 @@ export function parentAuthorityFromDefinition(
     ...(definition.networkScope ? { networkScope: [...definition.networkScope] } : {}),
     limits: { ...definition.limits },
     ...(options.worktreeScope ? { worktreeScope: [...options.worktreeScope] } : {}),
+    ...(worktreePaths ? { worktreePaths: { ...worktreePaths } } : {}),
   };
 }
 
@@ -159,6 +168,9 @@ export function createRootAgentAuthoritySnapshot(
   const canSearchWeb =
     tools.some((tool) => WEB_TOOLS.has(tool)) && (!options.networkScope || options.networkScope.length > 0);
 
+  const worktreePaths =
+    options.worktreePaths ?? ((options.worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
+
   return {
     parent: {
       tools,
@@ -181,6 +193,7 @@ export function createRootAgentAuthoritySnapshot(
       ...(options.networkScope ? { networkScope: [...options.networkScope] } : {}),
       limits: { ...options.limits },
       ...(options.worktreeScope ? { worktreeScope: [...options.worktreeScope] } : {}),
+      ...(worktreePaths ? { worktreePaths: { ...worktreePaths } } : {}),
     },
     readOnly,
     planMode,
@@ -203,7 +216,7 @@ export function resolveAgentSpecForChild(
   const inputErrors = validateAgentSpec(rawSpec);
   const parent = options?.parent;
   const parentErrors = validateParentAuthority(parent);
-  const worktreeResult = resolveWorktree(options?.worktree, parent?.worktreeScope);
+  const worktreeResult = resolveWorktree(options?.worktree, parent?.worktreeScope, parent?.worktreePaths);
   const errors = [...inputErrors, ...parentErrors, ...worktreeResult.errors];
   if (errors.length > 0) return { ok: false, errors };
 
@@ -272,6 +285,7 @@ export function resolveAgentSpecForChild(
     config,
     definition: boundedDefinition,
     ...(worktreeResult.worktree ? { worktree: worktreeResult.worktree } : {}),
+    ...(worktreeResult.authorizedPath ? { authorizedWorktreePath: worktreeResult.authorizedPath } : {}),
   };
 }
 
@@ -508,6 +522,19 @@ function validateParentAuthority(parent: AgentPermissionBoundaryParent | undefin
       message: 'Parent worktree scope must be an array of names.',
     });
   }
+  if (
+    parent.worktreePaths &&
+    (typeof parent.worktreePaths !== 'object' ||
+      parent.worktreePaths === null ||
+      Array.isArray(parent.worktreePaths) ||
+      Object.values(parent.worktreePaths).some((p) => typeof p !== 'string'))
+  ) {
+    errors.push({
+      code: 'missing_parent_authority',
+      field: 'worktreePaths',
+      message: 'Parent worktree paths must be a record of names to paths.',
+    });
+  }
   return errors;
 }
 
@@ -592,7 +619,8 @@ function validateResolvedScopeTools(definition: ResolvedAgentDefinition): AgentS
 function resolveWorktree(
   requested: unknown,
   allowed: ReadonlyArray<string> | undefined,
-): { worktree?: string; errors: AgentSpecBoundaryError[] } {
+  paths?: Readonly<Record<string, string>>,
+): { worktree?: string; authorizedPath?: string; errors: AgentSpecBoundaryError[] } {
   if (requested === undefined) return { errors: [] };
   if (
     typeof requested !== 'string' ||
@@ -622,5 +650,10 @@ function resolveWorktree(
       ],
     };
   }
-  return { worktree: requested, errors: [] };
+  const authorizedPath = paths ? paths[requested] : undefined;
+  return {
+    worktree: requested,
+    ...(authorizedPath ? { authorizedPath } : {}),
+    errors: [],
+  };
 }

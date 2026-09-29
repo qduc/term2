@@ -35,6 +35,11 @@ export interface SubagentRequest {
    * Worker only.
    */
   worktree?: string;
+  /**
+   * Expected real path of the worktree if authorized by the root agent snapshot.
+   * If provided, `pinWorkerWorktree` ensures the worktree still resolves to this exact path.
+   */
+  authorizedWorktreePath?: string;
 }
 
 /** Narrow per-segment callbacks supplied by the logical async-run owner. */

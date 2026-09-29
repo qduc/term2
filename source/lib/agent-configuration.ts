@@ -71,6 +71,7 @@ export interface AgentConfigurationDeps {
   ) => void;
   mcpToolSource?: McpToolSource;
   worktreeScope?: ReadonlyArray<string>;
+  worktreePaths?: Readonly<Record<string, string>>;
   listWorktreesSync?: ListWorktreesSync;
 }
 
@@ -117,6 +118,7 @@ export class AgentConfiguration implements AgentSource {
   ) => void;
   #mcpToolSource?: TurnStableMcpToolSource;
   #worktreeScope?: ReadonlyArray<string>;
+  #worktreePaths?: Readonly<Record<string, string>>;
   #listWorktreesSync?: ListWorktreesSync;
   #globalMemoryContextSnapshot?: string;
   #unsubscribeSettings: (() => void) | null = null;
@@ -163,6 +165,7 @@ export class AgentConfiguration implements AgentSource {
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
     this.#mcpToolSource = deps.mcpToolSource ? new TurnStableMcpToolSource(deps.mcpToolSource) : undefined;
     this.#worktreeScope = deps.worktreeScope;
+    this.#worktreePaths = deps.worktreePaths;
     this.#listWorktreesSync = deps.listWorktreesSync;
     this.#approvalPolicyRegistry = config.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
 
@@ -309,6 +312,7 @@ export class AgentConfiguration implements AgentSource {
         return this.#globalMemoryContextSnapshot;
       },
       ...(this.#worktreeScope ? { worktreeScope: this.#worktreeScope } : {}),
+      ...(this.#worktreePaths ? { worktreePaths: this.#worktreePaths } : {}),
       ...(this.#listWorktreesSync ? { listWorktreesSync: this.#listWorktreesSync } : {}),
     };
   }

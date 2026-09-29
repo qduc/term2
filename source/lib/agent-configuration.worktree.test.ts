@@ -92,6 +92,9 @@ describe('worktree authority wiring in production getAgentDefinition and AgentCo
     expect(authority?.parent.worktreeScope).toContain('alpha');
     expect(authority?.parent.worktreeScope).not.toContain('outside');
     expect(authority?.parent.worktreeScope).not.toContain('main');
+    expect((authority?.parent as any).worktreePaths).toEqual({
+      alpha: '/repo/.worktrees/alpha',
+    });
   });
 
   it('fails closed when remote, readOnly, or planMode is set', () => {
@@ -241,5 +244,175 @@ describe('worktree authority wiring in production getAgentDefinition and AgentCo
     expect(launchedWorktree).toBe('alpha');
     expect(pinnedExecutionContext).toBeDefined();
     expect(pinnedExecutionContext?.getCwd()).toBe('/repo/.worktrees/alpha');
+  });
+
+  it('rejects retargeted or moved worktrees before child effect in foreground and async script starts, while unchanged worktree launches', async () => {
+    ensureProvider();
+    const settings = createMockSettingsService();
+    settings.set('agent.provider', 'mock-worktree-provider');
+    settings.set('agent.model', 'mock-model');
+    const logger = mockLogger();
+    const executionContext = ExecutionContext.pin(REPO_HOME);
+
+    let currentWorktrees: GitWorktree[] = [...REPO_WORKTREES];
+    let childEffectExecuted = false;
+
+    const mockSubagentManager = {
+      runAsTool: vi.fn(async (request: any) => {
+        const pin = await pinWorkerWorktree({
+          name: request.worktree,
+          role: request.role,
+          homeRoot: REPO_HOME,
+          isRemote: false,
+          listWorktrees: async () => currentWorktrees,
+          authorizedPath: request.authorizedWorktreePath,
+        });
+        if (!pin.ok) {
+          return { status: 'failed', error: pin.error, finalText: '', filesChanged: [], toolsUsed: [] };
+        }
+        childEffectExecuted = true;
+        return {
+          status: 'completed',
+          finalText: `child pinned in ${pin.executionContext.getCwd()}`,
+          worktreePath: pin.worktreePath,
+          filesChanged: ['mutated.txt'],
+          toolsUsed: ['create_file'],
+        };
+      }),
+      startRunAsync: vi.fn((request: any) => {
+        const runId = 'async-run-1';
+        let settledResult: any = null;
+        const promise = (async () => {
+          const pin = await pinWorkerWorktree({
+            name: request.worktree,
+            role: request.role,
+            homeRoot: REPO_HOME,
+            isRemote: false,
+            listWorktrees: async () => currentWorktrees,
+            authorizedPath: request.authorizedWorktreePath,
+          });
+          if (!pin.ok) {
+            settledResult = { status: 'failed', error: pin.error, finalText: '', filesChanged: [], toolsUsed: [] };
+          } else {
+            childEffectExecuted = true;
+            settledResult = {
+              status: 'completed',
+              finalText: `async child pinned in ${pin.executionContext.getCwd()}`,
+              worktreePath: pin.worktreePath,
+              filesChanged: ['mutated.txt'],
+              toolsUsed: ['create_file'],
+            };
+          }
+          return settledResult;
+        })();
+        return {
+          runId,
+          role: request.role,
+          status: 'running',
+          task: request.task,
+          _promise: promise,
+          _getResult: () => settledResult,
+        };
+      }),
+      getRunResult: vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const lastCall = mockSubagentManager.startRunAsync.mock.results.at(-1)?.value;
+        if (lastCall?._promise) await lastCall._promise;
+        return (
+          lastCall?._getResult?.() ?? {
+            status: 'failed',
+            error: 'unknown',
+            finalText: '',
+            filesChanged: [],
+            toolsUsed: [],
+          }
+        );
+      }),
+      getSubagentStatus: vi.fn((params: any) => ({ runId: params.runId, status: 'running' })),
+      cancelAllAsyncRuns: () => {},
+      resetMentorSession: () => {},
+      clearCache: () => {},
+      dispose: () => {},
+    };
+
+    const bridge = new SubagentBridge({
+      logger,
+      settings,
+      sessionContextService: {
+        getContext: () => null,
+        runWithContext: (_c: unknown, fn: () => unknown) => fn(),
+      } as any,
+      chat: async () => '',
+      createClient: () => ({}),
+      subagentManager: mockSubagentManager as any,
+    } as any);
+
+    const agentConfig = new AgentConfiguration({}, {
+      logger,
+      settings,
+      executionContext,
+      sessionContextService: {
+        getContext: () => null,
+        runWithContext: (_c: unknown, fn: () => unknown) => fn(),
+      } as any,
+      toolInterceptorRegistry: new ToolInterceptorRegistry({ logger }),
+      askUserAnswerStore: new AskUserAnswerStore(),
+      getSubagentBridge: () => bridge,
+      listWorktreesSync: () => REPO_WORKTREES,
+    } as any);
+
+    const applicationAgent = agentConfig.getApplicationAgent('test-session');
+    const runCode = applicationAgent.tools.find((t) => t.name === 'run_code');
+    expect(runCode).toBeDefined();
+
+    // Now, simulate that alpha was MOVED outside the repository after root authority snapshot
+    currentWorktrees = [
+      { path: REPO_HOME, branch: 'main', detached: false, bare: false, locked: false, prunable: false },
+      { path: '/outside/alpha', branch: 'alpha', detached: false, bare: false, locked: false, prunable: false },
+      OUTSIDE_WORKTREE,
+    ];
+
+    // 1. Foreground script start rejects retargeted worktree before child effect
+    childEffectExecuted = false;
+    const fgRetargetResult = await runCode!.execute(
+      {
+        code: `return await agent.run({ spec: { goal: 'test', tools: ['read_file'] }, worktree: 'alpha' });`,
+        description: 'test moved worktree in foreground',
+      },
+      {} as any,
+      {} as any,
+    );
+    expect(fgRetargetResult).toContain('failed');
+    expect(fgRetargetResult).toMatch(/does not match authorized path/);
+    expect(childEffectExecuted).toBe(false);
+
+    // 2. Async script start rejects retargeted worktree before child effect
+    childEffectExecuted = false;
+    const asyncRetargetResult = await runCode!.execute(
+      {
+        code: `const handle = await agent.start({ spec: { goal: 'test', tools: ['read_file'] }, worktree: 'alpha' });
+return await agent.result({ runId: handle.runId });`,
+        description: 'test moved worktree in async',
+      },
+      {} as any,
+      {} as any,
+    );
+    expect(asyncRetargetResult).toContain('failed');
+    expect(asyncRetargetResult).toMatch(/does not match authorized path/);
+    expect(childEffectExecuted).toBe(false);
+
+    // 3. Unchanged authorized tree still launches
+    currentWorktrees = [...REPO_WORKTREES]; // restored to original path /repo/.worktrees/alpha
+    childEffectExecuted = false;
+    const unchangedResult = await runCode!.execute(
+      {
+        code: `return await agent.run({ spec: { goal: 'test', tools: ['read_file'] }, worktree: 'alpha' });`,
+        description: 'test unchanged worktree',
+      },
+      {} as any,
+      {} as any,
+    );
+    expect(unchangedResult).toContain('child pinned in /repo/.worktrees/alpha');
+    expect(childEffectExecuted).toBe(true);
   });
 });

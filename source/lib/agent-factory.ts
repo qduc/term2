@@ -123,6 +123,7 @@ export interface AgentFactoryDeps {
   mcpToolSource?: McpToolSource;
   snapshotGlobalMemoryContext?: (read: () => string) => string;
   worktreeScope?: ReadonlyArray<string>;
+  worktreePaths?: Readonly<Record<string, string>>;
   listWorktreesSync?: ListWorktreesSync;
 }
 
@@ -545,6 +546,7 @@ export function buildAgent(
       mcpToolSource: deps.mcpToolSource,
       snapshotGlobalMemoryContext: deps.snapshotGlobalMemoryContext,
       ...(deps.worktreeScope ? { worktreeScope: deps.worktreeScope } : {}),
+      ...(deps.worktreePaths ? { worktreePaths: deps.worktreePaths } : {}),
       ...(deps.listWorktreesSync ? { listWorktreesSync: deps.listWorktreesSync } : {}),
     },
     resolvedModel,

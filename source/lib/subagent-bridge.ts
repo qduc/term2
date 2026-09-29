@@ -70,6 +70,7 @@ export interface ResolvedSubagentLaunch {
   task?: string;
   /** A boundary result's validated worktree is used when this is omitted. */
   worktree?: string;
+  authorizedWorktreePath?: string;
   name?: string;
   continue_run_id?: string;
   /** Host-only approval owner for pauses in this awaited foreground child. */
@@ -108,10 +109,12 @@ function normalizeResolvedLaunch(params: ResolvedSubagentLaunch): {
   definition: SubagentDefinition;
   task: string;
   worktree?: string;
+  authorizedWorktreePath?: string;
 } {
   let definitionInput = params.resolvedDefinition;
   let task = params.task;
   let worktree = params.worktree;
+  let authorizedWorktreePath = params.authorizedWorktreePath;
 
   if (isBoundaryResult(definitionInput)) {
     if (!definitionInput.ok) {
@@ -123,6 +126,7 @@ function normalizeResolvedLaunch(params: ResolvedSubagentLaunch): {
     definitionInput = successfulResult.definition;
     task ??= successfulResult.spec.goal;
     worktree ??= successfulResult.worktree;
+    authorizedWorktreePath ??= successfulResult.authorizedWorktreePath;
   }
 
   if (!task) {
@@ -133,6 +137,7 @@ function normalizeResolvedLaunch(params: ResolvedSubagentLaunch): {
     definition: toManagerDefinition(definitionInput),
     task,
     ...(worktree ? { worktree } : {}),
+    ...(authorizedWorktreePath ? { authorizedWorktreePath } : {}),
   };
 }
 
@@ -441,6 +446,7 @@ export class SubagentBridge {
       task: launch.task,
       resolvedDefinition: launch.definition,
       ...(launch.worktree ? { worktree: launch.worktree } : {}),
+      ...(launch.authorizedWorktreePath ? { authorizedWorktreePath: launch.authorizedWorktreePath } : {}),
       parentTool: 'run_subagent',
       ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
       signal: this.signal,
@@ -479,6 +485,7 @@ export class SubagentBridge {
       ...(params.name ? { name: params.name } : {}),
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       ...(launch.worktree ? { worktree: launch.worktree } : {}),
+      ...(launch.authorizedWorktreePath ? { authorizedWorktreePath: launch.authorizedWorktreePath } : {}),
       parentTool: 'run_subagent',
       signal: this.backgroundSignal,
     };

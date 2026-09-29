@@ -287,6 +287,7 @@ export const getAgentDefinition = (
     mcpToolSource?: McpToolSource;
     snapshotGlobalMemoryContext?: (read: () => string) => string;
     worktreeScope?: ReadonlyArray<string>;
+    worktreePaths?: Readonly<Record<string, string>>;
     listWorktreesSync?: ListWorktreesSync;
   },
   model?: string,
@@ -714,6 +715,8 @@ export const getAgentDefinition = (
             listWorktreesSync: deps.listWorktreesSync,
           })
         : undefined);
+    const worktreePaths =
+      deps.worktreePaths ?? ((worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
     const agentSpecAuthority = liteMixedFilesystemAuthority
       ? undefined
       : createRootAgentAuthoritySnapshot({
@@ -726,6 +729,7 @@ export const getAgentDefinition = (
           readOnly,
           planMode,
           ...(worktreeScope ? { worktreeScope } : {}),
+          ...(worktreePaths ? { worktreePaths } : {}),
         });
     // The script-only agent capability rides on the same root authority
     // snapshot as run_code and additionally requires the subagents capability

@@ -162,6 +162,7 @@ function authority(
     filesystemScope: { read: ['**'], write: ['docs/**'] },
     networkScope: ['example.com'],
     worktreeScope: ['alpha'],
+    worktreePaths: { alpha: '/repo/.worktrees/alpha' },
     ...overrides,
   });
 }
@@ -368,6 +369,7 @@ describe('run_code agent capability', () => {
     expect(value[1]).toBe('done: inside');
     expect(calls.runAsTool).toHaveLength(1);
     expect(calls.runAsTool[0].args.worktree).toBe('alpha');
+    expect(calls.runAsTool[0].args.authorizedWorktreePath).toBe('/repo/.worktrees/alpha');
   });
 
   it('caps agent starts per script before any manager launch; admitted siblings finish untouched', async () => {

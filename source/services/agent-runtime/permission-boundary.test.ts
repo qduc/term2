@@ -213,18 +213,24 @@ describe('resolveAgentSpecForChild', () => {
   });
 
   it('allows only an explicitly authorized worktree and rejects an unprovable one', () => {
-    const authority = parentAuthorityFromDefinition(parent(), { worktreeScope: ['feature-a'] });
-    expect(
-      resolveAgentSpecForChild(
-        { goal: 'inspect', tools: [] },
-        {
-          settings: settings(),
-          logger: logger(),
-          parent: authority,
-          worktree: 'feature-a',
-        },
-      ).ok,
-    ).toBe(true);
+    const authority = parentAuthorityFromDefinition(parent(), {
+      worktreeScope: ['feature-a'],
+      worktreePaths: { 'feature-a': '/repo/.worktrees/feature-a' },
+    });
+    const result = resolveAgentSpecForChild(
+      { goal: 'inspect', tools: [] },
+      {
+        settings: settings(),
+        logger: logger(),
+        parent: authority,
+        worktree: 'feature-a',
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.worktree).toBe('feature-a');
+      expect(result.authorizedWorktreePath).toBe('/repo/.worktrees/feature-a');
+    }
     const denied = resolveAgentSpecForChild(
       { goal: 'inspect', tools: [] },
       {

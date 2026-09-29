@@ -639,6 +639,7 @@ export class NestedSubagentRunner {
         role: request.role,
         homeRoot: this.#executionContext?.getHomeWorkspace() ?? process.cwd(),
         isRemote: this.#executionContext?.isRemote() ?? false,
+        authorizedPath: request.authorizedWorktreePath,
       });
       if (!pin.ok) {
         const agentId = detailsRecord?.toolCall?.callId ?? randomUUID();

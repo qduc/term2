@@ -197,3 +197,50 @@ it('deriveAuthorizedWorktreeScope fails closed when worktree listing fails or is
   ).toEqual([]);
   expect(deriveAuthorizedWorktreeScope({ homeRoot: HOME, worktrees: [] })).toEqual([]);
 });
+
+it('deriveAuthorizedWorktreeScope retains immutable authorized path identity alongside each allowed name', () => {
+  const scope = deriveAuthorizedWorktreeScope({
+    homeRoot: HOME,
+    worktrees: [{ path: HOME, branch: 'main', detached: false, bare: false, locked: false, prunable: false }, FEATURE],
+  });
+
+  expect(scope).toContain('feature');
+  expect((scope as any).authorizedPaths).toEqual({
+    feature: FEATURE.path,
+  });
+});
+
+it('pinWorkerWorktree succeeds when freshly resolved worktree matches authorizedPath', async () => {
+  const result = await pinWorkerWorktree({
+    name: 'feature',
+    role: 'agent',
+    homeRoot: HOME,
+    isRemote: false,
+    listWorktrees: list,
+    authorizedPath: FEATURE.path,
+  } as any);
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.worktreePath).toBe(FEATURE.path);
+});
+
+it('pinWorkerWorktree fails closed when freshly resolved worktree does not match authorizedPath (moved tree)', async () => {
+  const movedList = async () => [
+    { path: HOME, branch: 'main', detached: false, bare: false, locked: false, prunable: false },
+    { path: '/outside/moved-feature', branch: 'feature', detached: false, bare: false, locked: false, prunable: false },
+  ];
+
+  const result = await pinWorkerWorktree({
+    name: 'feature',
+    role: 'agent',
+    homeRoot: HOME,
+    isRemote: false,
+    listWorktrees: movedList,
+    authorizedPath: FEATURE.path,
+  } as any);
+
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error).toMatch(/does not match authorized path/);
+});

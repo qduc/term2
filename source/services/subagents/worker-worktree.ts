@@ -63,8 +63,9 @@ export async function pinWorkerWorktree(params: {
   homeRoot: string;
   isRemote: boolean;
   listWorktrees?: ListWorktrees;
+  authorizedPath?: string;
 }): Promise<WorkerWorktreePin> {
-  const { name, role, homeRoot, isRemote, listWorktrees = listGitWorktrees } = params;
+  const { name, role, homeRoot, isRemote, listWorktrees = listGitWorktrees, authorizedPath } = params;
 
   if (role !== 'worker' && role !== 'agent') {
     return {
@@ -94,12 +95,49 @@ export async function pinWorkerWorktree(params: {
     return { ok: false, error: formatResolveFailure(name, outcome) };
   }
 
+  let resolvedRealPath: string;
+  try {
+    resolvedRealPath = fs.realpathSync(outcome.worktree.path);
+  } catch {
+    resolvedRealPath = path.resolve(outcome.worktree.path);
+  }
+
+  if (authorizedPath !== undefined) {
+    let authorizedRealPath: string;
+    try {
+      authorizedRealPath = fs.realpathSync(authorizedPath);
+    } catch {
+      authorizedRealPath = path.resolve(authorizedPath);
+    }
+
+    if (resolvedRealPath !== authorizedRealPath) {
+      return {
+        ok: false,
+        error: `Worktree "${name}" resolved to ${outcome.worktree.path}, which does not match authorized path ${authorizedPath}.`,
+      };
+    }
+  }
+
   return {
     ok: true,
     executionContext: ExecutionContext.pin(outcome.worktree.path),
     worktreePath: outcome.worktree.path,
     worktree: outcome.worktree,
   };
+}
+
+export type AuthorizedWorktreeScope = string[] & {
+  readonly authorizedPaths?: Readonly<Record<string, string>>;
+};
+
+function createAuthorizedWorktreeScope(names: string[], paths: Record<string, string>): AuthorizedWorktreeScope {
+  const scope = [...names] as AuthorizedWorktreeScope;
+  Object.defineProperty(scope, 'authorizedPaths', {
+    value: Object.freeze({ ...paths }),
+    enumerable: false,
+    configurable: true,
+  });
+  return scope;
 }
 
 export interface DeriveAuthorizedWorktreeScopeOptions {
@@ -116,12 +154,12 @@ export interface DeriveAuthorizedWorktreeScopeOptions {
  * in-repo worktrees. Fails closed (empty list) when remote, read-only, plan mode,
  * outside a git repo, or when worktree listing fails.
  */
-export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeScopeOptions): string[] {
+export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeScopeOptions): AuthorizedWorktreeScope {
   const { homeRoot, isRemote = false, readOnly = false, planMode = false } = options;
 
   // Fail-closed for remote, read-only, or plan mode
   if (isRemote || readOnly || planMode) {
-    return [];
+    return createAuthorizedWorktreeScope([], {});
   }
 
   let worktrees: GitWorktree[];
@@ -132,12 +170,12 @@ export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeS
       const listSync = options.listWorktreesSync ?? listGitWorktreesSync;
       worktrees = listSync(homeRoot);
     } catch {
-      return [];
+      return createAuthorizedWorktreeScope([], {});
     }
   }
 
   if (!worktrees || worktrees.length === 0) {
-    return [];
+    return createAuthorizedWorktreeScope([], {});
   }
 
   let physicalHomeRoot: string;
@@ -161,6 +199,7 @@ export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeS
 
   const repoPrefix = physicalRepoRoot.endsWith(path.sep) ? physicalRepoRoot : `${physicalRepoRoot}${path.sep}`;
   const allowedNames = new Set<string>();
+  const authorizedPaths: Record<string, string> = {};
 
   for (const worktree of worktrees) {
     if (worktree.bare || worktree.prunable) continue;
@@ -207,9 +246,10 @@ export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeS
 
       if (resolvedPath !== physicalHomeRoot && resolvedPath.startsWith(repoPrefix)) {
         allowedNames.add(name);
+        authorizedPaths[name] = resolvedPath;
       }
     }
   }
 
-  return [...allowedNames].sort();
+  return createAuthorizedWorktreeScope([...allowedNames].sort(), authorizedPaths);
 }

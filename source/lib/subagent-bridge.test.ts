@@ -500,12 +500,14 @@ it('runResolvedSubagent accepts a successful boundary result and forwards its va
     config: {} as AgentConfig,
     definition,
     worktree: 'resolved-worktree',
+    authorizedWorktreePath: '/repo/.worktrees/resolved-worktree',
   } as AgentSpecBoundaryResult;
 
   await bridge.runResolvedSubagent({ resolvedDefinition: boundaryResult });
 
   expect(trackRunAsTool.lastArgs.args.task).toBe('inspect the file');
   expect(trackRunAsTool.lastArgs.args.worktree).toBe('resolved-worktree');
+  expect(trackRunAsTool.lastArgs.args.authorizedWorktreePath).toBe('/repo/.worktrees/resolved-worktree');
   expect(trackRunAsTool.lastArgs.args.agentSpec).toBeUndefined();
   expect(trackRunAsTool.lastArgs.args.resolvedDefinition).toMatchObject({
     instructions: definition.instructions,
@@ -721,12 +723,14 @@ it('runResolvedSubagentAsync preserves the resolved definition, worktree, and co
     resolvedDefinition,
     task: 'inspect asynchronously',
     worktree: 'async-worktree',
-  });
+    authorizedWorktreePath: '/repo/.worktrees/async-worktree',
+  } as any);
 
   expect(trackStartRunAsync.lastArgs.agentSpec).toBeUndefined();
   expect(trackStartRunAsync.lastArgs.resolvedDefinition).toBe(resolvedDefinition);
   expect(trackStartRunAsync.lastArgs.task).toBe('inspect asynchronously');
   expect(trackStartRunAsync.lastArgs.worktree).toBe('async-worktree');
+  expect(trackStartRunAsync.lastArgs.authorizedWorktreePath).toBe('/repo/.worktrees/async-worktree');
   expect(trackStartRunAsync.lastArgs.signal).toBe(bridge.backgroundSignal);
   expect(trackStartRunAsync.lastArgs.signal).not.toBe(bridge.signal);
 });

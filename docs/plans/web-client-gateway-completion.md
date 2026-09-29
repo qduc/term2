@@ -2,7 +2,9 @@
 
 ## Resume here
 
-**Status (2026-09-12): complete. Live E2E passed after the fix wave.** term2 main: M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`, F2 `45373d68`, F3 `1622c851`, F4 `33854fc3`, F1 `a99eafaa`, F5 `afde86c6`. ChatForge `integration/v1-chat`: M5c `2caf86c`, M4c `507b1cb`, F5c `ae398a4`. The first live run found D1 (read-only grants writable through `run_code`), D2–D4 and D3b; the fix wave F1–F5 and F5c closed them, and the final live run passed D1–D4 and the F4/F5 checks.
+**Status (2026-09-29): merged state.** term2 main is at merge commit `077be788`, which includes the gateway projection completion and Contract 13's `POST /private/agent/v1/sessions/:sessionId/commands` route. The preceding web-client routes work is at `f4b394dd`. ChatForge main is at `a4ff51b`. LAN listen uses `chooseListenHost`, which reads `TERM2_WEB_CLIENT_ALLOWED_HOSTS` and defaults to `127.0.0.1`; the policy is written up in `docs/plans/web-client-lan-tls.md`.
+
+**What was true on 2026-09-12:** term2 main had M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`, F2 `45373d68`, F3 `1622c851`, F4 `33854fc3`, F1 `a99eafaa`, and F5 `afde86c6`. ChatForge `integration/v1-chat` had M5c `2caf86c`, M4c `507b1cb`, and F5c `ae398a4`. The first live run found D1 (read-only grants writable through `run_code`), D2–D4 and D3b; the fix wave F1–F5 and F5c closed them, and the final live run passed D1–D4 and the F4/F5 checks. This is historical, not the current status.
 
 **Open follow-ups (not started):**
 - **Codex manual compaction fails on multi-turn sessions.** The final live run got `native_failed` on 3 of 3 three-turn sessions, and success only on a one-turn session. It is reported truthfully, but the native call itself is failing. The CLI's `/compact` shares this path.
@@ -37,8 +39,8 @@ Three rules carried into later milestones, because they were learned the hard wa
   and the revalidated binding access. Only `read_write` plus `--allow-write` is writable;
   a `read` grant stays read-only across restart.
 
-The web client is ChatForge at `~/chat-term2-integration/chat/` (a git repo on
-branch `integration/v1-chat`). It has a frontend and a BFF backend that calls this
+The Next app in term2's `web-client/` tree is the current web-client surface. The
+ChatForge BFF in `/home/qduc/chat` is a separate client integration that calls this
 gateway. The gateway and BFF were built by an earlier program whose records live
 in `~/chat-term2-integration/`: `PLAN.md`, `RESUME-HERE.md`,
 `subplans/browser-owned-term2-control/MAP.md`, and

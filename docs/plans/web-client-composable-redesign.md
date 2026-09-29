@@ -103,8 +103,9 @@ lifecycle, retry/failure, compaction, usage). ~17 types fall through to `null`.
 
 ### ChatForge salvage boundary
 
-ChatForge checkout: `~/chat-term2-integration/chat`, branch `integration/v1-chat`,
-HEAD `ae398a4`, clean except untracked `backend/data/`.
+The 2026-09-12 salvage source is the ChatForge checkout at
+`~/chat-term2-integration/chat`, branch `integration/v1-chat`, HEAD `ae398a4`.
+Current ChatForge work is in `/home/qduc/chat` at main `a4ff51b`.
 
 The term2 web UI is already a self-contained client slice, separate from
 ChatForge's product code (which activates only without `?term2=1`):

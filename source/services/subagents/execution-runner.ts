@@ -28,7 +28,7 @@ import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.js';
 import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import { createSessionRuntime } from '../../core/index.js';
+import { createSessionRuntime } from '../../core/session-runtime.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';

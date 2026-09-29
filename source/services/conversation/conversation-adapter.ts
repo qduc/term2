@@ -8,7 +8,7 @@ import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
-import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/index.js';
+import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/session-runtime.js';
 import { getProfileLabel } from '../profiles/labels.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';

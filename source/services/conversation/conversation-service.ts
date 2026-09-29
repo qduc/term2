@@ -26,19 +26,13 @@ import type {
 import type { ConversationEvent } from './conversation-events.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
-import type {
-  InteractionDecision,
-  InteractionResult,
-  QueuedTurnStart,
-  SessionHandle,
-  SessionRuntime,
-} from '../../core/index.js';
+import type { InteractionDecision, InteractionResult, QueuedTurnStart, SessionHandle } from '../../core/index.js';
+import type { BackgroundSubagentApprovalChannel, SessionRuntime } from '../../core/session-runtime.js';
 import type { BackgroundTaskControlPort } from '../session/background-task-control.js';
 import type {
   BackgroundSubagentNotificationPort,
   BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
-import type { BackgroundSubagentApprovalChannel } from '../../core/index.js';
 import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';

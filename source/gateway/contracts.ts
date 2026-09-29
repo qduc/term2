@@ -1,4 +1,4 @@
-import type { SessionRuntime } from '../core/index.js';
+import type { SessionRuntime } from '../core/session-runtime.js';
 
 export const ASSERTION_PURPOSES = [
   'workspace_list',

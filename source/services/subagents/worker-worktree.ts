@@ -103,14 +103,9 @@ export async function pinWorkerWorktree(params: {
   }
 
   if (authorizedPath !== undefined) {
-    let authorizedRealPath: string;
-    try {
-      authorizedRealPath = fs.realpathSync(authorizedPath);
-    } catch {
-      authorizedRealPath = path.resolve(authorizedPath);
-    }
-
-    if (resolvedRealPath !== authorizedRealPath) {
+    // The snapshot already recorded the physical path. Re-resolving it here
+    // would bless a symlink swapped into that same name after authorization.
+    if (resolvedRealPath !== authorizedPath) {
       return {
         ok: false,
         error: `Worktree "${name}" resolved to ${outcome.worktree.path}, which does not match authorized path ${authorizedPath}.`,

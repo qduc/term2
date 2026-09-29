@@ -1,4 +1,7 @@
 import { it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { getActiveWorkspaceRoot, publishActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { pinWorkerWorktree, deriveAuthorizedWorktreeScope } from './worker-worktree.js';
 import type { GitWorktree } from '../workspace/parse-worktree-list.js';
@@ -243,4 +246,32 @@ it('pinWorkerWorktree fails closed when freshly resolved worktree does not match
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.error).toMatch(/does not match authorized path/);
+});
+
+it('rejects a registered worktree path replaced by a symlink after its authority snapshot', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-retarget-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-outside-'));
+  try {
+    const tree = path.join(root, '.worktrees', 'feature');
+    fs.mkdirSync(path.dirname(tree), { recursive: true });
+    fs.mkdirSync(tree);
+    const authorized = fs.realpathSync(tree);
+    fs.renameSync(tree, `${tree}-old`);
+    fs.symlinkSync(outside, tree);
+    const result = await pinWorkerWorktree({
+      name: 'feature',
+      role: 'agent',
+      homeRoot: root,
+      isRemote: false,
+      listWorktrees: async () => [
+        { path: root, branch: 'main', detached: false, bare: false, locked: false, prunable: false },
+        { path: tree, branch: 'feature', detached: false, bare: false, locked: false, prunable: false },
+      ],
+      authorizedPath: authorized,
+    });
+    expect(result.ok).toBe(false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
 });

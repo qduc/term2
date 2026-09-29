@@ -284,6 +284,48 @@ describe('ApplicationRunLoop nested tool', () => {
 });
 
 describe('NestedSubagentRunner end to end', () => {
+  it('resumes a non-adopted foreground child through its host approval callback exactly once', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({ needsApproval: true });
+    const applications: unknown[] = [];
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'script-owned-foreground-approval' },
+      foregroundChildApproval: async (pause: any) => {
+        expect(pause.interruption).toBeDefined();
+        const applied = pause.apply((application: any) => {
+          expect(application.interruption).toBe(pause.interruption);
+          applications.push(application);
+          application.handle.approve?.(application.interruption);
+          return true;
+        });
+        expect(applied).toBe(true);
+      },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(getFakeToolCalls()).toBe(1);
+    expect(applications).toHaveLength(1);
+  });
+
+  it('resumes a non-adopted foreground child after host denial without executing its tool', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({ needsApproval: true });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'script-owned-foreground-denial' },
+      foregroundChildApproval: async (pause: any) => {
+        expect(
+          pause.apply((application: any) => {
+            application.handle.reject?.(application.interruption, { message: 'denied by host' });
+            return true;
+          }),
+        ).toBe(true);
+      },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(getFakeToolCalls()).toBe(0);
+  });
+
   it('publishes an adopted pause through the session sink and resumes only through its application callback', async () => {
     const pauses: BackgroundSubagentApprovalPause[] = [];
     const events: ConversationEvent[] = [];

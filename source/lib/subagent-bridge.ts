@@ -20,7 +20,10 @@ import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SubagentRunHandle } from '../services/subagents/types.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
-import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
+import type {
+  BackgroundSubagentApprovalPauseSink,
+  ForegroundSubagentApprovalCallback,
+} from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
@@ -69,6 +72,8 @@ export interface ResolvedSubagentLaunch {
   worktree?: string;
   name?: string;
   continue_run_id?: string;
+  /** Host-only approval owner for pauses in this awaited foreground child. */
+  foregroundChildApproval?: ForegroundSubagentApprovalCallback;
 }
 
 type SuccessfulAgentSpecBoundaryResult = Extract<AgentSpecBoundaryResult, { ok: true }>;
@@ -444,7 +449,13 @@ export class SubagentBridge {
     const endRun = this.#beginSubagentRun();
     try {
       return await this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () =>
-        this.#subagentManager!.runAsTool(request, _context, details),
+        this.#subagentManager!.runAsTool(
+          request,
+          _context,
+          params.foregroundChildApproval
+            ? { ...detailsRecord, foregroundChildApproval: params.foregroundChildApproval }
+            : details,
+        ),
       );
     } finally {
       endRun();

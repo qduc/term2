@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { SubagentBridge as ProductionSubagentBridge } from './subagent-bridge.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
@@ -444,6 +444,34 @@ it('runResolvedSubagent forwards the host-resolved definition without raw AgentS
   expect(trackRunAsTool.lastArgs.args.agentSpec).toBeUndefined();
   expect(trackRunAsTool.lastArgs.args.resolvedDefinition).toBe(resolvedDefinition);
   expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
+});
+
+it('forwards a host foreground-child approval callback only through the resolved launch details', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+  const foregroundChildApproval = vi.fn();
+
+  await bridge.runResolvedSubagent({
+    resolvedDefinition: {
+      role: 'agent',
+      name: 'host-resolved-agent',
+      instructions: 'Use only host-approved tools.',
+      canRead: true,
+      canWrite: false,
+      canSearchWeb: false,
+      canRunShell: false,
+      maxTurns: 3,
+      model: 'host-model',
+      provider: 'host-provider',
+      reasoningEffort: 'default',
+      tools: ['read_file'],
+    },
+    task: 'inspect',
+    foregroundChildApproval,
+  });
+
+  expect(trackRunAsTool.lastArgs.details.foregroundChildApproval).toBe(foregroundChildApproval);
+  expect(trackRunAsTool.lastArgs.args.foregroundChildApproval).toBeUndefined();
 });
 
 it('runResolvedSubagent accepts a successful boundary result and forwards its validated worktree', async () => {

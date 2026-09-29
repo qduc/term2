@@ -2,7 +2,13 @@
 
 ## Resume here
 
-Phase 1 merged at `70e9ba3e` and reported in `henshin-agent-runtime-report.md`. Phase 2 assignment: `/tmp/henshin-phase2-brief.md`. This plan starts from the decision to allow **agent execution only** in `run_code`, leaving mentor, user interaction and rollover prohibited. The implementation is not yet merged. Final report: `henshin-run-code-subagents-report.md`.
+Phase 1 merged at `70e9ba3e` and reported in `henshin-agent-runtime-report.md`. Phase 2 assignment: `/tmp/henshin-phase2-brief.md`. This plan starts from the decision to allow **agent execution only** in `run_code`, leaving mentor, user interaction and rollover prohibited. Phase 2 is split into **three separately mergeable points** (progress basis: merged points / 3):
+
+1. **2a, merge now after cross-model review and refreshed gates:** script-only `agent.run/start/status/result/cancel`, authority attenuation, root and worktree authority, budget/ledger, and fail-closed interrupted-child handling. The exact foreground continuation seam at branch commit `595b268a` is included, but script approval-interactive children are **not yet supported**. Direct subagent tools stay unchanged. Reconcile with current main, rerun affected suites, merge `--no-ff`, then publish the phase report with an honest 1/3 progress basis.
+2. **2b, separate branch from main after 2a:** wire host/session approval into awaited script children, with real-runner approved and denied public `run_code` tests. A Zai worker is building this in an isolated branch; do not interrupt it or mix unverified adapter work into 2a.
+3. **2c, evidence-gated later merge:** migrate prompt/catalog, measure catalog cost, and retire direct subagent tools and role layer only once 2b proves equivalence. Retain compatibility presets when usage requires them.
+
+No push or publish without the user's authorization. Final report: `henshin-run-code-subagents-report.md`; it must distinguish the 2a merge from outstanding 2b/2c rather than claiming phase-2 completion.
 
 ## Goal and proportionality boundary
 

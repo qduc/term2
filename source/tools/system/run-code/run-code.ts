@@ -178,7 +178,9 @@ function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
     lines.push(
       '- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result ' +
         '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call ' +
-        'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled.',
+        'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. ' +
+        'Approval-interactive foreground children are not yet supported here: an interrupted child rejects; ' +
+        'use the direct subagent tool for work that may require user approval.',
     );
   }
   if (members.includes('start')) {

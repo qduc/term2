@@ -13,6 +13,7 @@ eval/*
 .pnpm-store/**
 pnpm-lock.yaml
 website/**
+web-client/**
 # Machine-written evidence/audit artifacts are preserved as recorded bytes.
 docs/test-audit/**/*.yaml
 docs/research/**/evidence.json

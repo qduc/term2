@@ -1,0 +1,19 @@
+# Dependencies
+/node_modules
+
+# Next.js build output
+/.next
+/out
+
+# Local env files and generated pairing key
+.env*
+/.data
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs / OS
+npm-debug.log*
+.DS_Store

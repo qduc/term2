@@ -47,6 +47,14 @@ export interface RunCodeAgentSpecBridge {
 export interface RunCodeAgentCapabilityDeps extends RunCodeAgentSpecBridge {
   authority: AgentSpecAuthoritySnapshot;
   logger: ILoggingService;
+  onCallAdmitted?: (member: string, started: number, callId: string) => void;
+  onCallSettled?: (
+    member: string,
+    started: number,
+    callId: string,
+    outcome: 'ok' | 'error' | 'unknown',
+    reason?: string,
+  ) => void;
 }
 
 /** Per-run state a script invocation owns. */
@@ -96,7 +104,6 @@ type PreparedAgentLaunch =
       member: 'start';
       boundary: SuccessfulBoundary;
       name?: string;
-      continue_run_id?: string;
       started: number;
     };
 
@@ -140,6 +147,9 @@ function launchParamError(member: 'run' | 'start', params: Record<string, unknow
   if (params.name !== undefined && typeof params.name !== 'string') return 'name must be a string.';
   if (params.continue_run_id !== undefined && typeof params.continue_run_id !== 'string') {
     return 'continue_run_id must be a string.';
+  }
+  if (member === 'start' && params.continue_run_id !== undefined) {
+    return 'continue_run_id is not supported by script agent.start until continuation authority can be verified.';
   }
   return undefined;
 }
@@ -199,6 +209,14 @@ export function createRunCodeAgentCapability(
           maxCalls - usedCalls,
         )} remaining). Return the partial results you collected.`,
       ),
+    onAdmitted: (prepared, context) => {
+      const callId = `${invocation.bridgeRunId}:agent:${context.callId}`;
+      deps.onCallAdmitted?.(prepared.member, prepared.started, callId);
+    },
+    onAborted: (prepared, context, reason) => {
+      const callId = `${invocation.bridgeRunId}:agent:${context.callId}`;
+      deps.onCallSettled?.(prepared.member, prepared.started, callId, 'unknown', reason);
+    },
     lane: (prepared) => (prepared.member === 'run' || prepared.member === 'start' ? 'default' : 'serial'),
     prepare: (payload) => {
       const started = Date.now();
@@ -242,7 +260,6 @@ export function createRunCodeAgentCapability(
               member,
               boundary,
               ...(typeof params.name === 'string' ? { name: params.name } : {}),
-              ...(typeof params.continue_run_id === 'string' ? { continue_run_id: params.continue_run_id } : {}),
               started,
             } satisfies PreparedAgentCall);
       }
@@ -262,71 +279,94 @@ export function createRunCodeAgentCapability(
       return { member: 'cancel', target: params.target as string, started } satisfies PreparedAgentCall;
     },
     invoke: async (prepared, callContext): Promise<CapabilityOutcome> => {
-      if (prepared.member === 'run') {
-        try {
-          const nested = await deps.runResolvedSubagent!.call(
-            undefined,
-            { resolvedDefinition: prepared.boundary },
-            invocation.context,
-            // The host controller signal aborts the child on script timeout or
-            // cancellation; the tool call id keeps foreground leases movable.
-            {
-              toolCall: { callId: `${invocation.bridgeRunId}:agent:${callContext.callId}` },
-              signal: callContext.signal,
-            },
-          );
-          return { kind: 'result', result: { ok: true, result: projectNestedResult(nested) } as JsonValue };
-        } catch (error) {
-          if (callContext.signal.aborted || isAbortError(error)) throw error;
-          return rejectCall(error instanceof Error ? error.message : String(error));
-        }
-      }
-      if (prepared.member === 'start') {
-        try {
-          const handle = await deps.runResolvedSubagentAsync!.call(undefined, {
-            resolvedDefinition: prepared.boundary,
-            ...(prepared.name ? { name: prepared.name } : {}),
-            ...(prepared.continue_run_id ? { continue_run_id: prepared.continue_run_id } : {}),
-          });
-          return {
-            kind: 'result',
-            result: {
-              ok: true,
-              result: {
-                runId: handle.runId,
-                ...(handle.name ? { name: handle.name } : {}),
-                role: handle.role,
-                status: handle.status,
-              } as JsonValue,
-            } as JsonValue,
-          };
-        } catch (error) {
-          // Launch failures are script-catchable; the background run is never
-          // bound to this script's signal, so there is no abort case here.
-          return rejectCall(error instanceof Error ? error.message : String(error));
-        }
-      }
-      if (prepared.member === 'status') {
-        const status = deps.getSubagentStatus!.call(
-          undefined,
-          prepared.runId !== undefined ? { runId: prepared.runId } : {},
-          invocation.context,
+      const callId = `${invocation.bridgeRunId}:agent:${callContext.callId}`;
+      try {
+        const outcome = await (async (): Promise<CapabilityOutcome> => {
+          if (prepared.member === 'run') {
+            try {
+              const nested = await deps.runResolvedSubagent!.call(
+                undefined,
+                { resolvedDefinition: prepared.boundary },
+                invocation.context,
+                // The host controller signal aborts the child on script timeout or
+                // cancellation; the tool call id keeps foreground leases movable.
+                {
+                  toolCall: { callId: `${invocation.bridgeRunId}:agent:${callContext.callId}` },
+                  signal: callContext.signal,
+                },
+              );
+              return { kind: 'result', result: { ok: true, result: projectNestedResult(nested) } as JsonValue };
+            } catch (error) {
+              if (callContext.signal.aborted || isAbortError(error)) throw error;
+              return rejectCall(error instanceof Error ? error.message : String(error));
+            }
+          }
+          if (prepared.member === 'start') {
+            try {
+              const handle = await deps.runResolvedSubagentAsync!.call(undefined, {
+                resolvedDefinition: prepared.boundary,
+                ...(prepared.name ? { name: prepared.name } : {}),
+              });
+              return {
+                kind: 'result',
+                result: {
+                  ok: true,
+                  result: {
+                    runId: handle.runId,
+                    ...(handle.name ? { name: handle.name } : {}),
+                    role: handle.role,
+                    status: handle.status,
+                  } as JsonValue,
+                } as JsonValue,
+              };
+            } catch (error) {
+              // Launch failures are script-catchable; the background run is never
+              // bound to this script's signal, so there is no abort case here.
+              return rejectCall(error instanceof Error ? error.message : String(error));
+            }
+          }
+          if (prepared.member === 'status') {
+            const status = deps.getSubagentStatus!.call(
+              undefined,
+              prepared.runId !== undefined ? { runId: prepared.runId } : {},
+              invocation.context,
+            );
+            return { kind: 'result', result: { ok: true, result: status as unknown as JsonValue } };
+          }
+          if (prepared.member === 'result') {
+            try {
+              const settled = await deps.getSubagentResult!.call(
+                undefined,
+                { runId: prepared.runId },
+                invocation.context,
+                {
+                  signal: callContext.signal,
+                },
+              );
+              return { kind: 'result', result: { ok: true, result: projectNestedResult(settled) } as JsonValue };
+            } catch (error) {
+              if (callContext.signal.aborted || isAbortError(error)) throw error;
+              return rejectCall(error instanceof Error ? error.message : String(error));
+            }
+          }
+          const acknowledgement = deps.cancelSubagentRun!.call(undefined, { target: prepared.target });
+          return { kind: 'result', result: { ok: true, result: acknowledgement as unknown as JsonValue } };
+        })();
+        const result = outcome.kind === 'result' && isRecord(outcome.result) ? outcome.result : undefined;
+        const failed = outcome.kind === 'fail' || result?.ok === false;
+        const reason = failed && typeof result?.error === 'string' ? result.error : undefined;
+        deps.onCallSettled?.(prepared.member, prepared.started, callId, failed ? 'error' : 'ok', reason);
+        return outcome;
+      } catch (error) {
+        deps.onCallSettled?.(
+          prepared.member,
+          prepared.started,
+          callId,
+          'error',
+          error instanceof Error ? error.message : String(error),
         );
-        return { kind: 'result', result: { ok: true, result: status as unknown as JsonValue } };
+        throw error;
       }
-      if (prepared.member === 'result') {
-        try {
-          const settled = await deps.getSubagentResult!.call(undefined, { runId: prepared.runId }, invocation.context, {
-            signal: callContext.signal,
-          });
-          return { kind: 'result', result: { ok: true, result: projectNestedResult(settled) } as JsonValue };
-        } catch (error) {
-          if (callContext.signal.aborted || isAbortError(error)) throw error;
-          return rejectCall(error instanceof Error ? error.message : String(error));
-        }
-      }
-      const acknowledgement = deps.cancelSubagentRun!.call(undefined, { target: prepared.target });
-      return { kind: 'result', result: { ok: true, result: acknowledgement as unknown as JsonValue } };
     },
   };
 }

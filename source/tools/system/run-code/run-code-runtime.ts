@@ -533,6 +533,8 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const receipts: RunCodeActionReceipt[] = [];
     const pendingReceiptByCallId = new Map<string, number>();
     const abortedCallIds = new Set<string>();
+    const agentCallIndexes = new Map<string, number>();
+    const abortedAgentCallIds = new Set<string>();
     let rejectedSeq = 0;
     const output: string[] = [];
     const consoleValues: JsonValue[][] = [];
@@ -581,6 +583,33 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         receipts[pendingIndex] = value;
         pendingReceiptByCallId.delete(callId);
       } else receipts.push(value);
+    };
+    const recordAgentCall = (
+      member: string,
+      started: number,
+      callId: string,
+      outcome: RunCodeCallRecord['outcome'],
+      reason?: string,
+    ): void => {
+      if (abortedAgentCallIds.has(callId) && outcome !== 'unknown') return;
+      let index = agentCallIndexes.get(callId);
+      if (index === undefined) {
+        index = calls.length;
+        agentCallIndexes.set(callId, index);
+        calls.push({ tool: `agent.${member}`, outcome: 'unknown', durationMs: 0, callId });
+        if (member === 'start') recordReceipt(callId, 'agent.start', 'unknown');
+      }
+      calls[index] = {
+        tool: `agent.${member}`,
+        outcome,
+        durationMs: Date.now() - started,
+        callId,
+        ...(reason ? { reason: clipReason(reason) } : {}),
+      };
+      if (member === 'start') {
+        const actionOutcome = outcome === 'ok' ? 'applied' : outcome === 'error' ? 'failed' : 'unknown';
+        recordReceipt(callId, 'agent.start', actionOutcome, reason);
+      }
     };
 
     const tools: CapabilityHandler<PreparedCall> = {
@@ -863,7 +892,16 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const capabilities: Record<string, CapabilityHandler<any>> = { tools };
     if (options.agentBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentBridge)) {
       capabilities.agent = createRunCodeAgentCapability(
-        { ...options.agentBridge, authority: options.agentSpecAuthority, logger: loggingService },
+        {
+          ...options.agentBridge,
+          authority: options.agentSpecAuthority,
+          logger: loggingService,
+          onCallAdmitted: (member, started, callId) => recordAgentCall(member, started, callId, 'unknown'),
+          onCallSettled: (member, started, callId, outcome, reason) => {
+            if (outcome === 'unknown' && reason) abortedAgentCallIds.add(callId);
+            recordAgentCall(member, started, callId, outcome, reason);
+          },
+        },
         { bridgeRunId, context: input.context },
       );
     }

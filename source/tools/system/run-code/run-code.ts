@@ -183,8 +183,9 @@ function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
   }
   if (members.includes('start')) {
     lines.push(
-      '- `agent.start({ spec, name?, continue_run_id? })` starts a conversation-scoped background run and ' +
-        "resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout.",
+      '- `agent.start({ spec, name? })` starts a conversation-scoped background run and ' +
+        "resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. " +
+        '`continue_run_id` is rejected by this script capability until stored-run authority can be verified.',
       '- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled ' +
         'result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session ' +
         'notification lane even after this script returns.',

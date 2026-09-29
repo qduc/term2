@@ -546,6 +546,63 @@ describe('run_code agent capability', () => {
     expect(calls.startRunAsync[0].resolvedDefinition).toBeTruthy();
     expect(calls.cancelAsyncRun).toEqual(['async-1']);
     expect(bridge.runSubagentAsync).not.toHaveBeenCalled();
+    expect(output).toContain('agent.start [');
+    expect(output).toContain('applied');
+  });
+
+  it('rejects script continuation instead of inheriting a stored run definition', async () => {
+    const { manager, calls } = createScriptManager();
+    const bridge = makeBridge(manager);
+    const definition = buildRunCodeTool({ bridge });
+
+    const output = await execute(
+      definition,
+      `const rejection = await agent.start({
+        spec: ${specJson('continue with read-only tools')},
+        continue_run_id: 'completed-broader-run',
+      }).catch((error) => error.message);
+      return rejection;`,
+    );
+
+    expect(output).toContain('continue_run_id is not supported');
+    expect(calls.startRunAsync).toHaveLength(0);
+  });
+
+  it('includes successful agent launches in the host call ledger', async () => {
+    const { manager } = createScriptManager();
+    const definition = buildRunCodeTool({ bridge: makeBridge(manager) });
+
+    const output = await execute(
+      definition,
+      `await agent.run({ spec: ${specJson('account this launch')} });
+      throw new Error('script failed after launch');`,
+    );
+
+    expect(output).toContain('agent.run');
+    expect(output).toContain('1 tool call');
+  });
+
+  it('records an unknown background launch when the script times out before receiving its handle', async () => {
+    const { manager } = createScriptManager();
+    const dispatched: unknown[] = [];
+    (manager as any).startRunAsync = (args: unknown) => {
+      dispatched.push(args);
+      return new Promise(() => {});
+    };
+    const definition = buildRunCodeTool({ bridge: makeBridge(manager) });
+
+    const output = await execute(
+      definition,
+      `await agent.start({ spec: ${specJson('background launch with delayed handle')} });
+      return 'unreachable';`,
+      1_000,
+    );
+
+    expect(output).toContain('Script timed out');
+    expect(output).toContain('agent.start');
+    expect(output).toContain('unknown');
+    expect(output).toContain('did not settle before the script run ended');
+    expect(dispatched).toHaveLength(1);
   });
 
   it('reports unobserved agent failures through the host unhandled-rejection lane with the agent prefix', async () => {
@@ -598,6 +655,7 @@ describe('run_code agent capability', () => {
     expect(both.description).toContain('## Agent capability');
     expect(both.description).toContain('agent.run(');
     expect(both.description).toContain('agent.start(');
+    expect(both.description).toContain('continue_run_id` is rejected');
 
     const foregroundOnly = buildRunCodeTool({ bridge: makeBridge(manager), foregroundOnly: true });
     expect(foregroundOnly.description).toContain('agent.run(');

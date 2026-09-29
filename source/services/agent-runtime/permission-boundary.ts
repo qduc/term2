@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
-import { agentSpecToConfig } from './agent-spec.js';
+import { AGENT_SPEC_TOOL_NAMES, agentSpecToConfig } from './agent-spec.js';
 import { resolveAgent } from './agent-resolver.js';
 import type { ResolvedAgentDefinition } from './resolved-agent.js';
 import type { ResolvedFilesystemScope, ResolvedNetworkScope } from './scope-resolver.js';
@@ -24,19 +24,7 @@ const AGENT_SPEC_FIELDS = new Set([
   'model',
   'budget',
 ]);
-const AGENT_SPEC_TOOL_SET = new Set<AgentSpecToolName>([
-  'read_file',
-  'grep',
-  'glob',
-  'read_code_outline',
-  'code_context_search',
-  'web_search',
-  'web_fetch',
-  'shell',
-  'apply_patch',
-  'search_replace',
-  'create_file',
-]);
+const AGENT_SPEC_TOOL_SET = new Set<AgentSpecToolName>(AGENT_SPEC_TOOL_NAMES);
 const READ_TOOLS = new Set(['read_file', 'grep', 'glob', 'read_code_outline', 'code_context_search']);
 const WRITE_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 const WEB_TOOLS = new Set(['web_search', 'web_fetch']);
@@ -159,6 +147,24 @@ export function resolveAgentSpecForChild(
     };
   });
   resolutionErrors.push(...validateResolvedScopeTools(definition));
+  if (authority.filesystemScope) {
+    for (const axis of ['read', 'write'] as const) {
+      if (definition.filesystemScope?.[axis].some((pattern) => !authority.filesystemScope![axis].includes(pattern))) {
+        resolutionErrors.push({
+          code: 'unsupported_permission_scope',
+          field: `permissions.filesystem.${axis}`,
+          message: 'Child filesystem patterns must exactly match an authorized parent pattern.',
+        });
+      }
+    }
+  }
+  if (spec.permissions?.agents?.create === true) {
+    resolutionErrors.push({
+      code: 'unsupported_permission_scope',
+      field: 'permissions.agents.create',
+      message: 'Nested agent creation is not provisioned for AgentSpec executions.',
+    });
+  }
   if (resolutionErrors.length > 0) return { ok: false, errors: resolutionErrors };
 
   // A scope can derive a coarse flag in the general resolver even when no
@@ -173,6 +179,7 @@ export function resolveAgentSpecForChild(
       canWrite: definition.tools.some((tool) => WRITE_TOOLS.has(tool)),
       canRunShell: definition.tools.includes('shell'),
       canSearchWeb: definition.tools.some((tool) => WEB_TOOLS.has(tool)),
+      canUseNestedAgents: false,
     },
   };
 
@@ -488,11 +495,11 @@ function validateResolvedScopeTools(definition: ResolvedAgentDefinition): AgentS
         message: 'Network host scope is explicitly empty.',
       });
     }
-    if (definition.tools.includes('web_fetch') && !definition.networkScope.includes('*')) {
+    if (definition.tools.some((tool) => WEB_TOOLS.has(tool)) && !definition.networkScope.includes('*')) {
       errors.push({
         code: 'unsupported_permission_scope',
         field: 'permissions.network.hosts',
-        message: 'web_fetch cannot be proven safe with a finite network scope.',
+        message: 'Web tools cannot be proven usable with a finite network scope.',
       });
     }
   }

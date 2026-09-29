@@ -59,31 +59,48 @@ function resolve(spec: unknown, authority = parentAuthorityFromDefinition(parent
 }
 
 describe('resolveAgentSpecForChild', () => {
-  it('allows a child subset and preserves narrowed filesystem, network, and nested-agent authority', () => {
+  it('allows a child subset and preserves narrowed filesystem authority', () => {
     const result = resolve({
       goal: 'Inspect the source tree',
-      tools: ['read_file', 'web_search'],
+      tools: ['read_file'],
       permissions: {
-        tools: ['read_file', 'web_search'],
+        tools: ['read_file'],
         filesystem: { read: ['src/**'] },
-        network: { hosts: ['docs.example.com'] },
-        agents: { create: true, maxDepth: 1 },
       },
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.definition.tools).toEqual(['read_file', 'web_search']);
+    expect(result.definition.tools).toEqual(['read_file']);
     expect(result.definition.filesystemScope).toEqual({ read: ['src/**'], write: [] });
-    expect(result.definition.networkScope).toEqual(['docs.example.com']);
     expect(result.definition.permissions).toMatchObject({
       canRead: true,
       canWrite: false,
       canRunShell: false,
-      canSearchWeb: true,
-      canUseNestedAgents: true,
+      canSearchWeb: false,
+      canUseNestedAgents: false,
     });
-    expect(result.definition.limits.maxDepth).toBe(1);
+    expect(result.definition.limits.maxDepth).toBe(2);
+  });
+
+  it('rejects a broader child glob even when the existing resolver accepts its shared prefix', () => {
+    const authority = parentAuthorityFromDefinition(
+      parent({ filesystemScope: { read: ['src/*.ts'], write: ['src/*.ts'] } }),
+    );
+    for (const tool of ['read_file', 'apply_patch']) {
+      const result = resolve(
+        { goal: 'Inspect source', tools: [tool], permissions: { filesystem: { read: ['src/**'], write: ['src/**'] } } },
+        authority,
+      );
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('rejects finite-host web_search and unsupported nested-agent creation', () => {
+    expect(
+      resolve({ goal: 'search', tools: ['web_search'], permissions: { network: { hosts: ['docs.example.com'] } } }).ok,
+    ).toBe(false);
+    expect(resolve({ goal: 'delegate', permissions: { agents: { create: true, maxDepth: 1 } } }).ok).toBe(false);
   });
 
   it('rejects tools and scopes that exceed a narrower parent', () => {

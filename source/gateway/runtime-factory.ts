@@ -519,6 +519,7 @@ export class RuntimeFactory {
       const session = new ServerSession({
         binding,
         service,
+        handle: service.sessionHandle,
         composition,
         policy: this.#policy,
         eventSink: options?.eventSink,

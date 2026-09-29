@@ -31,7 +31,7 @@ const [
   moduleAt('services/logging/logging-service.js'),
   moduleAt('services/settings/settings-service.js'),
   moduleAt('services/session/session-context-service.js'),
-  moduleAt('core/index.js'),
+  moduleAt('core/session-runtime.js'),
 ]);
 const [{ ExecutionContext }, { ToolOwnershipRegistry }, { createSubagentRuntime }, { loadRoleDefinition }] =
   await Promise.all([

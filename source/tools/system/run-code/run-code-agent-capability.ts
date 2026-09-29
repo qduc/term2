@@ -64,8 +64,7 @@ export interface RunCodeAgentCapabilityDeps extends RunCodeAgentSpecBridge {
   /** Session identity and graph binding forwarded to the owner's requests. */
   sessionId?: string;
   graphIdentity?: object;
-  /** Session-owned grant memory for allow-session/docker child answers. */
-  sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
+  /** Session-owned nested tool grant memory; never grant a child through root access. */
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
   onCallAdmitted?: (member: string, started: number, callId: string) => void;
   onCallSettled?: (
@@ -297,12 +296,16 @@ export function createRunCodeAgentCapability(
             ).kind,
           grant: (decision) => {
             if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
+            // Nested edit tools have no session edit-grant store. Do not claim
+            // a durable child edit authorization by mutating the root's state.
+            if (decision.answer === 'allow-edit-file-session' || decision.answer === 'allow-edit-folder-session') {
+              throw new Error('Session edit grants are unavailable for script child agents.');
+            }
             // Session-owned grant memory (allow-session edits, docker, denied
             // reads) applies exactly as the direct child approval path does.
             const applied = applyApprovalGrant(
               {
                 sessionId: deps.sessionId ?? 'unknown',
-                sessionAccess: deps.sessionAccess,
                 nestedCompatibility: deps.nestedCompatibility,
                 logger: deps.logger,
               },

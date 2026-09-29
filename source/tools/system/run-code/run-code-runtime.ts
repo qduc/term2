@@ -903,7 +903,6 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             : {}),
           ...(sessionId !== undefined ? { sessionId } : {}),
           ...(options.graphIdentity ? { graphIdentity: options.graphIdentity } : {}),
-          ...(options.sessionAccess ? { sessionAccess: options.sessionAccess } : {}),
           ...(options.nestedCompatibility ? { nestedCompatibility: options.nestedCompatibility } : {}),
           onCallAdmitted: (member, started, callId) => recordAgentCall(member, started, callId, 'unknown'),
           onCallSettled: (member, started, callId, outcome, reason) => {

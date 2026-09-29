@@ -13,6 +13,8 @@ import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import { NestedToolCompatibilityState } from '../../../services/session/nested-tool-compatibility-state.js';
+import { SessionAccessState } from '../../../services/session/session-access-state.js';
 import { NestedSubagentRunner } from '../../../services/subagents/nested-runner.js';
 import { getSubagentRunContext, type SubagentToolFactory } from '../../../services/subagents/tool-policy.js';
 import type { SubagentDefinition } from '../../../services/subagents/types.js';
@@ -739,7 +741,15 @@ describe('run_code agent capability foreground child approvals (real nested runn
    * run_code `agent.run` capability instead of a direct runner call.
    */
   function buildRealRunnerFixture(
-    options: { approvalPerCall?: boolean; toolCallsBeforeSummary?: number; summaryDelayMs?: number } = {},
+    options: {
+      approvalPerCall?: boolean;
+      toolCallsBeforeSummary?: number;
+      summaryDelayMs?: number;
+      toolName?: string;
+      toolArguments?: string;
+      toolParameters?: AnyToolDefinition['parameters'];
+      onExecute?: () => void;
+    } = {},
   ) {
     const toolCallsBeforeSummary = options.toolCallsBeforeSummary ?? 1;
     let requestedToolCalls = 0;
@@ -770,11 +780,23 @@ describe('run_code agent capability foreground child approvals (real nested runn
           }
           requestedToolCalls += 1;
           const callId = `child-call-${requestedToolCalls}`;
-          yield { type: 'tool_call', id: callId, name: 'fake_tool', arguments: '{"path":"notes.md"}' };
+          yield {
+            type: 'tool_call',
+            id: callId,
+            name: options.toolName ?? 'fake_tool',
+            arguments: options.toolArguments ?? '{"path":"notes.md"}',
+          };
           yield {
             type: 'completion',
             responseId: `resp-${requestedToolCalls}`,
-            output: [{ type: 'tool_call', id: callId, name: 'fake_tool', arguments: '{"path":"notes.md"}' }],
+            output: [
+              {
+                type: 'tool_call',
+                id: callId,
+                name: options.toolName ?? 'fake_tool',
+                arguments: options.toolArguments ?? '{"path":"notes.md"}',
+              },
+            ],
           };
         },
       }),
@@ -782,12 +804,13 @@ describe('run_code agent capability foreground child approvals (real nested runn
     });
 
     const fakeTool: AnyToolDefinition = {
-      name: 'fake_tool',
+      name: options.toolName ?? 'fake_tool',
       description: 'child tool that needs approval',
-      parameters: z.object({ path: z.string() }),
+      parameters: options.toolParameters ?? z.object({ path: z.string() }),
       needsApproval: () => options.approvalPerCall ?? false,
       formatCommandMessage: noopFormatter,
       execute: async (_params: unknown, context: unknown) => {
+        options.onExecute?.();
         executedToolCalls.push('fake_tool');
         const runContext = getSubagentRunContext(context);
         runContext?.filesChanged.push('notes.md');
@@ -862,13 +885,20 @@ describe('run_code agent capability foreground child approvals (real nested runn
 
   function buildChildApprovalRunCodeTool(
     fixture: ReturnType<typeof buildRealRunnerFixture>,
-    options: { withOwner?: boolean } = {},
+    options: {
+      withOwner?: boolean;
+      nestedCompatibility?: NestedToolCompatibilityState;
+      sessionAccess?: SessionAccessState;
+      toolName?: string;
+      toolParameters?: AnyToolDefinition['parameters'];
+      authoritySnapshot?: AgentSpecAuthoritySnapshot;
+    } = {},
   ) {
     const approvalRegistry = new ToolApprovalPolicyRegistry();
     approvalRegistry.register({ toolName: 'echo', parameters: echoTool().parameters, needsApproval: () => false });
     approvalRegistry.register({
-      toolName: 'fake_tool',
-      parameters: z.object({ path: z.string() }),
+      toolName: options.toolName ?? 'fake_tool',
+      parameters: options.toolParameters ?? z.object({ path: z.string() }),
       needsApproval: () => true,
     });
     const owner = new NestedApprovalOwner();
@@ -878,8 +908,10 @@ describe('run_code agent capability foreground child approvals (real nested runn
       getToolRegistry: () => tools,
       getCwd: () => process.cwd(),
       approvalPolicyRegistry: approvalRegistry,
-      agentSpecAuthority: authority(),
+      agentSpecAuthority: options.authoritySnapshot ?? authority(),
       agentSpecBridge: scriptBridge(fixture.bridge, { foregroundOnly: true }) as never,
+      nestedCompatibility: options.nestedCompatibility,
+      sessionAccess: options.sessionAccess,
     }) as AnyToolDefinition;
     tools = [...tools, runCode];
     bindRunCodeRegistry(tools);
@@ -923,6 +955,78 @@ describe('run_code agent capability foreground child approvals (real nested runn
     expect(value.filesChanged).toEqual(['notes.md']);
     expect(value.costRecords).toBeUndefined();
     expect(value.nestedRunResult).toBeUndefined();
+  });
+
+  it('applies a child folder grant to nested state, not the root access state', async () => {
+    const settings = createMockSettingsService();
+    const nestedCompatibility = new NestedToolCompatibilityState(settings);
+    const sessionAccess = new SessionAccessState(settings);
+    const file = `${process.cwd()}/notes.md`;
+    const fixture = buildRealRunnerFixture({
+      approvalPerCall: true,
+      toolName: 'read_file',
+      toolArguments: JSON.stringify({ path: file }),
+      onExecute: () => {
+        if (!nestedCompatibility.allowsRead('session-1', file)) throw new Error('child grant missing');
+      },
+    });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture, {
+      nestedCompatibility,
+      sessionAccess,
+      toolName: 'read_file',
+    });
+    const pending = execute(
+      runCode,
+      `return await agent.run({ spec: ${childSpecJson(fixture.providerId, 'read notes')} });`,
+      20_000,
+      runCodeSession(),
+    );
+    await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+    await owner!.decide(owner!.getSnapshot()!.requestId, { answer: 'allow-folder-session' });
+    expect(resultJson(await pending).status).toBe('completed');
+    expect(nestedCompatibility.allowsRead('session-1', file)).toBe(true);
+    expect(sessionAccess.allowsRead(file)).toBe(false);
+  });
+
+  it('applies child Docker approval to nested grants without granting the root shell', async () => {
+    const settings = createMockSettingsService();
+    const nestedCompatibility = new NestedToolCompatibilityState(settings);
+    const sessionAccess = new SessionAccessState(settings);
+    const command = 'docker ps';
+    const toolParameters = z.object({ command: z.string() });
+    const fixture = buildRealRunnerFixture({
+      approvalPerCall: true,
+      toolName: 'shell',
+      toolArguments: JSON.stringify({ command }),
+      toolParameters,
+      onExecute: () => {
+        if (!nestedCompatibility.docker.consumeOnce('session-1', command))
+          throw new Error('child Docker grant missing');
+      },
+    });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture, {
+      nestedCompatibility,
+      sessionAccess,
+      toolName: 'shell',
+      toolParameters,
+      authoritySnapshot: authority({ filesystemScope: undefined }),
+    });
+    const spec = JSON.stringify({
+      goal: 'inspect Docker',
+      tools: ['shell'],
+      model: { provider: fixture.providerId, model: 'nested-model' },
+      permissions: { tools: ['shell'] },
+    });
+    const pending = execute(runCode, `return await agent.run({ spec: ${spec} });`, 20_000, runCodeSession());
+    await Promise.race([
+      pending.then((output) => {
+        throw new Error(`Child settled without approval: ${output}`);
+      }),
+      vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull()),
+    ]);
+    await owner!.decide(owner!.getSnapshot()!.requestId, { answer: 'docker-allow-once' });
+    expect(resultJson(await pending).status).toBe('completed');
+    expect(sessionAccess.hasDockerGrant(command, process.cwd())).toBe(false);
   });
 
   it('applies a denial to the exact child continuation without executing the child tool', async () => {

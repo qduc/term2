@@ -13,6 +13,7 @@ import {
   interactionDtoFromSnapshot,
   isInteractionResolveRequest,
   isPublicEventEnvelope,
+  GATEWAY_EVENT_PROJECTION,
   mapConversationEvent,
   publicEventProjectionCounters,
   sessionConfigProjection,
@@ -34,6 +35,7 @@ import { createMockStream } from '../services/test-helpers/mock-stream.js';
 import type { GatewayAssertionClaims, GatewaySafeLogMetadata, ProviderBrokerCapability } from './contracts.js';
 import type { ILoggingService, LogMetadataContract } from '../services/service-interfaces.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import { FROZEN_AGENT_EVENT_TYPES } from '@qduc/agent-wire';
 
 const tempRoots: string[] = [];
 // Injects sidecar write failures without touching the filesystem; the real
@@ -203,6 +205,13 @@ describe('M4 conversation event projections', () => {
 });
 
 describe('M4 public event allowlist', () => {
+  it('declares the gateway outcome for every frozen wire event and no other event', () => {
+    expect(Object.keys(GATEWAY_EVENT_PROJECTION).sort()).toEqual([...FROZEN_AGENT_EVENT_TYPES].sort());
+    for (const type of FROZEN_AGENT_EVENT_TYPES) {
+      expect(['projected', 'folded', 'not_emitted']).toContain(GATEWAY_EVENT_PROJECTION[type]);
+    }
+  });
+
   it('accepts each newly projected event family', () => {
     for (const type of [
       'retry',

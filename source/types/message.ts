@@ -78,3 +78,19 @@ export const isCommandMessage = (message: Message): message is CommandMessage =>
 
 export const isSubagentActivityMessage = (message: Message): message is SubagentActivityMessage =>
   message.sender === 'subagent';
+
+export const isResultToolEvent = (tool: string | CommandMessage): boolean => {
+  if (tool && typeof tool === 'object') {
+    return tool.status === 'completed' || tool.status === 'failed' || tool.success !== undefined;
+  }
+  if (typeof tool === 'string') {
+    return (
+      tool.endsWith(' (Success)') ||
+      tool.endsWith(' (Failed)') ||
+      tool.endsWith(' (Cancelled)') ||
+      /\s+\(Failed:.*\)$/.test(tool) ||
+      /\s+\(\d+\s+match(es)?\)$/.test(tool)
+    );
+  }
+  return false;
+};

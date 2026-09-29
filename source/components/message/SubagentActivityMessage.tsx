@@ -3,7 +3,8 @@ import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
 import { COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING, TOOL_STATUS_GLYPH } from '../theme.js';
-import type { CommandMessage as CommandMessageType } from '../../types/message.js';
+import { isResultToolEvent, type CommandMessage as CommandMessageType } from '../../types/message.js';
+export { isResultToolEvent } from '../../types/message.js';
 
 type SubagentToolEntry = string | CommandMessageType;
 
@@ -75,22 +76,6 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
   }
 
   return `${statusChar} ${cleaned}`;
-};
-
-export const isResultToolEvent = (tool: SubagentToolEntry): boolean => {
-  if (tool && typeof tool === 'object') {
-    return tool.status === 'completed' || tool.status === 'failed' || tool.success !== undefined;
-  }
-  if (typeof tool === 'string') {
-    return (
-      tool.endsWith(' (Success)') ||
-      tool.endsWith(' (Failed)') ||
-      tool.endsWith(' (Cancelled)') ||
-      /\s+\(Failed:.*\)$/.test(tool) ||
-      /\s+\(\d+\s+match(es)?\)$/.test(tool)
-    );
-  }
-  return false;
 };
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {

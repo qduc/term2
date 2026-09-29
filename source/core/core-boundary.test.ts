@@ -215,7 +215,7 @@ it('imports the core entry without CLI process or filesystem side effects', asyn
   }) as typeof process.exit;
 
   try {
-    const core = await import('./index.js');
+    const core = await import('./session-runtime.js');
     expect(typeof core.createSessionRuntime).toBe('function');
     await new Promise<void>((resolveImmediate) => setImmediate(resolveImmediate));
     probeDirectoryContents = Object.values(probeDirectories).map((directory) => readdirSync(directory));
@@ -240,11 +240,23 @@ it('imports the core entry without CLI process or filesystem side effects', asyn
   expect(probeDirectoryContents).toEqual([[], [], [], []]);
 });
 
-it('keeps the conversation runtime factory on the core entry', () => {
+it('keeps the conversation runtime factory on the internal runtime entry', () => {
   const factory = readFileSync(resolve(sourceRoot, 'services/conversation/conversation-runtime-factory.ts'), 'utf8');
 
-  expect(factory).toContain('../../core/index.js');
-  expect(factory).not.toContain('../session/session-composition.js');
+  expect(factory).toContain('../../core/session-runtime.js');
+  expect(factory).not.toContain('../../core/index.js');
+});
+
+it('exposes only the session handle DTOs from the core barrel', async () => {
+  const source = readFileSync(coreEntry, 'utf8');
+  expect(source).toContain('SessionHandle');
+  expect(source).toContain('Prepared');
+  expect(source).toContain('InteractionDecision');
+  expect(source).not.toContain('createSessionRuntime');
+  expect(source).not.toContain('CreateConversationSessionOptions');
+
+  const core = await import('./index.js');
+  expect(Object.keys(core).sort()).toEqual([]);
 });
 
 it('does not pull the CLI log writer into the core production graph', () => {

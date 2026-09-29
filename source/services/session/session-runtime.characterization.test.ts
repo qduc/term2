@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createSessionRuntime } from '../../core/index.js';
+import { createSessionRuntime } from '../../core/session-runtime.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';

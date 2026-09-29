@@ -1,5 +1,5 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
-import type { SessionRuntime } from '../../core/index.js';
+import type { SessionRuntime } from '../../core/session-runtime.js';
 import { ConversationAdapter } from './conversation-adapter.js';
 import { createSessionQueuePersistence } from './queue-persistence.js';
 import { isTestEnvironment } from '../settings/settings-env.js';

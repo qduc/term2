@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { createSessionRuntime } from '../../core/index.js';
+import { createSessionRuntime } from '../../core/session-runtime.js';
 import { ExecutionContext } from '../execution-context.js';
 import { normalizeToolPath } from '../agent-runtime/scope-resolver.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';

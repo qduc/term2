@@ -4,7 +4,7 @@ import type {
   ConversationAgentClient,
   SubagentEventSinkHost,
 } from '../conversation-agent-client.js';
-import { createSessionRuntime, type SessionRuntime } from '../../core/index.js';
+import { createSessionRuntime, type SessionRuntime } from '../../core/session-runtime.js';
 import { createConversationAdapterForRuntime } from './conversation-adapter-factory.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';

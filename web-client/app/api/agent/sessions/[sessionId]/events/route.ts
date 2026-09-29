@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { term2GatewayClient } from '@/lib/server/term2-gateway-client.js';
 import { LOCAL_OWNER_USER_ID } from '@/lib/server/gateway-config.js';
 import { errorResponse, rpc, validateCursor } from '@/lib/server/proxy';
+import { attachAbortCleanup } from '@/lib/server/request-guards';
 import { resolveSessionWorkspace } from '@/lib/server/session-lookup';
 
 export const runtime = 'nodejs';
@@ -20,7 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
     after = validateCursor(after);
     const query = after ? `?after=${after}` : '';
 
-    const upstream = await term2GatewayClient.stream({
+    const upstreamPromise = term2GatewayClient.stream({
       userId: LOCAL_OWNER_USER_ID,
       purpose: 'events_connect',
       workspaceId: resolved.workspaceId,
@@ -28,7 +29,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
       rpcPath: `${rpc.session(sessionId)}/events`,
       query,
     });
-    request.signal.addEventListener('abort', () => {
+    const upstream = await upstreamPromise;
+    attachAbortCleanup(request.signal, () => {
       upstream.destroy();
     });
     const body = Readable.toWeb(upstream) as unknown as ReadableStream<Uint8Array>;

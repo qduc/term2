@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { Term2GatewayError, OPAQUE_ID, type Term2GatewayClient } from './term2-gateway-client.js';
 import { LOCAL_OWNER_USER_ID } from './gateway-config.js';
 import { rememberSessionBindings } from './session-bindings.js';
+import { assertLocalStateChangingRequest } from './request-guards';
+import { RequestValidationError } from './request-validation';
 
 export const rpc = {
   workspaces: '/private/agent/v1/workspaces',
@@ -24,7 +26,7 @@ export const rpc = {
   oauthAccount: (provider: string, accountId: string) => `/private/agent/v1/oauth/${provider}/accounts/${accountId}`,
 };
 
-export class LocalValidationError extends Error {
+export class LocalValidationError extends RequestValidationError {
   code = 'validation_error';
   status = 400;
 }
@@ -58,13 +60,14 @@ export function buildQuery(page: { limit: number; cursor: string | null }): stri
 
 export async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
   try {
+    assertLocalStateChangingRequest(request);
     const parsed = await request.json();
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new LocalValidationError('Invalid request body');
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
-    if (error instanceof LocalValidationError) throw error;
+    if (error instanceof RequestValidationError) throw error;
     throw new LocalValidationError('Invalid JSON body');
   }
 }
@@ -91,7 +94,7 @@ export async function forward(
 }
 
 export function errorResponse(error: unknown): NextResponse {
-  if (error instanceof LocalValidationError) {
+  if (error instanceof RequestValidationError) {
     return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status });
   }
   if (error instanceof Term2GatewayError) {

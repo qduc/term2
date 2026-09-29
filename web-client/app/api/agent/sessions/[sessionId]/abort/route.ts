@@ -1,27 +1,23 @@
 import { term2GatewayClient } from '@/lib/server/term2-gateway-client.js';
 import { errorResponse, forward, readJsonBody, rpc } from '@/lib/server/proxy';
-import { validateInteractionBody } from '@/lib/server/request-validation';
+import { validateAbortBody } from '@/lib/server/request-validation';
 import { resolveSessionWorkspace } from '@/lib/server/session-lookup';
 
 export const runtime = 'nodejs';
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ sessionId: string; interactionId: string }> },
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
-    const { sessionId, interactionId } = await params;
+    const { sessionId } = await params;
     const resolved = await resolveSessionWorkspace(sessionId);
     if ('response' in resolved) return resolved.response;
-    const body = await readJsonBody(request);
-    const upstream = validateInteractionBody(body, interactionId);
+    const body = validateAbortBody(await readJsonBody(request));
     return await forward(term2GatewayClient, {
-      purpose: 'interaction_resolve',
+      purpose: 'abort',
       method: 'POST',
-      rpcPath: rpc.interactions(sessionId, interactionId),
+      rpcPath: rpc.abort(sessionId),
       workspaceId: resolved.workspaceId,
       sessionId,
-      body: upstream,
+      body,
     });
   } catch (error) {
     return errorResponse(error);

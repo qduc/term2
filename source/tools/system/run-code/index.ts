@@ -1,6 +1,7 @@
 export {
   bindRunCodeRegistry,
   createRunCodeToolDefinition,
+  getRunCodeAgentSpecAuthority,
   TOOL_NAME_RUN_CODE,
   isDirectlyCallable,
   type CreateRunCodeToolOptions,

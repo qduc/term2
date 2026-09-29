@@ -48,8 +48,10 @@ export {
 } from './agent-spec.js';
 
 export {
+  createRootAgentAuthoritySnapshot,
   parentAuthorityFromDefinition,
   resolveAgentSpecForChild,
+  type AgentSpecAuthoritySnapshot,
   type AgentPermissionBoundaryParent,
   type AgentSpecBoundaryError,
   type AgentSpecBoundaryErrorCode,

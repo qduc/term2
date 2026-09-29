@@ -22,6 +22,7 @@ import {
 import { renderToolsHeader } from './tools-header.js';
 import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../../services/mcp/mcp-tool-source.js';
+import type { AgentSpecAuthoritySnapshot } from '../../../services/agent-runtime/permission-boundary.js';
 import { RUN_CODE_EXECUTION_RESULT, type RunCodeExecution } from './run-code-execution.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../../utils/shell/shell-output.js';
 import {
@@ -190,6 +191,8 @@ export interface CreateRunCodeToolOptions {
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
   /** Script-only MCP source; its tools are intentionally absent from the root registry. */
   mcpToolSource?: McpToolSource;
+  /** Host-owned root authority for a future script AgentSpec adapter. */
+  agentSpecAuthority?: AgentSpecAuthoritySnapshot;
 }
 
 /**
@@ -206,6 +209,15 @@ const REGISTRY_BINDER = Symbol.for('term2.run_code.bindRegistry');
 type RegistryBindable = { [REGISTRY_BINDER]?: (registry: ToolRegistry) => void };
 const NESTED_OWNER_BINDER = Symbol.for('term2.run_code.bindNestedApprovalOwner');
 type NestedOwnerBindable = { [NESTED_OWNER_BINDER]?: (owner: NestedApprovalOwner, graph: object) => void };
+const AGENT_SPEC_AUTHORITY = Symbol.for('term2.run_code.agentSpecAuthority');
+type AgentSpecAuthorityBindable = {
+  [AGENT_SPEC_AUTHORITY]?: () => AgentSpecAuthoritySnapshot | undefined;
+};
+
+/** Read the host-bound snapshot for the execution adapter, never from script input. */
+export function getRunCodeAgentSpecAuthority(tool: AnyToolDefinition): AgentSpecAuthoritySnapshot | undefined {
+  return (tool as AnyToolDefinition as AgentSpecAuthorityBindable)[AGENT_SPEC_AUTHORITY]?.();
+}
 
 /** Installs the wrapped registry into any `run_code` definition in `tools`. */
 export function bindRunCodeRegistry(tools: ToolRegistry): void {
@@ -440,6 +452,8 @@ export function createRunCodeToolDefinition(
     // complete bound graph as identity, not the later filtered model surface.
     owner.bindGraph(boundRegistry ?? graph);
   };
+  (definition as AnyToolDefinition as AgentSpecAuthorityBindable)[AGENT_SPEC_AUTHORITY] = () =>
+    options.agentSpecAuthority;
 
   return definition;
 }

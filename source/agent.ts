@@ -66,6 +66,7 @@ import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
+import { createRootAgentAuthoritySnapshot } from './services/agent-runtime/permission-boundary.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import { resolveDisabledCapabilities } from './services/tool-toggles.js';
@@ -203,6 +204,14 @@ function resolvePrompt(promptPath: string): string {
     }
     throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
   }
+}
+
+function positiveIntegerSetting(
+  settings: ISettingsService,
+  key: 'agent.maxTurns' | 'agent.maxOutputTokens',
+): number | undefined {
+  const value = settings.get(key);
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 /**
@@ -665,6 +674,32 @@ export const getAgentDefinition = (
   // resolved. The registry it actually calls is injected later by
   // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
   if (hasCapability('shell')) {
+    // Lite intentionally permits outside-workspace reads while its write tools
+    // remain workspace-rooted. The current AgentSpec scope type cannot express
+    // that mixed authority without widening writes, so fail closed for this
+    // root until the scope contract gains independent unrestricted axes.
+    const liteMixedFilesystemAuthority = liteMode && filesystemReadEnabled && filesystemWriteEnabled;
+    const filesystemScope =
+      !liteMixedFilesystemAuthority && (filesystemReadEnabled || filesystemWriteEnabled)
+        ? {
+            read: filesystemReadEnabled && !liteMode ? ['**'] : [],
+            write: filesystemWriteEnabled ? ['**'] : [],
+          }
+        : undefined;
+    const maxTurns = positiveIntegerSetting(settingsService, 'agent.maxTurns');
+    const maxTokens = positiveIntegerSetting(settingsService, 'agent.maxOutputTokens');
+    const agentSpecAuthority = liteMixedFilesystemAuthority
+      ? undefined
+      : createRootAgentAuthoritySnapshot({
+          effectiveTools: tools.map((tool) => tool.name),
+          filesystemScope,
+          limits: {
+            ...(maxTurns !== undefined ? { maxTurns } : {}),
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+          },
+          readOnly,
+          planMode: profile.enforcement.denials.has('filesystem-mutation'),
+        });
     tools.push(
       createRunCodeToolDefinition({
         loggingService,
@@ -672,6 +707,7 @@ export const getAgentDefinition = (
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
         sessionAccess,
+        ...(agentSpecAuthority ? { agentSpecAuthority } : {}),
         ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),
       }),
     );

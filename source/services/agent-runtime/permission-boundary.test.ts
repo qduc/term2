@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import type { ResolvedAgentDefinition } from './resolved-agent.js';
-import { parentAuthorityFromDefinition, resolveAgentSpecForChild } from './permission-boundary.js';
+import {
+  createRootAgentAuthoritySnapshot,
+  parentAuthorityFromDefinition,
+  resolveAgentSpecForChild,
+} from './permission-boundary.js';
 
 function logger(): ILoggingService {
   return {
@@ -59,6 +63,40 @@ function resolve(spec: unknown, authority = parentAuthorityFromDefinition(parent
 }
 
 describe('resolveAgentSpecForChild', () => {
+  it('derives a host-owned root snapshot from effective tools and mode', () => {
+    const snapshot = createRootAgentAuthoritySnapshot({
+      effectiveTools: ['read_file', 'shell', 'web_search', 'apply_patch', 'run_subagent', 'run_code'],
+      filesystemScope: { read: ['**'], write: ['**'] },
+      limits: { maxTurns: 12, maxTokens: 4000 },
+      planMode: true,
+    });
+
+    expect(snapshot.parent.tools).toEqual(['read_file', 'web_search']);
+    expect(snapshot.parent.permissions).toEqual({
+      canRead: true,
+      canWrite: false,
+      canRunShell: false,
+      canSearchWeb: true,
+      canUseNestedAgents: false,
+    });
+    expect(snapshot.parent.filesystemScope).toEqual({ read: ['**'], write: ['**'] });
+    expect(snapshot.parent.limits).toEqual({ maxTurns: 12, maxTokens: 4000 });
+    expect(snapshot.planMode).toBe(true);
+  });
+
+  it('does not fabricate an AgentSpec capability for disabled root tools', () => {
+    const snapshot = createRootAgentAuthoritySnapshot({
+      effectiveTools: ['read_file'],
+      limits: {},
+    });
+
+    expect(snapshot.parent.tools).toEqual(['read_file']);
+    expect(snapshot.parent.permissions.canWrite).toBe(false);
+    expect(snapshot.parent.permissions.canRunShell).toBe(false);
+    expect(snapshot.parent.permissions.canSearchWeb).toBe(false);
+    expect(snapshot.parent.permissions.canUseNestedAgents).toBe(false);
+  });
+
   it('allows a child subset and preserves narrowed filesystem authority', () => {
     const result = resolve({
       goal: 'Inspect the source tree',

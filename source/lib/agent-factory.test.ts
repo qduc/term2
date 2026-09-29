@@ -11,7 +11,7 @@ import { z } from 'zod';
 import path from 'path';
 import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { buildAgent, buildAgentTools } from './agent-factory.js';
-import { createRunCodeToolDefinition } from '../tools/system/run-code/run-code.js';
+import { createRunCodeToolDefinition, getRunCodeAgentSpecAuthority } from '../tools/system/run-code/run-code.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
 import { registerProvider, type ProviderDefinition } from '../providers/registry.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
@@ -167,6 +167,67 @@ it('omits file-mutating tools from a read-only model surface but preserves CLI b
   expect(cliDefinition.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining(['create_file', 'search_replace']),
   );
+});
+
+it('binds the host-owned root authority snapshot to run_code after capability and mode resolution', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'agent.maxTurns': 17,
+      'agent.maxOutputTokens': 6000,
+      'app.activeProfileId': 'builtin:plan',
+      'app.searchViaShell': 'off',
+    },
+  });
+  const raw = getAgentDefinition({ settingsService: deps.settings, loggingService: deps.logger }, 'gpt-4o');
+  const runCode = raw.tools.find((tool) => tool.name === 'run_code');
+  expect(runCode).toBeDefined();
+
+  const authority = getRunCodeAgentSpecAuthority(runCode!);
+  expect(authority).toBeDefined();
+  expect(authority?.parent.tools).toContain('read_file');
+  expect(authority?.parent.tools).not.toContain('apply_patch');
+  expect(authority?.parent.tools).not.toContain('shell');
+  expect(authority?.parent.permissions.canWrite).toBe(false);
+  expect(authority?.parent.permissions.canUseNestedAgents).toBe(false);
+  expect(authority?.parent.limits).toEqual({ maxTurns: 17, maxTokens: 6000 });
+});
+
+it('does not bind root AgentSpec authority when Lite combines outside-workspace reads with writes', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'app.activeProfileId': 'builtin:lite',
+      'app.searchViaShell': 'off',
+    },
+  });
+  const raw = getAgentDefinition({ settingsService: deps.settings, loggingService: deps.logger }, 'gpt-4o');
+  const runCode = raw.tools.find((tool) => tool.name === 'run_code');
+  expect(runCode).toBeDefined();
+  expect(getRunCodeAgentSpecAuthority(runCode!)).toBeUndefined();
+});
+
+it('tracks disabled capabilities and read-only posture without inventing child authority', () => {
+  const { deps } = createDeps({
+    readOnly: true,
+    settingsValues: {
+      'tools.web.enabled': false,
+      'tools.fileWrite.enabled': false,
+      'app.searchViaShell': 'off',
+    },
+  });
+  const raw = getAgentDefinition(
+    { settingsService: deps.settings, loggingService: deps.logger, readOnly: true },
+    'gpt-4o',
+  );
+  const runCode = raw.tools.find((tool) => tool.name === 'run_code');
+  expect(runCode).toBeDefined();
+
+  const authority = getRunCodeAgentSpecAuthority(runCode!);
+  expect(authority?.parent.tools).not.toContain('web_search');
+  expect(authority?.parent.tools).not.toContain('web_fetch');
+  expect(authority?.parent.tools).not.toContain('apply_patch');
+  expect(authority?.parent.permissions.canWrite).toBe(false);
+  expect(authority?.parent.permissions.canSearchWeb).toBe(false);
+  expect(authority?.parent.permissions.canUseNestedAgents).toBe(false);
 });
 
 const buildTestTool = (definition: ToolDefinition<typeof postExecuteTestParameters>, deps: AgentFactoryDeps) =>

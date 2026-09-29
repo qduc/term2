@@ -44,6 +44,25 @@ export interface AgentPermissionBoundaryParent {
   readonly worktreeScope?: ReadonlyArray<string>;
 }
 
+/** Host-owned snapshot bound to a script-capable root. */
+export interface AgentSpecAuthoritySnapshot {
+  readonly parent: AgentPermissionBoundaryParent;
+  readonly readOnly: boolean;
+  readonly planMode: boolean;
+}
+
+export interface RootAgentAuthoritySnapshotOptions {
+  /** Effective host tool names after profile and capability-toggle resolution. */
+  readonly effectiveTools: ReadonlyArray<string>;
+  readonly limits: AgentLimits;
+  /** A finite scope is host-owned; callers must not derive it from AgentSpec. */
+  readonly filesystemScope?: ResolvedFilesystemScope;
+  readonly networkScope?: ResolvedNetworkScope;
+  readonly worktreeScope?: ReadonlyArray<string>;
+  readonly readOnly?: boolean;
+  readonly planMode?: boolean;
+}
+
 /** Options which are host state, rather than data supplied by the script. */
 export interface ResolveAgentSpecForChildOptions {
   readonly settings: ISettingsService;
@@ -101,6 +120,70 @@ export function parentAuthorityFromDefinition(
     ...(definition.networkScope ? { networkScope: [...definition.networkScope] } : {}),
     limits: { ...definition.limits },
     ...(options.worktreeScope ? { worktreeScope: [...options.worktreeScope] } : {}),
+  };
+}
+
+/**
+ * Build the only authority object a future script-launched AgentSpec may use.
+ *
+ * This adapter intentionally starts from the already-effective root tool
+ * surface. It ignores tools which AgentSpec cannot provision, never enables
+ * nested agents, and removes writes in read-only/plan mode before the snapshot
+ * is bound. A finite filesystem scope also removes shell: the existing child
+ * tool policy cannot safely combine arbitrary shell execution with path scopes.
+ */
+export function createRootAgentAuthoritySnapshot(
+  options: RootAgentAuthoritySnapshotOptions,
+): AgentSpecAuthoritySnapshot {
+  const readOnly = options.readOnly === true;
+  const planMode = options.planMode === true;
+  const finiteFilesystemScope = options.filesystemScope !== undefined;
+  const finiteNetworkScope = options.networkScope !== undefined;
+  let tools = options.effectiveTools.filter((tool) => AGENT_SPEC_TOOL_SET.has(tool as AgentSpecToolName));
+
+  if (readOnly || planMode) tools = tools.filter((tool) => !WRITE_TOOLS.has(tool));
+  if (finiteFilesystemScope) tools = tools.filter((tool) => tool !== 'shell');
+  if (finiteNetworkScope && !options.networkScope!.includes('*')) {
+    // web_search has no target URL and web_fetch cannot prove redirect
+    // containment. The resolver will reject these promises; do not advertise
+    // them as effective child authority in the first place.
+    tools = tools.filter((tool) => !WEB_TOOLS.has(tool));
+  }
+
+  const canRead =
+    tools.some((tool) => READ_TOOLS.has(tool)) && (!options.filesystemScope || options.filesystemScope.read.length > 0);
+  const canWrite =
+    tools.some((tool) => WRITE_TOOLS.has(tool)) &&
+    (!options.filesystemScope || options.filesystemScope.write.length > 0);
+  const canRunShell = tools.includes('shell') && !finiteFilesystemScope;
+  const canSearchWeb =
+    tools.some((tool) => WEB_TOOLS.has(tool)) && (!options.networkScope || options.networkScope.length > 0);
+
+  return {
+    parent: {
+      tools,
+      permissions: {
+        canRead,
+        canWrite,
+        canRunShell,
+        canSearchWeb,
+        // AgentSpec execution has no nested-agent provisioning adapter yet.
+        canUseNestedAgents: false,
+      },
+      ...(options.filesystemScope
+        ? {
+            filesystemScope: {
+              read: [...options.filesystemScope.read],
+              write: [...options.filesystemScope.write],
+            },
+          }
+        : {}),
+      ...(options.networkScope ? { networkScope: [...options.networkScope] } : {}),
+      limits: { ...options.limits },
+      ...(options.worktreeScope ? { worktreeScope: [...options.worktreeScope] } : {}),
+    },
+    readOnly,
+    planMode,
   };
 }
 

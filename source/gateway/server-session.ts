@@ -122,6 +122,7 @@ export class ServerSession {
     try {
       await this.#eventSink?.(event, { turnId, discardedTurnIds });
     } catch (error) {
+      this.handle.closeAdmission();
       this.#status = 'interrupted';
       throw error;
     }
@@ -231,11 +232,6 @@ export class ServerSession {
       throw error;
     }
     this.#preparedTurns.delete(leaseId);
-    if (!this.#activeTurnId) {
-      this.#activeTurnId = turnId;
-      this.#status = 'running';
-      this.#startDeadline(turnId);
-    }
   }
 
   async cancelPreparedMessage(leaseId: string): Promise<void> {
@@ -367,6 +363,7 @@ export class ServerSession {
     // Close admission before awaiting the bounded barrier. This makes a
     // cancellation race fail closed instead of letting fresh work auto-run.
     this.#abortGeneration += 1;
+    this.handle.closeAdmission();
     try {
       const result = await this.handle.abortAndDiscard();
       if (!result.proven) {
@@ -381,6 +378,7 @@ export class ServerSession {
       this.#activeTurnId = null;
       this.#status = this.#computePublicStatus();
       this.#clearDeadline();
+      this.handle.reopenAdmission();
       const outcome: AbortOutcome = { kind: 'aborted', turnId, discardedTurnIds: result.discardedTurnIds };
       this.#lastAbortOutcome = outcome;
       return outcome;
@@ -395,6 +393,7 @@ export class ServerSession {
   async dispose(reason: 'closed' | 'shutdown' | 'interrupted' = 'closed'): Promise<void> {
     if (this.#disposePromise) return this.#disposePromise;
     this.#disposePromise = (async () => {
+      this.handle.closeAdmission();
       this.#preparedTurns.clear();
       this.#clearDeadline();
       let interrupted = reason === 'interrupted';

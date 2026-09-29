@@ -54,6 +54,8 @@ type FakeService = {
     snapshot: () => object;
     setEventSink: (sink: ((event: any) => void | PromiseLike<void>) | null) => void;
     setQueuedTurnStartObserver: (observer: ((execution: any) => void) | null) => void;
+    closeAdmission: () => void;
+    reopenAdmission: () => void;
     abortAndDiscard: () => Promise<{ proven: boolean; discardedTurnIds: string[] }>;
     shutdown: () => Promise<void>;
   };
@@ -87,6 +89,8 @@ function fakeService(): FakeService {
       service.eventSink = sink ?? undefined;
     },
     setQueuedTurnStartObserver: () => {},
+    closeAdmission: () => {},
+    reopenAdmission: () => {},
     abortAndDiscard: async () => ({ proven: true, discardedTurnIds: [] }),
     shutdown: async () => {},
   };

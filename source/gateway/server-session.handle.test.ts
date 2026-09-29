@@ -22,12 +22,14 @@ const policy = { maxActiveTurnMs: 10_000, shutdownGraceMs: 10 } as any;
 function createHarness() {
   let eventSink: ((event: any) => void | PromiseLike<void>) | null = null;
   let queuedObserver: ((start: { requestId: string }) => void) | null = null;
+  let admissionClosed = false;
   const calls: string[] = [];
   const handle: SessionHandle = {
     sessionId: binding.sessionId,
     sessionStartedAt: new Date(0).toISOString(),
     prepare: vi.fn(async () => {
       calls.push('handle.prepare');
+      if (admissionClosed) return { kind: 'rejected' as const, reason: 'busy' as const };
       return { kind: 'prepared' as const, leaseId: 'lease', turnId: 'turn' };
     }),
     commit: vi.fn(async () => {
@@ -49,6 +51,14 @@ function createHarness() {
     setQueuedTurnStartObserver: vi.fn((observer) => {
       calls.push('handle.setQueuedTurnStartObserver');
       queuedObserver = observer;
+    }),
+    closeAdmission: vi.fn(() => {
+      calls.push('handle.closeAdmission');
+      admissionClosed = true;
+    }),
+    reopenAdmission: vi.fn(() => {
+      calls.push('handle.reopenAdmission');
+      admissionClosed = false;
     }),
     abortAndDiscard: vi.fn(async () => {
       calls.push('handle.abortAndDiscard');
@@ -130,7 +140,9 @@ describe('ServerSession SessionHandle boundary', () => {
       'handle.prepare',
       'handle.commit',
       'handle.resolveInteraction',
+      'handle.closeAdmission',
       'handle.abortAndDiscard',
+      'handle.reopenAdmission',
     ]);
     expect(harness.service.prepareMessage).not.toHaveBeenCalled();
     expect(harness.service.commitMessage).not.toHaveBeenCalled();
@@ -138,5 +150,50 @@ describe('ServerSession SessionHandle boundary', () => {
     await session.dispose();
     expect(harness.handle.shutdown).toHaveBeenCalledTimes(1);
     expect(harness.service.shutdown).not.toHaveBeenCalled();
+  });
+
+  it('rejects a prepare that races with an in-progress abort barrier', async () => {
+    const harness = createHarness();
+    let releaseAbort!: () => void;
+    const abortBarrier = new Promise<{ proven: boolean; discardedTurnIds: string[] }>((resolve) => {
+      releaseAbort = () => resolve({ proven: true, discardedTurnIds: [] });
+    });
+    harness.handle.abortAndDiscard = vi.fn(() => abortBarrier);
+    const session = new ServerSession({
+      binding,
+      service: harness.service,
+      handle: harness.handle,
+      composition,
+      policy,
+    });
+    harness.start('turn');
+    const abort = session.abort('turn');
+    const prepared = await session.prepareMessage('racing', { turnId: 'racing', clientRequestId: 'request' });
+    expect(prepared).toEqual({ kind: 'rejected', reason: 'busy' });
+    releaseAbort();
+    await expect(abort).resolves.toEqual({ kind: 'aborted', turnId: 'turn', discardedTurnIds: [] });
+    await session.dispose();
+  });
+
+  it('does not infer a running turn from commit before queued-start observation', async () => {
+    const harness = createHarness();
+    harness.handle.commit = vi.fn(async () => {
+      harness.calls.push('handle.commit.paused');
+    });
+    const session = new ServerSession({
+      binding,
+      service: harness.service,
+      handle: harness.handle,
+      composition,
+      policy,
+    });
+    await session.prepareMessage('paused', { turnId: 'turn', clientRequestId: 'request' });
+    await session.commitMessage('lease');
+    expect(session.status).toBe('idle');
+    expect(session.activeTurnId).toBeNull();
+    harness.start('turn');
+    expect(session.status).toBe('running');
+    expect(session.activeTurnId).toBe('turn');
+    await session.dispose();
   });
 });

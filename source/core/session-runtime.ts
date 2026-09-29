@@ -83,6 +83,8 @@ export interface SessionHandle {
   snapshot(): SessionSnapshot;
   setEventSink(sink: ((event: SessionEvent) => void | PromiseLike<void>) | null): void;
   setQueuedTurnStartObserver(observer: ((start: QueuedTurnStart) => void) | null): void;
+  closeAdmission(): void;
+  reopenAdmission(): void;
   abortAndDiscard(): Promise<{ readonly proven: boolean; readonly discardedTurnIds: string[] }>;
   shutdown(): Promise<void>;
 }

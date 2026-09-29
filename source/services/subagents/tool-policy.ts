@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import type { ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
-import type { SubagentDefinition, SupportedSubagentRole, ValidationEvidence } from './types.js';
+import type { SubagentDefinition, ValidationEvidence } from './types.js';
 import type { AnyToolDefinition, CommandMessage, SchemaToolDefinition, ToolRegistry } from '../../tools/types.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
@@ -58,7 +58,7 @@ export interface ValidationCapture {
 
 export type SubagentRunContext = {
   agentId: string;
-  role: SupportedSubagentRole;
+  role: string;
   task: string;
   filesChanged: string[];
   toolCounts: Record<string, number>;
@@ -1104,7 +1104,7 @@ export class SubagentToolFactory {
 
     // This callback is supplied exclusively by the async execution-segment
     // adapter. Sync and nested runners never receive it.
-    if (askOrchestrator && ['explorer', 'worker', 'librarian'].includes(definition.role)) {
+    if (askOrchestrator && ['agent', 'explorer', 'worker', 'librarian'].includes(definition.role)) {
       tools.push(createAskOrchestratorToolDefinition(askOrchestrator));
     }
 

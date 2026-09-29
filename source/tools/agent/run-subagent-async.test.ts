@@ -78,6 +78,18 @@ it('run_subagent_async requires a task', () => {
   expect(tool.parameters.safeParse({ role: 'explorer' }).success).toBe(false);
 });
 
+it('run_subagent_async accepts a generic invocation without a role and forwards its spec', async () => {
+  const dispatch = vi.fn(async () => makeHandle({ role: 'agent', task: 'review' }));
+  const tool = createRunSubagentAsyncToolDefinition(dispatch);
+  const agent_spec = { goal: 'Review this change', tools: ['read_file'] as const, constraints: ['Read only'] };
+
+  expect(tool.parameters.safeParse({ agent_spec }).success).toBe(true);
+  await tool.execute({ agent_spec });
+  expect(dispatch).toHaveBeenCalledWith({ agent_spec }, undefined, undefined);
+  expect(tool.parameters.safeParse({}).success).toBe(false);
+  expect(tool.parameters.safeParse({ role: 'explorer', task: 'inspect', agent_spec }).success).toBe(false);
+});
+
 it('run_subagent_async accepts only constrained optional active-run names', () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
 

@@ -35,6 +35,20 @@ it('pins a worker into an existing worktree without publishing the active root',
   expect(getActiveWorkspaceRoot()).toBe(before);
 });
 
+it('pins a generic agent invocation into the requested existing worktree', async () => {
+  const result = await pinWorkerWorktree({
+    name: 'feature',
+    role: 'agent',
+    homeRoot: HOME,
+    isRemote: false,
+    listWorktrees: list,
+  });
+
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.executionContext.getCwd()).toBe(FEATURE.path);
+});
+
 it('rejects non-worker roles', async () => {
   const result = await pinWorkerWorktree({
     name: 'feature',

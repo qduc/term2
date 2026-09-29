@@ -87,7 +87,7 @@ export interface ResolvedAgentPermissions {
 export interface AgentLimits {
   /** Maximum model turns before forced termination. */
   maxTurns?: number;
-  /** Maximum total tokens across all model calls (provider cap + post-usage tree enforcement). */
+  /** Maximum total tokens across model calls (provider response cap plus post-usage tree enforcement). */
   maxTokens?: number;
   /** Maximum cost in USD (typed preflight rejection; use `agent.runBudget` instead). */
   maxCost?: number;
@@ -211,6 +211,28 @@ export type RunErrorCode =
  */
 export type ToolReference = string;
 
+/** Tools provisionable by a generic AgentSpec invocation. */
+export type AgentSpecToolName =
+  | 'read_file'
+  | 'grep'
+  | 'glob'
+  | 'read_code_outline'
+  | 'code_context_search'
+  | 'web_search'
+  | 'web_fetch'
+  | 'shell'
+  | 'apply_patch'
+  | 'search_replace'
+  | 'create_file';
+
+/** Permissions accepted by the generic delegated-agent tool surface. */
+export interface AgentSpecPermissions extends Omit<AgentPermissions, 'tools'> {
+  tools?: ReadonlyArray<AgentSpecToolName>;
+}
+
+/** Model policies exposed by the generic tool schema. */
+export type AgentSpecModelPolicy = ModelTier | ExactModelPolicy;
+
 // ─── Agent Config ────────────────────────────────────────────────
 
 /** Configuration used to create an agent handle. */
@@ -233,6 +255,20 @@ export interface AgentConfig {
   permissions?: AgentPermissions;
   /** Requested limits. Effective limits are clamped by parent. */
   limits?: AgentLimits;
+  /** Per-model-response output token cap; independent of aggregate execution budgets. */
+  responseMaxTokens?: number;
+}
+
+/** A task-shaped invocation of the general agent runtime. */
+export interface AgentSpec {
+  goal: string;
+  context?: Record<string, unknown>;
+  tools?: ReadonlyArray<AgentSpecToolName>;
+  permissions?: AgentSpecPermissions;
+  constraints?: string[];
+  doneWhen?: string;
+  model?: AgentSpecModelPolicy;
+  budget?: Pick<AgentLimits, 'maxTurns' | 'maxTokens'>;
 }
 
 // ─── Agent Handle ────────────────────────────────────────────────

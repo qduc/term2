@@ -11,6 +11,7 @@ import type {
   SubagentSteerAcknowledgement,
 } from '../services/subagents/types.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
+import type { AgentSpec } from '../services/agent-runtime/types.js';
 import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SubagentRunHandle } from '../services/subagents/types.js';
@@ -327,7 +328,7 @@ export class SubagentBridge {
   };
 
   runSubagent = async (
-    params: { role: string; task: string; worktree?: string },
+    params: { role?: string; task?: string; agent_spec?: AgentSpec; worktree?: string },
     _context?: unknown,
     details?: unknown,
   ): Promise<NestedSubagentResult> => {
@@ -338,8 +339,9 @@ export class SubagentBridge {
       | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
       | undefined;
     const request = {
-      role: params.role,
-      task: params.task,
+      role: params.agent_spec ? 'agent' : params.role!,
+      task: params.agent_spec?.goal ?? params.task!,
+      ...(params.agent_spec ? { agentSpec: params.agent_spec } : {}),
       ...(params.worktree ? { worktree: params.worktree } : {}),
       parentTool: 'run_subagent',
       ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
@@ -357,7 +359,14 @@ export class SubagentBridge {
   };
 
   runSubagentAsync = async (
-    params: { role: string; task: string; name?: string; continue_run_id?: string; worktree?: string },
+    params: {
+      role?: string;
+      task?: string;
+      agent_spec?: AgentSpec;
+      name?: string;
+      continue_run_id?: string;
+      worktree?: string;
+    },
     _context?: unknown,
     _details?: unknown,
   ): Promise<SubagentRunHandle> => {
@@ -365,8 +374,9 @@ export class SubagentBridge {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }
     const request = {
-      role: params.role,
-      task: params.task,
+      role: params.agent_spec ? 'agent' : params.role!,
+      task: params.agent_spec?.goal ?? params.task!,
+      ...(params.agent_spec ? { agentSpec: params.agent_spec } : {}),
       ...(params.name ? { name: params.name } : {}),
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
       ...(params.worktree ? { worktree: params.worktree } : {}),

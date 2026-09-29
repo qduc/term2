@@ -224,7 +224,7 @@ describe('SubagentToolFactory search tool descriptions', () => {
 });
 
 describe('SubagentToolFactory memory authority', () => {
-  it.each(['explorer', 'worker', 'librarian'] as const)(
+  it.each(['agent', 'explorer', 'worker', 'librarian'] as const)(
     'provisions ask_orchestrator only for an eligible async %s segment',
     (role) => {
       expect(buildToolNames(createDefinition({ role }), true, async () => 'answer')).toContain('ask_orchestrator');

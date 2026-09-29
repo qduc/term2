@@ -57,6 +57,10 @@ In Orchestrator mode, delegate for specialization, context compression, safe par
 Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`
   }`;
 
+  const genericGuidance = `**Generic invocation:** For diverse work, prefer a roleless agent_spec invocation and describe the goal, context, constraints, and completion condition. Omit tools for the safe read-only workspace defaults; explicitly allowlist tools when more capability is needed. The role presets remain useful for bounded explorer, worker, mentor, or reviewer${
+    memoryEnabled ? ', or librarian' : ''
+  } behavior. Generic agents may use a worktree, but writable generic runs cannot be continued; read-only generic runs can. Plan mode currently cannot resolve generic capabilities, so use a named read-only role there. Choose only an authorized provider/model. Budget supports positive maxTurns and per-response maxTokens; it is not an aggregate token budget.`;
+
   const backgroundRules = backgroundEnabled
     ? `**Background execution rules:**
 - A returned handle with \`status: "running"\` means delegation succeeded. Do not duplicate or independently perform the delegated unit.
@@ -64,7 +68,7 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
 - Fresh background runs support explorer, worker, mentor, reviewer${
         memoryEnabled ? ', and librarian' : ''
       }. They persist across ordinary parent-turn completion in process memory until the 30-minute sliding TTL expires or the 50-session cap evicts them.
-- Inside \`run_code\`, use \`tools.get_subagent_result(...)\` only with the exact \`runId\` from a completed run when you need to re-fetch a result already received. Mentor and librarian fresh calls reuse their default session; explorer fresh calls start a new session. Worker runs are always fresh and cannot be continued. Only completed non-worker runs support \`continue_run_id\`; do not invent runIds or continue active, failed, cancelled, missing, or evicted runs.${
+- Inside \`run_code\`, use \`tools.get_subagent_result(...)\` only with the exact \`runId\` from a completed run when you need to re-fetch a result already received. Mentor and librarian fresh calls reuse their default session; explorer fresh calls start a new session. Worker runs are always fresh and cannot be continued. Completed read-only generic and supported read-only role runs can be continued; writable generic runs cannot. Do not invent runIds or continue active, failed, cancelled, missing, or evicted runs.${
         controlsEnabled
           ? `
 - Inside \`run_code\`, address \`tools.send_message(...)\` and \`tools.cancel_run(...)\` by the active name or runId; runId remains canonical. \`tools.send_message(...)\` non-blockingly steers an active execution run or answers a waiting \`ask_orchestrator\` question with \`reply_to\`; \`tools.cancel_run(...)\` non-blockingly requests cancellation.
@@ -79,7 +83,7 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
 
 Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root \`AGENTS.md\`, or skills catalog. The subagent does not see your conversation or reasoning, so include only objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable.`;
 
-  return `${header}\n\n${triggers}${
+  return `${header}\n\n${genericGuidance}\n\n${triggers}${
     backgroundRules ? `\n\n${backgroundRules}` : ''
   }\n\n${planningStep}\n\n${getSubagentsRolesSection({
     includeLibrarian: memoryEnabled,

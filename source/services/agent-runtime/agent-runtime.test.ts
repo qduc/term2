@@ -105,6 +105,54 @@ describe('AgentRuntime', () => {
     expect(handle.name).toBe('agent');
   });
 
+  it('runs a generic AgentSpec by composing constraints, completion criteria, and context', async () => {
+    const captured = mockExecutor();
+    const runtime = new AgentRuntime({ settings: settings(), logger: logger(), executor: captured.executor });
+
+    const result = await runtime.runAgent({
+      goal: 'Inspect the change',
+      context: { changedFile: 'src/example.ts' },
+      tools: ['read_file'],
+      constraints: ['Do not modify files'],
+      doneWhen: 'Report evidence for each finding',
+    });
+
+    expect(result.status).toBe('completed');
+    const input = captured.getCaptured()!;
+    expect(input.instructions).toContain('Do not modify files');
+    expect(input.instructions).toContain('Report evidence for each finding');
+    expect(input.instructions).toContain('src/example.ts');
+    expect(input.definition.tools).toContain('read_file');
+  });
+
+  it('gives a goal-only generic spec useful read-only tools and the preset-aligned turn budget', async () => {
+    const captured = mockExecutor();
+    const runtime = new AgentRuntime({ settings: settings(), logger: logger(), executor: captured.executor });
+
+    const result = await runtime.runAgent({ goal: 'Review this change' });
+
+    expect(result.status).toBe('completed');
+    expect(captured.getCaptured()!.definition.tools).toEqual([
+      'read_file',
+      'grep',
+      'glob',
+      'read_code_outline',
+      'code_context_search',
+    ]);
+    expect(captured.getCaptured()!.definition.limits.maxTurns).toBe(200);
+    expect(captured.getCaptured()!.definition.permissions.canWrite).toBe(false);
+  });
+
+  it('maps AgentSpec maxTokens to a response cap, not an aggregate execution budget', async () => {
+    const captured = mockExecutor();
+    const runtime = new AgentRuntime({ settings: settings(), logger: logger(), executor: captured.executor });
+
+    await runtime.runAgent({ goal: 'Summarize briefly', budget: { maxTokens: 1234 } });
+
+    expect(captured.getCaptured()!.definition.responseMaxTokens).toBe(1234);
+    expect(captured.getCaptured()!.definition.limits.maxTokens).toBeUndefined();
+  });
+
   it('AgentHandle has readonly properties reflecting resolution', () => {
     const { executor } = mockExecutor();
     const runtime = new AgentRuntime({

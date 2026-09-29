@@ -22,42 +22,55 @@ import {
 } from '../../services/background-task-activity.js';
 
 import { relaxedNumber } from '../utils.js';
+import { agentSpecSchema } from './run-subagent.js';
 
-const ASYNC_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
+const ASYNC_ROLES = ['agent', 'explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 
-const runSubagentAsyncSchema = z.object({
-  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, mentor, reviewer, or librarian.'),
-  task: z
-    .string()
-    .describe(
-      'One bounded task with one objective, ownership boundary, and done condition. Explorer tasks must choose breadth or depth, never both.',
-    ),
-  name: z
-    .string()
-    .regex(SUBAGENT_RUN_NAME_PATTERN)
-    .optional()
-    .describe(
-      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.',
-    ),
-  continue_run_id: z
-    .string()
-    .optional()
-    .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
-  check_in: z
-    .object({
-      enabled: z
-        .boolean()
-        .optional()
-        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
-      interval_seconds: relaxedNumber
-        .int()
-        .positive()
-        .optional()
-        .describe('Custom interval in seconds between proactive check-ins.'),
-    })
-    .optional()
-    .describe('Optional check-in configuration for this background subagent.'),
-});
+const runSubagentAsyncSchema = z
+  .object({
+    role: z.enum(ASYNC_ROLES).optional().describe('Optional legacy role preset.'),
+    task: z
+      .string()
+      .optional()
+      .describe(
+        'One bounded task with one objective, ownership boundary, and done condition. Explorer tasks must choose breadth or depth, never both.',
+      ),
+    agent_spec: agentSpecSchema.optional().describe('Dynamic task configuration; omits the need for a named role.'),
+    name: z
+      .string()
+      .regex(SUBAGENT_RUN_NAME_PATTERN)
+      .optional()
+      .describe(
+        'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.',
+      ),
+    continue_run_id: z
+      .string()
+      .optional()
+      .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
+    check_in: z
+      .object({
+        enabled: z
+          .boolean()
+          .optional()
+          .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
+        interval_seconds: relaxedNumber
+          .int()
+          .positive()
+          .optional()
+          .describe('Custom interval in seconds between proactive check-ins.'),
+      })
+      .optional()
+      .describe('Optional check-in configuration for this background subagent.'),
+  })
+  .refine(
+    (value) =>
+      value.agent_spec
+        ? value.role === undefined && value.task === undefined
+        : value.role !== 'agent' && Boolean(value.role) && Boolean(value.task),
+    {
+      message: 'Provide agent_spec, or both role and task.',
+    },
+  );
 
 const getSubagentResultSchema = z.object({
   runId: z.string().describe('The runId returned by run_subagent with execution: "background".'),
@@ -203,7 +216,7 @@ export function createRunSubagentAsyncToolDefinition(
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call tools.get_subagent_result(...) inside run_code if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
       'Fresh runs support explorer, worker, mentor, reviewer, and librarian. ' +
-      'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
+      'Completed read-only generic and supported read-only role runs can be continued across turns; writable generic runs and workers cannot continue.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {

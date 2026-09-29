@@ -223,6 +223,69 @@ it('schema requires role and task', () => {
   expect(tool.parameters.safeParse({ execution: 'foreground', task: 'find files' }).success).toBe(false);
 });
 
+it('accepts a dynamic AgentSpec without a named role and forwards it to background execution', async () => {
+  const background = vi.fn(async () => ({
+    runId: 'dynamic-run',
+    role: 'agent',
+    task: 'inspect',
+    status: 'running' as const,
+  }));
+  const tool = createRunSubagentToolDefinition({ runSubagentAsync: background });
+  const agent_spec = {
+    goal: 'Inspect change',
+    tools: ['read_file'],
+    constraints: ['Do not edit'],
+    doneWhen: 'Summarize',
+  };
+  const params = { execution: 'background', agent_spec };
+
+  expect(tool.parameters.safeParse(params).success).toBe(true);
+  await tool.execute(params);
+  expect(background).toHaveBeenCalledWith(
+    expect.objectContaining({ role: 'agent', task: 'Inspect change', agent_spec }),
+    undefined,
+    undefined,
+  );
+  expect(tool.parameters.safeParse({ execution: 'background', role: 'explorer' }).success).toBe(false);
+  expect(
+    tool.parameters.safeParse({ execution: 'background', agent_spec: { goal: 'inspect', tools: ['ask_user'] } })
+      .success,
+  ).toBe(false);
+  expect(
+    tool.parameters.safeParse({ execution: 'background', agent_spec: { goal: 'inspect', budget: { timeoutMs: 100 } } })
+      .success,
+  ).toBe(false);
+  expect(
+    tool.parameters.safeParse({ execution: 'background', agent_spec: { goal: 'inspect', budget: { maxTurns: 0 } } })
+      .success,
+  ).toBe(false);
+});
+
+it('rejects mixed legacy role/task and dynamic AgentSpec payloads in every execution schema', () => {
+  const backgroundOnly = createRunSubagentToolDefinition({
+    runSubagentAsync: async () => ({ runId: 'dynamic-run', role: 'agent', task: 'inspect', status: 'running' }),
+  });
+  const foregroundOnly = createRunSubagentToolDefinition({ runSubagent: async () => makeResult() });
+  const spec = { goal: 'edit files', tools: ['apply_patch'] };
+
+  expect(
+    backgroundOnly.parameters.safeParse({
+      execution: 'background',
+      role: 'explorer',
+      task: 'inspect',
+      agent_spec: spec,
+    }).success,
+  ).toBe(false);
+  expect(
+    foregroundOnly.parameters.safeParse({
+      execution: 'foreground',
+      role: 'explorer',
+      task: 'inspect',
+      agent_spec: spec,
+    }).success,
+  ).toBe(false);
+});
+
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 

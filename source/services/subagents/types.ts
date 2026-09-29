@@ -3,6 +3,7 @@ import type { BackgroundTaskObservation } from '../background-task-activity.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 import type { RunTerminationCause } from '../../contracts/run-termination.js';
+import type { AgentSpec } from '../agent-runtime/types.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian', 'reviewer'] as const;
 export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];
@@ -12,6 +13,10 @@ export type SubagentRole = SupportedSubagentRole | string;
 export interface SubagentRequest {
   role: SubagentRole;
   task: string;
+  /** Generic per-invocation configuration; when present the named role is only a lifecycle label. */
+  agentSpec?: AgentSpec;
+  /** Resolved once at launch and reused for every asynchronous segment. */
+  resolvedDefinition?: SubagentDefinition;
   /** Optional ergonomic alias, unique only while the asynchronous run is active. */
   name?: string;
   /** Parent tool/run cancellation signal. */

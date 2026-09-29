@@ -1,8 +1,10 @@
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import type { SkillsService } from '../skills/skills-service.js';
-import type { AgentConfig, AgentHandle, AgentPermissions, AgentLimits, ModelPolicy } from './types.js';
+import type { AgentConfig, AgentHandle, AgentPermissions, AgentLimits, ModelPolicy, AgentSpec } from './types.js';
 import { resolveAgent, type AgentResolverDeps } from './agent-resolver.js';
 import { AgentHandleImpl, type ExecutorFn } from './agent-handle.js';
+import type { ResolvedAgentDefinition } from './resolved-agent.js';
+import { agentSpecToConfig } from './agent-spec.js';
 
 export interface AgentRuntimeDeps {
   settings: ISettingsService;
@@ -100,6 +102,12 @@ export class AgentRuntime {
    * happens in handle.run().
    */
   agent(config: AgentConfig): AgentHandle {
+    const definition = this.resolveDefinition(config);
+    return new AgentHandleImpl(definition, this.#deps.logger, this.#deps.executor);
+  }
+
+  /** Resolve a generic invocation for adapters that share the same executor. */
+  resolveDefinition(config: AgentConfig): ResolvedAgentDefinition {
     const resolverDeps: AgentResolverDeps = {
       settings: this.#deps.settings,
       logger: this.#deps.logger,
@@ -109,7 +117,11 @@ export class AgentRuntime {
       parentModelPolicy: this.#deps.parent?.modelPolicy,
     };
 
-    const definition = resolveAgent(config, resolverDeps);
-    return new AgentHandleImpl(definition, this.#deps.logger, this.#deps.executor);
+    return resolveAgent(config, resolverDeps);
+  }
+
+  /** Execute a goal/context/tools specification without introducing a role. */
+  runAgent(spec: AgentSpec) {
+    return this.agent(agentSpecToConfig(spec)).run({ task: spec.goal });
   }
 }

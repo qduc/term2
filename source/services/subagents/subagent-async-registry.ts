@@ -213,8 +213,11 @@ export class SubagentAsyncRegistry {
   startRun(request: SubagentRequest, _legacyParentSignal?: AbortSignal): SubagentRunHandle {
     if (this.#disposed) throw new Error('Subagent async registry is disposed');
     const role = request.role;
-    if (!['explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(role)) {
+    if (!['agent', 'explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${role}`);
+    }
+    if (role === 'agent' && !request.resolvedDefinition) {
+      throw new SubagentRegistryError('not_continuable', 'Generic agent runs require a resolved AgentSpec.');
     }
     const name = request.name;
     if (name !== undefined && !SUBAGENT_RUN_NAME_PATTERN.test(name)) {
@@ -248,9 +251,9 @@ export class SubagentAsyncRegistry {
           'not_continuable',
           `Async subagent run ${continuation} cannot be continued from status ${previous.status}`,
         );
-      if (role === 'worker')
+      if (role === 'worker' || previous.definition?.canWrite === true)
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
-      if (!['mentor', 'librarian', 'explorer', 'reviewer'].includes(role)) {
+      if (!['agent', 'mentor', 'librarian', 'explorer', 'reviewer'].includes(role)) {
         throw new SubagentRegistryError('not_continuable', `Role ${role} cannot be continued`);
       }
       session = previous.session;
@@ -277,7 +280,9 @@ export class SubagentAsyncRegistry {
     // display model of the run it continues rather than resolving again --
     // resolving on continuation would draw another pool entry and rotate the
     // model mid-conversation, which callers must never see.
-    const definition = previousRun ? previousRun.definition : this.#resolveDefinition?.(role);
+    const definition = previousRun
+      ? previousRun.definition
+      : request.resolvedDefinition ?? this.#resolveDefinition?.(role);
     const model = previousRun
       ? previousRun.model
       : role === 'mentor'
@@ -355,7 +360,7 @@ export class SubagentAsyncRegistry {
     if (this.#runs.has(lease.runId) || this.#evicted.has(lease.runId)) {
       throw new Error(`Async subagent run id ${lease.runId} is already retained.`);
     }
-    if (!['explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(request.role)) {
+    if (!['agent', 'explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(request.role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${request.role}`);
     }
     if (
@@ -855,6 +860,7 @@ export class SubagentAsyncRegistry {
         const failure = result.status === 'failed' ? classifyPoolEntryFailure(result.error) : undefined;
         if (
           !run.poolFailoverEligible ||
+          run.role === 'agent' ||
           !failure ||
           !run.definition ||
           !this.#markPoolEntryUnhealthy ||

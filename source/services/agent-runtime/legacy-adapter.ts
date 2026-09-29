@@ -58,7 +58,11 @@ export function adaptLegacyDefinition(resolved: ResolvedAgentDefinition, budget?
     model: resolved.model.model,
     provider: resolved.model.provider,
     reasoningEffort: 'default',
-    ...(resolved.limits.maxTokens !== undefined ? { maxTokens: resolved.limits.maxTokens } : {}),
+    ...(resolved.responseMaxTokens !== undefined
+      ? { maxTokens: resolved.responseMaxTokens }
+      : resolved.limits.maxTokens !== undefined
+      ? { maxTokens: resolved.limits.maxTokens }
+      : {}),
     ...(resolved.tools.length > 0 ? { tools: [...resolved.tools] } : {}),
     ...(resolved.filesystemScope ? { filesystemScope: resolved.filesystemScope } : {}),
     ...(resolved.networkScope ? { networkScope: resolved.networkScope } : {}),

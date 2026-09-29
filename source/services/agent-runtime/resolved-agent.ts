@@ -21,6 +21,8 @@ export interface ResolvedAgentDefinition {
   readonly permissions: ResolvedAgentPermissions;
   /** Resolved limits clamped to parent maxima. */
   readonly limits: AgentLimits;
+  /** Per-model-response output token cap. */
+  readonly responseMaxTokens?: number;
   /** Resolved tool names available to the agent. */
   readonly tools: ReadonlyArray<string>;
   /** Resolved skill instruction bodies. */

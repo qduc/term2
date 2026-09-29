@@ -115,6 +115,7 @@ describe('adaptLegacyDefinition', () => {
         canUseNestedAgents: false,
       },
       limits: { maxTurns: 10 },
+      responseMaxTokens: 1234,
       tools: ['read_file', 'search_replace'],
       skillInstructions: '',
       resolutionErrors: [],
@@ -129,6 +130,7 @@ describe('adaptLegacyDefinition', () => {
     expect(legacy.canRunShell).toBe(false);
     expect(legacy.canSearchWeb).toBe(false);
     expect(legacy.maxTurns).toBe(10);
+    expect(legacy.maxTokens).toBe(1234);
     expect(legacy.model).toBe('gpt-4o');
     expect(legacy.provider).toBe('openai');
   });

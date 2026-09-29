@@ -28,6 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
       sessionId,
       rpcPath: `${rpc.session(sessionId)}/events`,
       query,
+      signal: request.signal,
     });
     const upstream = await upstreamPromise;
     attachAbortCleanup(request.signal, () => {

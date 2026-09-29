@@ -520,6 +520,7 @@ export class Term2GatewayClient {
     rpcPath,
     query = '',
     correlationId = randomUUID(),
+    signal,
   } = {}) {
     this.#assertEnabled();
     assertPurpose(purpose);
@@ -537,22 +538,30 @@ export class Term2GatewayClient {
       });
     const assertion = this.issueAssertion({ userId, purpose, workspaceId, sessionId });
     const options = this.#requestOptions({ method: 'GET', rpcPath, query, assertion, correlationId });
-    return this.#send(options, null, { correlationId, stream: true });
+    return this.#send(options, null, { correlationId, stream: true, signal });
   }
 
   async stream(args = {}) {
     return this.#retryAfterPairing(() => this.#streamOnce(args));
   }
 
-  #send(options, body, { correlationId, stream }) {
+  #send(options, body, { correlationId, stream, signal }) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timeoutMs = stream ? this.gatewayConfig.streamTimeoutMs : this.gatewayConfig.requestTimeoutMs;
       let timer;
+      let abortHandler;
+      const cleanupAbortListener = () => {
+        if (abortHandler) {
+          signal.removeEventListener('abort', abortHandler);
+          abortHandler = undefined;
+        }
+      };
       const fail = (error) => {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
+        cleanupAbortListener();
         const safeError =
           error instanceof Term2GatewayError
             ? error
@@ -577,6 +586,7 @@ export class Term2GatewayClient {
           if (stream && response.statusCode >= 200 && response.statusCode < 300) {
             settled = true;
             if (timer) clearTimeout(timer);
+            cleanupAbortListener();
             resolve(response);
             return;
           }
@@ -606,6 +616,7 @@ export class Term2GatewayClient {
             if (response.statusCode >= 200 && response.statusCode < 300) {
               settled = true;
               if (timer) clearTimeout(timer);
+              cleanupAbortListener();
               resolve({ statusCode: response.statusCode, headers: response.headers, body: parsed });
             } else {
               fail(normalizeGatewayError(response.statusCode, parsed, correlationId));
@@ -620,6 +631,15 @@ export class Term2GatewayClient {
         req.on('error', () =>
           fail(new Term2GatewayError('gateway_unavailable', 'Agent gateway unavailable', { requestId: correlationId })),
         );
+        if (signal) {
+          abortHandler = () => {
+            req.destroy();
+            fail(new Term2GatewayError('gateway_unavailable', 'Agent gateway unavailable', { requestId: correlationId }));
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
+          if (signal.aborted) abortHandler();
+        }
+        if (settled) return;
         timer = setTimeout(() => {
           req.destroy();
           fail(new Term2GatewayError('gateway_unavailable', 'Agent gateway unavailable', { requestId: correlationId }));

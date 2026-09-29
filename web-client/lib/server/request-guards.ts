@@ -1,4 +1,5 @@
 import { RequestValidationError } from './request-validation';
+import { optedInHostnames } from './listen-host.js';
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
 const ALLOWED_HOSTS_ENV = 'TERM2_WEB_CLIENT_ALLOWED_HOSTS';
@@ -6,16 +7,7 @@ const ALLOWED_HOSTS_ENV = 'TERM2_WEB_CLIENT_ALLOWED_HOSTS';
 function allowedHostnames(): Set<string> {
   const names = new Set(LOCAL_HOSTNAMES);
   // TERM2_WEB_CLIENT_ALLOWED_HOSTS is an explicit comma-separated hostname allowlist for LAN access.
-  for (const raw of (process.env[ALLOWED_HOSTS_ENV] ?? '').split(',')) {
-    const value = raw.trim();
-    if (!value || /[\\/@?#]/u.test(value)) continue;
-    try {
-      const hostname = new URL(`http://${value}`).hostname.toLowerCase();
-      if (hostname) names.add(hostname);
-    } catch {
-      // Ignore malformed opt-in entries; an empty or invalid setting grants no additional hosts.
-    }
-  }
+  for (const hostname of optedInHostnames(process.env[ALLOWED_HOSTS_ENV])) names.add(hostname);
   return names;
 }
 

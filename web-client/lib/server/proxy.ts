@@ -98,8 +98,17 @@ export function errorResponse(error: unknown): NextResponse {
     return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status });
   }
   if (error instanceof Term2GatewayError) {
+    const details = error.code === 'settings_conflict' && isPlainObject(error.details) ? { details: error.details } : {};
     return NextResponse.json(
-      { error: { code: error.code, message: error.message, retryable: error.retryable, requestId: error.requestId } },
+      {
+        error: {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+          requestId: error.requestId,
+          ...details,
+        },
+      },
       { status: error.statusCode },
     );
   }
@@ -107,4 +116,10 @@ export function errorResponse(error: unknown): NextResponse {
     { error: { code: 'gateway_unavailable', message: 'Agent gateway unavailable', retryable: true } },
     { status: 503 },
   );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

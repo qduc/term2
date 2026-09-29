@@ -896,6 +896,15 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           ...options.agentBridge,
           authority: options.agentSpecAuthority,
           logger: loggingService,
+          // Session-owned child approval surfaces: without an owner the child
+          // interruption settles as the catchable interrupted error.
+          ...(options.nestedApprovalOwner
+            ? { nestedApprovalOwner: options.nestedApprovalOwner, approvalPolicyRegistry: approvalRegistry }
+            : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
+          ...(options.graphIdentity ? { graphIdentity: options.graphIdentity } : {}),
+          ...(options.sessionAccess ? { sessionAccess: options.sessionAccess } : {}),
+          ...(options.nestedCompatibility ? { nestedCompatibility: options.nestedCompatibility } : {}),
           onCallAdmitted: (member, started, callId) => recordAgentCall(member, started, callId, 'unknown'),
           onCallSettled: (member, started, callId, outcome, reason) => {
             if (outcome === 'unknown' && reason) abortedAgentCallIds.add(callId);

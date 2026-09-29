@@ -12,6 +12,17 @@ import { createMockSettingsService } from '../../../services/settings/settings-s
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
+import { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import { NestedSubagentRunner } from '../../../services/subagents/nested-runner.js';
+import { getSubagentRunContext, type SubagentToolFactory } from '../../../services/subagents/tool-policy.js';
+import type { SubagentDefinition } from '../../../services/subagents/types.js';
+import {
+  createMockLogger,
+  createMockSettings,
+  createSessionContextService,
+  registerTestProvider,
+} from '../../../services/subagents/test-helpers/subagent-manager-fixtures.js';
+import { bindRunCodeNestedApprovalOwner, bindRunCodeRegistry } from './run-code.js';
 
 class SubagentBridge extends ProductionSubagentBridge {
   constructor(options: Omit<ConstructorParameters<typeof ProductionSubagentBridge>[0], 'toolOwnership'>) {
@@ -204,8 +215,15 @@ function buildRunCodeTool(options: {
   }) as AnyToolDefinition;
 }
 
-const execute = async (definition: AnyToolDefinition, code: string, timeoutMs = 60_000): Promise<string> =>
-  String(await definition.execute({ code, timeout_ms: timeoutMs, description: 'agent capability test' } as never));
+const execute = async (
+  definition: AnyToolDefinition,
+  code: string,
+  timeoutMs = 60_000,
+  context?: unknown,
+): Promise<string> =>
+  String(
+    await definition.execute({ code, timeout_ms: timeoutMs, description: 'agent capability test' } as never, context),
+  );
 
 const resultJson = (output: string): any => {
   const marker = 'Result:\n';
@@ -710,5 +728,390 @@ describe('run_code agent capability', () => {
     const definition = buildRunCodeTool({ withAuthority: false });
     const output = await execute(definition, 'return typeof agent;');
     expect(output).toContain('undefined');
+  });
+});
+
+describe('run_code agent capability foreground child approvals (real nested runner)', () => {
+  /**
+   * A real NestedSubagentRunner wired to a scripted provider whose child calls
+   * `fake_tool` `toolCallsBeforeSummary` times and then finishes. This is the
+   * same shape the nested-runner suite uses, launched through the public
+   * run_code `agent.run` capability instead of a direct runner call.
+   */
+  function buildRealRunnerFixture(
+    options: { approvalPerCall?: boolean; toolCallsBeforeSummary?: number; summaryDelayMs?: number } = {},
+  ) {
+    const toolCallsBeforeSummary = options.toolCallsBeforeSummary ?? 1;
+    let requestedToolCalls = 0;
+    const executedToolCalls: string[] = [];
+    const providerId = registerTestProvider({
+      label: 'run_code child scripted provider',
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          if (request.tools.length === 0) {
+            yield {
+              type: 'completion',
+              responseId: 'wrap-up',
+              output: [{ type: 'message', content: [{ type: 'text', text: 'Budget wrap-up summary.' }] }],
+            };
+            return;
+          }
+          if (
+            request.input.some((item: any) => item.type === 'tool_result') &&
+            requestedToolCalls >= toolCallsBeforeSummary
+          ) {
+            if (options.summaryDelayMs) await new Promise((resolve) => setTimeout(resolve, options.summaryDelayMs));
+            yield {
+              type: 'completion',
+              responseId: `resp-summary-${requestedToolCalls}`,
+              output: [{ type: 'message', content: [{ type: 'text', text: 'Summary: child finished.' }] }],
+            };
+            return;
+          }
+          requestedToolCalls += 1;
+          const callId = `child-call-${requestedToolCalls}`;
+          yield { type: 'tool_call', id: callId, name: 'fake_tool', arguments: '{"path":"notes.md"}' };
+          yield {
+            type: 'completion',
+            responseId: `resp-${requestedToolCalls}`,
+            output: [{ type: 'tool_call', id: callId, name: 'fake_tool', arguments: '{"path":"notes.md"}' }],
+          };
+        },
+      }),
+      fetchModels: async () => [{ id: 'nested-model' }],
+    });
+
+    const fakeTool: AnyToolDefinition = {
+      name: 'fake_tool',
+      description: 'child tool that needs approval',
+      parameters: z.object({ path: z.string() }),
+      needsApproval: () => options.approvalPerCall ?? false,
+      formatCommandMessage: noopFormatter,
+      execute: async (_params: unknown, context: unknown) => {
+        executedToolCalls.push('fake_tool');
+        const runContext = getSubagentRunContext(context);
+        runContext?.filesChanged.push('notes.md');
+        if (runContext) runContext.toolCounts.fake_tool = (runContext.toolCounts.fake_tool ?? 0) + 1;
+        return 'Updated notes.md';
+      },
+    } as unknown as AnyToolDefinition;
+
+    const stubToolFactory = {
+      buildToolDefinitions: () => [fakeTool],
+      buildAgentTools: () => [fakeTool],
+    } as unknown as SubagentToolFactory;
+
+    const workerDefinition = (): SubagentDefinition => ({
+      role: 'worker',
+      name: 'worker',
+      instructions: 'You are a worker. Update the notes file.',
+      canRead: true,
+      canWrite: true,
+      canSearchWeb: false,
+      canRunShell: false,
+      maxTurns: 8,
+      model: 'nested-model',
+      provider: providerId,
+      reasoningEffort: 'default',
+    });
+
+    const runner = new NestedSubagentRunner({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.model': 'nested-model',
+        'agent.provider': providerId,
+        'agent.runBudget.extensionPercent': 0,
+      }),
+      sessionContextService: createSessionContextService(),
+      toolFactory: stubToolFactory,
+      roleToolCache: new Map(),
+      resolveRole: () => workerDefinition(),
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+
+    const bridge = new SubagentBridge({
+      logger: createMockLogger(),
+      settings: createMockSettings({}),
+      sessionContextService: {
+        getContext: () => null,
+        runWithContext: (_c: unknown, fn: () => unknown) => fn(),
+      } as never,
+      chat: async () => '',
+      createClient: () => ({}),
+      subagentManager: runner as never,
+    });
+    vi.spyOn(bridge, 'runSubagent').mockImplementation(async () => {
+      throw new Error('raw runSubagent must not be reached from scripts');
+    });
+
+    return { runner, bridge, providerId, executedToolCalls };
+  }
+
+  const runCodeSession = () => ({
+    context: { sessionId: 'session-1' },
+    signal: new AbortController().signal,
+  });
+
+  const childSpecJson = (providerId: string, goal: string) =>
+    JSON.stringify({
+      goal,
+      tools: ['read_file'],
+      model: { provider: providerId, model: 'nested-model' },
+      permissions: { filesystem: { read: ['**'] } },
+    });
+
+  function buildChildApprovalRunCodeTool(
+    fixture: ReturnType<typeof buildRealRunnerFixture>,
+    options: { withOwner?: boolean } = {},
+  ) {
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    approvalRegistry.register({ toolName: 'echo', parameters: echoTool().parameters, needsApproval: () => false });
+    approvalRegistry.register({
+      toolName: 'fake_tool',
+      parameters: z.object({ path: z.string() }),
+      needsApproval: () => true,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [echoTool()];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry: approvalRegistry,
+      agentSpecAuthority: authority(),
+      agentSpecBridge: scriptBridge(fixture.bridge, { foregroundOnly: true }) as never,
+    }) as AnyToolDefinition;
+    tools = [...tools, runCode];
+    bindRunCodeRegistry(tools);
+    if (options.withOwner === false) {
+      return { runCode, owner: undefined };
+    }
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    return { runCode, owner };
+  }
+
+  it('surfaces a child tool approval through the session owner and applies an approval to the exact child continuation', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture);
+
+    const pending = execute(
+      runCode,
+      `const result = await agent.run({ spec: ${childSpecJson(fixture.providerId, 'update notes')} });
+       return result;`,
+      20_000,
+      runCodeSession(),
+    );
+
+    await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+    const snapshot = owner!.getSnapshot()!;
+    expect(snapshot.toolName).toBe('fake_tool');
+    expect(snapshot.sessionId).toBe('session-1');
+    expect(snapshot.outerRunId).toMatch(/^run_code_bridge_\d+$/);
+    expect(snapshot.nestedCallId).toBe(`${snapshot.outerRunId}:agent:1`);
+    expect(snapshot.requestId).toBe(`${snapshot.nestedCallId}:child-approval:1`);
+    expect(snapshot.approval.agentName).toContain('Script child agent');
+    expect(snapshot.approval.toolName).toBe('fake_tool');
+
+    await owner!.decide(snapshot.requestId, { answer: 'y' });
+    const output = await pending;
+
+    expect(fixture.executedToolCalls).toEqual(['fake_tool']);
+    const value = resultJson(output);
+    expect(value.status).toBe('completed');
+    expect(value.finalText).toBe('Summary: child finished.');
+    expect(JSON.stringify(value.toolsUsed)).toContain('fake_tool');
+    expect(value.filesChanged).toEqual(['notes.md']);
+    expect(value.costRecords).toBeUndefined();
+    expect(value.nestedRunResult).toBeUndefined();
+  });
+
+  it('applies a denial to the exact child continuation without executing the child tool', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture);
+
+    const pending = execute(
+      runCode,
+      `return await agent.run({ spec: ${childSpecJson(fixture.providerId, 'update notes')} });`,
+      20_000,
+      runCodeSession(),
+    );
+
+    await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+    await owner!.decide(owner!.getSnapshot()!.requestId, { answer: 'n', rejectionReason: 'not now' });
+    const output = await pending;
+
+    expect(fixture.executedToolCalls).toEqual([]);
+    const value = resultJson(output);
+    expect(value.status).toBe('completed');
+    expect(value.finalText).toBe('Summary: child finished.');
+    expect(value.filesChanged).toEqual([]);
+  });
+
+  it('publishes every repeated child approval pause with a fresh generation and applies each decision', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true, toolCallsBeforeSummary: 2 });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture);
+
+    const pending = execute(
+      runCode,
+      `return await agent.run({ spec: ${childSpecJson(fixture.providerId, 'update notes twice')} });`,
+      20_000,
+      runCodeSession(),
+    );
+
+    await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+    const first = owner!.getSnapshot()!;
+    expect(first.requestId.endsWith(':child-approval:1')).toBe(true);
+    await owner!.decide(first.requestId, { answer: 'y' });
+
+    await vi.waitFor(() => {
+      const snapshot = owner!.getSnapshot();
+      expect(snapshot).not.toBeNull();
+      expect(snapshot!.requestId).not.toBe(first.requestId);
+    });
+    const second = owner!.getSnapshot()!;
+    expect(second.requestId.endsWith(':child-approval:2')).toBe(true);
+    await owner!.decide(second.requestId, { answer: 'y' });
+
+    const output = await pending;
+    expect(fixture.executedToolCalls).toEqual(['fake_tool', 'fake_tool']);
+    const value = resultJson(output);
+    expect(value.status).toBe('completed');
+  });
+
+  it('pauses the work clock while concurrent child siblings wait for their approvals', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture);
+
+    const decideAll = (async () => {
+      const decided = new Set<string>();
+      while (decided.size < 2) {
+        await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+        const snapshot = owner!.getSnapshot()!;
+        if (decided.has(snapshot.requestId)) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          continue;
+        }
+        decided.add(snapshot.requestId);
+        // Wait long enough that both waits together exceed the script timeout:
+        // this only survives when the host pauses the work clock while every
+        // admitted call is waiting on its child approval.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await owner!.decide(snapshot.requestId, { answer: 'y' });
+      }
+    })();
+
+    const output = await execute(
+      runCode,
+      `const results = await Promise.all([
+        agent.run({ spec: ${childSpecJson(fixture.providerId, 'job a')} }),
+        agent.run({ spec: ${childSpecJson(fixture.providerId, 'job b')} }),
+      ]);
+      return results.map((result) => result.finalText).sort().join('|');`,
+      500,
+      runCodeSession(),
+    );
+    await decideAll;
+
+    expect(fixture.executedToolCalls).toEqual(['fake_tool', 'fake_tool']);
+    expect(output).toContain('Summary: child finished.|Summary: child finished.');
+    expect(output).not.toContain('exceeded its configured timeout');
+  });
+
+  it('keeps the work clock running while a child waits when a sibling tool call is still working', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const slowTool: AnyToolDefinition = {
+      name: 'slow_tool',
+      description: 'sibling work that keeps the clock honest',
+      parameters: z.object({ value: z.string() }),
+      needsApproval: () => false,
+      formatCommandMessage: noopFormatter,
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return 'slow done';
+      },
+    } as unknown as AnyToolDefinition;
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    approvalRegistry.register({ toolName: 'slow_tool', parameters: slowTool.parameters, needsApproval: () => false });
+    approvalRegistry.register({
+      toolName: 'fake_tool',
+      parameters: z.object({ path: z.string() }),
+      needsApproval: () => true,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [slowTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      getCwd: () => process.cwd(),
+      approvalPolicyRegistry: approvalRegistry,
+      agentSpecAuthority: authority(),
+      agentSpecBridge: scriptBridge(fixture.bridge, { foregroundOnly: true }) as never,
+    }) as AnyToolDefinition;
+    tools = [...tools, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+
+    const output = await execute(
+      runCode,
+      `const child = agent.run({ spec: ${childSpecJson(fixture.providerId, 'waiting child')} });
+       const slow = await tools.slow_tool({ value: 'x' });
+       return { slow, child: await child };`,
+      700,
+    );
+
+    expect(output).toContain('exceeded its configured timeout');
+    // The aborted script must not strand the child's pending session request.
+    await vi.waitFor(() => expect(owner.getSnapshot()).toBeNull());
+  });
+
+  it('settles a paused child approval request when the parent cancels the script', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const { runCode, owner } = buildChildApprovalRunCodeTool(fixture);
+    let childSettled = false;
+    const originalRunAsTool = fixture.runner.runAsTool.bind(fixture.runner);
+    vi.spyOn(fixture.runner, 'runAsTool').mockImplementation(async (...args: Parameters<typeof originalRunAsTool>) => {
+      try {
+        return await originalRunAsTool(...args);
+      } finally {
+        childSettled = true;
+      }
+    });
+
+    // A fully paused script has its work clock paused by design, so the
+    // settlement signal here is the parent cancellation, not the script
+    // timeout.
+    const controller = new AbortController();
+    const pending = execute(
+      runCode,
+      `return await agent.run({ spec: ${childSpecJson(fixture.providerId, 'cancelled child')} });`,
+      20_000,
+      { context: { sessionId: 'session-1' }, signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(owner!.getSnapshot()).not.toBeNull());
+    controller.abort();
+    const output = await pending;
+
+    expect(output).toContain('cancelled by its parent');
+    await vi.waitFor(() => expect(childSettled).toBe(true));
+    await vi.waitFor(() => expect(owner!.getSnapshot()).toBeNull());
+  });
+
+  it('keeps an unresolvable child interruption a catchable agent.run failure when no approval owner is bound', async () => {
+    const fixture = buildRealRunnerFixture({ approvalPerCall: true });
+    const { runCode } = buildChildApprovalRunCodeTool(fixture, { withOwner: false });
+
+    const output = await execute(
+      runCode,
+      `return await agent.run({ spec: ${childSpecJson(fixture.providerId, 'unowned child')} }).then(
+        () => 'FALSELY COMPLETED',
+        (error) => error.message,
+      );`,
+      20_000,
+      runCodeSession(),
+    );
+
+    expect(output).not.toContain('FALSELY COMPLETED');
+    expect(output).toContain('Child run interrupted');
+    expect(fixture.executedToolCalls).toEqual([]);
   });
 });

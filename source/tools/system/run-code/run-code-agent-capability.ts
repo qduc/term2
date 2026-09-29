@@ -17,6 +17,11 @@ import type {
   SubagentRunStatus,
 } from '../../../services/subagents/types.js';
 import type { ResolvedSubagentLaunch } from '../../../lib/subagent-bridge.js';
+import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
+import { applyApprovalGrant } from '../../../services/approval/approval-grant-executor.js';
+import type { ForegroundSubagentApprovalPause } from '../../../services/subagents/foreground-subagent-lease.js';
+import type { CapabilityCallContext } from '../../../services/sandboxed-code-host/host-types.js';
 import { RUN_CODE_LIMITS } from './run-code-runtime.js';
 
 /**
@@ -47,6 +52,21 @@ export interface RunCodeAgentSpecBridge {
 export interface RunCodeAgentCapabilityDeps extends RunCodeAgentSpecBridge {
   authority: AgentSpecAuthoritySnapshot;
   logger: ILoggingService;
+  /**
+   * Session-owned approval decision owner and policy registry. When both are
+   * bound, a foreground child's tool approval pauses surface through the same
+   * user surface as nested `tools.*` calls and the decided answer is applied
+   * to the exact retained child continuation. Unbound, a child interruption
+   * settles as the existing catchable interrupted error.
+   */
+  nestedApprovalOwner?: NestedApprovalOwner;
+  approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
+  /** Session identity and graph binding forwarded to the owner's requests. */
+  sessionId?: string;
+  graphIdentity?: object;
+  /** Session-owned grant memory for allow-session/docker child answers. */
+  sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
+  nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
   onCallAdmitted?: (member: string, started: number, callId: string) => void;
   onCallSettled?: (
     member: string,
@@ -123,6 +143,39 @@ const rejectCall = (error: string): CapabilityOutcome => ({
 
 const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';
 
+/** The host-inspectable parts of a child run loop's tool-approval interruption. */
+type ChildToolApproval = {
+  toolName: string;
+  argumentsText: string;
+  arguments: unknown;
+  callId?: string;
+};
+
+/**
+ * Extracts the pending tool call from a child run-loop interruption. Other
+ * interruption kinds — e.g. a child run-budget check-in — are not tool
+ * approvals: the caller leaves those pauses unapplied, so the child settles
+ * interrupted and the script keeps its existing catchable error.
+ */
+function extractChildToolApproval(interruption: unknown): ChildToolApproval | undefined {
+  if (!isRecord(interruption) || interruption.type !== 'tool_approval_item') return undefined;
+  if (typeof interruption.name !== 'string' || interruption.name === '') return undefined;
+  const argumentsText =
+    typeof interruption.arguments === 'string' ? interruption.arguments : JSON.stringify(interruption.arguments ?? {});
+  let argumentsValue: unknown = {};
+  try {
+    argumentsValue = JSON.parse(argumentsText);
+  } catch {
+    // Registry evaluation is fail-closed for arguments it cannot inspect.
+  }
+  return {
+    toolName: interruption.name,
+    argumentsText,
+    arguments: argumentsValue,
+    ...(typeof interruption.callId === 'string' ? { callId: interruption.callId } : {}),
+  };
+}
+
 /** `costRecords` and `nestedRunResult` are host-owned: possibly large, possibly not JSON-safe. */
 const projectNestedResult = (result: NestedSubagentResult | SubagentResult): JsonValue => {
   const { costRecords: _costRecords, nestedRunResult: _nestedRunResult, ...projected } = result;
@@ -195,7 +248,101 @@ export function createRunCodeAgentCapability(
   // check and the increment, so concurrent script starts cannot exceed it.
   let startsAdmitted = 0;
 
-  return {
+  /**
+   * Builds the per-call publisher that surfaces one foreground child approval
+   * pause through the session-owned decision owner. The capability attaches it
+   * only when the session owner and policy registry are bound; the decision is
+   * applied to the pause's exact retained continuation through `pause.apply`,
+   * never from script data, and the human wait is bracketed with the host
+   * work-clock hooks so paused children do not burn the script timeout.
+   */
+  const childApprovalPublisher = (callContext: CapabilityCallContext) => {
+    const owner = deps.nestedApprovalOwner;
+    const registry = deps.approvalPolicyRegistry;
+    if (!owner || !registry) return undefined;
+    return async (pause: ForegroundSubagentApprovalPause): Promise<void> => {
+      const approvalInfo = extractChildToolApproval(pause.interruption);
+      // Not a tool approval (e.g. a child run-budget check-in): leave the pause
+      // unapplied so the child settles interrupted and the script keeps its
+      // existing catchable error.
+      if (!approvalInfo) return;
+      // The host wraps these on the handler per run; the clock pauses only
+      // while every admitted call is waiting.
+      handler.onWaiting?.(callContext);
+      try {
+        const resolution = await owner.request({
+          requestId: `${pause.runId}:child-approval:${pause.generation}`,
+          sessionId: deps.sessionId ?? 'unknown',
+          graphIdentity: deps.graphIdentity ?? {},
+          outerRunId: invocation.bridgeRunId,
+          nestedCallId: pause.runId,
+          toolName: approvalInfo.toolName,
+          preparedArguments: approvalInfo.arguments,
+          authorityContext: invocation.context,
+          approval: {
+            agentName: `Script child agent (${pause.role})`,
+            toolName: approvalInfo.toolName,
+            argumentsText: approvalInfo.argumentsText,
+            rawInterruption: null,
+            ...(approvalInfo.callId !== undefined ? { callId: approvalInfo.callId } : {}),
+          },
+          signal: callContext.signal,
+          revalidate: async () =>
+            (
+              await registry.evaluate({
+                toolName: approvalInfo.toolName,
+                args: approvalInfo.arguments,
+                context: invocation.context,
+              })
+            ).kind,
+          grant: (decision) => {
+            if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
+            // Session-owned grant memory (allow-session edits, docker, denied
+            // reads) applies exactly as the direct child approval path does.
+            const applied = applyApprovalGrant(
+              {
+                sessionId: deps.sessionId ?? 'unknown',
+                sessionAccess: deps.sessionAccess,
+                nestedCompatibility: deps.nestedCompatibility,
+                logger: deps.logger,
+              },
+              {
+                answer: decision.answer,
+                toolName: approvalInfo.toolName,
+                rawArguments: approvalInfo.argumentsText,
+                callId: approvalInfo.callId,
+                interruption: pause.interruption,
+              },
+            );
+            if (!applied.isApproved) throw new Error('Tool execution was not approved.');
+            // One decision on the exact retained continuation: `apply` consumes
+            // only this pause's generation and returns false when stale.
+            const resumed = pause.apply(({ handle, interruption }) => {
+              handle.approve?.(interruption);
+              return true;
+            });
+            if (!resumed) throw new Error('The child approval pause is no longer current.');
+          },
+          // The child's own loop dispatches after its continuation is approved;
+          // the host owns no tool call to run here.
+          dispatch: async () => true,
+        });
+        if (resolution.kind === 'denied') {
+          pause.apply(({ handle, interruption }) => {
+            handle.reject?.(interruption, { message: resolution.message });
+            return true;
+          });
+        }
+        // `approved`: the grant already resumed the exact child continuation.
+        // `failed`: the grant threw before or while applying; the lease queue
+        // settles the child so the script keeps a truthful outcome.
+      } finally {
+        handler.onResumed?.(callContext);
+      }
+    };
+  };
+
+  const handler: CapabilityHandler<PreparedAgentCall> = {
     binding: { name: 'agent', kind: 'namespace', members },
     limits: {
       maxCalls: RUN_CODE_LIMITS.maxAgentCalls,
@@ -284,9 +431,13 @@ export function createRunCodeAgentCapability(
         const outcome = await (async (): Promise<CapabilityOutcome> => {
           if (prepared.member === 'run') {
             try {
+              const publisher = childApprovalPublisher(callContext);
               const nested = await deps.runResolvedSubagent!.call(
                 undefined,
-                { resolvedDefinition: prepared.boundary },
+                {
+                  resolvedDefinition: prepared.boundary,
+                  ...(publisher ? { foregroundChildApproval: publisher } : {}),
+                },
                 invocation.context,
                 // The host controller signal aborts the child on script timeout or
                 // cancellation; the tool call id keeps foreground leases movable.
@@ -375,4 +526,5 @@ export function createRunCodeAgentCapability(
       }
     },
   };
+  return handler;
 }

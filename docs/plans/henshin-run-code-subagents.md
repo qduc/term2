@@ -1,0 +1,21 @@
+# Henshin phase 2: script-composed agent executions
+
+## Resume here
+
+Phase 1 merged at `70e9ba3e` and reported in `henshin-agent-runtime-report.md`. Phase 2 assignment: `/tmp/henshin-phase2-brief.md`. This plan starts from the decision to allow **agent execution only** in `run_code`, leaving mentor, user interaction and rollover prohibited. The implementation is not yet merged. Final report: `henshin-run-code-subagents-report.md`.
+
+## Goal and proportionality boundary
+
+The orchestrator composes parameterized agent executions with script calls, using `AgentSpec` and host-owned mechanics rather than a fixed direct subagent tool taxonomy. `run_code` already has a wrapped tool registry, host-side nested approval, call/concurrency limits, cancellation and script-only registry entries (MCP precedent). Prefer one script-only `agent_run`/`agent_start` capability and lifecycle controls, surfaced as `tools.agent.run(...)` only if the existing VM's flat namespace can support it without a second host protocol. Otherwise use flat `tools.agent_run(spec)` and document the naming deviation. Retire direct `run_subagent` paths only after scripts preserve approvals, async handles and result delivery; do not remove mentor's distinct retained-session mechanics.
+
+## Required sequence and evidence
+
+1. Revise the historical script prohibition in `run-code-nested-approval.md` and applicable `run-code-codemode-improvements.md` claims with rationale and exact remaining exclusions. Record baseline (`run-code.test.ts`: 129 passed).
+2. Implement a host-side agent invocation capability over phase-1 `AgentSpec` and the existing bridge/manager, available only in scripts. The script VM is not authority: the host validates and narrows tool permissions against parent policy, revalidates nested approval after wait, and keeps source/call ledger semantics. Bound script-launched agent count and concurrent execution in the existing host ledger, in addition to `AgentSpec` turn/output bounds; handle async jobs after the script returns with session-owned notifications/cancellation and worktree pinning. Avoid a second scheduler or session registry.
+3. Test the public `run_code` boundary: composition (`await`, fan-out, loops), rejected or approved writes, parent scope narrowing, budget exhaustion, background settlement/notification and cancellation, and worktree/adoption. Then migrate orchestrator guidance and catalog, measure before/after header tokens/chars using the existing catalog-cost methodology.
+4. Evidence-gated retirement: identify all direct subagent callers, role enum/pool/prompt consumers and `run_explorer` mechanics. Remove direct tools when equivalent script controls are verified; preserve thin presets or compatibility adapters for users of old session/APIs when removal would break contracts. `ask_mentor` remains direct. Distinguish retired components from retained compatibility explicitly.
+5. Cross-model review with the must-fix reachability/harm bar, correction round, focused/related/changed/typecheck, provider black-box, integration and broad unit gates. Merge `--no-ff`, update report with actual merge and progress basis; no push/publish.
+
+## Guard contract
+
+Harm prevented: script loops spawning unbounded agent runs or child tools exceeding parent authority. Scope: one `run_code` invocation from an interactive or headless session, including async jobs that outlive the call. Guard classes: admission cap and permission boundary. Enforcement owner: host-side script capability/registry and existing agent resolver; recovery owner: existing async registry and session notifications. Signal: admitted agent starts per script/turn and resolved permissions; count and allowlist are direct evidence. Legitimate work: bounded parallel evidence gathering within cap. Reject before starting excess jobs without cancelling siblings; preserve accepted job handles and receipts. No silent retries, capability escalation or VM-side authorization. Configure from existing run-code ceilings unless evidence requires a separately named cap; test boundary, parallel races, cancellation and post-script status. Rollback: retain direct compatible tool wiring until script path proves equivalent. `guard-ledger.md` must be reconciled before changing actual limits.

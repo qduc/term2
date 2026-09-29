@@ -150,9 +150,15 @@ same script. Denial is catchable and earlier effects are never replayed.
   Arguments shown must be those executed, including path/context meaning.
 - Keep approval host-side. Preserve VM-realm-owned bindings and JSON crossings;
   the VM is not an OS security boundary.
-- Shell/bash, agent/workflow control, mentor, user interaction, and rollover
-  remain prohibited inside scripts. For the initial nested-approval rollout,
-  also prohibit nested worktree transitions and retain their direct tools.
+- For the initial nested-approval rollout, shell/bash, agent/workflow control,
+  mentor, user interaction, rollover and nested worktree transitions were
+  prohibited inside scripts. The later Henshin phase-2 decision permits only
+  **agent execution** through host-owned script capabilities: it composes
+  independent runs without granting a script approval or parent tool authority.
+  Mentor, direct user interaction, rollover, shell/bash and nested worktree
+  transitions remain prohibited; workflow control is a separate decision.
+  The per-run worktree pin belongs to the host-side agent execution API, not a
+  script-side worktree transition. See `henshin-run-code-subagents.md`.
 - No replay, checkpoint format, escrow tool, blanket trusted-script mode, or
   separate script-local grant policy is part of this implementation.
 - Preserve separate script completion and diagnostic-output channels.

@@ -64,5 +64,5 @@ export const searxngProvider: WebSearchProvider = {
   search: searchSearxng,
   isConfigured,
 };
-registerWebSearchProvider(searxngProvider);
+registerWebSearchProvider(searxngProvider, { builtin: true });
 export { isConfigured as isSearxngConfigured };

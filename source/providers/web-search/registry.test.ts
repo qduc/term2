@@ -7,6 +7,7 @@ import {
   getAllWebSearchProviders,
   getConfiguredWebSearchProvider,
   clearWebSearchProviders,
+  createWebSearchRegistry,
 } from './registry.js';
 import type { WebSearchProvider } from './types.js';
 
@@ -148,4 +149,26 @@ it.sequential('clearWebSearchProviders removes all providers', () => {
 
   expect(getAllWebSearchProviders().length).toBe(0);
   expect(getDefaultWebSearchProvider()).toBe(undefined);
+});
+
+it('keeps web-search registry instances independent from the default', () => {
+  const registryA = createWebSearchRegistry();
+  const registryB = createWebSearchRegistry();
+  const provider = createMockProvider('isolated-search', 'Isolated');
+
+  registryA.registerWebSearchProvider(provider);
+
+  expect(registryA.getWebSearchProvider(provider.id)).toBe(provider);
+  expect(registryB.getWebSearchProvider(provider.id)).toBeUndefined();
+  expect(getWebSearchProvider(provider.id)).toBeUndefined();
+});
+
+it('does not copy a later default web-search provider into an existing instance', () => {
+  const registry = createWebSearchRegistry();
+  const provider = createMockProvider('default-after-search-instance', 'Later');
+
+  registerWebSearchProvider(provider);
+
+  expect(getWebSearchProvider(provider.id)).toBe(provider);
+  expect(registry.getWebSearchProvider(provider.id)).toBeUndefined();
 });

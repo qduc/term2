@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { saveCodexTokens } from './codex-auth.js';
 import { saveGrokTokens } from './grok-auth.js';
-import { resetSessionAccounts } from './oauth-session-account.js';
+import {
+  createSessionAccountStore,
+  getSessionAccount,
+  recordSessionAccount,
+  resetSessionAccounts,
+} from './oauth-session-account.js';
 import {
   isOAuthAccountProvider,
   listOAuthAccounts,
@@ -97,4 +102,24 @@ it('separates the account in use from the one selected for next session', async 
   expect(after.find((a) => a.isInUse)?.label).toBe('b@example.com');
   expect(after.find((a) => a.isSelected)?.label).toBe('a@example.com');
   await expect(manager.getOrRefreshAccessToken()).resolves.toBe('b');
+});
+
+it('keeps OAuth session account stores independent from each other and the default', () => {
+  const storeA = createSessionAccountStore();
+  const storeB = createSessionAccountStore();
+
+  recordSessionAccount('codex', 'runtime-account', storeA);
+
+  expect(getSessionAccount('codex', storeA)).toBe('runtime-account');
+  expect(getSessionAccount('codex', storeB)).toBeNull();
+  expect(getSessionAccount('codex')).toBeNull();
+});
+
+it('does not copy a later default OAuth pin into an existing store', () => {
+  const store = createSessionAccountStore();
+
+  recordSessionAccount('grok', 'default-account');
+
+  expect(getSessionAccount('grok')).toBe('default-account');
+  expect(getSessionAccount('grok', store)).toBeNull();
 });

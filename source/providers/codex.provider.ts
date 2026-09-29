@@ -27,6 +27,7 @@ import {
 import type { CodexTokens } from './codex-auth.js';
 import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
 import { recordSessionAccount } from './oauth-session-account.js';
+import type { SessionAccountStore } from './oauth-session-account.js';
 import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
@@ -102,11 +103,18 @@ export class CodexTokenManager {
    * mid-session would break the chain.
    */
   private pinnedAccountId: string | null = null;
+  private readonly sessionAccountStore?: SessionAccountStore;
 
-  constructor(options?: { tokenPathResolver?: () => string | null; authPath?: string; fetchImpl?: typeof fetch }) {
+  constructor(options?: {
+    tokenPathResolver?: () => string | null;
+    authPath?: string;
+    fetchImpl?: typeof fetch;
+    sessionAccountStore?: SessionAccountStore;
+  }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
     this.authPath = options?.authPath || resolveTerm2CodexAuthPath();
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.sessionAccountStore = options?.sessionAccountStore;
   }
 
   getAccountId(): string | null {
@@ -144,7 +152,7 @@ export class CodexTokenManager {
     const account = pinned ?? store.getActive();
     if (account) {
       this.pinnedAccountId = account.id;
-      recordSessionAccount('codex', account.id);
+      recordSessionAccount('codex', account.id, this.sessionAccountStore);
       return account.tokens;
     }
     const cliPath = this.tokenPathResolver();
@@ -673,71 +681,82 @@ function codexProviderFingerprint(settingsService: { get(key: string): unknown }
 }
 
 // Register Codex provider
-registerProvider({
-  id: 'codex',
-  label: 'Codex',
-  createStreamedModel: (
-    model,
-    { settingsService, loggingService, sessionContextService, onRetry, retryAttempts, contextCompactionSessionState },
-  ) => {
-    const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
-    // A session context is the ownership boundary for continuation state. Do
-    // not fall back to the settings service: it can be shared by independent
-    // sessions, which would leak server-managed response history.
-    const cacheKey = sessionContextService as object | undefined;
-    const fingerprint = codexProviderFingerprint(settingsService, retryAttempts);
-    const cached = cacheKey ? streamedProviders.get(cacheKey) : undefined;
-    if (cached) {
-      if (cached.fingerprint !== fingerprint) {
-        throw new Error(
-          'Codex transport or retry settings changed while this session was active. Start a new session before continuing so server-managed tool-call state is not lost.',
-        );
-      }
-      // The cache is session-scoped, but retry observers are client-scoped.
-      cached.provider.setRetryCallback(onRetry);
-      return cached.provider.getStreamedModel(model || defaultModel);
-    }
-
-    const tokenManager = new CodexTokenManager();
-
-    const openAIClient = new OpenAI({
-      apiKey: 'placeholder',
-      baseURL: process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex',
-      maxRetries: retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
-      fetch: createProviderFetch({
-        providerId: 'codex',
-        defaultModel,
-        deps: {
-          loggingService,
-          sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
-        },
-        middlewares: [
-          codexAuthMiddleware(tokenManager, loggingService),
-          codexSanitizeRequestMiddleware,
-          codexHeadersMiddleware(sessionContextService),
-        ],
-      }),
-    });
-
-    const provider = new CodexProvider(
-      openAIClient,
-      tokenManager,
-      loggingService,
-      sessionContextService,
-      settingsService.get('agent.transport') ?? 'websocket',
-      retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
+registerProvider(
+  {
+    id: 'codex',
+    label: 'Codex',
+    createStreamedModel: (
+      model,
       {
-        firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
-        interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
+        settingsService,
+        loggingService,
+        sessionContextService,
+        onRetry,
+        retryAttempts,
+        contextCompactionSessionState,
+        sessionAccountStore,
       },
-      onRetry,
-      contextCompactionSessionState,
-    );
-    if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
-    return provider.getStreamedModel(model || defaultModel);
+    ) => {
+      const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
+      // A session context is the ownership boundary for continuation state. Do
+      // not fall back to the settings service: it can be shared by independent
+      // sessions, which would leak server-managed response history.
+      const cacheKey = sessionContextService as object | undefined;
+      const fingerprint = codexProviderFingerprint(settingsService, retryAttempts);
+      const cached = cacheKey ? streamedProviders.get(cacheKey) : undefined;
+      if (cached) {
+        if (cached.fingerprint !== fingerprint) {
+          throw new Error(
+            'Codex transport or retry settings changed while this session was active. Start a new session before continuing so server-managed tool-call state is not lost.',
+          );
+        }
+        // The cache is session-scoped, but retry observers are client-scoped.
+        cached.provider.setRetryCallback(onRetry);
+        return cached.provider.getStreamedModel(model || defaultModel);
+      }
+
+      const tokenManager = new CodexTokenManager({ sessionAccountStore });
+
+      const openAIClient = new OpenAI({
+        apiKey: 'placeholder',
+        baseURL: process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex',
+        maxRetries: retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
+        fetch: createProviderFetch({
+          providerId: 'codex',
+          defaultModel,
+          deps: {
+            loggingService,
+            sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+          },
+          middlewares: [
+            codexAuthMiddleware(tokenManager, loggingService),
+            codexSanitizeRequestMiddleware,
+            codexHeadersMiddleware(sessionContextService),
+          ],
+        }),
+      });
+
+      const provider = new CodexProvider(
+        openAIClient,
+        tokenManager,
+        loggingService,
+        sessionContextService,
+        settingsService.get('agent.transport') ?? 'websocket',
+        retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
+        {
+          firstFrameMs: settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
+          interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
+        },
+        onRetry,
+        contextCompactionSessionState,
+      );
+      if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
+      return provider.getStreamedModel(model || defaultModel);
+    },
+    fetchModels: fetchCodexModels,
+    clearConversations: undefined,
+    sensitiveSettingKeys: [],
+    capabilities: CODEX_CAPABILITIES,
   },
-  fetchModels: fetchCodexModels,
-  clearConversations: undefined,
-  sensitiveSettingKeys: [],
-  capabilities: CODEX_CAPABILITIES,
-});
+  { builtin: true },
+);

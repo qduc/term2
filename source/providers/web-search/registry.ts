@@ -6,42 +6,83 @@
 import type { WebSearchProvider } from './types.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 
-const providers = new Map<string, WebSearchProvider>();
-let defaultProviderId: string | null = null;
+export interface WebSearchRegistry {
+  registerWebSearchProvider(provider: WebSearchProvider, options?: { isDefault?: boolean; builtin?: boolean }): void;
+  getWebSearchProvider(id: string): WebSearchProvider | undefined;
+  getDefaultWebSearchProvider(): WebSearchProvider | undefined;
+  getAllWebSearchProviders(): WebSearchProvider[];
+  getConfiguredWebSearchProvider(deps: { settingsService: ISettingsService }): WebSearchProvider | undefined;
+  clearWebSearchProviders(): void;
+}
+
+const builtinProviders = new Map<string, WebSearchProvider>();
+let builtinDefaultProviderId: string | null = null;
+
+export function createWebSearchRegistry(): WebSearchRegistry {
+  const providers = new Map(builtinProviders);
+  let defaultProviderId = builtinDefaultProviderId;
+  const registry: WebSearchRegistry = {
+    registerWebSearchProvider(provider, options) {
+      if (providers.has(provider.id)) {
+        throw new Error(`Web search provider '${provider.id}' is already registered`);
+      }
+      providers.set(provider.id, provider);
+      if (options?.isDefault || !defaultProviderId) defaultProviderId = provider.id;
+      if (options?.builtin) {
+        builtinProviders.set(provider.id, provider);
+        if (options.isDefault || !builtinDefaultProviderId) builtinDefaultProviderId = provider.id;
+      }
+    },
+    getWebSearchProvider: (id) => providers.get(id),
+    getDefaultWebSearchProvider: () => (defaultProviderId ? providers.get(defaultProviderId) : undefined),
+    getAllWebSearchProviders: () => Array.from(providers.values()),
+    getConfiguredWebSearchProvider: (deps) => {
+      const providerId = deps.settingsService.get('webSearch.provider');
+      if (providerId) {
+        const provider = providers.get(providerId);
+        if (provider) return provider;
+      }
+      return defaultProviderId ? providers.get(defaultProviderId) : undefined;
+    },
+    clearWebSearchProviders: () => {
+      providers.clear();
+      defaultProviderId = null;
+    },
+  };
+  return registry;
+}
+
+const defaultWebSearchRegistry = createWebSearchRegistry();
 
 /**
  * Register a web search provider
  */
-export function registerWebSearchProvider(provider: WebSearchProvider, options?: { isDefault?: boolean }): void {
-  if (providers.has(provider.id)) {
-    throw new Error(`Web search provider '${provider.id}' is already registered`);
-  }
-  providers.set(provider.id, provider);
-
-  if (options?.isDefault || !defaultProviderId) {
-    defaultProviderId = provider.id;
-  }
+export function registerWebSearchProvider(
+  provider: WebSearchProvider,
+  options?: { isDefault?: boolean; builtin?: boolean },
+): void {
+  defaultWebSearchRegistry.registerWebSearchProvider(provider, options);
 }
 
 /**
  * Get a specific web search provider by ID
  */
 export function getWebSearchProvider(id: string): WebSearchProvider | undefined {
-  return providers.get(id);
+  return defaultWebSearchRegistry.getWebSearchProvider(id);
 }
 
 /**
  * Get the default web search provider
  */
 export function getDefaultWebSearchProvider(): WebSearchProvider | undefined {
-  return defaultProviderId ? providers.get(defaultProviderId) : undefined;
+  return defaultWebSearchRegistry.getDefaultWebSearchProvider();
 }
 
 /**
  * Get all registered web search providers
  */
 export function getAllWebSearchProviders(): WebSearchProvider[] {
-  return Array.from(providers.values());
+  return defaultWebSearchRegistry.getAllWebSearchProviders();
 }
 
 /**
@@ -52,16 +93,15 @@ export function getConfiguredWebSearchProvider(deps: {
 }): WebSearchProvider | undefined {
   const providerId = deps.settingsService.get('webSearch.provider');
   if (providerId) {
-    const provider = getWebSearchProvider(providerId);
+    const provider = defaultWebSearchRegistry.getWebSearchProvider(providerId);
     if (provider) return provider;
   }
-  return getDefaultWebSearchProvider();
+  return defaultWebSearchRegistry.getDefaultWebSearchProvider();
 }
 
 /**
  * Clear all registered providers (useful for testing)
  */
 export function clearWebSearchProviders(): void {
-  providers.clear();
-  defaultProviderId = null;
+  defaultWebSearchRegistry.clearWebSearchProviders();
 }

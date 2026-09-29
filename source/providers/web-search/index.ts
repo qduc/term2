@@ -10,7 +10,8 @@ import './firecrawl.provider.js';
 import './searxng.provider.js';
 
 // Re-export registry API and types
-export { getConfiguredWebSearchProvider } from './registry.js';
+export { createWebSearchRegistry, getConfiguredWebSearchProvider } from './registry.js';
+export type { WebSearchRegistry } from './registry.js';
 
 export type {
   WebSearchProvider,

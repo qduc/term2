@@ -104,7 +104,7 @@ const tavilyProvider: WebSearchProvider = {
 };
 
 // Register the Tavily provider as the default
-registerWebSearchProvider(tavilyProvider, { isDefault: true });
+registerWebSearchProvider(tavilyProvider, { isDefault: true, builtin: true });
 
 // Export for testing purposes
 export { tavilyProvider, isConfigured as isTavilyConfigured };

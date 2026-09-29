@@ -1,5 +1,33 @@
 import { it, expect } from 'vitest';
-import { getProvider, getAllProviders, getProviderIds } from './index.js';
+import { createProviderRegistry, getProvider, getAllProviders, getProviderIds, upsertProvider } from './index.js';
+
+const providerDefinition = (id: string) => ({
+  id,
+  label: id,
+  fetchModels: async () => [],
+});
+
+it('keeps runtime provider registries independent from each other and the default', () => {
+  const registryA = createProviderRegistry();
+  const registryB = createProviderRegistry();
+  const runtimeProvider = providerDefinition('runtime-isolated-provider');
+
+  registryA.upsertProvider(runtimeProvider);
+
+  expect(registryA.getProvider(runtimeProvider.id)).toBe(runtimeProvider);
+  expect(registryB.getProvider(runtimeProvider.id)).toBeUndefined();
+  expect(getProvider(runtimeProvider.id)).toBeUndefined();
+});
+
+it('snapshots builtins and does not copy later default upserts', () => {
+  const registry = createProviderRegistry();
+  const runtimeProvider = providerDefinition('default-after-instance-provider');
+
+  upsertProvider(runtimeProvider);
+
+  expect(getProvider(runtimeProvider.id)).toBe(runtimeProvider);
+  expect(registry.getProvider(runtimeProvider.id)).toBeUndefined();
+});
 it('openai provider is registered', () => {
   const provider = getProvider('openai');
   expect(provider).toBeTruthy();

@@ -116,28 +116,31 @@ async function fetchOpenRouterModels(
 }
 
 // Register OpenRouter provider
-registerProvider({
-  id: 'openrouter',
-  label: 'OpenRouter',
-  createStreamedModel: (model, deps): StreamedModelTurn => {
-    const provider = createOpenRouterModel(deps, model);
-    if (!provider) throw new Error('OpenRouter API key is not configured');
-    const streamedModel = provider.getStreamedModel(model);
-    const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
-    return new RetryingModel(streamedModel, {
-      retryAttempts,
-      loggingService: deps.loggingService,
-      onRetry: deps.onRetry,
-    });
+registerProvider(
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    createStreamedModel: (model, deps): StreamedModelTurn => {
+      const provider = createOpenRouterModel(deps, model);
+      if (!provider) throw new Error('OpenRouter API key is not configured');
+      const streamedModel = provider.getStreamedModel(model);
+      const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
+      return new RetryingModel(streamedModel, {
+        retryAttempts,
+        loggingService: deps.loggingService,
+        onRetry: deps.onRetry,
+      });
+    },
+    fetchModels: fetchOpenRouterModels,
+    sensitiveSettingKeys: [
+      'agent.openrouter.apiKey',
+      'agent.openrouter.baseUrl',
+      'agent.openrouter.referrer',
+      'agent.openrouter.title',
+    ],
+    capabilities: {
+      supportsConversationChaining: false,
+    },
   },
-  fetchModels: fetchOpenRouterModels,
-  sensitiveSettingKeys: [
-    'agent.openrouter.apiKey',
-    'agent.openrouter.baseUrl',
-    'agent.openrouter.referrer',
-    'agent.openrouter.title',
-  ],
-  capabilities: {
-    supportsConversationChaining: false,
-  },
-});
+  { builtin: true },
+);

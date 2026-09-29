@@ -9,6 +9,7 @@ import { OAuthAccountStore } from './oauth-account-store.js';
 import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
 import { getJwtClaims } from './jwt-claims.js';
 import { recordSessionAccount } from './oauth-session-account.js';
+import type { SessionAccountStore } from './oauth-session-account.js';
 import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 
 /**
@@ -243,11 +244,18 @@ export class GrokTokenManager {
   private readonly fetchImpl: typeof fetch;
   private readonly authPath: string;
   private readonly cliAuthPathResolver: () => string | null;
+  private readonly sessionAccountStore?: SessionAccountStore;
 
-  constructor(options?: { fetchImpl?: typeof fetch; authPath?: string; cliAuthPathResolver?: () => string | null }) {
+  constructor(options?: {
+    fetchImpl?: typeof fetch;
+    authPath?: string;
+    cliAuthPathResolver?: () => string | null;
+    sessionAccountStore?: SessionAccountStore;
+  }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
     this.authPath = options?.authPath || resolveGrokAuthPath();
     this.cliAuthPathResolver = options?.cliAuthPathResolver || resolveGrokCliAuthPath;
+    this.sessionAccountStore = options?.sessionAccountStore;
   }
 
   private load(): GrokTokens | null {
@@ -257,7 +265,7 @@ export class GrokTokenManager {
     const account = pinned ?? store.getActive();
     if (account) {
       this.pinnedAccountId = account.id;
-      recordSessionAccount('grok', account.id);
+      recordSessionAccount('grok', account.id, this.sessionAccountStore);
       return account.tokens;
     }
     const cliPath = this.cliAuthPathResolver();

@@ -98,69 +98,72 @@ async function fetchOpenAIModels(
 }
 
 // Register OpenAI provider
-registerProvider({
-  id: 'openai',
-  label: 'OpenAI',
-  createStreamedModel: (
-    model,
-    {
-      settingsService,
-      loggingService,
-      sessionContextService,
-      onRetry,
-      retryAttempts,
-      requestCapture,
-      contextCompactionSessionState,
-    },
-  ) => {
-    const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
-    const resolvedModel = model || defaultModel;
-    const cacheKey = sessionContextService as object | undefined;
-    const fingerprint = openaiStreamedModelFingerprint(settingsService, resolvedModel, retryAttempts);
-    const cached = cacheKey ? streamedModels.get(cacheKey) : undefined;
-    if (cached?.fingerprint === fingerprint) {
-      return cached.model;
-    }
-    if (cached) {
-      void (cached.model as { close?: () => Promise<void> }).close?.();
-    }
-    const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
-    const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
-    const openAIClient = new OpenAI({
-      apiKey: apiKey || 'placeholder',
-      maxRetries: configuredRetries,
-      fetch: createRetryAwareFetch(
-        createProviderFetch({
-          providerId: 'openai',
-          defaultModel,
-          deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
-        }),
+registerProvider(
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    createStreamedModel: (
+      model,
+      {
+        settingsService,
+        loggingService,
+        sessionContextService,
         onRetry,
-        configuredRetries,
-      ),
-    });
+        retryAttempts,
+        requestCapture,
+        contextCompactionSessionState,
+      },
+    ) => {
+      const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
+      const resolvedModel = model || defaultModel;
+      const cacheKey = sessionContextService as object | undefined;
+      const fingerprint = openaiStreamedModelFingerprint(settingsService, resolvedModel, retryAttempts);
+      const cached = cacheKey ? streamedModels.get(cacheKey) : undefined;
+      if (cached?.fingerprint === fingerprint) {
+        return cached.model;
+      }
+      if (cached) {
+        void (cached.model as { close?: () => Promise<void> }).close?.();
+      }
+      const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
+      const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
+      const openAIClient = new OpenAI({
+        apiKey: apiKey || 'placeholder',
+        maxRetries: configuredRetries,
+        fetch: createRetryAwareFetch(
+          createProviderFetch({
+            providerId: 'openai',
+            defaultModel,
+            deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
+          }),
+          onRetry,
+          configuredRetries,
+        ),
+      });
 
-    const selectedModel =
-      settingsService.get('agent.transport') === 'http'
-        ? new OpenAIResponsesModelWithPromptCacheKey(
-            openAIClient,
-            resolvedModel,
-            requestCapture,
-            OPENAI_CAPABILITIES.supportsContextCompaction,
-            contextCompactionSessionState,
-          )
-        : new OpenAIResponsesWSModelWithPromptCacheKey(
-            openAIClient,
-            resolvedModel,
-            requestCapture,
-            OPENAI_CAPABILITIES.supportsContextCompaction,
-            contextCompactionSessionState,
-          );
-    if (cacheKey) streamedModels.set(cacheKey, { fingerprint, model: selectedModel });
-    return selectedModel;
+      const selectedModel =
+        settingsService.get('agent.transport') === 'http'
+          ? new OpenAIResponsesModelWithPromptCacheKey(
+              openAIClient,
+              resolvedModel,
+              requestCapture,
+              OPENAI_CAPABILITIES.supportsContextCompaction,
+              contextCompactionSessionState,
+            )
+          : new OpenAIResponsesWSModelWithPromptCacheKey(
+              openAIClient,
+              resolvedModel,
+              requestCapture,
+              OPENAI_CAPABILITIES.supportsContextCompaction,
+              contextCompactionSessionState,
+            );
+      if (cacheKey) streamedModels.set(cacheKey, { fingerprint, model: selectedModel });
+      return selectedModel;
+    },
+    fetchModels: fetchOpenAIModels,
+    clearConversations: undefined, // No conversation state to clear
+    sensitiveSettingKeys: [],
+    capabilities: OPENAI_CAPABILITIES,
   },
-  fetchModels: fetchOpenAIModels,
-  clearConversations: undefined, // No conversation state to clear
-  sensitiveSettingKeys: [],
-  capabilities: OPENAI_CAPABILITIES,
-});
+  { builtin: true },
+);

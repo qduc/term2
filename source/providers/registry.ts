@@ -150,8 +150,8 @@ export function unregisterProvider(id: string): void {
  * Get a specific provider definition by ID.
  * Returns undefined if the provider is not registered.
  */
-export function getProvider(id: string): ProviderDefinition | undefined {
-  return defaultProviderRegistry.getProvider(id);
+export function getProvider(id: string, registry?: ProviderRegistry): ProviderDefinition | undefined {
+  return (registry ?? defaultProviderRegistry).getProvider(id);
 }
 
 /**

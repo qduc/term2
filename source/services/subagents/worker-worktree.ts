@@ -1,6 +1,12 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { ExecutionContext } from '../execution-context.js';
-import { listGitWorktrees, type ListWorktrees } from '../workspace/worktree-inventory.js';
+import {
+  listGitWorktrees,
+  listGitWorktreesSync,
+  type ListWorktrees,
+  type ListWorktreesSync,
+} from '../workspace/worktree-inventory.js';
 import { resolveWorkerWorktree, type ResolveWorkerWorktreeOutcome } from '../workspace/worktree-transition.js';
 import type { GitWorktree } from '../workspace/parse-worktree-list.js';
 
@@ -94,4 +100,116 @@ export async function pinWorkerWorktree(params: {
     worktreePath: outcome.worktree.path,
     worktree: outcome.worktree,
   };
+}
+
+export interface DeriveAuthorizedWorktreeScopeOptions {
+  homeRoot: string;
+  isRemote?: boolean;
+  readOnly?: boolean;
+  planMode?: boolean;
+  worktrees?: GitWorktree[];
+  listWorktreesSync?: ListWorktreesSync;
+}
+
+/**
+ * Derives a finite host-owned allowlist of authorized worktree names for registered
+ * in-repo worktrees. Fails closed (empty list) when remote, read-only, plan mode,
+ * outside a git repo, or when worktree listing fails.
+ */
+export function deriveAuthorizedWorktreeScope(options: DeriveAuthorizedWorktreeScopeOptions): string[] {
+  const { homeRoot, isRemote = false, readOnly = false, planMode = false } = options;
+
+  // Fail-closed for remote, read-only, or plan mode
+  if (isRemote || readOnly || planMode) {
+    return [];
+  }
+
+  let worktrees: GitWorktree[];
+  if (options.worktrees) {
+    worktrees = options.worktrees;
+  } else {
+    try {
+      const listSync = options.listWorktreesSync ?? listGitWorktreesSync;
+      worktrees = listSync(homeRoot);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!worktrees || worktrees.length === 0) {
+    return [];
+  }
+
+  let physicalHomeRoot: string;
+  try {
+    physicalHomeRoot = fs.realpathSync(homeRoot);
+  } catch {
+    physicalHomeRoot = path.resolve(homeRoot);
+  }
+
+  const mainWorktree = worktrees.find((w) => !w.bare) ?? worktrees[0];
+  let physicalRepoRoot: string;
+  if (mainWorktree?.path) {
+    try {
+      physicalRepoRoot = fs.realpathSync(mainWorktree.path);
+    } catch {
+      physicalRepoRoot = path.resolve(mainWorktree.path);
+    }
+  } else {
+    physicalRepoRoot = physicalHomeRoot;
+  }
+
+  const repoPrefix = physicalRepoRoot.endsWith(path.sep) ? physicalRepoRoot : `${physicalRepoRoot}${path.sep}`;
+  const allowedNames = new Set<string>();
+
+  for (const worktree of worktrees) {
+    if (worktree.bare || worktree.prunable) continue;
+
+    let candidatePath: string;
+    try {
+      candidatePath = fs.realpathSync(worktree.path);
+    } catch {
+      candidatePath = path.resolve(worktree.path);
+    }
+
+    // Must be physically inside the repository root and not the parent session homeRoot
+    if (candidatePath === physicalHomeRoot || !candidatePath.startsWith(repoPrefix)) {
+      continue;
+    }
+
+    const namesToTest: string[] = [];
+    const base = path.basename(candidatePath);
+    if (base) namesToTest.push(base);
+    if (worktree.branch) namesToTest.push(worktree.branch);
+
+    for (const name of namesToTest) {
+      if (
+        typeof name !== 'string' ||
+        name.length === 0 ||
+        name.includes('\0') ||
+        path.isAbsolute(name) ||
+        name.split(/[\\/]/).includes('..')
+      ) {
+        continue;
+      }
+
+      const outcome = resolveWorkerWorktree(name, physicalHomeRoot, worktrees);
+      if (outcome.kind !== 'resolved') {
+        continue;
+      }
+
+      let resolvedPath: string;
+      try {
+        resolvedPath = fs.realpathSync(outcome.worktree.path);
+      } catch {
+        resolvedPath = path.resolve(outcome.worktree.path);
+      }
+
+      if (resolvedPath !== physicalHomeRoot && resolvedPath.startsWith(repoPrefix)) {
+        allowedNames.add(name);
+      }
+    }
+  }
+
+  return [...allowedNames].sort();
 }

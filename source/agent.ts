@@ -68,6 +68,8 @@ import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { createRootAgentAuthoritySnapshot } from './services/agent-runtime/permission-boundary.js';
+import { deriveAuthorizedWorktreeScope } from './services/subagents/worker-worktree.js';
+import type { ListWorktreesSync } from './services/workspace/worktree-inventory.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import { resolveDisabledCapabilities } from './services/tool-toggles.js';
@@ -284,6 +286,8 @@ export const getAgentDefinition = (
     /** Root-session-only MCP source; subagent definitions intentionally omit it. */
     mcpToolSource?: McpToolSource;
     snapshotGlobalMemoryContext?: (read: () => string) => string;
+    worktreeScope?: ReadonlyArray<string>;
+    listWorktreesSync?: ListWorktreesSync;
   },
   model?: string,
 ): AgentDefinition => {
@@ -698,6 +702,18 @@ export const getAgentDefinition = (
         : undefined;
     const maxTurns = positiveIntegerSetting(settingsService, 'agent.maxTurns');
     const maxTokens = positiveIntegerSetting(settingsService, 'agent.maxOutputTokens');
+    const planMode = profile.enforcement.denials.has('filesystem-mutation');
+    const worktreeScope =
+      deps.worktreeScope ??
+      (executionContext
+        ? deriveAuthorizedWorktreeScope({
+            homeRoot: executionContext.getHomeWorkspace?.() ?? executionContext.getCwd?.() ?? process.cwd(),
+            isRemote: executionContext.isRemote?.() ?? false,
+            readOnly,
+            planMode,
+            listWorktreesSync: deps.listWorktreesSync,
+          })
+        : undefined);
     const agentSpecAuthority = liteMixedFilesystemAuthority
       ? undefined
       : createRootAgentAuthoritySnapshot({
@@ -708,7 +724,8 @@ export const getAgentDefinition = (
             ...(maxTokens !== undefined ? { maxTokens } : {}),
           },
           readOnly,
-          planMode: profile.enforcement.denials.has('filesystem-mutation'),
+          planMode,
+          ...(worktreeScope ? { worktreeScope } : {}),
         });
     // The script-only agent capability rides on the same root authority
     // snapshot as run_code and additionally requires the subagents capability

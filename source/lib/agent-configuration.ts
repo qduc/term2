@@ -1,6 +1,7 @@
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
+import type { ListWorktreesSync } from '../services/workspace/worktree-inventory.js';
 import type { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import type { AskUserAnswerStore } from './ask-user-answer-store.js';
 import type { SubagentBridge } from './subagent-bridge.js';
@@ -69,6 +70,8 @@ export interface AgentConfigurationDeps {
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
   mcpToolSource?: McpToolSource;
+  worktreeScope?: ReadonlyArray<string>;
+  listWorktreesSync?: ListWorktreesSync;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -113,6 +116,8 @@ export class AgentConfiguration implements AgentSource {
     options: { enabled?: boolean; intervalMs?: number },
   ) => void;
   #mcpToolSource?: TurnStableMcpToolSource;
+  #worktreeScope?: ReadonlyArray<string>;
+  #listWorktreesSync?: ListWorktreesSync;
   #globalMemoryContextSnapshot?: string;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
@@ -157,6 +162,8 @@ export class AgentConfiguration implements AgentSource {
     this.#configureTaskCheckIn = deps.configureTaskCheckIn;
     this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
     this.#mcpToolSource = deps.mcpToolSource ? new TurnStableMcpToolSource(deps.mcpToolSource) : undefined;
+    this.#worktreeScope = deps.worktreeScope;
+    this.#listWorktreesSync = deps.listWorktreesSync;
     this.#approvalPolicyRegistry = config.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
 
     // Create editor
@@ -301,6 +308,8 @@ export class AgentConfiguration implements AgentSource {
         if (this.#globalMemoryContextSnapshot === undefined) this.#globalMemoryContextSnapshot = read();
         return this.#globalMemoryContextSnapshot;
       },
+      ...(this.#worktreeScope ? { worktreeScope: this.#worktreeScope } : {}),
+      ...(this.#listWorktreesSync ? { listWorktreesSync: this.#listWorktreesSync } : {}),
     };
   }
 

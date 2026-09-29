@@ -9,6 +9,7 @@ import { createEditorImpl } from './editor-impl.js';
 import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import type { ListWorktreesSync } from '../services/workspace/worktree-inventory.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../utils/output/bound-tool-result.js';
@@ -121,6 +122,8 @@ export interface AgentFactoryDeps {
   ) => void;
   mcpToolSource?: McpToolSource;
   snapshotGlobalMemoryContext?: (read: () => string) => string;
+  worktreeScope?: ReadonlyArray<string>;
+  listWorktreesSync?: ListWorktreesSync;
 }
 
 export interface AgentBuildResult {
@@ -541,6 +544,8 @@ export function buildAgent(
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,
       mcpToolSource: deps.mcpToolSource,
       snapshotGlobalMemoryContext: deps.snapshotGlobalMemoryContext,
+      ...(deps.worktreeScope ? { worktreeScope: deps.worktreeScope } : {}),
+      ...(deps.listWorktreesSync ? { listWorktreesSync: deps.listWorktreesSync } : {}),
     },
     resolvedModel,
   );

@@ -217,6 +217,12 @@ export class ConversationService {
         service.setEventSink(sink as ((event: ConversationEvent) => void | PromiseLike<void>) | null),
       setQueuedTurnStartObserver: (observer: ((start: QueuedTurnStart) => void) | null) =>
         service.setQueuedTurnStartObserver(observer),
+      closeAdmission: () => {
+        service.closeAdmission();
+      },
+      reopenAdmission: () => {
+        service.reopenAdmission();
+      },
       abortAndDiscard: () => service.abortAndDiscard(),
       shutdown: () => service.shutdown(),
     };

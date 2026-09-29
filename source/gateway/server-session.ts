@@ -36,7 +36,7 @@ export type ServerSessionEventContext = {
 export type ServerSessionOptions = {
   binding: SessionBinding;
   service: ConversationService;
-  handle?: SessionHandle;
+  handle: SessionHandle;
   composition: GatewaySessionComposition;
   policy: RuntimeResourcePolicy;
   eventSink?: (event: ConversationEvent, context: ServerSessionEventContext) => void | PromiseLike<void>;
@@ -88,18 +88,18 @@ export class ServerSession {
     this.workspaceId = options.binding.workspaceId;
     this.binding = Object.freeze({ ...options.binding });
     this.service = options.service;
-    this.handle = options.handle ?? (options.service as unknown as SessionHandle);
+    this.handle = options.handle;
     this.#composition = options.composition;
     this.#policy = options.policy;
     this.#eventSink = options.eventSink;
     this.#onDispose = options.onDispose;
-    this.service.setQueuedTurnStartObserver((execution) => {
+    this.handle.setQueuedTurnStartObserver((execution) => {
       if (this.#status === 'interrupted' || this.#status === 'closed') return;
       this.#activeTurnId = execution.requestId;
       this.#status = 'running';
       this.#startDeadline(execution.requestId);
     });
-    this.service.setEventSink((event) => this.#dispatchEvent(event));
+    this.handle.setEventSink((event) => this.#dispatchEvent(event as ConversationEvent));
   }
 
   /**
@@ -122,8 +122,8 @@ export class ServerSession {
     try {
       await this.#eventSink?.(event, { turnId, discardedTurnIds });
     } catch (error) {
+      this.handle.closeAdmission();
       this.#status = 'interrupted';
-      this.service.closeAdmission();
       throw error;
     }
   }
@@ -212,7 +212,7 @@ export class ServerSession {
     if (this.#status === 'closed' || this.#status === 'interrupted') {
       return Promise.resolve({ kind: 'rejected', reason: 'closed' });
     }
-    return this.service.prepareMessage(input, ids).then((result) => {
+    return this.handle.prepare(input, ids).then((result) => {
       if (result.kind === 'prepared') this.#preparedTurns.set(result.leaseId, result.turnId);
       return result;
     });
@@ -226,23 +226,18 @@ export class ServerSession {
       ?.resetRequestBudget;
     resetBudget?.();
     try {
-      await this.service.commitMessage(leaseId);
+      await this.handle.commit(leaseId);
     } catch (error) {
       this.#preparedTurns.delete(leaseId);
       throw error;
     }
     this.#preparedTurns.delete(leaseId);
-    if (!this.#activeTurnId) {
-      this.#activeTurnId = turnId;
-      this.#status = 'running';
-      this.#startDeadline(turnId);
-    }
   }
 
   async cancelPreparedMessage(leaseId: string): Promise<void> {
     if (this.#status === 'closed') throw new ServerSessionError('closed');
     if (this.#cancelledLeases.has(leaseId)) return;
-    await this.service.cancelPreparedMessage(leaseId);
+    await this.handle.cancelPrepared(leaseId);
     this.#preparedTurns.delete(leaseId);
     this.#cancelledLeases.add(leaseId);
   }
@@ -256,7 +251,7 @@ export class ServerSession {
         if (this.#status === 'running' || this.#status === 'awaiting_interaction') {
           return { kind: 'rejected', reason: 'busy' };
         }
-        const result = await this.service.prepareMessage('', ids);
+        const result = await this.handle.prepare('', ids);
         if (result.kind === 'prepared') {
           this.#preparedTurns.set(result.leaseId, result.turnId);
         }
@@ -271,7 +266,7 @@ export class ServerSession {
         resetBudget?.();
 
         try {
-          await this.service.cancelPreparedMessage(leaseId);
+          await this.handle.cancelPrepared(leaseId);
         } catch {
           // ignore cleanup errors
         }
@@ -349,7 +344,7 @@ export class ServerSession {
 
   resolvePendingInteraction(request: ResolvePendingInteractionRequest): PendingInteractionResolution {
     this.assertOpen();
-    const result = this.service.resolvePendingInteraction(request);
+    const result = this.handle.resolveInteraction(request) as PendingInteractionResolution;
     if (result.kind === 'stale_interaction') throw new ServerSessionError('stale_interaction');
     return result;
   }
@@ -368,9 +363,9 @@ export class ServerSession {
     // Close admission before awaiting the bounded barrier. This makes a
     // cancellation race fail closed instead of letting fresh work auto-run.
     this.#abortGeneration += 1;
-    this.service.closeAdmission();
+    this.handle.closeAdmission();
     try {
-      const result = await this.service.abortAndDiscard();
+      const result = await this.handle.abortAndDiscard();
       if (!result.proven) {
         const outcome: AbortOutcome = { kind: 'interrupted', turnId, reason: 'cancellation_timeout' };
         this.#status = 'interrupted';
@@ -383,7 +378,7 @@ export class ServerSession {
       this.#activeTurnId = null;
       this.#status = this.#computePublicStatus();
       this.#clearDeadline();
-      this.service.reopenAdmission();
+      this.handle.reopenAdmission();
       const outcome: AbortOutcome = { kind: 'aborted', turnId, discardedTurnIds: result.discardedTurnIds };
       this.#lastAbortOutcome = outcome;
       return outcome;
@@ -398,13 +393,13 @@ export class ServerSession {
   async dispose(reason: 'closed' | 'shutdown' | 'interrupted' = 'closed'): Promise<void> {
     if (this.#disposePromise) return this.#disposePromise;
     this.#disposePromise = (async () => {
-      this.service.closeAdmission();
+      this.handle.closeAdmission();
       this.#preparedTurns.clear();
       this.#clearDeadline();
       let interrupted = reason === 'interrupted';
-      const cancellation = await withTimeout(this.service.abortAndDiscard(), this.#policy.shutdownGraceMs);
+      const cancellation = await withTimeout(this.handle.abortAndDiscard(), this.#policy.shutdownGraceMs);
       if (cancellation.timedOut || !cancellation.value?.proven) interrupted = true;
-      const shutdown = await withTimeout(this.service.shutdown(), this.#policy.shutdownGraceMs);
+      const shutdown = await withTimeout(this.handle.shutdown(), this.#policy.shutdownGraceMs);
       if (shutdown.timedOut) interrupted = true;
       await Promise.resolve(this.#composition.dispose());
       this.#activeTurnId = null;

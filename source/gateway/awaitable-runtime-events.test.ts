@@ -44,6 +44,21 @@ type FakeService = {
   dispose(): void;
   getPendingInteractionSnapshot(): null;
   consumeFailureDiscardedTurnIds(): string[];
+  sessionHandle: {
+    sessionId: string;
+    sessionStartedAt: string;
+    prepare: (...args: any[]) => Promise<any>;
+    commit: (...args: any[]) => Promise<void>;
+    cancelPrepared: (...args: any[]) => Promise<void>;
+    resolveInteraction: (...args: any[]) => any;
+    snapshot: () => object;
+    setEventSink: (sink: ((event: any) => void | PromiseLike<void>) | null) => void;
+    setQueuedTurnStartObserver: (observer: ((execution: any) => void) | null) => void;
+    closeAdmission: () => void;
+    reopenAdmission: () => void;
+    abortAndDiscard: () => Promise<{ proven: boolean; discardedTurnIds: string[] }>;
+    shutdown: () => Promise<void>;
+  };
 };
 
 function fakeService(): FakeService {
@@ -62,6 +77,23 @@ function fakeService(): FakeService {
     getPendingInteractionSnapshot: () => null,
     consumeFailureDiscardedTurnIds: () => [],
   } as unknown as FakeService;
+  service.sessionHandle = {
+    sessionId: binding.sessionId,
+    sessionStartedAt: new Date(0).toISOString(),
+    prepare: async () => ({ kind: 'rejected', reason: 'closed' }),
+    commit: async () => {},
+    cancelPrepared: async () => {},
+    resolveInteraction: () => ({ kind: 'stale_interaction' }),
+    snapshot: () => ({}),
+    setEventSink: (sink) => {
+      service.eventSink = sink ?? undefined;
+    },
+    setQueuedTurnStartObserver: () => {},
+    closeAdmission: () => {},
+    reopenAdmission: () => {},
+    abortAndDiscard: async () => ({ proven: true, discardedTurnIds: [] }),
+    shutdown: async () => {},
+  };
   return service;
 }
 
@@ -78,6 +110,7 @@ function createSession(
   return new ServerSession({
     binding,
     service: service as any,
+    handle: service.sessionHandle,
     composition,
     policy,
     eventSink,

@@ -12,14 +12,22 @@ import type {
 } from '../services/subagents/types.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import type { AgentSpec } from '../services/agent-runtime/types.js';
+import type { AgentSpecBoundaryResult } from '../services/agent-runtime/permission-boundary.js';
+import type { ResolvedAgentDefinition } from '../services/agent-runtime/resolved-agent.js';
+import { adaptLegacyDefinition } from '../services/agent-runtime/legacy-adapter.js';
+import { createRootBudget } from '../services/agent-runtime/execution-budget.js';
 import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SubagentRunHandle } from '../services/subagents/types.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
-import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
+import type {
+  BackgroundSubagentApprovalPauseSink,
+  ForegroundSubagentApprovalCallback,
+} from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
+import type { SubagentDefinition } from '../services/subagents/types.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -45,6 +53,93 @@ export interface SubagentBridgeDeps {
 }
 
 type SubagentEventScope = 'foreground' | 'background';
+
+/**
+ * Host-owned launch input for a resolved generic agent.
+ *
+ * This is intentionally separate from the raw `runSubagent` entry point. A
+ * caller must resolve and attenuate the AgentSpec before it can reach this
+ * seam; no VM-facing tool accepts this shape.
+ */
+export interface ResolvedSubagentLaunch {
+  /** A successful host boundary result, a new runtime definition, or a legacy
+   * manager-ready definition retained by compatibility callers. */
+  resolvedDefinition: AgentSpecBoundaryResult | ResolvedAgentDefinition | SubagentDefinition;
+  /** Boundary results carry their task in `spec.goal`; other definitions need
+   * an explicit task. */
+  task?: string;
+  /** A boundary result's validated worktree is used when this is omitted. */
+  worktree?: string;
+  authorizedWorktreePath?: string;
+  name?: string;
+  continue_run_id?: string;
+  /** Host-only approval owner for pauses in this awaited foreground child. */
+  foregroundChildApproval?: ForegroundSubagentApprovalCallback;
+}
+
+type SuccessfulAgentSpecBoundaryResult = Extract<AgentSpecBoundaryResult, { ok: true }>;
+
+function isBoundaryResult(value: ResolvedSubagentLaunch['resolvedDefinition']): value is AgentSpecBoundaryResult {
+  return typeof value === 'object' && value !== null && 'ok' in value;
+}
+
+function toManagerDefinition(value: ResolvedAgentDefinition | SubagentDefinition): SubagentDefinition {
+  // A legacy definition is already the manager's immutable launch contract.
+  // Preserve its identity so host callers can verify that no second
+  // resolution or widening occurred in the bridge.
+  if (isLegacyDefinition(value)) return value;
+
+  const budget = createRootBudget({
+    maxChildren: value.limits.maxChildren,
+    maxDepth: value.limits.maxDepth,
+    maxConcurrency: value.limits.maxConcurrency,
+    maxTokens: value.limits.maxTokens,
+  });
+  return {
+    ...adaptLegacyDefinition(value, budget),
+    isRootExecution: true,
+  };
+}
+
+function isLegacyDefinition(value: ResolvedAgentDefinition | SubagentDefinition): value is SubagentDefinition {
+  return typeof value.model === 'string';
+}
+
+function normalizeResolvedLaunch(params: ResolvedSubagentLaunch): {
+  definition: SubagentDefinition;
+  task: string;
+  worktree?: string;
+  authorizedWorktreePath?: string;
+} {
+  let definitionInput = params.resolvedDefinition;
+  let task = params.task;
+  let worktree = params.worktree;
+  let authorizedWorktreePath = params.authorizedWorktreePath;
+
+  if (isBoundaryResult(definitionInput)) {
+    if (!definitionInput.ok) {
+      throw new Error(
+        `Agent specification rejected: ${definitionInput.errors.map((error) => error.message).join('; ')}`,
+      );
+    }
+    const successfulResult: SuccessfulAgentSpecBoundaryResult = definitionInput;
+    definitionInput = successfulResult.definition;
+    task ??= successfulResult.spec.goal;
+    worktree ??= successfulResult.worktree;
+    authorizedWorktreePath ??= successfulResult.authorizedWorktreePath;
+  }
+
+  if (!task) {
+    throw new Error('Resolved subagent launches require a non-empty task.');
+  }
+
+  return {
+    definition: toManagerDefinition(definitionInput),
+    task,
+    ...(worktree ? { worktree } : {}),
+    ...(authorizedWorktreePath ? { authorizedWorktreePath } : {}),
+  };
+}
 
 export class SubagentBridge {
   #subagentManager: SubagentManager | null;
@@ -325,6 +420,77 @@ export class SubagentBridge {
     } finally {
       endRun();
     }
+  };
+
+  /**
+   * Run a host-resolved generic agent through the normal foreground tool
+   * lifecycle. The definition is deliberately handed to SubagentManager as
+   * `resolvedDefinition`; the manager therefore skips raw AgentSpec
+   * resolution while retaining nested approvals, the turn signal, worktree
+   * pinning, and traffic scoping.
+   */
+  runResolvedSubagent = async (
+    params: ResolvedSubagentLaunch,
+    _context?: unknown,
+    details?: unknown,
+  ): Promise<NestedSubagentResult> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
+    const launch = normalizeResolvedLaunch(params);
+    const detailsRecord = details as
+      | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
+      | undefined;
+    const request = {
+      role: 'agent' as const,
+      task: launch.task,
+      resolvedDefinition: launch.definition,
+      ...(launch.worktree ? { worktree: launch.worktree } : {}),
+      ...(launch.authorizedWorktreePath ? { authorizedWorktreePath: launch.authorizedWorktreePath } : {}),
+      parentTool: 'run_subagent',
+      ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
+      signal: this.signal,
+    };
+
+    const endRun = this.#beginSubagentRun();
+    try {
+      return await this.#withSubagentTrafficContext(detailsRecord?.toolCall?.callId, () =>
+        this.#subagentManager!.runAsTool(
+          request,
+          _context,
+          params.foregroundChildApproval
+            ? { ...detailsRecord, foregroundChildApproval: params.foregroundChildApproval }
+            : details,
+        ),
+      );
+    } finally {
+      endRun();
+    }
+  };
+
+  /**
+   * Start a host-resolved generic agent in the conversation-scoped async
+   * registry. Unlike the foreground method, this uses `backgroundSignal`, so
+   * an ordinary turn abort cannot cancel the retained run.
+   */
+  runResolvedSubagentAsync = async (params: ResolvedSubagentLaunch): Promise<SubagentRunHandle> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
+    const launch = normalizeResolvedLaunch(params);
+    const request = {
+      role: 'agent' as const,
+      task: launch.task,
+      resolvedDefinition: launch.definition,
+      ...(params.name ? { name: params.name } : {}),
+      ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
+      ...(launch.worktree ? { worktree: launch.worktree } : {}),
+      ...(launch.authorizedWorktreePath ? { authorizedWorktreePath: launch.authorizedWorktreePath } : {}),
+      parentTool: 'run_subagent',
+      signal: this.backgroundSignal,
+    };
+
+    return this.#subagentManager.startRunAsync(request);
   };
 
   runSubagent = async (

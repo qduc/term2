@@ -149,6 +149,37 @@ describe('ForegroundSubagentLease', () => {
     expect(resumed).toEqual(['exact-loop']);
   });
 
+  it('keeps an explicitly host-owned pause foreground and resumes its exact loop once', async () => {
+    const lease = new ForegroundSubagentLease({ runId: 'script-child' });
+    const interruption = { callId: 'foreground-call' };
+    const resumed: string[] = [];
+    const handle = createContinuationHandle({ approve: vi.fn() });
+    let pause: { runId: string; generation: number; interruption: unknown } | undefined;
+    const waiting = lease.waitForForegroundContinuation(
+      handle,
+      interruption,
+      () => resumed.push('same-loop'),
+      () => {},
+      async (snapshot) => {
+        pause = snapshot;
+        expect(
+          lease.applyForegroundApproval(snapshot, (application) => {
+            expect(application.handle).toBe(handle);
+            expect(application.interruption).toBe(interruption);
+            application.handle.approve?.(application.interruption);
+            return true;
+          }),
+        ).toBe(true);
+      },
+    );
+
+    await expect(waiting).resolves.toBe(true);
+    expect(lease.adopted).toBe(false);
+    expect(resumed).toEqual(['same-loop']);
+    expect(pause).toBeDefined();
+    expect(lease.applyForegroundApproval(pause!, () => true)).toBe(false);
+  });
+
   it('does not resume or release the pause when policy application throws', async () => {
     const lease = new ForegroundSubagentLease({ runId: 'child' });
     lease.adopt();

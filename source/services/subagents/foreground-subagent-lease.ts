@@ -29,6 +29,24 @@ export interface BackgroundSubagentApprovalPause extends BackgroundSubagentAppro
   apply(callback: (application: BackgroundSubagentApprovalApplication) => boolean): boolean;
 }
 
+/** Host-owned arbitration for a pause that remains in the foreground call. */
+export interface ForegroundSubagentApprovalPause extends BackgroundSubagentApprovalSnapshot {
+  readonly role: string;
+  /** Applies one session-policy decision to this exact continuation. */
+  apply(callback: (application: BackgroundSubagentApprovalApplication) => boolean): boolean;
+}
+
+export type ForegroundSubagentApprovalCallback = (pause: ForegroundSubagentApprovalPause) => void | Promise<void>;
+
+type PendingLeaseApproval = {
+  handle: ContinuationHandle;
+  interruption: unknown;
+  owner: 'foreground' | 'background';
+  resolve: (resumed: boolean) => void;
+  reject: (error: unknown) => void;
+  resume?: () => void;
+};
+
 /** Session-owned queue/control boundary; it has no Ink or policy dependency. */
 export type BackgroundSubagentApprovalPauseSink = (pause: BackgroundSubagentApprovalPause) => void;
 
@@ -50,20 +68,7 @@ export class ForegroundSubagentLease {
   #settled = false;
   #adoptionWaiters: Array<(adopted: boolean) => void> = [];
   #generation = 0;
-  #pending:
-    | {
-        handle: ContinuationHandle;
-        interruption: unknown;
-        resolve: (resumed: boolean) => void;
-        reject: (error: unknown) => void;
-        /**
-         * The child loop is deliberately retained with the opaque handle. A
-         * decision is not a resume by itself: only this closure can continue
-         * the exact ApplicationRunLoop segment that produced the pause.
-         */
-        resume?: () => void;
-      }
-    | undefined;
+  #pending: PendingLeaseApproval | undefined;
 
   constructor({
     runId,
@@ -167,6 +172,36 @@ export class ForegroundSubagentLease {
     return this.#waitForBackgroundApproval(handle, interruption, resume, onPending);
   }
 
+  /** Keeps a host-arbitrated child pause inside its original foreground call. */
+  async waitForForegroundContinuation(
+    handle: ContinuationHandle,
+    interruption: unknown,
+    resume: () => void,
+    onPending: (snapshot: BackgroundSubagentApprovalSnapshot) => void,
+    onPause: (snapshot: BackgroundSubagentApprovalSnapshot) => void | Promise<void>,
+  ): Promise<boolean> {
+    if (this.#adopted || this.#settled || this.#controller.signal.aborted) return false;
+    if (this.#pending) throw new Error(`Foreground subagent lease ${this.#runId} already has a pending approval.`);
+    let pending!: PendingLeaseApproval;
+    const resumed = new Promise<boolean>((resolve, reject) => {
+      this.#generation += 1;
+      pending = { handle, interruption, owner: 'foreground', resume, resolve, reject };
+      this.#pending = pending;
+    });
+    const snapshot = { runId: this.#runId, generation: this.#generation, interruption };
+    onPending(snapshot);
+    void Promise.resolve()
+      .then(() => onPause(snapshot))
+      .then(() => {
+        if (this.#pending === pending) this.#releasePending(false);
+      })
+      .catch((error) => {
+        if (this.#pending === pending) this.#pending = undefined;
+        pending.reject(error);
+      });
+    return (await resumed) && !this.#controller.signal.aborted;
+  }
+
   async #waitForBackgroundApproval(
     handle: ContinuationHandle,
     interruption: unknown,
@@ -177,7 +212,7 @@ export class ForegroundSubagentLease {
     if (this.#pending) throw new Error(`Foreground subagent lease ${this.#runId} already has a pending approval.`);
     const resumed = await new Promise<boolean>((resolve, reject) => {
       this.#generation += 1;
-      this.#pending = { handle, interruption, resolve, reject, ...(resume ? { resume } : {}) };
+      this.#pending = { handle, interruption, owner: 'background', resolve, reject, ...(resume ? { resume } : {}) };
       onPending?.({ runId: this.#runId, generation: this.#generation, interruption });
     });
     return resumed && !this.#controller.signal.aborted;
@@ -201,10 +236,26 @@ export class ForegroundSubagentLease {
     expected: BackgroundSubagentApprovalSnapshot,
     apply: (application: BackgroundSubagentApprovalApplication) => boolean,
   ): boolean {
+    return this.#applyApproval(expected, 'background', apply);
+  }
+
+  applyForegroundApproval(
+    expected: BackgroundSubagentApprovalSnapshot,
+    apply: (application: BackgroundSubagentApprovalApplication) => boolean,
+  ): boolean {
+    return this.#applyApproval(expected, 'foreground', apply);
+  }
+
+  #applyApproval(
+    expected: BackgroundSubagentApprovalSnapshot,
+    owner: 'foreground' | 'background',
+    apply: (application: BackgroundSubagentApprovalApplication) => boolean,
+  ): boolean {
     const pending = this.#pending;
     if (
       !pending ||
-      !this.#adopted ||
+      pending.owner !== owner ||
+      (owner === 'background' ? !this.#adopted : this.#adopted) ||
       expected.runId !== this.#runId ||
       expected.generation !== this.#generation ||
       expected.interruption !== pending.interruption ||

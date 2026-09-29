@@ -96,11 +96,12 @@ export class SubagentManager {
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
-    if (request.agentSpec) {
-      const resolvedDefinition =
-        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget);
+    if (request.agentSpec || request.resolvedDefinition) {
+      const resolvedDefinition = request.resolvedDefinition
+        ? { ...request.resolvedDefinition, isScriptGeneric: true }
+        : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
       return this.#runtime.nestedRunner.runAsTool(
-        { ...request, role: 'agent', task: request.agentSpec.goal, resolvedDefinition },
+        { ...request, role: 'agent', task: request.agentSpec?.goal ?? request.task, resolvedDefinition },
         context,
         details,
       );
@@ -167,6 +168,7 @@ export class SubagentManager {
       });
     const adapted = {
       ...adaptLegacyDefinition(definition, budget),
+      isScriptGeneric: true,
       isRootExecution: inheritedBudget === undefined,
     };
     return adapted;
@@ -196,13 +198,16 @@ export class SubagentManager {
         }
         this.#mentorActive = true;
       }
-      const resolvedDefinition = request.agentSpec
-        ? request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget)
+      const hasResolvedAgent = request.agentSpec !== undefined || request.resolvedDefinition !== undefined;
+      const resolvedDefinition = hasResolvedAgent
+        ? request.resolvedDefinition
+          ? { ...request.resolvedDefinition, isScriptGeneric: true }
+          : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget)
         : undefined;
-      const result = request.agentSpec
+      const result = hasResolvedAgent
         ? await this.#runtime.executionRunner.run(
             agentId,
-            { ...request, role: 'agent', task: request.agentSpec.goal, resolvedDefinition },
+            { ...request, role: 'agent', task: request.agentSpec?.goal ?? request.task, resolvedDefinition },
             resolvedDefinition!,
           )
         : request.role === 'mentor'
@@ -254,13 +259,14 @@ export class SubagentManager {
     if (request.role === 'mentor' && this.#mentorActive) {
       throw new SubagentRegistryError('already_active', 'Mentor session is already active');
     }
-    if (request.agentSpec) {
-      const resolvedDefinition =
-        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget);
+    if (request.agentSpec || request.resolvedDefinition) {
+      const resolvedDefinition = request.resolvedDefinition
+        ? { ...request.resolvedDefinition, isScriptGeneric: true }
+        : this.#resolveAgentSpec(request.agentSpec!, request.executionBudget);
       return this.#runtime.asyncRegistry.startRun({
         ...request,
         role: 'agent',
-        task: request.agentSpec.goal,
+        task: request.agentSpec?.goal ?? request.task,
         resolvedDefinition,
       });
     }

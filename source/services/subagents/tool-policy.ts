@@ -1108,7 +1108,11 @@ export class SubagentToolFactory {
       tools.push(createAskOrchestratorToolDefinition(askOrchestrator));
     }
 
-    if (this.#skillsService && this.#skillsService.getAvailableSkillsForModel().length > 0) {
+    if (
+      !definition.isScriptGeneric &&
+      this.#skillsService &&
+      this.#skillsService.getAvailableSkillsForModel().length > 0
+    ) {
       tools.push(createActivateSkillToolDefinition(this.#skillsService));
     }
 
@@ -1295,6 +1299,11 @@ export class SubagentToolFactory {
     // When a non-empty allowlist is present, only provision tools
     // whose names appear in it. This lets AgentRuntime pass resolved
     // tool lists through to ExecutionSubagentRunner.
+    if (definition.isScriptGeneric) {
+      const allowed = new Set(definition.tools ?? []);
+      return tools.filter((tool) => allowed.has(tool.name));
+    }
+
     if (definition.tools && definition.tools.length > 0) {
       const allowed = new Set(definition.tools);
       // The three editor names represent one capability, while models expose

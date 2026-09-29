@@ -89,6 +89,61 @@ describe('SubagentToolFactory editor capability selection', () => {
       ),
     ).toEqual(['read_file', 'shell']);
   });
+
+  it('keeps script-child editor tools within the exact resolved tool names', () => {
+    const settings = createMemorySettings();
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const factory = new SubagentToolFactory({
+      settings,
+      logger: createMockLogger(),
+      toolPolicy: policy,
+      skillsService: { getAvailableSkillsForModel: () => [{ name: 'outside-skill' }] } as any,
+    });
+
+    const definition = createDefinition({
+      role: 'agent',
+      canWrite: true,
+      model: 'other-model',
+      tools: ['apply_patch'],
+      isScriptGeneric: true,
+    });
+    expect(factory.buildToolDefinitions(definition, [], '', false).map((tool) => tool.name)).toEqual([]);
+
+    const nonPatchRequest = createDefinition({
+      role: 'agent',
+      canWrite: true,
+      model: 'gpt-5',
+      tools: ['create_file', 'search_replace'],
+      isScriptGeneric: true,
+    });
+    expect(factory.buildToolDefinitions(nonPatchRequest, [], '', false).map((tool) => tool.name)).toEqual([]);
+  });
+
+  it('does not add an implicit skill tool to script children, even with an empty tool list', () => {
+    const settings = createMemorySettings();
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const factory = new SubagentToolFactory({
+      settings,
+      logger: createMockLogger(),
+      toolPolicy: policy,
+      skillsService: { getAvailableSkillsForModel: () => [{ name: 'outside-skill' }] } as any,
+    });
+
+    const generic = createDefinition({ role: 'agent', isScriptGeneric: true, tools: [] });
+    const legacy = createDefinition({ role: 'worker', tools: [] });
+    expect(factory.buildToolDefinitions(generic, [], '', false).map((tool) => tool.name)).not.toContain(
+      'activate_skill',
+    );
+    expect(factory.buildToolDefinitions(legacy, [], '', false).map((tool) => tool.name)).toContain('activate_skill');
+  });
 });
 
 describe('SubagentToolPolicy fine-grained scope attenuation', () => {

@@ -41,6 +41,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from './services/subagents/types.js';
+import type { ResolvedSubagentLaunch } from './lib/subagent-bridge.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,
@@ -66,6 +67,9 @@ import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
+import { createRootAgentAuthoritySnapshot } from './services/agent-runtime/permission-boundary.js';
+import { deriveAuthorizedWorktreeScope } from './services/subagents/worker-worktree.js';
+import type { ListWorktreesSync } from './services/workspace/worktree-inventory.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import { resolveDisabledCapabilities } from './services/tool-toggles.js';
@@ -205,6 +209,14 @@ function resolvePrompt(promptPath: string): string {
   }
 }
 
+function positiveIntegerSetting(
+  settings: ISettingsService,
+  key: 'agent.maxTurns' | 'agent.maxOutputTokens',
+): number | undefined {
+  const value = settings.get(key);
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 /**
  * Returns the agent definition with appropriate tools based on the model.
  */
@@ -238,6 +250,13 @@ export const getAgentDefinition = (
     ) => SubagentRunStatus | SubagentRunStatus[];
     sendSubagentMessage?: (params: SendMessageParams) => SendMessageAcknowledgement;
     cancelSubagentRun?: (params: CancelRunParams) => CancelRunAcknowledgement;
+    /** Resolved-launch seams for the run_code script agent capability; absent means scripts cannot launch agents. */
+    runResolvedSubagent?: (
+      params: ResolvedSubagentLaunch,
+      context?: unknown,
+      details?: unknown,
+    ) => Promise<NestedSubagentResult>;
+    runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
     proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
@@ -267,6 +286,9 @@ export const getAgentDefinition = (
     /** Root-session-only MCP source; subagent definitions intentionally omit it. */
     mcpToolSource?: McpToolSource;
     snapshotGlobalMemoryContext?: (read: () => string) => string;
+    worktreeScope?: ReadonlyArray<string>;
+    worktreePaths?: Readonly<Record<string, string>>;
+    listWorktreesSync?: ListWorktreesSync;
   },
   model?: string,
 ): AgentDefinition => {
@@ -282,6 +304,8 @@ export const getAgentDefinition = (
     getSubagentStatus,
     sendSubagentMessage,
     cancelSubagentRun,
+    runResolvedSubagent,
+    runResolvedSubagentAsync,
     getAskUserAnswer,
     proposeGoal,
     skillsService,
@@ -665,6 +689,65 @@ export const getAgentDefinition = (
   // resolved. The registry it actually calls is injected later by
   // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
   if (hasCapability('shell')) {
+    // Lite intentionally permits outside-workspace reads while its write tools
+    // remain workspace-rooted. The current AgentSpec scope type cannot express
+    // that mixed authority without widening writes, so fail closed for this
+    // root until the scope contract gains independent unrestricted axes.
+    const liteMixedFilesystemAuthority = liteMode && filesystemReadEnabled && filesystemWriteEnabled;
+    const filesystemScope =
+      !liteMixedFilesystemAuthority && (filesystemReadEnabled || filesystemWriteEnabled)
+        ? {
+            read: filesystemReadEnabled && !liteMode ? ['**'] : [],
+            write: filesystemWriteEnabled ? ['**'] : [],
+          }
+        : undefined;
+    const maxTurns = positiveIntegerSetting(settingsService, 'agent.maxTurns');
+    const maxTokens = positiveIntegerSetting(settingsService, 'agent.maxOutputTokens');
+    const planMode = profile.enforcement.denials.has('filesystem-mutation');
+    const worktreeScope =
+      deps.worktreeScope ??
+      (executionContext
+        ? deriveAuthorizedWorktreeScope({
+            homeRoot: executionContext.getHomeWorkspace?.() ?? executionContext.getCwd?.() ?? process.cwd(),
+            isRemote: executionContext.isRemote?.() ?? false,
+            readOnly,
+            planMode,
+            listWorktreesSync: deps.listWorktreesSync,
+          })
+        : undefined);
+    const worktreePaths =
+      deps.worktreePaths ?? ((worktreeScope as any)?.authorizedPaths as Record<string, string> | undefined);
+    const agentSpecAuthority = liteMixedFilesystemAuthority
+      ? undefined
+      : createRootAgentAuthoritySnapshot({
+          effectiveTools: tools.map((tool) => tool.name),
+          filesystemScope,
+          limits: {
+            ...(maxTurns !== undefined ? { maxTurns } : {}),
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+          },
+          readOnly,
+          planMode,
+          ...(worktreeScope ? { worktreeScope } : {}),
+          ...(worktreePaths ? { worktreePaths } : {}),
+        });
+    // The script-only agent capability rides on the same root authority
+    // snapshot as run_code and additionally requires the subagents capability
+    // plus at least one resolved-launch seam. Raw runSubagent callbacks are
+    // deliberately never wired here: scripts launch through resolved
+    // definitions only, so no raw script spec can reach a raw launch path.
+    const agentSpecBridge =
+      hasCapability('subagents') &&
+      agentSpecAuthority &&
+      (runResolvedSubagent || (runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun))
+        ? {
+            settings: settingsService,
+            ...(runResolvedSubagent ? { runResolvedSubagent } : {}),
+            ...(runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun
+              ? { runResolvedSubagentAsync, getSubagentResult, getSubagentStatus, cancelSubagentRun }
+              : {}),
+          }
+        : undefined;
     tools.push(
       createRunCodeToolDefinition({
         loggingService,
@@ -672,6 +755,8 @@ export const getAgentDefinition = (
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
         sessionAccess,
+        ...(agentSpecAuthority ? { agentSpecAuthority } : {}),
+        ...(agentSpecBridge ? { agentSpecBridge } : {}),
         ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),
       }),
     );

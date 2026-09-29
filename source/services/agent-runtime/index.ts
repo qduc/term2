@@ -47,6 +47,18 @@ export {
   AGENT_SPEC_DEFAULT_MAX_TURNS,
 } from './agent-spec.js';
 
+export {
+  createRootAgentAuthoritySnapshot,
+  parentAuthorityFromDefinition,
+  resolveAgentSpecForChild,
+  type AgentSpecAuthoritySnapshot,
+  type AgentPermissionBoundaryParent,
+  type AgentSpecBoundaryError,
+  type AgentSpecBoundaryErrorCode,
+  type AgentSpecBoundaryResult,
+  type ResolveAgentSpecForChildOptions,
+} from './permission-boundary.js';
+
 // Bounded programmable workflow evaluator types.
 export type {
   JsonValue,

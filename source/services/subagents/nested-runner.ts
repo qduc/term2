@@ -44,7 +44,11 @@ import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
-import { ForegroundSubagentLease, type BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
+import {
+  ForegroundSubagentLease,
+  type BackgroundSubagentApprovalPauseSink,
+  type ForegroundSubagentApprovalCallback,
+} from './foreground-subagent-lease.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
 import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
 import { streamHasCommittedOutput } from '../agent-stream.js';
@@ -416,7 +420,11 @@ export class NestedSubagentRunner {
         runContext.task = task;
 
         const detailsRecord = details as
-          | { signal?: AbortSignal; foregroundSubagentLease?: ForegroundSubagentLease }
+          | {
+              signal?: AbortSignal;
+              foregroundSubagentLease?: ForegroundSubagentLease;
+              foregroundChildApproval?: ForegroundSubagentApprovalCallback;
+            }
           | undefined;
         const foregroundLease = detailsRecord?.foregroundSubagentLease;
         const signal = detailsRecord?.signal;
@@ -475,31 +483,53 @@ export class NestedSubagentRunner {
               agentId: runContext.agentId,
               role,
             });
-            if (!stream.interruptions?.length || !foregroundLease?.adopted || !stream.state) break;
+            if (!stream.interruptions?.length || !stream.state) break;
             let resumed: typeof stream | undefined;
-            const continued = await foregroundLease.waitForBackgroundContinuation(
-              stream.state,
-              stream.interruptions[0],
-              () => {
-                resumed = trafficContext
-                  ? this.#sessionContextService.runWithContext(trafficContext, () =>
-                      loop.continueRunStream(stream.state!),
-                    )
-                  : loop.continueRunStream(stream.state!);
-              },
-              (snapshot) => {
-                this.#onEvent?.({
-                  type: 'subagent_approval_required',
-                  agentId: runContext.agentId,
-                  role,
-                });
-                this.#backgroundApprovalPauseSink?.({
-                  ...snapshot,
-                  role,
-                  apply: (callback) => foregroundLease.applyBackgroundApproval(snapshot, callback),
-                });
-              },
-            );
+            const continueOriginalStream = () => {
+              resumed = trafficContext
+                ? this.#sessionContextService.runWithContext(trafficContext, () =>
+                    loop.continueRunStream(stream.state!),
+                  )
+                : loop.continueRunStream(stream.state!);
+            };
+            const continued = foregroundLease?.adopted
+              ? await foregroundLease.waitForBackgroundContinuation(
+                  stream.state,
+                  stream.interruptions[0],
+                  continueOriginalStream,
+                  (snapshot) => {
+                    this.#onEvent?.({
+                      type: 'subagent_approval_required',
+                      agentId: runContext.agentId,
+                      role,
+                    });
+                    this.#backgroundApprovalPauseSink?.({
+                      ...snapshot,
+                      role,
+                      apply: (callback) => foregroundLease.applyBackgroundApproval(snapshot, callback),
+                    });
+                  },
+                )
+              : foregroundLease && detailsRecord?.foregroundChildApproval
+              ? await foregroundLease.waitForForegroundContinuation(
+                  stream.state,
+                  stream.interruptions[0],
+                  continueOriginalStream,
+                  (_snapshot) => {
+                    this.#onEvent?.({
+                      type: 'subagent_approval_required',
+                      agentId: runContext.agentId,
+                      role,
+                    });
+                  },
+                  (snapshot) =>
+                    detailsRecord.foregroundChildApproval!({
+                      ...snapshot,
+                      role,
+                      apply: (callback) => foregroundLease.applyForegroundApproval(snapshot, callback),
+                    }),
+                )
+              : false;
             if (!continued || !resumed) break;
             stream = resumed;
           }
@@ -591,7 +621,7 @@ export class NestedSubagentRunner {
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
-    const generic = request.agentSpec !== undefined && request.resolvedDefinition !== undefined;
+    const generic = request.resolvedDefinition !== undefined;
     if (!generic && !SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
       throw new Error(`Unsupported subagent role: "${request.role}"`);
     }
@@ -609,6 +639,7 @@ export class NestedSubagentRunner {
         role: request.role,
         homeRoot: this.#executionContext?.getHomeWorkspace() ?? process.cwd(),
         isRemote: this.#executionContext?.isRemote() ?? false,
+        authorizedPath: request.authorizedWorktreePath,
       });
       if (!pin.ok) {
         const agentId = detailsRecord?.toolCall?.callId ?? randomUUID();

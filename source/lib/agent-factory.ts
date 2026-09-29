@@ -9,6 +9,7 @@ import { createEditorImpl } from './editor-impl.js';
 import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import type { ListWorktreesSync } from '../services/workspace/worktree-inventory.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../utils/output/bound-tool-result.js';
@@ -44,6 +45,8 @@ import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 import type { AgentSpec } from '../services/agent-runtime/types.js';
+import type { NestedSubagentResult, SubagentRunHandle } from '../services/subagents/types.js';
+import type { ResolvedSubagentLaunch } from './subagent-bridge.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -79,6 +82,13 @@ export interface AgentFactoryDeps {
   getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
   sendSubagentMessage: (params: { target: string; message: string; reply_to?: string }) => any;
   cancelSubagentRun: (params: { target: string }) => any;
+  /** Resolved-launch seams for the run_code script agent capability; absent means scripts cannot launch agents. */
+  runResolvedSubagent?: (
+    params: ResolvedSubagentLaunch,
+    context?: unknown,
+    details?: unknown,
+  ) => Promise<NestedSubagentResult>;
+  runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
   getAskUserAnswer?: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
@@ -112,6 +122,9 @@ export interface AgentFactoryDeps {
   ) => void;
   mcpToolSource?: McpToolSource;
   snapshotGlobalMemoryContext?: (read: () => string) => string;
+  worktreeScope?: ReadonlyArray<string>;
+  worktreePaths?: Readonly<Record<string, string>>;
+  listWorktreesSync?: ListWorktreesSync;
 }
 
 export interface AgentBuildResult {
@@ -512,6 +525,8 @@ export function buildAgent(
       getSubagentStatus: deps.getSubagentStatus,
       sendSubagentMessage: deps.sendSubagentMessage,
       cancelSubagentRun: deps.cancelSubagentRun,
+      runResolvedSubagent: deps.runResolvedSubagent,
+      runResolvedSubagentAsync: deps.runResolvedSubagentAsync,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,
@@ -530,6 +545,9 @@ export function buildAgent(
       setTaskCheckInPolicy: deps.setTaskCheckInPolicy,
       mcpToolSource: deps.mcpToolSource,
       snapshotGlobalMemoryContext: deps.snapshotGlobalMemoryContext,
+      ...(deps.worktreeScope ? { worktreeScope: deps.worktreeScope } : {}),
+      ...(deps.worktreePaths ? { worktreePaths: deps.worktreePaths } : {}),
+      ...(deps.listWorktreesSync ? { listWorktreesSync: deps.listWorktreesSync } : {}),
     },
     resolvedModel,
   );

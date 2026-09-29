@@ -25,6 +25,12 @@ import {
   validateScriptedReturn,
 } from '../../scripted-return-contract.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
+import type { AgentSpecAuthoritySnapshot } from '../../../services/agent-runtime/permission-boundary.js';
+import {
+  createRunCodeAgentCapability,
+  isRunCodeAgentBridgeActive,
+  type RunCodeAgentSpecBridge,
+} from './run-code-agent-capability.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 import { TOOL_NAME_APPLY_PATCH } from '../../tool-names.js';
@@ -41,6 +47,11 @@ export const TOOL_NAME_DESCRIBE = 'describe';
 export const RUN_CODE_LIMITS = {
   maxCalls: 200,
   maxConcurrency: 8,
+  // Agent capability budgets are separate from the tools ledger by design:
+  // launching child agents is scarcer and more expensive than a tool call.
+  maxAgentStarts: 16,
+  maxAgentConcurrency: 4,
+  maxAgentCalls: 200,
   maxResultChars: 100_000,
   maxMediaBytes: 8 * 1024 * 1024,
   maxMediaTotalBytes: 32 * 1024 * 1024,
@@ -457,6 +468,10 @@ export interface RunCodeRuntimeOptions {
   nestedApprovalOwner?: NestedApprovalOwner;
   sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
+  /** Host-owned root authority snapshot; required by the agent capability. */
+  agentSpecAuthority?: AgentSpecAuthoritySnapshot;
+  /** Host-owned resolved-launch bridge; the agent capability exists only when active. */
+  agentBridge?: RunCodeAgentSpecBridge;
 }
 
 export interface RunCodeRuntimeInput {
@@ -518,6 +533,8 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const receipts: RunCodeActionReceipt[] = [];
     const pendingReceiptByCallId = new Map<string, number>();
     const abortedCallIds = new Set<string>();
+    const agentCallIndexes = new Map<string, number>();
+    const abortedAgentCallIds = new Set<string>();
     let rejectedSeq = 0;
     const output: string[] = [];
     const consoleValues: JsonValue[][] = [];
@@ -566,6 +583,33 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         receipts[pendingIndex] = value;
         pendingReceiptByCallId.delete(callId);
       } else receipts.push(value);
+    };
+    const recordAgentCall = (
+      member: string,
+      started: number,
+      callId: string,
+      outcome: RunCodeCallRecord['outcome'],
+      reason?: string,
+    ): void => {
+      if (abortedAgentCallIds.has(callId) && outcome !== 'unknown') return;
+      let index = agentCallIndexes.get(callId);
+      if (index === undefined) {
+        index = calls.length;
+        agentCallIndexes.set(callId, index);
+        calls.push({ tool: `agent.${member}`, outcome: 'unknown', durationMs: 0, callId });
+        if (member === 'start') recordReceipt(callId, 'agent.start', 'unknown');
+      }
+      calls[index] = {
+        tool: `agent.${member}`,
+        outcome,
+        durationMs: Date.now() - started,
+        callId,
+        ...(reason ? { reason: clipReason(reason) } : {}),
+      };
+      if (member === 'start') {
+        const actionOutcome = outcome === 'ok' ? 'applied' : outcome === 'error' ? 'failed' : 'unknown';
+        recordReceipt(callId, 'agent.start', actionOutcome, reason);
+      }
     };
 
     const tools: CapabilityHandler<PreparedCall> = {
@@ -845,6 +889,23 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       },
     };
 
+    const capabilities: Record<string, CapabilityHandler<any>> = { tools };
+    if (options.agentBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentBridge)) {
+      capabilities.agent = createRunCodeAgentCapability(
+        {
+          ...options.agentBridge,
+          authority: options.agentSpecAuthority,
+          logger: loggingService,
+          onCallAdmitted: (member, started, callId) => recordAgentCall(member, started, callId, 'unknown'),
+          onCallSettled: (member, started, callId, outcome, reason) => {
+            if (outcome === 'unknown' && reason) abortedAgentCallIds.add(callId);
+            recordAgentCall(member, started, callId, outcome, reason);
+          },
+        },
+        { bridgeRunId, context: input.context },
+      );
+    }
+
     const settleResolved = async (prepared: PreparedCall, raw: unknown, callId: string): Promise<CapabilityOutcome> => {
       try {
         if (isActionTool(prepared.tool.name)) {
@@ -890,7 +951,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const result = await new SandboxedCodeHostImpl().run({
       code: input.code,
       inputData: input.inputs,
-      capabilities: { tools },
+      capabilities,
       limits: {
         timeoutMs: input.timeout,
         maxCodeBytes: RUN_CODE_LIMITS.maxCodeBytes,

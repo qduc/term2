@@ -1,9 +1,11 @@
 packages:
   - packages/*
+  - web-client
 allowBuilds:
   better-sqlite3: true
   cpu-features: true
   esbuild: true
+  sharp: set this to true or false
   ssh2: true
 minimumReleaseAgeExclude:
   - ink-prompt

@@ -29,8 +29,8 @@ import type { ConversationEvent } from '../services/conversation/conversation-ev
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { normalizeRunItem } from '../services/conversation/run-item-normalizer.js';
 import type { LogEvent } from '../services/logging/conversation-log-events.js';
+import { FROZEN_AGENT_EVENT_TYPES } from '@qduc/agent-wire';
 import {
-  FROZEN_AGENT_EVENT_TYPES,
   GatewayPersistenceError,
   TERMINAL_AGENT_EVENT_TYPES,
   type AgentEventType,
@@ -3645,6 +3645,43 @@ export function mapConversationEvent(
       return null;
   }
 }
+
+export type GatewayEventProjectionOutcome = 'projected' | 'folded' | 'not_emitted';
+
+// Keep the public event inventory adjacent to mapConversationEvent. The wire
+// package owns the frozen key set; this table records the gateway's current
+// treatment of every key without creating another list of event names.
+export const GATEWAY_EVENT_PROJECTION = {
+  session_created: 'projected',
+  user_message_accepted: 'projected',
+  user_message_rejected: 'projected',
+  assistant_started: 'projected',
+  text_delta: 'projected',
+  reasoning_delta: 'projected',
+  tool_started: 'projected',
+  command_message: 'projected',
+  approval_required: 'projected',
+  interaction_updated: 'projected',
+  interaction_resolved: 'projected',
+  interaction_recovered: 'projected',
+  usage_update: 'projected',
+  retry: 'projected',
+  retry_exhausted: 'projected',
+  subagent_started: 'projected',
+  subagent_tool_started: 'projected',
+  subagent_text_turn: 'projected',
+  subagent_command_message: 'projected',
+  subagent_approval_required: 'projected',
+  subagent_completed: 'projected',
+  subagent_interrupted: 'projected',
+  subagent_question: 'projected',
+  context_compaction_started: 'projected',
+  context_compaction_completed: 'projected',
+  context_compaction_failed: 'projected',
+  turn_completed: 'projected',
+  turn_failed: 'projected',
+  turn_aborted: 'projected',
+} satisfies Readonly<Record<(typeof FROZEN_AGENT_EVENT_TYPES)[number], GatewayEventProjectionOutcome>>;
 
 export { interactionDtoFromSnapshot, isPublicEventEnvelope };
 export type { SessionBinding };

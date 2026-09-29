@@ -36,6 +36,8 @@ export interface AgentConfigurationDeps {
   logger: ILoggingService;
   settings: ISettingsService;
   getGoal?: () => DurableGoal | undefined;
+  /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
+  proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
   sessionContextService: ISessionContextService;
   executionContext?: ExecutionContext;
   toolInterceptorRegistry: ToolInterceptorRegistry;
@@ -87,6 +89,7 @@ export class AgentConfiguration implements AgentSource {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #getGoal?: () => DurableGoal | undefined;
+  #proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
   #executionContext?: ExecutionContext;
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #askUserAnswerStore: AskUserAnswerStore;
@@ -133,6 +136,7 @@ export class AgentConfiguration implements AgentSource {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#getGoal = deps.getGoal;
+    this.#proposeGoal = deps.proposeGoal;
     this.#executionContext = deps.executionContext;
     this.#toolInterceptorRegistry = deps.toolInterceptorRegistry;
     this.#askUserAnswerStore = deps.askUserAnswerStore;
@@ -248,6 +252,7 @@ export class AgentConfiguration implements AgentSource {
       settings: this.#settings,
       logger: this.#logger,
       ...(this.#getGoal ? { getGoal: this.#getGoal } : {}),
+      ...(this.#proposeGoal ? { proposeGoal: this.#proposeGoal } : {}),
       executionContext: this.#executionContext,
       editor: this.#editor,
       approvalPolicyRegistry,

@@ -1042,6 +1042,14 @@ await hookService.initialize();
 // Mutations become visible to later provider requests only after the event append succeeds.
 const currentGoalState: { current: DurableGoal | undefined } = { current: resumedConversation?.goal };
 
+// A prior goal proposal (approved or rejected) leaves a propose_goal function
+// call in the transcript; replaying it seeds the once-per-session proposal guard.
+let goalProposalAttempted =
+  resumedConversation?.history?.some(
+    (item) =>
+      (item as { type?: unknown }).type === 'function_call' && (item as { name?: unknown }).name === 'propose_goal',
+  ) ?? false;
+
 const sessionClientFactory = createOwnedSessionClientFactory(
   settings,
   (
@@ -1067,6 +1075,20 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         logger: logger,
         settings: settings,
         getGoal: () => currentGoalState.current,
+        // Interactive sessions only: propose_goal needs an answerable user, so
+        // non-interactive callers (allowAskUser=false) never register the tool.
+        ...(allowAskUser
+          ? {
+              proposeGoal: {
+                appendGoal: (goal: DurableGoal) => {
+                  logWriter.append({ type: 'goal_changed', version: 1, goal });
+                  currentGoalState.current = goal;
+                  goalProposalAttempted = true;
+                },
+                hasPriorProposal: () => goalProposalAttempted,
+              },
+            }
+          : {}),
         executionContext: executionContext,
         sessionContextService,
         skillsService,

@@ -6,7 +6,16 @@ Milestones M1-M3 implement the bounded session-owned goal record, replay, launch
 flags, interactive `/goal` controls, and fixed-suffix prompt context described
 below. The existing goal
 wording in compaction instructions and rollover handoffs remains separate; neither
-is authoritative objective state. Continue with M4. Keep the goal record limited
+is authoritative objective state. Continue with M4.
+
+Update (2026-09-29): open decision 6(b) is implemented as a `propose_goal` tool
+with a dedicated never-auto-approved approval class. The model may propose a goal
+once per session — only at the discussion-to-implementation transition — and only
+an explicit user approval appends the existing `goal_changed` event via the same
+write path as `/goal set`. Never-auto-approval follows the `ask_user` precedent:
+`shouldBypassToolApproval` exempts the tool from YOLO mode, and
+`NonInteractiveApprovalPolicy` rejects it fail-closed; non-interactive and gateway
+sessions never register the tool at all. Keep the goal record limited
 to the desired outcome and how success is recognized. Do not put a plan, schedule,
 execution status, or child-run topology in it. Persistence is plain session-log
 events; there is no goal-specific database or autonomous retry behavior.
@@ -358,6 +367,14 @@ snapshot to the child-run interface.
    without introducing an approval surface into core durable state. Revisit (b)
    only with observed need for model-suggested new objectives; if accepted, use a
    dedicated always-confirm approval class, never a generic auto-approvable tool.
+
+   **Implemented (2026-09-29): (b), as `propose_goal`.** Timing is model judgment
+   encoded in the tool description (propose only at the transition from discussion
+   to implementation, at most once per session); the once-guard combines the
+   goal-exists check with a proposal marker seeded from replayed transcript
+   history. Approval reuses the existing approval surface and appends the same
+   `goal_changed` event as `/goal set`; rejection changes nothing. Option (c)
+   remains unimplemented.
    Do not add (c) unless users specifically want completion proposals; explicit
    `/goal achieved` keeps the terminal transition legible and under user control.
 

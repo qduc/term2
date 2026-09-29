@@ -60,6 +60,7 @@ import { ProfileResolutionError, resolveActiveProfile } from './services/profile
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
+import { createProposeGoalToolDefinition } from './tools/agent/propose-goal.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
@@ -238,6 +239,8 @@ export const getAgentDefinition = (
     sendSubagentMessage?: (params: SendMessageParams) => SendMessageAcknowledgement;
     cancelSubagentRun?: (params: CancelRunParams) => CancelRunAcknowledgement;
     getAskUserAnswer?: (callId?: string) => string | undefined;
+    /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
+    proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
@@ -280,6 +283,7 @@ export const getAgentDefinition = (
     sendSubagentMessage,
     cancelSubagentRun,
     getAskUserAnswer,
+    proposeGoal,
     skillsService,
     agentRuntime,
     postExecuteDeniedRead = false,
@@ -507,6 +511,16 @@ export const getAgentDefinition = (
 
   if (hasCapability('skills') && skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));
+  }
+
+  if (hasCapability('user-interaction') && allowAskUser && proposeGoal && deps.getGoal) {
+    tools.push(
+      createProposeGoalToolDefinition({
+        getGoal: deps.getGoal,
+        appendGoal: proposeGoal.appendGoal,
+        hasPriorProposal: proposeGoal.hasPriorProposal,
+      }),
+    );
   }
 
   if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {

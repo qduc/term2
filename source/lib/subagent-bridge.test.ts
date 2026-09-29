@@ -3,6 +3,9 @@ import { SubagentBridge as ProductionSubagentBridge } from './subagent-bridge.js
 import { SessionContextService } from '../services/session/session-context-service.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import { SubagentAsyncRegistry } from '../services/subagents/subagent-async-registry.js';
+import type { AgentSpecBoundaryResult } from '../services/agent-runtime/permission-boundary.js';
+import type { ResolvedAgentDefinition } from '../services/agent-runtime/resolved-agent.js';
+import type { AgentConfig } from '../services/agent-runtime/types.js';
 
 class SubagentBridge extends ProductionSubagentBridge {
   constructor(options: Omit<ConstructorParameters<typeof ProductionSubagentBridge>[0], 'toolOwnership'>) {
@@ -418,6 +421,70 @@ it('runSubagent forwards worktree into the nested request', async () => {
   expect(trackRunAsTool.lastArgs.args.worktree).toBe('feature');
 });
 
+it('runResolvedSubagent forwards the host-resolved definition without raw AgentSpec resolution', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+  const resolvedDefinition = {
+    role: 'agent',
+    name: 'host-resolved-agent',
+    instructions: 'Use only the host-approved tools.',
+    canRead: true,
+    canWrite: false,
+    canSearchWeb: false,
+    canRunShell: false,
+    maxTurns: 3,
+    model: 'host-model',
+    provider: 'host-provider',
+    reasoningEffort: 'default',
+    tools: ['read_file'],
+  };
+
+  await bridge.runResolvedSubagent({ resolvedDefinition, task: 'inspect the file' });
+
+  expect(trackRunAsTool.lastArgs.args.agentSpec).toBeUndefined();
+  expect(trackRunAsTool.lastArgs.args.resolvedDefinition).toBe(resolvedDefinition);
+  expect(trackRunAsTool.lastArgs.args.signal).toBe(bridge.signal);
+});
+
+it('runResolvedSubagent accepts a successful boundary result and forwards its validated worktree', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+  const definition = {
+    name: 'resolved-agent',
+    legacyRole: 'agent',
+    instructions: 'Read the approved files.',
+    model: { provider: 'host-provider', model: 'host-model' },
+    permissions: {
+      canRead: true,
+      canWrite: false,
+      canSearchWeb: false,
+      canRunShell: false,
+      canUseNestedAgents: false,
+    },
+    limits: { maxTurns: 3 },
+    tools: ['read_file'],
+    skillInstructions: '',
+    resolutionErrors: [],
+  } satisfies ResolvedAgentDefinition;
+  const boundaryResult = {
+    ok: true,
+    spec: { goal: 'inspect the file', tools: ['read_file'] },
+    config: {} as AgentConfig,
+    definition,
+    worktree: 'resolved-worktree',
+  } as AgentSpecBoundaryResult;
+
+  await bridge.runResolvedSubagent({ resolvedDefinition: boundaryResult });
+
+  expect(trackRunAsTool.lastArgs.args.task).toBe('inspect the file');
+  expect(trackRunAsTool.lastArgs.args.worktree).toBe('resolved-worktree');
+  expect(trackRunAsTool.lastArgs.args.agentSpec).toBeUndefined();
+  expect(trackRunAsTool.lastArgs.args.resolvedDefinition).toMatchObject({
+    instructions: definition.instructions,
+    tools: definition.tools,
+  });
+});
+
 it('runSubagent throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 
@@ -602,6 +669,38 @@ it('runSubagentAsync forwards worktree into the async request', async () => {
   await bridge.runSubagentAsync({ role: 'worker', task: 'edit in isolation', worktree: 'feature' });
 
   expect(trackStartRunAsync.lastArgs.worktree).toBe('feature');
+});
+
+it('runResolvedSubagentAsync preserves the resolved definition, worktree, and conversation signal', async () => {
+  const { manager, trackStartRunAsync } = createMockManager();
+  const bridge = makeBridge(manager);
+  const resolvedDefinition = {
+    role: 'agent',
+    name: 'host-resolved-agent',
+    instructions: 'Use only the host-approved tools.',
+    canRead: true,
+    canWrite: false,
+    canSearchWeb: false,
+    canRunShell: false,
+    maxTurns: 3,
+    model: 'host-model',
+    provider: 'host-provider',
+    reasoningEffort: 'default',
+    tools: ['read_file'],
+  };
+
+  await bridge.runResolvedSubagentAsync({
+    resolvedDefinition,
+    task: 'inspect asynchronously',
+    worktree: 'async-worktree',
+  });
+
+  expect(trackStartRunAsync.lastArgs.agentSpec).toBeUndefined();
+  expect(trackStartRunAsync.lastArgs.resolvedDefinition).toBe(resolvedDefinition);
+  expect(trackStartRunAsync.lastArgs.task).toBe('inspect asynchronously');
+  expect(trackStartRunAsync.lastArgs.worktree).toBe('async-worktree');
+  expect(trackStartRunAsync.lastArgs.signal).toBe(bridge.backgroundSignal);
+  expect(trackStartRunAsync.lastArgs.signal).not.toBe(bridge.signal);
 });
 
 it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () => {

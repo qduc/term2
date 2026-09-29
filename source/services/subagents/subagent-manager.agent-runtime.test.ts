@@ -131,6 +131,56 @@ describe('SubagentManager.getAgentRuntime()', () => {
     expect(toolNames).not.toContain('shell');
   });
 
+  it('executes a host-resolved definition without requiring a raw AgentSpec', async () => {
+    let executedAgent: any = null;
+    const providerId = registerTestProvider({
+      label: 'Mock Pre-Resolved Agent Provider',
+      createStreamedModel: () =>
+        ({
+          stream: async function* (agent: any) {
+            executedAgent = agent;
+            yield* wrapResultAsAgentStream({
+              status: 'completed',
+              finalOutput: 'pre-resolved output',
+              history: [],
+              messages: [],
+            });
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'pre-resolved-model' }],
+    });
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.model': 'pre-resolved-model', 'agent.provider': providerId }),
+      sessionContextService: createSessionContextService() as any,
+    });
+    const resolvedDefinition = {
+      role: 'agent',
+      name: 'pre-resolved-agent',
+      instructions: 'Use the host-resolved instructions.',
+      canRead: true,
+      canWrite: false,
+      canSearchWeb: false,
+      canRunShell: false,
+      maxTurns: 3,
+      model: 'pre-resolved-model',
+      provider: providerId,
+      reasoningEffort: 'default',
+      tools: ['read_file'],
+    };
+
+    const result = await manager.runAsTool({
+      role: 'agent',
+      task: 'Inspect the approved file.',
+      resolvedDefinition,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.finalText).toBe('pre-resolved output');
+    expect(executedAgent.instructions).toContain('Use the host-resolved instructions.');
+    expect(executedAgent.tools.map((tool: any) => tool.name)).toEqual(['read_file']);
+  });
+
   it('rejects generic specs that request capabilities outside their permission allowlist', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),

@@ -73,6 +73,20 @@ function makeBridge(subagentManager: Record<string, any>) {
   });
 }
 
+const resolvedDefinition = {
+  role: 'agent',
+  name: 'host-resolved-agent',
+  instructions: 'Use only approved tools.',
+  canRead: true,
+  canWrite: false,
+  canSearchWeb: false,
+  canRunShell: false,
+  maxTurns: 3,
+  model: 'host-model',
+  provider: 'host-provider',
+  reasoningEffort: 'default',
+};
+
 it('background runs get an abort signal distinct from the per-turn foreground signal', async () => {
   const { manager, backgroundSignals } = createMockManager();
   const bridge = makeBridge(manager);
@@ -127,6 +141,29 @@ it('an ordinary per-turn abort still cancels a foreground run_subagent run', asy
 
   expect(foregroundSignals).toHaveLength(1);
   expect(foregroundSignals[0].aborted).toBe(true);
+});
+
+it('an ordinary per-turn abort cancels a host-resolved foreground run', async () => {
+  const { manager, foregroundSignals } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runResolvedSubagent({ resolvedDefinition, task: 'do it' });
+  bridge.abort();
+
+  expect(foregroundSignals).toHaveLength(1);
+  expect(foregroundSignals[0].aborted).toBe(true);
+});
+
+it('an ordinary per-turn abort leaves a host-resolved background run alive', async () => {
+  const { manager, backgroundSignals, calls } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runResolvedSubagentAsync({ resolvedDefinition, task: 'keep working' });
+  bridge.abort();
+
+  expect(backgroundSignals).toHaveLength(1);
+  expect(backgroundSignals[0].aborted).toBe(false);
+  expect(calls.cancelAllAsyncRuns).toBe(0);
 });
 
 it('cancelBackgroundRuns aborts the background signal and cancels live async runs', async () => {

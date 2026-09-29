@@ -591,7 +591,7 @@ export class NestedSubagentRunner {
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
-    const generic = request.agentSpec !== undefined && request.resolvedDefinition !== undefined;
+    const generic = request.resolvedDefinition !== undefined;
     if (!generic && !SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
       throw new Error(`Unsupported subagent role: "${request.role}"`);
     }

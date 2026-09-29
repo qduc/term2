@@ -34,6 +34,9 @@ export default tseslint.config(
       '.worktrees/**',
       '.claude/worktrees/**',
       'website/**',
+      // Standalone Next.js app with its own toolchain and tsconfig; root
+      // project-aware linting does not apply to it.
+      'web-client/**',
     ],
   },
   eslint.configs.recommended,

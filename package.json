@@ -48,6 +48,7 @@
   "scripts": {
     "start": "node dist/cli.js",
     "build": "node scripts/build-with-rollback.mjs",
+    "postinstall": "pnpm --filter @qduc/agent-wire build",
     "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "tsc --build tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",

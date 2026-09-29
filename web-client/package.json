@@ -1,0 +1,27 @@
+{
+  "name": "term2-web-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "highlight.js": "^11.9.0",
+    "lucide-react": "^0.462.0",
+    "next": "16.2.4",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "tailwindcss": "^4",
+    "typescript": "5.9.2"
+  }
+}

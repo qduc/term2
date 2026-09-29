@@ -1,6 +1,8 @@
-import { it, expect } from 'vitest';
+import { afterEach, it, expect, vi } from 'vitest';
 import { createWebSearchToolDefinition, formatResultsAsMarkdown, formatWebSearchCommandMessage } from './web-search.js';
 import type { WebSearchResponse } from '../../providers/web-search/index.js';
+
+afterEach(() => vi.unstubAllGlobals());
 
 // Helper to create a mock settings service
 const createMockSettingsService = (settings: Record<string, any> = {}) => ({
@@ -73,6 +75,56 @@ it('execute returns error when provider not configured', async () => {
   expect(typeof result === 'string').toBe(true);
   expect((result as string).includes('Error:')).toBe(true);
   expect((result as string).includes('not properly configured')).toBe(true);
+});
+
+it('execute forwards search options and abort signal to the provider', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ query: 'test', results: [] }), { status: 200 }));
+  vi.stubGlobal('fetch', fetch);
+  const settings = createMockSettingsService({
+    'webSearch.provider': 'tavily',
+    'webSearch.tavily.apiKey': 'key',
+  });
+  const tool = createWebSearchToolDefinition({ settingsService: settings, loggingService: createMockLoggingService() });
+  const signal = new AbortController().signal;
+
+  await tool.execute(
+    {
+      query: 'test',
+      includeDomains: ['example.test'],
+      excludeDomains: ['blocked.test'],
+      topic: 'news',
+      days: 2,
+      maxResults: 4,
+    },
+    { signal },
+  );
+
+  const request = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(request).toMatchObject({
+    query: 'test',
+    include_domains: ['example.test'],
+    exclude_domains: ['blocked.test'],
+    topic: 'news',
+    days: 2,
+    max_results: 4,
+  });
+  expect(fetch.mock.calls[0][1].signal).toBe(signal);
+});
+
+it('execute supports a query-only call', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ query: 'test', results: [] }), { status: 200 }));
+  vi.stubGlobal('fetch', fetch);
+  const tool = createWebSearchToolDefinition({
+    settingsService: createMockSettingsService({ 'webSearch.provider': 'tavily', 'webSearch.tavily.apiKey': 'key' }),
+    loggingService: createMockLoggingService(),
+  });
+
+  await expect(tool.execute({ query: 'test' }, undefined)).resolves.toContain('No results found');
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ api_key: 'key', query: 'test' });
 });
 
 it('formatResultsAsMarkdown formats results correctly', () => {

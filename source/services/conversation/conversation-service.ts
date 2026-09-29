@@ -26,7 +26,13 @@ import type {
 import type { ConversationEvent } from './conversation-events.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
-import type { SessionRuntime } from '../../core/index.js';
+import type {
+  InteractionDecision,
+  InteractionResult,
+  QueuedTurnStart,
+  SessionHandle,
+  SessionRuntime,
+} from '../../core/index.js';
 import type { BackgroundTaskControlPort } from '../session/background-task-control.js';
 import type {
   BackgroundSubagentNotificationPort,
@@ -89,6 +95,7 @@ export type ConversationCompactionOutcome =
 export class ConversationService {
   #runtime: SessionRuntime;
   #adapter: ConversationAdapter;
+  readonly #sessionHandle: SessionHandle;
   #clientHandle: SessionClientHandle;
   readonly #clientFactory: SessionClientFactory;
   readonly #toolCallMarkers: ToolCallMarkerStore;
@@ -196,6 +203,23 @@ export class ConversationService {
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
+    const service = this;
+    this.#sessionHandle = {
+      sessionId: this.sessionId,
+      sessionStartedAt: this.sessionStartedAt,
+      prepare: (input, ids) => service.prepareMessage(input, ids),
+      commit: (leaseId) => service.commitMessage(leaseId),
+      cancelPrepared: (leaseId) => service.cancelPreparedMessage(leaseId),
+      resolveInteraction: (request: InteractionDecision): InteractionResult =>
+        service.resolvePendingInteraction(request) as InteractionResult,
+      snapshot: () => service.getCurrentSnapshot(),
+      setEventSink: (sink) =>
+        service.setEventSink(sink as ((event: ConversationEvent) => void | PromiseLike<void>) | null),
+      setQueuedTurnStartObserver: (observer: ((start: QueuedTurnStart) => void) | null) =>
+        service.setQueuedTurnStartObserver(observer),
+      abortAndDiscard: () => service.abortAndDiscard(),
+      shutdown: () => service.shutdown(),
+    };
     if (this.#deps.settingsService) {
       primeActiveProfileNoticeIfActive(this.#deps.settingsService, (text) => this.queueModeNotice(text));
     }
@@ -257,6 +281,11 @@ export class ConversationService {
 
   get sessionStartedAt(): string {
     return this.#runtime.sessionStartedAt;
+  }
+
+  /** The gateway-facing projection over this service's already-built runtime. */
+  get sessionHandle(): SessionHandle {
+    return this.#sessionHandle;
   }
 
   getUnsettledToolExecutions(): { callId: string; toolName: string; status: string }[] {

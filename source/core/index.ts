@@ -11,4 +11,12 @@ export type {
   SessionApprovalQuery,
   SessionLogs,
   SessionRuntime,
+  InteractionDecision,
+  InteractionResult,
+  Prepared,
+  QueuedTurnStart,
+  Rejected,
+  SessionEvent,
+  SessionHandle,
+  SessionSnapshot,
 } from './session-runtime.js';

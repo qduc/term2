@@ -9,6 +9,7 @@ import type { GatewaySessionComposition, SecretFreeWorkerSettings, SessionBindin
 import type { RuntimeResourcePolicy } from './runtime-factory.js';
 import type { PreparedMessageResult, PreparedMessageIds } from '../services/conversation/conversation-adapter.js';
 import type { GatewayMessageAdmissionRuntime } from './persistence/admission-persistence.js';
+import type { SessionHandle } from '../core/index.js';
 
 export type ServerSessionStatus = 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
 
@@ -35,6 +36,7 @@ export type ServerSessionEventContext = {
 export type ServerSessionOptions = {
   binding: SessionBinding;
   service: ConversationService;
+  handle?: SessionHandle;
   composition: GatewaySessionComposition;
   policy: RuntimeResourcePolicy;
   eventSink?: (event: ConversationEvent, context: ServerSessionEventContext) => void | PromiseLike<void>;
@@ -63,6 +65,7 @@ export class ServerSession {
   readonly workspaceId: string;
   readonly binding: Readonly<SessionBinding>;
   readonly service: ConversationService;
+  readonly handle: SessionHandle;
   #status: ServerSessionStatus = 'idle';
   #activeTurnId: string | null = null;
   #abortGeneration = 0;
@@ -85,6 +88,7 @@ export class ServerSession {
     this.workspaceId = options.binding.workspaceId;
     this.binding = Object.freeze({ ...options.binding });
     this.service = options.service;
+    this.handle = options.handle ?? (options.service as unknown as SessionHandle);
     this.#composition = options.composition;
     this.#policy = options.policy;
     this.#eventSink = options.eventSink;

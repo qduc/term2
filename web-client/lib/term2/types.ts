@@ -5,37 +5,9 @@ export const TERM2_CONTRACT_VERSION = 1 as const;
  */
 export const TERM2_FREEZE_SHA = '11b1f3637e6110e73b63d8a199b0e9a9d4001b78c49eec0fbe2a9725e01d2fdc';
 
-export const TERM2_EVENT_TYPES = [
-  'session_created',
-  'user_message_accepted',
-  'user_message_rejected',
-  'assistant_started',
-  'text_delta',
-  'reasoning_delta',
-  'tool_started',
-  'command_message',
-  'approval_required',
-  'interaction_updated',
-  'interaction_resolved',
-  'interaction_recovered',
-  'usage_update',
-  'turn_completed',
-  'turn_failed',
-  'turn_aborted',
-  'retry',
-  'retry_exhausted',
-  'subagent_started',
-  'subagent_tool_started',
-  'subagent_text_turn',
-  'subagent_command_message',
-  'subagent_completed',
-  'subagent_interrupted',
-  'subagent_approval_required',
-  'subagent_question',
-  'context_compaction_started',
-  'context_compaction_completed',
-  'context_compaction_failed',
-] as const;
+import { AGENT_EVENT_TYPES } from '@qduc/agent-wire';
+
+export const TERM2_EVENT_TYPES = AGENT_EVENT_TYPES;
 export type Term2EventType = (typeof TERM2_EVENT_TYPES)[number];
 export const TERM2_EVENT_TYPE_SET = new Set<string>(TERM2_EVENT_TYPES);
 

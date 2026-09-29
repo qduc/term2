@@ -308,6 +308,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
+      '@qduc/agent-wire':
+        specifier: workspace:*
+        version: link:packages/wire
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
@@ -380,6 +383,18 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.21.0
+
+  packages/wire:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: npm:@typescript/typescript6@^6.0.1
+        version: '@typescript/typescript6@6.0.1'
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@24.10.1)(@vitest/coverage-v8@4.1.9)(jsdom@27.4.0)(vite@8.0.16(@types/node@24.10.1)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
 
 packages:
 

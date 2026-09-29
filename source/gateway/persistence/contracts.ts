@@ -55,36 +55,8 @@ export type AdmissionRecord = {
   readonly journalChecksum?: string;
 };
 
-export type AgentEventType =
-  | 'session_created'
-  | 'user_message_accepted'
-  | 'user_message_rejected'
-  | 'assistant_started'
-  | 'text_delta'
-  | 'reasoning_delta'
-  | 'tool_started'
-  | 'command_message'
-  | 'approval_required'
-  | 'interaction_updated'
-  | 'interaction_resolved'
-  | 'interaction_recovered'
-  | 'usage_update'
-  | 'retry'
-  | 'retry_exhausted'
-  | 'subagent_started'
-  | 'subagent_tool_started'
-  | 'subagent_text_turn'
-  | 'subagent_command_message'
-  | 'subagent_approval_required'
-  | 'subagent_completed'
-  | 'subagent_interrupted'
-  | 'subagent_question'
-  | 'context_compaction_started'
-  | 'context_compaction_completed'
-  | 'context_compaction_failed'
-  | 'turn_completed'
-  | 'turn_failed'
-  | 'turn_aborted';
+import { AGENT_EVENT_TYPES, type AgentEventEnvelope, type AgentEventType } from '@qduc/agent-wire';
+export type { AgentEventEnvelope, AgentEventType } from '@qduc/agent-wire';
 
 export const TERMINAL_AGENT_EVENT_TYPES: ReadonlySet<AgentEventType> = new Set([
   'turn_completed',
@@ -92,46 +64,7 @@ export const TERMINAL_AGENT_EVENT_TYPES: ReadonlySet<AgentEventType> = new Set([
   'turn_aborted',
 ]);
 
-export const FROZEN_AGENT_EVENT_TYPES = [
-  'session_created',
-  'user_message_accepted',
-  'user_message_rejected',
-  'assistant_started',
-  'text_delta',
-  'reasoning_delta',
-  'tool_started',
-  'command_message',
-  'approval_required',
-  'interaction_updated',
-  'interaction_resolved',
-  'interaction_recovered',
-  'usage_update',
-  'retry',
-  'retry_exhausted',
-  'subagent_started',
-  'subagent_tool_started',
-  'subagent_text_turn',
-  'subagent_command_message',
-  'subagent_approval_required',
-  'subagent_completed',
-  'subagent_interrupted',
-  'subagent_question',
-  'context_compaction_started',
-  'context_compaction_completed',
-  'context_compaction_failed',
-  'turn_completed',
-  'turn_failed',
-  'turn_aborted',
-] as const;
-
-export type AgentEventEnvelope = {
-  readonly schemaVersion: 1;
-  readonly id: number;
-  readonly sessionId: string;
-  readonly type: AgentEventType;
-  readonly occurredAt: string;
-  readonly payload: Readonly<Record<string, unknown>>;
-};
+export const FROZEN_AGENT_EVENT_TYPES = AGENT_EVENT_TYPES;
 
 export type DurableEventCandidate = Omit<AgentEventEnvelope, 'id' | 'occurredAt' | 'schemaVersion'> & {
   readonly occurredAt?: string;

@@ -23,6 +23,11 @@ import { renderToolsHeader } from './tools-header.js';
 import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../../services/mcp/mcp-tool-source.js';
 import type { AgentSpecAuthoritySnapshot } from '../../../services/agent-runtime/permission-boundary.js';
+import {
+  getRunCodeAgentCapabilityMembers,
+  isRunCodeAgentBridgeActive,
+  type RunCodeAgentSpecBridge,
+} from './run-code-agent-capability.js';
 import { RUN_CODE_EXECUTION_RESULT, type RunCodeExecution } from './run-code-execution.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../../utils/shell/shell-output.js';
 import {
@@ -156,6 +161,46 @@ const RUN_CODE_DESCRIPTION =
   'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
   'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
 
+/**
+ * Model-facing catalogue for the script-only `agent` capability, rendered only
+ * when the host bound both the authority snapshot and a bridge. The capability
+ * binds as a flat global `agent` (the worker template's namespace protocol),
+ * not as `tools.agent.*`.
+ */
+function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
+  const members = getRunCodeAgentCapabilityMembers(bridge);
+  const lines: string[] = [
+    '## Agent capability',
+    '',
+    'When present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:',
+  ];
+  if (members.includes('run')) {
+    lines.push(
+      '- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result ' +
+        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call ' +
+        'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled.',
+    );
+  }
+  if (members.includes('start')) {
+    lines.push(
+      '- `agent.start({ spec, name?, continue_run_id? })` starts a conversation-scoped background run and ' +
+        "resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout.",
+      '- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled ' +
+        'result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session ' +
+        'notification lane even after this script returns.',
+    );
+  }
+  lines.push(
+    '- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). ' +
+      "The host attenuates it against this session's authority before launch: requests beyond parent tools, " +
+      'scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is ' +
+      'never forwarded to any launch path.',
+    `- Per-script limits, separate from the tools.* budget: at most ${RUN_CODE_LIMITS.maxAgentStarts} agent launches, ` +
+      `${RUN_CODE_LIMITS.maxAgentConcurrency} parallel foreground runs, and ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls.`,
+  );
+  return lines.join('\n');
+}
+
 export type RunCodeExecutionResult =
   | (string & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution })
   | (Array<RunCodeContentPart> & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution });
@@ -191,8 +236,13 @@ export interface CreateRunCodeToolOptions {
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
   /** Script-only MCP source; its tools are intentionally absent from the root registry. */
   mcpToolSource?: McpToolSource;
-  /** Host-owned root authority for a future script AgentSpec adapter. */
+  /** Host-owned root authority for the script AgentSpec adapter. */
   agentSpecAuthority?: AgentSpecAuthoritySnapshot;
+  /**
+   * Host-owned resolved-launch bridge for the script-only `agent` capability.
+   * The capability exists only when the authority snapshot is also bound.
+   */
+  agentSpecBridge?: RunCodeAgentSpecBridge;
 }
 
 /**
@@ -399,6 +449,8 @@ export function createRunCodeToolDefinition(
       nestedApprovalOwner,
       sessionAccess: options.sessionAccess,
       nestedCompatibility: options.nestedCompatibility,
+      ...(options.agentSpecAuthority ? { agentSpecAuthority: options.agentSpecAuthority } : {}),
+      ...(options.agentSpecBridge ? { agentBridge: options.agentSpecBridge } : {}),
     });
 
   const definition: SchemaToolDefinition<typeof runCodeParametersSchema> = {
@@ -412,7 +464,11 @@ export function createRunCodeToolDefinition(
         createRuntime(registry.filter((tool) => !isMcpToolDefinition(tool))).discovery(),
       );
       const mcpHeader = mcpCatalog ? renderMcpCatalog(mcpCatalog) : '';
-      return [RUN_CODE_DESCRIPTION, header, mcpHeader].filter(Boolean).join('\n\n');
+      const agentSection =
+        options.agentSpecBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentSpecBridge)
+          ? renderAgentCapabilitySection(options.agentSpecBridge)
+          : '';
+      return [RUN_CODE_DESCRIPTION, header, mcpHeader, agentSection].filter(Boolean).join('\n\n');
     },
     parameters: runCodeParametersSchema,
     effect: 'mutating',

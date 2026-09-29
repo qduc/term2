@@ -41,6 +41,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from './services/subagents/types.js';
+import type { ResolvedSubagentLaunch } from './lib/subagent-bridge.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,
@@ -247,6 +248,13 @@ export const getAgentDefinition = (
     ) => SubagentRunStatus | SubagentRunStatus[];
     sendSubagentMessage?: (params: SendMessageParams) => SendMessageAcknowledgement;
     cancelSubagentRun?: (params: CancelRunParams) => CancelRunAcknowledgement;
+    /** Resolved-launch seams for the run_code script agent capability; absent means scripts cannot launch agents. */
+    runResolvedSubagent?: (
+      params: ResolvedSubagentLaunch,
+      context?: unknown,
+      details?: unknown,
+    ) => Promise<NestedSubagentResult>;
+    runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
     /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
     proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
@@ -291,6 +299,8 @@ export const getAgentDefinition = (
     getSubagentStatus,
     sendSubagentMessage,
     cancelSubagentRun,
+    runResolvedSubagent,
+    runResolvedSubagentAsync,
     getAskUserAnswer,
     proposeGoal,
     skillsService,
@@ -700,6 +710,23 @@ export const getAgentDefinition = (
           readOnly,
           planMode: profile.enforcement.denials.has('filesystem-mutation'),
         });
+    // The script-only agent capability rides on the same root authority
+    // snapshot as run_code and additionally requires the subagents capability
+    // plus at least one resolved-launch seam. Raw runSubagent callbacks are
+    // deliberately never wired here: scripts launch through resolved
+    // definitions only, so no raw script spec can reach a raw launch path.
+    const agentSpecBridge =
+      hasCapability('subagents') &&
+      agentSpecAuthority &&
+      (runResolvedSubagent || (runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun))
+        ? {
+            settings: settingsService,
+            ...(runResolvedSubagent ? { runResolvedSubagent } : {}),
+            ...(runSubagentAsync && getSubagentResult && getSubagentStatus && cancelSubagentRun
+              ? { runResolvedSubagentAsync, getSubagentResult, getSubagentStatus, cancelSubagentRun }
+              : {}),
+          }
+        : undefined;
     tools.push(
       createRunCodeToolDefinition({
         loggingService,
@@ -708,6 +735,7 @@ export const getAgentDefinition = (
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
         sessionAccess,
         ...(agentSpecAuthority ? { agentSpecAuthority } : {}),
+        ...(agentSpecBridge ? { agentSpecBridge } : {}),
         ...(hasCapability('mcp') && !profile.enforcement.denials.has('mcp') && mcpToolSource ? { mcpToolSource } : {}),
       }),
     );

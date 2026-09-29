@@ -289,7 +289,9 @@ function installContextBindings() {
           // failed: the underlying message often does not (e.g. 'rg: regex parse error').
           if (response.ok === false) {
             callState.state.rejected = true;
-            callState.state.message = 'tools.' + member + ' failed: ' + String(response.error);
+            // Name the capability, not a hardcoded 'tools.': a second namespace
+            // (agent.*) must report its own failures.
+            callState.state.message = name + '.' + member + ' failed: ' + String(response.error);
             throw new Error(callState.state.message);
           }
           return response.result;

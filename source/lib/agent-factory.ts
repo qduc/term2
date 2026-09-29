@@ -44,6 +44,8 @@ import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
 import type { AgentSpec } from '../services/agent-runtime/types.js';
+import type { NestedSubagentResult, SubagentRunHandle } from '../services/subagents/types.js';
+import type { ResolvedSubagentLaunch } from './subagent-bridge.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -79,6 +81,13 @@ export interface AgentFactoryDeps {
   getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
   sendSubagentMessage: (params: { target: string; message: string; reply_to?: string }) => any;
   cancelSubagentRun: (params: { target: string }) => any;
+  /** Resolved-launch seams for the run_code script agent capability; absent means scripts cannot launch agents. */
+  runResolvedSubagent?: (
+    params: ResolvedSubagentLaunch,
+    context?: unknown,
+    details?: unknown,
+  ) => Promise<NestedSubagentResult>;
+  runResolvedSubagentAsync?: (params: ResolvedSubagentLaunch) => Promise<SubagentRunHandle>;
   getAskUserAnswer?: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
@@ -512,6 +521,8 @@ export function buildAgent(
       getSubagentStatus: deps.getSubagentStatus,
       sendSubagentMessage: deps.sendSubagentMessage,
       cancelSubagentRun: deps.cancelSubagentRun,
+      runResolvedSubagent: deps.runResolvedSubagent,
+      runResolvedSubagentAsync: deps.runResolvedSubagentAsync,
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       agentRuntime: deps.getAgentRuntime?.() ?? null,

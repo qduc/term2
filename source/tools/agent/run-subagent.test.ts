@@ -223,6 +223,32 @@ it('schema requires role and task', () => {
   expect(tool.parameters.safeParse({ execution: 'foreground', task: 'find files' }).success).toBe(false);
 });
 
+it('accepts a dynamic AgentSpec without a named role and forwards it to background execution', async () => {
+  const background = vi.fn(async () => ({
+    runId: 'dynamic-run',
+    role: 'agent',
+    task: 'inspect',
+    status: 'running' as const,
+  }));
+  const tool = createRunSubagentToolDefinition({ runSubagentAsync: background });
+  const agent_spec = {
+    goal: 'Inspect change',
+    tools: ['read_file'],
+    constraints: ['Do not edit'],
+    doneWhen: 'Summarize',
+  };
+  const params = { execution: 'background', agent_spec };
+
+  expect(tool.parameters.safeParse(params).success).toBe(true);
+  await tool.execute(params);
+  expect(background).toHaveBeenCalledWith(
+    expect.objectContaining({ role: 'agent', task: 'Inspect change', agent_spec }),
+    undefined,
+    undefined,
+  );
+  expect(tool.parameters.safeParse({ execution: 'background', role: 'explorer' }).success).toBe(false);
+});
+
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 

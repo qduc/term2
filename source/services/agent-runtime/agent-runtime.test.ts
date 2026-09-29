@@ -105,6 +105,26 @@ describe('AgentRuntime', () => {
     expect(handle.name).toBe('agent');
   });
 
+  it('runs a generic AgentSpec by composing constraints, completion criteria, and context', async () => {
+    const captured = mockExecutor();
+    const runtime = new AgentRuntime({ settings: settings(), logger: logger(), executor: captured.executor });
+
+    const result = await runtime.runAgent({
+      goal: 'Inspect the change',
+      context: { changedFile: 'src/example.ts' },
+      tools: ['read_file'],
+      constraints: ['Do not modify files'],
+      doneWhen: 'Report evidence for each finding',
+    });
+
+    expect(result.status).toBe('completed');
+    const input = captured.getCaptured()!;
+    expect(input.instructions).toContain('Do not modify files');
+    expect(input.instructions).toContain('Report evidence for each finding');
+    expect(input.instructions).toContain('src/example.ts');
+    expect(input.definition.tools).toContain('read_file');
+  });
+
   it('AgentHandle has readonly properties reflecting resolution', () => {
     const { executor } = mockExecutor();
     const runtime = new AgentRuntime({

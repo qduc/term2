@@ -235,6 +235,18 @@ export interface AgentConfig {
   limits?: AgentLimits;
 }
 
+/** A task-shaped invocation of the general agent runtime. */
+export interface AgentSpec {
+  goal: string;
+  context?: Record<string, unknown>;
+  tools?: ReadonlyArray<ToolReference>;
+  permissions?: AgentPermissions;
+  constraints?: string[];
+  doneWhen?: string;
+  model?: ModelPolicy;
+  budget?: AgentLimits;
+}
+
 // ─── Agent Handle ────────────────────────────────────────────────
 
 /** A configured, resolved agent ready to execute one-shot runs. */

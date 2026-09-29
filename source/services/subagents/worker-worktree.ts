@@ -60,10 +60,10 @@ export async function pinWorkerWorktree(params: {
 }): Promise<WorkerWorktreePin> {
   const { name, role, homeRoot, isRemote, listWorktrees = listGitWorktrees } = params;
 
-  if (role !== 'worker') {
+  if (role !== 'worker' && role !== 'agent') {
     return {
       ok: false,
-      error: `worktree is only supported for role "worker" (received "${role}"). Omit worktree or use role "worker".`,
+      error: `worktree is only supported for role "worker" or a generic agent invocation (received "${role}"). Omit worktree or use a writable agent.`,
     };
   }
   if (isRemote) {

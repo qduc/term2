@@ -19,6 +19,8 @@ import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage
 import { adaptLegacyRole, adaptLegacyDefinition } from '../agent-runtime/legacy-adapter.js';
 import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-agent-runtime.js';
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
+import type { AgentSpec } from '../agent-runtime/types.js';
+import { createRootBudget } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type {
   SubagentCancelAcknowledgement,
@@ -37,6 +39,7 @@ export class SubagentManager {
   #settings: ISettingsService;
   #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
   #runtime: SubagentRuntime;
+  #skillsService?: SkillsService;
   #mentorActive = false;
 
   constructor(deps: {
@@ -56,6 +59,7 @@ export class SubagentManager {
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
+    this.#skillsService = deps.skillsService;
     this.#onEvent = deps.onEvent;
     this.#runtime = createSubagentRuntime(deps);
   }
@@ -91,6 +95,15 @@ export class SubagentManager {
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
+    if (request.agentSpec) {
+      const resolvedDefinition =
+        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget);
+      return this.#runtime.nestedRunner.runAsTool(
+        { ...request, role: 'agent', task: request.agentSpec.goal, resolvedDefinition },
+        context,
+        details,
+      );
+    }
     return this.#runtime.nestedRunner.runAsTool(request, context, details);
   }
 
@@ -105,6 +118,7 @@ export class SubagentManager {
     return createAgentRuntimeFromSubagentRuntime({
       settings: this.#settings,
       logger: this.#logger,
+      skillsService: this.#skillsService,
       executionRunner: this.#runtime.executionRunner,
       mentorRunner: this.#runtime.mentorRunner,
       onEvent: this.#onEvent,
@@ -120,6 +134,48 @@ export class SubagentManager {
   #resolveRoleDefinition(role: string): SubagentDefinition {
     const resolved = adaptLegacyRole(role, this.#settings);
     return adaptLegacyDefinition(resolved);
+  }
+
+  #resolveAgentSpec(spec: AgentSpec, inheritedBudget?: SubagentRequest['executionBudget']): SubagentDefinition {
+    const runtime = this.getAgentRuntime();
+    const permissions = spec.permissions ?? (spec.tools ? { tools: [...spec.tools] } : undefined);
+    const constraints = [
+      ...(spec.constraints ?? []).map((item) => `- ${item}`),
+      ...(spec.doneWhen ? [`Done when: ${spec.doneWhen}`] : []),
+    ];
+    const context = spec.context === undefined ? '' : `Invocation context (JSON):\n${JSON.stringify(spec.context)}`;
+    const definition = runtime.resolveDefinition({
+      name: 'agent',
+      instructions: [
+        ...(constraints.length ? [`Invocation constraints:\n${constraints.join('\n')}`] : []),
+        ...(context ? [context] : []),
+      ].join('\n\n'),
+      ...(spec.tools ? { tools: spec.tools } : {}),
+      ...(permissions ? { permissions } : {}),
+      ...(spec.model ? { model: spec.model } : {}),
+      ...(spec.budget ? { limits: spec.budget } : {}),
+    });
+    if (definition.resolutionErrors.length > 0) {
+      throw new Error(
+        `Agent specification rejected: ${definition.resolutionErrors.map((error) => error.message).join('; ')}`,
+      );
+    }
+    const budget =
+      inheritedBudget ??
+      createRootBudget({
+        maxChildren: definition.limits.maxChildren,
+        maxDepth: definition.limits.maxDepth,
+        maxConcurrency: definition.limits.maxConcurrency,
+        maxTokens: definition.limits.maxTokens,
+      });
+    const adapted = {
+      ...adaptLegacyDefinition(definition, budget),
+      isRootExecution: inheritedBudget === undefined,
+    };
+    if (typeof spec.model === 'object' && 'reasoning' in spec.model && spec.model.reasoning) {
+      return { ...adapted, reasoningEffort: spec.model.reasoning };
+    }
+    return adapted;
   }
 
   async run(request: SubagentRequest): Promise<SubagentResult> {
@@ -146,16 +202,24 @@ export class SubagentManager {
         }
         this.#mentorActive = true;
       }
-      const result =
-        request.role === 'mentor'
-          ? await this.#runtime.mentorRunner.run(
-              agentId,
-              request.task,
-              request.signal,
-              undefined,
-              request.executionBudget,
-            )
-          : await this.#runtime.executionRunner.run(agentId, request, this.#resolveRoleDefinition(request.role));
+      const resolvedDefinition = request.agentSpec
+        ? request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget)
+        : undefined;
+      const result = request.agentSpec
+        ? await this.#runtime.executionRunner.run(
+            agentId,
+            { ...request, role: 'agent', task: request.agentSpec.goal, resolvedDefinition },
+            resolvedDefinition!,
+          )
+        : request.role === 'mentor'
+        ? await this.#runtime.mentorRunner.run(
+            agentId,
+            request.task,
+            request.signal,
+            undefined,
+            request.executionBudget,
+          )
+        : await this.#runtime.executionRunner.run(agentId, request, this.#resolveRoleDefinition(request.role));
       await safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result }, { propagate: true });
       return result;
     } catch (error: any) {
@@ -195,6 +259,16 @@ export class SubagentManager {
   startRunAsync(request: SubagentRequest): SubagentRunHandle {
     if (request.role === 'mentor' && this.#mentorActive) {
       throw new SubagentRegistryError('already_active', 'Mentor session is already active');
+    }
+    if (request.agentSpec) {
+      const resolvedDefinition =
+        request.resolvedDefinition ?? this.#resolveAgentSpec(request.agentSpec, request.executionBudget);
+      return this.#runtime.asyncRegistry.startRun({
+        ...request,
+        role: 'agent',
+        task: request.agentSpec.goal,
+        resolvedDefinition,
+      });
     }
     return this.#runtime.asyncRegistry.startRun(request);
   }

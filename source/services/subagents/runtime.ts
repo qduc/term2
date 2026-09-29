@@ -181,7 +181,8 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
       // recomputing per segment would draw another pool entry per turn
       // instead of once per spawn. The fallback only covers callers that
       // never went through `resolveDefinition` (e.g. a bare test double).
-      const resolvedDefinition = definition ?? loadRoleDefinition(request.role, deps.settings);
+      const resolvedDefinition =
+        definition ?? request.resolvedDefinition ?? loadRoleDefinition(request.role, deps.settings);
       return executionRunner.runInSession(
         runId,
         { ...request, signal },

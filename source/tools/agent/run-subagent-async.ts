@@ -22,42 +22,52 @@ import {
 } from '../../services/background-task-activity.js';
 
 import { relaxedNumber } from '../utils.js';
+import { agentSpecSchema } from './run-subagent.js';
 
-const ASYNC_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
+const ASYNC_ROLES = ['agent', 'explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 
-const runSubagentAsyncSchema = z.object({
-  role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, mentor, reviewer, or librarian.'),
-  task: z
-    .string()
-    .describe(
-      'One bounded task with one objective, ownership boundary, and done condition. Explorer tasks must choose breadth or depth, never both.',
-    ),
-  name: z
-    .string()
-    .regex(SUBAGENT_RUN_NAME_PATTERN)
-    .optional()
-    .describe(
-      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.',
-    ),
-  continue_run_id: z
-    .string()
-    .optional()
-    .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
-  check_in: z
-    .object({
-      enabled: z
-        .boolean()
-        .optional()
-        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
-      interval_seconds: relaxedNumber
-        .int()
-        .positive()
-        .optional()
-        .describe('Custom interval in seconds between proactive check-ins.'),
-    })
-    .optional()
-    .describe('Optional check-in configuration for this background subagent.'),
-});
+const runSubagentAsyncSchema = z
+  .object({
+    role: z.enum(ASYNC_ROLES).optional().describe('Optional legacy role preset.'),
+    task: z
+      .string()
+      .optional()
+      .describe(
+        'One bounded task with one objective, ownership boundary, and done condition. Explorer tasks must choose breadth or depth, never both.',
+      ),
+    agent_spec: agentSpecSchema.optional().describe('Dynamic task configuration; omits the need for a named role.'),
+    name: z
+      .string()
+      .regex(SUBAGENT_RUN_NAME_PATTERN)
+      .optional()
+      .describe(
+        'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.',
+      ),
+    continue_run_id: z
+      .string()
+      .optional()
+      .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
+    check_in: z
+      .object({
+        enabled: z
+          .boolean()
+          .optional()
+          .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
+        interval_seconds: relaxedNumber
+          .int()
+          .positive()
+          .optional()
+          .describe('Custom interval in seconds between proactive check-ins.'),
+      })
+      .optional()
+      .describe('Optional check-in configuration for this background subagent.'),
+  })
+  .refine(
+    (value) => Boolean(value.agent_spec) || (value.role !== 'agent' && Boolean(value.role) && Boolean(value.task)),
+    {
+      message: 'Provide agent_spec, or both role and task.',
+    },
+  );
 
 const getSubagentResultSchema = z.object({
   runId: z.string().describe('The runId returned by run_subagent with execution: "background".'),

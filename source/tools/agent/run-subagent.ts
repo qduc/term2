@@ -13,10 +13,11 @@ import type { NestedSubagentResult, SubagentResult, SubagentRunHandle } from '..
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
+import type { AgentSpec } from '../../services/agent-runtime/types.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
-    'Delegate a bounded task to a specialized subagent. ' +
+    'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. ' +
     (backgroundEnabled
       ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
       : 'This session uses foreground execution and returns the structured result in this turn. ') +
@@ -47,6 +48,46 @@ const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const SUBAGENT_TASK_DESCRIPTION =
   'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
+
+export const agentSpecSchema = z
+  .object({
+    goal: z.string().describe('The goal for this general-purpose agent invocation.'),
+    context: z.record(z.string(), z.unknown()).optional(),
+    tools: z.array(z.string()).readonly().optional(),
+    permissions: z
+      .object({
+        tools: z.array(z.string()).readonly().optional(),
+        filesystem: z
+          .object({ read: z.array(z.string()).optional(), write: z.array(z.string()).optional() })
+          .optional(),
+        network: z.object({ hosts: z.array(z.string()).optional() }).optional(),
+        agents: z.object({ create: z.boolean().optional(), maxDepth: z.number().optional() }).optional(),
+      })
+      .optional(),
+    constraints: z.array(z.string()).optional(),
+    doneWhen: z.string().optional(),
+    model: z
+      .union([
+        z.enum(['efficient', 'balanced', 'capable']),
+        z.object({
+          tier: z.enum(['lower', 'same', 'higher']),
+          reasoning: z.enum(['low', 'medium', 'high']).optional(),
+        }),
+        z.object({ provider: z.string(), model: z.string() }),
+      ])
+      .optional(),
+    budget: z
+      .object({
+        maxTurns: z.number().optional(),
+        maxTokens: z.number().optional(),
+        timeoutMs: z.number().optional(),
+        maxChildren: z.number().optional(),
+        maxDepth: z.number().optional(),
+        maxConcurrency: z.number().optional(),
+      })
+      .optional(),
+  })
+  .strict();
 
 const backgroundFields = {
   name: z
@@ -81,7 +122,7 @@ const worktreeField = {
     .string()
     .optional()
     .describe(
-      'Worker only. Directory basename or branch of an existing git worktree to pin the child into. ' +
+      'For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into. ' +
         'Create the worktree first under the workspace root; this does not re-root the parent session.',
     ),
 };
@@ -91,16 +132,23 @@ const runSubagentSchema = z
     execution: z
       .enum(['foreground', 'background'])
       .describe('"foreground" returns the result in this turn; "background" returns a running handle immediately.'),
-    role: z.enum(ALL_ROLES).describe('The subagent role to use.'),
-    task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
+    role: z.enum(ALL_ROLES).optional().describe('Optional legacy role preset. Omit when supplying agent_spec.'),
+    task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
+    agent_spec: agentSpecSchema
+      .optional()
+      .describe('Dynamic goal/context/tools/constraints/model/budget; no named role required.'),
     ...worktreeField,
     ...backgroundFields,
   })
-  .strict();
+  .strict()
+  .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
+    message: 'Provide agent_spec, or both role and task.',
+  });
 
 export type ForegroundRunSubagentParams = {
-  role: (typeof FOREGROUND_ROLES)[number];
-  task: string;
+  role?: (typeof FOREGROUND_ROLES)[number] | 'agent';
+  task?: string;
+  agent_spec?: AgentSpec;
   worktree?: string;
 };
 export type RunSubagentParams =
@@ -111,8 +159,9 @@ export type RunSubagentParams =
       })
   | {
       execution: 'background';
-      role: (typeof BACKGROUND_ROLES)[number];
-      task: string;
+      role?: (typeof BACKGROUND_ROLES)[number] | 'agent';
+      task?: string;
+      agent_spec?: AgentSpec;
       name?: string;
       continue_run_id?: string;
       worktree?: string;
@@ -126,10 +175,14 @@ export type RunSubagentToolCallbacks = {
     details?: unknown,
   ) => Promise<NestedSubagentResult>;
   runSubagentAsync?: (
-    params: Pick<
-      Extract<RunSubagentParams, { execution: 'background' }>,
-      'role' | 'task' | 'name' | 'continue_run_id' | 'worktree'
-    >,
+    params: {
+      role?: (typeof BACKGROUND_ROLES)[number] | 'agent';
+      task?: string;
+      agent_spec?: AgentSpec;
+      name?: string;
+      continue_run_id?: string;
+      worktree?: string;
+    },
     context?: unknown,
     details?: unknown,
   ) => Promise<SubagentRunHandle>;
@@ -144,23 +197,31 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
     return z
       .object({
         execution: z.literal('background').describe('Only background execution is available in this session.'),
-        role: z.enum(BACKGROUND_ROLES).describe('The subagent role to use.'),
-        task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
+        role: z.enum(BACKGROUND_ROLES).optional().describe('Optional legacy role preset.'),
+        task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
+        agent_spec: runSubagentSchema.shape.agent_spec,
         ...worktreeField,
         ...backgroundFields,
       })
-      .strict();
+      .strict()
+      .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
+        message: 'Provide agent_spec, or both role and task.',
+      });
   }
 
   if (runSubagent && !runSubagentAsync) {
     return z
       .object({
         execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
-        role: z.enum(FOREGROUND_ROLES).describe('The subagent role to use.'),
-        task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
+        role: z.enum(FOREGROUND_ROLES).optional().describe('Optional legacy role preset.'),
+        task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
+        agent_spec: runSubagentSchema.shape.agent_spec,
         ...worktreeField,
       })
-      .strict();
+      .strict()
+      .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
+        message: 'Provide agent_spec, or both role and task.',
+      });
   }
 
   return runSubagentSchema;
@@ -414,21 +475,25 @@ export function createRunSubagentToolDefinition(
       if (params.execution === 'foreground' || (legacyForegroundOnly && params.execution === undefined)) {
         if (params.name != null || params.continue_run_id != null) {
           return failedForegroundResult(
-            params.role,
+            params.role ?? 'agent',
             'Background-only inputs name and continue_run_id cannot be used with execution: "foreground".',
           );
         }
         if (!resolvedCallbacks.runSubagent) {
-          return failedForegroundResult(params.role, 'Foreground execution is unavailable in this session.');
+          return failedForegroundResult(params.role ?? 'agent', 'Foreground execution is unavailable in this session.');
         }
-        if (!FOREGROUND_ROLES.includes(params.role as (typeof FOREGROUND_ROLES)[number])) {
-          return failedForegroundResult(params.role, `Role "${params.role}" is unavailable for foreground execution.`);
+        if (!params.agent_spec && !FOREGROUND_ROLES.includes(params.role as (typeof FOREGROUND_ROLES)[number])) {
+          return failedForegroundResult(
+            params.role ?? 'agent',
+            `Role "${params.role}" is unavailable for foreground execution.`,
+          );
         }
         try {
           const result = await resolvedCallbacks.runSubagent(
             {
-              role: params.role as (typeof FOREGROUND_ROLES)[number],
-              task: params.task,
+              role: params.agent_spec ? 'agent' : (params.role as (typeof FOREGROUND_ROLES)[number]),
+              task: params.agent_spec?.goal ?? params.task,
+              ...(params.agent_spec ? { agent_spec: params.agent_spec } : {}),
               ...(params.worktree ? { worktree: params.worktree } : {}),
             },
             context,
@@ -439,7 +504,7 @@ export function createRunSubagentToolDefinition(
           if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
             throw error;
           }
-          return failedForegroundResult(params.role, error);
+          return failedForegroundResult(params.role ?? 'agent', error);
         }
       }
 
@@ -452,8 +517,9 @@ export function createRunSubagentToolDefinition(
       try {
         const handle = await resolvedCallbacks.runSubagentAsync(
           {
-            role: params.role,
-            task: params.task,
+            role: params.agent_spec ? 'agent' : params.role,
+            task: params.agent_spec?.goal ?? params.task,
+            ...(params.agent_spec ? { agent_spec: params.agent_spec } : {}),
             name: params.name ?? undefined,
             continue_run_id: params.continue_run_id ?? undefined,
             ...(params.worktree ? { worktree: params.worktree } : {}),

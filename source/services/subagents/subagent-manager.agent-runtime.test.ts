@@ -81,4 +81,106 @@ describe('SubagentManager.getAgentRuntime()', () => {
     expect(handle1.name).toBe('agent');
     expect(handle2.name).toBe('agent');
   });
+
+  it('executes an asynchronous dynamic spec through the existing runner with narrowed tools and budget', async () => {
+    let executedAgent: any = null;
+    const providerId = registerTestProvider({
+      label: 'Mock Dynamic Agent Spec Provider',
+      createStreamedModel: () =>
+        ({
+          stream: async function* (agent: any) {
+            executedAgent = agent;
+            yield* wrapResultAsAgentStream({
+              status: 'completed',
+              finalOutput: 'dynamic output',
+              history: [],
+              messages: [],
+            });
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'dynamic-model' }],
+    });
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.model': 'dynamic-model', 'agent.provider': providerId }),
+      sessionContextService: createSessionContextService() as any,
+    });
+
+    const handle = manager.startRunAsync({
+      role: 'agent',
+      task: 'Inspect the requested file.',
+      agentSpec: {
+        goal: 'Inspect the requested file.',
+        context: { file: 'source/example.ts' },
+        tools: ['read_file'],
+        constraints: ['Do not edit files'],
+        doneWhen: 'Return a concise evidence-backed summary',
+        budget: { maxTurns: 3, timeoutMs: 10_000 },
+      },
+    });
+    const result = await manager.getRunResult(handle.runId);
+
+    expect(result.status).toBe('completed');
+    expect(result.finalText).toBe('dynamic output');
+    expect(executedAgent.instructions).toContain('Do not edit files');
+    expect(executedAgent.instructions).toContain('Return a concise evidence-backed summary');
+    expect(executedAgent.instructions).toContain('source/example.ts');
+    const toolNames: string[] = executedAgent.tools.map((tool: any) => tool.name);
+    expect(toolNames).toContain('read_file');
+    expect(toolNames).not.toContain('shell');
+  });
+
+  it('rejects generic specs that request capabilities outside their permission allowlist', () => {
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': 'openai', 'agent.model': 'gpt-4o' }),
+      sessionContextService: createSessionContextService() as any,
+    });
+
+    expect(() =>
+      manager.startRunAsync({
+        role: 'agent',
+        task: 'do not run',
+        agentSpec: {
+          goal: 'Try to run shell',
+          tools: ['shell'],
+          permissions: { tools: ['read_file'] },
+        },
+      }),
+    ).toThrow(/not authorized/i);
+  });
+
+  it('runs write-capable generic specs through the foreground nested approval path', async () => {
+    let executedAgent: any = null;
+    const providerId = registerTestProvider({
+      label: 'Mock Foreground Generic Agent Provider',
+      createStreamedModel: () =>
+        ({
+          stream: async function* (agent: any) {
+            executedAgent = agent;
+            yield* wrapResultAsAgentStream({ status: 'completed', finalOutput: 'ready', history: [], messages: [] });
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'foreground-generic' }],
+    });
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.model': 'foreground-generic', 'agent.provider': providerId }),
+      sessionContextService: createSessionContextService() as any,
+    });
+
+    const result = await manager.runAsTool({
+      role: 'agent',
+      task: 'Prepare an implementation',
+      agentSpec: {
+        goal: 'Prepare an implementation',
+        tools: ['create_file'],
+        permissions: { tools: ['create_file'] },
+      },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(executedAgent.tools.map((tool: any) => tool.name)).toContain('create_file');
+    expect(executedAgent.tools.map((tool: any) => tool.name)).not.toContain('read_file');
+  });
 });

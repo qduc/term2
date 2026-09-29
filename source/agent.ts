@@ -172,7 +172,7 @@ type SubagentResultLike = Pick<SubagentResult, 'finalText'> & Partial<NestedSuba
 function toSubagentResult(result: SubagentResultLike, role: ForegroundRunSubagentParams['role']): NestedSubagentResult {
   return {
     agentId: result.agentId ?? 'unknown',
-    role: result.role ?? role,
+    role: result.role ?? role ?? 'agent',
     status: result.status ?? 'completed',
     finalText: result.finalText,
     filesChanged: result.filesChanged ?? [],

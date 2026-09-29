@@ -268,6 +268,14 @@ export class NestedSubagentRunner {
     if (options?.applyPool) {
       definition = this.#rolePoolSelector.resolveForSpawn(role, definition);
     }
+    return this.#buildDefinitionTool(definition, role, options);
+  }
+
+  #buildDefinitionTool(
+    definition: SubagentDefinition,
+    role: string,
+    options?: { executionContext?: ExecutionContext },
+  ): CachedRoleTool {
     const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.canRunShell);
     const runExecutionContext = options?.executionContext ?? this.#executionContext;
     const toolDefinitions = this.#toolFactory.buildToolDefinitions(
@@ -379,11 +387,7 @@ export class NestedSubagentRunner {
    * ledger from `toolContext.approvals`, so parent decisions are honored (F5)
    * and the run's own decisions accumulate on the same ledger.
    */
-  createSubagentTool(
-    role: SupportedSubagentRole,
-    definition: SubagentDefinition,
-    agent: ApplicationAgent,
-  ): AnyToolDefinition {
+  createSubagentTool(role: string, definition: SubagentDefinition, agent: ApplicationAgent): AnyToolDefinition {
     const parameters = z.object({
       role: z.literal(role),
       task: z.string(),
@@ -587,7 +591,8 @@ export class NestedSubagentRunner {
   }
 
   async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<NestedSubagentResult> {
-    if (!SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
+    const generic = request.agentSpec !== undefined && request.resolvedDefinition !== undefined;
+    if (!generic && !SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
       throw new Error(`Unsupported subagent role: "${request.role}"`);
     }
     const role = request.role as SupportedSubagentRole;
@@ -626,7 +631,11 @@ export class NestedSubagentRunner {
       }
       worktreePath = pin.worktreePath;
       pinnedExecutionContext = pin.executionContext;
-      pinnedRoleTool = this.#buildRoleTool(role, { executionContext: pin.executionContext, applyPool: true });
+      pinnedRoleTool = generic
+        ? this.#buildDefinitionTool(request.resolvedDefinition!, request.role, {
+            executionContext: pin.executionContext,
+          })
+        : this.#buildRoleTool(role, { executionContext: pin.executionContext, applyPool: true });
     }
 
     // ── Budget enforcement ──
@@ -657,7 +666,11 @@ export class NestedSubagentRunner {
     // another pool entry, so it always takes the cache path.
     let roleTool =
       pinnedRoleTool ??
-      (detailsRecord?.resumeState ? this.#getOrCreateRoleTool(role) : this.#resolveRoleToolForSpawn(role));
+      (generic
+        ? this.#buildDefinitionTool(request.resolvedDefinition!, request.role)
+        : detailsRecord?.resumeState
+        ? this.#getOrCreateRoleTool(role)
+        : this.#resolveRoleToolForSpawn(role));
     const lease = new ForegroundSubagentLease({
       runId: candidateRunId,
       parentSignal: parentComposite?.signal,

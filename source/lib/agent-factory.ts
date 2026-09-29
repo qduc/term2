@@ -43,6 +43,7 @@ import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
+import type { AgentSpec } from '../services/agent-runtime/types.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -56,8 +57,24 @@ export interface AgentFactoryDeps {
   providerId: string;
   serviceTierOverrideForNextRequest: 'standard' | null;
   createMentor: (task: string) => Promise<string>;
-  runSubagent: (params: { role: string; task: string }) => Promise<{ finalText: string }>;
-  runSubagentAsync: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
+  runSubagent: (params: {
+    role?: string;
+    task?: string;
+    agent_spec?: AgentSpec;
+    worktree?: string;
+  }) => Promise<{ finalText: string }>;
+  runSubagentAsync: (
+    params: {
+      role?: string;
+      task?: string;
+      agent_spec?: AgentSpec;
+      name?: string;
+      continue_run_id?: string;
+      worktree?: string;
+    },
+    context?: unknown,
+    details?: unknown,
+  ) => Promise<any>;
   getSubagentResult: (params: { runId: string }, context?: unknown, details?: unknown) => Promise<any>;
   getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
   sendSubagentMessage: (params: { target: string; message: string; reply_to?: string }) => any;

@@ -7,6 +7,7 @@ export type { AgentRuntime, AgentRuntimeDeps } from './agent-runtime.js';
 export {
   // Types
   type AgentConfig,
+  type AgentSpec,
   type AgentHandle,
   type RunInput,
   type RunResult,

@@ -104,6 +104,7 @@ export function resolveAgent(config: AgentConfig, deps: AgentResolverDeps): Reso
     model,
     permissions: resolvedPerms,
     limits,
+    responseMaxTokens: config.responseMaxTokens,
     tools,
     skillInstructions,
     filesystemScope,

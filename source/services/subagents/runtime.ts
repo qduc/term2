@@ -210,7 +210,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
       return rolePoolSelector.resolveForSpawn(role as SupportedSubagentRole, base);
     },
     markPoolEntryUnhealthy: (definition, failure) => rolePoolSelector.markUnhealthy(definition, failure),
-    hasModelPool: (role) => rolePoolSelector.hasPool(role as SupportedSubagentRole),
+    hasModelPool: (role) => role !== 'agent' && rolePoolSelector.hasPool(role as SupportedSubagentRole),
     modelForRole: (role) => {
       const mentorPool = role === 'mentor' ? deps.settings.get('agent.mentorPool') : undefined;
       if (Array.isArray(mentorPool) && mentorPool.length > 0) return undefined;

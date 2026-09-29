@@ -4,6 +4,7 @@ import type { AgentConfig, AgentHandle, AgentPermissions, AgentLimits, ModelPoli
 import { resolveAgent, type AgentResolverDeps } from './agent-resolver.js';
 import { AgentHandleImpl, type ExecutorFn } from './agent-handle.js';
 import type { ResolvedAgentDefinition } from './resolved-agent.js';
+import { agentSpecToConfig } from './agent-spec.js';
 
 export interface AgentRuntimeDeps {
   settings: ISettingsService;
@@ -121,21 +122,6 @@ export class AgentRuntime {
 
   /** Execute a goal/context/tools specification without introducing a role. */
   runAgent(spec: AgentSpec) {
-    const instructions = [
-      ...(spec.constraints?.length ? [`Constraints:\n${spec.constraints.map((item) => `- ${item}`).join('\n')}`] : []),
-      ...(spec.doneWhen ? [`Completion criterion:\n${spec.doneWhen}`] : []),
-    ].join('\n\n');
-    return this.agent({
-      name: 'agent',
-      instructions,
-      ...(spec.model ? { model: spec.model } : {}),
-      ...(spec.tools ? { tools: spec.tools } : {}),
-      ...(spec.permissions
-        ? { permissions: spec.permissions }
-        : spec.tools
-        ? { permissions: { tools: [...spec.tools] } }
-        : {}),
-      ...(spec.budget ? { limits: spec.budget } : {}),
-    }).run({ task: spec.goal, ...(spec.context ? { context: spec.context } : {}) });
+    return this.agent(agentSpecToConfig(spec)).run({ task: spec.goal });
   }
 }

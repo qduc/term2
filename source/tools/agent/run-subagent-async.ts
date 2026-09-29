@@ -63,7 +63,10 @@ const runSubagentAsyncSchema = z
       .describe('Optional check-in configuration for this background subagent.'),
   })
   .refine(
-    (value) => Boolean(value.agent_spec) || (value.role !== 'agent' && Boolean(value.role) && Boolean(value.task)),
+    (value) =>
+      value.agent_spec
+        ? value.role === undefined && value.task === undefined
+        : value.role !== 'agent' && Boolean(value.role) && Boolean(value.task),
     {
       message: 'Provide agent_spec, or both role and task.',
     },
@@ -213,7 +216,7 @@ export function createRunSubagentAsyncToolDefinition(
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call tools.get_subagent_result(...) inside run_code if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
       'Fresh runs support explorer, worker, mentor, reviewer, and librarian. ' +
-      'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
+      'Completed read-only generic and supported read-only role runs can be continued across turns; writable generic runs and workers cannot continue.',
     parameters: runSubagentAsyncSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {

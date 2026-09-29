@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CODENAME_RUN_ID_PATTERN } from './codename-run-id.js';
 import { SubagentAsyncRegistry, SubagentRegistryError } from './subagent-async-registry.js';
-import type { SubagentRequest, SubagentResult } from './types.js';
+import type { SubagentDefinition, SubagentRequest, SubagentResult } from './types.js';
 import type { SubagentSession } from './subagent-session.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AgentClient } from '../../lib/agent-client.js';
@@ -654,6 +654,93 @@ it('resolves a definition once per fresh spawn and keeps it across a continuatio
   expect(seenModels).toEqual(['pool-a', 'pool-a', 'pool-b']);
   expect(registry.getRunStatus(first.runId)).toMatchObject({ model: { provider: 'openai', id: 'pool-a' } });
   expect(registry.getRunStatus(fresh.runId)).toMatchObject({ model: { provider: 'openai', id: 'pool-b' } });
+  registry.dispose();
+});
+
+it('blocks continuation of a writable generic run but permits read-only generic continuation', async () => {
+  const registry = make();
+  const definition = (canWrite: boolean) =>
+    ({ role: 'agent', name: 'agent', provider: 'openai', model: 'gpt-4o', canWrite } as SubagentDefinition);
+  const readOnly = registry.startRun({
+    role: 'agent',
+    task: 'inspect',
+    agentSpec: { goal: 'inspect' },
+    resolvedDefinition: definition(false),
+  });
+  await registry.getResult(readOnly.runId);
+  const continuation = registry.startRun({
+    role: 'agent',
+    task: 'inspect another detail',
+    continueRunId: readOnly.runId,
+    agentSpec: { goal: 'inspect another detail' },
+    resolvedDefinition: definition(false),
+  });
+  await registry.getResult(continuation.runId);
+
+  const writable = registry.startRun({
+    role: 'agent',
+    task: 'edit files',
+    agentSpec: { goal: 'edit files' },
+    resolvedDefinition: definition(true),
+  });
+  await registry.getResult(writable.runId);
+  expect(() =>
+    registry.startRun({
+      role: 'agent',
+      task: 'continue editing',
+      continueRunId: writable.runId,
+      agentSpec: { goal: 'continue editing' },
+      resolvedDefinition: definition(false),
+    }),
+  ).toThrowError(expect.objectContaining({ code: 'worker_blocked' }));
+  registry.dispose();
+});
+
+it('preserves generic provider errors instead of attempting role-pool failover', async () => {
+  const resolveDefinition = vi.fn(() => {
+    throw new Error('Unknown subagent role: agent');
+  });
+  const markPoolEntryUnhealthy = vi.fn();
+  const definition = {
+    role: 'agent',
+    name: 'agent',
+    provider: 'openai',
+    model: 'custom-model',
+    canWrite: false,
+  } as SubagentDefinition;
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    resolveDefinition,
+    markPoolEntryUnhealthy,
+    hasModelPool: () => true,
+    run: async () => ({ ...result('agent', 'failed'), error: '402 Insufficient Balance' }),
+  });
+  const handle = registry.startRun({
+    role: 'agent',
+    task: 'advice',
+    agentSpec: { goal: 'advice' },
+    resolvedDefinition: definition,
+  });
+  const settled = await registry.getResult(handle.runId);
+
+  expect(settled.error).toBe('402 Insufficient Balance');
+  expect(resolveDefinition).not.toHaveBeenCalled();
+  expect(markPoolEntryUnhealthy).not.toHaveBeenCalled();
+  registry.dispose();
+});
+
+it('adopts a live foreground generic run into the async registry and retains its completion', async () => {
+  const registry = make(() => new Promise<SubagentResult>(() => undefined));
+  const lease = new ForegroundSubagentLease({ runId: 'generic-adopted' });
+  const handle = registry.adoptForegroundLease(lease, { role: 'agent', task: 'read-only inspect' });
+
+  expect(handle).toMatchObject({ runId: 'generic-adopted', role: 'agent', status: 'running' });
+  registry.handleSubagentEvent({
+    type: 'subagent_completed',
+    async: true,
+    result: { ...result('agent'), agentId: 'generic-adopted' },
+  } as unknown as ConversationEvent);
+  await expect(registry.getResult('generic-adopted')).resolves.toMatchObject({ status: 'completed', role: 'agent' });
   registry.dispose();
 });
 

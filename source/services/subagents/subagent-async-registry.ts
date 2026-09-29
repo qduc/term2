@@ -251,7 +251,7 @@ export class SubagentAsyncRegistry {
           'not_continuable',
           `Async subagent run ${continuation} cannot be continued from status ${previous.status}`,
         );
-      if (role === 'worker')
+      if (role === 'worker' || previous.definition?.canWrite === true)
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
       if (!['agent', 'mentor', 'librarian', 'explorer', 'reviewer'].includes(role)) {
         throw new SubagentRegistryError('not_continuable', `Role ${role} cannot be continued`);
@@ -360,7 +360,7 @@ export class SubagentAsyncRegistry {
     if (this.#runs.has(lease.runId) || this.#evicted.has(lease.runId)) {
       throw new Error(`Async subagent run id ${lease.runId} is already retained.`);
     }
-    if (!['explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(request.role)) {
+    if (!['agent', 'explorer', 'worker', 'mentor', 'librarian', 'reviewer'].includes(request.role)) {
       throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${request.role}`);
     }
     if (
@@ -860,6 +860,7 @@ export class SubagentAsyncRegistry {
         const failure = result.status === 'failed' ? classifyPoolEntryFailure(result.error) : undefined;
         if (
           !run.poolFailoverEligible ||
+          run.role === 'agent' ||
           !failure ||
           !run.definition ||
           !this.#markPoolEntryUnhealthy ||

@@ -115,7 +115,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
         tools: ['read_file'],
         constraints: ['Do not edit files'],
         doneWhen: 'Return a concise evidence-backed summary',
-        budget: { maxTurns: 3, timeoutMs: 10_000 },
+        budget: { maxTurns: 3, maxTokens: 10_000 },
       },
     });
     const result = await manager.getRunResult(handle.runId);
@@ -125,6 +125,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
     expect(executedAgent.instructions).toContain('Do not edit files');
     expect(executedAgent.instructions).toContain('Return a concise evidence-backed summary');
     expect(executedAgent.instructions).toContain('source/example.ts');
+    expect(executedAgent.maxTokens).toBe(10_000);
     const toolNames: string[] = executedAgent.tools.map((tool: any) => tool.name);
     expect(toolNames).toContain('read_file');
     expect(toolNames).not.toContain('shell');
@@ -148,6 +149,21 @@ describe('SubagentManager.getAgentRuntime()', () => {
         },
       }),
     ).toThrow(/not authorized/i);
+  });
+
+  it('rejects unsupported delegated budget fields and invalid integer budgets', () => {
+    const manager = new TestSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': 'openai', 'agent.model': 'gpt-4o' }),
+      sessionContextService: createSessionContextService() as any,
+    });
+    const request = (budget: any) =>
+      manager.startRunAsync({ role: 'agent', task: 'inspect', agentSpec: { goal: 'inspect', budget } });
+
+    expect(() => request({ timeoutMs: 1_000 })).toThrow(/Unsupported AgentSpec budget fields.*timeoutMs/);
+    expect(() => request({ maxDepth: 2 })).toThrow(/Unsupported AgentSpec budget fields.*maxDepth/);
+    expect(() => request({ maxTurns: 0 })).toThrow(/budget.maxTurns must be a positive integer/);
+    expect(() => request({ maxTokens: 1.5 })).toThrow(/budget.maxTokens must be a positive integer/);
   });
 
   it('runs write-capable generic specs through the foreground nested approval path', async () => {

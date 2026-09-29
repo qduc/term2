@@ -40,6 +40,12 @@ export {
 
 // Execution budget for tree-level resource enforcement
 export { ExecutionBudget, createRootBudget, type ChildAcquireRejection } from './execution-budget.js';
+export {
+  agentSpecToConfig,
+  AGENT_SPEC_TOOL_NAMES,
+  DEFAULT_AGENT_SPEC_TOOLS,
+  AGENT_SPEC_DEFAULT_MAX_TURNS,
+} from './agent-spec.js';
 
 // Bounded programmable workflow evaluator types.
 export type {

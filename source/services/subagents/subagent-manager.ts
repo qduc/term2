@@ -21,6 +21,7 @@ import { createAgentRuntimeFromSubagentRuntime } from '../agent-runtime/compose-
 import type { AgentRuntime } from '../agent-runtime/agent-runtime.js';
 import type { AgentSpec } from '../agent-runtime/types.js';
 import { createRootBudget } from '../agent-runtime/execution-budget.js';
+import { agentSpecToConfig } from '../agent-runtime/agent-spec.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type {
   SubagentCancelAcknowledgement,
@@ -137,24 +138,20 @@ export class SubagentManager {
   }
 
   #resolveAgentSpec(spec: AgentSpec, inheritedBudget?: SubagentRequest['executionBudget']): SubagentDefinition {
+    if (spec.budget) {
+      const unsupported = Object.keys(spec.budget).filter((key) => key !== 'maxTurns' && key !== 'maxTokens');
+      if (unsupported.length > 0) {
+        throw new Error(`Unsupported AgentSpec budget fields in delegated runs: ${unsupported.join(', ')}`);
+      }
+      for (const key of ['maxTurns', 'maxTokens'] as const) {
+        const value = spec.budget[key];
+        if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
+          throw new Error(`AgentSpec budget.${key} must be a positive integer.`);
+        }
+      }
+    }
     const runtime = this.getAgentRuntime();
-    const permissions = spec.permissions ?? (spec.tools ? { tools: [...spec.tools] } : undefined);
-    const constraints = [
-      ...(spec.constraints ?? []).map((item) => `- ${item}`),
-      ...(spec.doneWhen ? [`Done when: ${spec.doneWhen}`] : []),
-    ];
-    const context = spec.context === undefined ? '' : `Invocation context (JSON):\n${JSON.stringify(spec.context)}`;
-    const definition = runtime.resolveDefinition({
-      name: 'agent',
-      instructions: [
-        ...(constraints.length ? [`Invocation constraints:\n${constraints.join('\n')}`] : []),
-        ...(context ? [context] : []),
-      ].join('\n\n'),
-      ...(spec.tools ? { tools: spec.tools } : {}),
-      ...(permissions ? { permissions } : {}),
-      ...(spec.model ? { model: spec.model } : {}),
-      ...(spec.budget ? { limits: spec.budget } : {}),
-    });
+    const definition = runtime.resolveDefinition(agentSpecToConfig(spec));
     if (definition.resolutionErrors.length > 0) {
       throw new Error(
         `Agent specification rejected: ${definition.resolutionErrors.map((error) => error.message).join('; ')}`,
@@ -172,9 +169,6 @@ export class SubagentManager {
       ...adaptLegacyDefinition(definition, budget),
       isRootExecution: inheritedBudget === undefined,
     };
-    if (typeof spec.model === 'object' && 'reasoning' in spec.model && spec.model.reasoning) {
-      return { ...adapted, reasoningEffort: spec.model.reasoning };
-    }
     return adapted;
   }
 

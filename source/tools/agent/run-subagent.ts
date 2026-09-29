@@ -14,6 +14,7 @@ import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
 import type { AgentSpec } from '../../services/agent-runtime/types.js';
+import { AGENT_SPEC_TOOL_NAMES } from '../../services/agent-runtime/agent-spec.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -36,7 +37,7 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
     'For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\n' +
     'For isolated worker edits, create a git worktree under the workspace root first ' +
     '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
-    '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
+    '`worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\n' +
     (backgroundEnabled
       ? 'A background status of "running" means launch succeeded: end the turn and wait for the completion notification.'
       : 'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
@@ -53,10 +54,14 @@ export const agentSpecSchema = z
   .object({
     goal: z.string().describe('The goal for this general-purpose agent invocation.'),
     context: z.record(z.string(), z.unknown()).optional(),
-    tools: z.array(z.string()).readonly().optional(),
+    tools: z
+      .array(z.enum(AGENT_SPEC_TOOL_NAMES))
+      .readonly()
+      .optional()
+      .describe('Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.'),
     permissions: z
       .object({
-        tools: z.array(z.string()).readonly().optional(),
+        tools: z.array(z.enum(AGENT_SPEC_TOOL_NAMES)).readonly().optional(),
         filesystem: z
           .object({ read: z.array(z.string()).optional(), write: z.array(z.string()).optional() })
           .optional(),
@@ -67,25 +72,21 @@ export const agentSpecSchema = z
     constraints: z.array(z.string()).optional(),
     doneWhen: z.string().optional(),
     model: z
-      .union([
-        z.enum(['efficient', 'balanced', 'capable']),
-        z.object({
-          tier: z.enum(['lower', 'same', 'higher']),
-          reasoning: z.enum(['low', 'medium', 'high']).optional(),
-        }),
-        z.object({ provider: z.string(), model: z.string() }),
-      ])
+      .union([z.enum(['efficient', 'balanced', 'capable']), z.object({ provider: z.string(), model: z.string() })])
       .optional(),
     budget: z
       .object({
-        maxTurns: z.number().optional(),
-        maxTokens: z.number().optional(),
-        timeoutMs: z.number().optional(),
-        maxChildren: z.number().optional(),
-        maxDepth: z.number().optional(),
-        maxConcurrency: z.number().optional(),
+        maxTurns: z.number().int().positive().optional().describe('Maximum model turns; defaults to 200.'),
+        maxTokens: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Provider output-token cap per model response, not an aggregate run token budget.'),
       })
-      .optional(),
+      .strict()
+      .optional()
+      .describe('Only enforced per-invocation budgets are accepted.'),
   })
   .strict();
 
@@ -100,7 +101,9 @@ const backgroundFields = {
   continue_run_id: z
     .string()
     .optional()
-    .describe('Continue a completed background run using its runId. Background only; worker continuation is blocked.'),
+    .describe(
+      'Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.',
+    ),
   check_in: z
     .object({
       enabled: z
@@ -141,9 +144,15 @@ const runSubagentSchema = z
     ...backgroundFields,
   })
   .strict()
-  .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
-    message: 'Provide agent_spec, or both role and task.',
-  });
+  .refine(
+    (value) =>
+      value.agent_spec
+        ? value.role === undefined && value.task === undefined
+        : Boolean(value.role) && Boolean(value.task),
+    {
+      message: 'Provide agent_spec, or both role and task.',
+    },
+  );
 
 export type ForegroundRunSubagentParams = {
   role?: (typeof FOREGROUND_ROLES)[number] | 'agent';
@@ -204,9 +213,15 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...backgroundFields,
       })
       .strict()
-      .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
-        message: 'Provide agent_spec, or both role and task.',
-      });
+      .refine(
+        (value) =>
+          value.agent_spec
+            ? value.role === undefined && value.task === undefined
+            : Boolean(value.role) && Boolean(value.task),
+        {
+          message: 'Provide agent_spec, or both role and task.',
+        },
+      );
   }
 
   if (runSubagent && !runSubagentAsync) {
@@ -219,9 +234,15 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...worktreeField,
       })
       .strict()
-      .refine((value) => Boolean(value.agent_spec) || (Boolean(value.role) && Boolean(value.task)), {
-        message: 'Provide agent_spec, or both role and task.',
-      });
+      .refine(
+        (value) =>
+          value.agent_spec
+            ? value.role === undefined && value.task === undefined
+            : Boolean(value.role) && Boolean(value.task),
+        {
+          message: 'Provide agent_spec, or both role and task.',
+        },
+      );
   }
 
   return runSubagentSchema;

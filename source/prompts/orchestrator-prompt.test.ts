@@ -14,6 +14,13 @@ it('orchestrator prompt does not encourage continued or direct work while delega
   expect(orchestratorPrompt).not.toContain('Directly inspect, edit, run commands, and test small or clear work');
 });
 
+it('orchestrator prompt prefers the generic agent spec for diverse tasks and states its limits', () => {
+  expect(orchestratorPrompt).toContain('generic agent_spec interface');
+  expect(orchestratorPrompt).toContain('safe read-only workspace defaults');
+  expect(orchestratorPrompt).toContain('not yet supported by plan-mode interception');
+  expect(orchestratorPrompt).toContain('writable generic runs cannot be continued');
+});
+
 it('orchestrator prompt gives the orchestrator standing to overrule a subagent recommendation', () => {
   const lower = orchestratorPrompt.toLowerCase();
 

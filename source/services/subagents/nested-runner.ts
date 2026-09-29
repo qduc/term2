@@ -756,6 +756,7 @@ export class NestedSubagentRunner {
           } catch (error) {
             const failure = classifyPoolEntryFailure(error);
             if (
+              generic ||
               detailsRecord?.resumeState ||
               !this.#rolePoolSelector.hasPool(role) ||
               !failure ||

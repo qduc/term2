@@ -57,7 +57,7 @@ In Orchestrator mode, delegate for specialization, context compression, safe par
 Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`
   }`;
 
-  const genericGuidance = `**Generic invocation:** For diverse work, prefer a roleless agent_spec invocation and describe the goal, context, constraints, and completion condition. Omit tools for the safe read-only workspace defaults; explicitly allowlist tools when more capability is needed. The role presets remain useful for bounded explorer, worker, mentor, or reviewer${
+  const genericGuidance = `**Generic invocation:** For diverse work, prefer a roleless agent_spec invocation and describe the goal, context, constraints, and completion condition. When run_code advertises the script-only agent capability, compose bounded runs with agent.run({ spec, worktree? }) and agent.start({ spec, name? }); the host checks authority and the bound session owner handles child tool approval. Do not assume this capability is present in every session. Omit tools for the safe read-only workspace defaults; explicitly allowlist tools when more capability is needed. The role presets remain useful for bounded explorer, worker, mentor, or reviewer${
     memoryEnabled ? ', or librarian' : ''
   } behavior. Generic agents may use a worktree, but writable generic runs cannot be continued; read-only generic runs can. Plan mode currently cannot resolve generic capabilities, so use a named read-only role there. Choose only an authorized provider/model. Budget supports positive maxTurns and per-response maxTokens; it is not an aggregate token budget.`;
 

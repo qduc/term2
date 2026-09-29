@@ -19,6 +19,8 @@ it('orchestrator prompt prefers the generic agent spec for diverse tasks and sta
   expect(orchestratorPrompt).toContain('safe read-only workspace defaults');
   expect(orchestratorPrompt).toContain('not yet supported by plan-mode interception');
   expect(orchestratorPrompt).toContain('writable generic runs cannot be continued');
+  expect(orchestratorPrompt).toContain('agent.run({ spec, worktree? })');
+  expect(orchestratorPrompt).toContain('without one, interrupted children reject');
 });
 
 it('orchestrator prompt gives the orchestrator standing to overrule a subagent recommendation', () => {

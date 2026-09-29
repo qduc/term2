@@ -9,6 +9,7 @@ it('getSubagentDelegationAddendum returns non-empty delegation guidance', () => 
   expect(result.length > 0).toBe(true);
   expect(result.includes('Delegating to subagents')).toBe(true);
   expect(result.includes('run_subagent')).toBe(true);
+  expect(result).toContain('agent.run({ spec, worktree? })');
 });
 
 it('getSubagentDelegationAddendum does not encourage orchestrators to keep working directly', () => {

@@ -295,6 +295,12 @@ export function createRunCodeAgentCapability(
                   signal: callContext.signal,
                 },
               );
+              if (nested.status === 'interrupted') {
+                return rejectCall(
+                  'Child run interrupted (possibly awaiting a tool approval). The script cannot resume ' +
+                    'this foreground child; use the direct subagent tool for approval-interactive work.',
+                );
+              }
               return { kind: 'result', result: { ok: true, result: projectNestedResult(nested) } as JsonValue };
             } catch (error) {
               if (callContext.signal.aborted || isAbortError(error)) throw error;

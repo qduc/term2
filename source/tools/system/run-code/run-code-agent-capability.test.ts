@@ -217,6 +217,27 @@ const specJson = (goal: string) =>
   JSON.stringify({ goal, tools: ['read_file'], permissions: { filesystem: { read: ['**'] } } });
 
 describe('run_code agent capability', () => {
+  it('does not present a child approval interruption as a completed script agent result', async () => {
+    const { manager } = createScriptManager({
+      runAsTool: async () => ({
+        agentId: 'approval-child',
+        role: 'agent',
+        status: 'interrupted',
+        interrupted: true,
+        finalText: '',
+        filesChanged: [],
+        toolsUsed: [],
+      }),
+    });
+    const output = await execute(
+      buildRunCodeTool({ bridge: makeBridge(manager) }),
+      `return await agent.run({ spec: ${specJson('write pending approval')} })
+        .then(() => 'FALSELY COMPLETED', (error) => error.message);`,
+    );
+    expect(output).not.toContain('FALSELY COMPLETED');
+    expect(output).toContain('Child run interrupted (possibly awaiting a tool approval)');
+  });
+
   it('awaits one foreground agent and forwards a resolved definition, never the raw spec', async () => {
     const { manager, calls } = createScriptManager();
     const bridge = makeBridge(manager);

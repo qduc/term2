@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 const releaseScript = resolve('scripts/release.sh');
 
@@ -43,4 +44,15 @@ it('rejects conflicting push modes before touching the repo', () => {
 
   expect(result.status).toBe(1);
   expect(result.output).toContain('Specify only one of --push or --no-push');
+});
+
+it('guards the root package from depending on an unpublished wire package', async () => {
+  const manifest = JSON.parse(await readFile(resolve('package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
+  const registryHasVersion = vi.fn(async () => false);
+  const version = manifest.dependencies?.['@qduc/agent-wire'];
+  expect(version).toBeUndefined();
+  if (version && !(await registryHasVersion(version))) throw new Error('root depends on unpublished @qduc/agent-wire');
+  expect(registryHasVersion).not.toHaveBeenCalled();
 });

@@ -13,7 +13,8 @@ commit `ae398a4`. Everything under `components/term2/`, `components/Term2Entry.t
 - `lib/server/term2-gateway-client.js` — verbatim port of
   `backend/src/lib/term2GatewayClient.js` (@ `ae398a4`). Deliberate deviations:
   - Config sourcing: ChatForge's `config.term2Gateway` singleton replaced by
-    `lib/server/gateway-config.js` reading `TERM2_*` env vars.
+    `lib/server/gateway-config.js` reading `TERM2_*` env vars. Issuer default is
+    `chatforge-bff` because that is the gateway's `DEFAULT_SERVE_ISSUER`.
   - `logger.warn` transport-failure logging dropped (no logger in this client).
   - `createAgentAssertion` no longer defaults issuer/audience/keyId from ChatForge
     config; they are always passed by `issueAssertion`.

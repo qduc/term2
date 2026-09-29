@@ -3,10 +3,13 @@
 ## Resume here
 
 Status: complete through Milestone 6 and merged to `main` (2026-09-12).
-The subsequent Henshin phase-2 decision allows agent execution inside scripts
-through host-owned `AgentSpec` capabilities, while mentor, user interaction and
-rollover stay prohibited. This does not reopen Milestones 0–6: see
-`henshin-run-code-subagents.md` for the new authority, budget and approval gate.
+The subsequent Henshin phase-2 decision permits agent execution inside scripts
+through host-owned `AgentSpec` capabilities. The host must enforce permission
+narrowing, nested approval, admission bounds, async lifecycle and worktree
+pinning; this is not authority granted to VM code. Mentor, direct user
+interaction and rollover remain prohibited. This does not reopen Milestones
+0–6: see `henshin-run-code-subagents.md` for the new authority, budget and
+approval gate.
 Milestones 0–3 are implemented; Milestone 4 closed with no catalog change after
 measurement; Milestone 5 landed; and the Milestone 6 extraction and dead-path
 cleanup landed. The program exit criteria are satisfied.

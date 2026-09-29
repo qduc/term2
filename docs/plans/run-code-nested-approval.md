@@ -152,13 +152,16 @@ same script. Denial is catchable and earlier effects are never replayed.
   the VM is not an OS security boundary.
 - For the initial nested-approval rollout, shell/bash, agent/workflow control,
   mentor, user interaction, rollover and nested worktree transitions were
-  prohibited inside scripts. The later Henshin phase-2 decision permits only
-  **agent execution** through host-owned script capabilities: it composes
-  independent runs without granting a script approval or parent tool authority.
-  Mentor, direct user interaction, rollover, shell/bash and nested worktree
-  transitions remain prohibited; workflow control is a separate decision.
-  The per-run worktree pin belongs to the host-side agent execution API, not a
-  script-side worktree transition. See `henshin-run-code-subagents.md`.
+  prohibited inside scripts. The Henshin phase-2 decision now permits **agent
+  execution only**, through host-owned script capabilities. This enables
+  composition of independent `AgentSpec` executions; it does not grant the
+  script approval authority or expand the parent's tool permissions. The host
+  must validate/narrow child permissions, route child tool approvals through
+  the existing approval owner, and bound/adopt async runs. Mentor, direct user
+  interaction, rollover, shell/bash, and script-side worktree transitions
+  remain prohibited. A host-side per-run worktree pin is part of agent
+  execution, not a script-side worktree transition. Workflow control remains a
+  separate decision. See `henshin-run-code-subagents.md`.
 - No replay, checkpoint format, escrow tool, blanket trusted-script mode, or
   separate script-local grant policy is part of this implementation.
 - Preserve separate script completion and diagnostic-output channels.

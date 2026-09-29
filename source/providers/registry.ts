@@ -1,6 +1,7 @@
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
+import type { SessionAccountStore } from './oauth-session-account.js';
 import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 export interface ProviderDeps {
@@ -16,6 +17,8 @@ export interface ProviderDeps {
   requestCapture?: ProviderRequestCapture;
   /** Session-owned state for disabling unsupported server-side compaction. */
   contextCompactionSessionState?: ContextCompactionSessionState;
+  /** Optional runtime-owned OAuth session account pins. */
+  sessionAccountStore?: SessionAccountStore;
 }
 
 /** The real fetch contract used by provider model listing and token refresh. */
@@ -76,19 +79,52 @@ export interface ProviderDefinition {
  * Global registry of providers.
  * Providers register themselves by calling registerProvider() on module load.
  */
-const providers = new Map<string, ProviderDefinition>();
+export interface ProviderRegistry {
+  registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean }): void;
+  upsertProvider(definition: ProviderDefinition): void;
+  unregisterProvider(id: string): void;
+  getProvider(id: string): ProviderDefinition | undefined;
+  getAllProviders(): ProviderDefinition[];
+  getProviderIds(): string[];
+}
+
+const builtinProviders = new Map<string, ProviderDefinition>();
+
+export function createProviderRegistry(): ProviderRegistry {
+  const providers = new Map(builtinProviders);
+  const registry: ProviderRegistry = {
+    registerProvider(definition, options) {
+      const allowOverride = options?.allowOverride === true;
+      if (providers.has(definition.id) && !allowOverride) {
+        throw new Error(`Provider '${definition.id}' is already registered`);
+      }
+      providers.set(definition.id, definition);
+    },
+    upsertProvider(definition) {
+      registry.registerProvider(definition, { allowOverride: true });
+    },
+    unregisterProvider(id) {
+      providers.delete(id);
+    },
+    getProvider: (id) => providers.get(id),
+    getAllProviders: () => Array.from(providers.values()),
+    getProviderIds: () => Array.from(providers.keys()),
+  };
+  return registry;
+}
+
+const defaultProviderRegistry = createProviderRegistry();
 
 /**
  * Register a provider definition.
  * Called by provider modules during initialization.
  */
-export function registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean }): void {
-  const allowOverride = options?.allowOverride === true;
-
-  if (providers.has(definition.id) && !allowOverride) {
-    throw new Error(`Provider '${definition.id}' is already registered`);
-  }
-  providers.set(definition.id, definition);
+export function registerProvider(
+  definition: ProviderDefinition,
+  options?: { allowOverride?: boolean; builtin?: boolean },
+): void {
+  if (options?.builtin) builtinProviders.set(definition.id, definition);
+  defaultProviderRegistry.registerProvider(definition, options);
 }
 
 /**
@@ -97,7 +133,7 @@ export function registerProvider(definition: ProviderDefinition, options?: { all
  * Intended for runtime-defined providers (e.g. user-configured OpenAI-compatible providers).
  */
 export function upsertProvider(definition: ProviderDefinition): void {
-  registerProvider(definition, { allowOverride: true });
+  defaultProviderRegistry.upsertProvider(definition);
 }
 
 /**
@@ -107,7 +143,7 @@ export function upsertProvider(definition: ProviderDefinition): void {
  * restore global registry state.
  */
 export function unregisterProvider(id: string): void {
-  providers.delete(id);
+  defaultProviderRegistry.unregisterProvider(id);
 }
 
 /**
@@ -115,19 +151,19 @@ export function unregisterProvider(id: string): void {
  * Returns undefined if the provider is not registered.
  */
 export function getProvider(id: string): ProviderDefinition | undefined {
-  return providers.get(id);
+  return defaultProviderRegistry.getProvider(id);
 }
 
 /**
  * Get all registered provider definitions.
  */
 export function getAllProviders(): ProviderDefinition[] {
-  return Array.from(providers.values());
+  return defaultProviderRegistry.getAllProviders();
 }
 
 /**
  * Get all registered provider IDs.
  */
 export function getProviderIds(): string[] {
-  return Array.from(providers.keys());
+  return defaultProviderRegistry.getProviderIds();
 }

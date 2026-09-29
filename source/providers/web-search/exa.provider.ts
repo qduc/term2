@@ -114,7 +114,7 @@ const exaProvider: WebSearchProvider = {
 };
 
 // Register the Exa provider
-registerWebSearchProvider(exaProvider);
+registerWebSearchProvider(exaProvider, { builtin: true });
 
 // Export for testing purposes
 export { exaProvider, isConfigured as isExaConfigured };

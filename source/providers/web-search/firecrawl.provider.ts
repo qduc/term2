@@ -69,5 +69,5 @@ export const firecrawlProvider: WebSearchProvider = {
   isConfigured,
   sensitiveSettingKeys: ['webSearch.firecrawl.apiKey'],
 };
-registerWebSearchProvider(firecrawlProvider);
+registerWebSearchProvider(firecrawlProvider, { builtin: true });
 export { isConfigured as isFirecrawlConfigured };

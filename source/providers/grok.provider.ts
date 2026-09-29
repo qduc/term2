@@ -113,7 +113,7 @@ export async function fetchGrokModels(
   deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
-  const tokenManager = new GrokTokenManager({ fetchImpl });
+  const tokenManager = new GrokTokenManager({ fetchImpl, sessionAccountStore: deps.sessionAccountStore });
   const accessToken = await tokenManager.getOrRefreshAccessToken();
 
   const response = await fetchImpl(`${GROK_BASE_URL}/models`, {
@@ -152,7 +152,7 @@ export function createGrokStreamedModel(model: string, deps: ProviderDeps): Stre
     apiKey: 'oauth',
     baseURL: process.env.GROK_BASE_URL || GROK_BASE_URL,
     maxRetries: retryAttempts,
-    fetch: buildGrokFetch(deps, new GrokTokenManager(), resolvedModel),
+    fetch: buildGrokFetch(deps, new GrokTokenManager({ sessionAccountStore: deps.sessionAccountStore }), resolvedModel),
   });
 
   const costCapture: CostTrailerCapture = {};
@@ -178,11 +178,14 @@ export function createGrokStreamedModel(model: string, deps: ProviderDeps): Stre
   });
 }
 
-registerProvider({
-  id: 'grok',
-  label: 'Grok',
-  createStreamedModel: createGrokStreamedModel,
-  fetchModels: fetchGrokModels,
-  sensitiveSettingKeys: [],
-  capabilities: GROK_CAPABILITIES,
-});
+registerProvider(
+  {
+    id: 'grok',
+    label: 'Grok',
+    createStreamedModel: createGrokStreamedModel,
+    fetchModels: fetchGrokModels,
+    sensitiveSettingKeys: [],
+    capabilities: GROK_CAPABILITIES,
+  },
+  { builtin: true },
+);

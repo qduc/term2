@@ -10,14 +10,20 @@
  *
  * Process-local and deliberately not persisted: it describes this run only.
  */
-const sessionAccounts = new Map<string, string>();
+export type SessionAccountStore = Map<string, string>;
 
-export function recordSessionAccount(providerId: string, accountId: string): void {
-  sessionAccounts.set(providerId, accountId);
+export function createSessionAccountStore(): SessionAccountStore {
+  return new Map();
 }
 
-export function getSessionAccount(providerId: string): string | null {
-  return sessionAccounts.get(providerId) ?? null;
+const sessionAccounts = createSessionAccountStore();
+
+export function recordSessionAccount(providerId: string, accountId: string, store = sessionAccounts): void {
+  store.set(providerId, accountId);
+}
+
+export function getSessionAccount(providerId: string, store = sessionAccounts): string | null {
+  return store.get(providerId) ?? null;
 }
 
 /** Test seam; production code never needs to forget a pin. */

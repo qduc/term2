@@ -567,6 +567,17 @@ export const WebSearchSettingsSchema = z.object({
       apiKey: z.string().optional().meta({ secret: true }),
     })
     .optional(),
+  firecrawl: z
+    .object({
+      apiKey: z.string().optional().meta({ secret: true }),
+      baseUrl: z.string().url().optional(),
+    })
+    .optional(),
+  searxng: z
+    .object({
+      baseUrl: z.string().url().optional(),
+    })
+    .optional(),
 });
 
 export const MemorySettingsSchema = z
@@ -883,6 +894,8 @@ export interface SettingsWithSources {
     provider: SettingWithSource<string | undefined>;
     tavily: SettingWithSource<{ apiKey?: string } | undefined>;
     exa: SettingWithSource<{ apiKey?: string } | undefined>;
+    firecrawl: SettingWithSource<{ apiKey?: string; baseUrl?: string } | undefined>;
+    searxng: SettingWithSource<{ baseUrl?: string } | undefined>;
   };
   memory: {
     enabled: SettingWithSource<boolean>;
@@ -1040,6 +1053,9 @@ export const SETTING_KEYS = {
   WEB_SEARCH_PROVIDER: 'webSearch.provider',
   WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
   WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
+  WEB_SEARCH_FIRECRAWL_API_KEY: 'webSearch.firecrawl.apiKey',
+  WEB_SEARCH_FIRECRAWL_BASE_URL: 'webSearch.firecrawl.baseUrl',
+  WEB_SEARCH_SEARXNG_BASE_URL: 'webSearch.searxng.baseUrl',
   MEMORY_ENABLED: 'memory.enabled',
   MEMORY_DIRECTORY: 'memory.directory',
   MEMORY_CONTEXT_BUDGET_CHARS: 'memory.contextBudgetChars',
@@ -1357,6 +1373,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
     provider: 'tavily',
     tavily: {},
     exa: {},
+    firecrawl: {},
+    searxng: {},
   },
   memory: {
     enabled: true,

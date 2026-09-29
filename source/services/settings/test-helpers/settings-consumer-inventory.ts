@@ -165,6 +165,9 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'webSearch.provider',
     'webSearch.tavily.apiKey',
     'webSearch.exa.apiKey',
+    'webSearch.firecrawl.apiKey',
+    'webSearch.firecrawl.baseUrl',
+    'webSearch.searxng.baseUrl',
   ],
   'Memory — next retrieval/injection or restart-only storage construction': [
     'memory.enabled',

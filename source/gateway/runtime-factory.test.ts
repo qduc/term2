@@ -411,6 +411,9 @@ describe('production authority settings allowlist', () => {
         'agent.codex.websocketInterFrameTimeoutMs',
         'webSearch.tavily.apiKey',
         'webSearch.exa.apiKey',
+        'webSearch.firecrawl.apiKey',
+        'webSearch.firecrawl.baseUrl',
+        'webSearch.searxng.baseUrl',
       ].sort(),
     );
   });

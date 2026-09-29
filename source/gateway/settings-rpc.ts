@@ -23,6 +23,8 @@ const SAFE_SETTINGS_KEYS = [
   'app.planMode',
   'app.orchestratorMode',
   'webSearch.provider',
+  'webSearch.firecrawl.baseUrl',
+  'webSearch.searxng.baseUrl',
   'memory.enabled',
   'logging.logLevel',
   'shell.timeout',
@@ -107,6 +109,7 @@ const CREDENTIALS: Record<string, { settingKey: string; providerId: string; requ
   openrouter: { settingKey: 'agent.openrouter.apiKey', providerId: 'openrouter', required: true },
   tavily: { settingKey: 'webSearch.tavily.apiKey', providerId: 'tavily', required: true },
   exa: { settingKey: 'webSearch.exa.apiKey', providerId: 'exa', required: true },
+  firecrawl: { settingKey: 'webSearch.firecrawl.apiKey', providerId: 'firecrawl', required: true },
 };
 
 function isSafeSettingsKey(key: string): key is SafeSettingsKey {
@@ -248,7 +251,7 @@ function credentialStatus(
   if (isEnvironmentSource(settings.getSource?.(definition.settingKey))) {
     return { configured: true, required: definition.required, source: 'environment', writable: false };
   }
-  if (definition.providerId === 'tavily' || definition.providerId === 'exa') {
+  if (definition.providerId === 'tavily' || definition.providerId === 'exa' || definition.providerId === 'firecrawl') {
     const value = settings.getDynamic(definition.settingKey);
     const configured = typeof value === 'string' && value.trim().length > 0;
     const source = isEnvironmentSource(settings.getSource?.(definition.settingKey))

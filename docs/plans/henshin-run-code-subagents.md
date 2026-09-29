@@ -38,6 +38,8 @@ Containment after this investigation: an interrupted foreground child is now a c
 
 Validation checkpoint: `pnpm test:changed` selected no tests because the phase changes are committed; explicit `vitest --changed 80403957` passed 64 files (1290 passed, 1 expected fail). The first provider black-box gate failed one 15-second CLI error-path deadline (134 passed, 22 skipped after bail), and the first integration gate failed one 10-second CLI `--help` deadline (105 passed, 1 skipped). Both failing scenarios passed individually after those concurrently running suites settled (provider error-path 12.27 seconds; CLI help 1.4 seconds), consistent with load sensitivity but not proof that either whole gate passes. A sequential provider black-box rerun is pending. Do not report either broad gate green on the basis of narrowed reruns.
 
+Sequential full `pnpm test:provider-black-box` rerun completed successfully (20 files, 178 passed, 1 skipped, 73.2-second command runtime). A sequential full integration rerun is in progress; do not claim it green from the isolated CLI help result.
+
 ## Script-only agent capability (2026-09-29)
 
 Implemented in the `henshin-p2-capability` worktree. `run_code` scripts now see a flat `agent` global with members `run`/`start`/`status`/`result`/`cancel`, built by `createRunCodeAgentCapability` in `source/tools/system/run-code/run-code-agent-capability.ts`. Naming deviation from the `tools.agent.*` fallback considered below: the worker template binds every capability as a flat top-level namespace global, so the second capability is `agent`, not `tools.agent.*` or `tools.agent_run(spec)`; the template's member-failure message now names the capability instead of a hardcoded `tools.` prefix.

@@ -5,8 +5,9 @@
 /.next
 /out
 
-# Local env files
+# Local env files and generated pairing key
 .env*
+/.data
 !.env.example
 
 # TypeScript

@@ -6,9 +6,9 @@ Phase 1 merged at `70e9ba3e` and reported in `henshin-agent-runtime-report.md`. 
 
 1. **2a merged at `651fd9e5`:** script-only `agent.run/start/status/result/cancel`, authority attenuation, root and worktree authority, budget/ledger, and fail-closed interrupted-child handling. The exact foreground continuation seam at branch commit `595b268a` is included, but script approval-interactive children are **not yet supported** in 2a. Direct subagent tools stay unchanged. Sequential unit, integration, provider black-box, and typecheck gates passed before merge; see `henshin-run-code-subagents-report.md`.
 2. **2b merged at `eb2febdd`:** session-owned approval for awaited script children, with real-runner approved/denied public `run_code` tests. The Zai adapter was independently reviewed; the grant-state finding was corrected at `b9a17208`. Sequential unit, integration, provider black-box, and typecheck gates passed before merge. Direct tools remain unchanged.
-3. **2c, evidence-gated later merge:** migrate prompt/catalog and measure catalog cost. Retire direct subagent tools and role layer only where equivalence is established; retain compatibility presets where usage requires them. The script capability still rejects stored-run continuation, and direct role paths have separate behavior.
+3. **2c merged at `6ed72829`:** prompt/catalog guidance migrated, catalog cost measured, and direct role/tool retirement declined where equivalence is unproven. Direct compatibility paths remain: script `continue_run_id` rejects, and plan mode and reviewer explorer-only behavior have distinct contracts. Independent review found no material findings; sequential unit, integration, provider black-box and typecheck gates passed before merge.
 
-No push or publish without the user's authorization. Final report: `henshin-run-code-subagents-report.md`; it must distinguish the 2a merge from outstanding 2b/2c rather than claiming phase-2 completion.
+No push or publish was performed. Final report: `henshin-run-code-subagents-report.md`; phase 2 is complete as three separately merged points with direct compatibility retained on evidence.
 
 ## Goal and proportionality boundary
 

@@ -1,8 +1,8 @@
 # Henshin run-code subagents: phase 2 delivery
 
-## Progress: 2/3 separately mergeable points
+## Progress: 3/3 separately mergeable points
 
-Phase 2a merged to main with `--no-ff` at `651fd9e5` (branch `henshin-run-code`). Phase 2b merged separately at `eb2febdd` (branch `henshin-p2b-integration`). Phase 2c has **not** merged. No push or publish was performed.
+Phase 2a merged to main with `--no-ff` at `651fd9e5` (branch `henshin-run-code`); 2b merged separately at `eb2febdd` (branch `henshin-p2b-integration`); 2c merged separately at `6ed72829` (branch `henshin-p2c-migration`). No push or publish was performed.
 
 ## Delivered in 2a
 
@@ -26,10 +26,10 @@ Focused test 27/27, related and changed 57 files/1200 passed with one expected f
 | --- | --- | --- |
 | Direct foreground/background subagent tools | Retained unchanged | Script path rejects `continue_run_id`, while direct session/role paths support continuation and compatibility callers. Approval tests prove the session owner boundary, not the live Ink or provider boundary. |
 | Direct role/tool layer and presets | Retained for compatibility; 2c inventory below | Stored-run continuation, reviewer explorer-only tool and plan-mode handling lack script parity |
-| Script catalog/prompt guidance | 2c candidate corrects the 2a approval limit and adds conditional invocation guidance | Cross-review and gates before merge |
+| Script catalog/prompt guidance | 2c merged with conditional approval and invocation guidance | Keep descriptions aligned with the host's actual capability binding |
 | Mentor, user interaction, rollover | Remain outside script agent execution | Preserve separate contracts |
 
-## 2c migration and retirement decision (pending review and merge)
+## 2c migration and retirement decision
 
 The conditional `run_code` catalog now describes the 2b session-owner approval path instead of claiming all child approvals are unsupported. The orchestrator and delegation addendum describe `agent.run/start` conditionally on the capability being advertised; direct role guidance remains for compatibility. A rendered foreground-only agent catalog from the public tool description measured **1,075 chars (~269 tokens) before** and **1,193 chars (~299 tokens) after**, using the MCP catalog convention of chars/4. The 118-char increase is the replacement approval sentence; the non-agent tools header is unchanged. The old count is the rendered current section with that sentence replaced by the previous catalog sentence, not a second full-tool render.
 
@@ -39,4 +39,4 @@ Direct tool/role removal is **not justified** by the 2b evidence:
 - `source/services/subagents/tool-policy.ts` provisions `run_explorer` for the reviewer preset; `source/prompts/subagents/reviewer.md` promises that single tool. Replacing the preset with a generic script child would alter the reviewer evidence boundary rather than remove a redundant name.
 - The specialized mentor/librarian/reviewer/worker role behavior, retained sessions and background notifications remain shared by direct users. `ask_mentor`, user interaction and rollover stay outside script agent execution. Removing these definitions without matching caller and session behavior would regress existing contracts. Keep the direct role layer as explicit compatibility, not claim it was retired.
 
-Next: independent review, related/changed/typecheck and appropriate broad gates, then a separate 2c `--no-ff` merge and final report update. No 2c completion is claimed here.
+Independent Codex Luna review of `b7bb82e0` against the 2b merge found no material findings. Focused prompt/catalog tests passed 182/182; related tests passed 106 files/1896 tests with one expected failure; changed tests passed 107 files/1909 tests with one expected failure; typecheck passed. The sequential `pnpm test && pnpm test:integration && pnpm test:provider-black-box && pnpm typecheck` gate exited 0 in 283.277 seconds: unit 684 files/9352 passed, three expected failures, three skipped; integration 12 files/106 passed, one skipped; provider black-box 20 files/178 passed, one skipped. This completes the agreed three merge points, not the retirement of incompatible direct paths.

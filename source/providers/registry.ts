@@ -80,7 +80,7 @@ export interface ProviderDefinition {
  * Providers register themselves by calling registerProvider() on module load.
  */
 export interface ProviderRegistry {
-  registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean; builtin?: boolean }): void;
+  registerProvider(definition: ProviderDefinition, options?: { allowOverride?: boolean }): void;
   upsertProvider(definition: ProviderDefinition): void;
   unregisterProvider(id: string): void;
   getProvider(id: string): ProviderDefinition | undefined;
@@ -99,7 +99,6 @@ export function createProviderRegistry(): ProviderRegistry {
         throw new Error(`Provider '${definition.id}' is already registered`);
       }
       providers.set(definition.id, definition);
-      if (options?.builtin) builtinProviders.set(definition.id, definition);
     },
     upsertProvider(definition) {
       registry.registerProvider(definition, { allowOverride: true });
@@ -124,6 +123,7 @@ export function registerProvider(
   definition: ProviderDefinition,
   options?: { allowOverride?: boolean; builtin?: boolean },
 ): void {
+  if (options?.builtin) builtinProviders.set(definition.id, definition);
   defaultProviderRegistry.registerProvider(definition, options);
 }
 

@@ -7,7 +7,7 @@ import type { WebSearchProvider } from './types.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 
 export interface WebSearchRegistry {
-  registerWebSearchProvider(provider: WebSearchProvider, options?: { isDefault?: boolean; builtin?: boolean }): void;
+  registerWebSearchProvider(provider: WebSearchProvider, options?: { isDefault?: boolean }): void;
   getWebSearchProvider(id: string): WebSearchProvider | undefined;
   getDefaultWebSearchProvider(): WebSearchProvider | undefined;
   getAllWebSearchProviders(): WebSearchProvider[];
@@ -28,10 +28,6 @@ export function createWebSearchRegistry(): WebSearchRegistry {
       }
       providers.set(provider.id, provider);
       if (options?.isDefault || !defaultProviderId) defaultProviderId = provider.id;
-      if (options?.builtin) {
-        builtinProviders.set(provider.id, provider);
-        if (options.isDefault || !builtinDefaultProviderId) builtinDefaultProviderId = provider.id;
-      }
     },
     getWebSearchProvider: (id) => providers.get(id),
     getDefaultWebSearchProvider: () => (defaultProviderId ? providers.get(defaultProviderId) : undefined),
@@ -61,6 +57,10 @@ export function registerWebSearchProvider(
   provider: WebSearchProvider,
   options?: { isDefault?: boolean; builtin?: boolean },
 ): void {
+  if (options?.builtin) {
+    builtinProviders.set(provider.id, provider);
+    if (options.isDefault || !builtinDefaultProviderId) builtinDefaultProviderId = provider.id;
+  }
   defaultWebSearchRegistry.registerWebSearchProvider(provider, options);
 }
 

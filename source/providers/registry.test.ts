@@ -9,10 +9,10 @@ const providerDefinition = (id: string) => ({
 
 it('keeps runtime provider registries independent from each other and the default', () => {
   const registryA = createProviderRegistry();
-  const registryB = createProviderRegistry();
   const runtimeProvider = providerDefinition('runtime-isolated-provider');
 
   registryA.upsertProvider(runtimeProvider);
+  const registryB = createProviderRegistry();
 
   expect(registryA.getProvider(runtimeProvider.id)).toBe(runtimeProvider);
   expect(registryB.getProvider(runtimeProvider.id)).toBeUndefined();

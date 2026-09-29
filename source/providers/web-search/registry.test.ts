@@ -153,13 +153,14 @@ it.sequential('clearWebSearchProviders removes all providers', () => {
 
 it('keeps web-search registry instances independent from the default', () => {
   const registryA = createWebSearchRegistry();
-  const registryB = createWebSearchRegistry();
   const provider = createMockProvider('isolated-search', 'Isolated');
 
-  registryA.registerWebSearchProvider(provider);
+  registryA.registerWebSearchProvider(provider, { isDefault: true });
+  const registryB = createWebSearchRegistry();
 
   expect(registryA.getWebSearchProvider(provider.id)).toBe(provider);
   expect(registryB.getWebSearchProvider(provider.id)).toBeUndefined();
+  expect(registryB.getDefaultWebSearchProvider()).toBeUndefined();
   expect(getWebSearchProvider(provider.id)).toBeUndefined();
 });
 

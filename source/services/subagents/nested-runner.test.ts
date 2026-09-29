@@ -66,6 +66,8 @@ function buildNestedRunner(
     supportsConversationChaining?: boolean;
     /** Configures the worker role's tier model pool (`agent.balancedModel`). */
     workerPool?: string[];
+    failPoolFirstRequest?: boolean;
+    failPoolAfterTool?: boolean;
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
     logger?: ReturnType<typeof createMockLogger>;
@@ -77,9 +79,19 @@ function buildNestedRunner(
   const requests: any[] = [];
   const providerId = registerTestProvider({
     label: 'Nested scripted provider',
-    createStreamedModel: () => ({
+    createStreamedModel: (model: string) => ({
       async *stream(request: any) {
         requests.push(request);
+        if (options.failPoolFirstRequest && model === 'pool-a') {
+          throw Object.assign(new Error('402 Insufficient Balance'), { status: 402 });
+        }
+        if (
+          options.failPoolAfterTool &&
+          model === 'pool-a' &&
+          request.input.some((item: any) => item.type === 'tool_result')
+        ) {
+          throw Object.assign(new Error('402 Insufficient Balance'), { status: 402 });
+        }
         if (request.tools.length === 0) {
           wrapUpAttempts++;
           if (options.failFirstWrapUp && wrapUpAttempts === 1) {
@@ -174,7 +186,7 @@ function buildNestedRunner(
     ...(options.onBackgroundApprovalPause ? { backgroundApprovalPauseSink: options.onBackgroundApprovalPause } : {}),
   });
 
-  return { runner, providerId, requests };
+  return { runner, providerId, requests, getFakeToolCalls: () => fakeToolCalls };
 }
 
 function parentToolContext(): ToolInvocationContext<SubagentRunContext> {
@@ -383,6 +395,26 @@ describe('NestedSubagentRunner end to end', () => {
       { provider: providerId, id: 'pool-b' },
       { provider: providerId, id: 'pool-a' },
     ]);
+  });
+
+  it('fails over a rejected first request without replaying any tool action', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({
+      workerPool: ['pool-a', 'pool-b'],
+      failPoolFirstRequest: true,
+    });
+    const completed = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext());
+    expect(completed.status).toBe('completed');
+    expect(getFakeToolCalls()).toBe(1);
+  });
+
+  it('does not replay a rejection after a foreground tool action', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({
+      workerPool: ['pool-a', 'pool-b'],
+      failPoolAfterTool: true,
+    });
+    const output = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext());
+    expect(output.status).toBe('failed');
+    expect(getFakeToolCalls()).toBe(1);
   });
 
   it('turns a synchronous retained-loop launch failure into one durable adopted terminal without retaining the pause', async () => {

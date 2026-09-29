@@ -657,6 +657,74 @@ it('resolves a definition once per fresh spawn and keeps it across a continuatio
   registry.dispose();
 });
 
+it('fails over a fresh provider rejection once per entry and keeps the new model for status', async () => {
+  const { SubagentRolePoolSelector } = await import('./subagent-role-pool-selector.js');
+  const selector = new SubagentRolePoolSelector({ getDynamic: () => ['a', 'b'], get: () => 'openai' } as any);
+  const base = { role: 'explorer', provider: 'openai', model: 'a' } as any;
+  const seen: string[] = [];
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    resolveDefinition: () => selector.resolveForSpawn('explorer', base),
+    markPoolEntryUnhealthy: (definition, failure) => selector.markUnhealthy(definition, failure),
+    hasModelPool: () => true,
+    run: async ({ definition }) => {
+      seen.push(definition!.model);
+      return definition!.model === 'a'
+        ? { ...result('explorer'), status: 'failed', error: '402 Insufficient Balance' }
+        : result('explorer');
+    },
+  });
+  const handle = registry.startRun({ role: 'explorer', task: 'scan' });
+  expect((await registry.getResult(handle.runId)).status).toBe('completed');
+  expect(seen).toEqual(['a', 'b']);
+  expect(registry.getRunStatus(handle.runId)).toMatchObject({ model: { provider: 'openai', id: 'b' } });
+  registry.dispose();
+});
+
+it('does not replay a failed run after its first tool effect', async () => {
+  const resolveDefinition = vi.fn(() => ({ role: 'explorer', provider: 'openai', model: 'a' } as any));
+  const run = vi.fn(async () => ({
+    ...result('explorer'),
+    status: 'failed' as const,
+    error: '402 Insufficient Balance',
+    toolsUsed: [{ toolName: 'shell', count: 1 }],
+  }));
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    resolveDefinition,
+    markPoolEntryUnhealthy: vi.fn(),
+    run,
+  });
+  const handle = registry.startRun({ role: 'explorer', task: 'scan' });
+  expect((await registry.getResult(handle.runId)).status).toBe('failed');
+  expect(run).toHaveBeenCalledTimes(1);
+  registry.dispose();
+});
+
+it('settles with all pool failures when every entry rejects the first request', async () => {
+  const { SubagentRolePoolSelector } = await import('./subagent-role-pool-selector.js');
+  const selector = new SubagentRolePoolSelector({ getDynamic: () => ['a', 'b'], get: () => 'openai' } as any);
+  const run = vi.fn(async () => ({
+    ...result('explorer'),
+    status: 'failed' as const,
+    error: '402 Insufficient Balance',
+  }));
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    resolveDefinition: () =>
+      selector.resolveForSpawn('explorer', { role: 'explorer', provider: 'openai', model: 'a' } as any),
+    markPoolEntryUnhealthy: (definition, failure) => selector.markUnhealthy(definition, failure),
+    hasModelPool: () => true,
+    run,
+  });
+  const handle = registry.startRun({ role: 'explorer', task: 'scan' });
+  const output = await registry.getResult(handle.runId);
+  expect(output.status).toBe('failed');
+  expect(output.error).toMatch(/a.*balance.*b.*balance/);
+  expect(run).toHaveBeenCalledTimes(2);
+  registry.dispose();
+});
+
 it('applies role continuation policy', async () => {
   const registry = make();
   const worker = registry.startRun({ role: 'worker', task: 'fresh' });

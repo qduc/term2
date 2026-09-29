@@ -46,6 +46,8 @@ import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { ForegroundSubagentLease, type BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
+import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
+import { streamHasCommittedOutput } from '../agent-stream.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
@@ -556,6 +558,9 @@ export class NestedSubagentRunner {
             return JSON.stringify(failureResult);
           }
 
+          if (error && typeof error === 'object' && !streamHasCommittedOutput(stream) && toolCallCount === 0) {
+            (error as { poolFailoverSafe?: boolean }).poolFailoverSafe = true;
+          }
           throw error;
         }
 
@@ -592,6 +597,7 @@ export class NestedSubagentRunner {
 
     let worktreePath: string | undefined;
     let pinnedRoleTool: CachedRoleTool | undefined;
+    let pinnedExecutionContext: ExecutionContext | undefined;
     if (request.worktree) {
       const pin = await pinWorkerWorktree({
         name: request.worktree,
@@ -619,6 +625,7 @@ export class NestedSubagentRunner {
         return failed;
       }
       worktreePath = pin.worktreePath;
+      pinnedExecutionContext = pin.executionContext;
       pinnedRoleTool = this.#buildRoleTool(role, { executionContext: pin.executionContext, applyPool: true });
     }
 
@@ -648,7 +655,7 @@ export class NestedSubagentRunner {
     // this same tool call (SDK-level continuation), not a new spawn: it must
     // reuse whatever tool the original call resolved to rather than drawing
     // another pool entry, so it always takes the cache path.
-    const roleTool =
+    let roleTool =
       pinnedRoleTool ??
       (detailsRecord?.resumeState ? this.#getOrCreateRoleTool(role) : this.#resolveRoleToolForSpawn(role));
     const lease = new ForegroundSubagentLease({
@@ -710,8 +717,7 @@ export class NestedSubagentRunner {
     let abortListener: (() => void) | undefined;
     let transferredToBackground = false;
     try {
-      const { tool, agent: roleAgent } = roleTool;
-      replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
+      replayApprovals(nestedLedger, readParentApprovals(context), roleTool.agent);
       const nestedToolContext: ToolInvocationContext<SubagentRunContext> = {
         context: runContext,
         approvals: nestedLedger,
@@ -726,13 +732,43 @@ export class NestedSubagentRunner {
           })
         : null;
 
-      const execution = Promise.resolve(
-        tool.execute(
-          normalizeToolParameters({ role, task: request.task }, tool.parameters),
-          nestedToolContext,
-          effectiveDetails,
-        ),
-      );
+      const execution = (async () => {
+        for (;;) {
+          try {
+            return await roleTool.tool.execute(
+              normalizeToolParameters({ role, task: request.task }, roleTool.tool.parameters),
+              nestedToolContext,
+              effectiveDetails,
+            );
+          } catch (error) {
+            const failure = classifyPoolEntryFailure(error);
+            if (
+              detailsRecord?.resumeState ||
+              !this.#rolePoolSelector.hasPool(role) ||
+              !failure ||
+              !(error as { poolFailoverSafe?: boolean })?.poolFailoverSafe ||
+              lease.adopted ||
+              signal?.aborted
+            )
+              throw error;
+            const previous = roleTool.model;
+            this.#rolePoolSelector.markUnhealthy({ provider: previous.provider, model: previous.id }, failure);
+            roleTool = this.#buildRoleTool(role, {
+              ...(pinnedExecutionContext ? { executionContext: pinnedExecutionContext } : {}),
+              applyPool: true,
+            });
+            lease.setModel(roleTool.model);
+            const candidate = this.#foregroundLeases.get(candidateRunId);
+            if (candidate) candidate.model = roleTool.model;
+            this.#logger.warn('Subagent pool failover', {
+              role,
+              from: `${previous.provider}/${previous.id}`,
+              failure,
+              to: `${roleTool.model.provider}/${roleTool.model.id}`,
+            });
+          }
+        }
+      })();
       const promises: Array<Promise<unknown>> = [execution];
       if (abortPromise) {
         promises.push(abortPromise);

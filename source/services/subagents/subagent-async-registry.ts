@@ -21,6 +21,8 @@ import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
 import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 import { sanitizeBackgroundTaskToolLabel, type BackgroundTaskObservation } from '../background-task-activity.js';
+import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
+import type { PoolEntryFailure } from './subagent-role-pool-selector.js';
 
 export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
@@ -109,6 +111,7 @@ type StoredRun = {
    * pool entry mid-conversation.
    */
   definition?: SubagentDefinition;
+  poolFailoverEligible?: boolean;
   latestUsage?: NormalizedUsage;
   responseInStream: boolean;
   /**
@@ -155,6 +158,8 @@ export interface SubagentAsyncRegistryDeps {
    * that pool's cursor here — see `SubagentRolePoolSelector`.
    */
   resolveDefinition?: (role: string) => SubagentDefinition;
+  markPoolEntryUnhealthy?: (definition: SubagentDefinition, failure: PoolEntryFailure) => void;
+  hasModelPool?: (role: string) => boolean;
   setInterval?: (callback: () => void, delay: number) => ReturnType<typeof setInterval>;
   clearInterval?: (timer: ReturnType<typeof setInterval>) => void;
 }
@@ -177,6 +182,8 @@ export class SubagentAsyncRegistry {
   #sessionForRole?: (role: string) => SubagentSession | undefined;
   #modelForRole?: (role: string) => { provider: string; id: string } | undefined;
   #resolveDefinition?: (role: string) => SubagentDefinition;
+  #markPoolEntryUnhealthy?: SubagentAsyncRegistryDeps['markPoolEntryUnhealthy'];
+  #hasModelPool?: SubagentAsyncRegistryDeps['hasModelPool'];
   #timer: ReturnType<typeof setInterval>;
   #clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   #disposed = false;
@@ -193,6 +200,8 @@ export class SubagentAsyncRegistry {
     this.#sessionForRole = deps.sessionForRole;
     this.#modelForRole = deps.modelForRole;
     this.#resolveDefinition = deps.resolveDefinition;
+    this.#markPoolEntryUnhealthy = deps.markPoolEntryUnhealthy;
+    this.#hasModelPool = deps.hasModelPool;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
     this.#timer = (deps.setInterval ?? setInterval)(
       () => this.#evictExpired(),
@@ -306,6 +315,7 @@ export class SubagentAsyncRegistry {
       waitingReason: 'provider',
       ...(model === undefined ? {} : { model }),
       ...(definition === undefined ? {} : { definition }),
+      poolFailoverEligible: !previousRun,
       responseInStream: false,
       ...(trafficContext ? { trafficContext } : {}),
     };
@@ -835,9 +845,43 @@ export class SubagentAsyncRegistry {
 
       // Every segment — first launch, `continue_run_id`, steering continuation —
       // runs under the run's own context, so they share one provider-side session.
-      result = await (run.trafficContext && this.#sessionContextService
-        ? this.#sessionContextService.runWithContext(run.trafficContext, runSegment)
-        : runSegment());
+      const attempted = new Set<string>();
+      for (;;) {
+        const model = run.definition ? JSON.stringify([run.definition.provider, run.definition.model]) : undefined;
+        if (model) attempted.add(model);
+        result = await (run.trafficContext && this.#sessionContextService
+          ? this.#sessionContextService.runWithContext(run.trafficContext, runSegment)
+          : runSegment());
+        const failure = result.status === 'failed' ? classifyPoolEntryFailure(result.error) : undefined;
+        if (
+          !run.poolFailoverEligible ||
+          !failure ||
+          !run.definition ||
+          !this.#markPoolEntryUnhealthy ||
+          !this.#hasModelPool?.(run.role) ||
+          !this.#resolveDefinition ||
+          result.toolsUsed.length > 0 ||
+          run.toolCounts.size > 0 ||
+          run.responseInStream ||
+          controller.signal.aborted
+        )
+          break;
+        const previous = run.definition;
+        this.#markPoolEntryUnhealthy(previous, failure);
+        const next = this.#resolveDefinition(run.role);
+        const nextKey = JSON.stringify([next.provider, next.model]);
+        if (attempted.has(nextKey))
+          throw new Error(`Pool failover selected an already attempted entry: ${next.provider}/${next.model}`);
+        run.definition = next;
+        run.model = { provider: next.provider, id: next.model };
+        this.#logger.warn('Subagent pool failover', {
+          role: run.role,
+          from: `${previous.provider}/${previous.model}`,
+          failure,
+          to: `${next.provider}/${next.model}`,
+        });
+      }
+      run.poolFailoverEligible = false;
       run.session.trimHistory(this.#messageCap);
       result = { ...result, agentId: run.runId };
     } catch (error: any) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import {
   classifyProviderFailure,
+  classifyPoolEntryFailure,
   hasExplicitCancellationMarker,
   isClassifiedCancellation,
 } from './provider-failure-classification.js';
@@ -57,5 +58,25 @@ describe('hasExplicitCancellationMarker', () => {
     expect(classifyProviderFailure(providerError).errorKind).toBe('cancelled');
     expect(hasExplicitCancellationMarker(providerError)).toBe(false);
     expect(isClassifiedCancellation(providerError)).toBe(false);
+  });
+});
+
+describe('classifyPoolEntryFailure', () => {
+  it.each([
+    [Object.assign(new Error('Payment Required'), { status: 402 }), 'balance'],
+    [new OpenAICompatibleError('request failed', 400, {}, '{"error":{"code":"insufficient_quota"}}'), 'balance'],
+    [Object.assign(new Error('request failed'), { status: 400, error: { type: 'insufficient_credits' } }), 'balance'],
+    [new Error('402 Insufficient Balance'), 'balance'],
+    [Object.assign(new Error('invalid api key'), { status: 401 }), 'authentication'],
+  ])('recognizes permanent pool entry failure %#', (error, expected) => {
+    expect(classifyPoolEntryFailure(error)).toBe(expected);
+  });
+
+  it.each([
+    Object.assign(new Error('quota exceeded'), { status: 429, headers: { 'retry-after': '5' } }),
+    Object.assign(new Error('insufficient balance'), { status: 503 }),
+    new Error('quota exceeded'),
+  ])('does not quarantine transient or ambiguous failures %#', (error) => {
+    expect(classifyPoolEntryFailure(error)).toBeUndefined();
   });
 });

@@ -5,6 +5,46 @@ import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
 
 export type ProviderFailureKind = 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
 
+/** Narrow admission signal for pool failover; ambiguous quota wording is not enough. */
+export function classifyPoolEntryFailure(error: unknown): 'balance' | 'authentication' | undefined {
+  const seen = new Set<unknown>();
+  const inspect = (value: unknown): 'balance' | 'authentication' | undefined => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return undefined;
+    seen.add(value);
+    const record = value as Record<string, unknown>;
+    const status = Number(record.status ?? record.statusCode);
+    if (status === 429 || status >= 500) return undefined;
+    if (status === 402) return 'balance';
+    if (status === 401 || status === 403 || record.requiresReauthentication === true) return 'authentication';
+    for (const child of [record.error, record.cause]) {
+      const result = inspect(child);
+      if (result) return result;
+    }
+    if (typeof record.responseBody === 'string') {
+      try {
+        const result = inspect(JSON.parse(record.responseBody));
+        if (result) return result;
+      } catch {
+        /* Non-JSON provider body is not a structured signal. */
+      }
+    }
+    const code = record.code ?? record.type;
+    if (
+      typeof code === 'string' &&
+      /^(insufficient_(?:quota|balance|credits?)|billing_(?:hard_limit_reached|not_active))$/i.test(code)
+    )
+      return 'balance';
+    if (
+      typeof record.message === 'string' &&
+      /^(?:(?:error:\s*)?402\b|(?:error:\s*)?insufficient (?:balance|credits?)\b)/i.test(record.message)
+    )
+      return 'balance';
+    return undefined;
+  };
+  if (typeof error === 'string') return inspect({ message: error });
+  return inspect(error);
+}
+
 export type ProviderFailureClassification = {
   errorKind: ProviderFailureKind;
   code?: string;

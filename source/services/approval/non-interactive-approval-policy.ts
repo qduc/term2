@@ -3,6 +3,7 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.js';
+import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getTierModelPool } from '../agent-runtime/model-resolver.js';
@@ -68,6 +69,15 @@ export class NonInteractiveApprovalPolicy {
             rejectionReason: NON_INTERACTIVE_REJECTION_REASON,
             reportRejection: false,
           };
+    }
+    // propose_goal mutates user-authored durable state; auto-approval modes can
+    // never stand in for the interactive user decision it requires.
+    if (approval.toolName === TOOL_NAME_PROPOSE_GOAL) {
+      return {
+        answer: 'n',
+        rejectionReason: 'propose_goal requires an interactive user decision and is never auto-approved',
+        reportRejection: false,
+      };
     }
     if (approval.toolName !== 'shell' && approval.toolName !== 'bash') {
       return { answer: 'y' };

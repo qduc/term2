@@ -74,6 +74,15 @@ it('rejects every tool when non-interactive auto-approval is disabled', async ()
   });
 });
 
+it('rejects propose_goal even when non-interactive auto-approval is enabled', async () => {
+  const decision = await createPolicy().decide({
+    autoApprove: true,
+    approval: createApproval('propose_goal', '{"outcome":"Ship it"}'),
+  });
+
+  expect(decision.answer).toBe('n');
+});
+
 it('approves non-shell tools when non-interactive auto-approval is enabled', async () => {
   const decision = await createPolicy().decide({
     autoApprove: true,

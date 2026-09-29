@@ -8,7 +8,7 @@ import {
 } from './shell-auto-approval-evaluator.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
-import { TOOL_NAME_ASK_USER } from '../../tools/tool-names.js';
+import { TOOL_NAME_ASK_USER, TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
@@ -94,9 +94,11 @@ function formatToolOperationDescription(toolName: string, rawArgs: unknown): str
 /**
  * YOLO suppresses approval prompts for every tool. `ask_user` is different:
  * it is the model's user-input interaction, not an authority decision.
+ * `propose_goal` is also exempt: it mutates user-authored durable state and
+ * only an explicit human approval may persist it (durable-goal plan, decision 6b).
  */
 export function shouldBypassToolApproval(toolName: string | undefined, mode: AutoApproveMode | undefined): boolean {
-  return mode === 'always' && toolName !== TOOL_NAME_ASK_USER;
+  return mode === 'always' && toolName !== TOOL_NAME_ASK_USER && toolName !== TOOL_NAME_PROPOSE_GOAL;
 }
 
 const MAX_TRACKED_MANUAL_DECISIONS = 20;

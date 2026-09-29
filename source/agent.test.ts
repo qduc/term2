@@ -644,6 +644,29 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   expect(toolNames.includes('ask_user')).toBe(false);
 });
 
+it('getAgentDefinition includes propose_goal when the interactive proposal callbacks are supplied', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    getGoal: () => undefined,
+    proposeGoal: { appendGoal: () => {}, hasPriorProposal: () => false },
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('propose_goal')).toBe(true);
+});
+
+it('getAgentDefinition omits propose_goal when the proposal callbacks are absent', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    getGoal: () => undefined,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('propose_goal')).toBe(false);
+});
+
 it('getAgentDefinition omits ask_user when allowAskUser is false even if getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),

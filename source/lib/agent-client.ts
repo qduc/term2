@@ -650,6 +650,8 @@ export class AgentClient {
       logger: ILoggingService;
       settings: ISettingsService;
       getGoal?: () => DurableGoal | undefined;
+      /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
+      proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
@@ -703,6 +705,7 @@ export class AgentClient {
         logger: deps.logger,
         settings: deps.settings,
         ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),
+        ...(deps.proposeGoal ? { proposeGoal: deps.proposeGoal } : {}),
         sessionContextService: deps.sessionContextService,
         executionContext: deps.executionContext,
         toolInterceptorRegistry: this.#toolInterceptorRegistry,

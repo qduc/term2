@@ -702,6 +702,8 @@ describe('run_code agent capability', () => {
 
     const foregroundOnly = buildRunCodeTool({ bridge: makeBridge(manager), foregroundOnly: true });
     expect(foregroundOnly.description).toContain('agent.run(');
+    expect(foregroundOnly.description).toContain('child tool approval pauses surface to the user');
+    expect(foregroundOnly.description).toContain('Without that owner, or for non-tool interruptions');
     expect(foregroundOnly.description).not.toContain('agent.start(');
 
     const bridgeWithoutAuthority = createRunCodeToolDefinition({

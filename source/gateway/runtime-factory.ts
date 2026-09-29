@@ -83,6 +83,9 @@ export const PRODUCTION_AUTHORITY_SETTING_KEYS: readonly string[] = [
   'webSearch.tavily.apiKey',
   // The web-search tool reads this key when it executes in-process.
   'webSearch.exa.apiKey',
+  'webSearch.firecrawl.apiKey',
+  'webSearch.firecrawl.baseUrl',
+  'webSearch.searxng.baseUrl',
 ];
 
 export class RuntimeFactoryError extends Error {

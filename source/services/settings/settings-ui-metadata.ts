@@ -178,9 +178,12 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.APP_NOTIFICATIONS]: 'Enable desktop notifications when the terminal is unfocused (true|false)',
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Notify when the agent needs tool-call approval (true|false)',
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Notify when the agent finishes responding (true|false)',
-  [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa)',
+  [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa, firecrawl, searxng)',
   [SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY]: 'Tavily search API key',
   [SETTING_KEYS.WEB_SEARCH_EXA_API_KEY]: 'Exa search API key',
+  [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_API_KEY]: 'Firecrawl API key',
+  [SETTING_KEYS.WEB_SEARCH_FIRECRAWL_BASE_URL]: 'Firecrawl API base URL',
+  [SETTING_KEYS.WEB_SEARCH_SEARXNG_BASE_URL]: 'SearXNG base URL',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
     'Use shell commands (ripgrep/find) for codebase search instead of built-in tools; only `on` withholds them, `auto` matches `off` (auto|on|off)',
   [SETTING_KEYS.SANDBOX_ENABLED]: 'Enable sandbox mode for safer command execution (true|false)',

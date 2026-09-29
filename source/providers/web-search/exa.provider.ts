@@ -6,7 +6,7 @@
  */
 
 import { registerWebSearchProvider } from './registry.js';
-import type { WebSearchProvider, WebSearchResponse, WebSearchDeps } from './types.js';
+import type { WebSearchProvider, WebSearchResponse, WebSearchDeps, WebSearchOptions } from './types.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 
 /**
@@ -26,7 +26,11 @@ interface ExaAPIResponse {
 
 const EXA_API_URL = 'https://api.exa.ai/search';
 
-async function searchExa(query: string, deps: WebSearchDeps): Promise<WebSearchResponse> {
+async function searchExa(
+  query: string,
+  deps: WebSearchDeps,
+  options: WebSearchOptions = {},
+): Promise<WebSearchResponse> {
   const { settingsService, loggingService } = deps;
 
   const apiKey = settingsService.get('webSearch.exa.apiKey');
@@ -46,11 +50,14 @@ async function searchExa(query: string, deps: WebSearchDeps): Promise<WebSearchR
     },
     body: JSON.stringify({
       query: query,
+      ...(options.maxResults && { numResults: options.maxResults }),
+      ...(options.includeDomains && { includeDomains: options.includeDomains }),
+      ...(options.excludeDomains && { excludeDomains: options.excludeDomains }),
       contents: {
         highlights: true,
       },
-      numResults: 10,
     }),
+    signal: options.signal,
   });
 
   if (!response.ok) {

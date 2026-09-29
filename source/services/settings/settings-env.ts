@@ -46,6 +46,12 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   if (env.EXA_API_KEY) {
     webSearch.exa = { apiKey: env.EXA_API_KEY };
   }
+  if (env.FIRECRAWL_API_KEY || env.FIRECRAWL_BASE_URL) {
+    webSearch.firecrawl = {};
+    if (env.FIRECRAWL_API_KEY) webSearch.firecrawl.apiKey = env.FIRECRAWL_API_KEY;
+    if (env.FIRECRAWL_BASE_URL) webSearch.firecrawl.baseUrl = env.FIRECRAWL_BASE_URL;
+  }
+  if (env.SEARXNG_BASE_URL) webSearch.searxng = { baseUrl: env.SEARXNG_BASE_URL };
   if (env.WEB_SEARCH_PROVIDER) {
     webSearch.provider = env.WEB_SEARCH_PROVIDER;
   }

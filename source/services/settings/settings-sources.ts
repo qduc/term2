@@ -172,6 +172,8 @@ export const SETTINGS_SOURCE_KEYS = {
     provider: 'webSearch.provider',
     tavily: 'webSearch.tavily',
     exa: 'webSearch.exa',
+    firecrawl: 'webSearch.firecrawl',
+    searxng: 'webSearch.searxng',
   },
   memory: {
     enabled: 'memory.enabled',

@@ -222,6 +222,8 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'webSearch.provider': [
     { value: 'tavily', description: 'Tavily Search API' },
     { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },
+    { value: 'firecrawl', description: 'Firecrawl web search API' },
+    { value: 'searxng', description: 'Self-hosted SearXNG metasearch' },
   ],
   'app.searchViaShell': [
     { value: 'auto', description: 'Default; currently identical to off (built-in search tools)' },

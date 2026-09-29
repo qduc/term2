@@ -241,6 +241,7 @@ export function validatePendingInteractionDto(value: unknown): PendingInteractio
       )
         throw new AgentWireError();
       text(q.question, 4096);
+      if (q.options.length > 32) throw new AgentWireError();
       q.options.forEach((rawOption) => {
         const option = object(rawOption);
         keys(option, ['label', 'description'], ['label']);

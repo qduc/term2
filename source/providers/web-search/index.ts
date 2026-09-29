@@ -6,8 +6,16 @@
 // Import provider modules to trigger registration
 import './tavily.provider.js';
 import './exa.provider.js';
+import './firecrawl.provider.js';
+import './searxng.provider.js';
 
 // Re-export registry API and types
 export { getConfiguredWebSearchProvider } from './registry.js';
 
-export type { WebSearchProvider, WebSearchResponse, WebSearchResult, WebSearchDeps } from './types.js';
+export type {
+  WebSearchProvider,
+  WebSearchResponse,
+  WebSearchResult,
+  WebSearchDeps,
+  WebSearchOptions,
+} from './types.js';

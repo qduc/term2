@@ -25,6 +25,20 @@ export interface WebSearchResponse {
   answerBox?: string; // Direct answer if available (Tavily returns this)
 }
 
+/** Optional provider-specific controls carried by the shared search tool. */
+export interface WebSearchOptions {
+  signal?: AbortSignal;
+  site?: string;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  topic?: 'general' | 'news' | 'finance';
+  days?: number;
+  maxResults?: number;
+  engines?: string;
+  language?: string;
+  timeRange?: 'day' | 'week' | 'month' | 'year';
+}
+
 /**
  * Dependencies passed to web search providers
  */
@@ -49,7 +63,7 @@ export interface WebSearchProvider {
    * @param deps - Dependencies (settings service, logging service)
    * @returns Promise resolving to search results
    */
-  search: (query: string, deps: WebSearchDeps) => Promise<WebSearchResponse>;
+  search: (query: string, deps: WebSearchDeps, options?: WebSearchOptions) => Promise<WebSearchResponse>;
 
   /**
    * Check if the provider is properly configured (has API key, etc.)

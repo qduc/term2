@@ -6,7 +6,7 @@
  */
 
 import { registerWebSearchProvider } from './registry.js';
-import type { WebSearchProvider, WebSearchResponse, WebSearchDeps } from './types.js';
+import type { WebSearchProvider, WebSearchResponse, WebSearchDeps, WebSearchOptions } from './types.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 
 /**
@@ -26,7 +26,11 @@ interface TavilyAPIResponse {
 
 const TAVILY_API_URL = 'https://api.tavily.com/search';
 
-async function searchTavily(query: string, deps: WebSearchDeps): Promise<WebSearchResponse> {
+async function searchTavily(
+  query: string,
+  deps: WebSearchDeps,
+  options: WebSearchOptions = {},
+): Promise<WebSearchResponse> {
   const { settingsService, loggingService } = deps;
 
   const apiKey = settingsService.get('webSearch.tavily.apiKey');
@@ -47,8 +51,13 @@ async function searchTavily(query: string, deps: WebSearchDeps): Promise<WebSear
     body: JSON.stringify({
       api_key: apiKey,
       query: query,
-      // Leave all other parameters at default values per requirements
+      ...(options.topic && { topic: options.topic }),
+      ...(options.days && { days: options.days }),
+      ...(options.maxResults && { max_results: options.maxResults }),
+      ...(options.includeDomains && { include_domains: options.includeDomains }),
+      ...(options.excludeDomains && { exclude_domains: options.excludeDomains }),
     }),
+    signal: options.signal,
   });
 
   if (!response.ok) {

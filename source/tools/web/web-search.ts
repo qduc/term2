@@ -16,13 +16,19 @@ import { getConfiguredWebSearchProvider, type WebSearchResponse } from '../../pr
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
 const WEB_SEARCH_DESCRIPTION =
-  'Search the web for current information. ' +
-  'Use this when you need up-to-date information that may not be in your training data, such as recent news, current events, documentation updates, or any time-sensitive information. ' +
-  'Do NOT use this to read a specific known page; inside run_code, use tools.web_fetch(...) instead. ' +
-  'Returns a markdown summary with an answer box (when available) and a numbered list of results.';
+  'Search the web for current information. Use web_fetch for a specific known page. Optional filters include site/domain, topic, recency, and result count.';
 
 const webSearchSchema = z.object({
   query: z.string().min(1).describe('The search query to look up on the web.'),
+  site: z.string().min(1).optional().describe('Limit results to one site or domain.'),
+  includeDomains: z.array(z.string().min(1)).max(100).optional().describe('Domains to include.'),
+  excludeDomains: z.array(z.string().min(1)).max(100).optional().describe('Domains to exclude.'),
+  topic: z.enum(['general', 'news', 'finance']).optional().describe('Search topic.'),
+  days: z.number().int().positive().optional().describe('Only results from the last N days.'),
+  maxResults: z.number().int().min(1).max(100).optional().describe('Maximum results.'),
+  engines: z.string().min(1).optional().describe('SearXNG engines.'),
+  language: z.string().min(1).optional().describe('SearXNG language.'),
+  timeRange: z.enum(['day', 'week', 'month', 'year']).optional().describe('SearXNG recency filter.'),
 });
 
 export type WebSearchParams = z.infer<typeof webSearchSchema>;
@@ -102,8 +108,8 @@ export const createWebSearchToolDefinition = (deps: {
     parameters: webSearchSchema,
     parallelSafe: true,
     needsApproval: () => false, // Web search is read-only, safe operation
-    execute: async (params) => {
-      const { query } = params;
+    execute: async (params, context) => {
+      const { query, ...options } = params;
 
       try {
         const provider = getConfiguredWebSearchProvider({ settingsService });
@@ -119,10 +125,15 @@ export const createWebSearchToolDefinition = (deps: {
           );
         }
 
-        const response = await provider.search(query, {
-          settingsService,
-          loggingService,
-        });
+        const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
+        const response = await provider.search(
+          query,
+          {
+            settingsService,
+            loggingService,
+          },
+          { ...options, signal },
+        );
 
         return formatResultsAsMarkdown(response);
       } catch (error: any) {

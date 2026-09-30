@@ -288,6 +288,37 @@ it('manual cancel retains multiple queued items and resumes them FIFO', async ()
   expect(starts).toEqual(['active', 'second', 'third']);
 });
 
+it('settles a cancellation-unproven queue when the active turn later completes', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId, item }) => {
+        starts.push(`${executionId}:${item.text}`);
+      },
+      cancel: async () => false,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  const cancelled = await controller.command({ kind: 'cancel' });
+  expect(cancelled).toMatchObject({ kind: 'rejected', reason: 'cancellation_unproven' });
+  await controller.command({ kind: 'submit', text: 'fresh' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [{ text: 'fresh' }] });
+  await controller.event({ kind: 'completed', executionId: 'execution-1' as ExecutionId, terminal: {} });
+  expect(starts).toEqual(['execution-1:active', 'execution-2:fresh']);
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'fresh' } } });
+});
+
 it('manual cancel from a paused queue releases retained messages in FIFO order', async () => {
   const starts: string[] = [];
   const controller = new QueueController({

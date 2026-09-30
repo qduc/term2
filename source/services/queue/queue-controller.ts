@@ -307,6 +307,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
   #persistenceWrites = Promise.resolve();
   /** Out-of-band occupancy (manual compaction) that must not start queued work. */
   #dispatchHeld = false;
+  #cancellationUnproven = false;
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
     this.#driver = options.driver;
@@ -515,10 +516,17 @@ export class QueueController<Snapshot, Terminal = unknown> {
 
     if (!this.#active || this.#active.executionId !== event.executionId) return;
 
-    const activeFromPhase = this.#phase === 'running' || this.#phase === 'awaiting_active_action';
+    // A cancellation can time out without proving the driver stopped. Keep the
+    // queue closed until the active execution eventually reports a terminal
+    // event; that event is the proof needed to release or pause retained work.
+    const activeFromPhase =
+      this.#phase === 'running' ||
+      this.#phase === 'awaiting_active_action' ||
+      (this.#phase === 'cancelling' && this.#cancellationUnproven);
     if (!activeFromPhase) return;
 
     if (event.kind === 'failed') {
+      this.#cancellationUnproven = false;
       this.#active = undefined;
       this.#pendingAction = undefined;
       // Failure policy: do not auto-advance. Pause with retained work so the
@@ -535,6 +543,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     }
     if (event.kind !== 'completed') return;
 
+    this.#cancellationUnproven = false;
     this.#pendingAction = undefined;
     this.#phase = 'completing';
     await this.#persist();
@@ -595,6 +604,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     // empty pause with nothing to resume.
     const retainedQueueLength = this.#queue.length;
     this.#phase = 'cancelling';
+    this.#cancellationUnproven = false;
     this.#pendingAction = undefined;
     await this.#persist();
     let proven = true;
@@ -623,6 +633,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
         // Keep the active execution attached to the cancelling controller.
         // A caller that cannot prove cancellation must not observe an idle
         // queue capable of dispatching work alongside it.
+        this.#cancellationUnproven = true;
         await this.#persist();
       }
     }

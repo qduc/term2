@@ -1141,6 +1141,46 @@ it('classifies handleApprovalDecision completion without terminal event as cance
   await expect(decision).rejects.toMatchObject({ name: 'AbortError' });
 });
 
+it('dispatches a fresh submission after an unproven cancellation later settles', async () => {
+  let releaseActive!: () => void;
+  const activeGate = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  let starts = 0;
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        starts += 1;
+        if (starts === 1) await activeGate;
+        yield { type: 'final' as const, finalText: `done-${starts}` };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => new Promise<void>(() => {}),
+    },
+    queueForeground: true,
+    activeCancelTimeoutMs: 5,
+  });
+  const active = adapter.sendMessage('active');
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(adapter.queueStateKind()).toBe('cancelling');
+  const fresh = adapter.sendMessage('fresh');
+  expect(adapter.isQueueOwningSubmissions()).toBe(true);
+  releaseActive();
+  await expect(active).resolves.toMatchObject({ finalText: 'done-1' });
+  await expect(fresh).resolves.toMatchObject({ finalText: 'done-2' });
+});
+
 it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
   let queueState: string | undefined;
   const adapter = new ConversationAdapter({

@@ -542,6 +542,44 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
   });
 
+  it('does not re-send a released steer after clearConversation resets the session', async () => {
+    const onClear = vi.fn(async () => {});
+    const cfg = makeConfig({ onClear });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const service = cfg.conversationService as any;
+    service.isQueueOwningSubmissions = vi.fn(() => true);
+    service.isQueueActive = vi.fn(() => true);
+    service.queueStateKind = vi.fn(() => 'running');
+    let releaseSteer: (steered: boolean) => void = () => undefined;
+    service.steerActiveTurn = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseSteer = resolve;
+        }),
+    );
+    // A terminal only matters on the buggy path, where the released steer falls
+    // through to a fresh sendMessage into the replaced session.
+    service.sendMessage = vi.fn(async () => ({ type: 'response', finalText: 'late', commandMessages: [] }));
+
+    const pending = orchestrator.sendUserMessage('held steer', { busyMode: 'steer' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'held steer', 'steer');
+
+    // /clear resets the session while the steer is still waiting for a request
+    // boundary; the reset then releases it with steered=false.
+    await orchestrator.clearConversation();
+    releaseSteer(false);
+    await pending;
+
+    // The released steer belongs to the discarded session: it must not be
+    // reclassified as a follow-up or sent into the replacement session.
+    expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageReclassified).not.toHaveBeenCalled();
+    expect(cfg.ui.onQueuedMessageStarted).not.toHaveBeenCalled();
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+  });
+
   it('clears conversation through onClear when provided', async () => {
     const onClear = vi.fn();
     const cfg = makeConfig({ onClear });

@@ -9,7 +9,8 @@ import type {
   CapabilityOutcome,
   JsonValue,
 } from '../../../services/sandboxed-code-host/host-types.js';
-import type { ILoggingService } from '../../../services/service-interfaces.js';
+import type { ILoggingService, ISSHService } from '../../../services/service-interfaces.js';
+import { quoteShellArg } from '../../../services/ssh-service.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
 import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
@@ -347,11 +348,22 @@ export async function bindPreparedAuthority(
   executionContext?: ExecutionContext,
 ): Promise<BoundAuthority> {
   const isRemote = executionContext?.isRemote() ?? false;
-  if (isRemote && PATH_TOOLS.has(toolName))
-    return { kind: 'denied', message: 'Cannot establish remote physical path authority for a nested tool call.' };
   try {
-    const physicalRoot = isRemote ? cwd : await requirePhysicalPath(cwd, cwd);
-    return { kind: 'bound', physicalRoot, params: await bindPreparedArguments(toolName, params, cwd) };
+    // Only filesystem tools need a remote filesystem probe. Keep the existing
+    // remote behavior for unrelated capabilities rather than making (for
+    // example) a web call depend on a remote `realpath` utility.
+    if (isRemote && !PATH_TOOLS.has(toolName)) return { kind: 'bound', physicalRoot: cwd, params };
+    const sshService = executionContext?.getSSHService();
+    if (isRemote && !sshService) throw new Error('Remote filesystem service is unavailable');
+    const requireAuthorityPath = isRemote
+      ? (value: string, semantics?: PathSemantics) => requireRemotePhysicalPath(value, cwd, sshService!, semantics)
+      : (value: string, semantics?: PathSemantics) => requirePhysicalPath(value, cwd, semantics);
+    const physicalRoot = await requireAuthorityPath(cwd);
+    return {
+      kind: 'bound',
+      physicalRoot,
+      params: await bindPreparedArguments(toolName, params, requireAuthorityPath),
+    };
   } catch (error) {
     return {
       kind: 'denied',
@@ -371,11 +383,58 @@ async function requirePhysicalPath(value: string, cwd: string, semantics: PathSe
   return physicalPath;
 }
 
-async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
+/**
+ * Remote counterpart of `requirePhysicalPath`. The remote command canonicalizes
+ * the nearest existing ancestor, preserves a missing suffix, and rejects both
+ * dangling links and unlinking a symlink itself. Its NUL-delimited result means
+ * a valid remote pathname containing a newline is still unambiguous locally.
+ */
+async function requireRemotePhysicalPath(
+  value: string,
+  cwd: string,
+  sshService: ISSHService,
+  semantics: PathSemantics = 'referent',
+): Promise<string> {
+  const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+  const sourceCheck = semantics === 'unlink-source' ? 'if [ -L "$original" ]; then exit 42; fi\n' : '';
+  const command = [
+    `original=${quoteShellArg(lexicalPath)}`,
+    'candidate=$original',
+    "suffix=''",
+    sourceCheck.trimEnd(),
+    'while ! resolved=$(realpath -e -- "$candidate" 2>/dev/null); do',
+    '  if [ -L "$candidate" ]; then exit 43; fi',
+    '  parent=$(dirname -- "$candidate")',
+    '  if [ "$parent" = "$candidate" ]; then exit 44; fi',
+    '  suffix="/$(basename -- "$candidate")$suffix"',
+    '  candidate=$parent',
+    'done',
+    'printf \'%s\\0\' "$resolved$suffix"',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const result = await sshService.executeCommand(command);
+  if (result.exitCode === 42) throw new Error(`Symlink unlink source is unsupported: ${value}`);
+  if (result.exitCode === 43) throw new Error(`Unresolved path: ${value}`);
+  if (result.exitCode !== 0) throw new Error(`Unresolved path: ${value}`);
+  const terminator = result.stdout.indexOf('\0');
+  if (terminator < 1 || terminator !== result.stdout.length - 1) {
+    throw new Error(`Invalid remote physical path response: ${value}`);
+  }
+  return result.stdout.slice(0, terminator);
+}
+
+type AuthorityPathBinder = (value: string, semantics?: PathSemantics) => Promise<string>;
+
+async function bindPreparedArguments(
+  toolName: string,
+  params: unknown,
+  bindPhysicalPath: AuthorityPathBinder,
+): Promise<unknown> {
   if (!params || typeof params !== 'object' || Array.isArray(params) || !PATH_TOOLS.has(toolName)) return params;
   const record = params as Record<string, unknown>;
   const bindPath = async (value: unknown, semantics: PathSemantics = 'referent'): Promise<unknown> =>
-    typeof value === 'string' ? requirePhysicalPath(value, cwd, semantics) : value;
+    typeof value === 'string' ? bindPhysicalPath(value, semantics) : value;
   if (toolName === 'apply_patch' && typeof record.patch === 'string')
     return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
   return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;

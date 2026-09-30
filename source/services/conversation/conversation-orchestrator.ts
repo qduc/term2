@@ -465,6 +465,8 @@ export class ConversationOrchestrator {
    */
   #activeTurns = 0;
   readonly #outstandingSubmissions = new Map<string, OutstandingSubmission>();
+  /** Bumped by every presentation reset; pre-reset in-flight submissions are dead. */
+  #lifecycleGeneration = 0;
   /** True while {@link stopProcessing} is tearing the conversation down. */
   #stoppingByUser = false;
   /**
@@ -558,6 +560,9 @@ export class ConversationOrchestrator {
   }
 
   async clearConversation(): Promise<void> {
+    // Invalidate submissions already in flight before the service is replaced:
+    // a steer released by the reset must not fall through to a fresh send.
+    this.#lifecycleGeneration += 1;
     if (this.config.onClear) {
       await this.config.onClear();
     } else {
@@ -569,6 +574,7 @@ export class ConversationOrchestrator {
 
   /** Reset only the UI projection after an in-place session rollover. */
   resetPresentation(options: { preserveBackgroundNotificationDedup?: boolean } = {}): void {
+    this.#lifecycleGeneration += 1;
     this.config.messages.setMessages(() => []);
     this.config.approvedContext.current = null;
     this.config.conversationService.clearPendingInteraction?.();
@@ -892,6 +898,7 @@ export class ConversationOrchestrator {
         const queueActive = this.config.conversationService.isQueueActive?.() ?? false;
         const queueStateKind = this.config.conversationService.queueStateKind?.() ?? 'unknown';
         const steerStartedAt = Date.now();
+        const steerGeneration = this.#lifecycleGeneration;
         const steered = await this.config.conversationService
           .steerActiveTurn(turn, { id: userMessage.id })
           .catch((error) => {
@@ -905,6 +912,16 @@ export class ConversationOrchestrator {
           waitedMs: Date.now() - steerStartedAt,
           messageId: userMessage.id,
         });
+        if (steerGeneration !== this.#lifecycleGeneration) {
+          // The session was reset while this steer waited for a request
+          // boundary (e.g. /clear). The released steer belongs to the
+          // discarded session: reclassifying or re-sending it would deliver
+          // discarded text into the replacement session.
+          this.#outstandingSubmissions.delete(userMessage.id);
+          this.#editedSteerTurns.delete(userMessage.id);
+          options?.onSteerSettled?.(false);
+          return;
+        }
         options?.onSteerSettled?.(steered);
         if (steered) {
           this.#outstandingSubmissions.delete(userMessage.id);

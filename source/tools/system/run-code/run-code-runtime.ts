@@ -387,7 +387,9 @@ async function requirePhysicalPath(value: string, cwd: string, semantics: PathSe
  * Remote counterpart of `requirePhysicalPath`. The remote command canonicalizes
  * the nearest existing ancestor, preserves a missing suffix, and rejects both
  * dangling links and unlinking a symlink itself. Its NUL-delimited result means
- * a valid remote pathname containing a newline is still unambiguous locally.
+ * a valid remote pathname containing a newline is still unambiguous locally;
+ * do not capture that pathname in command substitution, which strips trailing
+ * newlines.
  */
 async function requireRemotePhysicalPath(
   value: string,
@@ -402,26 +404,50 @@ async function requireRemotePhysicalPath(
     'candidate=$original',
     "suffix=''",
     sourceCheck.trimEnd(),
-    'while ! resolved=$(realpath -e -- "$candidate" 2>/dev/null); do',
+    // Do this once before walking missing ancestors. Otherwise an absent or
+    // incompatible utility can make every probe fail and look like a path that
+    // merely does not exist.
+    'if ! command -v realpath >/dev/null 2>&1 || ! realpath -e -z -- / >/dev/null 2>&1; then exit 45; fi',
+    'while true; do',
+    '  if realpath -e -- "$candidate" >/dev/null 2>&1; then',
+    '    if [ -z "$suffix" ]; then',
+    '      realpath -e -z -- "$candidate" || exit 46',
+    '    else',
+    // A successful realpath of an unsearchable directory does not establish
+    // authority over a missing child below it. Refuse rather than append the
+    // child lexically.
+    '      if ! [ -d "$candidate" ] || ! [ -x "$candidate" ] || ! cd -P "$candidate"; then exit 46; fi',
+    '      printf \'%s%s\\0\' "$PWD" "$suffix"',
+    '    fi',
+    '    exit',
+    '  fi',
     '  if [ -L "$candidate" ]; then exit 43; fi',
-    '  parent=$(dirname -- "$candidate")',
+    // Do not interpret a failed realpath of an existing path as a missing leaf:
+    // permission and other resolution errors must not be converted into a
+    // lexical suffix.
+    '  if [ -e "$candidate" ]; then exit 46; fi',
+    '  parent=${candidate%/*}',
+    '  if [ -z "$parent" ]; then parent=/; fi',
     '  if [ "$parent" = "$candidate" ]; then exit 44; fi',
-    '  suffix="/$(basename -- "$candidate")$suffix"',
+    '  suffix="/${candidate##*/}$suffix"',
     '  candidate=$parent',
     'done',
-    'printf \'%s\\0\' "$resolved$suffix"',
   ]
     .filter(Boolean)
     .join('\n');
   const result = await sshService.executeCommand(command);
   if (result.exitCode === 42) throw new Error(`Symlink unlink source is unsupported: ${value}`);
   if (result.exitCode === 43) throw new Error(`Unresolved path: ${value}`);
+  if (result.exitCode === 45) throw new Error(`Remote canonicalizer is unavailable or unsupported: ${value}`);
+  if (result.exitCode === 46) throw new Error(`Remote canonicalizer could not resolve path safely: ${value}`);
   if (result.exitCode !== 0) throw new Error(`Unresolved path: ${value}`);
   const terminator = result.stdout.indexOf('\0');
   if (terminator < 1 || terminator !== result.stdout.length - 1) {
     throw new Error(`Invalid remote physical path response: ${value}`);
   }
-  return result.stdout.slice(0, terminator);
+  const physicalPath = result.stdout.slice(0, terminator);
+  if (!physicalPath.startsWith('/')) throw new Error(`Invalid remote physical path response: ${value}`);
+  return physicalPath;
 }
 
 type AuthorityPathBinder = (value: string, semantics?: PathSemantics) => Promise<string>;

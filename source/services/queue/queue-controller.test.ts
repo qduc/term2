@@ -288,6 +288,179 @@ it('manual cancel retains multiple queued items and resumes them FIFO', async ()
   expect(starts).toEqual(['active', 'second', 'third']);
 });
 
+it('does not treat a projected failure as proof that an unproven cancellation settled', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId, item }) => {
+        starts.push(`${executionId}:${item.text}`);
+      },
+      cancel: async () => false,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  const cancelled = await controller.command({ kind: 'cancel' });
+  expect(cancelled).toMatchObject({ kind: 'rejected', reason: 'cancellation_unproven' });
+  await controller.command({ kind: 'submit', text: 'fresh' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [{ text: 'fresh' }] });
+  await controller.event({
+    kind: 'failed',
+    executionId: 'execution-1' as ExecutionId,
+    failure: new Error('projected abort'),
+  });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [{ text: 'fresh' }] });
+  expect(starts).toEqual(['execution-1:active']);
+  await controller.command({ kind: 'cancellation_settled', executionId: 'execution-1' as ExecutionId });
+  expect(starts).toEqual(['execution-1:active', 'execution-2:fresh']);
+});
+
+it('releases an unproven cancellation by captured execution identity using stop-time retention', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId, item }) => {
+        starts.push(`${executionId}:${item.text}`);
+      },
+      cancel: async () => false,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'retained-at-stop' });
+  await controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'submit', text: 'fresh-during-cancel' });
+  await controller.command({ kind: 'cancellation_settled', executionId: 'wrong-execution' as ExecutionId });
+  expect(controller.state()).toMatchObject({
+    kind: 'cancelling',
+    queue: [{ text: 'retained-at-stop' }, { text: 'fresh-during-cancel' }],
+  });
+  await controller.command({ kind: 'cancellation_settled', executionId: 'execution-1' as ExecutionId });
+  expect(controller.state()).toMatchObject({
+    kind: 'paused',
+    reason: 'manual',
+    queue: [{ text: 'retained-at-stop' }, { text: 'fresh-during-cancel' }],
+  });
+  expect(starts).toEqual(['execution-1:active']);
+});
+
+it('discard during cancellation clears stop-time retention without releasing active ownership', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ executionId, item }) => {
+        starts.push(`${executionId}:${item.text}`);
+      },
+      cancel: async () => false,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'A' });
+  await controller.command({ kind: 'submit', text: 'B' });
+  await controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'discard_queue' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [] });
+  await controller.command({ kind: 'submit', text: 'C' });
+  expect(controller.state()).toMatchObject({ kind: 'cancelling', queue: [{ text: 'C' }] });
+  await controller.command({ kind: 'cancellation_settled', executionId: 'execution-1' as ExecutionId });
+  expect(starts).toEqual(['execution-1:A', 'execution-2:C']);
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'C' } } });
+});
+
+it('removing the last stop-retained item lets post-stop queued work dispatch on proof', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => false,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'A' });
+  await controller.command({ kind: 'submit', text: 'B' });
+  await controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'submit', text: 'C' });
+  await controller.command({ kind: 'remove_queued', itemId: 'item-2' as ItemId });
+  await controller.command({ kind: 'cancellation_settled', executionId: 'execution-1' as ExecutionId });
+  expect(starts).toEqual(['A', 'C']);
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'C' } } });
+});
+
+it('manual cancel from a paused queue releases retained messages in FIFO order', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'queued-before-stop' });
+  await controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'cancel' });
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'queued-before-stop' } } });
+  expect(starts).toEqual(['active', 'queued-before-stop']);
+  await controller.command({ kind: 'submit', text: 'fresh-after-stop' });
+  expect(starts).toEqual(['active', 'queued-before-stop']);
+  await controller.event({ kind: 'completed', executionId: 'execution-2' as ExecutionId, terminal: {} });
+  expect(starts).toEqual(['active', 'queued-before-stop', 'fresh-after-stop']);
+});
+
 it('manual cancel with no retained queue returns to idle so the next submission runs immediately', async () => {
   const starts: string[] = [];
   let releaseCleanup!: () => void;

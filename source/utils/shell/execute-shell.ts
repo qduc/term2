@@ -356,7 +356,7 @@ async function executeShellCommandUnleased(
   } = options;
 
   if (sshService) {
-    return sshService.executeCommand(command, { cwd });
+    return sshService.executeCommand(command, { cwd, signal, timeoutMs: timeout });
   }
 
   const childEnv: NodeJS.ProcessEnv = {

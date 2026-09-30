@@ -16,6 +16,25 @@ The governing rule is:
 > The harness may measure and contain work. It must not silently interpret a
 > weak proxy as proof that productive work is invalid.
 
+### Interactive foreground cancellation proof settlement
+
+The queue's bounded cancellation wait is a fail-closed containment boundary: a
+timeout does not prove the active execution stopped, so submissions remain queued
+while the captured execution owns the session. The adapter captures the active
+queue execution identity and the coordinator's abort-completion promise. If the
+bounded wait expires, only settlement of that exact promise can issue the
+identity-fenced `cancellation_settled` transition; projected stream failures
+are not cancellation proof. The controller applies the retained-work decision
+captured at stop: an empty queue at stop releases to idle and dispatches fresh
+input submitted during the wait, while pre-existing queued work is retained in
+a manual pause. Discarding the entire retained queue while proof is pending
+lowers that captured retention decision to empty, but keeps active ownership
+fail-closed until proof settles. Ordinary execution failures continue to use
+failure-pause policy. If proof never settles, the queue remains fail-closed; runtime abandon /
+reset isolation is a separate product decision. The shell SSH adapter forwards
+the caller's signal and timeout to `SSHService`, which settles the local wait
+but cannot guarantee termination of the remote process.
+
 Budget judgment for turns, time, cost, and stall evidence is owned by
 [`run-budget-stall-escalation.md`](./run-budget-stall-escalation.md), not here.
 Shell changes must preserve [`background-shell-monitor/MAP.md`](./background-shell-monitor/MAP.md).

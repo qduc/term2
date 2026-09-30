@@ -7,6 +7,7 @@ import {
   registerSandboxNetworkApprovalHandler,
   requestSandboxNetworkApproval,
 } from './sandbox/sandbox-network-approval.js';
+import type { SSHCommandOptions } from '../../services/service-interfaces.js';
 
 it('executeShellCommand returns stdout and exit code for successful command', async () => {
   const result = await executeShellCommand("printf 'hello'", {
@@ -20,6 +21,19 @@ it('executeShellCommand returns stdout and exit code for successful command', as
   expect(result.stderr).toBe('');
   expect(result.exitCode).toBe(0);
   expect(result.timedOut).toBe(false);
+});
+
+it('forwards abort signal and timeout to SSH command execution', async () => {
+  const signal = new AbortController().signal;
+  let received: SSHCommandOptions | undefined;
+  const sshService = {
+    executeCommand: async (_command: string, options?: SSHCommandOptions) => {
+      received = options;
+      return { stdout: '', stderr: '', exitCode: 0 } as any;
+    },
+  };
+  await executeShellCommand('remote command', { sshService: sshService as any, signal, timeout: 4321 });
+  expect(received).toEqual({ cwd: process.cwd(), signal, timeoutMs: 4321 });
 });
 
 it('executeShellCommand captures stderr and exit code for failed command', async () => {

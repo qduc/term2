@@ -27,8 +27,10 @@ identity-fenced `cancellation_settled` transition; projected stream failures
 are not cancellation proof. The controller applies the retained-work decision
 captured at stop: an empty queue at stop releases to idle and dispatches fresh
 input submitted during the wait, while pre-existing queued work is retained in
-a manual pause. Ordinary execution failures continue to use failure-pause
-policy. If proof never settles, the queue remains fail-closed; runtime abandon /
+a manual pause. Discarding the entire retained queue while proof is pending
+lowers that captured retention decision to empty, but keeps active ownership
+fail-closed until proof settles. Ordinary execution failures continue to use
+failure-pause policy. If proof never settles, the queue remains fail-closed; runtime abandon /
 reset isolation is a separate product decision. The shell SSH adapter forwards
 the caller's signal and timeout to `SSHService`, which settles the local wait
 but cannot guarantee termination of the remote process.

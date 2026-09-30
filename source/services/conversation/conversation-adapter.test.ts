@@ -1217,6 +1217,88 @@ it('dispatches fresh input after the captured LiveRun consumer settles beyond th
   await expect(fresh).resolves.toMatchObject({ finalText: 'done-2' });
 });
 
+it('discard during unproven abort does not restore a manual pause when proof settles', async () => {
+  let releaseConsumer!: () => void;
+  const consumerGate = new Promise<void>((resolve) => {
+    releaseConsumer = resolve;
+  });
+  const liveRun = new LiveRun(
+    'run-discard',
+    new PostExecutePendingRegistry({ sessionId: 'session-discard', epoch: 1 }),
+    async () => {
+      await consumerGate;
+      return { kind: 'stale' };
+    },
+  );
+  const coordinator = new TurnCoordinator({
+    statusMachine: new TurnStatusMachine(),
+    turnWorkflow: {
+      abortLiveRun: () => {
+        liveRun.cancel();
+        return liveRun.completion.then(
+          () => undefined,
+          () => undefined,
+        );
+      },
+      closeTurn: () => {},
+    } as any,
+    approvalFlow: { abort: () => ({ aborted: true }) } as any,
+    providerContinuity: { clear: () => {} } as any,
+    shellAutoApproval: {} as any,
+  });
+  const starts: string[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn) {
+        const text = typeof input === 'string' ? input : input.text;
+        starts.push(text);
+        if (text === 'A') {
+          await liveRun.next();
+          return;
+        }
+        yield { type: 'final' as const, finalText: text };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      abort: () => coordinator.abort(),
+    },
+    queueForeground: true,
+    activeCancelTimeoutMs: 5,
+  });
+  const active = adapter.sendMessage('A');
+  const activeResult = active.then(
+    () => undefined,
+    () => undefined,
+  );
+  const retained = adapter.sendMessage('B');
+  void retained.catch(noop);
+  await new Promise((resolve) => setImmediate(resolve));
+  adapter.abort();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await adapter.abortAndDiscard();
+  expect(adapter.queueStateKind()).toBe('cancelling');
+  const fresh = adapter.sendMessage('C');
+  const freshResult = fresh.then(
+    (value) => value,
+    (error) => {
+      throw error;
+    },
+  );
+  releaseConsumer();
+  await activeResult;
+  await expect(freshResult).resolves.toMatchObject({ finalText: 'C' });
+  expect(starts).toEqual(['A', 'C']);
+  expect(adapter.queueStateKind()).toBe('idle');
+});
+
 it('force-settles the active request when cancel completes even if the turn ignores abort', async () => {
   let queueState: string | undefined;
   const adapter = new ConversationAdapter({

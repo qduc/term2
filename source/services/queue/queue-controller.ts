@@ -570,6 +570,13 @@ export class QueueController<Snapshot, Terminal = unknown> {
   }
 
   async #cancel(): Promise<QueueCommandResult> {
+    if (this.#phase === 'paused' && this.#pauseReason === 'manual') {
+      this.#phase = 'idle';
+      this.#pauseReason = undefined;
+      await this.#persist();
+      await this.#dispatch();
+      return { kind: 'accepted' };
+    }
     if (this.#phase === 'awaiting_preflight') {
       this.#phase = 'paused';
       this.#pauseReason = 'manual';

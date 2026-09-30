@@ -288,6 +288,39 @@ it('manual cancel retains multiple queued items and resumes them FIFO', async ()
   expect(starts).toEqual(['active', 'second', 'third']);
 });
 
+it('manual cancel from a paused queue releases retained messages in FIFO order', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let n = 0;
+        return () => `item-${++n}`;
+      })(),
+      execution: (() => {
+        let n = 0;
+        return () => `execution-${++n}`;
+      })(),
+    },
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'queued-before-stop' });
+  await controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'cancel' });
+  expect(controller.state()).toMatchObject({ kind: 'running', active: { item: { text: 'queued-before-stop' } } });
+  expect(starts).toEqual(['active', 'queued-before-stop']);
+  await controller.command({ kind: 'submit', text: 'fresh-after-stop' });
+  expect(starts).toEqual(['active', 'queued-before-stop']);
+  await controller.event({ kind: 'completed', executionId: 'execution-2' as ExecutionId, terminal: {} });
+  expect(starts).toEqual(['active', 'queued-before-stop', 'fresh-after-stop']);
+});
+
 it('manual cancel with no retained queue returns to idle so the next submission runs immediately', async () => {
   const starts: string[] = [];
   let releaseCleanup!: () => void;

@@ -202,7 +202,7 @@ export class ConversationAdapter {
   #cancellationEpoch = 0;
   #cancellation: Promise<void> = Promise.resolve();
   #cancellationProven = true;
-  #activeAbortCompletion: Promise<void> | null = null;
+  #cancellationProof: { executionId: ExecutionId; completion: Promise<void> } | null = null;
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
   #postExecuteApproval: PostExecuteApprovalToken | null = null;
@@ -268,11 +268,15 @@ export class ConversationAdapter {
     if (deps.queueForeground) {
       const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
         start: (execution) => this.#startQueuedTurn(execution),
-        cancel: async () => {
+        cancel: async (execution) => {
           // Prefer natural abort settlement, but report whether the bounded
           // barrier actually proved that the active execution stopped.
+          const proof =
+            this.#cancellationProof?.executionId === execution.executionId
+              ? this.#cancellationProof.completion
+              : this.#activeTurn;
           const result = await Promise.race([
-            (this.#activeAbortCompletion ?? this.#activeTurn).then(
+            proof.then(
               () => true,
               () => true,
             ),
@@ -750,12 +754,37 @@ export class ConversationAdapter {
     // own (a hung generator, missing abort hook, etc.), force-settle the active
     // request so orchestrator awaits cannot stick forever. Retained queued
     // requests stay pending — pause is not a terminal fate.
+    const queueState = this.#queue.state();
+    if (queueState.kind === 'cancelling') return;
     const activeRequestId = this.#activeRequestId;
+    const activeExecutionId =
+      queueState.kind === 'running' || queueState.kind === 'awaiting_active_action'
+        ? queueState.active.executionId
+        : null;
     this.#cancellingRequestId = activeRequestId;
-    this.#activeAbortCompletion = Promise.resolve(this.#turnFlow.abort?.());
+    const abortCompletion = Promise.resolve(this.#turnFlow.abort?.());
+    const proof = activeExecutionId ? { executionId: activeExecutionId, completion: abortCompletion } : null;
+    this.#cancellationProof = proof;
     this.#cancellationProven = true;
     this.#cancellation = this.#queue.command({ kind: 'cancel' }).then((result) => {
       this.#cancellationProven = result.kind !== 'rejected' || result.reason !== 'cancellation_unproven';
+      if (!this.#cancellationProven && proof) {
+        const settle = () => {
+          void this.#queue?.command({ kind: 'cancellation_settled', executionId: proof.executionId }).then(
+            () => {
+              if (this.#cancellationProof === proof) this.#cancellationProof = null;
+              this.#notifyQueueState();
+            },
+            (error: unknown) => {
+              this.#logger.error('Failed to settle an unproven queue cancellation', {
+                error: error instanceof Error ? error.message : String(error),
+                executionId: proof.executionId,
+              });
+            },
+          );
+        };
+        void proof.completion.then(settle, settle);
+      }
       if (this.#cancellationProven && activeRequestId && this.#messagesById.has(activeRequestId)) {
         this.#settleFailure(activeRequestId, queueCancellationError('Active turn was cancelled'));
       }
@@ -765,7 +794,7 @@ export class ConversationAdapter {
       if (this.#cancellationProven && this.#cancellingRequestId === activeRequestId) {
         this.#cancellingRequestId = null;
       }
-      if (this.#cancellationProven) this.#activeAbortCompletion = null;
+      if (this.#cancellationProven && this.#cancellationProof === proof) this.#cancellationProof = null;
       this.#notifyQueueState();
     });
   }

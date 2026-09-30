@@ -103,6 +103,7 @@ export type QueueCommand =
   | { readonly kind: 'submit'; readonly text: string; readonly id?: string }
   | { readonly kind: 'steer'; readonly text: string; readonly id?: string }
   | { readonly kind: 'cancel' }
+  | { readonly kind: 'cancellation_settled'; readonly executionId: ExecutionId }
   | {
       readonly kind: 'answer_preflight';
       readonly itemId: ItemId;
@@ -308,6 +309,8 @@ export class QueueController<Snapshot, Terminal = unknown> {
   /** Out-of-band occupancy (manual compaction) that must not start queued work. */
   #dispatchHeld = false;
   #cancellationUnproven = false;
+  #cancellationExecutionId: ExecutionId | null = null;
+  #cancelRetainedQueueLength = 0;
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
     this.#driver = options.driver;
@@ -389,6 +392,30 @@ export class QueueController<Snapshot, Terminal = unknown> {
         return this.#submit(cmd);
       case 'cancel':
         return this.#cancel();
+      case 'cancellation_settled': {
+        if (
+          this.#phase !== 'cancelling' ||
+          !this.#cancellationUnproven ||
+          this.#active?.executionId !== cmd.executionId ||
+          this.#cancellationExecutionId !== cmd.executionId
+        ) {
+          return { kind: 'no_op' };
+        }
+        this.#active = undefined;
+        this.#pendingAction = undefined;
+        this.#cancellationUnproven = false;
+        this.#cancellationExecutionId = null;
+        if (this.#cancelRetainedQueueLength === 0) {
+          this.#phase = 'idle';
+          this.#pauseReason = undefined;
+        } else {
+          this.#phase = 'paused';
+          this.#pauseReason = 'manual';
+        }
+        await this.#persist();
+        if (this.#phase === 'idle') await this.#dispatch();
+        return { kind: 'accepted' };
+      }
       case 'answer_preflight': {
         if (this.#phase !== 'awaiting_preflight') return { kind: 'rejected', reason: 'stale' };
         const head = this.#queue[0]!;
@@ -516,17 +543,10 @@ export class QueueController<Snapshot, Terminal = unknown> {
 
     if (!this.#active || this.#active.executionId !== event.executionId) return;
 
-    // A cancellation can time out without proving the driver stopped. Keep the
-    // queue closed until the active execution eventually reports a terminal
-    // event; that event is the proof needed to release or pause retained work.
-    const activeFromPhase =
-      this.#phase === 'running' ||
-      this.#phase === 'awaiting_active_action' ||
-      (this.#phase === 'cancelling' && this.#cancellationUnproven);
+    const activeFromPhase = this.#phase === 'running' || this.#phase === 'awaiting_active_action';
     if (!activeFromPhase) return;
 
     if (event.kind === 'failed') {
-      this.#cancellationUnproven = false;
       this.#active = undefined;
       this.#pendingAction = undefined;
       // Failure policy: do not auto-advance. Pause with retained work so the
@@ -543,7 +563,6 @@ export class QueueController<Snapshot, Terminal = unknown> {
     }
     if (event.kind !== 'completed') return;
 
-    this.#cancellationUnproven = false;
     this.#pendingAction = undefined;
     this.#phase = 'completing';
     await this.#persist();
@@ -605,6 +624,8 @@ export class QueueController<Snapshot, Terminal = unknown> {
     const retainedQueueLength = this.#queue.length;
     this.#phase = 'cancelling';
     this.#cancellationUnproven = false;
+    this.#cancellationExecutionId = active.executionId;
+    this.#cancelRetainedQueueLength = retainedQueueLength;
     this.#pendingAction = undefined;
     await this.#persist();
     let proven = true;
@@ -613,6 +634,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
     } finally {
       if (this.#active?.executionId === active.executionId && proven) {
         this.#active = undefined;
+        this.#cancellationExecutionId = null;
         // Invariant: a paused queue must contain retained work. When nothing
         // was queued at stop time, return to idle so the next submission
         // starts immediately instead of being queued behind a manual pause

@@ -11,6 +11,10 @@ import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
 import type { ConversationEvent } from './conversation-events.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
+import { LiveRun } from '../session/live-run.js';
+import { TurnCoordinator } from '../session/turn-coordinator.js';
+import { TurnStatusMachine } from '../session/turn-status-machine.js';
+import { PostExecutePendingRegistry } from '../session/post-execute-pending-registry.js';
 
 const noop = () => {};
 
@@ -1141,10 +1145,35 @@ it('classifies handleApprovalDecision completion without terminal event as cance
   await expect(decision).rejects.toMatchObject({ name: 'AbortError' });
 });
 
-it('dispatches a fresh submission after an unproven cancellation later settles', async () => {
-  let releaseActive!: () => void;
-  const activeGate = new Promise<void>((resolve) => {
-    releaseActive = resolve;
+it('dispatches fresh input after the captured LiveRun consumer settles beyond the cancel bound', async () => {
+  let releaseConsumer!: () => void;
+  const consumerGate = new Promise<void>((resolve) => {
+    releaseConsumer = resolve;
+  });
+  const liveRun = new LiveRun(
+    'run-1',
+    new PostExecutePendingRegistry({ sessionId: 'session-1', epoch: 1 }),
+    async () => {
+      await consumerGate;
+      return { kind: 'stale' };
+    },
+  );
+  const turnWorkflow = {
+    abortLiveRun: () => {
+      liveRun.cancel();
+      return liveRun.completion.then(
+        () => undefined,
+        () => undefined,
+      );
+    },
+    closeTurn: () => {},
+  };
+  const coordinator = new TurnCoordinator({
+    statusMachine: new TurnStatusMachine(),
+    turnWorkflow: turnWorkflow as any,
+    approvalFlow: { abort: () => ({ aborted: true }) } as any,
+    providerContinuity: { clear: () => {} } as any,
+    shellAutoApproval: {} as any,
   });
   let starts = 0;
   const adapter = new ConversationAdapter({
@@ -1158,26 +1187,33 @@ it('dispatches a fresh submission after an unproven cancellation later settles',
     turnFlow: {
       async *start() {
         starts += 1;
-        if (starts === 1) await activeGate;
+        if (starts === 1) {
+          const projected = await liveRun.next();
+          if (projected.kind === 'cancelled') return;
+        }
         yield { type: 'final' as const, finalText: `done-${starts}` };
       },
       async *continueAfterApproval() {
         yield { type: 'final' as const, finalText: 'done' };
       },
-      abort: () => new Promise<void>(() => {}),
+      abort: () => coordinator.abort(),
     },
     queueForeground: true,
     activeCancelTimeoutMs: 5,
   });
   const active = adapter.sendMessage('active');
+  const activeResult = active.then(
+    (value) => ({ kind: 'resolved' as const, value }),
+    (error) => ({ kind: 'rejected' as const, error }),
+  );
   await new Promise((resolve) => setImmediate(resolve));
   adapter.abort();
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(adapter.queueStateKind()).toBe('cancelling');
   const fresh = adapter.sendMessage('fresh');
   expect(adapter.isQueueOwningSubmissions()).toBe(true);
-  releaseActive();
-  await expect(active).resolves.toMatchObject({ finalText: 'done-1' });
+  releaseConsumer();
+  await expect(activeResult).resolves.toMatchObject({ kind: 'rejected', error: { name: 'AbortError' } });
   await expect(fresh).resolves.toMatchObject({ finalText: 'done-2' });
 });
 

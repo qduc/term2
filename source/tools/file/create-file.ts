@@ -131,7 +131,7 @@ export function createCreateFileToolDefinition(deps: {
         // The shared physical check is local-only; remote symlink state is not
         // visible through the local filesystem, so remote writes fail closed to
         // explicit approval instead of being auto-approved lexically.
-        const isRemote = executionContext?.isRemote() && !executionContext?.getSSHService();
+        const isRemote = executionContext?.isRemote() ?? false;
         const physicallyInsideWorkspace =
           !isRemote &&
           !isProtectedHookPath(targetPath, cwd) &&

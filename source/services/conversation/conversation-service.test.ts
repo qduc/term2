@@ -2006,6 +2006,56 @@ it('returns the client run-budget grant result', () => {
   expect(grantCalls).toBe(1);
 });
 
+it('resetWithNewId() discards queued messages instead of running them after the clear', async () => {
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const inputs: unknown[] = [];
+  const mockClient = partialClient({
+    async startStream(input: unknown) {
+      inputs.push(input);
+      if (inputs.length === 1) return new GatedStream('first terminal', firstGate);
+      const stream = new MockStream([{ type: 'text_delta', text: 'queued terminal' }]);
+      stream.finalOutput = 'queued terminal';
+      return stream;
+    },
+  });
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const first = service.sendMessage('first');
+  // The active turn is aborted by the reset; its terminal is not this test's
+  // contract, so it must not surface as an unhandled rejection.
+  first.catch(() => undefined);
+  await flushQueue();
+  const queued = service.sendMessage('queued');
+  await flushQueue();
+  expect(inputs).toHaveLength(1);
+  expect(service.queueStateKind()).toBe('running');
+
+  service.resetWithNewId('new-id');
+  releaseFirst();
+
+  // /clear discards the queue: the queued submission is settled (as discarded)
+  // instead of hanging forever or being executed by the replaced adapter.
+  const settled = await Promise.race([
+    queued.then(
+      () => 'settled' as const,
+      () => 'settled' as const,
+    ),
+    new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 2000)),
+  ]);
+  expect(settled).toBe('settled');
+  await expect(queued).rejects.toThrow();
+
+  // The cleared session must not execute the discarded queue item.
+  expect(inputs).toHaveLength(1);
+  expect(service.isQueueOwningSubmissions()).toBe(false);
+});
+
 it('returns the unavailable run-budget grant result when the client lacks the capability', () => {
   const service = new ConversationService({
     agentClient: partialClient(),

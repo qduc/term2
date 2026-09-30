@@ -304,6 +304,11 @@ export class ConversationService {
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
     const previousEventSink = this.#eventSink;
+    // A reset replaces the session; pending queue work belongs to the session
+    // being replaced. Discard it (in memory and in persistence) so the dropped
+    // adapter can never start a queued submission after the reset — otherwise
+    // a /clear with queued messages sends them afterward.
+    void this.#adapter.discardQueue();
     this.#runtime.state.reset();
     this.#runtime.dispose();
     this.#clientHandle.dispose();

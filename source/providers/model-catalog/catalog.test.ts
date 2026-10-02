@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATALOG_META, MODEL_CATALOG } from './catalog.generated.js';
+import { CATALOG_META, MODEL_CATALOG, type GeneratedCatalogModel } from './catalog.generated.js';
 import {
   getCatalogModel,
   getModelContextWindow,
@@ -178,13 +178,26 @@ describe('vendored catalog data contract', () => {
     }
   });
 
-  it('carries a standard price for every vendored model', () => {
-    const unpriced = Object.entries(MODEL_CATALOG).flatMap(([provider, models]) =>
-      Object.entries(models)
-        .filter(([, entry]) => entry.inputPricePerMTok === undefined || entry.outputPricePerMTok === undefined)
-        .map(([model]) => `${provider}/${model}`),
-    );
-    expect(unpriced).toEqual([]);
+  it('carries only complete, finite, nonnegative pricing or no pricing at all', () => {
+    for (const [provider, models] of Object.entries(MODEL_CATALOG)) {
+      for (const [model, info] of Object.entries(models)) {
+        const entry: GeneratedCatalogModel = info;
+        const rates = [
+          entry.inputPricePerMTok,
+          entry.outputPricePerMTok,
+          entry.cacheReadPricePerMTok,
+          entry.cacheWritePricePerMTok,
+        ];
+        const supplied = rates.filter((rate) => rate !== undefined);
+        if (supplied.length === 0) continue;
+        expect(entry.inputPricePerMTok, `${provider}/${model} input price`).toBeDefined();
+        expect(entry.outputPricePerMTok, `${provider}/${model} output price`).toBeDefined();
+        for (const rate of supplied) {
+          expect(Number.isFinite(rate), `${provider}/${model} finite price`).toBe(true);
+          expect(rate, `${provider}/${model} nonnegative price`).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
   });
 
   it('keeps model ids lowercase', () => {
@@ -198,5 +211,15 @@ describe('vendored catalog data contract', () => {
   it('records a parseable generation timestamp', () => {
     expect(Number.isNaN(Date.parse(CATALOG_META.generatedAt))).toBe(false);
     expect(CATALOG_META.schemaVersion).toBe(2);
+  });
+});
+
+describe('router pricing regression', () => {
+  it.each(['openrouter/auto', 'openrouter/auto-beta'])('retains %s model limits without inventing a price', (model) => {
+    const entry = getCatalogModel('openrouter', model);
+    expect(entry?.contextWindow).toBe(2000000);
+    expect(entry?.maxTokens).toBe(4096);
+    expect(entry?.inputPricePerMTok).toBeUndefined();
+    expect(entry?.outputPricePerMTok).toBeUndefined();
   });
 });

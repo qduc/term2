@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import {
   computeModelCost,
@@ -388,5 +388,55 @@ describe('createSessionCostAccumulator', () => {
     expect(formatModelUsageBreakdown(summarizeModelUsage(records))).toBe(
       'By model:\n  openai/gpt-4.1: 1,200 input (300 cached), 80 output; Cost $0.42',
     );
+  });
+});
+
+describe('catalog price validity at the arithmetic boundary', () => {
+  it.each(['inputPerMTok', 'outputPerMTok', 'cacheReadPerMTok', 'cacheWritePerMTok'] as const)(
+    'leaves requests unpriced for invalid %s, even when its token count is zero',
+    (field) => {
+      for (const invalid of [-1, -1000000, Number.NaN, Infinity, -Infinity]) {
+        const getPrice = stubPrice({ ...STANDARD_PRICE, [field]: invalid });
+        for (const usage of [
+          { prompt_tokens: 1000, completion_tokens: 200, cache_read_tokens: 100, cache_creation_tokens: 50 },
+          { prompt_tokens: 0, completion_tokens: 0 },
+        ]) {
+          const cost = computeModelCost(baseInput({ getPrice, usage }));
+          expect(cost.unpricedReason).toBe('unknown_model');
+          expect(cost.usdMicros).toBeUndefined();
+          expect(cost.source).toBeUndefined();
+          expect(cost.pricingVersion).toBeUndefined();
+          expect(summarizeCost([cost]).state).toBe('unavailable');
+        }
+      }
+    },
+  );
+
+  it('preserves free catalog pricing', () => {
+    const cost = computeModelCost(
+      baseInput({
+        getPrice: stubPrice({ inputPerMTok: 0, outputPerMTok: 0, cacheReadPerMTok: 0, cacheWritePerMTok: 0 }),
+      }),
+    );
+    expect(cost).toMatchObject({ source: 'catalog', usdMicros: 0 });
+    expect(cost.unpricedReason).toBeUndefined();
+  });
+
+  it('preserves existing semantics for absent optional cache prices', () => {
+    const cost = computeModelCost(baseInput({ getPrice: stubPrice({ inputPerMTok: 2, outputPerMTok: 8 }) }));
+    expect(cost).toMatchObject({ source: 'catalog', usdMicros: 3400 });
+  });
+
+  it.each([
+    { providerUsdMicros: 42, providerUsd: '1', expected: 42 },
+    { providerUsdMicros: 0, expected: 0 },
+    { providerUsd: '0.000123', expected: 123 },
+    { providerUsd: '-0.000123', expected: -123 },
+  ])('keeps provider charge precedence without consulting invalid catalog rates: %j', ({ expected, ...charge }) => {
+    const getPrice = vi.fn(stubPrice({ inputPerMTok: -1000000, outputPerMTok: Infinity }));
+    const cost = computeModelCost(baseInput({ ...charge, getPrice }));
+    expect(cost).toMatchObject({ source: 'provider', usdMicros: expected });
+    expect(cost.unpricedReason).toBeUndefined();
+    expect(getPrice).not.toHaveBeenCalled();
   });
 });

@@ -18,7 +18,7 @@ import {
   type GeneratedCatalogModel,
 } from '../../providers/model-catalog/catalog.generated.js';
 import { findModelMatches, lookupModel } from '../../providers/model-catalog/catalog.js';
-import type { CatalogPrice, PricingLookupResult, ServiceTier } from './model-cost.js';
+import { isValidCatalogPrice, type CatalogPrice, type PricingLookupResult, type ServiceTier } from './model-cost.js';
 import { TIER_PRICING_OVERLAY, type OverlayTier } from './pricing-overlay.js';
 
 const CATALOG_PRICING_VERSION = `catalog:v${CATALOG_META.schemaVersion}@${CATALOG_META.source}`;
@@ -34,15 +34,13 @@ function entryToCatalogPrice(entry: {
   cacheReadPricePerMTok?: number;
   cacheWritePricePerMTok?: number;
 }): CatalogPrice | undefined {
-  if (typeof entry.inputPricePerMTok !== 'number' || typeof entry.outputPricePerMTok !== 'number') {
-    return undefined;
-  }
-  return {
+  const price = {
     inputPerMTok: entry.inputPricePerMTok,
     outputPerMTok: entry.outputPricePerMTok,
     ...(entry.cacheReadPricePerMTok !== undefined ? { cacheReadPerMTok: entry.cacheReadPricePerMTok } : {}),
     ...(entry.cacheWritePricePerMTok !== undefined ? { cacheWritePerMTok: entry.cacheWritePricePerMTok } : {}),
   };
+  return isValidCatalogPrice(price) ? price : undefined;
 }
 
 /**
@@ -61,7 +59,7 @@ export function getModelPricing(provider: string, model: string, tier: ServiceTi
     const overlayEntry = TIER_PRICING_OVERLAY[providerId]?.[modelId]?.[tier as OverlayTier];
     if (overlayEntry) {
       const { sourceUrl: _sourceUrl, checkedAt: _checkedAt, ...price } = overlayEntry;
-      return { found: true, price };
+      if (isValidCatalogPrice(price)) return { found: true, price };
     }
     return { found: false, reason: 'unknown_tier' };
   }

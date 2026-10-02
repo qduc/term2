@@ -131,6 +131,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
   [SETTING_KEYS.UI_PASTE_THRESHOLD]: 'Max paste length before text is replaced by a placeholder',
   [SETTING_KEYS.UI_DISPLAY_MODE]: 'Display mode for rendering output (standard|concise)',
+  [SETTING_KEYS.UI_SKIN]: 'Layout skin (classic|rail|cards|ledger|zen); changes how output and prompts are drawn',
   [SETTING_KEYS.UI_THEME]: 'Colour theme (auto|dark|light|high-contrast|mono); auto follows the terminal background',
   [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
   [SETTING_KEYS.LOGGING_DISABLE]: 'Disable all file logging (true|false)',

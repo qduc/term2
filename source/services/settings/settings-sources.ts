@@ -119,6 +119,7 @@ export const SETTINGS_SOURCE_KEYS = {
     pasteThreshold: 'ui.pasteThreshold',
     displayMode: 'ui.displayMode',
     theme: 'ui.theme',
+    skin: 'ui.skin',
   },
   logging: {
     logLevel: 'logging.logLevel',

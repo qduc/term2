@@ -29,7 +29,7 @@ const NAMED_COLORS =
  * (the profile registry carries presentation metadata that no component renders),
  * so that rule applies only to code that draws the terminal UI.
  */
-const UI_PATHS = ['components/', 'hooks/', 'app.tsx', 'cli.tsx'];
+const UI_PATHS = ['components/', 'hooks/', 'skins/', 'app.tsx', 'cli.tsx'];
 export const isUiSource = (relativePath: string): boolean => UI_PATHS.some((p) => relativePath.startsWith(p));
 
 const RULES: ReadonlyArray<{ name: string; pattern: RegExp; uiOnly?: boolean }> = [
@@ -85,6 +85,7 @@ describe('findThemeViolations', () => {
     expect(findThemeViolations(line, { ui: false })).toEqual([]);
     expect(isUiSource('components/message/ChatMessage.tsx')).toBe(true);
     expect(isUiSource('hooks/use-setting.ts')).toBe(true);
+    expect(isUiSource('skins/rail/index.ts')).toBe(true);
     expect(isUiSource('services/profiles/registry.ts')).toBe(false);
   });
 

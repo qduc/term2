@@ -313,6 +313,11 @@ it('buildSettingValueSuggestions offers every theme for ui.theme, auto first', (
   expect(values).toEqual(['auto', 'dark', 'light', 'high-contrast', 'mono']);
 });
 
+it('buildSettingValueSuggestions offers every skin for ui.skin, classic first', () => {
+  const values = buildSettingValueSuggestions('ui.skin').map((r) => r.value);
+  expect(values).toEqual(['classic', 'rail', 'cards', 'ledger', 'zen']);
+});
+
 it('buildSettingValueSuggestions returns curated presets for shell.backgroundTimeout', () => {
   const result = buildSettingValueSuggestions('shell.backgroundTimeout');
   const values = result.map((r) => r.value);

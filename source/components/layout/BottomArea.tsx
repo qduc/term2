@@ -9,7 +9,7 @@ import ModeSwitchConfirmationPrompt from '../prompt/ModeSwitchConfirmationPrompt
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
-import Divider from '../common/Divider.js';
+import { useSkin } from '../../skins/SkinContext.js';
 import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
@@ -20,7 +20,6 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
-import { formatTokensPerSecond } from '../../utils/streaming/streaming-speed-tracker.js';
 import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
@@ -229,6 +228,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   mcpConfigController,
 }) => {
   const theme = useTheme();
+  const { WorkingIndicator, LiveDivider } = useSkin();
   const { controller } = useInputState();
   const terminalColumns = useTerminalColumns();
   const [dotCount, setDotCount] = useState(1);
@@ -354,7 +354,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
         {/* The one structural split on screen: printed history above, live controls below. */}
-        <Divider />
+        <LiveDivider />
         {firstRunSetup?.active && firstRunSetup.phase && (
           <FirstRunSetupPrompt phase={firstRunSetup.phase} provider={firstRunSetup.provider} />
         )}
@@ -410,19 +410,14 @@ const BottomArea: FC<BottomAreaProps> = ({
               </Box>
             )}
             {isProcessing && toolCallStreamingInfo && (
-              <Text color={theme.textSubtle}>
-                Calling tool {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : ''}
-                {' · '}
-                {workingElapsedSeconds}s
-                {toolCallStreamingInfo.argumentCharCount != null
-                  ? ` (${toolCallStreamingInfo.argumentCharCount} chars`
-                  : ''}
-                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? ` · ${formatTokensPerSecond(liveStreamingSpeed.tps)}`
-                  : ''}
-                {toolCallStreamingInfo.argumentCharCount != null ? ')' : ''}
-                {'.'.repeat(dotCount)}
-              </Text>
+              <WorkingIndicator
+                phase="tool_call"
+                elapsedSeconds={workingElapsedSeconds}
+                tokensPerSecond={liveStreamingSpeed?.tps}
+                toolName={toolCallStreamingInfo.toolName}
+                argumentChars={toolCallStreamingInfo.argumentCharCount}
+                dotCount={dotCount}
+              />
             )}
             {activeShellCommand && (
               <Text color={theme.textSubtle}>
@@ -430,20 +425,21 @@ const BottomArea: FC<BottomAreaProps> = ({
                 <Text bold>{truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))}</Text>
               </Text>
             )}
-            {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
-              <Text color={theme.textSubtle}>
-                Thinking · {thinkingElapsedSeconds}s
-                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? ` (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
-                  : ''}
-              </Text>
-            )}
-            {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
-              <Text color={theme.textSubtle}>
-                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? `Generating · ${workingElapsedSeconds}s (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
-                  : `Processing · ${workingElapsedSeconds}s`}
-              </Text>
+            {isProcessing && !toolCallStreamingInfo && (
+              <WorkingIndicator
+                phase={
+                  thinkingStartedAt != null
+                    ? 'thinking'
+                    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+                    ? 'generating'
+                    : 'processing'
+                }
+                elapsedSeconds={thinkingStartedAt != null ? thinkingElapsedSeconds : workingElapsedSeconds}
+                tokensPerSecond={liveStreamingSpeed?.tps}
+                toolName={undefined}
+                argumentChars={undefined}
+                dotCount={dotCount}
+              />
             )}
             {interruptConfirmVisible && <Text color={theme.warning}>Press Esc again to interrupt</Text>}
             <BackgroundTasksPanel

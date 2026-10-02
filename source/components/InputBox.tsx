@@ -16,6 +16,7 @@ import type { SubmissionMutation } from '../services/conversation/conversation-a
 import { MenuFooter, type MenuHint } from './common/MenuContainer.js';
 import PendingQueueList, { orderPendingQueueMessages, type PendingQueueMessage } from './input/PendingQueueList.js';
 import { useTheme } from './theme.js';
+import { useSkin } from '../skins/SkinContext.js';
 
 type Props = {
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
@@ -116,6 +117,7 @@ const InputBox: FC<Props> = ({
   historyNavigation,
 }) => {
   const theme = useTheme();
+  const { PromptMarker, InputFrame } = useSkin();
   const {
     input: value,
     setInput: onChange,
@@ -425,14 +427,10 @@ const InputBox: FC<Props> = ({
           <Text color={theme.accent}>{activePromptLabel}</Text>
         </Box>
       )}
-      <Box>
-        {!activePromptLabel && waitingForRejectionReason ? (
-          <Text color={theme.warning}>Why? </Text>
-        ) : isShellMode ? (
-          <Text color={theme.danger}>! </Text>
-        ) : (
-          <Text color={theme.accent}>❯ </Text>
-        )}
+      <InputFrame>
+        <PromptMarker
+          mode={!activePromptLabel && waitingForRejectionReason ? 'rejection' : isShellMode ? 'shell' : 'input'}
+        />
         <MultilineInput
           key={inputKey}
           value={value}
@@ -463,7 +461,7 @@ const InputBox: FC<Props> = ({
             return isFocusReportingSequence(input) || (key.meta && key.return);
           }}
         />
-      </Box>
+      </InputFrame>
       {escHintVisible && <Text color={theme.textSubtle}>Press Esc again to clear input</Text>}
       {waitingForRejectionReason && <Text color={theme.textSubtle}>(or Esc to cancel)</Text>}
       {!turnInFlight &&

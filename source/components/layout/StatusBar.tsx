@@ -1,6 +1,5 @@
 import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
 import React, { FC } from 'react';
-import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-host-control-grants.js';
@@ -17,43 +16,13 @@ import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/co
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
 import { getActiveWorkspaceRoot } from '../../services/workspace/active-workspace-root.js';
-import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
-import { GLYPH_SELECTED, GLYPH_SEPARATOR, GLYPH_WARNING, useTheme } from '../theme.js';
-
-/**
- * The one separator used between top-level config segments. Spacing lives
- * here so every gap is identical; previously the same `│` was written three
- * different ways (bare, inside `marginX`, and padded) and the bar looked
- * ragged.
- */
-const Divider: FC = () => {
-  const theme = useTheme();
-  return <Text color={theme.textSubtle}> {GLYPH_SEPARATOR} </Text>;
-};
-
-/** The separator used between metrics segments — a lighter join than the `│`
- * used elsewhere, since the metrics group is already one visual cluster. */
-const MetricDivider: FC = () => {
-  const theme = useTheme();
-  return <Text color={theme.textSubtle}> · </Text>;
-};
+import { GLYPH_WARNING, type ColorRole } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import type { StatusAlertView, StatusQuotaWindow, StatusSegmentView, StatusView } from '../../skins/types.js';
 
 function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
 }
-
-// terminalTextWidth counts every codepoint above U+007F as 2 columns, which is
-// the right conservative default for CJK/emoji text but wildly overcounts the
-// narrow box-drawing and arrow glyphs this bar is built from (│ ↑ ↓ · ▲ ❯ …).
-// Measuring those as 2 nearly doubles the bar's apparent width and makes the
-// budget collapse into the narrow layout far too eagerly. These specific
-// glyphs render as exactly one cell in every terminal this app targets (they
-// are chosen from theme.ts's "single-width on purpose" set plus the ellipsis
-// truncateTerminalText appends), so measure them at 1 and defer to
-// terminalTextWidth for everything else. Fix it here, not in
-// terminalTextWidth itself — other callers of that function rely on its
-// conservative doubling for content that really can be double-width.
-const STATUS_BAR_NARROW_GLYPHS = new Set([GLYPH_SEPARATOR, '↑', '↓', '→', '·', GLYPH_WARNING, GLYPH_SELECTED, '…']);
 
 const PROFILE_MODE_LABELS: Record<string, string> = {
   'builtin:standard': 'Standard',
@@ -66,139 +35,6 @@ const PROFILE_MODE_LABELS: Record<string, string> = {
 /** Compact rate for the bar (`48.2t/s`); prose contexts keep `formatTokensPerSecond`. */
 function formatStatusBarRate(tps: number, approximate: boolean): string {
   return formatTokensPerSecond(tps, approximate).replace(' tok/s', 't/s');
-}
-
-function statusBarTextWidth(value: string): number {
-  return Array.from(value).reduce(
-    (columns, char) => columns + (STATUS_BAR_NARROW_GLYPHS.has(char) ? 1 : terminalTextWidth(char)),
-    0,
-  );
-}
-
-const GROUP_SEPARATOR_TEXT = ` ${GLYPH_SEPARATOR} `;
-const METRIC_SEPARATOR_TEXT = ' · ';
-const GROUP_SEPARATOR_WIDTH = statusBarTextWidth(GROUP_SEPARATOR_TEXT);
-const METRIC_SEPARATOR_WIDTH = statusBarTextWidth(METRIC_SEPARATOR_TEXT);
-
-type SeparatorKind = 'group' | 'metric';
-
-/** One piece of the status bar, as data rather than inline JSX, so a shared
- * layout routine can measure, drop, and truncate segments identically for
- * both the configuration group and the metrics group. */
-interface StatusSegment {
-  id: string;
-  /** Empty string means "not applicable right now" and is filtered out before layout. */
-  text: string;
-  color?: string;
-  bold?: boolean;
-  /** Divider drawn before this segment when an earlier segment in the same
-   * group is visible. Omitted for sub-segments (e.g. reasoning effort, the
-   * SSH host detail) that attach directly to the segment before them instead
-   * of getting their own divider. */
-  separator?: SeparatorKind;
-  /** Drop order: lower drops first. Omit to make a segment undroppable. */
-  tier?: number;
-}
-
-interface RenderedSegment {
-  id: string;
-  text: string;
-  color?: string;
-  bold?: boolean;
-  showSeparator: boolean;
-  separator?: SeparatorKind;
-}
-
-function separatorWidth(kind: SeparatorKind | undefined): number {
-  if (kind === 'group') return GROUP_SEPARATOR_WIDTH;
-  if (kind === 'metric') return METRIC_SEPARATOR_WIDTH;
-  return 0;
-}
-
-function computeVisible(segments: StatusSegment[], dropped: ReadonlySet<string>): RenderedSegment[] {
-  const visible: RenderedSegment[] = [];
-  let anyBefore = false;
-  for (const segment of segments) {
-    if (!segment.text || dropped.has(segment.id)) continue;
-    visible.push({
-      id: segment.id,
-      text: segment.text,
-      color: segment.color,
-      bold: segment.bold,
-      showSeparator: Boolean(segment.separator) && anyBefore,
-      separator: segment.separator,
-    });
-    anyBefore = true;
-  }
-  return visible;
-}
-
-function measureVisible(visible: RenderedSegment[]): number {
-  return visible.reduce(
-    (total, segment) =>
-      total + (segment.showSeparator ? separatorWidth(segment.separator) : 0) + statusBarTextWidth(segment.text),
-    0,
-  );
-}
-
-/**
- * Fits one segment group to `budget` physical columns by dropping whole
- * segments in ascending `tier` order (lowest tier first) until it fits, then —
- * only as a last resort, and only for `truncatableId` — shrinking that one
- * segment's text with an ellipsis. This is the explicit-budget approach
- * BackgroundTasksPanel already uses: compute a hard column budget and shed
- * content deliberately, rather than let Ink's flexbox reflow text mid-word
- * when nothing fits.
- */
-function fitGroup(
-  defs: StatusSegment[],
-  budget: number,
-  truncatableId?: string,
-): { visible: RenderedSegment[]; width: number } {
-  const present = defs.filter((segment) => segment.text);
-  const dropped = new Set<string>();
-  const dropOrder = present
-    .filter((segment) => segment.tier != null)
-    .sort((a, b) => a.tier! - b.tier!)
-    .map((segment) => segment.id);
-
-  let visible = computeVisible(present, dropped);
-  let width = measureVisible(visible);
-
-  for (const id of dropOrder) {
-    if (width <= budget) break;
-    dropped.add(id);
-    visible = computeVisible(present, dropped);
-    width = measureVisible(visible);
-  }
-
-  if (width > budget && truncatableId) {
-    const index = visible.findIndex((segment) => segment.id === truncatableId);
-    if (index !== -1) {
-      const segment = visible[index];
-      const ownWidth =
-        (segment.showSeparator ? separatorWidth(segment.separator) : 0) + statusBarTextWidth(segment.text);
-      const otherWidth = width - ownWidth;
-      const separatorPortion = segment.showSeparator ? separatorWidth(segment.separator) : 0;
-      const textAllowance = Math.max(1, budget - otherWidth - separatorPortion);
-      const truncated = truncateTerminalText(segment.text, textAllowance);
-      visible = visible.map((entry, entryIndex) => (entryIndex === index ? { ...entry, text: truncated } : entry));
-      width = measureVisible(visible);
-    }
-  }
-
-  return { visible, width };
-}
-
-function renderSegments(visible: RenderedSegment[]) {
-  return visible.map((segment) => (
-    <React.Fragment key={segment.id}>
-      {segment.showSeparator && (segment.separator === 'metric' ? <MetricDivider /> : <Divider />)}
-      <Text color={segment.color} bold={segment.bold} wrap="truncate-end">
-        {segment.text}
-      </Text>
-    </React.Fragment>
-  ));
 }
 
 /**
@@ -233,6 +69,128 @@ const AUTO_APPROVE_LABELS: Record<'off' | 'advisory' | 'auto' | 'always', string
   always: 'YOLO',
 };
 
+/** One quota window as the classic bar prints it: `5H 42%→09:11`, or `Credits 40%` with no reset. */
+export function formatQuotaWindow(window: StatusQuotaWindow): string {
+  return `${window.label} ${window.percent}%${window.resetText ? `→${window.resetText}` : ''}`;
+}
+
+const formatDateMonthDay = (date: Date): string =>
+  `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+
+function openCodeGoQuotaWindows(usage: OpenCodeGoUsage | null | undefined): StatusQuotaWindow[] {
+  if (!usage) return [];
+  const formatReset = (seconds: number): string => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+  };
+  const toWindow = (label: string, limit: { usagePercent: number; resetInSec: number }): StatusQuotaWindow => ({
+    label,
+    percent: Math.round(limit.usagePercent),
+    resetText: formatReset(limit.resetInSec),
+  });
+  return [
+    toWindow('Roll', usage.rollingUsage),
+    toWindow('Week', usage.weeklyUsage),
+    toWindow('Month', usage.monthlyUsage),
+  ];
+}
+
+function codexQuotaWindows(info: CodexRateLimitInfo | null | undefined): StatusQuotaWindow[] {
+  if (!info) return [];
+
+  const isNumber = (value: unknown): value is number => typeof value === 'number' && !isNaN(value);
+
+  // Codex decides which slot carries which window, so derive the unit from the
+  // window length instead of assuming primary is short and secondary is weekly.
+  const formatWindow = (minutes: number): string => {
+    if (minutes >= 24 * 60) return `${Math.round(minutes / (24 * 60))}D`;
+    if (minutes >= 60) return `${Math.round(minutes / 60)}H`;
+    return `${Math.round(minutes)}M`;
+  };
+
+  const formatTime = (date: Date): string =>
+    date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  // A reset further out than a day only needs a date. A reset landing within
+  // 24h needs the clock time, plus the date when the window itself spans days
+  // so it stays clear the reset can be tomorrow rather than later today.
+  const formatReset = (resetAt: number, windowMinutes: number): string => {
+    const resetDate = new Date(resetAt * 1000);
+    const diffMs = resetDate.getTime() - Date.now();
+    const within24Hours = diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
+    if (!within24Hours) {
+      return formatDateMonthDay(resetDate);
+    }
+    return windowMinutes >= 24 * 60
+      ? `${formatDateMonthDay(resetDate)} ${formatTime(resetDate)}`
+      : formatTime(resetDate);
+  };
+
+  const toWindow = (window: CodexRateLimitWindow | undefined): StatusQuotaWindow | undefined => {
+    if (!window || !isNumber(window.window_minutes) || !isNumber(window.used_percent) || !isNumber(window.reset_at)) {
+      return undefined;
+    }
+    return {
+      label: formatWindow(window.window_minutes),
+      percent: window.used_percent,
+      resetText: formatReset(window.reset_at, window.window_minutes),
+    };
+  };
+
+  return [info.primary, info.secondary]
+    .map(toWindow)
+    .filter((window): window is StatusQuotaWindow => window !== undefined);
+}
+
+// Grok reports one weekly credit percentage, not the rolling used/reset
+// windows Codex reports, so it gets its own shape in the same slot — only one
+// provider is active at a time.
+function grokQuotaWindows(usage: GrokCreditUsage | null | undefined): StatusQuotaWindow[] {
+  if (!usage || typeof usage.creditUsagePercent !== 'number') return [];
+  return [
+    {
+      label: 'Credits',
+      percent: Math.round(usage.creditUsagePercent),
+      resetText: usage.periodEndMs === undefined ? undefined : formatDateMonthDay(new Date(usage.periodEndMs)),
+    },
+  ];
+}
+
+function formatActiveTime(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
+}
+
+// In warn mode the run keeps going past its envelope, so this line is the
+// only signal the human gets. It states the dimension, used vs limit, and
+// percentage consumed, not an instruction — the decision stays with the human.
+function runBudgetNoticeText(notice: RunBudgetEvent | null): string {
+  if (!notice) return '';
+  if (notice.type === 'tool_stall') {
+    return `${GLYPH_WARNING} Possible stall: ${notice.toolName} ×${notice.count}`;
+  }
+  const { dimension, used, limit } = notice.evidence;
+  const percent = limit > 0 ? Math.round((used / limit) * 100) : 100;
+  switch (dimension) {
+    case 'usd':
+      return `${GLYPH_WARNING} Run ${formatUsdMicros(used)}/${formatUsdMicros(limit)} (${percent}%)`;
+    case 'unpriced_tokens':
+      return `${GLYPH_WARNING} Run tokens ${formatStatusBarTokens(used)}/${formatStatusBarTokens(limit)} (${percent}%)`;
+    case 'active_time':
+      return `${GLYPH_WARNING} Run time ${formatActiveTime(used)}/${formatActiveTime(limit)} (${percent}%)`;
+    case 'turns':
+      return `${GLYPH_WARNING} Run turns ${used}/${limit} (${percent}%)`;
+    default:
+      return `${GLYPH_WARNING} Run budget: ${percent}%`;
+  }
+}
+
 interface StatusBarProps {
   settingsService: SettingsService;
   sshInfo?: SSHInfo;
@@ -255,6 +213,11 @@ interface StatusBarProps {
   columns?: number;
 }
 
+/**
+ * Builds the status view — every number, label and alert, already formatted —
+ * and hands it to the active skin to lay out. The formatting and the decisions
+ * about what is worth showing live here, so every skin shows the same facts.
+ */
 const StatusBar: FC<StatusBarProps> = ({
   settingsService,
   sshInfo,
@@ -274,12 +237,9 @@ const StatusBar: FC<StatusBarProps> = ({
   runBudgetNotice = null,
   columns: testColumns,
 }) => {
-  const theme = useTheme();
+  const { StatusBar: SkinStatusBar } = useSkin();
   const liveColumns = useTerminalColumns();
   const columns = testColumns ?? liveColumns;
-  // The bar applies paddingX={1} on both sides, so the budget available to
-  // segments is narrower than the terminal itself.
-  const budget = Math.max(1, columns - 2);
 
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
   const mentorMode = activeProfileId === 'builtin:mentor';
@@ -312,16 +272,13 @@ const StatusBar: FC<StatusBarProps> = ({
   const contextWindow = model ? getModelContextWindow(providerKey, model) : undefined;
   const contextTokens = lastUsage?.prompt_tokens;
   const contextUsageText = contextTokens != null ? formatContextUsage(contextTokens, contextWindow) : '';
-
-  const slate = theme.textSubtle;
-  const glow = theme.warning;
-  const accent = theme.accent;
-  const warnRed = theme.danger;
+  const contextPercent =
+    contextTokens != null && contextWindow ? Math.round((contextTokens / contextWindow) * 100) : undefined;
 
   const cacheReadTokens = lastUsage?.cache_read_tokens;
   const usageHasCacheRead = cacheReadTokens != null && cacheReadTokens > 0;
   const usageHasIntegratedWarning = Boolean(largeUncachedWarning && usageHasCacheRead);
-  const usageColor = largeUncachedWarning ? (hasPendingConfirmation ? warnRed : glow) : slate;
+  const usageTone: ColorRole = largeUncachedWarning ? (hasPendingConfirmation ? 'danger' : 'warning') : 'textSubtle';
 
   const tokenPieces: string[] = [];
   if (lastUsage?.prompt_tokens != null) tokenPieces.push(`↑${formatStatusBarTokens(lastUsage.prompt_tokens)}`);
@@ -373,122 +330,16 @@ const StatusBar: FC<StatusBarProps> = ({
     return `${GLYPH_WARNING} cache miss risk ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
   })();
 
-  const openCodeGoUsageText = (() => {
-    if (!openCodeGoUsage) return '';
-    const formatReset = (seconds: number): string => {
-      if (seconds < 60) return `${Math.round(seconds)}s`;
-      const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}m`;
-      const hours = Math.floor(minutes / 60);
-      return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
-    };
-    const formatLimit = (label: string, limit: { usagePercent: number; resetInSec: number }) =>
-      `${label} ${Math.round(limit.usagePercent)}%→${formatReset(limit.resetInSec)}`;
-    return [
-      formatLimit('Roll', openCodeGoUsage.rollingUsage),
-      formatLimit('Week', openCodeGoUsage.weeklyUsage),
-      formatLimit('Month', openCodeGoUsage.monthlyUsage),
-    ].join(' / ');
-  })();
-
-  const codexRateLimitText = (() => {
-    if (!lastCodexRateLimit) return '';
-
-    const isNumber = (value: unknown): value is number => typeof value === 'number' && !isNaN(value);
-
-    // Codex decides which slot carries which window, so derive the unit from the
-    // window length instead of assuming primary is short and secondary is weekly.
-    const formatWindow = (minutes: number): string => {
-      if (minutes >= 24 * 60) return `${Math.round(minutes / (24 * 60))}D`;
-      if (minutes >= 60) return `${Math.round(minutes / 60)}H`;
-      return `${Math.round(minutes)}M`;
-    };
-
-    const formatDate = (date: Date): string =>
-      `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
-
-    const formatTime = (date: Date): string =>
-      date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    // A reset further out than a day only needs a date. A reset landing within
-    // 24h needs the clock time, plus the date when the window itself spans days
-    // so it stays clear the reset can be tomorrow rather than later today.
-    const formatReset = (resetAt: number, windowMinutes: number): string => {
-      const resetDate = new Date(resetAt * 1000);
-      const diffMs = resetDate.getTime() - Date.now();
-      const within24Hours = diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
-      if (!within24Hours) {
-        return formatDate(resetDate);
-      }
-      return windowMinutes >= 24 * 60 ? `${formatDate(resetDate)} ${formatTime(resetDate)}` : formatTime(resetDate);
-    };
-
-    const formatWindowUsage = (window: CodexRateLimitWindow | undefined): string | undefined => {
-      if (!window || !isNumber(window.window_minutes) || !isNumber(window.used_percent) || !isNumber(window.reset_at)) {
-        return undefined;
-      }
-      const reset = formatReset(window.reset_at, window.window_minutes);
-      return `${formatWindow(window.window_minutes)} ${window.used_percent}%→${reset}`;
-    };
-
-    return [lastCodexRateLimit.primary, lastCodexRateLimit.secondary]
-      .map(formatWindowUsage)
-      .filter((part): part is string => part !== undefined)
-      .join(' / ');
-  })();
-
-  // Grok reports one weekly credit percentage, not the rolling used/reset
-  // windows Codex reports, so it gets its own formatting in the same slot —
-  // only one provider is active at a time. `formatDate` and `formatTime` above
-  // belong to the Codex block; this one needs only the period end.
-  const grokCreditUsageText = (() => {
-    if (!grokCreditUsage || typeof grokCreditUsage.creditUsagePercent !== 'number') return '';
-
-    const percent = Math.round(grokCreditUsage.creditUsagePercent);
-    const periodEndMs = grokCreditUsage.periodEndMs;
-    if (periodEndMs === undefined) return `Credits ${percent}%`;
-
-    const resetDate = new Date(periodEndMs);
-    const reset = `${String(resetDate.getMonth() + 1).padStart(2, '0')}/${String(resetDate.getDate()).padStart(
-      2,
-      '0',
-    )}`;
-    return `Credits ${percent}%→${reset}`;
-  })();
-
-  function formatActiveTime(ms: number): string {
-    const totalSeconds = Math.round(ms / 1000);
-    if (totalSeconds < 60) return `${totalSeconds}s`;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
-  }
-
-  // In warn mode the run keeps going past its envelope, so this line is the
-  // only signal the human gets. It states the dimension, used vs limit, and
-  // percentage consumed, not an instruction — the decision stays with the human.
-  const runBudgetNoticeText = (() => {
-    if (!runBudgetNotice) return '';
-    if (runBudgetNotice.type === 'tool_stall') {
-      return `${GLYPH_WARNING} Possible stall: ${runBudgetNotice.toolName} ×${runBudgetNotice.count}`;
-    }
-    const { dimension, used, limit } = runBudgetNotice.evidence;
-    const percent = limit > 0 ? Math.round((used / limit) * 100) : 100;
-    switch (dimension) {
-      case 'usd':
-        return `${GLYPH_WARNING} Run ${formatUsdMicros(used)}/${formatUsdMicros(limit)} (${percent}%)`;
-      case 'unpriced_tokens':
-        return `${GLYPH_WARNING} Run tokens ${formatStatusBarTokens(used)}/${formatStatusBarTokens(
-          limit,
-        )} (${percent}%)`;
-      case 'active_time':
-        return `${GLYPH_WARNING} Run time ${formatActiveTime(used)}/${formatActiveTime(limit)} (${percent}%)`;
-      case 'turns':
-        return `${GLYPH_WARNING} Run turns ${used}/${limit} (${percent}%)`;
-      default:
-        return `${GLYPH_WARNING} Run budget: ${percent}%`;
-    }
-  })();
+  // Only one provider is active at a time, so at most one of these is non-empty.
+  const codexWindows = codexQuotaWindows(lastCodexRateLimit);
+  const grokWindows = grokQuotaWindows(grokCreditUsage);
+  const quotaWindows =
+    codexWindows.length > 0
+      ? codexWindows
+      : grokWindows.length > 0
+      ? grokWindows
+      : openCodeGoQuotaWindows(openCodeGoUsage);
+  const quotaText = quotaWindows.map(formatQuotaWindow).join(' / ');
 
   const staticCommitBlockerText = (() => {
     if (!staticCommitBlocker) {
@@ -516,78 +367,83 @@ const StatusBar: FC<StatusBarProps> = ({
       : 'Sandboxed'
     : AUTO_APPROVE_LABELS[autoApproveMode];
 
-  const safetyColor = autoApproveAlways ? warnRed : sandboxEnabled || autoApproveMode === 'auto' ? theme.success : glow;
+  const safetyTone: ColorRole = autoApproveAlways
+    ? 'danger'
+    : sandboxEnabled || autoApproveMode === 'auto'
+    ? 'success'
+    : 'warning';
 
   // The alert row is where every non-steady-state message lands. Keeping them
   // in one row (rather than stacked beside the identity segments, as before)
   // means the bar is a single line whenever nothing is wrong — which is most
   // of the time — and grows only to say something.
-  const visibleStaticCommitBlockerText = debugMode ? staticCommitBlockerText : '';
-  const hasAlerts = Boolean(warningText || dockerHostAccess || runBudgetNoticeText || visibleStaticCommitBlockerText);
-  const quotaText = codexRateLimitText || grokCreditUsageText || openCodeGoUsageText;
+  const alerts: StatusAlertView[] = [];
+  if (warningText) {
+    alerts.push({
+      id: 'cache-warning',
+      parts: [{ text: warningText, tone: hasPendingConfirmation ? 'danger' : 'warning', bold: true }],
+    });
+  }
+  if (dockerHostAccess) {
+    alerts.push({
+      id: 'docker-host',
+      parts: [
+        { text: 'Docker host: ', tone: 'textSubtle' },
+        { text: dockerHostAccess, tone: 'warning', bold: true },
+      ],
+    });
+  }
+  const budgetText = runBudgetNoticeText(runBudgetNotice);
+  if (budgetText) {
+    alerts.push({ id: 'run-budget', parts: [{ text: budgetText, tone: 'warning', bold: true }] });
+  }
+  if (debugMode && staticCommitBlockerText) {
+    alerts.push({ id: 'static-blocker', parts: [{ text: staticCommitBlockerText, tone: 'danger', bold: true }] });
+  }
 
   // Segments as data: each group is fit to the *full* row budget on its own
-  // (drop order below), and only afterward do the two fitted groups get
-  // compared to see whether they still coexist on one line. That keeps the
-  // drop decision for each group independent of whatever the other group is
-  // doing, per the drop-order contract each priority list documents.
-  const configSegments: StatusSegment[] = [
-    { id: 'ssh-marker', text: sshInfo ? 'SSH' : '', color: glow, bold: true, tier: 0 },
+  // (drop order below) by the skin, and only afterward are the two fitted groups
+  // compared to see whether they still coexist on one line.
+  const config: StatusSegmentView[] = [
+    { id: 'ssh-marker', text: sshInfo ? 'SSH' : '', tone: 'warning', bold: true, tier: 0 },
     {
       id: 'ssh-detail',
       text: sshInfo ? ` ${sshInfo.user}@${sshInfo.host}:${sshInfo.remoteDir}` : '',
-      color: slate,
+      tone: 'textSubtle',
       tier: 5,
     },
-    {
-      id: 'mode',
-      text: modeLabel,
-      color: accent,
-      bold: true,
-      separator: 'group',
-    },
+    { id: 'mode', text: modeLabel, tone: 'accent', bold: true, separator: 'group' },
     {
       id: 'queue',
       text: queueLength != null && queueLength > 0 ? `[Q:${queueLength}]` : '',
-      color: accent,
+      tone: 'accent',
       separator: 'group',
       tier: 3,
     },
-    {
-      id: 'provider-model',
-      text: model ? `${displayProviderLabel}/${model}` : '',
-      color: accent,
-      separator: 'group',
-    },
+    { id: 'provider-model', text: model ? `${displayProviderLabel}/${model}` : '', tone: 'accent', separator: 'group' },
     {
       id: 'reasoning',
       text: model && reasoningEffort && reasoningEffort !== 'default' ? ` · ${reasoningEffort}` : '',
-      color: glow,
+      tone: 'warning',
       tier: 2,
     },
     {
       id: 'mentor',
       text: mentorMode && mentorModel ? mentorModel : '',
-      color: theme.accentAlt,
+      tone: 'accentAlt',
       separator: 'group',
       tier: 1,
     },
-    {
-      id: 'safety',
-      text: safetyLabel,
-      color: safetyColor,
-      bold: true,
-      separator: 'group',
-    },
+    { id: 'safety', text: safetyLabel, tone: safetyTone, bold: true, separator: 'group' },
   ];
 
-  const metricsSegments: StatusSegment[] = [
-    { id: 'tokens', text: tokensText, color: usageColor, bold: Boolean(largeUncachedWarning), tier: 4 },
-    { id: 'speed', text: speedText, color: slate, separator: 'metric', tier: 0 },
+  const metrics: StatusSegmentView[] = [
+    { id: 'tokens', text: tokensText, tone: usageTone, bold: Boolean(largeUncachedWarning), tier: 4 },
+    { id: 'speed', text: speedText, tone: 'textSubtle', separator: 'metric', tier: 0 },
     {
       id: 'cache',
       text: cacheText,
-      color: usageHasIntegratedWarning ? usageColor : slate,
+      tone: usageHasIntegratedWarning ? usageTone : 'textSubtle',
       bold: usageHasIntegratedWarning ? Boolean(largeUncachedWarning) : false,
       separator: 'metric',
       // The alert variant of this segment is the warning itself, so it must
@@ -595,85 +451,26 @@ const StatusBar: FC<StatusBarProps> = ({
       // the one thing it exists to say.
       tier: usageHasIntegratedWarning ? undefined : 1,
     },
-    { id: 'context', text: contextText, color: slate, separator: 'metric', tier: 3 },
-    { id: 'cost', text: costText, color: slate, separator: 'metric', tier: 2 },
+    { id: 'context', text: contextText, tone: 'textSubtle', separator: 'metric', tier: 3 },
+    { id: 'cost', text: costText, tone: 'textSubtle', separator: 'metric', tier: 2 },
   ];
 
-  const configFit = fitGroup(configSegments, budget);
-  const metricsFit = fitGroup(metricsSegments, budget);
-  const bothVisible = configFit.visible.length > 0 && metricsFit.visible.length > 0;
-  const combinedWidth = configFit.width + (bothVisible ? GROUP_SEPARATOR_WIDTH : 0) + metricsFit.width;
-  const metricsOnOwnRow = metricsFit.visible.length > 0 && combinedWidth > budget;
+  const view: StatusView = {
+    columns,
+    config,
+    metrics,
+    alerts,
+    quotaText,
+    gauges: {
+      contextPercent,
+      contextUsedTokens: contextTokens ?? undefined,
+      contextWindowTokens: contextWindow ?? undefined,
+      cachePercent,
+      quotaWindows,
+    },
+  };
 
-  return (
-    <Box marginTop={1} flexDirection="column" width="100%" paddingX={1}>
-      {/* Configuration (left) and this turn's numbers (right). No flexWrap: a
-          miscalculated budget should clip a segment via wrap="truncate-end",
-          never reflow it mid-word the way the row-level wrap used to. */}
-      <Box width="100%">
-        {renderSegments(configFit.visible)}
-        {!metricsOnOwnRow && metricsFit.visible.length > 0 && (
-          <>
-            <Divider />
-            {renderSegments(metricsFit.visible)}
-          </>
-        )}
-      </Box>
-      {metricsOnOwnRow && (
-        <Box width="100%" justifyContent="flex-end">
-          {renderSegments(metricsFit.visible)}
-        </Box>
-      )}
-
-      {/* Alerts (left) and provider quota (right). Absent when neither exists. */}
-      {(hasAlerts || quotaText) && (
-        <Box width="100%">
-          <Box flexGrow={1}>
-            {warningText && (
-              <Text color={hasPendingConfirmation ? warnRed : glow} bold wrap="truncate-end">
-                {warningText}
-              </Text>
-            )}
-            {dockerHostAccess && (
-              <>
-                {warningText && <Divider />}
-                <Text color={slate} wrap="truncate-end">
-                  Docker host:{' '}
-                </Text>
-                <Text color={glow} bold wrap="truncate-end">
-                  {dockerHostAccess}
-                </Text>
-              </>
-            )}
-            {runBudgetNoticeText && (
-              <>
-                {(warningText || dockerHostAccess) && <Divider />}
-                <Text color={glow} bold wrap="truncate-end">
-                  {runBudgetNoticeText}
-                </Text>
-              </>
-            )}
-            {visibleStaticCommitBlockerText && (
-              <>
-                {(warningText || dockerHostAccess || runBudgetNoticeText) && <Divider />}
-                <Text color={warnRed} bold wrap="truncate-end">
-                  {visibleStaticCommitBlockerText}
-                </Text>
-              </>
-            )}
-          </Box>
-
-          {quotaText && (
-            <Box flexShrink={0}>
-              <Text color={slate} wrap="truncate-end">
-                {quotaText}
-              </Text>
-            </Box>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
+  return <SkinStatusBar {...view} />;
 };
 
 export default StatusBar;

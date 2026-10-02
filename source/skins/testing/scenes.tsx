@@ -6,6 +6,10 @@ import StatusBar from '../../components/layout/StatusBar.js';
 import ChatMessage from '../../components/message/ChatMessage.js';
 import CommandGroupSummary from '../../components/message/CommandGroupSummary.js';
 import CommandMessage from '../../components/message/CommandMessage.js';
+import SubagentActivityMessage from '../../components/message/SubagentActivityMessage.js';
+import SkillSelectionMenu from '../../components/menu/SkillSelectionMenu.js';
+import SlashCommandMenu from '../../components/menu/SlashCommandMenu.js';
+import ResumeSelectionMenu from '../../components/menu/ResumeSelectionMenu.js';
 import ApprovalPrompt from '../../components/prompt/ApprovalPrompt.js';
 import { InputProvider } from '../../context/InputContext.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -150,6 +154,66 @@ export function isExpired(t: Token, skewMs = 30_000) {
 \`\`\`
 `;
 
+const ASK_USER_APPROVAL = {
+  agentName: 'Agent',
+  toolName: 'ask_user',
+  argumentsText: JSON.stringify({
+    questions: [
+      {
+        question: 'Which refresh strategy should I use?',
+        options: [
+          { label: 'Refresh inside the skew window', description: 'Recommended: avoids the one-hour logout.' },
+          { label: 'Refresh on every request', description: 'Simpler, but doubles token traffic.' },
+        ],
+      },
+      { question: 'Add a regression test?', options: [{ label: 'Yes' }, { label: 'No' }] },
+    ],
+  }),
+  rawInterruption: { type: 'ask_user' },
+};
+
+const toolBody = (id: string, toolName: string, output: string, toolArgs: Record<string, unknown>) =>
+  ({
+    id,
+    sender: 'command',
+    status: 'completed',
+    command: `${toolName} ${JSON.stringify(toolArgs)}`,
+    output,
+    success: true,
+    toolName,
+    toolArgs,
+  } as const);
+
+const GREP_BODY = toolBody(
+  'grep',
+  'grep',
+  'src/auth.ts:42:  if (token.expiresAt < Date.now())\nsrc/auth.ts:57:  return token.expiresAt\nsrc/retry.ts:10:  // TODO: refresh',
+  { pattern: 'expiresAt' },
+);
+const READ_BODY = toolBody(
+  'read',
+  'read_file',
+  'File: src/auth.ts (120 lines) [lines 40-43]\n===\n40: export function isExpired(t: Token) {\n41:   return expired(t);\n42: }\n43: ',
+  { path: 'src/auth.ts' },
+);
+const WEB_SEARCH_BODY = toolBody(
+  'web',
+  'web_search',
+  '## Answer\nRefresh tokens before they expire, using a skew window.\n\n## Search Results\n### 1. Token refresh patterns\n**URL:** https://example.com/refresh\n**Published:** 2025-01-02\nA skew window avoids edge expiry.\n---',
+  { query: 'token refresh skew' },
+);
+const WEB_FETCH_BODY = toolBody(
+  'fetch',
+  'web_fetch',
+  'Title: Token refresh patterns\nURL: https://example.com/refresh\n\nA skew window avoids edge expiry.',
+  { url: 'https://example.com/refresh' },
+);
+
+const SKILLS = [
+  { name: 'tdd', description: 'Test-driven development loop.', isProjectLevel: true },
+  { name: 'release', description: 'Cut a release.', isProjectLevel: false },
+];
+
 const noop = () => {};
 
 const bottomAreaProps = (overrides: Partial<BottomAreaProps>): BottomAreaProps => ({
@@ -279,6 +343,84 @@ export const SCENES: readonly Scene[] = [
     description: 'A sandbox-blocked read, with the list-only choices.',
     node: () => approval(DENIED_READ_APPROVAL),
     mustContain: ['Sandbox blocked read access', '/etc/hosts', 'Deny'],
+  },
+  {
+    id: 'ask-user',
+    description: 'The ask-user question: two questions, a recommended option, and the built-in custom-answer row.',
+    node: () => approval(ASK_USER_APPROVAL),
+    mustContain: [
+      'Which refresh strategy should I use?',
+      'Refresh inside the skew window',
+      'Refresh on every request',
+      'Recommended: avoids the one-hour logout.',
+      'Esc cancel',
+    ],
+  },
+  {
+    id: 'subagent-feed',
+    description: 'A subagent feed: running with its latest calls, completed with an answer, and failed.',
+    node: () => (
+      <Box flexDirection="column">
+        <SubagentActivityMessage
+          msg={{
+            role: 'explorer',
+            task: 'map auth flow',
+            status: 'running',
+            tools: ['read_file "src/auth.ts" (Success)', 'grep "expiresAt" (Failed)'],
+          }}
+        />
+        <SubagentActivityMessage
+          msg={{
+            role: 'explorer',
+            task: 'map auth flow',
+            status: 'completed',
+            finalText: 'Tokens refresh in src/auth.ts.',
+          }}
+        />
+        <SubagentActivityMessage
+          msg={{ role: 'reviewer', task: 'review the patch', status: 'failed', error: 'timeout', tools: [] }}
+        />
+      </Box>
+    ),
+    mustContain: ['map auth flow', 'src/auth.ts', 'Tokens refresh in src/auth.ts.', 'failed: timeout'],
+  },
+  {
+    id: 'tool-bodies',
+    description: 'The bodies of the specialised tool renderers: grep, read_file, web_search and web_fetch.',
+    node: () => (
+      <Box flexDirection="column">
+        <CommandMessage {...GREP_BODY} displayMode="standard" />
+        <CommandMessage {...READ_BODY} displayMode="standard" />
+        <CommandMessage {...WEB_SEARCH_BODY} displayMode="standard" />
+        <CommandMessage {...WEB_FETCH_BODY} displayMode="standard" />
+      </Box>
+    ),
+    mustContain: [
+      'src/retry.ts',
+      'return expired(t);',
+      'Answer Summary',
+      'Token refresh patterns',
+      'https://example.com/refresh',
+    ],
+  },
+  {
+    id: 'menus',
+    description: 'Menu bodies: a list menu, a two-column menu, and a menu with nothing to show.',
+    node: () => (
+      <Box flexDirection="column">
+        <SlashCommandMenu
+          commands={[
+            { name: 'clear', description: 'Clear screen', action: noop } as never,
+            { name: 'settings', description: 'Open settings', action: noop } as never,
+          ]}
+          selectedIndex={1}
+          filter=""
+        />
+        <SkillSelectionMenu items={SKILLS as never} selectedIndex={0} query="" />
+        <ResumeSelectionMenu items={[]} selectedIndex={0} query="" />
+      </Box>
+    ),
+    mustContain: ['Commands', 'settings', 'Skills', 'Test-driven development loop.', 'No saved conversations found'],
   },
   {
     id: 'status',

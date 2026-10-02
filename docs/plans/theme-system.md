@@ -114,7 +114,8 @@ tool call means, only where its parts go and how they are framed. The contract i
 **Slots** (all required; a skin spreads `classicSkin` and overrides what it draws
 differently): `Banner`, `UserMessage`, `AssistantFrame` (+ `assistantGutter`),
 `ToolFrame`, `ToolHeader`, `ToolGroupSummary`, `WorkingIndicator`, `LiveDivider`,
-`PromptMarker`, `InputFrame`, `Hints`, `ApprovalFrame`, `ApprovalChoices`, `StatusBar`.
+`PromptMarker`, `InputFrame`, `Hints`, `ApprovalFrame`, `ApprovalChoices`, `QuestionPrompt`,
+`SubagentFeed`, `ToolSection`, `MenuFrame`, `StatusBar`.
 The classic implementations are in `source/skins/classic/`; they reproduce the
 original output exactly and are the reference for what each slot receives.
 
@@ -201,12 +202,39 @@ that renders a running call needs fake timers.
 - Wrapped hints or status lines can leave a trailing `·` at a line end.
 - `rail` and `ledger` show `esc to interrupt`; the first Esc only asks for a second.
 
-**Not yet skinned** (the same in every skin today): the ask-user question prompt
-(it shares `TwoPaneApprovalLayout` from classic), the other confirmation prompts,
-`SubagentActivityMessage` and the body of the specialised tool renderers
-(`GrepRenderer`, `WebSearchRenderer`, ...) beneath their skinned header, menus other
-than their key-hint footer (`Hints`), `BackgroundTasksPanel`, and the "running shell
-command" line in `BottomArea`. Extending the contract to these is separate work.
+**Added later: the four slots that close most of the gap.**
+
+- `QuestionPrompt` — the ask-user question. The container supplies finished option views
+  (selected, ticked, recommended, tone) and the footer; the skin draws the question and
+  rows. The prompt is *not* wrapped in `ApprovalFrame` any more: a question is not a
+  request to run something, and nesting the two drew a frame inside a frame (and, in
+  classic, a misleading "Agent wants to run: ask_user" line, now gone).
+- `SubagentFeed` — a subagent's task line plus either its first-paragraph answer or its
+  latest calls (`children`, already drawn dense). `SubagentActivityMessage` owns the
+  title, status text and which calls to show.
+- `ToolSection` — the body of the specialised renderers (`GrepRenderer`,
+  `ReadFileRenderer`, `WebSearchRenderer`, `WebFetchRenderer`, `CodeContextSearchRenderer`,
+  `MemoryRenderer`, `RunCodeRenderer`, and the mentor answer). Three variants cover every
+  shape they used: `indent` (rows), `panel` (a block of content), `callout` (titled
+  highlight). Spacing between sections stays with the renderer. These bodies always sit
+  inside the tool call's `ToolFrame`, so a skin that draws a rail or box there should not
+  draw a second one around a section (`rail` indents instead).
+- `MenuFrame` — the surface a menu is drawn on, used by `MenuContainer` and by the Skills,
+  Profiles and Resume menus. `borderColor` is the *state* colour the container chose
+  (an error, say), never an identity colour; a skin may ignore it. `footerPlacement`
+  is `inside` or `outside` the frame. Loading, error and empty bodies pass `hasItems={false}`.
+
+Behaviour changes in classic from this work, all small: the `web_fetch` table-of-contents
+box is now the rounded callout shape instead of the ASCII `classic` border, and the
+Resume menu's empty state puts its `Esc cancel` hint below the frame like the other menus.
+
+**Not yet skinned** (the same in every skin today): the binary confirmation prompts
+(`ConfirmPrompt`, `QueuePausedPrompt` and the other `*ConfirmationPrompt`s), the menus
+that draw their own box rather than using `MenuContainer` or `MenuFrame`
+(`ProviderSelectionMenu`, `SubagentPoolSelectionMenu`, `FirstRunSetupPrompt`),
+`BackgroundTasksPanel` and `BackgroundTaskManager`, the inline `glob` / `ask_mentor`-style
+bodies in `CommandMessage` that are not in a renderer, and the "running shell command"
+line in `BottomArea`. Extending the contract to these is separate work.
 
 ## Verifying a change here
 

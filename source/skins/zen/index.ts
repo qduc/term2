@@ -1,3 +1,4 @@
+import { ZenMenuFrame, ZenQuestionPrompt, ZenSubagentFeed, ZenToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
 import { ZenApprovalChoices, ZenApprovalFrame } from './approval.js';
@@ -32,5 +33,9 @@ export const zenSkin: Skin = {
   Hints: ZenHints,
   ApprovalFrame: ZenApprovalFrame,
   ApprovalChoices: ZenApprovalChoices,
+  QuestionPrompt: ZenQuestionPrompt,
+  SubagentFeed: ZenSubagentFeed,
+  ToolSection: ZenToolSection,
+  MenuFrame: ZenMenuFrame,
   StatusBar: ZenStatusBar,
 };

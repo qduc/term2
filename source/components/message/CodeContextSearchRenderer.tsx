@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseCodeContextSearchOutput } from './command-message-helpers.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   output: string;
@@ -10,6 +11,7 @@ type Props = {
 
 const CodeContextSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
   const theme = useTheme();
+  const { ToolSection } = useSkin();
   const parsed = parseCodeContextSearchOutput(output) as any;
   if (!parsed) return null;
 
@@ -20,11 +22,11 @@ const CodeContextSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) 
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         {!relatedFiles || relatedFiles.length === 0 ? (
-          <Box paddingLeft={2}>
+          <ToolSection variant="indent">
             <Text color={theme.textSubtle}>No related files found.</Text>
-          </Box>
+          </ToolSection>
         ) : (
-          <Box flexDirection="column" paddingLeft={2}>
+          <ToolSection variant="indent">
             {relatedFiles.map((f: any, idx: number) => (
               <Box key={idx} flexDirection="column" marginBottom={0.5}>
                 <Text color={theme.text}>{f.filePath}</Text>
@@ -34,7 +36,7 @@ const CodeContextSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) 
                 </Text>
               </Box>
             ))}
-          </Box>
+          </ToolSection>
         )}
       </Box>
     );
@@ -44,11 +46,11 @@ const CodeContextSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) 
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         {!results || results.length === 0 ? (
-          <Box paddingLeft={2}>
+          <ToolSection variant="indent">
             <Text color={theme.textSubtle}>No symbol declarations found.</Text>
-          </Box>
+          </ToolSection>
         ) : (
-          <Box flexDirection="column" paddingLeft={2}>
+          <ToolSection variant="indent">
             {results.map((res: any, idx: number) => (
               <Text key={idx}>
                 <Text color={theme.text}>
@@ -69,7 +71,7 @@ const CodeContextSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) 
                 )}
               </Text>
             ))}
-          </Box>
+          </ToolSection>
         )}
       </Box>
     );

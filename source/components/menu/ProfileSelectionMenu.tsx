@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { ProfileOption } from '../../hooks/use-profile-selection.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   items: ProfileOption[];
@@ -14,14 +15,19 @@ type Props = {
 
 const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex, scrollOffset = 0, query }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   if (items.length === 0) {
     return (
       <Box flexDirection="column">
-        <Box borderStyle="round" borderColor={theme.borderActive} paddingX={1} flexDirection="column">
-          <Text color={theme.textSubtle}>Profiles</Text>
+        <MenuFrame
+          title="Profiles"
+          borderColor={theme.borderActive}
+          hasItems={false}
+          footer={<MenuFooter hints={[['Esc', 'cancel']]} />}
+          footerPlacement="outside"
+        >
           <Text color={theme.textSubtle}>No matching profiles</Text>
-        </Box>
-        <MenuFooter hints={[['Esc', 'cancel']]} />
+        </MenuFrame>
       </Box>
     );
   }
@@ -35,8 +41,21 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={theme.borderActive} flexDirection="column" width="100%" paddingX={1}>
-        <Text color={theme.textSubtle}>Profiles{query ? ` — ${query}` : ''}</Text>
+      <MenuFrame
+        title={`Profiles${query ? ` — ${query}` : ''}`}
+        borderColor={theme.borderActive}
+        hasItems={true}
+        footer={
+          <MenuFooter
+            hints={[
+              ['↑↓', 'navigate'],
+              ['⏎', 'switch'],
+              ['Esc', 'cancel'],
+            ]}
+          />
+        }
+        footerPlacement="outside"
+      >
         {/* The two columns split the row evenly at every terminal width: each
             takes half, so the divider sits in the middle instead of at a fixed
             offset. Both columns have a definite width, which lets Yoga hand
@@ -100,14 +119,7 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
             )}
           </Box>
         </Box>
-      </Box>
-      <MenuFooter
-        hints={[
-          ['↑↓', 'navigate'],
-          ['⏎', 'switch'],
-          ['Esc', 'cancel'],
-        ]}
-      />
+      </MenuFrame>
     </Box>
   );
 };

@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   items: SkillInfo[];
@@ -13,14 +14,19 @@ type Props = {
 
 const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   if (items.length === 0) {
     return (
       <Box flexDirection="column">
-        <Box borderStyle="round" borderColor={theme.borderActive} paddingX={1} flexDirection="column">
-          <Text color={theme.textSubtle}>Skills</Text>
+        <MenuFrame
+          title="Skills"
+          borderColor={theme.borderActive}
+          hasItems={false}
+          footer={<MenuFooter hints={[['Esc', 'cancel']]} />}
+          footerPlacement="outside"
+        >
           <Text color={theme.textSubtle}>{query ? 'No matching skills' : 'No skills available'}</Text>
-        </Box>
-        <MenuFooter hints={[['Esc', 'cancel']]} />
+        </MenuFrame>
       </Box>
     );
   }
@@ -34,8 +40,21 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={theme.borderActive} flexDirection="column" width="100%" paddingX={1}>
-        <Text color={theme.textSubtle}>Skills</Text>
+      <MenuFrame
+        title="Skills"
+        borderColor={theme.borderActive}
+        hasItems={true}
+        footer={
+          <MenuFooter
+            hints={[
+              ['↑↓', 'navigate'],
+              ['⏎', 'select'],
+              ['Esc', 'cancel'],
+            ]}
+          />
+        }
+        footerPlacement="outside"
+      >
         {/* The two columns split the row evenly at every terminal width: each
             takes half, so the divider sits in the middle instead of tracking
             the longest name. Both columns have a definite width, which lets
@@ -95,14 +114,7 @@ const SkillSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0,
             )}
           </Box>
         </Box>
-      </Box>
-      <MenuFooter
-        hints={[
-          ['↑↓', 'navigate'],
-          ['⏎', 'select'],
-          ['Esc', 'cancel'],
-        ]}
-      />
+      </MenuFrame>
     </Box>
   );
 };

@@ -112,7 +112,7 @@ const CommandMessage: FC<Props> = ({
   awaitingDecision = false,
 }) => {
   const theme = useTheme();
-  const { ToolFrame, ToolHeader } = useSkin();
+  const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const { isVisible, isRunning } = useCommandVisibility(status);
   const isWaiting = awaitingDecision;
   const isQueued = status === 'pending' && !awaitingDecision;
@@ -836,11 +836,10 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column">
             {renderStandardHeader()}
-            <Box flexDirection="column" borderStyle="round" borderColor={theme.accentAlt} paddingX={1} marginTop={1}>
-              <Text color={theme.accentAlt} bold>
-                Mentor Response
-              </Text>
-              <Text color={theme.toolOutput}>{output}</Text>
+            <Box flexDirection="column" marginTop={1}>
+              <ToolSection variant="callout" title="Mentor Response" tone="accentAlt">
+                <Text color={theme.toolOutput}>{output}</Text>
+              </ToolSection>
             </Box>
           </Box>
         );

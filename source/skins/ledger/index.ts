@@ -1,3 +1,4 @@
+import { LedgerMenuFrame, LedgerQuestionPrompt, LedgerSubagentFeed, LedgerToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
 import { LedgerApprovalChoices, LedgerApprovalFrame } from './approval.js';
@@ -38,5 +39,9 @@ export const ledgerSkin: Skin = {
   Hints: LedgerHints,
   ApprovalFrame: LedgerApprovalFrame,
   ApprovalChoices: LedgerApprovalChoices,
+  QuestionPrompt: LedgerQuestionPrompt,
+  SubagentFeed: LedgerSubagentFeed,
+  ToolSection: LedgerToolSection,
+  MenuFrame: LedgerMenuFrame,
   StatusBar: LedgerStatusBar,
 };

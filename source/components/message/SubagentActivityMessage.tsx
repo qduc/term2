@@ -3,6 +3,8 @@ import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
 import { TOOL_STATUS_GLYPH, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import type { ColorRole } from '../../theme/palettes.js';
 import { isResultToolEvent, type CommandMessage as CommandMessageType } from '../../types/message.js';
 export { isResultToolEvent } from '../../types/message.js';
 
@@ -80,6 +82,7 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const theme = useTheme();
+  const { SubagentFeed } = useSkin();
   const tools = Array.isArray(msg.tools) ? msg.tools.filter(isResultToolEvent).slice(-3) : [];
   const title = buildTitle(msg.role, msg.task, msg.async, msg.parentTool);
   const statusSuffix =
@@ -90,24 +93,19 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         ? ' — moved to background'
         : ` — ${msg.status}`
       : '';
-  const color =
+  const tone: ColorRole =
     msg.status === 'completed'
-      ? theme.success
+      ? 'success'
       : msg.status === 'failed'
-      ? theme.danger
+      ? 'danger'
       : msg.status === 'cancelled' || msg.status === 'interrupted' || msg.status === 'backgrounded'
-      ? theme.textSubtle
-      : theme.warning;
+      ? 'textSubtle'
+      : 'warning';
+  const summary = msg.status === 'completed' && msg.finalText ? getFirstParagraph(msg.finalText, 500) : undefined;
 
   return (
-    <Box flexDirection="column">
-      <Text color={color}>
-        $ {title}
-        {statusSuffix}
-      </Text>
-      {msg.status === 'completed' && msg.finalText ? (
-        <Text color={theme.textSubtle}>{getFirstParagraph(msg.finalText, 500)}</Text>
-      ) : (
+    <SubagentFeed title={title} statusSuffix={statusSuffix} status={msg.status} tone={tone} summary={summary}>
+      {summary === undefined &&
         tools.map((tool, index) => {
           if (tool && typeof tool === 'object') {
             return (
@@ -134,9 +132,8 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
               {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
             </Text>
           );
-        })
-      )}
-    </Box>
+        })}
+    </SubagentFeed>
   );
 };
 

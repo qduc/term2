@@ -1,3 +1,4 @@
+import { CardsMenuFrame, CardsQuestionPrompt, CardsSubagentFeed, CardsToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
 import { CardsApprovalChoices, CardsApprovalFrame } from './approval.js';
@@ -35,5 +36,9 @@ export const cardsSkin: Skin = {
   Hints: CardsHints,
   ApprovalFrame: CardsApprovalFrame,
   ApprovalChoices: CardsApprovalChoices,
+  QuestionPrompt: CardsQuestionPrompt,
+  SubagentFeed: CardsSubagentFeed,
+  ToolSection: CardsToolSection,
+  MenuFrame: CardsMenuFrame,
   StatusBar: CardsStatusBar,
 };

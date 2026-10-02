@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseWebFetchOutput } from './command-message-helpers.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   output: string;
@@ -10,6 +11,7 @@ type Props = {
 
 const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
   const theme = useTheme();
+  const { ToolSection } = useSkin();
   const parsed = parseWebFetchOutput(output) as any;
   if (!parsed) return null;
 
@@ -27,36 +29,28 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
   return (
     <Box flexDirection="column">
       {renderStandardHeader()}
-      {title && (
-        <Box paddingLeft={2}>
+      <ToolSection variant="indent">
+        {title && (
           <Text color={theme.text} bold>
             {title}
           </Text>
-        </Box>
-      )}
-      <Box paddingLeft={2}>
+        )}
         <Text color={theme.accent} underline>
           {url}
         </Text>
-      </Box>
+      </ToolSection>
       {toc && (
-        <Box
-          flexDirection="column"
-          borderStyle="classic"
-          borderColor={theme.textSubtle}
-          paddingX={1}
-          marginY={1}
-          width={50}
-        >
-          <Text color={theme.warning} bold>
-            Table of Contents
-          </Text>
-          <Text color={theme.textSubtle}>{toc}</Text>
+        <Box flexDirection="column" marginY={1} width={50}>
+          <ToolSection variant="callout" title="Table of Contents" tone="warning">
+            <Text color={theme.textSubtle}>{toc}</Text>
+          </ToolSection>
         </Box>
       )}
       {content && (
-        <Box flexDirection="column" borderStyle="single" borderColor={theme.textSubtle} paddingX={1} marginTop={1}>
-          <Text color={theme.toolOutput}>{displayContent}</Text>
+        <Box flexDirection="column" marginTop={1}>
+          <ToolSection variant="panel">
+            <Text color={theme.toolOutput}>{displayContent}</Text>
+          </ToolSection>
         </Box>
       )}
       {tempFile && (

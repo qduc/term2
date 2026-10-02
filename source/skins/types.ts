@@ -199,6 +199,85 @@ export interface StatusView {
   };
 }
 
+// --- Ask-user question ------------------------------------------------------
+
+export interface QuestionOptionView {
+  label: string;
+  selected: boolean;
+  /** Multi-select only: whether this option is ticked. `undefined` for single-select, and for the built-in rows. */
+  checked: boolean | undefined;
+  /** The agent's first option is its recommendation. */
+  recommended: boolean;
+  /** Colour when selected; `undefined` leaves it in the default text colour. */
+  tone: ColorRole | undefined;
+}
+
+export interface QuestionPromptProps {
+  /** "Question 1 of 3"; absent when there is only one question. */
+  progress: string | undefined;
+  question: string;
+  /** Shown while the user is typing a custom answer in the input below. */
+  notice: string | undefined;
+  /** Numbered by position: the first is 1. The built-in "something else" / "submit" rows are included. */
+  options: ReadonlyArray<QuestionOptionView>;
+  /** What the selected option does. */
+  description: { title: string; text: string | undefined };
+  /** The key-hint footer, already drawn through `Hints`. */
+  footer: ReactNode;
+}
+
+// --- Subagent feed ----------------------------------------------------------
+
+export interface SubagentFeedProps {
+  /** e.g. `run_subagent [explorer] map the auth flow`. */
+  title: string;
+  /** e.g. ` — failed: timeout`; empty while running. */
+  statusSuffix: string;
+  status: string | undefined;
+  tone: ColorRole;
+  /** The first paragraph of the final answer, once completed; otherwise `undefined`. */
+  summary: string | undefined;
+  /** The subagent's most recent calls (already drawn, dense and single-line), when there is no summary. */
+  children: ReactNode;
+}
+
+// --- Tool body --------------------------------------------------------------
+
+/**
+ * The shapes a specialised tool renderer puts beneath its header.
+ *  - `indent`: a run of rows that belong to the call (matches, results, trace rows);
+ *  - `panel`: a block of the tool's content (file lines, a fetched page, a memory);
+ *  - `callout`: a titled highlight set apart from the rows (an answer summary, a table of contents).
+ */
+export type ToolSectionVariant = 'indent' | 'panel' | 'callout';
+
+export interface ToolSectionProps {
+  variant: ToolSectionVariant;
+  /** `callout` only: the heading, and the colour that marks it. */
+  title?: string;
+  tone?: ColorRole;
+  children: ReactNode;
+}
+
+// --- Menu body --------------------------------------------------------------
+
+export interface MenuFrameProps {
+  /** The line that says which menu this is, drawn dim above the body. */
+  title?: string;
+  /**
+   * The colour the container chose to signal state (an error, an empty list); it
+   * is never an identity colour. A skin may colour its frame with it or ignore it.
+   */
+  borderColor: string | undefined;
+  /** `false` for a loading, error or empty body, which is a message rather than a list. */
+  hasItems: boolean;
+  /** Key hints or free text; drawn below the body (`inside`) or below the frame (`outside`). */
+  footer?: ReactNode;
+  footerPlacement: 'inside' | 'outside';
+  /** The rows, or the state message. */
+  children: ReactNode;
+}
+
 // --- The skin ---------------------------------------------------------------
 
 export interface Skin {
@@ -230,6 +309,15 @@ export interface Skin {
 
   ApprovalFrame: FC<ApprovalFrameProps>;
   ApprovalChoices: FC<ApprovalChoicesProps>;
+  /** The ask-user prompt: a question, its options, and what the selected one does. */
+  QuestionPrompt: FC<QuestionPromptProps>;
+
+  /** A subagent's feed in the transcript: its task, its latest calls or its answer. */
+  SubagentFeed: FC<SubagentFeedProps>;
+  /** The body of a specialised tool renderer, beneath its (skinned) header. */
+  ToolSection: FC<ToolSectionProps>;
+  /** The surface every menu is drawn on. */
+  MenuFrame: FC<MenuFrameProps>;
 
   StatusBar: FC<StatusView>;
 }

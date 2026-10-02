@@ -8,7 +8,11 @@ import {
   ClassicWorkingIndicator,
 } from './live-region.js';
 import { ClassicAssistantFrame, ClassicBanner, ClassicUserMessage } from './messages.js';
+import { ClassicMenuFrame } from './menu.js';
+import { ClassicQuestionPrompt } from './question.js';
 import { ClassicStatusBar } from './status.js';
+import { ClassicSubagentFeed } from './subagent.js';
+import { ClassicToolSection } from './tool-section.js';
 import { ClassicToolFrame, ClassicToolGroupSummary, ClassicToolHeader } from './tools.js';
 
 /**
@@ -31,5 +35,9 @@ export const classicSkin: Skin = {
   Hints: ClassicHints,
   ApprovalFrame: ClassicApprovalFrame,
   ApprovalChoices: ClassicApprovalChoices,
+  QuestionPrompt: ClassicQuestionPrompt,
+  SubagentFeed: ClassicSubagentFeed,
+  ToolSection: ClassicToolSection,
+  MenuFrame: ClassicMenuFrame,
   StatusBar: ClassicStatusBar,
 };

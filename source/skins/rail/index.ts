@@ -1,5 +1,6 @@
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
+import { RailMenuFrame, RailQuestionPrompt, RailSubagentFeed, RailToolSection } from './body.js';
 import { RailApprovalChoices, RailApprovalFrame } from './approval.js';
 import { RailHints, RailInputFrame, RailLiveDivider, RailPromptMarker, RailWorkingIndicator } from './live-region.js';
 import { RailAssistantFrame, RailBanner, RailUserMessage } from './messages.js';
@@ -32,5 +33,9 @@ export const railSkin: Skin = {
   Hints: RailHints,
   ApprovalFrame: RailApprovalFrame,
   ApprovalChoices: RailApprovalChoices,
+  QuestionPrompt: RailQuestionPrompt,
+  SubagentFeed: RailSubagentFeed,
+  ToolSection: RailToolSection,
+  MenuFrame: RailMenuFrame,
   StatusBar: RailStatusBar,
 };

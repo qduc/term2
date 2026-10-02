@@ -6,6 +6,7 @@ import { profileIdFromLegacyMode } from '../../services/profiles/legacy-adapter.
 import { getProfileLabel } from '../../services/profiles/labels.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   items: ConversationListEntry[];
@@ -60,10 +61,16 @@ function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string
 
 const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query, loading, error }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   if (loading || error || items.length === 0) {
     return (
-      <Box borderStyle="round" borderColor={theme.borderActive} paddingX={1} flexDirection="column">
-        <Text color={theme.textSubtle}>Resume Conversation</Text>
+      <MenuFrame
+        title="Resume Conversation"
+        borderColor={theme.borderActive}
+        hasItems={false}
+        footer={<MenuFooter hints={[['Esc', 'cancel']]} />}
+        footerPlacement="outside"
+      >
         <Text color={error ? theme.danger : theme.textSubtle}>
           {loading
             ? 'Loading conversations...'
@@ -73,8 +80,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
             ? 'No matching conversations'
             : 'No saved conversations found'}
         </Text>
-        <MenuFooter hints={[['Esc', 'cancel']]} />
-      </Box>
+      </MenuFrame>
     );
   }
 
@@ -87,8 +93,21 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={theme.borderActive} flexDirection="column" width="100%" paddingX={1}>
-        <Text color={theme.textSubtle}>Resume Conversation</Text>
+      <MenuFrame
+        title="Resume Conversation"
+        borderColor={theme.borderActive}
+        hasItems={true}
+        footer={
+          <MenuFooter
+            hints={[
+              ['↑↓', 'navigate'],
+              ['⏎', 'resume'],
+              ['Esc', 'cancel'],
+            ]}
+          />
+        }
+        footerPlacement="outside"
+      >
         {/* The two columns split the row evenly at every terminal width: each
             takes half, so the divider sits in the middle instead of tracking
             the longest id. Both columns have a definite width, which lets
@@ -168,14 +187,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
             )}
           </Box>
         </Box>
-      </Box>
-      <MenuFooter
-        hints={[
-          ['↑↓', 'navigate'],
-          ['⏎', 'resume'],
-          ['Esc', 'cancel'],
-        ]}
-      />
+      </MenuFrame>
     </Box>
   );
 };

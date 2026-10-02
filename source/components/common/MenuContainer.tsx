@@ -122,15 +122,11 @@ export function MenuContainer<T>({
     );
   }, [hasScrollDown, hasScrollUp, visibleItems, scrollOffset]);
 
-  const titleElement = title ? <Text color={theme.textSubtle}>{title}</Text> : null;
+  const { MenuFrame } = useSkin();
   const renderState = (state: ReactNode, color: string | undefined = borderColor) => (
-    <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={color} paddingX={1} flexDirection="column">
-        {titleElement}
-        {state}
-      </Box>
-      {footer && (typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer)}
-    </Box>
+    <MenuFrame title={title} borderColor={color} hasItems={false} footer={footer} footerPlacement="outside">
+      {state}
+    </MenuFrame>
   );
 
   if (loading) {
@@ -155,9 +151,14 @@ export function MenuContainer<T>({
   // rows size to their content, percentage min-widths (the narrow-terminal
   // wrap plans) resolve against nothing, and a wide terminal gets a
   // shrink-wrapped menu instead of full-width rows.
-  const content = (
-    <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column" width="100%">
-      {titleElement}
+  return (
+    <MenuFrame
+      title={title}
+      borderColor={borderColor}
+      hasItems={true}
+      footer={footer}
+      footerPlacement={footerOutsideBorder ? 'outside' : 'inside'}
+    >
       <Box flexDirection="row" width="100%">
         <Box flexDirection="column" flexGrow={1} flexShrink={1}>
           {visibleItems.map((item, visibleIndex) => {
@@ -195,30 +196,6 @@ export function MenuContainer<T>({
           />
         ) : null}
       </Box>
-      {!footerOutsideBorder && footer && (
-        <Box
-          marginTop={1}
-          borderStyle="single"
-          borderTop={true}
-          borderBottom={false}
-          borderLeft={false}
-          borderRight={false}
-          borderColor={theme.border}
-        >
-          {typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer}
-        </Box>
-      )}
-    </Box>
+    </MenuFrame>
   );
-
-  if (footerOutsideBorder && footer) {
-    return (
-      <Box flexDirection="column" width="100%">
-        {content}
-        {typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer}
-      </Box>
-    );
-  }
-
-  return content;
 }

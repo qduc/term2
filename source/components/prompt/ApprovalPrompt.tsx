@@ -13,11 +13,10 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } f
 import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
-import { GLYPH_FAVORITE, type ColorRole, useTheme } from '../theme.js';
+import { type ColorRole, useTheme } from '../theme.js';
 import { MenuFooter } from '../common/MenuContainer.js';
 import { SelectionMarker } from '../common/SelectionMarker.js';
 import { useSkin } from '../../skins/SkinContext.js';
-import { TwoPaneApprovalLayout } from '../../skins/classic/approval.js';
 import { formatDurationMs } from '../menu/settings-value-formatter.js';
 
 type Props = {
@@ -446,7 +445,7 @@ const ApprovalPrompt: FC<Props> = ({
   waitingForAskUserAnswer = false,
 }) => {
   const theme = useTheme();
-  const { ApprovalFrame, ApprovalChoices } = useSkin();
+  const { ApprovalFrame, ApprovalChoices, QuestionPrompt } = useSkin();
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
 
@@ -900,65 +899,24 @@ const ApprovalPrompt: FC<Props> = ({
     ];
 
     content = (
-      <Box flexDirection="column">
-        {totalQuestions > 1 && (
-          <Box marginLeft={1}>
-            <Text color={theme.textSubtle}>
-              Question {currentQuestionIndex + 1} of {totalQuestions}
-            </Text>
-          </Box>
-        )}
-        <Box borderStyle="round" borderColor={theme.warning} paddingX={1} paddingY={0}>
-          <Text color={theme.warning} bold>
-            {questionText}
-          </Text>
-        </Box>
-        {waitingForAskUserAnswer && (
-          <Box marginTop={1} marginLeft={1}>
-            <Text color={theme.accent}>❯ Type your custom answer in the prompt below...</Text>
-          </Box>
-        )}
-        <TwoPaneApprovalLayout
-          left={askUserMenuItems.map((item, idx) => {
-            const isOption = idx < askUserOptions.length;
-            const isRecommended = idx === 0 && isOption;
-            const isSelected = selectedIndex === idx;
-
-            let checkbox = '';
-            if (isMultiSelect && isOption) {
-              checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-            }
-
-            const color = isSelected
-              ? item === ASK_USER_CUSTOM_ANSWER_LABEL
-                ? theme.accent
-                : theme.success
-              : undefined;
-
-            return (
-              <Box key={item} flexDirection="row" width="100%">
-                <SelectionMarker selected={isSelected} />
-                <Box width={2} flexShrink={0}>
-                  <Text color={theme.textSubtle} dimColor>
-                    {isRecommended ? GLYPH_FAVORITE : ' '}
-                  </Text>
-                </Box>
-                <Box flexDirection="row" flexShrink={1} flexWrap="wrap">
-                  <Text color={color} bold={isSelected}>
-                    {idx + 1}. {checkbox}
-                    {item}
-                  </Text>
-                </Box>
-              </Box>
-            );
-          })}
-          rightTitle={rightPaneTitle}
-          rightDescription={highlightedDescription}
-        />
-        <Box marginTop={1} marginLeft={1}>
-          <MenuFooter hints={askUserFooterHints} />
-        </Box>
-      </Box>
+      <QuestionPrompt
+        progress={totalQuestions > 1 ? `Question ${currentQuestionIndex + 1} of ${totalQuestions}` : undefined}
+        question={questionText}
+        notice={waitingForAskUserAnswer ? 'Type your custom answer in the prompt below...' : undefined}
+        options={askUserMenuItems.map((item, idx) => {
+          const isOption = idx < askUserOptions.length;
+          const isSelected = selectedIndex === idx;
+          return {
+            label: item,
+            selected: isSelected,
+            checked: isMultiSelect && isOption ? selectedIndices.has(idx) : undefined,
+            recommended: idx === 0 && isOption,
+            tone: item === ASK_USER_CUSTOM_ANSWER_LABEL ? 'accent' : 'success',
+          };
+        })}
+        description={{ title: rightPaneTitle, text: highlightedDescription }}
+        footer={<MenuFooter hints={askUserFooterHints} />}
+      />
     );
   }
 
@@ -1069,6 +1027,12 @@ const ApprovalPrompt: FC<Props> = ({
       {plainApprovalSection}
     </>
   );
+
+  // A question is not a request to run something: the skin frames it itself, so it
+  // does not also sit inside an approval frame headed "wants to run: ask_user".
+  if (isAskUser) {
+    return content;
+  }
 
   return (
     <ApprovalFrame

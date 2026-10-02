@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseGrepOutput } from './command-message-helpers.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   output: string;
@@ -10,6 +11,7 @@ type Props = {
 
 const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
   const theme = useTheme();
+  const { ToolSection } = useSkin();
   const parsed = parseGrepOutput(output) as any;
   if (!parsed) return null;
 
@@ -70,7 +72,7 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
                 {file.truncatedCount > 0 ? `, ${file.truncatedCount} truncated` : ''})
               </Text>
             </Box>
-            <Box flexDirection="column" paddingLeft={2}>
+            <ToolSection variant="indent">
               {file.matches.map((match: any, matchIdx: number) => {
                 const lineNumStr = String(match.lineNum).padStart(4, ' ');
                 return (
@@ -88,7 +90,7 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
                   ...
                 </Text>
               )}
-            </Box>
+            </ToolSection>
           </Box>
         );
       })}

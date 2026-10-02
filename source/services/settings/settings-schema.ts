@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import envPaths from 'env-paths';
 import path from 'node:path';
+import { THEME_SETTING_VALUES, type ThemeSetting } from '../../theme/resolve-theme.js';
 import {
   normalizeProviderIdentifier,
   resolveProviderId,
@@ -395,6 +396,10 @@ export const UISettingsSchema = z.object({
     .enum(['standard', 'concise'])
     .default('concise')
     .describe('Display mode for rendering conversation output'),
+  theme: z
+    .enum(THEME_SETTING_VALUES)
+    .default('auto')
+    .describe('Colour theme; auto follows the terminal background and honours NO_COLOR'),
 });
 
 export const LoggingSettingsSchema = z.object({
@@ -840,6 +845,7 @@ export interface SettingsWithSources {
     historySize: SettingWithSource<number>;
     pasteThreshold: SettingWithSource<number | undefined>;
     displayMode: SettingWithSource<'standard' | 'concise'>;
+    theme: SettingWithSource<ThemeSetting>;
   };
   logging: {
     logLevel: SettingWithSource<string>;
@@ -1013,6 +1019,7 @@ export const SETTING_KEYS = {
   UI_HISTORY_SIZE: 'ui.historySize',
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   UI_DISPLAY_MODE: 'ui.displayMode',
+  UI_THEME: 'ui.theme',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
   LOGGING_DEBUG: 'logging.debugLogging',
@@ -1153,6 +1160,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SANDBOX_ALLOW_NETWORKING,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.UI_DISPLAY_MODE,
+  SETTING_KEYS.UI_THEME,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
@@ -1322,6 +1330,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     historySize: 1000,
     pasteThreshold: 3000,
     displayMode: 'concise',
+    theme: 'auto',
   },
   logging: {
     logLevel: 'info',

@@ -12,15 +12,7 @@ import { useSetting } from '../../hooks/use-setting.js';
 import type { NicknameDraftState } from '../../hooks/use-model-selection.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import {
-  COLOR_ACCENT,
-  COLOR_DANGER,
-  COLOR_TEXT,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  GLYPH_FAVORITE,
-  GLYPH_WARNING,
-} from '../theme.js';
+import { GLYPH_FAVORITE, GLYPH_WARNING, useTheme } from '../theme.js';
 import { FAVORITES_TAB_ID, serializeFavorite } from '../../services/models/model-favorites.js';
 import { MODEL_TAB_LABELS, MODEL_TABS, type ModelTab } from '../../services/models/model-tabs.js';
 import {
@@ -77,6 +69,7 @@ const ModelSelectionMenu: FC<Props> = ({
   nicknameLabels,
   nicknameDraft = null,
 }) => {
+  const theme = useTheme();
   const isFavoritesTab = modelTab === 'favorites' || provider === FAVORITES_TAB_ID;
   const isNicknamesTab = modelTab === 'nicknames';
   const isUnified = provider == null;
@@ -142,7 +135,7 @@ const ModelSelectionMenu: FC<Props> = ({
         return (
           <Text
             inverse={isActive}
-            color={isActive ? COLOR_ACCENT : isDisabled ? COLOR_DANGER : COLOR_TEXT_SUBTLE}
+            color={isActive ? theme.accent : isDisabled ? theme.danger : theme.textSubtle}
             bold={isActive}
             strikethrough={isDisabled}
           >
@@ -165,7 +158,7 @@ const ModelSelectionMenu: FC<Props> = ({
       activeItemId={modelTab}
       getItemWidth={(tab) => tab.label.length + 2}
       renderTab={(tab, isActive) => (
-        <Text inverse={isActive} color={isActive ? COLOR_ACCENT : COLOR_TEXT_SUBTLE} bold={isActive}>
+        <Text inverse={isActive} color={isActive ? theme.accent : theme.textSubtle} bold={isActive}>
           {' '}
           {tab.label}{' '}
         </Text>
@@ -178,15 +171,15 @@ const ModelSelectionMenu: FC<Props> = ({
       {modelTabBar}
       {!isUnified && canSwitchProvider && tabBar}
       {!isUnified && !canSwitchProvider && activeTab && (
-        <Text color={COLOR_TEXT_SUBTLE}>Provider: {activeTab.label}</Text>
+        <Text color={theme.textSubtle}>Provider: {activeTab.label}</Text>
       )}
       {warning && (
-        <Text color={COLOR_WARNING}>
+        <Text color={theme.warning}>
           {GLYPH_WARNING} {warning}
         </Text>
       )}
       {activeTab && !activeTab.hasCredentials && (
-        <Text color={COLOR_WARNING}>
+        <Text color={theme.warning}>
           {GLYPH_WARNING} {activeTab.label} unavailable:{' '}
           {activeTab.unavailableReason === 'missing-codex-login'
             ? 'Not logged in on this host. Run `term2 --codex-login` to log in to Codex.'
@@ -197,12 +190,12 @@ const ModelSelectionMenu: FC<Props> = ({
       )}
       {!canSwitchProvider && (
         <Box marginTop={0}>
-          <Text color={COLOR_WARNING}>
+          <Text color={theme.warning}>
             {GLYPH_WARNING} {providerSwitchDisabledMessage}
           </Text>
         </Box>
       )}
-      <Text color={COLOR_TEXT_SUBTLE}>Filter: {query || 'type to filter'}</Text>
+      <Text color={theme.textSubtle}>Filter: {query || 'type to filter'}</Text>
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}
@@ -216,13 +209,13 @@ const ModelSelectionMenu: FC<Props> = ({
         error={error ? `Unable to load models: ${error}` : null}
         fallbackText={
           isNicknamesTab && !query ? (
-            <Text color={COLOR_TEXT_SUBTLE}>
+            <Text color={theme.textSubtle}>
               No nicknames yet — switch to All and press Ctrl+N on a model to name it.
             </Text>
           ) : isFavoritesTab && !query ? (
-            <Text color={COLOR_TEXT_SUBTLE}>No favorites yet — press Ctrl+F on a model to add one.</Text>
+            <Text color={theme.textSubtle}>No favorites yet — press Ctrl+F on a model to add one.</Text>
           ) : (
-            <Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>
+            <Text color={theme.textSubtle}>No models match "{query || '*'}"</Text>
           )
         }
         footer={<MenuFooter hints={bindingHints(footerBindings)} />}
@@ -239,30 +232,30 @@ const ModelSelectionMenu: FC<Props> = ({
               <SelectionMarker selected={isSelected} />
               {isFavorited && (
                 <Box width={2} flexShrink={0}>
-                  <Text color={COLOR_ACCENT} wrap="truncate">
+                  <Text color={theme.accent} wrap="truncate">
                     {GLYPH_FAVORITE}{' '}
                   </Text>
                 </Box>
               )}
               <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
                 <Text>
-                  <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
+                  <Text color={isSelected ? theme.accent : undefined} bold={isSelected}>
                     {item.id}
                   </Text>
-                  {nickname && <Text color={COLOR_ACCENT}> — aka "{nickname}"</Text>}
-                  {(isFavoritesTab || isUnified) && <Text color={COLOR_TEXT_SUBTLE}> ({item.provider})</Text>}
+                  {nickname && <Text color={theme.accent}> — aka "{nickname}"</Text>}
+                  {(isFavoritesTab || isUnified) && <Text color={theme.textSubtle}> ({item.provider})</Text>}
                   {item.unavailableReason === 'missing-codex-login' ? (
-                    <Text color={COLOR_WARNING}>
+                    <Text color={theme.warning}>
                       {' '}
                       — unavailable: Not logged in on this host. Run `term2 --codex-login`.
                     </Text>
                   ) : item.unavailableReason === 'missing-grok-login' ? (
-                    <Text color={COLOR_WARNING}>
+                    <Text color={theme.warning}>
                       {' '}
                       — unavailable: Not logged in on this host. Run `term2 --grok-login`.
                     </Text>
                   ) : item.unavailableReason === 'missing-credentials' ? (
-                    <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
+                    <Text color={theme.warning}> — unavailable: API key not configured on this host</Text>
                   ) : null}
                 </Text>
               </Box>
@@ -273,14 +266,14 @@ const ModelSelectionMenu: FC<Props> = ({
       {nicknameDraft && (
         <Box flexDirection="column">
           <Box>
-            <Text color={COLOR_ACCENT} bold>
+            <Text color={theme.accent} bold>
               Nickname for {nicknameDraft.modelId}:
             </Text>
-            <Text color={COLOR_TEXT}> {nicknameDraft.text}</Text>
-            <Text color={COLOR_ACCENT}>▏</Text>
+            <Text color={theme.text}> {nicknameDraft.text}</Text>
+            <Text color={theme.accent}>▏</Text>
           </Box>
           {nicknameDraft.error && (
-            <Text color={nicknameDraft.pendingReplace ? COLOR_WARNING : COLOR_DANGER}>{nicknameDraft.error}</Text>
+            <Text color={nicknameDraft.pendingReplace ? theme.warning : theme.danger}>{nicknameDraft.error}</Text>
           )}
         </Box>
       )}

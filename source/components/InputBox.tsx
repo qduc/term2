@@ -15,7 +15,7 @@ import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 import { MenuFooter, type MenuHint } from './common/MenuContainer.js';
 import PendingQueueList, { orderPendingQueueMessages, type PendingQueueMessage } from './input/PendingQueueList.js';
-import { COLOR_ACCENT, COLOR_ACCENT_ALT, COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
+import { useTheme } from './theme.js';
 
 type Props = {
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
@@ -90,8 +90,8 @@ const IDLE_HINTS: ReadonlyArray<MenuHint> = [
 
 // Steer/queue key colors match the pending-queue group headers they create.
 const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
-  ['⏎', 'steer', COLOR_ACCENT],
-  ['Alt+⏎', 'queue', COLOR_ACCENT_ALT],
+  ['⏎', 'steer', 'accent'],
+  ['Alt+⏎', 'queue', 'accentAlt'],
   ...MODEL_HINTS,
 ];
 
@@ -115,6 +115,7 @@ const InputBox: FC<Props> = ({
   cursorOverride: propsCursorOverride,
   historyNavigation,
 }) => {
+  const theme = useTheme();
   const {
     input: value,
     setInput: onChange,
@@ -421,16 +422,16 @@ const InputBox: FC<Props> = ({
       )}
       {activePromptLabel && (
         <Box>
-          <Text color={COLOR_ACCENT}>{activePromptLabel}</Text>
+          <Text color={theme.accent}>{activePromptLabel}</Text>
         </Box>
       )}
       <Box>
         {!activePromptLabel && waitingForRejectionReason ? (
-          <Text color={COLOR_WARNING}>Why? </Text>
+          <Text color={theme.warning}>Why? </Text>
         ) : isShellMode ? (
-          <Text color={COLOR_DANGER}>! </Text>
+          <Text color={theme.danger}>! </Text>
         ) : (
-          <Text color={COLOR_ACCENT}>❯ </Text>
+          <Text color={theme.accent}>❯ </Text>
         )}
         <MultilineInput
           key={inputKey}
@@ -463,8 +464,8 @@ const InputBox: FC<Props> = ({
           }}
         />
       </Box>
-      {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press Esc again to clear input</Text>}
-      {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or Esc to cancel)</Text>}
+      {escHintVisible && <Text color={theme.textSubtle}>Press Esc again to clear input</Text>}
+      {waitingForRejectionReason && <Text color={theme.textSubtle}>(or Esc to cancel)</Text>}
       {!turnInFlight &&
         !waitingForRejectionReason &&
         !escHintVisible &&

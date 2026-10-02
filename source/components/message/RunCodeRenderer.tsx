@@ -1,14 +1,7 @@
 import React, { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import { truncateOutputLines, type RunCodeTrace } from './command-message-helpers.js';
-import {
-  COLOR_DANGER,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  COLOR_TOOL_OUTPUT,
-  TOOL_STATUS_COLOR,
-  TOOL_STATUS_GLYPH,
-} from '../theme.js';
+import { TOOL_STATUS_GLYPH, useTheme } from '../theme.js';
 
 type Props = {
   trace: RunCodeTrace;
@@ -22,24 +15,27 @@ type Props = {
  * an opaque blob, since its nested calls otherwise appear only as a count on the
  * last line of the result.
  */
-const RunCodeRenderer: React.FC<Props> = ({ trace, success, renderStandardHeader }) => (
-  <Box flexDirection="column">
-    {renderStandardHeader()}
-    {trace.rows.length > 0 && (
-      <Box flexDirection="column" paddingLeft={2}>
-        {trace.rows.map((row) => (
-          <Text key={row.tool} color={COLOR_TEXT_MUTED}>
-            <Text color={TOOL_STATUS_COLOR[row.status]}>{TOOL_STATUS_GLYPH[row.status]}</Text> {row.tool}
-            {row.count > 1 ? <Text color={COLOR_TEXT_SUBTLE}> ×{row.count}</Text> : null}
-            {row.note ? <Text color={COLOR_DANGER}> — {row.note}</Text> : null}
-          </Text>
-        ))}
-      </Box>
-    )}
-    {trace.body ? (
-      <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{truncateOutputLines(trace.body)}</Text>
-    ) : null}
-  </Box>
-);
+const RunCodeRenderer: React.FC<Props> = ({ trace, success, renderStandardHeader }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column">
+      {renderStandardHeader()}
+      {trace.rows.length > 0 && (
+        <Box flexDirection="column" paddingLeft={2}>
+          {trace.rows.map((row) => (
+            <Text key={row.tool} color={theme.textMuted}>
+              <Text color={theme.toolStatus[row.status]}>{TOOL_STATUS_GLYPH[row.status]}</Text> {row.tool}
+              {row.count > 1 ? <Text color={theme.textSubtle}> ×{row.count}</Text> : null}
+              {row.note ? <Text color={theme.danger}> — {row.note}</Text> : null}
+            </Text>
+          ))}
+        </Box>
+      )}
+      {trace.body ? (
+        <Text color={success === false ? theme.danger : theme.toolOutput}>{truncateOutputLines(trace.body)}</Text>
+      ) : null}
+    </Box>
+  );
+};
 
 export default RunCodeRenderer;

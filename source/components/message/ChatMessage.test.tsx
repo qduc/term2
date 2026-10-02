@@ -5,7 +5,8 @@ import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import chalk from 'chalk';
 import ChatMessage from './ChatMessage.js';
-import { COLOR_BORDER, COLOR_USER_BACKGROUND } from '../theme.js';
+import { THEMES } from '../../theme/palettes.js';
+import { ThemeProvider } from '../../theme/ThemeContext.js';
 
 const stripAnsi = (s: string) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
@@ -171,7 +172,7 @@ it('ChatMessage renders rule presentation using the border color token', async (
     });
 
     // Dividers are structural; they must not introduce a new color.
-    expect((lastFrame() || '').includes(hexToRgbEscape(COLOR_BORDER, 38))).toBe(true);
+    expect((lastFrame() || '').includes(hexToRgbEscape(THEMES.dark.border as string, 38))).toBe(true);
 
     await act(async () => {
       unmount();
@@ -209,7 +210,7 @@ it('ChatMessage renders user messages on a background band', async () => {
     // User messages carry the band background so they never read as another
     // accent-colored header line.
     const frame = lastFrame() || '';
-    expect(frame.includes(hexToRgbEscape(COLOR_USER_BACKGROUND))).toBe(true);
+    expect(frame.includes(hexToRgbEscape(THEMES.dark.userBackground as string))).toBe(true);
 
     await act(async () => {
       unmount();
@@ -218,3 +219,39 @@ it('ChatMessage renders user messages on a background band', async () => {
     chalk.level = originalLevel;
   }
 });
+
+it.each(['dark', 'light'] as const)(
+  'ChatMessage sets an explicit foreground on the user band in the %s theme',
+  async (name) => {
+    // Regression: the band had a hard-coded background but no foreground, so on
+    // a light terminal the default (dark) text sat on a dark band at 1.5:1.
+    const originalLevel = chalk.level;
+    chalk.level = 3;
+
+    try {
+      const theme = THEMES[name];
+      let lastFrame!: () => string | undefined;
+      let unmount!: () => void;
+
+      await act(async () => {
+        const result = render(
+          <ThemeProvider theme={theme}>
+            <ChatMessage msg={{ id: 'user-2', sender: 'user', text: 'How do I run tests?' }} />
+          </ThemeProvider>,
+        );
+        lastFrame = result.lastFrame;
+        unmount = result.unmount;
+      });
+
+      const frame = lastFrame() || '';
+      expect(frame.includes(hexToRgbEscape(theme.userBackground as string, 48))).toBe(true);
+      expect(frame.includes(hexToRgbEscape(theme.userText as string, 38))).toBe(true);
+
+      await act(async () => {
+        unmount();
+      });
+    } finally {
+      chalk.level = originalLevel;
+    }
+  },
+);

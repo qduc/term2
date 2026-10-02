@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
-import { COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING, TOOL_STATUS_GLYPH } from '../theme.js';
+import { TOOL_STATUS_GLYPH, useTheme } from '../theme.js';
 import { isResultToolEvent, type CommandMessage as CommandMessageType } from '../../types/message.js';
 export { isResultToolEvent } from '../../types/message.js';
 
@@ -79,6 +79,7 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
 };
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
+  const theme = useTheme();
   const tools = Array.isArray(msg.tools) ? msg.tools.filter(isResultToolEvent).slice(-3) : [];
   const title = buildTitle(msg.role, msg.task, msg.async, msg.parentTool);
   const statusSuffix =
@@ -91,12 +92,12 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
       : '';
   const color =
     msg.status === 'completed'
-      ? COLOR_SUCCESS
+      ? theme.success
       : msg.status === 'failed'
-      ? COLOR_DANGER
+      ? theme.danger
       : msg.status === 'cancelled' || msg.status === 'interrupted' || msg.status === 'backgrounded'
-      ? COLOR_TEXT_SUBTLE
-      : COLOR_WARNING;
+      ? theme.textSubtle
+      : theme.warning;
 
   return (
     <Box flexDirection="column">
@@ -105,7 +106,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         {statusSuffix}
       </Text>
       {msg.status === 'completed' && msg.finalText ? (
-        <Text color={COLOR_TEXT_SUBTLE}>{getFirstParagraph(msg.finalText, 500)}</Text>
+        <Text color={theme.textSubtle}>{getFirstParagraph(msg.finalText, 500)}</Text>
       ) : (
         tools.map((tool, index) => {
           if (tool && typeof tool === 'object') {
@@ -122,14 +123,14 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
                   isApprovalRejection={tool.isApprovalRejection}
                   hadApproval={tool.hadApproval}
                   displayMode="concise"
-                  textColor={COLOR_TEXT_SUBTLE}
+                  textColor={theme.textSubtle}
                   isSubagent={true}
                 />
               </Box>
             );
           }
           return (
-            <Text key={`${tool}-${index}`} color={COLOR_TEXT_SUBTLE}>
+            <Text key={`${tool}-${index}`} color={theme.textSubtle}>
               {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
             </Text>
           );

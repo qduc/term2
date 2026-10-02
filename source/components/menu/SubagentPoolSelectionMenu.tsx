@@ -1,15 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { MenuContainer, MenuFooter } from '../common/MenuContainer.js';
-import {
-  GLYPH_WARNING,
-  COLOR_ACCENT,
-  COLOR_DANGER,
-  COLOR_TEXT,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  GLYPH_SELECTED,
-} from '../theme.js';
+import { GLYPH_WARNING, GLYPH_SELECTED, useTheme } from '../theme.js';
 import {
   formatSubagentPoolProvider,
   formatSubagentPoolReasoning,
@@ -44,6 +36,7 @@ function SubagentPoolSelectionMenu({
   poolKind,
   entryShape,
 }: Props) {
+  const theme = useTheme();
   const title =
     phase === 'list'
       ? `${roleLabel} Pool`
@@ -65,17 +58,17 @@ function SubagentPoolSelectionMenu({
     return (
       <Box
         borderStyle="round"
-        borderColor={errorMessage ? COLOR_DANGER : COLOR_ACCENT}
+        borderColor={errorMessage ? theme.danger : theme.accent}
         paddingX={1}
         flexDirection="column"
       >
-        <Text color={COLOR_ACCENT} bold underline>
+        <Text color={theme.accent} bold underline>
           {title}
         </Text>
-        <Text color={COLOR_TEXT_SUBTLE}>Type the model ID below and press Enter.</Text>
-        <Text color={COLOR_WARNING}>Current value: {draft?.model || '<empty>'}</Text>
+        <Text color={theme.textSubtle}>Type the model ID below and press Enter.</Text>
+        <Text color={theme.warning}>Current value: {draft?.model || '<empty>'}</Text>
         {errorMessage && (
-          <Text color={COLOR_DANGER}>
+          <Text color={theme.danger}>
             {GLYPH_WARNING} {errorMessage}
           </Text>
         )}
@@ -126,30 +119,30 @@ function SubagentPoolSelectionMenu({
 
   return (
     <Box flexDirection="column">
-      <Text color={phase === 'confirm_delete' ? COLOR_DANGER : COLOR_ACCENT} bold underline>
+      <Text color={phase === 'confirm_delete' ? theme.danger : theme.accent} bold underline>
         {title}
       </Text>
       {phase === 'list' && (
         <Box flexDirection="column">
-          <Text color={COLOR_TEXT_SUBTLE}>{listSummary}</Text>
-          <Text color={COLOR_TEXT_SUBTLE}>
+          <Text color={theme.textSubtle}>{listSummary}</Text>
+          <Text color={theme.textSubtle}>
             {entryCount}/8 entries · {listCountSuffix}
           </Text>
           {isListEmpty && (
-            <Text color={COLOR_TEXT_SUBTLE}>
+            <Text color={theme.textSubtle}>
               No {roleLabel.toLowerCase()} entries configured yet. Add one to get started.
             </Text>
           )}
         </Box>
       )}
       {phase === 'confirm_delete' && (
-        <Text color={COLOR_DANGER}>{GLYPH_WARNING} This entry will be removed from the pool.</Text>
+        <Text color={theme.danger}>{GLYPH_WARNING} This entry will be removed from the pool.</Text>
       )}
       {phase === 'confirm_discard' && (
-        <Text color={COLOR_WARNING}>{GLYPH_WARNING} You have unsaved changes. Discard them?</Text>
+        <Text color={theme.warning}>{GLYPH_WARNING} You have unsaved changes. Discard them?</Text>
       )}
       {errorMessage && (
-        <Text color={COLOR_DANGER}>
+        <Text color={theme.danger}>
           {GLYPH_WARNING} {errorMessage}
         </Text>
       )}
@@ -157,32 +150,32 @@ function SubagentPoolSelectionMenu({
         items={activeItems}
         selectedIndex={selectedIndex}
         borderColor={
-          phase === 'confirm_delete' || phase === 'confirm_discard' || errorMessage ? COLOR_DANGER : COLOR_ACCENT
+          phase === 'confirm_delete' || phase === 'confirm_discard' || errorMessage ? theme.danger : theme.accent
         }
         footer={footer}
         renderItem={(item, index, selected, inactive) => {
           let label = item.label;
           let prefix = selected ? `${GLYPH_SELECTED} ` : '  ';
-          let color = selected ? COLOR_ACCENT : COLOR_TEXT;
+          let color = selected ? theme.accent : theme.text;
           if (item.kind === 'action') {
             prefix = item.action === 'add' ? '+ ' : item.action === 'save' ? '✓ ' : prefix;
             color =
               item.tone === 'destructive'
-                ? COLOR_DANGER
+                ? theme.danger
                 : item.action === 'add'
-                ? COLOR_WARNING
+                ? theme.warning
                 : selected
-                ? COLOR_ACCENT
-                : COLOR_TEXT;
+                ? theme.accent
+                : theme.text;
           } else if (item.kind === 'field') {
             label = `${item.label}: ${item.detail}`;
-            color = selected ? COLOR_ACCENT : COLOR_TEXT;
+            color = selected ? theme.accent : theme.text;
           } else if (item.kind === 'entry') {
             label = `${item.index + 1}. ${item.entry.model}`;
           } else if (item.kind === 'provider' || item.kind === 'reasoning') {
-            color = selected ? COLOR_ACCENT : COLOR_TEXT;
+            color = selected ? theme.accent : theme.text;
           }
-          if (inactive) color = COLOR_TEXT_SUBTLE;
+          if (inactive) color = theme.textSubtle;
           const field = item.kind === 'field' ? fieldErrors[item.field] : undefined;
           return (
             <Box key={`${item.kind}-${index}-${label}`} flexDirection="column">
@@ -192,14 +185,14 @@ function SubagentPoolSelectionMenu({
                   {label}
                 </Text>
                 {item.kind === 'entry' && entryShape === 'entries' ? (
-                  <Text color={selected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>
+                  <Text color={selected ? theme.text : theme.textSubtle}>
                     {'  '}· Provider: {formatSubagentPoolProvider(item.entry.provider, roleLabel)} · Reasoning:{' '}
                     {formatSubagentPoolReasoning(item.entry.reasoningEffort, roleLabel)}
                   </Text>
                 ) : null}
               </Box>
               {field && (
-                <Text color={COLOR_DANGER}>
+                <Text color={theme.danger}>
                   {' '}
                   {GLYPH_WARNING} {field}
                 </Text>

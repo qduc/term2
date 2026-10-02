@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { THEME_SETTING_VALUES } from '../../theme/resolve-theme.js';
 import { CONTRACT_04_CONSUMER_INVENTORY } from './test-helpers/settings-consumer-inventory.js';
 import {
   AgentSettingsSchema,
@@ -17,8 +18,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(148);
-  expect(new Set(exportedKeys).size).toBe(148);
+  expect(exportedKeys).toHaveLength(149);
+  expect(new Set(exportedKeys).size).toBe(149);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -261,6 +262,17 @@ it('ui displayMode defaults to concise and is runtime modifiable', () => {
   expect(UISettingsSchema.parse({}).displayMode).toBe('concise');
   expect(DEFAULT_SETTINGS.ui.displayMode).toBe('concise');
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.UI_DISPLAY_MODE)).toBe(true);
+});
+
+it('ui theme defaults to auto, accepts every registered theme, and is runtime modifiable', () => {
+  expect(UISettingsSchema.parse({}).theme).toBe('auto');
+  expect(DEFAULT_SETTINGS.ui.theme).toBe('auto');
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.UI_THEME)).toBe(true);
+
+  for (const value of THEME_SETTING_VALUES) {
+    expect(UISettingsSchema.parse({ theme: value }).theme).toBe(value);
+  }
+  expect(() => UISettingsSchema.parse({ theme: 'solarized' })).toThrow();
 });
 
 it('workflow limits have bounded defaults and accept workspace configuration', () => {

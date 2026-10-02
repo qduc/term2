@@ -9,14 +9,7 @@ import type {
 import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
 import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
-import {
-  COLOR_ACCENT_ALT,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  TOOL_STATUS_COLOR,
-  TOOL_STATUS_GLYPH,
-  type ToolStatusKind,
-} from '../theme.js';
+import { TOOL_STATUS_GLYPH, type ToolStatusKind, useTheme } from '../theme.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
@@ -180,6 +173,7 @@ const toolStatusKind = (state: BackgroundSubagentTaskTool['state']): ToolStatusK
   state === 'success' ? 'completed' : state;
 
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) => {
+  const theme = useTheme();
   const { stdout } = useStdout();
   const columns = testColumns ?? stdout.columns ?? BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
   const rows = normalizeLiveTaskRows(tasks);
@@ -206,7 +200,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color={COLOR_TEXT_MUTED}>Tasks · {activeCount} active · ^G manage</Text>
+      <Text color={theme.textMuted}>Tasks · {activeCount} active · ^G manage</Text>
       {visible.map(({ key, placement, task }) => {
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
@@ -216,14 +210,14 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
         return (
           <Box key={key} flexDirection="column">
             <Text>
-              <Text color={COLOR_TEXT_SUBTLE}>• </Text>
-              <Text color={COLOR_ACCENT_ALT}>{formattedRow.badge}</Text> <Text>{formattedRow.identity}</Text> ·{' '}
+              <Text color={theme.textSubtle}>• </Text>
+              <Text color={theme.accentAlt}>{formattedRow.badge}</Text> <Text>{formattedRow.identity}</Text> ·{' '}
               <Text>{formattedRow.phase}</Text>
             </Text>
             {tool && toolStatus ? (
-              <Text color={COLOR_TEXT_MUTED}>
+              <Text color={theme.textMuted}>
                 {'  └ '}
-                <Text color={TOOL_STATUS_COLOR[toolStatus]}>{TOOL_STATUS_GLYPH[toolStatus]}</Text>{' '}
+                <Text color={theme.toolStatus[toolStatus]}>{TOOL_STATUS_GLYPH[toolStatus]}</Text>{' '}
                 {truncate(firstLine(tool.label).replaceAll(/\s+/g, ' '), Math.max(1, columns - 6))}
               </Text>
             ) : null}

@@ -5,17 +5,7 @@ import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
-import {
-  COLOR_ACCENT,
-  COLOR_ACCENT_ALT,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  GLYPH_SEPARATOR,
-  MODE_BADGE_BACKGROUND,
-  MODE_BADGE_FOREGROUND,
-  type ModeBadge,
-} from '../theme.js';
+import { GLYPH_SEPARATOR, type ModeBadge, useTheme } from '../theme.js';
 
 const require = createRequire(import.meta.url);
 
@@ -56,14 +46,18 @@ const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
 const truncateModel = (name: string): string =>
   name.length > MAX_MODEL_LABEL ? `${name.slice(0, MAX_MODEL_LABEL - 1)}…` : name;
 
-const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => (
-  <Text backgroundColor={MODE_BADGE_BACKGROUND[mode]} color={MODE_BADGE_FOREGROUND} bold>
-    {' '}
-    {mode}{' '}
-  </Text>
-);
+const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => {
+  const theme = useTheme();
+  return (
+    <Text backgroundColor={theme.modeBadge[mode]} color={theme.modeBadgeForeground} bold>
+      {' '}
+      {mode}{' '}
+    </Text>
+  );
+};
 
 const Banner: FC<BannerProps> = ({ settingsService }) => {
+  const theme = useTheme();
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
   const model = useSetting(settingsService, 'agent.model');
   const smartPool = useSetting(settingsService, 'agent.smartModel');
@@ -88,10 +82,10 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
   return (
     <Box flexDirection="column" width="100%" paddingTop={1} marginBottom={1}>
       <Box>
-        <Text color={COLOR_WARNING} bold>
+        <Text color={theme.warning} bold>
           ▌
         </Text>
-        <Text color={COLOR_ACCENT} bold>
+        <Text color={theme.accent} bold>
           {' '}
           term²{' '}
         </Text>
@@ -102,22 +96,22 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
             <Badge mode="MENTOR" />
           </>
         )}
-        <Text color={COLOR_TEXT_MUTED}> v{version}</Text>
+        <Text color={theme.textMuted}> v{version}</Text>
       </Box>
 
       <Box>
-        <Text color={COLOR_TEXT_SUBTLE}>{'  '}</Text>
-        <Text color={COLOR_TEXT_MUTED}>{providerLabel}</Text>
-        <Text color={COLOR_TEXT_SUBTLE}>/</Text>
-        <Text color={COLOR_ACCENT}>{model ? truncateModel(model) : '—'}</Text>
-        {reasoningEffort !== 'none' && <Text color={COLOR_TEXT_SUBTLE}> ({reasoningEffort})</Text>}
+        <Text color={theme.textSubtle}>{'  '}</Text>
+        <Text color={theme.textMuted}>{providerLabel}</Text>
+        <Text color={theme.textSubtle}>/</Text>
+        <Text color={theme.accent}>{model ? truncateModel(model) : '—'}</Text>
+        {reasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({reasoningEffort})</Text>}
 
         {mentorMode && mentorModel && (
           <>
-            <Text color={COLOR_TEXT_SUBTLE}> {GLYPH_SEPARATOR} </Text>
-            <Text color={COLOR_TEXT_SUBTLE}>mentor </Text>
-            <Text color={COLOR_ACCENT_ALT}>{truncateModel(mentorModel)}</Text>
-            {mentorReasoningEffort !== 'none' && <Text color={COLOR_TEXT_SUBTLE}> ({mentorReasoningEffort})</Text>}
+            <Text color={theme.textSubtle}> {GLYPH_SEPARATOR} </Text>
+            <Text color={theme.textSubtle}>mentor </Text>
+            <Text color={theme.accentAlt}>{truncateModel(mentorModel)}</Text>
+            {mentorReasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({mentorReasoningEffort})</Text>}
           </>
         )}
       </Box>

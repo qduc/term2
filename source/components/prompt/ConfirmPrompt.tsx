@@ -1,7 +1,7 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_BORDER_ACTIVE, COLOR_TEXT_MUTED, COLOR_WARNING, GLYPH_WARNING } from '../theme.js';
+import { GLYPH_WARNING, useTheme } from '../theme.js';
 
 export interface ConfirmPromptProps {
   question: string;
@@ -34,6 +34,7 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
   onDecline,
   onCancel,
 }) => {
+  const theme = useTheme();
   const [selectedIndex, setSelectedIndex] = useState<0 | 1>(defaultIndex);
 
   useInput((input, key) => {
@@ -62,9 +63,9 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
   const options = [confirmLabel, declineLabel];
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.borderActive} paddingX={1}>
       {warning && (
-        <Text color={COLOR_WARNING}>
+        <Text color={theme.warning}>
           {GLYPH_WARNING} {warning}
         </Text>
       )}
@@ -75,7 +76,7 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
           return (
             <Box key={label}>
               <SelectionMarker selected={selected} />
-              <Text color={selected ? COLOR_ACCENT : COLOR_TEXT_MUTED} bold={selected}>
+              <Text color={selected ? theme.accent : theme.textMuted} bold={selected}>
                 {label}
               </Text>
             </Box>

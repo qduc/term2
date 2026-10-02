@@ -2,8 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
 import React, { act } from 'react';
-import ApprovalPrompt, { deniedReadOptionColor } from './ApprovalPrompt.js';
-import { COLOR_DANGER, COLOR_SUCCESS } from '../theme.js';
+import ApprovalPrompt, { deniedReadOptionTone } from './ApprovalPrompt.js';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
 import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 
@@ -56,8 +55,9 @@ it.sequential(
     );
     const frame = result.lastFrame() ?? '';
 
-    expect(deniedReadOptionColor('Deny')).toBe(COLOR_DANGER);
-    expect(deniedReadOptionColor('Allow once')).toBe(COLOR_SUCCESS);
+    expect(deniedReadOptionTone('Deny')).toBe('danger');
+    expect(deniedReadOptionTone('Run unsandboxed once')).toBe('warning');
+    expect(deniedReadOptionTone('Allow once')).toBe('success');
     expect(toVisibleText(frame)).toContain(
       '↑↓ navigate │ 1 allow once │ y/n answer │ ⏎ select │ Esc interrupts the turn',
     );

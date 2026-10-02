@@ -1,14 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseMemoryOutput } from './command-message-helpers.js';
-import {
-  COLOR_ACCENT,
-  COLOR_BORDER,
-  COLOR_DANGER,
-  COLOR_TEXT,
-  COLOR_TEXT_SUBTLE,
-  COLOR_TOOL_OUTPUT,
-} from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   output: string;
@@ -20,6 +13,7 @@ type Props = {
 const truncate = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}...` : text);
 
 const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHeader }) => {
+  const theme = useTheme();
   const parsed = parseMemoryOutput(output) as any;
   if (!parsed) return null;
 
@@ -28,7 +22,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         {renderStandardHeader()}
         <Box paddingLeft={2}>
-          <Text color={COLOR_DANGER}>
+          <Text color={theme.danger}>
             {parsed.code ? `[${parsed.code}] ` : ''}
             {parsed.message}
           </Text>
@@ -45,38 +39,38 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box flexDirection="column" paddingLeft={2}>
-          <Text color={COLOR_TEXT_SUBTLE} dimColor>
+          <Text color={theme.textSubtle} dimColor>
             {total} memor{total === 1 ? 'y' : 'ies'} found
             {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
             {parsed.unavailable ? `; ${parsed.unavailable} unavailable` : ''}
           </Text>
           {groups.map(([label, memories]) => (
             <Box key={label} flexDirection="column">
-              <Text color={COLOR_ACCENT} bold>
+              <Text color={theme.accent} bold>
                 {label}
               </Text>
               {memories.length === 0 ? (
-                <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                <Text color={theme.textSubtle} dimColor>
                   none
                 </Text>
               ) : (
                 memories.map((m: any, idx: number) => (
                   <Box key={idx} flexDirection="column" marginTop={1}>
-                    <Text color={COLOR_ACCENT} bold>
+                    <Text color={theme.accent} bold>
                       {m.title || m.id}
                     </Text>
                     {m.summary ? (
-                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                      <Text color={theme.textSubtle} dimColor>
                         {truncate(m.summary, 140)}
                       </Text>
                     ) : null}
                     {m.tags && m.tags.length > 0 ? (
-                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                      <Text color={theme.textSubtle} dimColor>
                         tags: {m.tags.join(', ')}
                       </Text>
                     ) : null}
                     {m.scope ? (
-                      <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                      <Text color={theme.textSubtle} dimColor>
                         scope: {m.scope}
                       </Text>
                     ) : null}
@@ -97,7 +91,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
         <Box flexDirection="column">
           {renderStandardHeader()}
           <Box paddingLeft={2} marginTop={1}>
-            <Text color={COLOR_TOOL_OUTPUT} dimColor>
+            <Text color={theme.toolOutput} dimColor>
               Saved memory {m?.id ? `"${m.id}"` : ''}
               {m?.title ? ` - "${m.title}"` : ''}
             </Text>
@@ -110,7 +104,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
         <Box flexDirection="column">
           {renderStandardHeader()}
           <Box paddingLeft={2} marginTop={1}>
-            <Text color={COLOR_TOOL_OUTPUT} dimColor>
+            <Text color={theme.toolOutput} dimColor>
               Updated memory {m?.id ? `"${m.id}"` : ''}
               {m?.title ? ` - "${m.title}"` : ''}
             </Text>
@@ -121,23 +115,23 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
-        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_BORDER} paddingX={1} marginTop={1}>
-          <Text color={COLOR_TEXT} bold>
+        <Box flexDirection="column" borderStyle="single" borderColor={theme.border} paddingX={1} marginTop={1}>
+          <Text color={theme.text} bold>
             {m.title || m.id}
           </Text>
           {m.summary ? (
-            <Text color={COLOR_TEXT_SUBTLE} dimColor>
+            <Text color={theme.textSubtle} dimColor>
               {m.summary}
             </Text>
           ) : null}
           {m.tags && m.tags.length > 0 ? (
-            <Text color={COLOR_TEXT_SUBTLE} dimColor>
+            <Text color={theme.textSubtle} dimColor>
               tags: {m.tags.join(', ')}
             </Text>
           ) : null}
           {m.content ? (
             <Box marginTop={1}>
-              <Text color={COLOR_TOOL_OUTPUT}>{m.content}</Text>
+              <Text color={theme.toolOutput}>{m.content}</Text>
             </Box>
           ) : null}
         </Box>
@@ -151,7 +145,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box paddingLeft={2}>
-          <Text color={COLOR_TEXT_SUBTLE} dimColor>
+          <Text color={theme.textSubtle} dimColor>
             {results.length} result{results.length === 1 ? '' : 's'}
             {query ? ` for "${query}"` : ''}
             {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
@@ -160,14 +154,14 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
         <Box flexDirection="column" paddingLeft={2}>
           {results.map((r: any, idx: number) => (
             <Box key={idx} flexDirection="column" marginTop={1}>
-              <Text color={COLOR_ACCENT} bold>
+              <Text color={theme.accent} bold>
                 {r.memory?.title || r.memory?.id}
               </Text>
-              <Text color={COLOR_TEXT_SUBTLE} dimColor>
+              <Text color={theme.textSubtle} dimColor>
                 [{r.scope || 'all'}] matched: {(r.matchedFields || []).join(', ') || 'n/a'}
               </Text>
-              {r.memory?.summary ? <Text color={COLOR_TOOL_OUTPUT}>{truncate(r.memory.summary, 140)}</Text> : null}
-              {r.contentSnippet?.text ? <Text color={COLOR_TOOL_OUTPUT}>{r.contentSnippet.text}</Text> : null}
+              {r.memory?.summary ? <Text color={theme.toolOutput}>{truncate(r.memory.summary, 140)}</Text> : null}
+              {r.contentSnippet?.text ? <Text color={theme.toolOutput}>{r.contentSnippet.text}</Text> : null}
             </Box>
           ))}
         </Box>
@@ -180,7 +174,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHead
       <Box flexDirection="column">
         {renderStandardHeader()}
         <Box paddingLeft={2} marginTop={1}>
-          <Text color={COLOR_TOOL_OUTPUT} dimColor>
+          <Text color={theme.toolOutput} dimColor>
             {parsed.deleted ? 'Deleted' : 'Memory not found'}
           </Text>
         </Box>

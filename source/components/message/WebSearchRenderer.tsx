@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseWebSearchOutput } from './command-message-helpers.js';
-import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   output: string;
@@ -9,6 +9,7 @@ type Props = {
 };
 
 const WebSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
+  const theme = useTheme();
   const parsed = parseWebSearchOutput(output) as any;
   if (!parsed) return null;
 
@@ -17,33 +18,33 @@ const WebSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
     <Box flexDirection="column">
       <Box marginBottom={1}>{renderStandardHeader()}</Box>
       {answer && (
-        <Box flexDirection="column" borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} marginBottom={1}>
-          <Text color={COLOR_WARNING} bold>
+        <Box flexDirection="column" borderStyle="round" borderColor={theme.warning} paddingX={1} marginBottom={1}>
+          <Text color={theme.warning} bold>
             Answer Summary
           </Text>
-          <Text color={COLOR_TOOL_OUTPUT}>{answer}</Text>
+          <Text color={theme.toolOutput}>{answer}</Text>
         </Box>
       )}
       {results && results.length > 0 && (
         <Box flexDirection="column">
-          <Text color={COLOR_ACCENT} bold>
+          <Text color={theme.accent} bold>
             Search Results:
           </Text>
           {results.map((res: any, idx: number) => (
             <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
-              <Text bold color={COLOR_TEXT}>
+              <Text bold color={theme.text}>
                 {idx + 1}. {res.title}
               </Text>
-              <Text color={COLOR_ACCENT} underline>
+              <Text color={theme.accent} underline>
                 {res.url}
               </Text>
               {res.published && (
-                <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                <Text color={theme.textSubtle} dimColor>
                   Published: {res.published}
                 </Text>
               )}
               <Box marginTop={1}>
-                <Text color={COLOR_TOOL_OUTPUT}>{res.content}</Text>
+                <Text color={theme.toolOutput}>{res.content}</Text>
               </Box>
             </Box>
           ))}

@@ -308,6 +308,11 @@ it('buildSettingValueSuggestions returns enum suggestions for ui.displayMode', (
   expect(values).toEqual(['standard', 'concise']);
 });
 
+it('buildSettingValueSuggestions offers every theme for ui.theme, auto first', () => {
+  const values = buildSettingValueSuggestions('ui.theme').map((r) => r.value);
+  expect(values).toEqual(['auto', 'dark', 'light', 'high-contrast', 'mono']);
+});
+
 it('buildSettingValueSuggestions returns curated presets for shell.backgroundTimeout', () => {
   const result = buildSettingValueSuggestions('shell.backgroundTimeout');
   const values = result.map((r) => r.value);

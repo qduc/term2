@@ -7,7 +7,6 @@ import {
   truncateKeepingTail,
 } from './settings-value-formatter.js';
 import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 it('formatDurationMs formats exact hours, minutes, and seconds', () => {
   expect(formatDurationMs(3600000)).toBe('1h');
@@ -46,27 +45,27 @@ it('truncateKeepingTail avoids cutting camel-case setting names in the middle of
 it('formatSettingDisplayValue formats secrets masked or <empty>', () => {
   const masked = formatSettingDisplayValue(SETTING_KEYS.AGENT_OPENAI_API_KEY, 'sk-secret123');
   expect(masked.text).toBe('********');
-  expect(masked.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(masked.tone).toBe('textSubtle');
 
   const empty = formatSettingDisplayValue(SETTING_KEYS.AGENT_OPENAI_API_KEY, '');
   expect(empty.text).toBe('<empty>');
-  expect(empty.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(empty.tone).toBe('textSubtle');
 });
 
 it('formatSettingDisplayValue formats booleans as ON/OFF', () => {
   const on = formatSettingDisplayValue(SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED, true);
   expect(on.text).toBe('ON');
-  expect(on.color).toBe(COLOR_SUCCESS);
+  expect(on.tone).toBe('success');
 
   const off = formatSettingDisplayValue(SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED, false);
   expect(off.text).toBe('OFF');
-  expect(off.color).toBe(COLOR_DANGER);
+  expect(off.tone).toBe('danger');
 });
 
 it('formatSettingDisplayValue formats durations in milliseconds', () => {
   const activeTime = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS, 3600000);
   expect(activeTime.text).toBe('1h');
-  expect(activeTime.color).toBe(COLOR_WARNING);
+  expect(activeTime.tone).toBe('warning');
 
   const warningTime = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS, 900000);
   expect(warningTime.text).toBe('15m');
@@ -82,13 +81,13 @@ it('formatSettingDisplayValue formats durations in milliseconds', () => {
 
   const reqDurationDisabled = formatSettingDisplayValue(SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS, 0);
   expect(reqDurationDisabled.text).toBe('disabled (0s)');
-  expect(reqDurationDisabled.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(reqDurationDisabled.tone).toBe('textSubtle');
 });
 
 it('formatSettingDisplayValue formats USD micros', () => {
   const maxBudget = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS, 5000000);
   expect(maxBudget.text).toBe('$5.00');
-  expect(maxBudget.color).toBe(COLOR_WARNING);
+  expect(maxBudget.tone).toBe('warning');
 
   const warningBudget = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS, 1000000);
   expect(warningBudget.text).toBe('$1.00');
@@ -100,17 +99,17 @@ it('formatSettingDisplayValue formats USD micros', () => {
 it('formatSettingDisplayValue formats percentages', () => {
   const compactThreshold = formatSettingDisplayValue(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD, 0.8);
   expect(compactThreshold.text).toBe('80%');
-  expect(compactThreshold.color).toBe(COLOR_WARNING);
+  expect(compactThreshold.tone).toBe('warning');
 
   const extension = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT, 50);
   expect(extension.text).toBe('50%');
-  expect(extension.color).toBe(COLOR_WARNING);
+  expect(extension.tone).toBe('warning');
 });
 
 it('formatSettingDisplayValue formats token and character counts', () => {
   const unpriced = formatSettingDisplayValue(SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS, 5000000);
   expect(unpriced.text).toBe('5,000,000 tokens');
-  expect(unpriced.color).toBe(COLOR_WARNING);
+  expect(unpriced.tone).toBe('warning');
 
   const maxOutputTokens = formatSettingDisplayValue(SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS, 32000);
   expect(maxOutputTokens.text).toBe('32,000 tokens');
@@ -131,21 +130,21 @@ it('formatSettingDisplayValue formats rollover milestones array', () => {
     [200000, 300000, 400000],
   );
   expect(milestones.text).toBe('200k, 300k, 400k');
-  expect(milestones.color).toBe(COLOR_WARNING);
+  expect(milestones.tone).toBe('warning');
 
   const emptyMilestones = formatSettingDisplayValue(SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES, []);
   expect(emptyMilestones.text).toBe('(none)');
-  expect(emptyMilestones.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(emptyMilestones.tone).toBe('textSubtle');
 });
 
 it('formatSettingDisplayValue formats empty arrays and collections as (none)', () => {
   const favModels = formatSettingDisplayValue(SETTING_KEYS.AGENT_FAVORITE_MODELS, []);
   expect(favModels.text).toBe('(none)');
-  expect(favModels.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(favModels.tone).toBe('textSubtle');
 
   const nicknames = formatSettingDisplayValue(SETTING_KEYS.AGENT_MODEL_NICKNAMES, {});
   expect(nicknames.text).toBe('(none)');
-  expect(nicknames.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(nicknames.tone).toBe('textSubtle');
 
   const mentorPool = formatSettingDisplayValue(SETTING_KEYS.AGENT_MENTOR_POOL, []);
   expect(mentorPool.text).toBe('(none)');
@@ -154,7 +153,7 @@ it('formatSettingDisplayValue formats empty arrays and collections as (none)', (
 it('formatSettingDisplayValue formats undefined/inherited values with informative fallbacks', () => {
   const smartModel = formatSettingDisplayValue(SETTING_KEYS.AGENT_SMART_MODEL, undefined);
   expect(smartModel.text).toBe('(inherits agent.model)');
-  expect(smartModel.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(smartModel.tone).toBe('textSubtle');
 
   const balancedProvider = formatSettingDisplayValue(SETTING_KEYS.AGENT_BALANCED_PROVIDER, undefined);
   expect(balancedProvider.text).toBe('(inherits agent.provider)');
@@ -169,5 +168,5 @@ it('formatSettingDisplayValue formats undefined/inherited values with informativ
 it('formatSettingDisplayValue formats null values correctly', () => {
   const compactTokens = formatSettingDisplayValue(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS, null);
   expect(compactTokens.text).toBe('disabled');
-  expect(compactTokens.color).toBe(COLOR_TEXT_SUBTLE);
+  expect(compactTokens.tone).toBe('textSubtle');
 });

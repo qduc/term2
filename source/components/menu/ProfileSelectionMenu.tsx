@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { ProfileOption } from '../../hooks/use-profile-selection.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_ACTIVE, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   items: ProfileOption[];
@@ -13,12 +13,13 @@ type Props = {
 };
 
 const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex, scrollOffset = 0, query }) => {
+  const theme = useTheme();
   if (items.length === 0) {
     return (
       <Box flexDirection="column">
-        <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
-          <Text color={COLOR_TEXT_SUBTLE}>Profiles</Text>
-          <Text color={COLOR_TEXT_SUBTLE}>No matching profiles</Text>
+        <Box borderStyle="round" borderColor={theme.borderActive} paddingX={1} flexDirection="column">
+          <Text color={theme.textSubtle}>Profiles</Text>
+          <Text color={theme.textSubtle}>No matching profiles</Text>
         </Box>
         <MenuFooter hints={[['Esc', 'cancel']]} />
       </Box>
@@ -34,8 +35,8 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} flexDirection="column" width="100%" paddingX={1}>
-        <Text color={COLOR_TEXT_SUBTLE}>Profiles{query ? ` — ${query}` : ''}</Text>
+      <Box borderStyle="round" borderColor={theme.borderActive} flexDirection="column" width="100%" paddingX={1}>
+        <Text color={theme.textSubtle}>Profiles{query ? ` — ${query}` : ''}</Text>
         {/* The two columns split the row evenly at every terminal width: each
             takes half, so the divider sits in the middle instead of at a fixed
             offset. Both columns have a definite width, which lets Yoga hand
@@ -52,7 +53,7 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
             borderBottom={false}
             borderLeft={false}
             borderRight={true}
-            borderColor={COLOR_BORDER}
+            borderColor={theme.border}
             paddingRight={1}
           >
             <Box flexDirection="row" width="100%">
@@ -65,7 +66,7 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
                   return (
                     <Box key={profile.id}>
                       <SelectionMarker selected={isSelected} />
-                      <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected || isActive} wrap="truncate">
+                      <Text color={isSelected ? theme.accent : undefined} bold={isSelected || isActive} wrap="truncate">
                         {label}
                       </Text>
                     </Box>
@@ -82,14 +83,14 @@ const ProfileSelectionMenu: FC<Props> = ({ items, activeProfileId, selectedIndex
           <Box flexDirection="column" width="50%" paddingLeft={2}>
             {selectedProfile && (
               <Box flexDirection="column">
-                <Text bold color={COLOR_ACCENT}>
+                <Text bold color={theme.accent}>
                   {selectedProfile.displayName}
                 </Text>
                 <Box marginTop={1}>
-                  <Text color={COLOR_TEXT}>{selectedProfile.detail}</Text>
+                  <Text color={theme.text}>{selectedProfile.detail}</Text>
                 </Box>
                 <Box marginTop={1}>
-                  <Text color={COLOR_TEXT_SUBTLE}>
+                  <Text color={theme.textSubtle}>
                     {selectedProfile.id === activeProfileId
                       ? 'Currently active'
                       : `Run /profile ${selectedProfile.shortId} to switch`}

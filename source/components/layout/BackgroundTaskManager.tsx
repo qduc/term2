@@ -13,7 +13,7 @@ import { sanitizeBackgroundTaskToolLabel } from '../../services/background-task-
 import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 import { MenuFooter } from '../common/MenuContainer.js';
-import { COLOR_ACCENT_ALT, COLOR_DANGER_SOFT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 export type BackgroundTaskManagerProps = {
   enabled?: boolean;
@@ -130,46 +130,49 @@ const formatToolCounts = (counts: Record<string, number>): string => {
   return omittedCount > 0 ? `${rendered}, … +${omittedCount} more` : rendered;
 };
 
-const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> = ({ details }) => (
-  <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-    <Text color={COLOR_ACCENT_ALT}>ID: {details.id}</Text>
-    <Text>State: {statusText(details)}</Text>
-    {details.activity && (
-      <Text>
-        Last observed: {formatBackgroundTaskElapsed(details.activity.liveness.ageMs)} ago
-        {details.activity.liveness.state === 'quiet' ? ' (quiet)' : ''}
-      </Text>
-    )}
-    {observationText(details) && <Text>Last activity: {observationText(details)}</Text>}
-    {details.kind === 'shell' ? (
-      <>
-        <Text wrap="wrap">Command: {details.command}</Text>
-        {details.output && <Text wrap="wrap">Output: {details.output}</Text>}
-        {details.error && <Text color={COLOR_DANGER_SOFT}>Error: {details.error}</Text>}
-      </>
-    ) : (
-      <>
-        <Text>Role: {details.role}</Text>
-        {details.name && <Text>Name: {details.name}</Text>}
-        <Text wrap="wrap">Task: {details.task}</Text>
-        <Text>Started: {formatBackgroundTaskElapsed(details.elapsedMs)} ago</Text>
-        {details.model && <Text>Model: {details.model.id}</Text>}
-        {details.model && <Text>Provider: {details.model.provider}</Text>}
-        {details.latestUsage?.prompt_tokens !== undefined && (
-          <Text>Context: {formatContext(details.latestUsage.prompt_tokens, details.model?.contextWindow)}</Text>
-        )}
-        {details.activity?.lastObservation.kind === 'retrying' && (
-          <Text>
-            Retries: {details.activity.lastObservation.attempt} of {details.activity.lastObservation.maxRetries}
-          </Text>
-        )}
-        {details.lastToolName && <Text>Last tool: {details.lastToolName}</Text>}
-        {Object.keys(details.toolCounts).length > 0 && <Text>Tools: {formatToolCounts(details.toolCounts)}</Text>}
-        {details.currentText && <Text wrap="wrap">Current: {details.currentText}</Text>}
-      </>
-    )}
-  </Box>
-);
+const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> = ({ details }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+      <Text color={theme.accentAlt}>ID: {details.id}</Text>
+      <Text>State: {statusText(details)}</Text>
+      {details.activity && (
+        <Text>
+          Last observed: {formatBackgroundTaskElapsed(details.activity.liveness.ageMs)} ago
+          {details.activity.liveness.state === 'quiet' ? ' (quiet)' : ''}
+        </Text>
+      )}
+      {observationText(details) && <Text>Last activity: {observationText(details)}</Text>}
+      {details.kind === 'shell' ? (
+        <>
+          <Text wrap="wrap">Command: {details.command}</Text>
+          {details.output && <Text wrap="wrap">Output: {details.output}</Text>}
+          {details.error && <Text color={theme.dangerSoft}>Error: {details.error}</Text>}
+        </>
+      ) : (
+        <>
+          <Text>Role: {details.role}</Text>
+          {details.name && <Text>Name: {details.name}</Text>}
+          <Text wrap="wrap">Task: {details.task}</Text>
+          <Text>Started: {formatBackgroundTaskElapsed(details.elapsedMs)} ago</Text>
+          {details.model && <Text>Model: {details.model.id}</Text>}
+          {details.model && <Text>Provider: {details.model.provider}</Text>}
+          {details.latestUsage?.prompt_tokens !== undefined && (
+            <Text>Context: {formatContext(details.latestUsage.prompt_tokens, details.model?.contextWindow)}</Text>
+          )}
+          {details.activity?.lastObservation.kind === 'retrying' && (
+            <Text>
+              Retries: {details.activity.lastObservation.attempt} of {details.activity.lastObservation.maxRetries}
+            </Text>
+          )}
+          {details.lastToolName && <Text>Last tool: {details.lastToolName}</Text>}
+          {Object.keys(details.toolCounts).length > 0 && <Text>Tools: {formatToolCounts(details.toolCounts)}</Text>}
+          {details.currentText && <Text wrap="wrap">Current: {details.currentText}</Text>}
+        </>
+      )}
+    </Box>
+  );
+};
 
 /** Keyboard-owned modal for retained background task inspection and per-item stop. */
 const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
@@ -183,6 +186,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   moveForegroundToBackground,
   onOpenChange,
 }) => {
+  const theme = useTheme();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedOrdinal, setSelectedOrdinal] = useState(0);
   const [detailsVisible, setDetailsVisible] = useState(false);
@@ -330,14 +334,14 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const selected = selectedRow?.kind === 'background' ? selectedRow.task : undefined;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={COLOR_ACCENT_ALT} paddingX={1} marginBottom={1}>
-      <Text bold color={COLOR_ACCENT_ALT}>
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.accentAlt} paddingX={1} marginBottom={1}>
+      <Text bold color={theme.accentAlt}>
         Manage background tasks
       </Text>
       {foreground.map((candidate, index) => (
         <Text
           key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
-          color={index === selectedIndex ? COLOR_TEXT : COLOR_TEXT_SUBTLE}
+          color={index === selectedIndex ? theme.text : theme.textSubtle}
         >
           {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
           {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
@@ -346,7 +350,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       {tasks.map((task, index) => {
         const displayIndex = index + foreground.length;
         return (
-          <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>
+          <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}>
             {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
             {taskLabel(task)} · {statusText(task)}
           </Text>
@@ -354,7 +358,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       })}
       {detailsVisible && selectedForeground && (
         <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-          <Text color={COLOR_ACCENT_ALT}>
+          <Text color={theme.accentAlt}>
             {selectedForeground.kind === 'shell' ? 'Call ID' : 'Run ID'}:{' '}
             {selectedForeground.kind === 'shell' ? selectedForeground.callId : selectedForeground.runId}
           </Text>
@@ -367,19 +371,17 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       )}
       {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
       {stopArmedKey === selectedRow?.key && (
-        <Text color={COLOR_WARNING}>Press Enter to force stop this task, or Esc to close.</Text>
+        <Text color={theme.warning}>Press Enter to force stop this task, or Esc to close.</Text>
       )}
       {backgroundArmedKey === selectedRow?.key && (
-        <Text color={COLOR_WARNING}>
+        <Text color={theme.warning}>
           Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background, or
           Esc to close.
         </Text>
       )}
       {feedback && (
         <Text
-          color={
-            feedback === 'Stop requested' || feedback === 'Moved to background' ? COLOR_WARNING : COLOR_DANGER_SOFT
-          }
+          color={feedback === 'Stop requested' || feedback === 'Moved to background' ? theme.warning : theme.dangerSoft}
         >
           {feedback}
         </Text>

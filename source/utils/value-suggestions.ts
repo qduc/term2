@@ -133,6 +133,13 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'standard', description: 'Standard output (full details)' },
     { value: 'concise', description: 'Concise output (no reasoning, one-line tool calls)' },
   ],
+  'ui.theme': [
+    { value: 'auto', description: 'Follow the terminal background (default)' },
+    { value: 'dark', description: 'For dark terminals' },
+    { value: 'light', description: 'For light terminals' },
+    { value: 'high-contrast', description: 'Maximum contrast on a dark terminal' },
+    { value: 'mono', description: 'No colour (also used for NO_COLOR)' },
+  ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.runBudget.maxUsdMicros': [
     { value: '1000000', description: '$1' },

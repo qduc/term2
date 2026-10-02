@@ -18,17 +18,7 @@ import type { StaticCommitBlocker } from '../message/MessageList.js';
 import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
 import { getActiveWorkspaceRoot } from '../../services/workspace/active-workspace-root.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
-import {
-  COLOR_ACCENT,
-  COLOR_ACCENT_ALT,
-  COLOR_DANGER,
-  COLOR_SUCCESS,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  GLYPH_SELECTED,
-  GLYPH_SEPARATOR,
-  GLYPH_WARNING,
-} from '../theme.js';
+import { GLYPH_SELECTED, GLYPH_SEPARATOR, GLYPH_WARNING, useTheme } from '../theme.js';
 
 /**
  * The one separator used between top-level config segments. Spacing lives
@@ -36,11 +26,17 @@ import {
  * different ways (bare, inside `marginX`, and padded) and the bar looked
  * ragged.
  */
-const Divider: FC = () => <Text color={COLOR_TEXT_SUBTLE}> {GLYPH_SEPARATOR} </Text>;
+const Divider: FC = () => {
+  const theme = useTheme();
+  return <Text color={theme.textSubtle}> {GLYPH_SEPARATOR} </Text>;
+};
 
 /** The separator used between metrics segments — a lighter join than the `│`
  * used elsewhere, since the metrics group is already one visual cluster. */
-const MetricDivider: FC = () => <Text color={COLOR_TEXT_SUBTLE}> · </Text>;
+const MetricDivider: FC = () => {
+  const theme = useTheme();
+  return <Text color={theme.textSubtle}> · </Text>;
+};
 
 function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
@@ -278,6 +274,7 @@ const StatusBar: FC<StatusBarProps> = ({
   runBudgetNotice = null,
   columns: testColumns,
 }) => {
+  const theme = useTheme();
   const liveColumns = useTerminalColumns();
   const columns = testColumns ?? liveColumns;
   // The bar applies paddingX={1} on both sides, so the budget available to
@@ -316,10 +313,10 @@ const StatusBar: FC<StatusBarProps> = ({
   const contextTokens = lastUsage?.prompt_tokens;
   const contextUsageText = contextTokens != null ? formatContextUsage(contextTokens, contextWindow) : '';
 
-  const slate = COLOR_TEXT_SUBTLE;
-  const glow = COLOR_WARNING;
-  const accent = COLOR_ACCENT;
-  const warnRed = COLOR_DANGER;
+  const slate = theme.textSubtle;
+  const glow = theme.warning;
+  const accent = theme.accent;
+  const warnRed = theme.danger;
 
   const cacheReadTokens = lastUsage?.cache_read_tokens;
   const usageHasCacheRead = cacheReadTokens != null && cacheReadTokens > 0;
@@ -519,7 +516,7 @@ const StatusBar: FC<StatusBarProps> = ({
       : 'Sandboxed'
     : AUTO_APPROVE_LABELS[autoApproveMode];
 
-  const safetyColor = autoApproveAlways ? warnRed : sandboxEnabled || autoApproveMode === 'auto' ? COLOR_SUCCESS : glow;
+  const safetyColor = autoApproveAlways ? warnRed : sandboxEnabled || autoApproveMode === 'auto' ? theme.success : glow;
 
   // The alert row is where every non-steady-state message lands. Keeping them
   // in one row (rather than stacked beside the identity segments, as before)
@@ -571,7 +568,7 @@ const StatusBar: FC<StatusBarProps> = ({
     {
       id: 'mentor',
       text: mentorMode && mentorModel ? mentorModel : '',
-      color: COLOR_ACCENT_ALT,
+      color: theme.accentAlt,
       separator: 'group',
       tier: 1,
     },

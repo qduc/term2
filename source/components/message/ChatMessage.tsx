@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
 import Divider from '../common/Divider.js';
-import { COLOR_ACCENT, COLOR_REASONING, COLOR_USER_BACKGROUND } from '../theme.js';
+import { useTheme } from '../theme.js';
 import type { Message } from '../../types/message.js';
 
 type Props = {
@@ -11,30 +11,31 @@ type Props = {
 };
 
 const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
+  const theme = useTheme();
   return (
     <Box flexDirection="column">
       {msg.sender === 'user' && msg.presentation === 'session_rollover' ? (
         <>
-          <Text color={COLOR_REASONING}>↻ Session rollover briefing</Text>
+          <Text color={theme.reasoning}>↻ Session rollover briefing</Text>
           <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
         </>
       ) : msg.sender === 'user' ? (
-        <Box width="100%" backgroundColor={COLOR_USER_BACKGROUND} paddingX={1}>
-          <Text bold>
-            <Text color={COLOR_ACCENT}>❯ </Text>
+        <Box width="100%" backgroundColor={theme.userBackground} paddingX={1}>
+          <Text bold color={theme.userText}>
+            <Text color={theme.accent}>❯ </Text>
             {msg.text}
           </Text>
         </Box>
       ) : msg.sender === 'system' && msg.presentation === 'rule' ? (
         <Divider width={maxWidth} />
       ) : msg.sender === 'system' && msg.memoryReceiptCount !== undefined ? (
-        <Text color={COLOR_REASONING}>
+        <Text color={theme.reasoning}>
           Loaded {msg.memoryReceiptCount} {msg.memoryReceiptCount === 1 ? 'memory' : 'memories'}
         </Text>
       ) : msg.sender === 'system' ? (
-        <Text color={COLOR_REASONING}>{msg.text}</Text>
+        <Text color={theme.reasoning}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (
-        <MarkdownRenderer defaultColor={COLOR_REASONING} maxWidth={maxWidth}>
+        <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={maxWidth}>
           {msg.text}
         </MarkdownRenderer>
       ) : msg.sender === 'bot' ? (

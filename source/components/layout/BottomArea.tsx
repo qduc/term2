@@ -43,7 +43,7 @@ import type { CopySelection } from '../../utils/copy-selections.js';
 import type { PendingQueueMessage } from '../input/PendingQueueList.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
-import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 import { truncateTerminalText } from './terminal-text-budget.js';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 
@@ -228,6 +228,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   mcpManager,
   mcpConfigController,
 }) => {
+  const theme = useTheme();
   const { controller } = useInputState();
   const terminalColumns = useTerminalColumns();
   const [dotCount, setDotCount] = useState(1);
@@ -394,7 +395,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             {showApprovalPrompt && pendingApproval && (
               <Box flexDirection="column">
                 {backgroundApprovalPendingCount > 1 && (
-                  <Text color={COLOR_WARNING}>Background approval · {backgroundApprovalPendingCount - 1} queued</Text>
+                  <Text color={theme.warning}>Background approval · {backgroundApprovalPendingCount - 1} queued</Text>
                 )}
                 <ApprovalPrompt
                   approval={pendingApproval}
@@ -409,7 +410,7 @@ const BottomArea: FC<BottomAreaProps> = ({
               </Box>
             )}
             {isProcessing && toolCallStreamingInfo && (
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 Calling tool {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : ''}
                 {' · '}
                 {workingElapsedSeconds}s
@@ -424,13 +425,13 @@ const BottomArea: FC<BottomAreaProps> = ({
               </Text>
             )}
             {activeShellCommand && (
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 Running shell command:{' '}
                 <Text bold>{truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))}</Text>
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 Thinking · {thinkingElapsedSeconds}s
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
                   ? ` (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
@@ -438,13 +439,13 @@ const BottomArea: FC<BottomAreaProps> = ({
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
                   ? `Generating · ${workingElapsedSeconds}s (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
                   : `Processing · ${workingElapsedSeconds}s`}
               </Text>
             )}
-            {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press Esc again to interrupt</Text>}
+            {interruptConfirmVisible && <Text color={theme.warning}>Press Esc again to interrupt</Text>}
             <BackgroundTasksPanel
               tasks={mergeLiveTaskRows({
                 foreground:

@@ -13,17 +13,7 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } f
 import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
-import {
-  COLOR_ACCENT,
-  COLOR_BORDER,
-  COLOR_DANGER,
-  COLOR_SUCCESS,
-  COLOR_TEXT,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-  GLYPH_FAVORITE,
-} from '../theme.js';
+import { GLYPH_FAVORITE, type ColorRole, useTheme } from '../theme.js';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { formatDurationMs } from '../menu/settings-value-formatter.js';
 
@@ -135,19 +125,20 @@ type CreateFileArgs = {
   content: string;
 };
 
-const operationLabels: Record<string, { label: string; color: string }> = {
-  create_file: { label: 'CREATE', color: COLOR_SUCCESS },
-  update_file: { label: 'UPDATE', color: COLOR_WARNING },
-  delete_file: { label: 'DELETE', color: COLOR_DANGER },
+const operationLabels: Record<string, { label: string; tone: ColorRole }> = {
+  create_file: { label: 'CREATE', tone: 'success' },
+  update_file: { label: 'UPDATE', tone: 'warning' },
+  delete_file: { label: 'DELETE', tone: 'danger' },
 };
 
 const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
-  const op = operationLabels[args.type] || { label: args.type, color: COLOR_TEXT };
+  const theme = useTheme();
+  const op = operationLabels[args.type] || { label: args.type, tone: 'text' as const };
 
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={op.color} bold>
+        <Text color={theme[op.tone]} bold>
           [{op.label}]
         </Text>
         <Text> {args.path}</Text>
@@ -158,27 +149,28 @@ const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
 };
 
 const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
+  const theme = useTheme();
   const cmd = args.command ?? args.commands ?? '';
   return (
     <Box flexDirection="column" marginLeft={2} marginTop={1}>
       <Box>
-        <Text bold color={COLOR_ACCENT}>
+        <Text bold color={theme.accent}>
           {cmd}
         </Text>
       </Box>
       {args.cwd && (
         <Box>
-          <Text color={COLOR_TEXT_SUBTLE}>Cwd: {args.cwd}</Text>
+          <Text color={theme.textSubtle}>Cwd: {args.cwd}</Text>
         </Box>
       )}
       {args.timeout_ms && (
         <Box>
-          <Text color={COLOR_TEXT_SUBTLE}>Timeout: {formatDurationMs(args.timeout_ms)}</Text>
+          <Text color={theme.textSubtle}>Timeout: {formatDurationMs(args.timeout_ms)}</Text>
         </Box>
       )}
       {args.max_output_length && (
         <Box>
-          <Text color={COLOR_TEXT_SUBTLE}>Max output: {args.max_output_length} chars</Text>
+          <Text color={theme.textSubtle}>Max output: {args.max_output_length} chars</Text>
         </Box>
       )}
     </Box>
@@ -186,10 +178,11 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
 };
 
 const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
+  const theme = useTheme();
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={COLOR_WARNING} bold>
+        <Text color={theme.warning} bold>
           [SEARCH & REPLACE]
         </Text>
         <Text> {args.path}</Text>
@@ -198,7 +191,7 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
         const diff = generateDiff(rep?.search_content, rep?.replace_content);
         return (
           <Box key={idx} flexDirection="column" marginTop={idx > 0 ? 1 : 0}>
-            {all.length > 1 && <Text color={COLOR_TEXT_SUBTLE}>Replacement #{idx + 1}:</Text>}
+            {all.length > 1 && <Text color={theme.textSubtle}>Replacement #{idx + 1}:</Text>}
             <DiffView diff={diff} />
           </Box>
         );
@@ -208,6 +201,7 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
 };
 
 const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
+  const theme = useTheme();
   // Show content as a diff with all lines added
   const diffLines = args.content
     .split('\n')
@@ -217,7 +211,7 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={COLOR_SUCCESS} bold>
+        <Text color={theme.success} bold>
           [CREATE]
         </Text>
         <Text> {args.path}</Text>
@@ -229,10 +223,10 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
 
 type SafetyFindingLevel = 'RED' | 'YELLOW' | 'GREEN';
 
-const SAFETY_FINDING_COLORS: Record<SafetyFindingLevel, string> = {
-  RED: COLOR_DANGER,
-  YELLOW: COLOR_WARNING,
-  GREEN: COLOR_SUCCESS,
+const SAFETY_FINDING_TONES: Record<SafetyFindingLevel, ColorRole> = {
+  RED: 'danger',
+  YELLOW: 'warning',
+  GREEN: 'success',
 };
 
 type ParsedSystemSafetyReasoning = {
@@ -274,8 +268,9 @@ function parseSystemSafetyReasoning(reasoning: string): ParsedSystemSafetyReason
 }
 
 const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
+  const theme = useTheme();
   const isSystem = advisory.source === 'system';
-  const advisoryColor = isSystem ? COLOR_DANGER : advisory.approved ? COLOR_SUCCESS : COLOR_WARNING;
+  const advisoryColor = isSystem ? theme.danger : advisory.approved ? theme.success : theme.warning;
   const borderColor = advisoryColor;
   const headerColor = advisoryColor;
   const label = isSystem ? 'System Safety Check: BLOCKED ' : `AI Advisor: ${advisory.approved ? 'SAFE ' : 'CAUTION '}`;
@@ -287,39 +282,39 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
         <Text color={headerColor} bold>
           {label}
         </Text>
-        <Text color={COLOR_TEXT_MUTED}> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
+        <Text color={theme.textMuted}> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
       </Box>
       {parsedSystemReasoning ? (
         <Box flexDirection="column" marginTop={1}>
-          <Text bold color={COLOR_TEXT_MUTED}>
+          <Text bold color={theme.textMuted}>
             Heuristic findings:
           </Text>
           <Box flexDirection="column" marginLeft={1}>
             {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
               <Box key={`${level}-${detail}-${index}`}>
-                <Text color={SAFETY_FINDING_COLORS[level]} bold>
+                <Text color={theme[SAFETY_FINDING_TONES[level]]} bold>
                   {`${level}:`.padEnd(8)}
                 </Text>
-                <Text color={COLOR_TEXT_MUTED}>{detail}</Text>
+                <Text color={theme.textMuted}>{detail}</Text>
               </Box>
             ))}
           </Box>
           <Box marginTop={1}>
-            <Text color={COLOR_TEXT_MUTED}>Manual approval is strictly required.</Text>
+            <Text color={theme.textMuted}>Manual approval is strictly required.</Text>
           </Box>
           {parsedSystemReasoning.modelAdvisory && (
             <Box flexDirection="column" marginTop={1}>
-              <Text bold color={COLOR_TEXT_MUTED}>
+              <Text bold color={theme.textMuted}>
                 Model advisory:
               </Text>
-              <Text italic color={COLOR_TEXT_MUTED}>
+              <Text italic color={theme.textMuted}>
                 {parsedSystemReasoning.modelAdvisory}
               </Text>
             </Box>
           )}
         </Box>
       ) : (
-        <Text italic color={COLOR_TEXT_MUTED}>
+        <Text italic color={theme.textMuted}>
           {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
         </Text>
       )}
@@ -342,6 +337,7 @@ const TwoPaneApprovalLayout: FC<{
   rightTitle: React.ReactNode;
   rightDescription: React.ReactNode;
 }> = ({ left, rightTitle, rightDescription }) => {
+  const theme = useTheme();
   const { stdout } = useStdout();
   const isNarrow = (stdout.columns ?? 100) < 90;
   const description = (
@@ -355,16 +351,16 @@ const TwoPaneApprovalLayout: FC<{
       borderBottom={false}
       borderRight={false}
       borderLeft={!isNarrow}
-      borderColor={COLOR_BORDER}
+      borderColor={theme.border}
     >
-      <Text bold color={COLOR_WARNING}>
+      <Text bold color={theme.warning}>
         {rightTitle}
       </Text>
       <Box marginTop={1}>
         {rightDescription ? (
-          <Text color={COLOR_TEXT}>{rightDescription}</Text>
+          <Text color={theme.text}>{rightDescription}</Text>
         ) : (
-          <Text color={COLOR_TEXT_SUBTLE} italic>
+          <Text color={theme.textSubtle} italic>
             No description available.
           </Text>
         )}
@@ -381,10 +377,10 @@ const TwoPaneApprovalLayout: FC<{
   );
 };
 
-export function deniedReadOptionColor(item: string): string {
-  if (item === 'Deny') return COLOR_DANGER;
-  if (item === 'Run unsandboxed once') return COLOR_WARNING;
-  return COLOR_SUCCESS;
+export function deniedReadOptionTone(item: string): ColorRole {
+  if (item === 'Deny') return 'danger';
+  if (item === 'Run unsandboxed once') return 'warning';
+  return 'success';
 }
 
 const APPROVAL_FOOTER_HINTS: [string, string][] = [
@@ -491,6 +487,7 @@ const ApprovalPrompt: FC<Props> = ({
   currentQuestionIndex = 0,
   waitingForAskUserAnswer = false,
 }) => {
+  const theme = useTheme();
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
 
@@ -830,7 +827,7 @@ const ApprovalPrompt: FC<Props> = ({
   if (approval.checkIn) {
     return (
       <Box flexDirection="column">
-        <Text color={COLOR_WARNING} bold>
+        <Text color={theme.warning} bold>
           {approval.argumentsText}
         </Text>
         <Box flexDirection="column" marginTop={1}>
@@ -842,11 +839,11 @@ const ApprovalPrompt: FC<Props> = ({
           <Box flexDirection="column" marginLeft={1}>
             <Box>
               <SelectionMarker selected={selectedIndex === 0} />
-              <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>1. Continue</Text>
+              <Text color={selectedIndex === 0 ? theme.success : undefined}>1. Continue</Text>
             </Box>
             <Box>
               <SelectionMarker selected={selectedIndex === 1} />
-              <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>2. Stop</Text>
+              <Text color={selectedIndex === 1 ? theme.danger : undefined}>2. Stop</Text>
             </Box>
           </Box>
           <Box marginTop={1} marginLeft={1}>
@@ -860,7 +857,7 @@ const ApprovalPrompt: FC<Props> = ({
   // Try to parse and render arguments nicely based on tool type
   let content: React.ReactNode = (
     <Box marginTop={1}>
-      <Text bold color={COLOR_ACCENT}>
+      <Text bold color={theme.accent}>
         {approval.argumentsText}
       </Text>
     </Box>
@@ -947,19 +944,19 @@ const ApprovalPrompt: FC<Props> = ({
       <Box flexDirection="column">
         {totalQuestions > 1 && (
           <Box marginLeft={1}>
-            <Text color={COLOR_TEXT_SUBTLE}>
+            <Text color={theme.textSubtle}>
               Question {currentQuestionIndex + 1} of {totalQuestions}
             </Text>
           </Box>
         )}
-        <Box borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} paddingY={0}>
-          <Text color={COLOR_WARNING} bold>
+        <Box borderStyle="round" borderColor={theme.warning} paddingX={1} paddingY={0}>
+          <Text color={theme.warning} bold>
             {questionText}
           </Text>
         </Box>
         {waitingForAskUserAnswer && (
           <Box marginTop={1} marginLeft={1}>
-            <Text color={COLOR_ACCENT}>❯ Type your custom answer in the prompt below...</Text>
+            <Text color={theme.accent}>❯ Type your custom answer in the prompt below...</Text>
           </Box>
         )}
         <TwoPaneApprovalLayout
@@ -975,15 +972,15 @@ const ApprovalPrompt: FC<Props> = ({
 
             const color = isSelected
               ? item === ASK_USER_CUSTOM_ANSWER_LABEL
-                ? COLOR_ACCENT
-                : COLOR_SUCCESS
+                ? theme.accent
+                : theme.success
               : undefined;
 
             return (
               <Box key={item} flexDirection="row" width="100%">
                 <SelectionMarker selected={isSelected} />
                 <Box width={2} flexShrink={0}>
-                  <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                  <Text color={theme.textSubtle} dimColor>
                     {isRecommended ? GLYPH_FAVORITE : ' '}
                   </Text>
                 </Box>
@@ -1012,10 +1009,10 @@ const ApprovalPrompt: FC<Props> = ({
     const displaySuggestedParent = deniedRead.suggestedParent.replace(os.homedir(), '~');
     return (
       <Box flexDirection="column">
-        <Text color={COLOR_DANGER} bold>
+        <Text color={theme.danger} bold>
           Sandbox blocked read access:
         </Text>
-        <Text color={COLOR_DANGER}> {displayPath}</Text>
+        <Text color={theme.danger}> {displayPath}</Text>
         {/* Red left border, not just red text: this approval can grant access outside
             the workspace, so its shape should read as risky before the words are read. */}
         <Box
@@ -1025,14 +1022,14 @@ const ApprovalPrompt: FC<Props> = ({
           borderBottom={false}
           borderRight={false}
           borderLeft={true}
-          borderColor={COLOR_DANGER}
+          borderColor={theme.danger}
           paddingLeft={1}
           marginTop={1}
         >
           {content}
           <Box flexDirection="column" marginTop={1}>
             {deniedReadMenuItems.map((item, idx) => {
-              const color = deniedReadOptionColor(item);
+              const color = theme[deniedReadOptionTone(item)];
               return (
                 <Box key={item}>
                   <SelectionMarker selected={selectedIndex === idx} />
@@ -1045,14 +1042,14 @@ const ApprovalPrompt: FC<Props> = ({
           </Box>
           {!deniedRead.sensitive && (
             <Box marginTop={1}>
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 "Allow and remember" persists this path for this project: {displaySuggestedParent}
               </Text>
             </Box>
           )}
           {deniedRead.sensitive && (
             <Box marginTop={1}>
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 This is a sensitive path — "allow once" is available but remember is suppressed.
               </Text>
             </Box>
@@ -1083,7 +1080,7 @@ const ApprovalPrompt: FC<Props> = ({
           return (
             <Box key={item}>
               <SelectionMarker selected={isSelected} />
-              <Text color={isSelected ? (isDangerLabel ? COLOR_DANGER : COLOR_SUCCESS) : undefined}>
+              <Text color={isSelected ? (isDangerLabel ? theme.danger : theme.success) : undefined}>
                 {index + 1}. {item}
               </Text>
             </Box>
@@ -1100,14 +1097,14 @@ const ApprovalPrompt: FC<Props> = ({
       />
       {isFolderReadApproval && folderReadGrantPath && (
         <Box marginTop={1}>
-          <Text color={COLOR_TEXT_SUBTLE}>
+          <Text color={theme.textSubtle}>
             "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this session.
           </Text>
         </Box>
       )}
       {isOutsideWorkspaceEdit && approval.outsideWorkspaceEdit && (
         <Box marginTop={1}>
-          <Text color={COLOR_TEXT_SUBTLE}>
+          <Text color={theme.textSubtle}>
             File scope permits only {approval.outsideWorkspaceEdit.path}; folder scope permits edits beneath{' '}
             {approval.outsideWorkspaceEdit.folder} for this session.
           </Text>
@@ -1123,7 +1120,7 @@ const ApprovalPrompt: FC<Props> = ({
     <>
       {content}
       {isDockerHostControlApproval && (
-        <Text color={COLOR_DANGER}>
+        <Text color={theme.danger}>
           This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount
           host files, run privileged or persistent workloads, and is effectively equivalent to host access.
         </Text>
@@ -1135,9 +1132,9 @@ const ApprovalPrompt: FC<Props> = ({
 
   return (
     <Box flexDirection="column">
-      <Text color={COLOR_WARNING}>
+      <Text color={theme.warning}>
         {isDockerHostControlApproval ? (
-          <Text bold color={COLOR_DANGER}>
+          <Text bold color={theme.danger}>
             Docker host control
           </Text>
         ) : (
@@ -1155,7 +1152,7 @@ const ApprovalPrompt: FC<Props> = ({
         )}
       </Text>
       {isFolderReadApproval && approval.workspaceRoot && (
-        <Text color={COLOR_TEXT_SUBTLE}>Active workspace: {approval.workspaceRoot}</Text>
+        <Text color={theme.textSubtle}>Active workspace: {approval.workspaceRoot}</Text>
       )}
       {isDockerHostControlApproval ? (
         // Red left border, not just red text: Docker host control is the single
@@ -1168,7 +1165,7 @@ const ApprovalPrompt: FC<Props> = ({
           borderBottom={false}
           borderRight={false}
           borderLeft={true}
-          borderColor={COLOR_DANGER}
+          borderColor={theme.danger}
           paddingLeft={1}
           marginTop={1}
         >

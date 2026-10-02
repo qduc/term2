@@ -8,7 +8,7 @@ import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
-import { COLOR_DANGER } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -20,6 +20,7 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'model' }>> & {
 };
 
 export function ModelMenuSession({ frame, active, controller, interactions, services }: Props) {
+  const theme = useTheme();
   const models = services.models;
   const modelsRef = useRef(models);
   modelsRef.current = models;
@@ -217,7 +218,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         nicknameLabels={models.nicknameLabels}
         nicknameDraft={models.nicknameDraft}
       />
-      {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
+      {applyError && <Text color={theme.danger}>{applyError}</Text>}
     </Box>
   );
 }

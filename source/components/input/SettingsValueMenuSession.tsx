@@ -14,7 +14,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
-import { COLOR_DANGER } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type SettingsValueState = ReturnType<typeof useSettingsValueCompletion>;
 
@@ -26,6 +26,7 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'settings_value' }>> 
 };
 
 export function SettingsValueMenuSession({ frame, active, controller, interactions, services }: Props) {
+  const theme = useTheme();
   const settingsValue = services.settingsValue;
   const settingsService = services.settingsService;
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -191,7 +192,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
         previewText={draftValue === undefined ? undefined : formatSettingValueDetail(frame.settingKey, draftValue)}
         unitHint={unitHint}
       />
-      {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
+      {applyError && <Text color={theme.danger}>{applyError}</Text>}
     </Box>
   );
 }

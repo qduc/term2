@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import { GLYPH_WARNING, COLOR_ACCENT, COLOR_DANGER, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { GLYPH_WARNING, useTheme } from '../theme.js';
 
 export interface McpMenuItem {
   id: string;
@@ -23,22 +23,23 @@ export function McpSelectionMenu({
   error?: string;
   editing?: boolean;
 }) {
+  const theme = useTheme();
   return (
     <Box flexDirection="column">
-      <Text color={COLOR_ACCENT} bold underline>
+      <Text color={theme.accent} bold underline>
         {title}
       </Text>
       {error ? (
-        <Text color={COLOR_DANGER}>
+        <Text color={theme.danger}>
           {GLYPH_WARNING} {error}
         </Text>
       ) : null}
-      {editing ? <Text color={COLOR_TEXT_SUBTLE}>Enter a value below. Esc cancels.</Text> : null}
+      {editing ? <Text color={theme.textSubtle}>Enter a value below. Esc cancels.</Text> : null}
       {!editing ? (
         <MenuContainer
           items={[...items]}
           selectedIndex={selectedIndex}
-          borderColor={error ? COLOR_DANGER : COLOR_ACCENT}
+          borderColor={error ? theme.danger : theme.accent}
           footer={
             <MenuFooter
               hints={[
@@ -53,11 +54,11 @@ export function McpSelectionMenu({
               <SelectionMarker selected={selected} />
               <Text
                 bold={selected}
-                color={item.tone === 'danger' ? COLOR_DANGER : item.tone === 'warning' ? COLOR_WARNING : COLOR_TEXT}
+                color={item.tone === 'danger' ? theme.danger : item.tone === 'warning' ? theme.warning : theme.text}
               >
                 {item.label}
               </Text>
-              {item.detail ? <Text color={COLOR_TEXT_SUBTLE}> {item.detail}</Text> : null}
+              {item.detail ? <Text color={theme.textSubtle}> {item.detail}</Text> : null}
             </Box>
           )}
         />

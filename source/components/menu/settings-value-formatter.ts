@@ -4,11 +4,12 @@ import {
   isSecretSetting,
   isUsdMicrosSetting,
 } from '../../services/settings/settings-ui-metadata.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import type { ColorRole } from '../theme.js';
 
 export interface FormattedSettingValue {
   text: string;
-  color?: string;
+  /** A theme colour role; the caller resolves it with `theme[tone]`. */
+  tone?: ColorRole;
 }
 
 function truncate(text: string, max: number): string {
@@ -86,7 +87,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   if (isSecretSetting(key)) {
     return {
       text: value ? '********' : '<empty>',
-      color: COLOR_TEXT_SUBTLE,
+      tone: 'textSubtle',
     };
   }
 
@@ -95,7 +96,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     const text = value ? 'ON' : 'OFF';
     return {
       text,
-      color: value ? COLOR_SUCCESS : COLOR_DANGER,
+      tone: value ? 'success' : 'danger',
     };
   }
 
@@ -107,7 +108,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
       key === SETTING_KEYS.AGENT_CHEAP_MODEL ||
       key === SETTING_KEYS.AGENT_CHORE_MODEL
     ) {
-      return { text: '(inherits agent.model)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(inherits agent.model)', tone: 'textSubtle' };
     }
     if (
       key === SETTING_KEYS.AGENT_SMART_PROVIDER ||
@@ -116,14 +117,14 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
       key === SETTING_KEYS.AGENT_CHORE_PROVIDER ||
       key === SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER
     ) {
-      return { text: '(inherits agent.provider)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(inherits agent.provider)', tone: 'textSubtle' };
     }
     if (
       key === SETTING_KEYS.AGENT_SMART_REASONING_EFFORT ||
       key === SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT ||
       key === SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT
     ) {
-      return { text: '(default)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(default)', tone: 'textSubtle' };
     }
     if (
       key === SETTING_KEYS.AGENT_MENTOR_MODEL ||
@@ -131,17 +132,17 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
       key === SETTING_KEYS.WEB_SEARCH_PROVIDER ||
       key === SETTING_KEYS.UI_PASTE_THRESHOLD
     ) {
-      return { text: '(none)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(none)', tone: 'textSubtle' };
     }
-    return { text: '(unset)', color: COLOR_TEXT_SUBTLE };
+    return { text: '(unset)', tone: 'textSubtle' };
   }
 
   // 4. Explicit null
   if (value === null) {
     if (key === SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS) {
-      return { text: 'disabled', color: COLOR_TEXT_SUBTLE };
+      return { text: 'disabled', tone: 'textSubtle' };
     }
-    return { text: '(none)', color: COLOR_TEXT_SUBTLE };
+    return { text: '(none)', tone: 'textSubtle' };
   }
 
   // If a JSON string representation was passed (e.g. from JSON serialization), parse it
@@ -162,7 +163,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     const text = formatDurationMs(value, isOptionalCeiling);
     return {
       text,
-      color: value === 0 && isOptionalCeiling ? COLOR_TEXT_SUBTLE : COLOR_WARNING,
+      tone: value === 0 && isOptionalCeiling ? 'textSubtle' : 'warning',
     };
   }
 
@@ -170,7 +171,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   if (key.endsWith('UsdMicros') && typeof value === 'number') {
     return {
       text: formatUsdMicros(value),
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
 
@@ -178,13 +179,13 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   if (key === SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD && typeof value === 'number') {
     return {
       text: `${Math.round(value * 100)}%`,
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
   if (key === SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT && typeof value === 'number') {
     return {
       text: `${value}%`,
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
 
@@ -192,19 +193,19 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   if ((key.endsWith('UnpricedTokens') || key === SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS) && typeof value === 'number') {
     return {
       text: `${formatNumber(value)} tokens`,
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
   if ((key.endsWith('Chars') || key === SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS) && typeof value === 'number') {
     return {
       text: `${formatNumber(value)} chars`,
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
   if (key === SETTING_KEYS.SHELL_MAX_OUTPUT_LINES && typeof value === 'number') {
     return {
       text: `${formatNumber(value)} lines`,
-      color: COLOR_WARNING,
+      tone: 'warning',
     };
   }
 
@@ -213,7 +214,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     if (Array.isArray(value)) {
       return {
         text: formatMilestones(value),
-        color: value.length === 0 ? COLOR_TEXT_SUBTLE : COLOR_WARNING,
+        tone: value.length === 0 ? 'textSubtle' : 'warning',
       };
     }
   }
@@ -221,41 +222,41 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
   // 10. Arrays & Objects
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return { text: '(none)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(none)', tone: 'textSubtle' };
     }
     if (value.every((item) => typeof item === 'string') && value.length <= 2) {
       const joined = value.join(', ');
       if (joined.length <= 30) {
-        return { text: truncate(joined, 40), color: COLOR_ACCENT };
+        return { text: truncate(joined, 40), tone: 'accent' };
       }
     }
     return {
       text: `${value.length} ${value.length === 1 ? 'item' : 'items'}`,
-      color: COLOR_ACCENT,
+      tone: 'accent',
     };
   }
 
   if (typeof value === 'object') {
     const keys = Object.keys(value as Record<string, unknown>);
     if (keys.length === 0) {
-      return { text: '(none)', color: COLOR_TEXT_SUBTLE };
+      return { text: '(none)', tone: 'textSubtle' };
     }
     return {
       text: `${keys.length} ${keys.length === 1 ? 'entry' : 'entries'}`,
-      color: COLOR_ACCENT,
+      tone: 'accent',
     };
   }
 
   // 11. Generic Numbers
   if (typeof value === 'number') {
-    return { text: String(value), color: COLOR_WARNING };
+    return { text: String(value), tone: 'warning' };
   }
 
   // 12. Generic Strings
   const str = String(value);
   return {
     text: truncate(str, 40),
-    color: COLOR_ACCENT,
+    tone: 'accent',
   };
 }
 

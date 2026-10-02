@@ -5,14 +5,7 @@ import type { SavedAppMode } from '../../services/conversation/conversation-pers
 import { profileIdFromLegacyMode } from '../../services/profiles/legacy-adapter.js';
 import { getProfileLabel } from '../../services/profiles/labels.js';
 import { MenuFooter, MenuScrollbar, SelectionMarker } from '../common/MenuContainer.js';
-import {
-  COLOR_ACCENT,
-  COLOR_BORDER,
-  COLOR_BORDER_ACTIVE,
-  COLOR_DANGER,
-  COLOR_TEXT,
-  COLOR_TEXT_SUBTLE,
-} from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   items: ConversationListEntry[];
@@ -66,11 +59,12 @@ function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string
 }
 
 const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query, loading, error }) => {
+  const theme = useTheme();
   if (loading || error || items.length === 0) {
     return (
-      <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} paddingX={1} flexDirection="column">
-        <Text color={COLOR_TEXT_SUBTLE}>Resume Conversation</Text>
-        <Text color={error ? COLOR_DANGER : COLOR_TEXT_SUBTLE}>
+      <Box borderStyle="round" borderColor={theme.borderActive} paddingX={1} flexDirection="column">
+        <Text color={theme.textSubtle}>Resume Conversation</Text>
+        <Text color={error ? theme.danger : theme.textSubtle}>
           {loading
             ? 'Loading conversations...'
             : error
@@ -93,8 +87,8 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box borderStyle="round" borderColor={COLOR_BORDER_ACTIVE} flexDirection="column" width="100%" paddingX={1}>
-        <Text color={COLOR_TEXT_SUBTLE}>Resume Conversation</Text>
+      <Box borderStyle="round" borderColor={theme.borderActive} flexDirection="column" width="100%" paddingX={1}>
+        <Text color={theme.textSubtle}>Resume Conversation</Text>
         {/* The two columns split the row evenly at every terminal width: each
             takes half, so the divider sits in the middle instead of tracking
             the longest id. Both columns have a definite width, which lets
@@ -111,7 +105,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
             borderBottom={false}
             borderLeft={false}
             borderRight={true}
-            borderColor={COLOR_BORDER}
+            borderColor={theme.border}
             paddingRight={1}
           >
             <Box flexDirection="row" width="100%">
@@ -122,7 +116,7 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                   return (
                     <Box key={entry.id}>
                       <SelectionMarker selected={isSelected} />
-                      <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
+                      <Text color={isSelected ? theme.accent : undefined} bold={isSelected} wrap="truncate">
                         {entry.firstUserMessage?.replace(/\s+/g, ' ').trim().slice(0, 60) || 'Untitled conversation'}
                         {' · '}
                         {formatRelativeTime(entry.updatedAt)}
@@ -144,16 +138,16 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
           <Box flexDirection="column" width="50%" paddingLeft={2}>
             {selectedEntry && (
               <Box flexDirection="column">
-                <Text bold color={COLOR_ACCENT}>
+                <Text bold color={theme.accent}>
                   {selectedEntry.id}
                 </Text>
                 <Box marginTop={0}>
-                  <Text color={COLOR_TEXT_SUBTLE}>
-                    Updated: <Text color={COLOR_TEXT}>{formatDate(selectedEntry.updatedAt)}</Text>
+                  <Text color={theme.textSubtle}>
+                    Updated: <Text color={theme.text}>{formatDate(selectedEntry.updatedAt)}</Text>
                   </Text>
                 </Box>
                 <Box marginTop={0}>
-                  <Text color={COLOR_TEXT_SUBTLE}>
+                  <Text color={theme.textSubtle}>
                     {selectedEntry.sshHost ? `SSH (${selectedEntry.sshHost})` : 'Local'}
                     {selectedEntry.messageCount !== undefined &&
                       ` • ${selectedEntry.messageCount} msg${selectedEntry.messageCount === 1 ? '' : 's'}`}
@@ -164,8 +158,8 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                 </Box>
                 {selectedEntry.firstUserMessage && (
                   <Box marginTop={1} flexDirection="column">
-                    <Text color={COLOR_TEXT_SUBTLE}>Initial Prompt:</Text>
-                    <Text color={COLOR_TEXT} italic wrap="truncate">
+                    <Text color={theme.textSubtle}>Initial Prompt:</Text>
+                    <Text color={theme.text} italic wrap="truncate">
                       "{selectedEntry.firstUserMessage.slice(0, 150).replace(/\n/g, ' ')}"
                     </Text>
                   </Box>

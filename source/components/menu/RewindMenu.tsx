@@ -4,7 +4,7 @@ import { REWIND_MENU_VISIBLE_ITEMS } from '../../hooks/use-rewind-selection.js';
 import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   items: RewindItem[];
@@ -69,6 +69,7 @@ const RewindMenu: FC<Props> = ({
   scrollOffset = 0,
   maxHeight = MAX_VISIBLE_ITEMS,
 }) => {
+  const theme = useTheme();
   const footer = (
     <MenuFooter
       hints={[
@@ -86,8 +87,8 @@ const RewindMenu: FC<Props> = ({
       selectedIndex={selectedIndex}
       scrollOffset={scrollOffset}
       maxHeight={maxHeight}
-      borderColor={COLOR_WARNING}
-      fallbackText={<Text color={COLOR_WARNING}>Nothing to rewind</Text>}
+      borderColor={theme.warning}
+      fallbackText={<Text color={theme.warning}>Nothing to rewind</Text>}
       footer={footer}
       footerOutsideBorder={true}
       renderItem={(item, index, isSelected) => {
@@ -98,11 +99,11 @@ const RewindMenu: FC<Props> = ({
             <Box>
               <SelectionMarker selected={isSelected} />
               {/* Warning, not accent: the selected row is the rewind target that discards what follows. */}
-              <Text color={isSelected ? COLOR_WARNING : undefined} bold={isSelected}>
+              <Text color={isSelected ? theme.warning : undefined} bold={isSelected}>
                 {`${String(index + 1).padStart(2)}. ${truncate(item.text, TRUNCATE_LENGTH)}${images}`}
               </Text>
             </Box>
-            <Text color={isSelected ? COLOR_WARNING : COLOR_TEXT_SUBTLE} dimColor={!isSelected}>
+            <Text color={isSelected ? theme.warning : theme.textSubtle} dimColor={!isSelected}>
               {`      ↳ ${describeDiscards(item)}`}
             </Text>
             {/* Blank line between rows: two-line entries run together otherwise. */}

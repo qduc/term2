@@ -1353,80 +1353,99 @@ if (controlSocketRequested) {
   }
 }
 
-const [{ default: React }, { render }, { default: App }, { InputProvider }, { getInkRenderOptions }] =
-  await Promise.all([
-    import('react'),
-    import('ink'),
-    import('./app.js'),
-    import('./context/InputContext.js'),
-    import('./utils/ink-render-options.js'),
-  ]);
+const [
+  { default: React },
+  { render },
+  { default: App },
+  { InputProvider },
+  { getInkRenderOptions },
+  { SettingsThemeProvider },
+  { detectTerminalBackground },
+  { shouldDetectBackground },
+] = await Promise.all([
+  import('react'),
+  import('ink'),
+  import('./app.js'),
+  import('./context/InputContext.js'),
+  import('./utils/ink-render-options.js'),
+  import('./theme/ThemeContext.js'),
+  import('./theme/detect-terminal-background.js'),
+  import('./theme/resolve-theme.js'),
+]);
+
+// Ask the terminal for its background before Ink takes over stdin: the reply
+// arrives as input. Skipped unless `ui.theme` is `auto` and colour is on.
+const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)
+  ? await detectTerminalBackground({ stdin: process.stdin, stdout: process.stdout })
+  : undefined;
 
 const { waitUntilExit } = render(
   (
-    <InputProvider>
-      <App
-        conversationService={conversationService}
-        controlSocket={controlSocket}
-        controlStartupNotice={controlStartupNotice}
-        controlSessionMetadata={() => ({
-          workspaceRoot: executionContext?.getHomeWorkspace() ?? null,
-          version: String(cli.pkg.version ?? ''),
-          createdAt: effectiveCreatedAt,
-          logPath: path.join(logWriterDir, `${effectiveSessionId ?? conversationService.sessionId}.jsonl`),
-        })}
-        settingsService={settings}
-        historyService={history}
-        loggingService={logger}
-        skillsService={skillsService}
-        sshInfo={sshInfo}
-        sshService={sshService}
-        usageAccumulator={sessionUsageAccumulator}
-        subagentUsageAccumulator={subagentUsageAccumulator}
-        costAccumulator={sessionCostAccumulator}
-        onPrintUsage={printUsage}
-        onExitUsage={printUsageOnce}
-        sessionId={effectiveSessionId}
-        initialMessages={initialMessages}
-        initialGoal={launchGoal ?? resumedConversation?.goal}
-        appendGoal={(goal) => {
-          logWriter.append({ type: 'goal_changed', version: 1, goal });
-          currentGoalState.current = goal;
-        }}
-        onGoalRestore={(goal) => {
-          currentGoalState.current = goal;
-        }}
-        restoredStaticMessageIds={restoredStaticMessageIds}
-        logWriter={logWriter}
-        onRotateWriter={(newId, createdAt, rolloverFrom, rolloverGoal) => {
-          rotateSessionLog(
-            logWriter,
-            newId,
-            buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom),
-            rolloverGoal,
-          );
-          if (rolloverFrom && rolloverGoal) {
-            currentGoalState.current = rolloverGoal;
-          }
-          effectiveHasConversationContent = false;
-        }}
-        generateId={generateId}
-        onSessionIdChange={(newId, createdAt) => {
-          effectiveSessionId = newId;
-          effectiveCreatedAt = createdAt;
-          controlSocket?.refreshAdvertisement();
-        }}
-        onHasConversationContent={(hasContent) => {
-          effectiveHasConversationContent = hasContent;
-        }}
-        terminalTitleBase={terminalTitleBase}
-        mcpManager={mcpManager}
-        mcpOAuthStore={mcpOAuthStore}
-        mcpConfigController={mcpConfigController}
-        mcpStartupNotices={mcpStartupNotices}
-        mcpUserConfigPath={mcpConfig.userConfigPath}
-      />
-    </InputProvider>
+    <SettingsThemeProvider settingsService={settings} detectedBackground={detectedBackground}>
+      <InputProvider>
+        <App
+          conversationService={conversationService}
+          controlSocket={controlSocket}
+          controlStartupNotice={controlStartupNotice}
+          controlSessionMetadata={() => ({
+            workspaceRoot: executionContext?.getHomeWorkspace() ?? null,
+            version: String(cli.pkg.version ?? ''),
+            createdAt: effectiveCreatedAt,
+            logPath: path.join(logWriterDir, `${effectiveSessionId ?? conversationService.sessionId}.jsonl`),
+          })}
+          settingsService={settings}
+          historyService={history}
+          loggingService={logger}
+          skillsService={skillsService}
+          sshInfo={sshInfo}
+          sshService={sshService}
+          usageAccumulator={sessionUsageAccumulator}
+          subagentUsageAccumulator={subagentUsageAccumulator}
+          costAccumulator={sessionCostAccumulator}
+          onPrintUsage={printUsage}
+          onExitUsage={printUsageOnce}
+          sessionId={effectiveSessionId}
+          initialMessages={initialMessages}
+          initialGoal={launchGoal ?? resumedConversation?.goal}
+          appendGoal={(goal) => {
+            logWriter.append({ type: 'goal_changed', version: 1, goal });
+            currentGoalState.current = goal;
+          }}
+          onGoalRestore={(goal) => {
+            currentGoalState.current = goal;
+          }}
+          restoredStaticMessageIds={restoredStaticMessageIds}
+          logWriter={logWriter}
+          onRotateWriter={(newId, createdAt, rolloverFrom, rolloverGoal) => {
+            rotateSessionLog(
+              logWriter,
+              newId,
+              buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom),
+              rolloverGoal,
+            );
+            if (rolloverFrom && rolloverGoal) {
+              currentGoalState.current = rolloverGoal;
+            }
+            effectiveHasConversationContent = false;
+          }}
+          generateId={generateId}
+          onSessionIdChange={(newId, createdAt) => {
+            effectiveSessionId = newId;
+            effectiveCreatedAt = createdAt;
+            controlSocket?.refreshAdvertisement();
+          }}
+          onHasConversationContent={(hasContent) => {
+            effectiveHasConversationContent = hasContent;
+          }}
+          terminalTitleBase={terminalTitleBase}
+          mcpManager={mcpManager}
+          mcpOAuthStore={mcpOAuthStore}
+          mcpConfigController={mcpConfigController}
+          mcpStartupNotices={mcpStartupNotices}
+          mcpUserConfigPath={mcpConfig.userConfigPath}
+        />
+      </InputProvider>
+    </SettingsThemeProvider>
   ) as ReactNode,
   getInkRenderOptions(),
 );

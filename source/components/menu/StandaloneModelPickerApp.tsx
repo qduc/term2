@@ -5,7 +5,7 @@ import { useStandaloneModelPicker } from '../../hooks/use-standalone-model-picke
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 import type { ModelFetcher } from '../../services/models/model-catalog-session.js';
-import { COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 export type StandaloneModelPickerSelection = { modelId: string; provider: string };
 
@@ -47,6 +47,7 @@ function StandaloneModelPickerApp({
   bannerLines,
   onDone,
 }: StandaloneModelPickerAppProps) {
+  const theme = useTheme();
   const models = useStandaloneModelPicker({
     loggingService,
     settingsService,
@@ -126,7 +127,7 @@ function StandaloneModelPickerApp({
   return (
     <Box flexDirection="column">
       {bannerLines?.map((line, index) => (
-        <Text key={index} color={COLOR_WARNING}>
+        <Text key={index} color={theme.warning}>
           {line}
         </Text>
       ))}

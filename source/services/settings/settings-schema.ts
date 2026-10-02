@@ -2,6 +2,7 @@ import { z } from 'zod';
 import envPaths from 'env-paths';
 import path from 'node:path';
 import { THEME_SETTING_VALUES, type ThemeSetting } from '../../theme/resolve-theme.js';
+import { SKIN_NAMES, type SkinName } from '../../skins/names.js';
 import {
   normalizeProviderIdentifier,
   resolveProviderId,
@@ -400,6 +401,10 @@ export const UISettingsSchema = z.object({
     .enum(THEME_SETTING_VALUES)
     .default('auto')
     .describe('Colour theme; auto follows the terminal background and honours NO_COLOR'),
+  skin: z
+    .enum(SKIN_NAMES)
+    .default('classic')
+    .describe('Layout skin: how messages, tool calls, approvals and the status bar are drawn'),
 });
 
 export const LoggingSettingsSchema = z.object({
@@ -846,6 +851,7 @@ export interface SettingsWithSources {
     pasteThreshold: SettingWithSource<number | undefined>;
     displayMode: SettingWithSource<'standard' | 'concise'>;
     theme: SettingWithSource<ThemeSetting>;
+    skin: SettingWithSource<SkinName>;
   };
   logging: {
     logLevel: SettingWithSource<string>;
@@ -1020,6 +1026,7 @@ export const SETTING_KEYS = {
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   UI_DISPLAY_MODE: 'ui.displayMode',
   UI_THEME: 'ui.theme',
+  UI_SKIN: 'ui.skin',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
   LOGGING_DEBUG: 'logging.debugLogging',
@@ -1161,6 +1168,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.UI_THEME,
+  SETTING_KEYS.UI_SKIN,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
@@ -1331,6 +1339,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     pasteThreshold: 3000,
     displayMode: 'concise',
     theme: 'auto',
+    skin: 'classic',
   },
   logging: {
     logLevel: 'info',

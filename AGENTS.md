@@ -63,7 +63,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Queued/in-flight input:** [Queue editing](docs/plans/queue-editing.md) and [mid-turn injection](docs/plans/mid-turn-injection.md)
 - **Provider continuity:** [Chain settlement](docs/plans/chain-settlement.md)
 - **MCP servers:** [MCP as `run_code` functions](docs/plans/mcp-code-mode.md)
-- **UI themes:** [Palettes, background detection, planned layout skins](docs/plans/theme-system.md) — components take colours from `useTheme()`; never write a hex literal or named colour in one
+- **UI themes and skins:** [Palettes, background detection, layout skins](docs/plans/theme-system.md) — components take colours from `useTheme()` and layout from `useSkin()`; never write a hex literal or named colour in one, and add a skin only inside `source/skins/<name>/`
 
 # Parallel Work Isolation
 

@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
 import Divider from '../common/Divider.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 import type { Message } from '../../types/message.js';
 
 type Props = {
@@ -12,6 +13,9 @@ type Props = {
 
 const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
   const theme = useTheme();
+  const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
+  // The frame may consume columns on the left; markdown wraps against an explicit width.
+  const answerWidth = maxWidth === undefined ? undefined : Math.max(1, maxWidth - assistantGutter);
   return (
     <Box flexDirection="column">
       {msg.sender === 'user' && msg.presentation === 'session_rollover' ? (
@@ -20,12 +24,7 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
           <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
         </>
       ) : msg.sender === 'user' ? (
-        <Box width="100%" backgroundColor={theme.userBackground} paddingX={1}>
-          <Text bold color={theme.userText}>
-            <Text color={theme.accent}>❯ </Text>
-            {msg.text}
-          </Text>
-        </Box>
+        <UserMessage text={msg.text} />
       ) : msg.sender === 'system' && msg.presentation === 'rule' ? (
         <Divider width={maxWidth} />
       ) : msg.sender === 'system' && msg.memoryReceiptCount !== undefined ? (
@@ -35,11 +34,15 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
       ) : msg.sender === 'system' ? (
         <Text color={theme.reasoning}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (
-        <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={maxWidth}>
-          {msg.text}
-        </MarkdownRenderer>
+        <AssistantFrame kind="reasoning">
+          <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={answerWidth}>
+            {msg.text}
+          </MarkdownRenderer>
+        </AssistantFrame>
       ) : msg.sender === 'bot' ? (
-        <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
+        <AssistantFrame kind="answer">
+          <MarkdownRenderer maxWidth={answerWidth}>{msg.text}</MarkdownRenderer>
+        </AssistantFrame>
       ) : null}
     </Box>
   );

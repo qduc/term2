@@ -19,7 +19,8 @@ import {
   parseSubagentOutput,
   stripRgErrorLines,
 } from './command-message-helpers.js';
-import { TOOL_STATUS_GLYPH, type ToolStatusKind, useTheme } from '../theme.js';
+import { type ToolStatusKind, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 import DiffView from '../layout/DiffView.js';
 import { useCommandVisibility } from './useCommandVisibility.js';
 import ReadFileRenderer from './ReadFileRenderer.js';
@@ -111,6 +112,7 @@ const CommandMessage: FC<Props> = ({
   awaitingDecision = false,
 }) => {
   const theme = useTheme();
+  const { ToolFrame, ToolHeader } = useSkin();
   const { isVisible, isRunning } = useCommandVisibility(status);
   const isWaiting = awaitingDecision;
   const isQueued = status === 'pending' && !awaitingDecision;
@@ -398,29 +400,27 @@ const CommandMessage: FC<Props> = ({
     // former and refuses to preserve the memo when the declared deps are narrower.
   }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch, success, theme.textSubtle]);
 
-  const renderStandardHeader = () => {
-    // isApprovalRejection carries no `success` value of its own — it is a distinct
-    // outcome from a normal failed run — so it is checked first and maps to the
-    // same 'failed' glyph/color as success === false.
-    const statusKind: ToolStatusKind =
-      isApprovalRejection || success === false || status === 'unknown'
-        ? 'failed'
-        : isWaiting || isQueued
-        ? 'pending'
-        : isRunning
-        ? 'running'
-        : 'completed';
-    const headerColor = theme.toolStatus[statusKind];
+  // isApprovalRejection carries no `success` value of its own — it is a distinct
+  // outcome from a normal failed run — so it is checked first and maps to the
+  // same 'failed' glyph/color as success === false.
+  const statusKind: ToolStatusKind =
+    isApprovalRejection || success === false || status === 'unknown'
+      ? 'failed'
+      : isWaiting || isQueued
+      ? 'pending'
+      : isRunning
+      ? 'running'
+      : 'completed';
 
-    return (
-      <Box>
-        <Text color={headerColor}>
-          {TOOL_STATUS_GLYPH[statusKind]} {displayAction}
-          {runningElapsedLabel}
-        </Text>
-      </Box>
-    );
-  };
+  const renderStandardHeader = () => (
+    <ToolHeader
+      toolName={toolName}
+      status={statusKind}
+      display="standard"
+      action={displayAction}
+      meta={runningElapsedLabel}
+    />
+  );
 
   const changeStats = useMemo(() => {
     const diffText =
@@ -477,471 +477,497 @@ const CommandMessage: FC<Props> = ({
     return null;
   }
 
-  if (displayMode === 'concise') {
-    if (isSubagent) {
-      const isFailed =
-        status === 'failed' ||
-        status === 'aborted' ||
-        status === 'unknown' ||
-        isApprovalRejection ||
-        success === false ||
-        Boolean(failureReason);
-      const subagentStatusKind: ToolStatusKind = isFailed
-        ? 'failed'
-        : isWaiting || isQueued
-        ? 'pending'
-        : isRunning
-        ? 'running'
-        : 'completed';
-      const actionText = isFailed ? command : displayAction;
-      return (
-        <Box>
-          <Text wrap="truncate" color={theme.textSubtle}>
-            <Text color={theme.toolStatus[subagentStatusKind]}>{TOOL_STATUS_GLYPH[subagentStatusKind]}</Text>{' '}
-            {actionText}
-            {runningElapsedLabel}
-          </Text>
-        </Box>
-      );
-    }
+  // The special renderers are FCs invoked as plain functions, so this can type as ReactNode | Promise<ReactNode>.
+  const renderContent = (): React.ReactNode | Promise<React.ReactNode> => {
+    if (displayMode === 'concise') {
+      if (isSubagent) {
+        const isFailed =
+          status === 'failed' ||
+          status === 'aborted' ||
+          status === 'unknown' ||
+          isApprovalRejection ||
+          success === false ||
+          Boolean(failureReason);
+        const subagentStatusKind: ToolStatusKind = isFailed
+          ? 'failed'
+          : isWaiting || isQueued
+          ? 'pending'
+          : isRunning
+          ? 'running'
+          : 'completed';
+        const actionText = isFailed ? command : displayAction;
+        return (
+          <ToolHeader
+            toolName={toolName}
+            status={subagentStatusKind}
+            display="concise"
+            nested
+            action={actionText}
+            meta={runningElapsedLabel}
+          />
+        );
+      }
 
-    if (isApprovalRejection) {
-      return (
-        <Box flexDirection="column">
-          <Text color={textColor || theme.textMuted}>
-            <Text color={theme.toolStatus.rejected} bold>
-              {TOOL_STATUS_GLYPH.rejected}
-            </Text>{' '}
-            {displayAction}
-            {changeStatsElement}
-          </Text>
-          <Text color={textColor || theme.textMuted}> → DENIED: {denialReason}</Text>
-        </Box>
-      );
-    }
-
-    if (isRunning || isQueued || isWaiting) {
-      const inFlightStatusKind: ToolStatusKind = isWaiting || isQueued ? 'pending' : 'running';
-      return (
-        <Box>
-          <Text color={theme.toolStatus[inFlightStatusKind]}>
-            <Text bold>{TOOL_STATUS_GLYPH[inFlightStatusKind]}</Text> {displayAction}
-            {runningElapsedLabel}
-            {changeStatsElement}
-          </Text>
-        </Box>
-      );
-    }
-
-    if (success === false || failureReason) {
-      const parsedOutputError = extractErrorMessage(output);
-      const errorMsg = failureReason || parsedOutputError || 'failed';
-      const summarizeRawError = !failureReason && !isApprovalRejection && isStructuredToolError(output);
-      const displayErrorMsg = isSearchLikeTool(toolName, command)
-        ? stripRgErrorLines(errorMsg).trim() || 'failed'
-        : errorMsg;
-      // Truncate error message like standard mode truncates output
-      const truncatedError = (() => {
-        const lines = displayErrorMsg.trimEnd().split('\n');
-        const maxLines = 3;
-        if (lines.length > maxLines + 1) {
-          const firstPart = lines.slice(0, maxLines).join('\n');
-          const lastLine = lines[lines.length - 1];
-          return `${firstPart}\n... (${lines.length - maxLines - 1} more lines)\n${lastLine}`;
-        }
-        return displayErrorMsg;
-      })();
-      return (
-        <Box flexDirection="column">
-          <Text color={textColor || theme.textMuted}>
-            <Text color={theme.toolStatus.failed} bold>
-              {TOOL_STATUS_GLYPH.failed}
-            </Text>{' '}
-            {displayAction}
-            {changeStatsElement}
-          </Text>
-          {matchCountElement}
-          {summarizeRawError && (
-            <>
-              <Text color={textColor || theme.textMuted}>Tool failed.</Text>
-              <Text color={textColor || theme.textMuted}>
-                Review the error details and retry after correcting the issue.
-              </Text>
-            </>
-          )}
-          {matchCount === 0 && <Text color={textColor || theme.textMuted}>{truncatedError}</Text>}
-        </Box>
-      );
-    }
-
-    // Success (one line)
-    if (toolName === 'automatic_memory') {
-      return (
-        <Box flexDirection="column">
-          {renderStandardHeader()}
-          <Text color={textColor || theme.textMuted}>{output}</Text>
-        </Box>
-      );
-    }
-
-    if (toolName === 'ask_user') {
-      const responseText = getConciseAskUserResponse(output);
-      return (
-        <Box flexDirection="column">
-          <Text color={textColor || theme.textMuted}>
-            <Text color={theme.toolStatus.completed} bold>
-              {TOOL_STATUS_GLYPH.completed}
-            </Text>{' '}
-            {displayAction}
-          </Text>
-          <Text color={textColor || theme.textMuted}> Response: {responseText}</Text>
-        </Box>
-      );
-    }
-
-    if (toolName === 'ask_mentor') {
-      const firstParagraph = getFirstParagraph(output, 200);
-      return (
-        <Box flexDirection="column">
-          <Text color={textColor || theme.textMuted}>
-            <Text color={theme.toolStatus.completed} bold>
-              {TOOL_STATUS_GLYPH.completed}
-            </Text>{' '}
-            {displayAction}
-          </Text>
-          <Text color={textColor || theme.textMuted}> Response: {firstParagraph}</Text>
-        </Box>
-      );
-    }
-
-    return (
-      <Box flexDirection="column">
-        <Text color={textColor || theme.textMuted}>
-          <Text color={theme.toolStatus.completed} bold>
-            {TOOL_STATUS_GLYPH.completed}
-          </Text>{' '}
-          {displayAction}
-          {runCodeTroubleElement}
-          {changeStatsElement}
-        </Text>
-        {matchCountElement}
-        {autoApprovalLabel}
-      </Box>
-    );
-  }
-  const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
-  const displayed = outputText && outputText !== '(no output)' ? truncateOutputLines(output || '') : outputText;
-  const actionableErrorSummary =
-    success === false && !failureReason && !isApprovalRejection && isStructuredToolError(output) ? (
-      <>
-        <Text color={textColor || theme.textMuted}>Tool failed.</Text>
-        <Text color={textColor || theme.textMuted}>Review the error details and retry after correcting the issue.</Text>
-      </>
-    ) : null;
-
-  // Special handling for apply_patch
-  if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {
-    if (hadApproval) {
-      return (
-        <Box flexDirection="column">
-          <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-        </Box>
-      );
-    }
-
-    return (
-      <Box flexDirection="column">
-        {renderStandardHeader()}
-        {actionableErrorSummary}
-        {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
-        {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
-        <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-      </Box>
-    );
-  }
-
-  // Special handling for search_replace
-  if (toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs) {
-    // For search_replace that had an approval prompt (user said 'y'), only show output
-    if (hadApproval) {
-      return (
-        <Box flexDirection="column">
-          <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-        </Box>
-      );
-    }
-
-    // For auto-approved search_replace (no approval prompt), show diff + output
-    return (
-      <Box flexDirection="column">
-        {renderStandardHeader()}
-        {actionableErrorSummary}
-        <DiffView diff={diff} />
-        {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
-        <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-      </Box>
-    );
-  }
-
-  // Special handling for create_file
-  if (toolName === TOOL_NAME_CREATE_FILE && toolArgs) {
-    return (
-      <Box flexDirection="column">
-        {renderStandardHeader()}
-        {actionableErrorSummary}
-        {success !== false && <DiffView diff={createFileDiffLines} />}
-        {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
-        <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-      </Box>
-    );
-  }
-
-  if ((toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) && success === false) {
-    let launchError = output;
-    try {
-      const parsed = JSON.parse(output);
-      launchError = parsed?.error?.message ?? parsed?.error ?? output;
-    } catch {
-      // The formatter may already have reduced the structured failure to text.
-    }
-    return (
-      <Box flexDirection="column">
-        {renderStandardHeader()}
-        <Box paddingLeft={2} marginTop={0.5}>
-          <Text color={theme.danger}>{launchError}</Text>
-        </Box>
-      </Box>
-    );
-  }
-
-  if (displayMode === 'standard' && toolName === 'run_code' && runCodeTrace && !isApprovalRejection) {
-    return <RunCodeRenderer trace={runCodeTrace} success={success} renderStandardHeader={renderStandardHeader} />;
-  }
-
-  // Standard mode custom tool renderers
-  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning && !isQueued && !isWaiting) {
-    if (toolName === 'read_file' || toolName === 'view_file') {
-      const result = ReadFileRenderer({ output, renderStandardHeader });
-      if (result) return result;
-    }
-
-    if (toolName === 'grep') {
-      const result = GrepRenderer({ output, renderStandardHeader });
-      if (result) return result;
-    }
-
-    if (toolName === 'glob') {
-      const parsed = parseFindFilesOutput(output) as any;
-      if (parsed) {
-        const { files, note } = parsed;
+      if (isApprovalRejection) {
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>{renderStandardHeader()}</Box>
-            <Box flexDirection="column" paddingLeft={2}>
-              {files.map((file: string, idx: number) => (
-                <Text key={idx} color={theme.toolOutput}>
-                  {file}
-                </Text>
-              ))}
-            </Box>
-            {note && (
-              <Box marginTop={1}>
-                <Text color={theme.warning}>{note}</Text>
-              </Box>
-            )}
+            <ToolHeader
+              toolName={toolName}
+              status="rejected"
+              display="concise"
+              action={displayAction}
+              trailing={changeStatsElement}
+              textColor={textColor}
+            />
+            <Text color={textColor || theme.textMuted}> → DENIED: {denialReason}</Text>
           </Box>
         );
       }
-    }
 
-    if ((toolName === 'run_subagent' && !isBackgroundSubagentLaunch) || toolName === 'get_subagent_result') {
-      const parsed = parseSubagentOutput(output, toolArgs) as any;
-      if (parsed) {
-        const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
-        const _statusColor =
-          status === 'completed' ? theme.textMuted : status === 'failed' ? theme.danger : theme.warning;
+      if (isRunning || isQueued || isWaiting) {
+        const inFlightStatusKind: ToolStatusKind = isWaiting || isQueued ? 'pending' : 'running';
+        return (
+          <ToolHeader
+            toolName={toolName}
+            status={inFlightStatusKind}
+            display="concise"
+            action={displayAction}
+            meta={runningElapsedLabel}
+            trailing={changeStatsElement}
+          />
+        );
+      }
+
+      if (success === false || failureReason) {
+        const parsedOutputError = extractErrorMessage(output);
+        const errorMsg = failureReason || parsedOutputError || 'failed';
+        const summarizeRawError = !failureReason && !isApprovalRejection && isStructuredToolError(output);
+        const displayErrorMsg = isSearchLikeTool(toolName, command)
+          ? stripRgErrorLines(errorMsg).trim() || 'failed'
+          : errorMsg;
+        // Truncate error message like standard mode truncates output
+        const truncatedError = (() => {
+          const lines = displayErrorMsg.trimEnd().split('\n');
+          const maxLines = 3;
+          if (lines.length > maxLines + 1) {
+            const firstPart = lines.slice(0, maxLines).join('\n');
+            const lastLine = lines[lines.length - 1];
+            return `${firstPart}\n... (${lines.length - maxLines - 1} more lines)\n${lastLine}`;
+          }
+          return displayErrorMsg;
+        })();
+        return (
+          <Box flexDirection="column">
+            <ToolHeader
+              toolName={toolName}
+              status="failed"
+              display="concise"
+              action={displayAction}
+              trailing={changeStatsElement}
+              textColor={textColor}
+            />
+            {matchCountElement}
+            {summarizeRawError && (
+              <>
+                <Text color={textColor || theme.textMuted}>Tool failed.</Text>
+                <Text color={textColor || theme.textMuted}>
+                  Review the error details and retry after correcting the issue.
+                </Text>
+              </>
+            )}
+            {matchCount === 0 && <Text color={textColor || theme.textMuted}>{truncatedError}</Text>}
+          </Box>
+        );
+      }
+
+      // Success (one line)
+      if (toolName === 'automatic_memory') {
         return (
           <Box flexDirection="column">
             {renderStandardHeader()}
-            {(toolsUsed || filesChanged) && (
-              <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
-                {toolsUsed && (
-                  <Text color={theme.textSubtle}>
-                    Tools: <Text color={theme.text}>{toolsUsed}</Text>
-                  </Text>
-                )}
-                {filesChanged && (
-                  <Text color={theme.textSubtle}>
-                    Changed: <Text color={theme.text}>{filesChanged}</Text>
-                  </Text>
-                )}
-              </Box>
-            )}
-            {mainText && (
-              <Box flexDirection="column" borderStyle="single" borderColor={theme.accent} paddingX={1} marginTop={1}>
-                <Text color={theme.toolOutput}>{mainText}</Text>
-              </Box>
-            )}
+            <Text color={textColor || theme.textMuted}>{output}</Text>
           </Box>
         );
       }
-    }
 
-    if (toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) {
-      let runId: string | undefined;
-      try {
-        const parsed = JSON.parse(output);
-        runId = parsed?.runId;
-      } catch {
-        // Fall back to treating the whole output as the runId.
-        runId = output;
-      }
-      return (
-        <Box flexDirection="column">
-          {renderStandardHeader()}
-          <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={theme.textSubtle}>Run ID: </Text>
-            <Text color={theme.textMuted}>{runId || output}</Text>
-          </Box>
-        </Box>
-      );
-    }
-
-    if (toolName === 'web_search') {
-      const result = WebSearchRenderer({ output, renderStandardHeader });
-      if (result) return result;
-    }
-
-    if (toolName === 'web_fetch') {
-      const result = WebFetchRenderer({ output, renderStandardHeader });
-      if (result) return result;
-    }
-
-    if (toolName === 'ask_mentor') {
-      return (
-        <Box flexDirection="column">
-          {renderStandardHeader()}
-          <Box flexDirection="column" borderStyle="round" borderColor={theme.accentAlt} paddingX={1} marginTop={1}>
-            <Text color={theme.accentAlt} bold>
-              Mentor Response
-            </Text>
-            <Text color={theme.toolOutput}>{output}</Text>
-          </Box>
-        </Box>
-      );
-    }
-
-    if (toolName === 'ask_user') {
-      const options = toolArgs?.options;
-      return (
-        <Box flexDirection="column">
-          {renderStandardHeader()}
-          {options && Array.isArray(options) && options.length > 0 && (
-            <Box paddingLeft={2} marginY={0.5}>
-              <Text color={theme.textSubtle}>Options: </Text>
-              {options.map((opt: string, idx: number) => (
-                <Text key={idx} color={idx === 0 ? theme.textMuted : theme.text}>
-                  {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
-                </Text>
-              ))}
-            </Box>
-          )}
-          <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={theme.textSubtle}>Response: </Text>
-            <Text color={theme.textMuted} bold>
-              {output || 'No response yet'}
-            </Text>
-          </Box>
-        </Box>
-      );
-    }
-
-    if (toolName === 'read_code_outline') {
-      const parsed = parseCodeOutlineOutput(output) as any;
-      if (parsed) {
-        const { filePath: _filePath, lang: _lang, imports, exports, decls } = parsed;
+      if (toolName === 'ask_user') {
+        const responseText = getConciseAskUserResponse(output);
         return (
           <Box flexDirection="column">
-            <Box marginBottom={1}>{renderStandardHeader()}</Box>
-            {imports && imports.length > 0 && (
-              <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                <Text color={theme.warning} bold>
-                  Imports:
-                </Text>
-                {imports.map((imp: string, idx: number) => (
-                  <Text key={idx} color={theme.toolOutput}>
-                    {' '}
-                    • {imp}
-                  </Text>
-                ))}
-              </Box>
-            )}
-            {exports && exports.length > 0 && (
-              <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                <Text color={theme.textMuted} bold>
-                  Exports:
-                </Text>
-                {exports.map((exp: string, idx: number) => (
-                  <Text key={idx} color={theme.toolOutput}>
-                    {' '}
-                    • {exp}
-                  </Text>
-                ))}
-              </Box>
-            )}
-            {decls && decls.length > 0 && (
-              <Box flexDirection="column" paddingLeft={2}>
-                <Text color={theme.accent} bold>
-                  Declarations:
-                </Text>
-                {decls.map((decl: string, idx: number) => (
-                  <Text key={idx} color={theme.toolOutput}>
-                    {' '}
-                    • {decl}
-                  </Text>
-                ))}
-              </Box>
-            )}
+            <ToolHeader
+              toolName={toolName}
+              status="completed"
+              display="concise"
+              action={displayAction}
+              textColor={textColor}
+            />
+            <Text color={textColor || theme.textMuted}> Response: {responseText}</Text>
           </Box>
         );
       }
+
+      if (toolName === 'ask_mentor') {
+        const firstParagraph = getFirstParagraph(output, 200);
+        return (
+          <Box flexDirection="column">
+            <ToolHeader
+              toolName={toolName}
+              status="completed"
+              display="concise"
+              action={displayAction}
+              textColor={textColor}
+            />
+            <Text color={textColor || theme.textMuted}> Response: {firstParagraph}</Text>
+          </Box>
+        );
+      }
+
+      return (
+        <Box flexDirection="column">
+          <ToolHeader
+            toolName={toolName}
+            status="completed"
+            display="concise"
+            action={displayAction}
+            trailing={
+              <>
+                {runCodeTroubleElement}
+                {changeStatsElement}
+              </>
+            }
+            textColor={textColor}
+          />
+          {matchCountElement}
+          {autoApprovalLabel}
+        </Box>
+      );
+    }
+    const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
+    const displayed = outputText && outputText !== '(no output)' ? truncateOutputLines(output || '') : outputText;
+    const actionableErrorSummary =
+      success === false && !failureReason && !isApprovalRejection && isStructuredToolError(output) ? (
+        <>
+          <Text color={textColor || theme.textMuted}>Tool failed.</Text>
+          <Text color={textColor || theme.textMuted}>
+            Review the error details and retry after correcting the issue.
+          </Text>
+        </>
+      ) : null;
+
+    // Special handling for apply_patch
+    if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {
+      if (hadApproval) {
+        return (
+          <Box flexDirection="column">
+            <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+          </Box>
+        );
+      }
+
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          {actionableErrorSummary}
+          {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
+          {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
+          <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+        </Box>
+      );
     }
 
-    if (toolName === 'code_context_search') {
-      const result = CodeContextSearchRenderer({ output, renderStandardHeader });
-      if (result) return result;
+    // Special handling for search_replace
+    if (toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs) {
+      // For search_replace that had an approval prompt (user said 'y'), only show output
+      if (hadApproval) {
+        return (
+          <Box flexDirection="column">
+            <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+          </Box>
+        );
+      }
+
+      // For auto-approved search_replace (no approval prompt), show diff + output
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          {actionableErrorSummary}
+          <DiffView diff={diff} />
+          {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
+          <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+        </Box>
+      );
     }
 
-    if (toolName && toolName.startsWith('memory_')) {
-      const result = MemoryRenderer({
-        output,
-        toolName,
-        query: typeof toolArgs?.query === 'string' ? toolArgs.query : undefined,
-        renderStandardHeader,
-      });
-      if (result) return result;
+    // Special handling for create_file
+    if (toolName === TOOL_NAME_CREATE_FILE && toolArgs) {
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          {actionableErrorSummary}
+          {success !== false && <DiffView diff={createFileDiffLines} />}
+          {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
+          <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+        </Box>
+      );
     }
-  }
 
-  // Special handling for approval-rejected shell commands: show the denial message
-  // with a clear [DENIED] label so the user knows what was attempted and why.
-  if (isApprovalRejection) {
+    if ((toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) && success === false) {
+      let launchError = output;
+      try {
+        const parsed = JSON.parse(output);
+        launchError = parsed?.error?.message ?? parsed?.error ?? output;
+      } catch {
+        // The formatter may already have reduced the structured failure to text.
+      }
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          <Box paddingLeft={2} marginTop={0.5}>
+            <Text color={theme.danger}>{launchError}</Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (displayMode === 'standard' && toolName === 'run_code' && runCodeTrace && !isApprovalRejection) {
+      return <RunCodeRenderer trace={runCodeTrace} success={success} renderStandardHeader={renderStandardHeader} />;
+    }
+
+    // Standard mode custom tool renderers
+    if (displayMode === 'standard' && success !== false && !failureReason && !isRunning && !isQueued && !isWaiting) {
+      if (toolName === 'read_file' || toolName === 'view_file') {
+        const result = ReadFileRenderer({ output, renderStandardHeader });
+        if (result) return result;
+      }
+
+      if (toolName === 'grep') {
+        const result = GrepRenderer({ output, renderStandardHeader });
+        if (result) return result;
+      }
+
+      if (toolName === 'glob') {
+        const parsed = parseFindFilesOutput(output) as any;
+        if (parsed) {
+          const { files, note } = parsed;
+          return (
+            <Box flexDirection="column">
+              <Box marginBottom={1}>{renderStandardHeader()}</Box>
+              <Box flexDirection="column" paddingLeft={2}>
+                {files.map((file: string, idx: number) => (
+                  <Text key={idx} color={theme.toolOutput}>
+                    {file}
+                  </Text>
+                ))}
+              </Box>
+              {note && (
+                <Box marginTop={1}>
+                  <Text color={theme.warning}>{note}</Text>
+                </Box>
+              )}
+            </Box>
+          );
+        }
+      }
+
+      if ((toolName === 'run_subagent' && !isBackgroundSubagentLaunch) || toolName === 'get_subagent_result') {
+        const parsed = parseSubagentOutput(output, toolArgs) as any;
+        if (parsed) {
+          const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
+          const _statusColor =
+            status === 'completed' ? theme.textMuted : status === 'failed' ? theme.danger : theme.warning;
+          return (
+            <Box flexDirection="column">
+              {renderStandardHeader()}
+              {(toolsUsed || filesChanged) && (
+                <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
+                  {toolsUsed && (
+                    <Text color={theme.textSubtle}>
+                      Tools: <Text color={theme.text}>{toolsUsed}</Text>
+                    </Text>
+                  )}
+                  {filesChanged && (
+                    <Text color={theme.textSubtle}>
+                      Changed: <Text color={theme.text}>{filesChanged}</Text>
+                    </Text>
+                  )}
+                </Box>
+              )}
+              {mainText && (
+                <Box flexDirection="column" borderStyle="single" borderColor={theme.accent} paddingX={1} marginTop={1}>
+                  <Text color={theme.toolOutput}>{mainText}</Text>
+                </Box>
+              )}
+            </Box>
+          );
+        }
+      }
+
+      if (toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) {
+        let runId: string | undefined;
+        try {
+          const parsed = JSON.parse(output);
+          runId = parsed?.runId;
+        } catch {
+          // Fall back to treating the whole output as the runId.
+          runId = output;
+        }
+        return (
+          <Box flexDirection="column">
+            {renderStandardHeader()}
+            <Box paddingLeft={2} marginTop={0.5}>
+              <Text color={theme.textSubtle}>Run ID: </Text>
+              <Text color={theme.textMuted}>{runId || output}</Text>
+            </Box>
+          </Box>
+        );
+      }
+
+      if (toolName === 'web_search') {
+        const result = WebSearchRenderer({ output, renderStandardHeader });
+        if (result) return result;
+      }
+
+      if (toolName === 'web_fetch') {
+        const result = WebFetchRenderer({ output, renderStandardHeader });
+        if (result) return result;
+      }
+
+      if (toolName === 'ask_mentor') {
+        return (
+          <Box flexDirection="column">
+            {renderStandardHeader()}
+            <Box flexDirection="column" borderStyle="round" borderColor={theme.accentAlt} paddingX={1} marginTop={1}>
+              <Text color={theme.accentAlt} bold>
+                Mentor Response
+              </Text>
+              <Text color={theme.toolOutput}>{output}</Text>
+            </Box>
+          </Box>
+        );
+      }
+
+      if (toolName === 'ask_user') {
+        const options = toolArgs?.options;
+        return (
+          <Box flexDirection="column">
+            {renderStandardHeader()}
+            {options && Array.isArray(options) && options.length > 0 && (
+              <Box paddingLeft={2} marginY={0.5}>
+                <Text color={theme.textSubtle}>Options: </Text>
+                {options.map((opt: string, idx: number) => (
+                  <Text key={idx} color={idx === 0 ? theme.textMuted : theme.text}>
+                    {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            <Box paddingLeft={2} marginTop={0.5}>
+              <Text color={theme.textSubtle}>Response: </Text>
+              <Text color={theme.textMuted} bold>
+                {output || 'No response yet'}
+              </Text>
+            </Box>
+          </Box>
+        );
+      }
+
+      if (toolName === 'read_code_outline') {
+        const parsed = parseCodeOutlineOutput(output) as any;
+        if (parsed) {
+          const { filePath: _filePath, lang: _lang, imports, exports, decls } = parsed;
+          return (
+            <Box flexDirection="column">
+              <Box marginBottom={1}>{renderStandardHeader()}</Box>
+              {imports && imports.length > 0 && (
+                <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
+                  <Text color={theme.warning} bold>
+                    Imports:
+                  </Text>
+                  {imports.map((imp: string, idx: number) => (
+                    <Text key={idx} color={theme.toolOutput}>
+                      {' '}
+                      • {imp}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+              {exports && exports.length > 0 && (
+                <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
+                  <Text color={theme.textMuted} bold>
+                    Exports:
+                  </Text>
+                  {exports.map((exp: string, idx: number) => (
+                    <Text key={idx} color={theme.toolOutput}>
+                      {' '}
+                      • {exp}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+              {decls && decls.length > 0 && (
+                <Box flexDirection="column" paddingLeft={2}>
+                  <Text color={theme.accent} bold>
+                    Declarations:
+                  </Text>
+                  {decls.map((decl: string, idx: number) => (
+                    <Text key={idx} color={theme.toolOutput}>
+                      {' '}
+                      • {decl}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          );
+        }
+      }
+
+      if (toolName === 'code_context_search') {
+        const result = CodeContextSearchRenderer({ output, renderStandardHeader });
+        if (result) return result;
+      }
+
+      if (toolName && toolName.startsWith('memory_')) {
+        const result = MemoryRenderer({
+          output,
+          toolName,
+          query: typeof toolArgs?.query === 'string' ? toolArgs.query : undefined,
+          renderStandardHeader,
+        });
+        if (result) return result;
+      }
+    }
+
+    // Special handling for approval-rejected shell commands: show the denial message
+    // with a clear [DENIED] label so the user knows what was attempted and why.
+    if (isApprovalRejection) {
+      return (
+        <Box flexDirection="column">
+          {renderStandardHeader()}
+          <Text color={theme.danger}>→ DENIED: {denialReason}</Text>
+        </Box>
+      );
+    }
+
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
-        <Text color={theme.danger}>→ DENIED: {denialReason}</Text>
+        {actionableErrorSummary}
+        {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
+        <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
+        {autoApprovalLabel}
       </Box>
     );
-  }
+  };
 
-  return (
-    <Box flexDirection="column">
-      {renderStandardHeader()}
-      {actionableErrorSummary}
-      {failureReason && <Text color={theme.danger}>Error: {failureReason}</Text>}
-      <Text color={success === false ? theme.danger : theme.toolOutput}>{displayed}</Text>
-      {autoApprovalLabel}
-    </Box>
+  const content = renderContent() as React.ReactNode;
+  // A call inside a subagent's own feed is dense by design and is never framed.
+  return isSubagent ? (
+    content
+  ) : (
+    <ToolFrame status={statusKind} display={displayMode} toolName={toolName}>
+      {content}
+    </ToolFrame>
   );
 };
 

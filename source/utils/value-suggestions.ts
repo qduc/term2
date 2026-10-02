@@ -140,6 +140,13 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'high-contrast', description: 'Maximum contrast on a dark terminal' },
     { value: 'mono', description: 'No colour (also used for NO_COLOR)' },
   ],
+  'ui.skin': [
+    { value: 'classic', description: 'The original layout (default)' },
+    { value: 'rail', description: 'Quiet and typographic: one-line tools, a thin rail, no boxes' },
+    { value: 'cards', description: 'Bordered cards for messages and tool calls, pill status bar' },
+    { value: 'ledger', description: 'Dense: a tool table, gauges, header and footer bars' },
+    { value: 'zen', description: 'Conversation first: tool calls collapsed, minimal status' },
+  ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.runBudget.maxUsdMicros': [
     { value: '1000000', description: '$1' },

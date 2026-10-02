@@ -1,11 +1,11 @@
 import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
 import React, { FC } from 'react';
-import { Box, Text } from 'ink';
 import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
-import { GLYPH_SEPARATOR, type ModeBadge, useTheme } from '../theme.js';
+import type { ModeBadge } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 const require = createRequire(import.meta.url);
 
@@ -33,8 +33,6 @@ interface BannerProps {
   settingsService: SettingsService;
 }
 
-const MAX_MODEL_LABEL = 34;
-
 const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
   'builtin:standard': 'STANDARD',
   'builtin:lite': 'LITE',
@@ -43,21 +41,8 @@ const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
   'builtin:orchestrator': 'ORCHESTRATOR',
 };
 
-const truncateModel = (name: string): string =>
-  name.length > MAX_MODEL_LABEL ? `${name.slice(0, MAX_MODEL_LABEL - 1)}…` : name;
-
-const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => {
-  const theme = useTheme();
-  return (
-    <Text backgroundColor={theme.modeBadge[mode]} color={theme.modeBadgeForeground} bold>
-      {' '}
-      {mode}{' '}
-    </Text>
-  );
-};
-
 const Banner: FC<BannerProps> = ({ settingsService }) => {
-  const theme = useTheme();
+  const { Banner: SkinBanner } = useSkin();
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
   const model = useSetting(settingsService, 'agent.model');
   const smartPool = useSetting(settingsService, 'agent.smartModel');
@@ -73,49 +58,17 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
 
-  const baseMode = PROFILE_BASE_BADGES[String(activeProfileId)] ?? 'STANDARD';
-  const mentorMode = activeProfileId === 'builtin:mentor';
-
-  // Two borderless lines, not a bordered block. The banner is the first thing
-  // on screen every session; a full box around it competes with the conversation
-  // below for attention and costs four lines to say four short facts.
   return (
-    <Box flexDirection="column" width="100%" paddingTop={1} marginBottom={1}>
-      <Box>
-        <Text color={theme.warning} bold>
-          ▌
-        </Text>
-        <Text color={theme.accent} bold>
-          {' '}
-          term²{' '}
-        </Text>
-        <Badge mode={baseMode} />
-        {mentorMode && (
-          <>
-            <Text> </Text>
-            <Badge mode="MENTOR" />
-          </>
-        )}
-        <Text color={theme.textMuted}> v{version}</Text>
-      </Box>
-
-      <Box>
-        <Text color={theme.textSubtle}>{'  '}</Text>
-        <Text color={theme.textMuted}>{providerLabel}</Text>
-        <Text color={theme.textSubtle}>/</Text>
-        <Text color={theme.accent}>{model ? truncateModel(model) : '—'}</Text>
-        {reasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({reasoningEffort})</Text>}
-
-        {mentorMode && mentorModel && (
-          <>
-            <Text color={theme.textSubtle}> {GLYPH_SEPARATOR} </Text>
-            <Text color={theme.textSubtle}>mentor </Text>
-            <Text color={theme.accentAlt}>{truncateModel(mentorModel)}</Text>
-            {mentorReasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({mentorReasoningEffort})</Text>}
-          </>
-        )}
-      </Box>
-    </Box>
+    <SkinBanner
+      version={version}
+      mode={PROFILE_BASE_BADGES[String(activeProfileId)] ?? 'STANDARD'}
+      mentor={activeProfileId === 'builtin:mentor'}
+      providerLabel={providerLabel}
+      model={model}
+      reasoningEffort={reasoningEffort}
+      mentorModel={mentorModel}
+      mentorReasoningEffort={mentorReasoningEffort}
+    />
   );
 };
 

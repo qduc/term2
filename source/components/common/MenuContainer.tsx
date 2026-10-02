@@ -1,49 +1,20 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Box, measureElement, Text } from 'ink';
-import { GLYPH_SELECTED, GLYPH_SEPARATOR, useTheme, type ColorRole } from '../theme.js';
+import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import type { MenuHint } from '../../skins/types.js';
 
-/**
- * The selection marker every menu row starts with. A gutter marker beats
- * `inverse`, which paints the row with the *terminal's* background color and so
- * looks harsh (and differs machine to machine). It also keeps every row's text
- * on the same left edge, selected or not.
- *
- * The fixed-width, non-shrinking wrapper is the point: without it Yoga steals
- * the gutter's cells first on narrow terminals (the marker collapses to `❯/`
- * and then vanishes), so every row must treat this as an inflexible 2-cell
- * gutter, never as shrinkable text.
- */
-export const SelectionMarker: React.FC<{ selected: boolean }> = ({ selected }) => {
-  const theme = useTheme();
-  return (
-    <Box width={2} flexShrink={0}>
-      <Text color={theme.accent} bold wrap="truncate">
-        {selected ? `${GLYPH_SELECTED} ` : '  '}
-      </Text>
-    </Box>
-  );
-};
+export { SelectionMarker } from './SelectionMarker.js';
+export type { MenuHint } from '../../skins/types.js';
 
 /**
  * The standard key-hint footer. Every menu shows its hints in the same order
- * and the same format, so the reader learns the shape once. Menus used to each
- * invent their own wording, separator, and arrow glyph.
+ * and the same format, so the reader learns the shape once; how that footer is
+ * drawn belongs to the active skin.
  */
-/** A key, what it does, and an optional color when the key names a colored concept (e.g. steer vs queue). */
-export type MenuHint = readonly [key: string, action: string, keyColor?: ColorRole];
-
 export const MenuFooter: React.FC<{ hints: ReadonlyArray<MenuHint> }> = ({ hints }) => {
-  const theme = useTheme();
-  return (
-    <Text color={theme.textSubtle}>
-      {hints.map(([key, action, keyColor], index) => (
-        <React.Fragment key={key}>
-          {index > 0 ? ` ${GLYPH_SEPARATOR} ` : ''}
-          {keyColor ? <Text color={theme[keyColor]}>{key}</Text> : key} {action}
-        </React.Fragment>
-      ))}
-    </Text>
-  );
+  const { Hints } = useSkin();
+  return <Hints hints={hints} />;
 };
 
 /** A compact, terminal-friendly scrollbar for a fixed-height menu list. */

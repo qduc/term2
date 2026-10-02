@@ -132,6 +132,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'ui.pasteThreshold',
     'ui.displayMode',
     'ui.theme',
+    'ui.skin',
   ],
   'Logging and process environment — live logger effect or startup-only process configuration': [
     'logging.logLevel',

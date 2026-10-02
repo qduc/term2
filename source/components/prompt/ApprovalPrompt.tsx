@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import os from 'node:os';
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import {
   READ_FILE_SESSION_APPROVE_ANSWER,
   supportsFolderSessionRead,
@@ -14,7 +14,10 @@ import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
 import { GLYPH_FAVORITE, type ColorRole, useTheme } from '../theme.js';
-import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
+import { MenuFooter } from '../common/MenuContainer.js';
+import { SelectionMarker } from '../common/SelectionMarker.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import { TwoPaneApprovalLayout } from '../../skins/classic/approval.js';
 import { formatDurationMs } from '../menu/settings-value-formatter.js';
 
 type Props = {
@@ -332,51 +335,6 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
  * the same place regardless of which approval this is or how long its option
  * labels are.
  */
-const TwoPaneApprovalLayout: FC<{
-  left: React.ReactNode;
-  rightTitle: React.ReactNode;
-  rightDescription: React.ReactNode;
-}> = ({ left, rightTitle, rightDescription }) => {
-  const theme = useTheme();
-  const { stdout } = useStdout();
-  const isNarrow = (stdout.columns ?? 100) < 90;
-  const description = (
-    <Box
-      flexDirection="column"
-      width={isNarrow ? '100%' : '50%'}
-      paddingLeft={isNarrow ? 0 : 2}
-      marginTop={isNarrow ? 1 : 0}
-      borderStyle={isNarrow ? undefined : 'single'}
-      borderTop={false}
-      borderBottom={false}
-      borderRight={false}
-      borderLeft={!isNarrow}
-      borderColor={theme.border}
-    >
-      <Text bold color={theme.warning}>
-        {rightTitle}
-      </Text>
-      <Box marginTop={1}>
-        {rightDescription ? (
-          <Text color={theme.text}>{rightDescription}</Text>
-        ) : (
-          <Text color={theme.textSubtle} italic>
-            No description available.
-          </Text>
-        )}
-      </Box>
-    </Box>
-  );
-  return (
-    <Box flexDirection={isNarrow ? 'column' : 'row'} width="100%" marginTop={1}>
-      <Box flexDirection="column" width={isNarrow ? '100%' : '50%'} flexShrink={0} flexGrow={0}>
-        {left}
-      </Box>
-      {description}
-    </Box>
-  );
-};
-
 export function deniedReadOptionTone(item: string): ColorRole {
   if (item === 'Deny') return 'danger';
   if (item === 'Run unsandboxed once') return 'warning';
@@ -488,6 +446,7 @@ const ApprovalPrompt: FC<Props> = ({
   waitingForAskUserAnswer = false,
 }) => {
   const theme = useTheme();
+  const { ApprovalFrame, ApprovalChoices } = useSkin();
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
 
@@ -1007,93 +966,74 @@ const ApprovalPrompt: FC<Props> = ({
     // Compact the denied path for display (replace $HOME with ~).
     const displayPath = deniedRead.deniedPath.replace(os.homedir(), '~');
     const displaySuggestedParent = deniedRead.suggestedParent.replace(os.homedir(), '~');
+    // This approval can grant access outside the workspace, so it is the danger
+    // class: the skin must make it recognisable by shape before the words are read.
     return (
-      <Box flexDirection="column">
-        <Text color={theme.danger} bold>
-          Sandbox blocked read access:
-        </Text>
-        <Text color={theme.danger}> {displayPath}</Text>
-        {/* Red left border, not just red text: this approval can grant access outside
-            the workspace, so its shape should read as risky before the words are read. */}
-        <Box
-          flexDirection="column"
-          borderStyle="single"
-          borderTop={false}
-          borderBottom={false}
-          borderRight={false}
-          borderLeft={true}
-          borderColor={theme.danger}
-          paddingLeft={1}
-          marginTop={1}
-        >
-          {content}
-          <Box flexDirection="column" marginTop={1}>
-            {deniedReadMenuItems.map((item, idx) => {
-              const color = theme[deniedReadOptionTone(item)];
-              return (
-                <Box key={item}>
-                  <SelectionMarker selected={selectedIndex === idx} />
-                  <Text color={selectedIndex === idx ? color : undefined}>
-                    {idx + 1}. {item}
-                  </Text>
-                </Box>
-              );
-            })}
-          </Box>
-          {!deniedRead.sensitive && (
-            <Box marginTop={1}>
-              <Text color={theme.textSubtle}>
-                "Allow and remember" persists this path for this project: {displaySuggestedParent}
-              </Text>
-            </Box>
-          )}
-          {deniedRead.sensitive && (
-            <Box marginTop={1}>
-              <Text color={theme.textSubtle}>
-                This is a sensitive path — "allow once" is available but remember is suppressed.
-              </Text>
-            </Box>
-          )}
-          <Box marginTop={1} marginLeft={1}>
-            <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
-          </Box>
+      <ApprovalFrame
+        tone="danger"
+        header={
+          <Text color={theme.danger} bold>
+            Sandbox blocked read access:
+          </Text>
+        }
+        subheader={<Text color={theme.danger}> {displayPath}</Text>}
+      >
+        {content}
+        <Box flexDirection="column" marginTop={1}>
+          <ApprovalChoices
+            question={undefined}
+            layout="list"
+            description={undefined}
+            selectedIndex={selectedIndex}
+            options={deniedReadMenuItems.map((item) => ({ label: item, tone: deniedReadOptionTone(item) }))}
+          />
         </Box>
-      </Box>
+        {!deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color={theme.textSubtle}>
+              "Allow and remember" persists this path for this project: {displaySuggestedParent}
+            </Text>
+          </Box>
+        )}
+        {deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color={theme.textSubtle}>
+              This is a sensitive path — "allow once" is available but remember is suppressed.
+            </Text>
+          </Box>
+        )}
+        <Box marginTop={1} marginLeft={1}>
+          <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+        </Box>
+      </ApprovalFrame>
     );
   }
 
   const plainApprovalSection = !isAskUser && !isDeniedReadShell && (
     <Box flexDirection="column" marginTop={1}>
-      <Text>
-        {isDockerHostControlApproval
-          ? 'Allow Docker host access?'
-          : isOutsideWorkspaceEdit
-          ? 'Allow permission to edit this file outside the workspace?'
-          : isFolderReadApproval
-          ? 'Allow this read outside the workspace?'
-          : 'Allow this action?'}
-      </Text>
-      <TwoPaneApprovalLayout
-        left={askUserMenuItems.map((item, index) => {
-          const isSelected = selectedIndex === index;
-          const isDangerLabel = item === 'Deny';
-          return (
-            <Box key={item}>
-              <SelectionMarker selected={isSelected} />
-              <Text color={isSelected ? (isDangerLabel ? theme.danger : theme.success) : undefined}>
-                {index + 1}. {item}
-              </Text>
-            </Box>
-          );
-        })}
-        rightTitle={askUserMenuItems[selectedIndex] ?? 'Option'}
-        rightDescription={describeStandardApprovalOption(askUserMenuItems[selectedIndex] ?? '', {
-          isDockerHostControlApproval,
-          isSandboxNetworkApproval,
-          isOutsideWorkspaceEdit,
-          isFolderReadApproval,
-          folderReadGrantPath,
-        })}
+      <ApprovalChoices
+        question={
+          isDockerHostControlApproval
+            ? 'Allow Docker host access?'
+            : isOutsideWorkspaceEdit
+            ? 'Allow permission to edit this file outside the workspace?'
+            : isFolderReadApproval
+            ? 'Allow this read outside the workspace?'
+            : 'Allow this action?'
+        }
+        layout="two-pane"
+        selectedIndex={selectedIndex}
+        options={askUserMenuItems.map((item) => ({ label: item, tone: item === 'Deny' ? 'danger' : 'success' }))}
+        description={{
+          title: askUserMenuItems[selectedIndex] ?? 'Option',
+          text: describeStandardApprovalOption(askUserMenuItems[selectedIndex] ?? '', {
+            isDockerHostControlApproval,
+            isSandboxNetworkApproval,
+            isOutsideWorkspaceEdit,
+            isFolderReadApproval,
+            folderReadGrantPath,
+          }),
+        }}
       />
       {isFolderReadApproval && folderReadGrantPath && (
         <Box marginTop={1}>
@@ -1131,9 +1071,10 @@ const ApprovalPrompt: FC<Props> = ({
   );
 
   return (
-    <Box flexDirection="column">
-      <Text color={theme.warning}>
-        {isDockerHostControlApproval ? (
+    <ApprovalFrame
+      tone={isDockerHostControlApproval ? 'danger' : 'caution'}
+      header={
+        isDockerHostControlApproval ? (
           <Text bold color={theme.danger}>
             Docker host control
           </Text>
@@ -1149,32 +1090,16 @@ const ApprovalPrompt: FC<Props> = ({
               : ' wants to run: '}
             <Text bold>{approval.toolName}</Text>
           </>
-        )}
-      </Text>
-      {isFolderReadApproval && approval.workspaceRoot && (
-        <Text color={theme.textSubtle}>Active workspace: {approval.workspaceRoot}</Text>
-      )}
-      {isDockerHostControlApproval ? (
-        // Red left border, not just red text: Docker host control is the single
-        // riskiest approval this app shows, and should be recognizable by shape
-        // even before the words are read.
-        <Box
-          flexDirection="column"
-          borderStyle="single"
-          borderTop={false}
-          borderBottom={false}
-          borderRight={false}
-          borderLeft={true}
-          borderColor={theme.danger}
-          paddingLeft={1}
-          marginTop={1}
-        >
-          {bodyContent}
-        </Box>
-      ) : (
-        bodyContent
-      )}
-    </Box>
+        )
+      }
+      subheader={
+        isFolderReadApproval && approval.workspaceRoot ? (
+          <Text color={theme.textSubtle}>Active workspace: {approval.workspaceRoot}</Text>
+        ) : undefined
+      }
+    >
+      {bodyContent}
+    </ApprovalFrame>
   );
 };
 

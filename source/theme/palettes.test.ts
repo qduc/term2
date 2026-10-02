@@ -107,8 +107,24 @@ describe('theme palettes', () => {
       expect(contrast(t.userText as string, t.userBackground as string)).toBeGreaterThanOrEqual(BODY_MIN);
     });
 
-    it('keeps the accent readable on inline code backgrounds', () => {
-      expect(contrast(t.accent as string, t.codeBackground as string)).toBeGreaterThanOrEqual(3);
+    it('keeps every body colour readable on the surface behind inline code and pills', () => {
+      // Skins draw status pills and chips on `codeBackground`, so a tone that passes on the bare
+      // terminal can still fail there (light `success` measured 4.1:1, dark `danger` 3.9:1).
+      for (const key of BODY_KEYS) {
+        const ratio = contrast(t[key] as string, t.codeBackground as string);
+        expect(ratio, `${name}.${key} on codeBackground`).toBeGreaterThanOrEqual(BODY_MIN);
+      }
+    });
+
+    it('keeps tool status colours readable on the terminal backgrounds the palette supports', () => {
+      for (const background of t.supportedBackgrounds) {
+        for (const [status, color] of Object.entries(t.toolStatus)) {
+          const ratio = contrast(color as string, background);
+          // `pending` is a quiet hint colour by design, so it is held to the hint tier.
+          const minimum = status === 'pending' ? HINT_MIN : BODY_MIN;
+          expect(ratio, `${name}.toolStatus.${status} on ${background}`).toBeGreaterThanOrEqual(minimum);
+        }
+      }
     });
 
     it('keeps badge text readable on every mode badge', () => {

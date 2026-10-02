@@ -368,16 +368,37 @@ export interface RenderSceneOptions {
   columns: number;
 }
 
-/** Renders a scene through the real containers, under the given skin and theme, at a fixed width. */
+/**
+ * Renders a scene through the real containers, under the given skin and theme, at a
+ * fixed width.
+ *
+ * `renderToString` lays out at `columns` but gives hooks no stdout width, so
+ * `useTerminalColumns()` and `useStdout().stdout.columns` would fall back to a
+ * default whatever width was asked for, and every width-adaptive choice a skin
+ * makes (dropping a segment, stacking options, shortening a banner) would go
+ * untested. The width is therefore set on `process.stdout` for the duration of the
+ * render, exactly where a real terminal reports it, and restored afterwards.
+ */
 export function renderScene(scene: Scene, { skin, theme, columns }: RenderSceneOptions): string {
-  return renderToString(
-    <ThemeProvider theme={THEMES[theme]}>
-      <SkinProvider skin={typeof skin === 'string' ? getSkin(skin) : skin}>
-        <Box flexDirection="column" width={columns}>
-          {scene.node()}
-        </Box>
-      </SkinProvider>
-    </ThemeProvider>,
-    { columns },
-  );
+  const hadOwn = Object.prototype.hasOwnProperty.call(process.stdout, 'columns');
+  const previous = process.stdout.columns;
+  process.stdout.columns = columns;
+  try {
+    return renderToString(
+      <ThemeProvider theme={THEMES[theme]}>
+        <SkinProvider skin={typeof skin === 'string' ? getSkin(skin) : skin}>
+          <Box flexDirection="column" width={columns}>
+            {scene.node()}
+          </Box>
+        </SkinProvider>
+      </ThemeProvider>,
+      { columns },
+    );
+  } finally {
+    if (hadOwn) {
+      process.stdout.columns = previous;
+    } else {
+      delete (process.stdout as { columns?: number }).columns;
+    }
+  }
 }

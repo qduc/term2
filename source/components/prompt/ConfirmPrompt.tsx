@@ -2,6 +2,7 @@ import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { GLYPH_WARNING, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 export interface ConfirmPromptProps {
   question: string;
@@ -35,6 +36,7 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
   onCancel,
 }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const [selectedIndex, setSelectedIndex] = useState<0 | 1>(defaultIndex);
 
   useInput((input, key) => {
@@ -63,7 +65,7 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
   const options = [confirmLabel, declineLabel];
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={theme.borderActive} paddingX={1}>
+    <MenuFrame borderColor={theme.borderActive} hasItems={false} footerPlacement="outside">
       {warning && (
         <Text color={theme.warning}>
           {GLYPH_WARNING} {warning}
@@ -84,7 +86,7 @@ const ConfirmPrompt: FC<ConfirmPromptProps> = ({
         })}
       </Box>
       <MenuFooter hints={HINTS} />
-    </Box>
+    </MenuFrame>
   );
 };
 

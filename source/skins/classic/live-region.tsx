@@ -3,7 +3,14 @@ import { Box, Text } from 'ink';
 import Divider from '../../components/common/Divider.js';
 import { GLYPH_SEPARATOR, useTheme } from '../../components/theme.js';
 import { formatTokensPerSecond } from '../../utils/streaming/streaming-speed-tracker.js';
-import type { HintsProps, InputFrameProps, PromptMarkerProps, WorkingIndicatorView } from '../types.js';
+import type {
+  HintsProps,
+  ShellActivityProps,
+  TaskPanelProps,
+  InputFrameProps,
+  PromptMarkerProps,
+  WorkingIndicatorView,
+} from '../types.js';
 
 /** What the agent is doing right now, as a single muted line. */
 export const ClassicWorkingIndicator: FC<WorkingIndicatorView> = ({
@@ -76,5 +83,25 @@ export const ClassicHints: FC<HintsProps> = ({ hints }) => {
         </React.Fragment>
       ))}
     </Text>
+  );
+};
+
+export const ClassicShellActivity: FC<ShellActivityProps> = ({ command }) => {
+  const theme = useTheme();
+  return (
+    <Text color={theme.textSubtle}>
+      Running shell command: <Text bold>{command}</Text>
+    </Text>
+  );
+};
+
+/** A muted header over the rows, unframed. */
+export const ClassicTaskPanel: FC<TaskPanelProps> = ({ header, children }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color={theme.textMuted}>{header}</Text>
+      {children}
+    </Box>
   );
 };

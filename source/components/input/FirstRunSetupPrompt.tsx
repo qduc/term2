@@ -1,7 +1,8 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Text } from 'ink';
 import { getProviderLabel } from '../../providers/provider-service.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 export type FirstRunSetupPhase = 'provider' | 'model';
 
@@ -12,13 +13,11 @@ export type FirstRunSetupPromptProps = {
 
 export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProps) {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const providerLabel = getProviderLabel(provider) ?? provider;
 
   return (
-    <Box borderStyle="round" borderColor={theme.accent} paddingX={1} flexDirection="column">
-      <Text color={theme.accent} bold>
-        First-run setup
-      </Text>
+    <MenuFrame title="First-run setup" borderColor={theme.accent} hasItems={false} footerPlacement="outside">
       {phase === 'provider' ? (
         <>
           <Text>Choose a provider and configure its credentials to start chatting.</Text>
@@ -40,7 +39,7 @@ export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProp
         </Text>
       )}
       <Text color={theme.textSubtle}>Normal chat is disabled until setup completes.</Text>
-    </Box>
+    </MenuFrame>
   );
 }
 

@@ -1,3 +1,4 @@
+import { LedgerShellActivity, LedgerTaskPanel } from './activity.js';
 import { LedgerMenuFrame, LedgerQuestionPrompt, LedgerSubagentFeed, LedgerToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
@@ -25,6 +26,7 @@ export const ledgerSkin: Skin = {
   ...classicSkin,
   name: 'ledger',
   // The answer's chip sits on its own line above the text, so markdown keeps the full width.
+  taskPanelGutter: 0,
   assistantGutter: 0,
   Banner: LedgerBanner,
   UserMessage: LedgerUserMessage,
@@ -37,6 +39,8 @@ export const ledgerSkin: Skin = {
   PromptMarker: LedgerPromptMarker,
   InputFrame: LedgerInputFrame,
   Hints: LedgerHints,
+  ShellActivity: LedgerShellActivity,
+  TaskPanel: LedgerTaskPanel,
   ApprovalFrame: LedgerApprovalFrame,
   ApprovalChoices: LedgerApprovalChoices,
   QuestionPrompt: LedgerQuestionPrompt,

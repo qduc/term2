@@ -14,6 +14,7 @@ import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 import { MenuFooter } from '../common/MenuContainer.js';
 import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 export type BackgroundTaskManagerProps = {
   enabled?: boolean;
@@ -187,6 +188,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   onOpenChange,
 }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedOrdinal, setSelectedOrdinal] = useState(0);
   const [detailsVisible, setDetailsVisible] = useState(false);
@@ -334,67 +336,76 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const selected = selectedRow?.kind === 'background' ? selectedRow.task : undefined;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={theme.accentAlt} paddingX={1} marginBottom={1}>
-      <Text bold color={theme.accentAlt}>
-        Manage background tasks
-      </Text>
-      {foreground.map((candidate, index) => (
-        <Text
-          key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
-          color={index === selectedIndex ? theme.text : theme.textSubtle}
-        >
-          {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
-          {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
-        </Text>
-      ))}
-      {tasks.map((task, index) => {
-        const displayIndex = index + foreground.length;
-        return (
-          <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}>
-            {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
-            {taskLabel(task)} · {statusText(task)}
+    <Box flexDirection="column" marginBottom={1}>
+      <MenuFrame
+        title="Manage background tasks"
+        borderColor={theme.accentAlt}
+        hasItems={false}
+        footerPlacement="outside"
+      >
+        {foreground.map((candidate, index) => (
+          <Text
+            key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
+            color={index === selectedIndex ? theme.text : theme.textSubtle}
+          >
+            {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
+            {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
           </Text>
-        );
-      })}
-      {detailsVisible && selectedForeground && (
-        <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-          <Text color={theme.accentAlt}>
-            {selectedForeground.kind === 'shell' ? 'Call ID' : 'Run ID'}:{' '}
-            {selectedForeground.kind === 'shell' ? selectedForeground.callId : selectedForeground.runId}
+        ))}
+        {tasks.map((task, index) => {
+          const displayIndex = index + foreground.length;
+          return (
+            <Text
+              key={`${task.kind}:${task.id}`}
+              color={displayIndex === selectedIndex ? theme.text : theme.textSubtle}
+            >
+              {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
+              {taskLabel(task)} · {statusText(task)}
+            </Text>
+          );
+        })}
+        {detailsVisible && selectedForeground && (
+          <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+            <Text color={theme.accentAlt}>
+              {selectedForeground.kind === 'shell' ? 'Call ID' : 'Run ID'}:{' '}
+              {selectedForeground.kind === 'shell' ? selectedForeground.callId : selectedForeground.runId}
+            </Text>
+            <Text>Status: running in foreground</Text>
+            <Text wrap="wrap">
+              {selectedForeground.kind === 'shell' ? 'Command' : 'Task'}:{' '}
+              {selectedForeground.kind === 'shell' ? selectedForeground.command : selectedForeground.task}
+            </Text>
+          </Box>
+        )}
+        {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
+        {stopArmedKey === selectedRow?.key && (
+          <Text color={theme.warning}>Press Enter to force stop this task, or Esc to close.</Text>
+        )}
+        {backgroundArmedKey === selectedRow?.key && (
+          <Text color={theme.warning}>
+            Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background,
+            or Esc to close.
           </Text>
-          <Text>Status: running in foreground</Text>
-          <Text wrap="wrap">
-            {selectedForeground.kind === 'shell' ? 'Command' : 'Task'}:{' '}
-            {selectedForeground.kind === 'shell' ? selectedForeground.command : selectedForeground.task}
+        )}
+        {feedback && (
+          <Text
+            color={
+              feedback === 'Stop requested' || feedback === 'Moved to background' ? theme.warning : theme.dangerSoft
+            }
+          >
+            {feedback}
           </Text>
-        </Box>
-      )}
-      {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
-      {stopArmedKey === selectedRow?.key && (
-        <Text color={theme.warning}>Press Enter to force stop this task, or Esc to close.</Text>
-      )}
-      {backgroundArmedKey === selectedRow?.key && (
-        <Text color={theme.warning}>
-          Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background, or
-          Esc to close.
-        </Text>
-      )}
-      {feedback && (
-        <Text
-          color={feedback === 'Stop requested' || feedback === 'Moved to background' ? theme.warning : theme.dangerSoft}
-        >
-          {feedback}
-        </Text>
-      )}
-      <MenuFooter
-        hints={[
-          ['↑↓', 'navigate'],
-          ['⏎', 'details'],
-          ...(selectedForeground ? [['b', 'background'] as const] : []),
-          ...(selected && isActive(selected) ? [['x', 'force stop'] as const] : []),
-          ['Esc', 'close'],
-        ]}
-      />
+        )}
+        <MenuFooter
+          hints={[
+            ['↑↓', 'navigate'],
+            ['⏎', 'details'],
+            ...(selectedForeground ? [['b', 'background'] as const] : []),
+            ...(selected && isActive(selected) ? [['x', 'force stop'] as const] : []),
+            ['Esc', 'close'],
+          ]}
+        />
+      </MenuFrame>
     </Box>
   );
 };

@@ -5,6 +5,8 @@ import {
   ClassicInputFrame,
   ClassicLiveDivider,
   ClassicPromptMarker,
+  ClassicShellActivity,
+  ClassicTaskPanel,
   ClassicWorkingIndicator,
 } from './live-region.js';
 import { ClassicAssistantFrame, ClassicBanner, ClassicUserMessage } from './messages.js';
@@ -22,6 +24,7 @@ import { ClassicToolFrame, ClassicToolGroupSummary, ClassicToolHeader } from './
 export const classicSkin: Skin = {
   name: 'classic',
   assistantGutter: 0,
+  taskPanelGutter: 0,
   Banner: ClassicBanner,
   UserMessage: ClassicUserMessage,
   AssistantFrame: ClassicAssistantFrame,
@@ -33,6 +36,8 @@ export const classicSkin: Skin = {
   PromptMarker: ClassicPromptMarker,
   InputFrame: ClassicInputFrame,
   Hints: ClassicHints,
+  ShellActivity: ClassicShellActivity,
+  TaskPanel: ClassicTaskPanel,
   ApprovalFrame: ClassicApprovalFrame,
   ApprovalChoices: ClassicApprovalChoices,
   QuestionPrompt: ClassicQuestionPrompt,

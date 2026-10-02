@@ -7,6 +7,7 @@ import type {
 } from '../../hooks/use-provider-selection.js';
 import { MenuContainer, MenuFooter, type MenuHint, SelectionMarker } from '../common/MenuContainer.js';
 import { GLYPH_WARNING, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   phase: ProviderSelectionPhase;
@@ -32,6 +33,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   allowCodexSelection = false,
 }) => {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const getHeader = () => {
     switch (phase) {
       case 'list':
@@ -130,10 +132,13 @@ const ProviderSelectionMenu: FC<Props> = ({
     }
 
     return (
-      <Box borderStyle="round" borderColor={getBorderColor()} paddingX={1} flexDirection="column">
-        <Text color={theme.accent} bold underline>
-          {getHeader()}
-        </Text>
+      <MenuFrame
+        title={getHeader()}
+        borderColor={getBorderColor()}
+        hasItems={false}
+        footer={getFooter()}
+        footerPlacement="inside"
+      >
         <Box marginTop={1} flexDirection="column">
           <Text color={theme.textSubtle}>{description}</Text>
           {currentValue && (
@@ -150,18 +155,7 @@ const ProviderSelectionMenu: FC<Props> = ({
             </Box>
           )}
         </Box>
-        <Box
-          marginTop={1}
-          borderStyle="single"
-          borderTop={true}
-          borderBottom={false}
-          borderLeft={false}
-          borderRight={false}
-          borderColor={theme.textSubtle}
-        >
-          {getFooter()}
-        </Box>
-      </Box>
+      </MenuFrame>
     );
   };
 

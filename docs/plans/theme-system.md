@@ -115,7 +115,7 @@ tool call means, only where its parts go and how they are framed. The contract i
 differently): `Banner`, `UserMessage`, `AssistantFrame` (+ `assistantGutter`),
 `ToolFrame`, `ToolHeader`, `ToolGroupSummary`, `WorkingIndicator`, `LiveDivider`,
 `PromptMarker`, `InputFrame`, `Hints`, `ApprovalFrame`, `ApprovalChoices`, `QuestionPrompt`,
-`SubagentFeed`, `ToolSection`, `MenuFrame`, `StatusBar`.
+`SubagentFeed`, `ToolSection`, `MenuFrame`, `ShellActivity`, `TaskPanel`, `StatusBar`.
 The classic implementations are in `source/skins/classic/`; they reproduce the
 original output exactly and are the reference for what each slot receives.
 
@@ -228,13 +228,30 @@ Behaviour changes in classic from this work, all small: the `web_fetch` table-of
 box is now the rounded callout shape instead of the ASCII `classic` border, and the
 Resume menu's empty state puts its `Esc cancel` hint below the frame like the other menus.
 
-**Not yet skinned** (the same in every skin today): the binary confirmation prompts
-(`ConfirmPrompt`, `QueuePausedPrompt` and the other `*ConfirmationPrompt`s), the menus
-that draw their own box rather than using `MenuContainer` or `MenuFrame`
-(`ProviderSelectionMenu`, `SubagentPoolSelectionMenu`, `FirstRunSetupPrompt`),
-`BackgroundTasksPanel` and `BackgroundTaskManager`, the inline `glob` / `ask_mentor`-style
-bodies in `CommandMessage` that are not in a renderer, and the "running shell command"
-line in `BottomArea`. Extending the contract to these is separate work.
+- `ShellActivity` — the "running shell command" line in `BottomArea`. The container truncates
+  the command to `terminalColumns - 24`, so a skin's prefix must stay within 23 columns.
+- `TaskPanel` — the background-task list. `Skin.taskPanelGutter` declares the columns the
+  panel's frame consumes; `BackgroundTasksPanel` narrows its row budget by it, the same
+  contract as `assistantGutter`.
+
+`MenuFrame` is also the surface for every other bordered box that is not a list: the
+confirmation prompts (`ConfirmPrompt`, which all `*ConfirmationPrompt`s use, and
+`QueuePausedPrompt`), `FirstRunSetupPrompt`, the text-entry steps of the provider and
+subagent-pool menus, and `BackgroundTaskManager`. These pass `hasItems={false}` and put
+their own hint footer in `children`. Approval's AI-advisor note and the mentor/subagent
+answer boxes in `CommandMessage` use `ToolSection`. A new bordered surface should pick one
+of these slots rather than draw its own `borderStyle`.
+
+Behaviour changes in classic from this work, all small: the `web_fetch` table-of-contents
+box is now the rounded callout shape instead of the ASCII `classic` border; the Resume
+menu's empty state puts its `Esc cancel` hint below the frame like the other menus; menu
+and prompt titles that used to be bold accent text (first-run setup, subagent-pool and
+provider text steps, background-task manager) are now the frame's dim title.
+
+**Deliberately not skinned.** `PendingQueueList` (an inline left-rule list that is already
+the rail idiom, not a surface), `MarkdownRenderer`'s code-block and table borders (they are
+the content's own markup, not UI chrome), and `Divider` (the classic `LiveDivider`).
+Anything else that draws `borderStyle` outside `source/skins/` is a gap to close.
 
 ## Verifying a change here
 

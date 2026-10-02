@@ -271,55 +271,54 @@ function parseSystemSafetyReasoning(reasoning: string): ParsedSystemSafetyReason
 
 const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
   const theme = useTheme();
+  const { ToolSection } = useSkin();
   const isSystem = advisory.source === 'system';
-  const advisoryColor = isSystem ? theme.danger : advisory.approved ? theme.success : theme.warning;
-  const borderColor = advisoryColor;
-  const headerColor = advisoryColor;
-  const label = isSystem ? 'System Safety Check: BLOCKED ' : `AI Advisor: ${advisory.approved ? 'SAFE ' : 'CAUTION '}`;
+  const tone: ColorRole = isSystem ? 'danger' : advisory.approved ? 'success' : 'warning';
+  const label = isSystem ? 'System Safety Check: BLOCKED' : `AI Advisor: ${advisory.approved ? 'SAFE' : 'CAUTION'}`;
   const parsedSystemReasoning = isSystem ? parseSystemSafetyReasoning(advisory.reasoning) : null;
 
   return (
-    <Box flexDirection="column" marginTop={1} paddingX={1} paddingY={0} borderStyle="round" borderColor={borderColor}>
-      <Box>
-        <Text color={headerColor} bold>
-          {label}
-        </Text>
-        <Text color={theme.textMuted}> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
-      </Box>
-      {parsedSystemReasoning ? (
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold color={theme.textMuted}>
-            Heuristic findings:
-          </Text>
-          <Box flexDirection="column" marginLeft={1}>
-            {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
-              <Box key={`${level}-${detail}-${index}`}>
-                <Text color={theme[SAFETY_FINDING_TONES[level]]} bold>
-                  {`${level}:`.padEnd(8)}
-                </Text>
-                <Text color={theme.textMuted}>{detail}</Text>
-              </Box>
-            ))}
-          </Box>
-          <Box marginTop={1}>
-            <Text color={theme.textMuted}>Manual approval is strictly required.</Text>
-          </Box>
-          {parsedSystemReasoning.modelAdvisory && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text bold color={theme.textMuted}>
-                Model advisory:
-              </Text>
-              <Text italic color={theme.textMuted}>
-                {parsedSystemReasoning.modelAdvisory}
-              </Text>
+    <Box flexDirection="column" marginTop={1}>
+      <ToolSection
+        variant="callout"
+        tone={tone}
+        title={`${label} (${isSystem ? 'automated heuristic' : advisory.model})`}
+      >
+        {parsedSystemReasoning ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold color={theme.textMuted}>
+              Heuristic findings:
+            </Text>
+            <Box flexDirection="column" marginLeft={1}>
+              {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
+                <Box key={`${level}-${detail}-${index}`}>
+                  <Text color={theme[SAFETY_FINDING_TONES[level]]} bold>
+                    {`${level}:`.padEnd(8)}
+                  </Text>
+                  <Text color={theme.textMuted}>{detail}</Text>
+                </Box>
+              ))}
             </Box>
-          )}
-        </Box>
-      ) : (
-        <Text italic color={theme.textMuted}>
-          {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
-        </Text>
-      )}
+            <Box marginTop={1}>
+              <Text color={theme.textMuted}>Manual approval is strictly required.</Text>
+            </Box>
+            {parsedSystemReasoning.modelAdvisory && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold color={theme.textMuted}>
+                  Model advisory:
+                </Text>
+                <Text italic color={theme.textMuted}>
+                  {parsedSystemReasoning.modelAdvisory}
+                </Text>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Text italic color={theme.textMuted}>
+            {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
+          </Text>
+        )}
+      </ToolSection>
     </Box>
   );
 };

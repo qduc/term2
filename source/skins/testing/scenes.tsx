@@ -6,6 +6,10 @@ import StatusBar from '../../components/layout/StatusBar.js';
 import ChatMessage from '../../components/message/ChatMessage.js';
 import CommandGroupSummary from '../../components/message/CommandGroupSummary.js';
 import CommandMessage from '../../components/message/CommandMessage.js';
+import BackgroundTasksPanel from '../../components/layout/BackgroundTasksPanel.js';
+import ConfirmPrompt from '../../components/prompt/ConfirmPrompt.js';
+import QueuePausedPrompt from '../../components/prompt/QueuePausedPrompt.js';
+import FirstRunSetupPrompt from '../../components/input/FirstRunSetupPrompt.js';
 import SubagentActivityMessage from '../../components/message/SubagentActivityMessage.js';
 import SkillSelectionMenu from '../../components/menu/SkillSelectionMenu.js';
 import SlashCommandMenu from '../../components/menu/SlashCommandMenu.js';
@@ -214,6 +218,16 @@ const SKILLS = [
   { name: 'release', description: 'Cut a release.', isProjectLevel: false },
 ];
 
+const ADVISED_APPROVAL = {
+  ...SHELL_APPROVAL,
+  llmAdvisory: {
+    source: 'model',
+    approved: false,
+    model: 'gpt-5.6-luna',
+    reasoning: 'Force pushing rewrites shared history.',
+  },
+};
+
 const noop = () => {};
 
 const bottomAreaProps = (overrides: Partial<BottomAreaProps>): BottomAreaProps => ({
@@ -421,6 +435,69 @@ export const SCENES: readonly Scene[] = [
       </Box>
     ),
     mustContain: ['Commands', 'settings', 'Skills', 'Test-driven development loop.', 'No saved conversations found'],
+  },
+  {
+    id: 'approval-advisory',
+    description: 'An approval carrying an AI advisor note.',
+    node: () => approval(ADVISED_APPROVAL),
+    mustContain: ['AI Advisor: CAUTION', 'Force pushing rewrites shared history.', 'Deny'],
+  },
+  {
+    id: 'confirm-prompts',
+    description: 'The confirmation surfaces: a yes/no confirm, the paused-queue notice, and first-run setup.',
+    node: () => (
+      <Box flexDirection="column">
+        <ConfirmPrompt
+          warning="Switching to plan mode requires clearing the current session."
+          question="Clear session and switch to plan mode?"
+          defaultIndex={1}
+          onConfirm={noop}
+          onDecline={noop}
+          onCancel={noop}
+        />
+        <QueuePausedPrompt queueLength={2} pauseReason="failure" onResume={noop} onDiscard={noop} />
+        <FirstRunSetupPrompt phase="provider" provider="openai" />
+      </Box>
+    ),
+    mustContain: [
+      'Clear session and switch to plan mode?',
+      'Queue paused',
+      'resume',
+      'discard',
+      'First-run setup',
+      'Normal chat is disabled until setup completes.',
+    ],
+  },
+  {
+    id: 'task-panel',
+    description: 'The background-task list above the input.',
+    node: () => (
+      <BackgroundTasksPanel
+        now={66_000}
+        tasks={[
+          {
+            kind: 'subagent',
+            runId: 'run-1',
+            role: 'explorer',
+            task: 'map auth',
+            status: 'running',
+            startedAt: 1_000,
+          },
+          { kind: 'shell', jobId: 'shell-1', command: 'pnpm test', status: 'running', startedAt: 61_000 },
+        ]}
+      />
+    ),
+    mustContain: ['Tasks', 'active'],
+  },
+  {
+    id: 'live-shell',
+    description: 'The live region while a foreground shell command runs.',
+    node: () => (
+      <InputProvider>
+        <BottomArea {...bottomAreaProps({ activeShellCommand: 'pnpm test auth' })} />
+      </InputProvider>
+    ),
+    mustContain: ['pnpm test auth'],
   },
   {
     id: 'status',

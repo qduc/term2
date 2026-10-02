@@ -1,3 +1,4 @@
+import { ZenShellActivity, ZenTaskPanel, ZEN_TASK_PANEL_GUTTER } from './activity.js';
 import { ZenMenuFrame, ZenQuestionPrompt, ZenSubagentFeed, ZenToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
@@ -19,6 +20,7 @@ import { ZenToolFrame, ZenToolGroupSummary, ZenToolHeader } from './tools.js';
 export const zenSkin: Skin = {
   ...classicSkin,
   name: 'zen',
+  taskPanelGutter: ZEN_TASK_PANEL_GUTTER,
   assistantGutter: ASSISTANT_GUTTER,
   Banner: ZenBanner,
   UserMessage: ZenUserMessage,
@@ -31,6 +33,8 @@ export const zenSkin: Skin = {
   PromptMarker: ZenPromptMarker,
   InputFrame: ZenInputFrame,
   Hints: ZenHints,
+  ShellActivity: ZenShellActivity,
+  TaskPanel: ZenTaskPanel,
   ApprovalFrame: ZenApprovalFrame,
   ApprovalChoices: ZenApprovalChoices,
   QuestionPrompt: ZenQuestionPrompt,

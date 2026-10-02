@@ -1,3 +1,4 @@
+import { RailShellActivity, RailTaskPanel, RAIL_TASK_PANEL_GUTTER } from './activity.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
 import { RailMenuFrame, RailQuestionPrompt, RailSubagentFeed, RailToolSection } from './body.js';
@@ -19,6 +20,7 @@ import { RailToolFrame, RailToolGroupSummary, RailToolHeader } from './tools.js'
 export const railSkin: Skin = {
   ...classicSkin,
   name: 'rail',
+  taskPanelGutter: RAIL_TASK_PANEL_GUTTER,
   assistantGutter: 0,
   Banner: RailBanner,
   UserMessage: RailUserMessage,
@@ -31,6 +33,8 @@ export const railSkin: Skin = {
   PromptMarker: RailPromptMarker,
   InputFrame: RailInputFrame,
   Hints: RailHints,
+  ShellActivity: RailShellActivity,
+  TaskPanel: RailTaskPanel,
   ApprovalFrame: RailApprovalFrame,
   ApprovalChoices: RailApprovalChoices,
   QuestionPrompt: RailQuestionPrompt,

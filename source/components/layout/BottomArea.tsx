@@ -228,7 +228,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   mcpConfigController,
 }) => {
   const theme = useTheme();
-  const { WorkingIndicator, LiveDivider } = useSkin();
+  const { WorkingIndicator, LiveDivider, ShellActivity } = useSkin();
   const { controller } = useInputState();
   const terminalColumns = useTerminalColumns();
   const [dotCount, setDotCount] = useState(1);
@@ -420,10 +420,7 @@ const BottomArea: FC<BottomAreaProps> = ({
               />
             )}
             {activeShellCommand && (
-              <Text color={theme.textSubtle}>
-                Running shell command:{' '}
-                <Text bold>{truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))}</Text>
-              </Text>
+              <ShellActivity command={truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))} />
             )}
             {isProcessing && !toolCallStreamingInfo && (
               <WorkingIndicator

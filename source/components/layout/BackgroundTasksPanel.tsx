@@ -10,6 +10,7 @@ import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
 import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 import { TOOL_STATUS_GLYPH, type ToolStatusKind, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
@@ -175,7 +176,8 @@ const toolStatusKind = (state: BackgroundSubagentTaskTool['state']): ToolStatusK
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) => {
   const theme = useTheme();
   const { stdout } = useStdout();
-  const columns = testColumns ?? stdout.columns ?? BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
+  const { TaskPanel, taskPanelGutter } = useSkin();
+  const columns = (testColumns ?? stdout.columns ?? BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS) - taskPanelGutter;
   const rows = normalizeLiveTaskRows(tasks);
   // The registry keeps terminal entries around indefinitely, so each settled row
   // lingers briefly — long enough to read its outcome — then drops off on its own.
@@ -199,8 +201,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
   const activeCount = visible.filter((row) => !isTerminal(row.task)).length;
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color={theme.textMuted}>Tasks · {activeCount} active · ^G manage</Text>
+    <TaskPanel header={`Tasks · ${activeCount} active · ^G manage`}>
       {visible.map(({ key, placement, task }) => {
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
@@ -224,7 +225,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
           </Box>
         );
       })}
-    </Box>
+    </TaskPanel>
   );
 };
 

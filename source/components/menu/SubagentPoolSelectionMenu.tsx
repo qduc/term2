@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { MenuContainer, MenuFooter } from '../common/MenuContainer.js';
 import { GLYPH_WARNING, GLYPH_SELECTED, useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
 import {
   formatSubagentPoolProvider,
   formatSubagentPoolReasoning,
@@ -37,6 +38,7 @@ function SubagentPoolSelectionMenu({
   entryShape,
 }: Props) {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const title =
     phase === 'list'
       ? `${roleLabel} Pool`
@@ -56,15 +58,12 @@ function SubagentPoolSelectionMenu({
 
   if (phase === 'edit_model') {
     return (
-      <Box
-        borderStyle="round"
+      <MenuFrame
+        title={title}
         borderColor={errorMessage ? theme.danger : theme.accent}
-        paddingX={1}
-        flexDirection="column"
+        hasItems={false}
+        footerPlacement="outside"
       >
-        <Text color={theme.accent} bold underline>
-          {title}
-        </Text>
         <Text color={theme.textSubtle}>Type the model ID below and press Enter.</Text>
         <Text color={theme.warning}>Current value: {draft?.model || '<empty>'}</Text>
         {errorMessage && (
@@ -73,7 +72,7 @@ function SubagentPoolSelectionMenu({
           </Text>
         )}
         <MenuFooter hints={[['Esc', 'back']]} />
-      </Box>
+      </MenuFrame>
     );
   }
 

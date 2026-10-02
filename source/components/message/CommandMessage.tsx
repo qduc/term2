@@ -457,11 +457,11 @@ const CommandMessage: FC<Props> = ({
 
   const matchCountElement =
     matchCount > 0 ? (
-      <Box paddingLeft={2}>
+      <ToolSection variant="indent">
         <Text color={theme.textSubtle}>
           ({matchCount} match{matchCount !== 1 ? 'es' : ''})
         </Text>
-      </Box>
+      </ToolSection>
     ) : null;
 
   // Concise mode draws the header alone, so a refused nested call would otherwise
@@ -722,8 +722,10 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box flexDirection="column">
           {renderStandardHeader()}
-          <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={theme.danger}>{launchError}</Text>
+          <Box flexDirection="column" marginTop={0.5}>
+            <ToolSection variant="indent">
+              <Text color={theme.danger}>{launchError}</Text>
+            </ToolSection>
           </Box>
         </Box>
       );
@@ -752,13 +754,13 @@ const CommandMessage: FC<Props> = ({
           return (
             <Box flexDirection="column">
               <Box marginBottom={1}>{renderStandardHeader()}</Box>
-              <Box flexDirection="column" paddingLeft={2}>
+              <ToolSection variant="indent">
                 {files.map((file: string, idx: number) => (
                   <Text key={idx} color={theme.toolOutput}>
                     {file}
                   </Text>
                 ))}
-              </Box>
+              </ToolSection>
               {note && (
                 <Box marginTop={1}>
                   <Text color={theme.warning}>{note}</Text>
@@ -779,22 +781,26 @@ const CommandMessage: FC<Props> = ({
             <Box flexDirection="column">
               {renderStandardHeader()}
               {(toolsUsed || filesChanged) && (
-                <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
-                  {toolsUsed && (
-                    <Text color={theme.textSubtle}>
-                      Tools: <Text color={theme.text}>{toolsUsed}</Text>
-                    </Text>
-                  )}
-                  {filesChanged && (
-                    <Text color={theme.textSubtle}>
-                      Changed: <Text color={theme.text}>{filesChanged}</Text>
-                    </Text>
-                  )}
+                <Box flexDirection="column" marginY={0.5}>
+                  <ToolSection variant="indent">
+                    {toolsUsed && (
+                      <Text color={theme.textSubtle}>
+                        Tools: <Text color={theme.text}>{toolsUsed}</Text>
+                      </Text>
+                    )}
+                    {filesChanged && (
+                      <Text color={theme.textSubtle}>
+                        Changed: <Text color={theme.text}>{filesChanged}</Text>
+                      </Text>
+                    )}
+                  </ToolSection>
                 </Box>
               )}
               {mainText && (
-                <Box flexDirection="column" borderStyle="single" borderColor={theme.accent} paddingX={1} marginTop={1}>
-                  <Text color={theme.toolOutput}>{mainText}</Text>
+                <Box flexDirection="column" marginTop={1}>
+                  <ToolSection variant="panel">
+                    <Text color={theme.toolOutput}>{mainText}</Text>
+                  </ToolSection>
                 </Box>
               )}
             </Box>
@@ -814,9 +820,13 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column">
             {renderStandardHeader()}
-            <Box paddingLeft={2} marginTop={0.5}>
-              <Text color={theme.textSubtle}>Run ID: </Text>
-              <Text color={theme.textMuted}>{runId || output}</Text>
+            <Box flexDirection="column" marginTop={0.5}>
+              <ToolSection variant="indent">
+                <Box>
+                  <Text color={theme.textSubtle}>Run ID: </Text>
+                  <Text color={theme.textMuted}>{runId || output}</Text>
+                </Box>
+              </ToolSection>
             </Box>
           </Box>
         );
@@ -851,20 +861,28 @@ const CommandMessage: FC<Props> = ({
           <Box flexDirection="column">
             {renderStandardHeader()}
             {options && Array.isArray(options) && options.length > 0 && (
-              <Box paddingLeft={2} marginY={0.5}>
-                <Text color={theme.textSubtle}>Options: </Text>
-                {options.map((opt: string, idx: number) => (
-                  <Text key={idx} color={idx === 0 ? theme.textMuted : theme.text}>
-                    {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
-                  </Text>
-                ))}
+              <Box flexDirection="column" marginY={0.5}>
+                <ToolSection variant="indent">
+                  <Box>
+                    <Text color={theme.textSubtle}>Options: </Text>
+                    {options.map((opt: string, idx: number) => (
+                      <Text key={idx} color={idx === 0 ? theme.textMuted : theme.text}>
+                        {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
+                      </Text>
+                    ))}
+                  </Box>
+                </ToolSection>
               </Box>
             )}
-            <Box paddingLeft={2} marginTop={0.5}>
-              <Text color={theme.textSubtle}>Response: </Text>
-              <Text color={theme.textMuted} bold>
-                {output || 'No response yet'}
-              </Text>
+            <Box flexDirection="column" marginTop={0.5}>
+              <ToolSection variant="indent">
+                <Box>
+                  <Text color={theme.textSubtle}>Response: </Text>
+                  <Text color={theme.textMuted} bold>
+                    {output || 'No response yet'}
+                  </Text>
+                </Box>
+              </ToolSection>
             </Box>
           </Box>
         );
@@ -878,33 +896,37 @@ const CommandMessage: FC<Props> = ({
             <Box flexDirection="column">
               <Box marginBottom={1}>{renderStandardHeader()}</Box>
               {imports && imports.length > 0 && (
-                <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                  <Text color={theme.warning} bold>
-                    Imports:
-                  </Text>
-                  {imports.map((imp: string, idx: number) => (
-                    <Text key={idx} color={theme.toolOutput}>
-                      {' '}
-                      • {imp}
+                <Box flexDirection="column" marginBottom={1}>
+                  <ToolSection variant="indent">
+                    <Text color={theme.warning} bold>
+                      Imports:
                     </Text>
-                  ))}
+                    {imports.map((imp: string, idx: number) => (
+                      <Text key={idx} color={theme.toolOutput}>
+                        {' '}
+                        • {imp}
+                      </Text>
+                    ))}
+                  </ToolSection>
                 </Box>
               )}
               {exports && exports.length > 0 && (
-                <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                  <Text color={theme.textMuted} bold>
-                    Exports:
-                  </Text>
-                  {exports.map((exp: string, idx: number) => (
-                    <Text key={idx} color={theme.toolOutput}>
-                      {' '}
-                      • {exp}
+                <Box flexDirection="column" marginBottom={1}>
+                  <ToolSection variant="indent">
+                    <Text color={theme.textMuted} bold>
+                      Exports:
                     </Text>
-                  ))}
+                    {exports.map((exp: string, idx: number) => (
+                      <Text key={idx} color={theme.toolOutput}>
+                        {' '}
+                        • {exp}
+                      </Text>
+                    ))}
+                  </ToolSection>
                 </Box>
               )}
               {decls && decls.length > 0 && (
-                <Box flexDirection="column" paddingLeft={2}>
+                <ToolSection variant="indent">
                   <Text color={theme.accent} bold>
                     Declarations:
                   </Text>
@@ -914,7 +936,7 @@ const CommandMessage: FC<Props> = ({
                       • {decl}
                     </Text>
                   ))}
-                </Box>
+                </ToolSection>
               )}
             </Box>
           );

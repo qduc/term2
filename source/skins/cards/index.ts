@@ -1,3 +1,4 @@
+import { CardsShellActivity, CardsTaskPanel, CARDS_TASK_PANEL_GUTTER } from './activity.js';
 import { CardsMenuFrame, CardsQuestionPrompt, CardsSubagentFeed, CardsToolSection } from './body.js';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
@@ -22,6 +23,7 @@ import { CardsToolFrame, CardsToolGroupSummary, CardsToolHeader } from './tools.
 export const cardsSkin: Skin = {
   ...classicSkin,
   name: 'cards',
+  taskPanelGutter: CARDS_TASK_PANEL_GUTTER,
   assistantGutter: ASSISTANT_GUTTER,
   Banner: CardsBanner,
   UserMessage: CardsUserMessage,
@@ -34,6 +36,8 @@ export const cardsSkin: Skin = {
   PromptMarker: CardsPromptMarker,
   InputFrame: CardsInputFrame,
   Hints: CardsHints,
+  ShellActivity: CardsShellActivity,
+  TaskPanel: CardsTaskPanel,
   ApprovalFrame: CardsApprovalFrame,
   ApprovalChoices: CardsApprovalChoices,
   QuestionPrompt: CardsQuestionPrompt,

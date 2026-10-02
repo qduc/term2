@@ -199,6 +199,20 @@ export interface StatusView {
   };
 }
 
+// --- Live region extras -----------------------------------------------------
+
+export interface ShellActivityProps {
+  /** The command a foreground shell call is running, already truncated to fit the line. */
+  command: string;
+}
+
+export interface TaskPanelProps {
+  /** e.g. `Tasks · 2 active · ^G manage`. */
+  header: string;
+  /** The task rows. They are budgeted against the terminal width minus `Skin.taskPanelGutter`. */
+  children: ReactNode;
+}
+
 // --- Ask-user question ------------------------------------------------------
 
 export interface QuestionOptionView {
@@ -291,6 +305,9 @@ export interface Skin {
    */
   assistantGutter: number;
 
+  /** Columns `TaskPanel` consumes on the left; the panel narrows its rows by this much. */
+  taskPanelGutter: number;
+
   Banner: FC<BannerView>;
   UserMessage: FC<UserMessageView>;
   AssistantFrame: FC<AssistantFrameProps>;
@@ -306,6 +323,10 @@ export interface Skin {
   InputFrame: FC<InputFrameProps>;
   /** Key-hint footers; used by every menu as well as the input. */
   Hints: FC<HintsProps>;
+  /** The "running shell command" line shown while a foreground shell call is in flight. */
+  ShellActivity: FC<ShellActivityProps>;
+  /** The background-task list above the input. */
+  TaskPanel: FC<TaskPanelProps>;
 
   ApprovalFrame: FC<ApprovalFrameProps>;
   ApprovalChoices: FC<ApprovalChoicesProps>;

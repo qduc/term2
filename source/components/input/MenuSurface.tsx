@@ -4,7 +4,7 @@ import { useInputContext } from '../../context/InputContext.js';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
 import { MenuStackHost } from './MenuStackHost.js';
 import type { MenuServices } from './menu-registry.js';
-import { COLOR_ACCENT, COLOR_TEXT } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
@@ -39,6 +39,7 @@ export type MenuSurfaceProps = {
 
 /** The sole terminal input boundary while a controller menu is visible. */
 export function MenuSurface({ stack, controller, interactions, services, enabled }: MenuSurfaceProps) {
+  const theme = useTheme();
   const { input, cursorOffset, menuPromptLabel, setCursorOverride } = useInputContext();
   const activeFrame = stack.at(-1);
   const filterFrame = isFilterableMenu(activeFrame) ? activeFrame : undefined;
@@ -134,10 +135,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
     <Box flexDirection="column">
       {promptLabel && (
         <Box marginBottom={0}>
-          <Text color={COLOR_ACCENT} bold>
+          <Text color={theme.accent} bold>
             {promptLabel}
           </Text>
-          <Text color={COLOR_TEXT}>{promptText}</Text>
+          <Text color={theme.text}>{promptText}</Text>
         </Box>
       )}
       <MenuStackHost

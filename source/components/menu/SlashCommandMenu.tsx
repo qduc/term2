@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { SlashCommand } from '../../slash-commands.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
+import { useTheme } from '../theme.js';
 import { SLASH_MENU_BINDINGS, bindingHints } from '../input/menu-bindings.js';
 
 type Props = {
@@ -24,6 +24,7 @@ export const SLASH_COMMAND_LABEL_MAX_WIDTH = 20;
 const SEPARATOR_COLUMN_WIDTH = 3;
 
 const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOffset = 0 }) => {
+  const theme = useTheme();
   const filteredCommands = commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
   const labelColumnWidth = Math.min(
     Math.max(...commands.map((cmd) => cmd.name.length + 1), 8),
@@ -46,18 +47,18 @@ const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOf
         <Box key={cmd.name} width="100%" flexDirection="row" flexWrap="wrap">
           <SelectionMarker selected={isSelected} />
           <Box width={labelColumnWidth} flexShrink={0}>
-            <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected} wrap="truncate">
+            <Text color={isSelected ? theme.accent : undefined} bold={isSelected} wrap="truncate">
               /{cmd.name}
             </Text>
           </Box>
           <Box width={SEPARATOR_COLUMN_WIDTH} flexShrink={0}>
-            <Text color={COLOR_TEXT_SUBTLE} wrap="truncate">
+            <Text color={theme.textSubtle} wrap="truncate">
               {' '}
               -
             </Text>
           </Box>
           <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth="50%">
-            <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>{cmd.description}</Text>
+            <Text color={isSelected ? theme.text : theme.textSubtle}>{cmd.description}</Text>
           </Box>
         </Box>
       )}

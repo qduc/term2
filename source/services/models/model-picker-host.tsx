@@ -1,5 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
+import { SettingsThemeProvider } from '../../theme/ThemeContext.js';
+import { SettingsSkinProvider } from '../../skins/SkinContext.js';
 import StandaloneModelPickerApp, {
   type StandaloneModelPickerOutcome,
 } from '../../components/menu/StandaloneModelPickerApp.js';
@@ -97,20 +99,24 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
 
   let picker: ReturnType<typeof render>;
   picker = render(
-    <StandaloneModelPickerApp
-      settingsService={options.settingsService}
-      loggingService={options.loggingService}
-      modelFetcher={options.modelFetcher}
-      initialQuery={options.initialQuery}
-      initialProvider={options.initialProvider}
-      lockProvider={options.lockProvider}
-      bannerLines={options.bannerLines}
-      onDone={(result) => {
-        outcome = result;
-        picker.clear();
-        picker.unmount();
-      }}
-    />,
+    <SettingsThemeProvider settingsService={options.settingsService}>
+      <SettingsSkinProvider settingsService={options.settingsService}>
+        <StandaloneModelPickerApp
+          settingsService={options.settingsService}
+          loggingService={options.loggingService}
+          modelFetcher={options.modelFetcher}
+          initialQuery={options.initialQuery}
+          initialProvider={options.initialProvider}
+          lockProvider={options.lockProvider}
+          bannerLines={options.bannerLines}
+          onDone={(result) => {
+            outcome = result;
+            picker.clear();
+            picker.unmount();
+          }}
+        />
+      </SettingsSkinProvider>
+    </SettingsThemeProvider>,
     {
       stdin,
       stdout,

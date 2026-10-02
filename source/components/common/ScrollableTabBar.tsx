@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { computeVisibleTabs } from './compute-visible-tabs.js';
-import { COLOR_TEXT_SUBTLE } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 export interface ScrollableTabBarProps<T extends { id: string }> {
   /** Array of tab items (must have an `id` property) */
@@ -30,6 +30,7 @@ export function ScrollableTabBar<T extends { id: string }>({
   renderTab,
   hint,
 }: ScrollableTabBarProps<T>): React.ReactElement {
+  const theme = useTheme();
   const { stdout } = useStdout();
   const terminalWidth = (stdout as any)?.columns || process.stdout.columns || 80;
   const hintLength = hint ? hint.length : 0;
@@ -45,16 +46,16 @@ export function ScrollableTabBar<T extends { id: string }>({
   return (
     <Box justifyContent="space-between">
       <Box>
-        {hasLeftScroll && <Text color={COLOR_TEXT_SUBTLE}>◀ </Text>}
+        {hasLeftScroll && <Text color={theme.textSubtle}>◀ </Text>}
         {visibleItems.map((item, index) => (
           <Box key={item.id}>
             {renderTab(item, item.id === activeItemId)}
-            {index < visibleItems.length - 1 && <Text color={COLOR_TEXT_SUBTLE}>{' │ '}</Text>}
+            {index < visibleItems.length - 1 && <Text color={theme.textSubtle}>{' │ '}</Text>}
           </Box>
         ))}
-        {hasRightScroll && <Text color={COLOR_TEXT_SUBTLE}> ▶</Text>}
+        {hasRightScroll && <Text color={theme.textSubtle}> ▶</Text>}
       </Box>
-      {hint && <Text color={COLOR_TEXT_SUBTLE}>{hint}</Text>}
+      {hint && <Text color={theme.textSubtle}>{hint}</Text>}
     </Box>
   );
 }

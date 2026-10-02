@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Text, Newline, useStdout } from 'ink';
 import { marked } from 'marked';
-import { COLOR_ACCENT, COLOR_CODE_BACKGROUND, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
+import { type ThemeTokens, useTheme } from './theme.js';
 
 type MarkdownRenderOptions = {
   defaultColor?: string;
@@ -114,7 +114,12 @@ interface StyledCell {
   chars: StyledChar[];
 }
 
-const flattenInlineTokens = (tokens: any[] | undefined, style: CellStyle, out: StyledChar[]): void => {
+const flattenInlineTokens = (
+  tokens: any[] | undefined,
+  style: CellStyle,
+  out: StyledChar[],
+  theme: ThemeTokens,
+): void => {
   const push = (text: string, charStyle: CellStyle) => {
     for (const char of text) {
       out.push({ char, style: charStyle });
@@ -126,28 +131,28 @@ const flattenInlineTokens = (tokens: any[] | undefined, style: CellStyle, out: S
       case 'text':
       case 'escape':
         if (token.tokens) {
-          flattenInlineTokens(token.tokens, style, out);
+          flattenInlineTokens(token.tokens, style, out, theme);
         } else {
           push(token.text, style);
         }
         break;
       case 'strong':
-        flattenInlineTokens(token.tokens, { ...style, bold: true }, out);
+        flattenInlineTokens(token.tokens, { ...style, bold: true }, out, theme);
         break;
       case 'em':
-        flattenInlineTokens(token.tokens, { ...style, italic: true }, out);
+        flattenInlineTokens(token.tokens, { ...style, italic: true }, out, theme);
         break;
       case 'del':
-        flattenInlineTokens(token.tokens, { ...style, strikethrough: true }, out);
+        flattenInlineTokens(token.tokens, { ...style, strikethrough: true }, out, theme);
         break;
       case 'codespan':
-        push(token.text, { ...style, color: COLOR_WARNING, backgroundColor: COLOR_CODE_BACKGROUND });
+        push(token.text, { ...style, color: theme.warning, backgroundColor: theme.codeBackground });
         break;
       case 'link':
-        push(token.text, { ...style, color: COLOR_ACCENT, underline: true });
+        push(token.text, { ...style, color: theme.accent, underline: true });
         break;
       case 'image':
-        push(`[Image: ${token.text}]`, { ...style, color: COLOR_TEXT_SUBTLE });
+        push(`[Image: ${token.text}]`, { ...style, color: theme.textSubtle });
         break;
       case 'br':
         push(' ', style);
@@ -159,9 +164,9 @@ const flattenInlineTokens = (tokens: any[] | undefined, style: CellStyle, out: S
 };
 
 // Collapse whitespace runs to one space and trim, mirroring how cell text wraps.
-const toStyledCell = (cell: TableCell | undefined): StyledCell => {
+const toStyledCell = (cell: TableCell | undefined, theme: ThemeTokens): StyledCell => {
   const flat: StyledChar[] = [];
-  flattenInlineTokens(cell?.tokens, {}, flat);
+  flattenInlineTokens(cell?.tokens, {}, flat, theme);
 
   const chars: StyledChar[] = [];
   for (const styled of flat) {
@@ -427,8 +432,9 @@ interface TableRendererProps {
 }
 
 const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: TableRendererProps) => {
-  const header = token.header.map(toStyledCell);
-  const rows = token.rows.map((row) => row.map(toStyledCell));
+  const theme = useTheme();
+  const header = token.header.map((cell) => toStyledCell(cell, theme));
+  const rows = token.rows.map((row) => row.map((cell) => toStyledCell(cell, theme)));
   const { align } = token;
   const numCols = header.length;
   const { stdout } = useStdout();
@@ -475,7 +481,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
     return Array.from({ length: lineCount }, (_, lineIndex) => (
       <Box key={`${rowKey}-${lineIndex}`} flexDirection="row">
         {vertical.left ? (
-          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+          <Text color={theme.textSubtle} dimColor={options.dimColor}>
             {vertical.left}
           </Text>
         ) : null}
@@ -491,7 +497,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
             <React.Fragment key={index}>
               {cell}
               {index < numCols - 1 && (
-                <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+                <Text color={theme.textSubtle} dimColor={options.dimColor}>
                   {vertical.middle}
                 </Text>
               )}
@@ -499,7 +505,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
           );
         })}
         {vertical.right ? (
-          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+          <Text color={theme.textSubtle} dimColor={options.dimColor}>
             {vertical.right}
           </Text>
         ) : null}
@@ -511,7 +517,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
   const renderSeparator = () => {
     return (
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+        <Text color={theme.textSubtle} dimColor={options.dimColor}>
           {borders.middle}
         </Text>
       </Box>
@@ -522,7 +528,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
     <Box flexDirection="column">
       {/* Top border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+        <Text color={theme.textSubtle} dimColor={options.dimColor}>
           {borders.top}
         </Text>
       </Box>
@@ -547,7 +553,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
 
       {/* Bottom border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+        <Text color={theme.textSubtle} dimColor={options.dimColor}>
           {borders.bottom}
         </Text>
       </Box>
@@ -559,6 +565,7 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
 
 // recursively render inline content (bold, italic, links, etc.)
 const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: MarkdownRenderOptions }) => {
+  const theme = useTheme();
   if (!tokens) return null;
 
   return (
@@ -595,21 +602,21 @@ const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: Mark
 
           case 'codespan':
             return (
-              <Text key={key} color={COLOR_WARNING} backgroundColor={COLOR_CODE_BACKGROUND} dimColor={options.dimColor}>
+              <Text key={key} color={theme.warning} backgroundColor={theme.codeBackground} dimColor={options.dimColor}>
                 {` ${token.text} `}
               </Text>
             );
 
           case 'link':
             return (
-              <Text key={key} color={COLOR_ACCENT} underline dimColor={options.dimColor}>
+              <Text key={key} color={theme.accent} underline dimColor={options.dimColor}>
                 {token.text}
               </Text>
             );
 
           case 'image':
             return (
-              <Text key={key} color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+              <Text key={key} color={theme.textSubtle} dimColor={options.dimColor}>
                 {' '}
                 [Image: {token.text}]{' '}
               </Text>
@@ -640,13 +647,14 @@ const BlockRenderer = ({
   options?: MarkdownRenderOptions;
   maxWidth?: number;
 }) => {
+  const theme = useTheme();
   switch (token.type) {
     case 'heading': {
       const isMain = token.depth === 1;
       const hasTrailingBlankLine = token.raw && token.raw.endsWith('\n\n');
       return (
         <Box flexDirection="column">
-          <Text bold underline={isMain} color={isMain ? COLOR_SUCCESS : COLOR_ACCENT} dimColor={options.dimColor}>
+          <Text bold underline={isMain} color={isMain ? theme.success : theme.accent} dimColor={options.dimColor}>
             {'#'.repeat(token.depth) + ' '}
             <InlineContent tokens={token.tokens} options={options} />
           </Text>
@@ -677,7 +685,7 @@ const BlockRenderer = ({
       return (
         <Box flexDirection="row">
           <Box marginRight={1}>
-            <Text color={COLOR_SUCCESS} dimColor={options.dimColor}>
+            <Text color={theme.success} dimColor={options.dimColor}>
               •
             </Text>
           </Box>
@@ -701,8 +709,8 @@ const BlockRenderer = ({
     case 'code':
       if (!token.text || !token.text.trim()) return null;
       return (
-        <Box borderStyle="round" borderColor={COLOR_TEXT_SUBTLE} paddingX={1} flexDirection="column" width={maxWidth}>
-          <Text color={COLOR_WARNING} dimColor={options.dimColor}>
+        <Box borderStyle="round" borderColor={theme.textSubtle} paddingX={1} flexDirection="column" width={maxWidth}>
+          <Text color={theme.warning} dimColor={options.dimColor}>
             {token.text}
           </Text>
         </Box>
@@ -717,7 +725,7 @@ const BlockRenderer = ({
           borderRight={false}
           borderTop={false}
           borderBottom={false}
-          borderColor={COLOR_ACCENT}
+          borderColor={theme.accent}
           flexDirection="column"
         >
           {/* Blockquotes often contain nested paragraphs which render as Boxes */}
@@ -734,7 +742,7 @@ const BlockRenderer = ({
     case 'hr':
       return (
         <Box>
-          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
+          <Text color={theme.textSubtle} dimColor={options.dimColor}>
             ────────────────────────────────────────
           </Text>
         </Box>

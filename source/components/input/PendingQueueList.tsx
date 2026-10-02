@@ -1,16 +1,7 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import {
-  COLOR_ACCENT,
-  COLOR_ACCENT_ALT,
-  COLOR_BORDER,
-  COLOR_BORDER_ACTIVE,
-  COLOR_TEXT,
-  COLOR_TEXT_MUTED,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-} from '../theme.js';
+import { type ColorRole, useTheme } from '../theme.js';
 
 export type PendingQueueDelivery = 'steer' | 'follow_up';
 
@@ -30,9 +21,9 @@ type Props = {
 };
 
 // Group colors match the Enter Steer / Alt+Enter Queue hints under the input.
-const GROUPS: ReadonlyArray<{ delivery: PendingQueueDelivery; label: string; timing: string; color: string }> = [
-  { delivery: 'steer', label: 'steer', timing: 'mid-turn', color: COLOR_ACCENT },
-  { delivery: 'follow_up', label: 'queued', timing: 'after this turn', color: COLOR_ACCENT_ALT },
+const GROUPS: ReadonlyArray<{ delivery: PendingQueueDelivery; label: string; timing: string; tone: ColorRole }> = [
+  { delivery: 'steer', label: 'steer', timing: 'mid-turn', tone: 'accent' },
+  { delivery: 'follow_up', label: 'queued', timing: 'after this turn', tone: 'accentAlt' },
 ];
 
 const SELECTING_HINTS: ReadonlyArray<[key: string, action: string]> = [
@@ -57,6 +48,7 @@ export const orderPendingQueueMessages = (
  * new application-wide InputOwner variant.
  */
 const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notice }) => {
+  const theme = useTheme();
   const selecting = selectedIndex !== null;
 
   return (
@@ -66,7 +58,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
       borderTop={false}
       borderRight={false}
       borderBottom={false}
-      borderColor={selecting ? COLOR_BORDER_ACTIVE : COLOR_BORDER}
+      borderColor={selecting ? theme.borderActive : theme.border}
       paddingLeft={1}
     >
       {GROUPS.map((group) => {
@@ -76,8 +68,8 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
         if (rows.length === 0) return null;
         return (
           <Box key={group.delivery} flexDirection="column">
-            <Text color={COLOR_TEXT_SUBTLE}>
-              <Text color={group.color}>{group.label}</Text> · {group.timing}
+            <Text color={theme.textSubtle}>
+              <Text color={theme[group.tone]}>{group.label}</Text> · {group.timing}
             </Text>
             {rows.map(({ message, index }) => {
               const selected = index === selectedIndex;
@@ -86,7 +78,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
                 <Box key={message.id} flexDirection="row">
                   <SelectionMarker selected={selected} />
                   <Text
-                    color={selected ? COLOR_TEXT : COLOR_TEXT_MUTED}
+                    color={selected ? theme.text : theme.textMuted}
                     bold={selected}
                     dimColor={editing}
                     wrap={selected || editing ? 'wrap' : 'truncate-end'}
@@ -99,7 +91,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
           </Box>
         );
       })}
-      {notice ? <Text color={COLOR_WARNING}>{notice}</Text> : selecting && <MenuFooter hints={SELECTING_HINTS} />}
+      {notice ? <Text color={theme.warning}>{notice}</Text> : selecting && <MenuFooter hints={SELECTING_HINTS} />}
     </Box>
   );
 };

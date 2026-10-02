@@ -118,6 +118,8 @@ export const SETTINGS_SOURCE_KEYS = {
     historySize: 'ui.historySize',
     pasteThreshold: 'ui.pasteThreshold',
     displayMode: 'ui.displayMode',
+    theme: 'ui.theme',
+    skin: 'ui.skin',
   },
   logging: {
     logLevel: 'logging.logLevel',

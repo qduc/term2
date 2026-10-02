@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseWebFetchOutput } from './command-message-helpers.js';
-import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   output: string;
@@ -9,6 +9,7 @@ type Props = {
 };
 
 const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
+  const theme = useTheme();
   const parsed = parseWebFetchOutput(output) as any;
   if (!parsed) return null;
 
@@ -28,13 +29,13 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       {renderStandardHeader()}
       {title && (
         <Box paddingLeft={2}>
-          <Text color={COLOR_TEXT} bold>
+          <Text color={theme.text} bold>
             {title}
           </Text>
         </Box>
       )}
       <Box paddingLeft={2}>
-        <Text color={COLOR_ACCENT} underline>
+        <Text color={theme.accent} underline>
           {url}
         </Text>
       </Box>
@@ -42,27 +43,27 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
         <Box
           flexDirection="column"
           borderStyle="classic"
-          borderColor={COLOR_TEXT_SUBTLE}
+          borderColor={theme.textSubtle}
           paddingX={1}
           marginY={1}
           width={50}
         >
-          <Text color={COLOR_WARNING} bold>
+          <Text color={theme.warning} bold>
             Table of Contents
           </Text>
-          <Text color={COLOR_TEXT_SUBTLE}>{toc}</Text>
+          <Text color={theme.textSubtle}>{toc}</Text>
         </Box>
       )}
       {content && (
-        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_TEXT_SUBTLE} paddingX={1} marginTop={1}>
-          <Text color={COLOR_TOOL_OUTPUT}>{displayContent}</Text>
+        <Box flexDirection="column" borderStyle="single" borderColor={theme.textSubtle} paddingX={1} marginTop={1}>
+          <Text color={theme.toolOutput}>{displayContent}</Text>
         </Box>
       )}
       {tempFile && (
         <Box marginTop={1}>
-          <Text color={COLOR_WARNING}>
+          <Text color={theme.warning}>
             Full content saved to:{' '}
-            <Text bold color={COLOR_TEXT}>
+            <Text bold color={theme.text}>
               {tempFile}
             </Text>
           </Text>
@@ -70,7 +71,7 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       )}
       {notes && (
         <Box marginTop={0.5}>
-          <Text color={COLOR_WARNING}>Warning: {notes}</Text>
+          <Text color={theme.warning}>Warning: {notes}</Text>
         </Box>
       )}
     </Box>

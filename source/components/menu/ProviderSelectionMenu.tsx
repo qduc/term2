@@ -6,15 +6,7 @@ import type {
   ProviderSelectionMenuItem,
 } from '../../hooks/use-provider-selection.js';
 import { MenuContainer, MenuFooter, type MenuHint, SelectionMarker } from '../common/MenuContainer.js';
-import {
-  GLYPH_WARNING,
-  COLOR_ACCENT,
-  COLOR_DANGER,
-  COLOR_SUCCESS,
-  COLOR_TEXT,
-  COLOR_TEXT_SUBTLE,
-  COLOR_WARNING,
-} from '../theme.js';
+import { GLYPH_WARNING, useTheme } from '../theme.js';
 
 type Props = {
   phase: ProviderSelectionPhase;
@@ -39,6 +31,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   draft,
   allowCodexSelection = false,
 }) => {
+  const theme = useTheme();
   const getHeader = () => {
     switch (phase) {
       case 'list':
@@ -115,9 +108,9 @@ const ProviderSelectionMenu: FC<Props> = ({
   };
 
   const getBorderColor = () => {
-    if (errorMessage) return COLOR_DANGER;
-    if (phase === 'confirm_delete' || phase === 'confirm_discard') return COLOR_DANGER;
-    return COLOR_ACCENT;
+    if (errorMessage) return theme.danger;
+    if (phase === 'confirm_delete' || phase === 'confirm_discard') return theme.danger;
+    return theme.accent;
   };
 
   // Render a help card for text prompt wizard steps
@@ -138,20 +131,20 @@ const ProviderSelectionMenu: FC<Props> = ({
 
     return (
       <Box borderStyle="round" borderColor={getBorderColor()} paddingX={1} flexDirection="column">
-        <Text color={COLOR_ACCENT} bold underline>
+        <Text color={theme.accent} bold underline>
           {getHeader()}
         </Text>
         <Box marginTop={1} flexDirection="column">
-          <Text color={COLOR_TEXT_SUBTLE}>{description}</Text>
+          <Text color={theme.textSubtle}>{description}</Text>
           {currentValue && (
             <Box marginTop={1}>
-              <Text color={COLOR_WARNING}>Current draft value: </Text>
-              <Text color={COLOR_TEXT}>{currentValue}</Text>
+              <Text color={theme.warning}>Current draft value: </Text>
+              <Text color={theme.text}>{currentValue}</Text>
             </Box>
           )}
           {errorMessage && (
             <Box marginTop={1}>
-              <Text color={COLOR_DANGER}>
+              <Text color={theme.danger}>
                 {GLYPH_WARNING} {errorMessage}
               </Text>
             </Box>
@@ -164,7 +157,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           borderBottom={false}
           borderLeft={false}
           borderRight={false}
-          borderColor={COLOR_TEXT_SUBTLE}
+          borderColor={theme.textSubtle}
         >
           {getFooter()}
         </Box>
@@ -197,27 +190,27 @@ const ProviderSelectionMenu: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <Box marginBottom={0}>
-        <Text color={COLOR_ACCENT} bold underline>
+        <Text color={theme.accent} bold underline>
           {getHeader()}
         </Text>
       </Box>
       {phase === 'confirm_delete' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color={COLOR_DANGER} bold>
+          <Text color={theme.danger} bold>
             {GLYPH_WARNING} WARNING: Are you sure you want to delete this provider? This action cannot be undone.
           </Text>
         </Box>
       )}
       {phase === 'confirm_discard' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color={COLOR_WARNING} bold>
+          <Text color={theme.warning} bold>
             {GLYPH_WARNING} You have unsaved changes. Discard them?
           </Text>
         </Box>
       )}
       {errorMessage && phase !== 'edit_fields' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color={COLOR_DANGER}>
+          <Text color={theme.danger}>
             {GLYPH_WARNING} {errorMessage}
           </Text>
         </Box>
@@ -233,7 +226,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           let label = item.label;
           let prefix = '  ';
           let suffix = '';
-          let color = isSelected ? COLOR_ACCENT : COLOR_TEXT;
+          let color = isSelected ? theme.accent : theme.text;
           let bold = isSelected;
 
           if (item.kind === 'provider') {
@@ -243,12 +236,12 @@ const ProviderSelectionMenu: FC<Props> = ({
             const unavailable = item.hasCredentials === false;
             const disabled = item.isDisabled === true;
             color = isInactive
-              ? COLOR_TEXT_SUBTLE
+              ? theme.textSubtle
               : unavailable
-              ? COLOR_WARNING
+              ? theme.warning
               : isSelected
-              ? COLOR_ACCENT
-              : COLOR_TEXT;
+              ? theme.accent
+              : theme.text;
             if (item.id === 'codex') {
               suffix = unavailable
                 ? 'Not logged in on this host · Run `term2 --codex-login`'
@@ -261,22 +254,22 @@ const ProviderSelectionMenu: FC<Props> = ({
             if (disabled) {
               // Disable state wins the suffix: it explains why the provider is
               // missing from model pickers even though credentials are fine.
-              color = isSelected ? COLOR_ACCENT : COLOR_TEXT_SUBTLE;
+              color = isSelected ? theme.accent : theme.textSubtle;
               suffix = 'Disabled · hidden from model pickers · Enter to edit and re-enable';
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
-            color = isSelected ? COLOR_ACCENT : COLOR_WARNING;
+            color = isSelected ? theme.accent : theme.warning;
           } else if (item.kind === 'action') {
             prefix = item.tone === 'destructive' ? '× ' : '  ';
             color =
               item.tone === 'destructive'
                 ? isSelected
-                  ? COLOR_DANGER
-                  : COLOR_DANGER
+                  ? theme.danger
+                  : theme.danger
                 : isSelected
-                ? COLOR_ACCENT
-                : COLOR_TEXT;
+                ? theme.accent
+                : theme.text;
             bold = isSelected || item.tone === 'destructive';
           } else if (item.kind === 'field' || item.kind === 'type') {
             prefix = '  ';
@@ -288,12 +281,12 @@ const ProviderSelectionMenu: FC<Props> = ({
             // "next session" is a selection that has not taken effect yet.
             prefix = item.isInUse ? '● ' : item.isSelected ? '◉ ' : '  ';
             color = item.isInUse
-              ? COLOR_SUCCESS
+              ? theme.success
               : item.isSelected
-              ? COLOR_ACCENT
+              ? theme.accent
               : isSelected
-              ? COLOR_ACCENT
-              : COLOR_TEXT;
+              ? theme.accent
+              : theme.text;
             bold = item.isInUse;
             suffix = item.isInUse
               ? item.isSelected
@@ -304,12 +297,12 @@ const ProviderSelectionMenu: FC<Props> = ({
               : '';
           } else if (item.kind === 'note') {
             prefix = '  ';
-            color = COLOR_TEXT_SUBTLE;
+            color = theme.textSubtle;
           }
 
           const isDestructive = item.kind === 'action' && item.tone === 'destructive';
           if (isDestructive) {
-            color = isSelected ? COLOR_DANGER : COLOR_DANGER;
+            color = isSelected ? theme.danger : theme.danger;
           }
 
           if (phase === 'edit_fields' && item.kind === 'field') {
@@ -324,11 +317,11 @@ const ProviderSelectionMenu: FC<Props> = ({
                       {label}
                     </Text>
                   </Box>
-                  {suffix ? <Text color={COLOR_TEXT_SUBTLE}>{suffix}</Text> : null}
+                  {suffix ? <Text color={theme.textSubtle}>{suffix}</Text> : null}
                 </Box>
                 {error ? (
                   <Box marginLeft={4}>
-                    <Text color={COLOR_DANGER}>
+                    <Text color={theme.danger}>
                       {GLYPH_WARNING} {error}
                     </Text>
                   </Box>
@@ -346,7 +339,7 @@ const ProviderSelectionMenu: FC<Props> = ({
                   {label}
                 </Text>
               </Box>
-              {suffix ? <Text color={COLOR_TEXT_SUBTLE}>{suffix}</Text> : null}
+              {suffix ? <Text color={theme.textSubtle}>{suffix}</Text> : null}
             </Box>
           );
         }}

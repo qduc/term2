@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TOOL_OUTPUT } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 interface DiffViewProps {
   diff: string;
@@ -53,18 +53,19 @@ const collapseUnchangedLines = (lines: string[]): string[] => {
 };
 
 const DiffView: FC<DiffViewProps> = ({ diff }) => {
+  const theme = useTheme();
   const renderLine = (line: string, key: any) => {
     let color: string | undefined;
     if (line.startsWith('+')) {
-      color = COLOR_SUCCESS;
+      color = theme.success;
     } else if (line.startsWith('-')) {
-      color = COLOR_DANGER;
+      color = theme.danger;
     } else if (line.startsWith('@@')) {
-      color = COLOR_ACCENT;
+      color = theme.accent;
     }
 
     return (
-      <Text key={key} color={color || COLOR_TOOL_OUTPUT}>
+      <Text key={key} color={color || theme.toolOutput}>
         {line}
       </Text>
     );
@@ -91,7 +92,7 @@ const DiffView: FC<DiffViewProps> = ({ diff }) => {
   if (collapsedLines.length === 0) {
     return (
       <Box flexDirection="column" marginLeft={2}>
-        <Text color={COLOR_DANGER}>[Failed to render diff preview]</Text>
+        <Text color={theme.danger}>[Failed to render diff preview]</Text>
       </Box>
     );
   }
@@ -99,7 +100,7 @@ const DiffView: FC<DiffViewProps> = ({ diff }) => {
   return (
     <Box flexDirection="column" marginLeft={2}>
       {displayLines.map((line, i) => renderLine(line, i))}
-      {truncated && <Text color={COLOR_TOOL_OUTPUT}>... ({collapsedLines.length - maxLines - 1} more lines)</Text>}
+      {truncated && <Text color={theme.toolOutput}>... ({collapsedLines.length - maxLines - 1} more lines)</Text>}
       {truncated && lastLine !== null && renderLine(lastLine, 'last')}
     </Box>
   );

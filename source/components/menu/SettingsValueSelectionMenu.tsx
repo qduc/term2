@@ -4,7 +4,7 @@ import { isSecretSetting, isStringSetting, type SettingValueSuggestion } from '.
 import { formatSettingDisplayValue } from './settings-value-formatter.js';
 import { isDurationSetting } from '../../services/settings/settings-ui-metadata.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
-import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   settingKey: string;
@@ -33,6 +33,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   previewText,
   unitHint,
 }) => {
+  const theme = useTheme();
   const acceptsAnyString = isStringSetting(settingKey);
   // Strings and numbers are settable by typing, so an empty list is a
   // neutral state. Choices (enums, booleans) stay red: Enter cannot apply
@@ -50,20 +51,20 @@ const SettingsValueSelectionMenu: FC<Props> = ({
 
   const header = (currentText !== undefined || defaultText !== undefined || unitHint) && (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color={COLOR_TEXT_SUBTLE}>
+      <Text color={theme.textSubtle}>
         {currentText !== undefined && (
           <>
-            Current: <Text color={COLOR_TEXT}>{currentText}</Text>
+            Current: <Text color={theme.text}>{currentText}</Text>
           </>
         )}
         {currentText !== undefined && defaultText !== undefined && ' · '}
         {defaultText !== undefined && !(settingKey === 'agent.reasoningEffort' && defaultText === 'default') && (
           <>
-            Default: <Text color={COLOR_TEXT}>{defaultText}</Text>
+            Default: <Text color={theme.text}>{defaultText}</Text>
           </>
         )}
       </Text>
-      {unitHint && <Text color={COLOR_TEXT_SUBTLE}>{unitHint}</Text>}
+      {unitHint && <Text color={theme.textSubtle}>{unitHint}</Text>}
     </Box>
   );
 
@@ -75,20 +76,20 @@ const SettingsValueSelectionMenu: FC<Props> = ({
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}
-        borderColor={items.length === 0 && !showNeutralEmpty ? COLOR_DANGER : COLOR_ACCENT}
+        borderColor={items.length === 0 && !showNeutralEmpty ? theme.danger : theme.accent}
         title={title}
         fallbackText={
           showNeutralEmpty ? (
             <Box flexDirection="column">
-              <Text color={COLOR_TEXT_SUBTLE}>{isNumericSettings ? 'Type a number' : 'Type a value'}</Text>
-              <Text color={COLOR_TEXT_SUBTLE}>{query ? `No suggestion matches — ${typedHint}` : typedHint}</Text>
+              <Text color={theme.textSubtle}>{isNumericSettings ? 'Type a number' : 'Type a value'}</Text>
+              <Text color={theme.textSubtle}>{query ? `No suggestion matches — ${typedHint}` : typedHint}</Text>
             </Box>
           ) : (
             <Box flexDirection="column">
-              <Text color={COLOR_DANGER} bold>
+              <Text color={theme.danger} bold>
                 No option matches "{query}"
               </Text>
-              <Text color={COLOR_TEXT_SUBTLE}>Backspace to see all options</Text>
+              <Text color={theme.textSubtle}>Backspace to see all options</Text>
             </Box>
           )
         }
@@ -96,7 +97,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           <Box flexDirection="column">
             {selectedItem?.description && (
               <Box marginBottom={0}>
-                <Text color={COLOR_ACCENT} italic>
+                <Text color={theme.accent} italic>
                   {selectedItem.description}
                 </Text>
               </Box>
@@ -107,7 +108,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         renderItem={(item, _index, isSelected) => (
           <Box key={item.value}>
             <SelectionMarker selected={isSelected} />
-            <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT} bold={isSelected}>
+            <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
               {isDurationSetting(settingKey)
                 ? formatSettingDisplayValue(settingKey, Number(item.value)).text
                 : item.value}
@@ -118,8 +119,8 @@ const SettingsValueSelectionMenu: FC<Props> = ({
       {/* Outside the container: MenuContainer drops its footer when the list
           is empty, which is exactly when a typed value needs the preview. */}
       {previewText !== undefined && (
-        <Text color={COLOR_TEXT_SUBTLE}>
-          Enter will set: <Text color={COLOR_SUCCESS}>{previewText}</Text>
+        <Text color={theme.textSubtle}>
+          Enter will set: <Text color={theme.success}>{previewText}</Text>
         </Text>
       )}
       <MenuFooter

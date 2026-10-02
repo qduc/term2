@@ -1,52 +1,21 @@
 import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Box, measureElement, Text } from 'ink';
-import {
-  COLOR_ACCENT,
-  COLOR_BORDER,
-  COLOR_BORDER_ACTIVE,
-  COLOR_DANGER,
-  COLOR_TEXT_SUBTLE,
-  GLYPH_SELECTED,
-  GLYPH_SEPARATOR,
-} from '../theme.js';
+import { useTheme } from '../theme.js';
+import { useSkin } from '../../skins/SkinContext.js';
+import type { MenuHint } from '../../skins/types.js';
 
-/**
- * The selection marker every menu row starts with. A gutter marker beats
- * `inverse`, which paints the row with the *terminal's* background color and so
- * looks harsh (and differs machine to machine). It also keeps every row's text
- * on the same left edge, selected or not.
- *
- * The fixed-width, non-shrinking wrapper is the point: without it Yoga steals
- * the gutter's cells first on narrow terminals (the marker collapses to `❯/`
- * and then vanishes), so every row must treat this as an inflexible 2-cell
- * gutter, never as shrinkable text.
- */
-export const SelectionMarker: React.FC<{ selected: boolean }> = ({ selected }) => (
-  <Box width={2} flexShrink={0}>
-    <Text color={COLOR_ACCENT} bold wrap="truncate">
-      {selected ? `${GLYPH_SELECTED} ` : '  '}
-    </Text>
-  </Box>
-);
+export { SelectionMarker } from './SelectionMarker.js';
+export type { MenuHint } from '../../skins/types.js';
 
 /**
  * The standard key-hint footer. Every menu shows its hints in the same order
- * and the same format, so the reader learns the shape once. Menus used to each
- * invent their own wording, separator, and arrow glyph.
+ * and the same format, so the reader learns the shape once; how that footer is
+ * drawn belongs to the active skin.
  */
-/** A key, what it does, and an optional color when the key names a colored concept (e.g. steer vs queue). */
-export type MenuHint = readonly [key: string, action: string, keyColor?: string];
-
-export const MenuFooter: React.FC<{ hints: ReadonlyArray<MenuHint> }> = ({ hints }) => (
-  <Text color={COLOR_TEXT_SUBTLE}>
-    {hints.map(([key, action, keyColor], index) => (
-      <React.Fragment key={key}>
-        {index > 0 ? ` ${GLYPH_SEPARATOR} ` : ''}
-        {keyColor ? <Text color={keyColor}>{key}</Text> : key} {action}
-      </React.Fragment>
-    ))}
-  </Text>
-);
+export const MenuFooter: React.FC<{ hints: ReadonlyArray<MenuHint> }> = ({ hints }) => {
+  const { Hints } = useSkin();
+  return <Hints hints={hints} />;
+};
 
 /** A compact, terminal-friendly scrollbar for a fixed-height menu list. */
 export const MenuScrollbar: React.FC<{
@@ -64,6 +33,7 @@ export const MenuScrollbar: React.FC<{
   visibleHeight: measuredVisibleHeight,
   totalHeight: measuredTotalHeight,
 }) => {
+  const theme = useTheme();
   const visibleHeight = measuredVisibleHeight ?? maxHeight;
   const totalHeight = measuredTotalHeight ?? itemCount;
   const maxScrollOffset = Math.max(1, totalHeight - visibleHeight);
@@ -77,7 +47,7 @@ export const MenuScrollbar: React.FC<{
       {Array.from({ length: visibleHeight }, (_, index) => {
         const isThumb = index >= thumbStart && index < thumbStart + thumbSize;
         return (
-          <Text key={index} color={isThumb ? COLOR_ACCENT : COLOR_BORDER}>
+          <Text key={index} color={isThumb ? theme.accent : theme.border}>
             {isThumb ? '┃' : '│'}
           </Text>
         );
@@ -120,7 +90,7 @@ export function MenuContainer<T>({
   selectedIndex,
   scrollOffset = 0,
   maxHeight = 10,
-  borderColor = COLOR_BORDER_ACTIVE,
+  borderColor: borderColorOverride,
   title,
   loading = false,
   loadingText = 'Loading...',
@@ -131,6 +101,8 @@ export function MenuContainer<T>({
   isInactive,
   renderItem,
 }: Props<T>) {
+  const theme = useTheme();
+  const borderColor = borderColorOverride ?? theme.borderActive;
   const rowRefs = useRef<Array<any>>([]);
   const [rowHeights, setRowHeights] = useState<number[]>([]);
   const visibleItems = items.slice(scrollOffset, scrollOffset + maxHeight);
@@ -150,28 +122,28 @@ export function MenuContainer<T>({
     );
   }, [hasScrollDown, hasScrollUp, visibleItems, scrollOffset]);
 
-  const titleElement = title ? <Text color={COLOR_TEXT_SUBTLE}>{title}</Text> : null;
-  const renderState = (state: ReactNode, color: string = borderColor) => (
+  const titleElement = title ? <Text color={theme.textSubtle}>{title}</Text> : null;
+  const renderState = (state: ReactNode, color: string | undefined = borderColor) => (
     <Box flexDirection="column" width="100%">
       <Box borderStyle="round" borderColor={color} paddingX={1} flexDirection="column">
         {titleElement}
         {state}
       </Box>
-      {footer && (typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer)}
+      {footer && (typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer)}
     </Box>
   );
 
   if (loading) {
-    return renderState(<Text color={COLOR_TEXT_SUBTLE}>{loadingText}</Text>);
+    return renderState(<Text color={theme.textSubtle}>{loadingText}</Text>);
   }
 
   if (error) {
-    return renderState(<Text color={COLOR_DANGER}>{error}</Text>, COLOR_DANGER);
+    return renderState(<Text color={theme.danger}>{error}</Text>, theme.danger);
   }
 
   if (items.length === 0) {
     return renderState(
-      typeof fallbackText === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{fallbackText}</Text> : fallbackText,
+      typeof fallbackText === 'string' ? <Text color={theme.textSubtle}>{fallbackText}</Text> : fallbackText,
     );
   }
 
@@ -196,9 +168,9 @@ export function MenuContainer<T>({
             let renderedElement = element;
             if (isItemInactive) {
               if (React.isValidElement(element) && element.type === Text) {
-                renderedElement = React.cloneElement(element as React.ReactElement<any>, { color: COLOR_TEXT_SUBTLE });
+                renderedElement = React.cloneElement(element as React.ReactElement<any>, { color: theme.textSubtle });
               } else if (typeof element === 'string' || typeof element === 'number') {
-                renderedElement = <Text color={COLOR_TEXT_SUBTLE}>{element}</Text>;
+                renderedElement = <Text color={theme.textSubtle}>{element}</Text>;
               }
             }
             return (
@@ -231,9 +203,9 @@ export function MenuContainer<T>({
           borderBottom={false}
           borderLeft={false}
           borderRight={false}
-          borderColor={COLOR_BORDER}
+          borderColor={theme.border}
         >
-          {typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer}
+          {typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer}
         </Box>
       )}
     </Box>
@@ -243,7 +215,7 @@ export function MenuContainer<T>({
     return (
       <Box flexDirection="column" width="100%">
         {content}
-        {typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer}
+        {typeof footer === 'string' ? <Text color={theme.textSubtle}>{footer}</Text> : footer}
       </Box>
     );
   }

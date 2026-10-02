@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseGrepOutput } from './command-message-helpers.js';
-import { COLOR_ACCENT, COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 
 type Props = {
   output: string;
@@ -9,6 +9,7 @@ type Props = {
 };
 
 const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
+  const theme = useTheme();
   const parsed = parseGrepOutput(output) as any;
   if (!parsed) return null;
 
@@ -60,10 +61,10 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
         return (
           <Box key={fileIdx} flexDirection="column" marginBottom={1}>
             <Box>
-              <Text color={COLOR_ACCENT} bold>
+              <Text color={theme.accent} bold>
                 {file.filePath}
               </Text>
-              <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={theme.textSubtle}>
                 {' '}
                 ({file.matches.length} match{file.matches.length !== 1 ? 'es' : ''}
                 {file.truncatedCount > 0 ? `, ${file.truncatedCount} truncated` : ''})
@@ -74,15 +75,15 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
                 const lineNumStr = String(match.lineNum).padStart(4, ' ');
                 return (
                   <Text key={matchIdx}>
-                    <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                    <Text color={theme.textSubtle} dimColor>
                       {lineNumStr}:{' '}
                     </Text>
-                    <Text color={COLOR_TOOL_OUTPUT}>{match.content}</Text>
+                    <Text color={theme.toolOutput}>{match.content}</Text>
                   </Text>
                 );
               })}
               {file.truncatedCount > 0 && (
-                <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                <Text color={theme.textSubtle} dimColor>
                   ... ({file.truncatedCount} more match{file.truncatedCount !== 1 ? 'es' : ''} truncated in this file)
                   ...
                 </Text>
@@ -93,7 +94,7 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       })}
       {truncatedMatchesCount > 0 && (
         <Box marginTop={1}>
-          <Text color={COLOR_WARNING}>
+          <Text color={theme.warning}>
             ... ({truncatedMatchesCount} match{truncatedMatchesCount !== 1 ? 'es' : ''}
             {truncatedFilesCount > 0
               ? ` in ${truncatedFilesCount} more file${truncatedFilesCount !== 1 ? 's' : ''}`
@@ -104,7 +105,7 @@ const GrepRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       )}
       {note && (
         <Box marginTop={1}>
-          <Text color={COLOR_WARNING}>{note}</Text>
+          <Text color={theme.warning}>{note}</Text>
         </Box>
       )}
     </Box>

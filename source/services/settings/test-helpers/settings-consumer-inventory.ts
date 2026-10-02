@@ -127,7 +127,13 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'subagent.asyncSessionTtlMs',
     'subagent.asyncMessageCap',
   ],
-  'Interactive presentation — UI-only/presentation state': ['ui.historySize', 'ui.pasteThreshold', 'ui.displayMode'],
+  'Interactive presentation — UI-only/presentation state': [
+    'ui.historySize',
+    'ui.pasteThreshold',
+    'ui.displayMode',
+    'ui.theme',
+    'ui.skin',
+  ],
   'Logging and process environment — live logger effect or startup-only process configuration': [
     'logging.logLevel',
     'logging.disableLogging',

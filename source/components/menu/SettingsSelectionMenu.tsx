@@ -7,7 +7,7 @@ import {
 } from '../../hooks/use-settings-completion.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
-import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
+import { useTheme } from '../theme.js';
 import { formatSettingDisplayValue, truncateKeepingTail } from './settings-value-formatter.js';
 
 type Props = {
@@ -44,6 +44,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   activeCategoryId,
   categories,
 }) => {
+  const theme = useTheme();
   const keyColWidth = Math.max(12, Math.min(32, (process.stdout.columns ?? 80) - 48));
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
   const selectedItem = items[selectedIndex];
@@ -55,7 +56,7 @@ const SettingsSelectionMenu: FC<Props> = ({
         activeItemId={activeCategoryId}
         getItemWidth={(category) => category.label.length + 2}
         renderTab={(category, isActive) => (
-          <Text inverse={isActive} color={isActive ? COLOR_ACCENT : COLOR_TEXT_SUBTLE} bold={isActive}>
+          <Text inverse={isActive} color={isActive ? theme.accent : theme.textSubtle} bold={isActive}>
             {' '}
             {category.label}{' '}
           </Text>
@@ -67,11 +68,11 @@ const SettingsSelectionMenu: FC<Props> = ({
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={VISIBLE_COUNT}
-        borderColor={COLOR_ACCENT}
+        borderColor={theme.accent}
         fallbackText={
           <Box flexDirection="column">
-            <Text color={COLOR_TEXT_SUBTLE}>No settings found</Text>
-            <Text color={COLOR_TEXT_SUBTLE}>
+            <Text color={theme.textSubtle}>No settings found</Text>
+            <Text color={theme.textSubtle}>
               No settings match "{query}"{' '}
               {isSearchingAll ? 'in any section' : `in ${activeCategory?.label ?? 'this section'}`}
             </Text>
@@ -80,25 +81,25 @@ const SettingsSelectionMenu: FC<Props> = ({
         footer={
           <Box flexDirection="column">
             {selectedItem && (
-              <Text color={COLOR_TEXT} bold>
+              <Text color={theme.text} bold>
                 {selectedItem.key}
               </Text>
             )}
             {selectedItem?.description && (
               <Box marginBottom={0}>
-                <Text color={COLOR_ACCENT} italic>
+                <Text color={theme.accent} italic>
                   {selectedItem.description}
                 </Text>
               </Box>
             )}
-            {selectedItem && <Text color={COLOR_TEXT_SUBTLE}>{describeSettingState(selectedItem)}</Text>}
+            {selectedItem && <Text color={theme.textSubtle}>{describeSettingState(selectedItem)}</Text>}
             <MenuFooter
               hints={[
                 ['type', 'to search all sections'],
                 ['↑↓', 'navigate'],
                 ['⏎', 'edit'],
                 ['Esc', 'close'],
-                ['●', 'changed', COLOR_WARNING],
+                ['●', 'changed', 'warning'],
                 ['↻', 'needs restart'],
               ]}
             />
@@ -121,7 +122,7 @@ const SettingsSelectionMenu: FC<Props> = ({
             <Box key={item.key} flexDirection="column">
               {showHeader && (
                 <Box marginTop={actualIndex === scrollOffset ? 0 : 1} marginBottom={0}>
-                  <Text color={COLOR_ACCENT} bold underline>
+                  <Text color={theme.accent} bold underline>
                     {category.label}
                   </Text>
                 </Box>
@@ -129,16 +130,16 @@ const SettingsSelectionMenu: FC<Props> = ({
 
               <Box>
                 <SelectionMarker selected={isSelected} />
-                <Text color={isSelected ? COLOR_ACCENT : COLOR_TEXT} bold={isSelected}>
+                <Text color={isSelected ? theme.accent : theme.text} bold={isSelected}>
                   {paddedKey}
                 </Text>
-                <Text color={COLOR_WARNING}>{isChanged ? '● ' : '  '}</Text>
+                <Text color={theme.warning}>{isChanged ? '● ' : '  '}</Text>
                 {valueObj && (
-                  <Text color={valueObj.color ?? COLOR_TEXT_SUBTLE} bold={isSelected}>
+                  <Text color={theme[valueObj.tone ?? 'textSubtle']} bold={isSelected}>
                     {valueObj.text}
                   </Text>
                 )}
-                {item.requiresRestart && <Text color={COLOR_TEXT_SUBTLE}> ↻</Text>}
+                {item.requiresRestart && <Text color={theme.textSubtle}> ↻</Text>}
               </Box>
             </Box>
           );

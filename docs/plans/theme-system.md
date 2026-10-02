@@ -119,10 +119,10 @@ The classic implementations are in `source/skins/classic/`; they reproduce the
 original output exactly and are the reference for what each slot receives.
 
 **Where a skin's code goes.** Each skin owns one folder, `source/skins/<name>/`, with
-an `index.ts` exporting its `Skin`. `rail`, `cards`, `ledger` and `zen` are currently
-stubs that re-export classic. Do not edit another skin's folder, `classic/`, the
+an `index.ts` exporting its `Skin`. Do not edit another skin's folder, `classic/`, the
 containers, or `types.ts` from a skin change: a slot that cannot express what a skin
-needs is a contract question, to be raised rather than worked around.
+needs is a contract question, to be raised rather than worked around. The four
+alternatives were each built that way, in parallel, in their own folders.
 
 **Rules every skin follows** — enforced by `source/skins/skin-conformance.test.tsx`,
 which renders every skin through the real containers (`source/skins/testing/scenes.tsx`)
@@ -152,6 +152,54 @@ NODE_ENV=test FORCE_COLOR=3 COLORTERM=truecolor TERM=xterm-256color \
 writes `.ansi`, a self-contained `.html`, and (with `PLAYWRIGHT_CORE` pointing at a
 `playwright-core` install) `.png`, per scene. Judge a skin by looking at it, not only
 by the suite: the suite proves it is *correct*, not that it is *good*.
+
+**The skins.**
+
+- `classic` — the original layout; the default and the base every other skin spreads.
+- `rail` — quiet and typographic. No backgrounds or boxes: a thin rail in the status
+  colour down a standard tool call (heavier on failure), hairlines around the prompt,
+  a one-line status with a context gauge.
+- `cards` — rounded cards for the user turn, standard tool calls and the input; chip
+  buttons for approval options; a pill status bar. Failure and the danger approval use
+  a heavier border so they read without colour.
+- `ledger` — dense: a banner band, `YOU`/`TERM²` role chips, tool rows with an aligned
+  tool-name column, a chip footer with context and quota gauges.
+- `zen` — conversation first: `◆` answers, quiet one-line tool calls where only
+  failures are red, a borderless prompt, one dim right-aligned status line that speaks
+  up (a `/compact` hint at 75% context) only when something needs attention.
+
+Each shows danger-class approvals by shape (heavier rule and `▲`), not just colour, and
+each carries status in glyphs so it survives `mono`.
+
+**Honest widths in tests.** `renderToString` lays out at the width it is given but gives
+hooks no stdout width, so `renderScene` sets `process.stdout.columns` for the duration of
+a render (`testing/conformance.test.tsx` pins it). Without that, every width-adaptive
+choice a skin makes silently ran at a default of 80 and the suite never exercised its
+narrow layouts. Spinners started under `renderToString` are not cleaned up by it; a test
+that renders a running call needs fake timers.
+
+**Contract limits found while building them** (open; none is a defect in a skin):
+
+- `ToolFrame` wraps header and body together, so no skin can indent output relative to
+  its header, put a border title on a card, or keep an error aligned under the action
+  text. This was hit by all four. Fixing it means the container passing header and body
+  separately.
+- `ToolHeader` receives no duration or result summary, so "time" and "result" columns
+  have nothing to show.
+- `StatusSegmentView` carries display text only; `ledger` parses it (stripping `· ` and
+  parentheses) to build chips. A structured value would be safer. The view also carries
+  no cwd, git branch or elapsed time.
+- `AssistantFrame` cannot restyle the markdown it wraps and `assistantGutter` is global,
+  so a skin cannot dim or italicise reasoning, or indent only reasoning.
+- `ApprovalFrame` cannot place a title or footer on its border, and `Hints` cannot be
+  placed on the input's border. Approval body margins are container-owned and uneven
+  (a shell command carries a blank line above it; a diff does not).
+- Markdown inside an indented frame is measured one column too wide for list items that
+  contain inline code, at some widths. `cards` and `zen` work around it (a right margin;
+  `zen` uses `assistantGutter: 4`), and the underlying `MarkdownRenderer` behaviour is
+  not fixed.
+- Wrapped hints or status lines can leave a trailing `·` at a line end.
+- `rail` and `ledger` show `esc to interrupt`; the first Esc only asks for a second.
 
 **Not yet skinned** (the same in every skin today): the ask-user question prompt
 (it shares `TwoPaneApprovalLayout` from classic), the other confirmation prompts,

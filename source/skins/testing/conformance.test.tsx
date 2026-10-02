@@ -2,11 +2,12 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React from 'react';
 import { Text } from 'ink';
+import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { describe, expect, it } from 'vitest';
 import { classicSkin } from '../classic/index.js';
 import type { Skin } from '../types.js';
 import { findConformanceProblems } from './conformance.js';
-import { SCENES, renderScene } from './scenes.js';
+import { SCENES, renderScene, type Scene } from './scenes.js';
 
 /**
  * The conformance suite is only worth trusting if it can fail. These are skins
@@ -63,5 +64,39 @@ describe('findConformanceProblems', () => {
     const frame = '│ git push --force-with-lease origin\n│ feature/auth-refresh && pnpm publish';
     const problems = findConformanceProblems(frame, { ...approval, mustContain: ['origin feature/auth-refresh'] }, 80);
     expect(problems).toEqual([]);
+  });
+});
+
+describe('renderScene', () => {
+  const WidthProbe = () => <Text>{`columns=${useTerminalColumns()}`}</Text>;
+  const probe: Scene = {
+    id: 'probe',
+    description: 'prints the width hooks see',
+    node: () => <WidthProbe />,
+    mustContain: [],
+  };
+
+  it.each([40, 60, 100, 120])('shows hooks the real terminal width, %i columns', (columns) => {
+    // Regression: renderToString has no stdout width, so every width-adaptive skin silently
+    // fell back to 80 and the suite never exercised its narrow layouts.
+    expect(renderScene(probe, { skin: 'classic', theme: 'dark', columns })).toContain(`columns=${columns}`);
+  });
+
+  it('restores process.stdout.columns afterwards', () => {
+    const before = process.stdout.columns;
+    renderScene(probe, { skin: 'classic', theme: 'dark', columns: 53 });
+    expect(process.stdout.columns).toBe(before);
+  });
+
+  it('restores it even when the render throws', () => {
+    const before = process.stdout.columns;
+    const broken: Scene = {
+      ...probe,
+      node: () => {
+        throw new Error('boom');
+      },
+    };
+    expect(() => renderScene(broken, { skin: 'classic', theme: 'dark', columns: 53 })).toThrow('boom');
+    expect(process.stdout.columns).toBe(before);
   });
 });

@@ -2522,6 +2522,41 @@ pnpm exec prettier --check source/acp-v2/agent.ts \
 PASS
 ```
 
+## Subagent cancellation identity classification
+
+Status: repaired on 2026-10-03; focused regressions pass. Combined broad gates
+remain the coordinator's responsibility.
+
+`services/subagents/utils.ts:isAbortLike` determines cancellation for subagent
+settlement and for `lib/tool-invoke.ts` error propagation. Diagnostic text is
+not a reliable cancellation signal: provider messages, role configuration
+errors, and paths can contain `abort` or `cancel`. Misclassifying those errors
+suppresses normal failure handling and emits a cancelled terminal event.
+
+The classifier now accepts structured `AbortError`, `ERR_ABORTED`, `ABORT_ERR`,
+and `kind: aborted` identities. Existing caller checks of their actual abort
+signals remain in place. The unfinished, already-aborted registry lookup and
+the run control's pending-answer cancellation/default settlement now use the
+existing `createAbortError` producer. Explicit settlement reasons retain their
+identity. Invalid adoption diagnostics remain ordinary failures. The separate
+general error helper is outside this repair.
+
+This is a classification contract, with no timeout, retry, or concurrency limit.
+Tests exercise actual manager results and terminal events, tool error handling,
+structured identities, and cancellation of pending waits. Before the source
+repair, the focused command failed 15 tests; afterward all 192 tests in five
+files passed (4.74s command elapsed, exit 0, 120s timeout). The regression matrix
+includes diagnostic words in both messages and paths so checkout naming cannot
+quietly change failure status again.
+
+Narrow handoff gates passed: source-related and changed tests each passed 142
+files / 2,814 tests with two expected failures (104.52s and 102.64s command
+elapsed, exit 0, 300s timeout). Typecheck passed (6.63s, exit 0, 180s timeout).
+Scoped ESLint passed with one existing generator warning; formatting and
+`git diff --check` passed. Related/changed emitted `TimeoutNaNWarning` without a
+test failure. Full unit, integration, and provider-black-box validation remain
+pending the combined coordinator gate.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

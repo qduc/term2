@@ -18,7 +18,7 @@ import type {
 import { isTerminalSubagentResult } from './types.js';
 import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
-import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
+import { createAbortError, isAbortLike, safeEmit, truncatePreview } from './utils.js';
 import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 import { sanitizeBackgroundTaskToolLabel, type BackgroundTaskObservation } from '../background-task-activity.js';
 import { classifyPoolEntryFailure } from '../retry/provider-failure-classification.js';
@@ -642,7 +642,7 @@ export class SubagentAsyncRegistry {
       );
     run.lastUsedAt = this.#now();
     if (run.result) return Promise.resolve(run.result);
-    if (signal?.aborted) return Promise.reject(new Error('The get_subagent_result call was aborted.'));
+    if (signal?.aborted) return Promise.reject(createAbortError('The get_subagent_result call was aborted.'));
     return run.promise;
   }
 

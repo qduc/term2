@@ -64,8 +64,9 @@ describe('SubagentRunControl', () => {
     expect(first.messageId).toBe('question-1');
     expect(() => control.ask('Can I ask another?')).toThrow('already pending');
 
-    control.settle(new Error('The subagent run was cancelled.'));
-    await expect(first.answer).rejects.toThrow('cancelled');
+    const failure = new Error('Provider does not support cancellation metadata');
+    control.settle(failure);
+    await expect(first.answer).rejects.toBe(failure);
     expect(control.pendingQuestion).toBeUndefined();
   });
 
@@ -99,7 +100,23 @@ describe('SubagentRunControl', () => {
 
     expect(control.cancellationRequested).toBe(true);
     expect(abort).toHaveBeenCalledOnce();
-    await expect(question.answer).rejects.toThrow('cancelled');
+    await expect(question.answer).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'The subagent run was cancelled.',
+    });
+    expect(control.pendingQuestion).toBeUndefined();
+  });
+
+  it('settles a pending question with cancellation identity when no failure reason is supplied', async () => {
+    const control = new SubagentRunControl();
+    const question = control.ask('Should I continue?');
+
+    control.settle();
+
+    await expect(question.answer).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'The subagent run was cancelled.',
+    });
     expect(control.pendingQuestion).toBeUndefined();
   });
 });

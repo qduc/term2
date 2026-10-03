@@ -1,3 +1,22 @@
+## [0.31.0] - 2026-10-03
+
+### Features
+- Added configurable colour themes with automatic terminal-background detection and monochrome support through `ui.theme`.
+- Added classic, rail, cards, ledger, and zen layout skins, selectable through `ui.skin`, covering messages, tool output, approvals, menus, and the status bar.
+
+### Bug Fixes
+- Queued input and drafts now survive approval prompts and queued-message editing. Stopping a paused queue, clearing a session, and late cancellation settlement no longer leave queued turns incorrectly armed or lose their cancellation state.
+- Live background-shell watches now see matching output before retention eviction removes it.
+- Completed background agents release their pending approvals, while session shutdown preserves lifecycle and persistence observers until asynchronous work settles.
+- Resetting a session with a reused client no longer lets the old session's shutdown clear the replacement session's background callbacks.
+- Subagent errors containing words such as “cancel” or “abort” are reported as failures unless they carry cancellation identity.
+- Invalid model-catalog prices are treated as unpriced and normalized during catalog refresh.
+- Nested filesystem tools in remote `run_code` calls now resolve physical paths over SSH and refuse paths whose authority cannot be established safely.
+- Web sessions expose their live turn status on reconnect, preserve local errors, and cancel active chat-completions streams correctly.
+
+### Improvements
+- Refreshed the model catalog.
+
 ## [0.30.0] - 2026-09-29
 
 ### Features

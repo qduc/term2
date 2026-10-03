@@ -493,6 +493,16 @@ it('toolErrorFunction returns a non-fatal message for other runtime errors', () 
   expect(result).toBe('An error occurred while running the tool. Please try again. Error: Error: disk on fire');
 });
 
+it.each([
+  'Unable to read /repo/cancel/config.json',
+  'Provider does not support cancellation metadata',
+  'Invalid abort option in tool configuration',
+])('toolErrorFunction preserves ordinary failure diagnostics containing cancellation words: %s', (message) => {
+  expect(toolErrorFunction({}, new Error(message))).toBe(
+    `An error occurred while running the tool. Please try again. Error: Error: ${message}`,
+  );
+});
+
 it('normalizeToolInput with schema coerces stringified array and object inputs', () => {
   const schema = z.object({
     tags: z.array(z.string()).optional(),

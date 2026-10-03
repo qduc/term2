@@ -2,10 +2,15 @@ import type { SubagentResult } from './types.js';
 import { MaxTurnsExceededError } from '../agent-runtime/application-run-loop.js';
 import { isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 
-export function isAbortLike(message: string | undefined, obj?: unknown): boolean {
-  if (message?.includes('abort') || message?.includes('cancel')) return true;
+// Diagnostic text can describe cancellation or contain it in a path without
+// representing a stop. Application-owned cancellation producers carry identity.
+export function isAbortLike(_message: string | undefined, obj?: unknown): boolean {
   const o = obj as Record<string, unknown> | undefined;
-  if (o && (o['name'] === 'AbortError' || o['code'] === 'ERR_ABORTED' || o['kind'] === 'aborted')) return true;
+  if (
+    o &&
+    (o['name'] === 'AbortError' || o['code'] === 'ERR_ABORTED' || o['code'] === 'ABORT_ERR' || o['kind'] === 'aborted')
+  )
+    return true;
   return false;
 }
 

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createAbortError } from './utils.js';
 
 const DEFAULT_MAX_MAILBOX_MESSAGES = 4;
 const DEFAULT_MAX_MAILBOX_CHARACTERS = 4_000;
@@ -176,11 +177,11 @@ export class SubagentRunControl {
     this.#cancellationRequested = true;
     this.#mailbox = [];
     this.#mailboxCharacters = 0;
-    this.#rejectPendingQuestion(new Error('The subagent run was cancelled.'));
+    this.#rejectPendingQuestion(createAbortError('The subagent run was cancelled.'));
     this.#abortCurrentSegment('cancel');
   }
 
-  settle(reason = new Error('The subagent run was cancelled.')): void {
+  settle(reason = createAbortError('The subagent run was cancelled.')): void {
     this.#mailbox = [];
     this.#mailboxCharacters = 0;
     this.#rejectPendingQuestion(reason);

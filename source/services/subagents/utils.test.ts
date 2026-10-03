@@ -4,8 +4,34 @@ import {
   buildTurnBudgetExhaustedFinalText,
   extractMaxTurnsLimit,
   formatSubagentResult,
+  isAbortLike,
   isMaxTurnsExceededError,
 } from './utils.js';
+
+it.each([
+  'Unable to read /repo/cancel/config.json',
+  'Unable to read /repo/abort/config.json',
+  'Provider does not support cancellation metadata',
+  'Invalid abort option in tool configuration',
+  'Tool returned the text "operation aborted"',
+])('isAbortLike treats diagnostic content as failure: %s', (message) => {
+  expect(isAbortLike(message, new Error(message))).toBe(false);
+  expect(isAbortLike(message)).toBe(false);
+});
+
+it.each([{ name: 'AbortError' }, { code: 'ERR_ABORTED' }, { code: 'ABORT_ERR' }, { kind: 'aborted' }])(
+  'isAbortLike recognizes cancellation identity %j with neutral diagnostic text',
+  (identity) => {
+    expect(isAbortLike('Stopped', Object.assign(new Error('Stopped'), identity))).toBe(true);
+  },
+);
+
+it.each([null, undefined, {}, 'cancelled', { name: 'Error', code: 'OTHER', kind: 'runtime_error' }])(
+  'isAbortLike rejects values without cancellation identity: %j',
+  (error) => {
+    expect(isAbortLike(undefined, error)).toBe(false);
+  },
+);
 
 it('formatSubagentResult includes worktree path when the worker was pinned', () => {
   const text = formatSubagentResult({

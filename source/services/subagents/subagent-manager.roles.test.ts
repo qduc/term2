@@ -40,7 +40,6 @@ const TASK_INSPECT_WORKSPACE = 'inspect the workspace';
 const TASK_INSPECT_TEMP_WORKSPACE = 'inspect a temp workspace';
 const TASK_GLOB = 'find files';
 
-const UNKNOWN_ROLE_ERROR_FRAGMENT = ROLE_UNKNOWN;
 const EXPLORER_BLOCKED_PREFIX =
   'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
 
@@ -59,40 +58,31 @@ const TEMP_BLOCKED_CASES = [
 
 // ========== run() with unknown role ==========
 
-it('run() returns failed result for unknown role', async () => {
-  const providerId = registerTestProvider({
-    label: 'Mock Mentor Manager',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (_agent: any, _input: any, _options: any) {
-          const result = {
-            status: 'completed',
-            finalOutput: 'mentor-response',
-            history: [],
-            messages: [],
-          };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
+it.each([ROLE_UNKNOWN, 'nonexistent-cancel-role-xyz', 'nonexistent-abort-role-xyz'])(
+  'run() returns and emits failure for unknown role %s',
+  async (role) => {
+    const events: ConversationEvent[] = [];
+    const manager = new RealSubagentManager({
+      logger: createMockLogger(),
+      settings: createMockSettings(),
+      sessionContextService: createSessionContextService() as any,
+      toolOwnership: new ToolOwnershipRegistry(),
+      onEvent: (event) => {
+        events.push(event);
+      },
+    });
 
-  const settings = createMockSettings({
-    'agent.model': MODEL_MOCK,
-    'agent.provider': providerId,
-  });
-  const manager = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings,
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  const result = await manager.run({ role: ROLE_UNKNOWN, task: 'do something' });
-
-  expect(result.status).toBe('failed');
-  expect(result.error).toBeTruthy();
-  expect(result.error!.includes(UNKNOWN_ROLE_ERROR_FRAGMENT)).toBe(true);
-});
+    try {
+      const result = await manager.run({ role, task: 'do something' });
+      expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining(role) });
+      expect(events.filter((event) => event.type === 'subagent_completed')).toEqual([
+        { type: 'subagent_completed', result },
+      ]);
+    } finally {
+      manager.dispose();
+    }
+  },
+);
 
 // ========== Mentor role ==========
 

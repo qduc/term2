@@ -38,6 +38,29 @@ type RunParams = {
 const make = (run: (params: RunParams) => Promise<SubagentResult> = async ({ request }) => result(request.role)) =>
   new SubagentAsyncRegistry({ logger: createMockLogger(), run });
 
+it('getResult rejects an already-aborted lookup with cancellation identity without cancelling the run', async () => {
+  let finish!: (value: SubagentResult) => void;
+  const pending = new Promise<SubagentResult>((resolve) => (finish = resolve));
+  const registry = make(() => pending);
+  const run = registry.startRun({ role: 'explorer', task: 'inspect' });
+  const controller = new AbortController();
+  controller.abort();
+
+  try {
+    await expect(registry.getResult(run.runId, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'The get_subagent_result call was aborted.',
+    });
+    expect(registry.getRunStatus(run.runId)).toMatchObject({ status: 'running' });
+    finish(result('explorer'));
+    await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
+    await expect(registry.getResult(run.runId, controller.signal)).resolves.toMatchObject({ status: 'completed' });
+  } finally {
+    finish(result('explorer'));
+    registry.dispose();
+  }
+});
+
 describe('background observations', () => {
   it('settles a budget-interrupted worker as non-success and rejects later steering', async () => {
     const events: ConversationEvent[] = [];

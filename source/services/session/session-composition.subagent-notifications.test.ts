@@ -719,3 +719,32 @@ it('shutdown retains the subagent sinks until adopted leases settle', async () =
   expect(sinks.background).toBeNull();
   expect(sinks.approval).toBeNull();
 });
+
+it('delivers every subagent lifecycle event to the observer without leaking shared shell events', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'observer-domain',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const observed = vi.fn();
+  runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(observed);
+  const started = start('run-a');
+  const asked = question('question-a', 'run-a');
+  const completed = completion('run-a');
+  sinks.background?.(started);
+  sinks.background?.(asked);
+  sinks.background?.(completed);
+  sinks.background?.(completed);
+  sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-a', command: 'pwd' });
+  sinks.shell?.({
+    type: 'background_shell_completed',
+    jobId: 'shell-a',
+    command: 'pwd',
+    status: 'completed',
+    output: '',
+  });
+  expect(observed.mock.calls).toEqual([[started], [asked], [completed], [completed]]);
+  expect(runtime.backgroundSubagentNotifications.pendingCount).toBe(3);
+  runtime.dispose();
+});

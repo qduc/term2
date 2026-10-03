@@ -803,6 +803,157 @@ it('keeps the log sink attached when the session is reset', () => {
   service.dispose();
 });
 
+function backgroundClient() {
+  const sinks: {
+    event: ((event: ConversationEvent) => void) | null;
+    shell: ((event: ConversationEvent) => void) | null;
+    pause: import('../subagents/foreground-subagent-lease.js').BackgroundSubagentApprovalPauseSink | null;
+  } = { event: null, shell: null, pause: null };
+  const client = partialClient({
+    setSubagentEventSink: () => {},
+    setBackgroundSubagentEventSink: (sink: typeof sinks.event) => {
+      sinks.event = sink;
+    },
+    setBackgroundShellEventSink: (sink: typeof sinks.shell) => {
+      sinks.shell = sink;
+    },
+    setBackgroundSubagentApprovalPauseSink: (sink: typeof sinks.pause) => {
+      sinks.pause = sink;
+    },
+  });
+  return { client, sinks };
+}
+
+const backgroundCompletion = (agentId: string): ConversationEvent => ({
+  type: 'subagent_completed',
+  async: true,
+  result: { agentId, role: 'worker', status: 'cancelled', finalText: '', filesChanged: [], toolsUsed: [] },
+});
+
+it('keeps terminal approval cleanup authoritative when a background event observer is registered', () => {
+  const { client, sinks } = backgroundClient();
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const lifecycleSink = sinks.event;
+  const publish = (runId: string, generation: number) =>
+    sinks.pause?.({
+      runId,
+      generation,
+      role: 'worker',
+      interruption: { name: 'shell', callId: `${runId}-${generation}`, arguments: '{}' },
+      apply: () => false,
+    });
+  publish('dead', 1);
+  publish('sibling', 1);
+  publish('dead', 2);
+  const stale = service.backgroundSubagentApprovals.getSnapshot();
+  const observed = vi.fn(() => {
+    expect(service.backgroundSubagentApprovals.getSnapshot()).toMatchObject({
+      current: { runId: 'sibling' },
+      pendingCount: 1,
+    });
+  });
+  service.setBackgroundSubagentEventSink(observed);
+  expect(sinks.event).toBe(lifecycleSink);
+  const terminal = backgroundCompletion('dead');
+  sinks.event?.(terminal);
+  const promoted = service.backgroundSubagentApprovals.getSnapshot();
+  expect(promoted).toMatchObject({ current: { runId: 'sibling' }, pendingCount: 1 });
+  expect(observed).toHaveBeenCalledWith(terminal);
+  expect(service.backgroundSubagentNotifications.pendingCount).toBe(1);
+  expect(
+    service.backgroundSubagentApprovals.resolve({
+      revision: stale.revision,
+      entry: stale.current!,
+      decision: { answer: 'y' },
+    }),
+  ).toEqual({ kind: 'stale', reason: 'revision_mismatch' });
+  sinks.event?.(terminal);
+  expect(observed).toHaveBeenCalledTimes(2);
+  expect(service.backgroundSubagentApprovals.getSnapshot()).toBe(promoted);
+  service.setBackgroundSubagentEventSink(null);
+  sinks.event?.(backgroundCompletion('sibling'));
+  expect(service.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+  expect(observed).toHaveBeenCalledTimes(2);
+  service.dispose();
+});
+
+it('isolates throwing background event observers and clears them on disposal', async () => {
+  const { client, sinks } = backgroundClient();
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const observed = vi.fn(() => {
+    throw new Error('observer failed');
+  });
+  service.setBackgroundSubagentEventSink(observed);
+  const lifecycleSink = sinks.event!;
+  expect(() => lifecycleSink(backgroundCompletion('run-a'))).not.toThrow();
+  expect(service.backgroundSubagentNotifications.pendingCount).toBe(1);
+  service.dispose();
+  lifecycleSink(backgroundCompletion('run-b'));
+  expect(observed).toHaveBeenCalledOnce();
+  await service.shutdown();
+  expect(sinks.event).toBeNull();
+});
+
+it.each(['factory-owned', 'caller-owned'] as const)(
+  'preserves the background event observer and lifecycle owner across %s session reset',
+  async (ownership) => {
+    const first = backgroundClient();
+    const second = ownership === 'factory-owned' ? backgroundClient() : first;
+    const service = new ConversationService({
+      ...(ownership === 'factory-owned'
+        ? { sessionClientFactory: factoryForClients([first.client, second.client]) }
+        : { agentClient: first.client, toolOwnership: new ToolOwnershipRegistry() }),
+      deps: { logger: mockLogger, sessionContextService },
+    });
+    const firstObserver = vi.fn();
+    const replacementObserver = vi.fn();
+    service.setBackgroundSubagentEventSink(firstObserver);
+    service.setBackgroundSubagentEventSink(replacementObserver);
+    service.resetWithNewId('replacement');
+    await Promise.resolve();
+    second.sinks.pause?.({
+      runId: 'run-new',
+      generation: 1,
+      role: 'worker',
+      interruption: { name: 'shell', callId: 'new-tool', arguments: '{}' },
+      apply: () => false,
+    });
+    const terminal = backgroundCompletion('run-new');
+    second.sinks.event?.(terminal);
+    expect(replacementObserver).toHaveBeenCalledWith(terminal);
+    expect(firstObserver).not.toHaveBeenCalled();
+    expect(service.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+    expect(service.backgroundSubagentNotifications.pendingCount).toBe(1);
+    expect(typeof second.sinks.shell).toBe('function');
+    second.sinks.shell?.({ type: 'background_shell_started', jobId: 'reset-shell', command: 'pwd' });
+    expect(service.backgroundSubagentTasks.getSnapshot()).toContainEqual(
+      expect.objectContaining({ jobId: 'reset-shell', status: 'running' }),
+    );
+    second.sinks.shell?.({
+      type: 'background_shell_completed',
+      jobId: 'reset-shell',
+      command: 'pwd',
+      status: 'completed',
+      output: '',
+    });
+    expect(service.backgroundSubagentNotifications.pendingCount).toBe(2);
+    expect(replacementObserver).toHaveBeenCalledOnce();
+    if (ownership === 'factory-owned') {
+      expect(first.sinks.event).toBeNull();
+      expect(first.sinks.shell).toBeNull();
+    }
+    service.dispose();
+  },
+);
+
 it('keeps background notification and task observers attached when the session is reset', async () => {
   const backgroundSinks: Array<((event: ConversationEvent) => void) | null> = [];
   const clients = [0, 1].map((index) =>

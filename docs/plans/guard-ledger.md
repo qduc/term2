@@ -52,7 +52,6 @@ total-run containment is unchanged. See
 The old lifetime allowed 15 minutes of successful work after a recovered failure
 to expire the next unrelated recovery before its first replacement request.
 
-
 The retry/recovery budget contract is that ordinary successful tool-loop
 continuations do not consume the physical recovery-attempt allowance. Recovery
 handlers claim the physical dispatch when they schedule a `retry_fresh` plan,
@@ -1712,7 +1711,6 @@ Verification: deterministic delayed-worker red/green, typecheck, provider
 black-box 177 passed / 1 skipped; isolated full suite 8,053 passed / 5 known
 failures (nested approval and file-tool workspace boundaries), not green.
 
-
 Disposition: **repaired on branch `retry-recovery-contract`; seven commits,
 pending merge to main.**
 
@@ -2754,3 +2752,84 @@ Verification (all terminal exit 0, finite timeouts):
 
 These are narrow handoff gates. No full-suite or provider-black-box run was
 required or claimed for this session approval arbitration fix.
+
+### Gateway background event observer ownership addendum
+
+Review found that `Gateway` registers `ConversationService.setBackgroundSubagentEventSink`,
+which forwarded directly to the client and replaced the session lifecycle sink.
+The original queue/composition tests did not exercise this public facade path.
+The retained FIFO defect therefore remained reachable after gateway registration.
+
+The session's `sinks.subagentEvents` now wraps background registration as one
+secondary observer while keeping its lifecycle sink attached. Foreground and
+other host methods retain bound forwarding. The service stores the observer
+alongside its task/notification observers and reattaches it on session reset.
+Null registration removes only the observer; disposal clears it while terminal
+settlement still owns the lifecycle sink until adopted runs settle.
+
+The observer receives every subagent lifecycle event, including starts, questions
+and duplicate completions, before notification enqueue deduplication can return.
+The shared owner excludes root shell events from this observer channel. Observer
+exceptions are logged and isolated from notification delivery. Terminal approval
+release remains before logging and external callbacks. No gateway, provider,
+registry or client-bridge change, additional bus, mirrored state, or new limit is
+introduced. The existing public setter signature is unchanged.
+
+Red proof before the addendum production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/conversation/conversation-service.facade.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 5 tests; 75 existing tests passed. Duration 1.97s, terminal exit 1.
+Public registration replaced recordBackgroundEvent; throwing observers escaped;
+reset lost the background observer; runtime registration replaced its owner;
+task/notification projection stopped receiving subagent events.
+```
+
+The prevention artifact now tests the real production service facade and runtime
+composition together, rather than only invoking the composition sink directly.
+The obsolete composition test promising raw sink replacement was changed to
+assert observer registration preserves the session lifecycle owner.
+
+Reset follow-up: the caller-owned compatibility factory intentionally reuses the
+same client. With no async disposer, the old runtime deferred sink detachment by
+one microtask and erased the replacement session's newly attached subagent and
+shell callbacks. The no-disposer cleanup branches now detach synchronously;
+real async disposal still retains lifecycle sinks until its promise settles.
+No incarnation tokens or additional ownership maps are needed. Factory-owned
+and caller-owned reset tests assert both channels survive and old observers are
+replaced. The existing adopted-lease shutdown test retains its delayed sink
+detachment assertion.
+
+Additional red evidence before changing disposal:
+`NODE_ENV=test timeout 120s pnpm exec vitest run source/services/conversation/conversation-service.facade.test.ts --testNamePattern='background event observer.*session reset' --reporter=minimal`
+failed only the caller-owned reset row (observer calls 0); factory-owned row
+passed. Vitest 1.61s, terminal exit 1. The old no-disposer microtask cleared the
+shared client callback.
+
+Addendum verification (finite timeouts, terminal exit 0):
+
+- Focused queue/facade/composition/notification tests: 96 passed; Vitest 2.00s,
+  command elapsed 3.14s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts ./source/services/conversation/conversation-service.ts`:
+  75 files passed; 1196 tests passed, one expected failure; Vitest 56.38s,
+  command elapsed 66.06s, timeout 300s.
+- `pnpm test:changed`: 71 files passed; 1167 tests passed, one expected failure;
+  Vitest 53.20s, command elapsed 64.00s, timeout 300s. This gate compares
+  against the initial fix commit; related and focused gates also cover queue
+  contracts from that commit.
+- `pnpm typecheck`: passed, command elapsed 6.66s, timeout 180s.
+- Scoped ESLint: exit 0, command elapsed 10.10s, timeout 120s; existing
+  `require-yield` and `no-this-alias` warnings remain outside changed lines.
+- Scoped Prettier: passed, command elapsed 2.70s, timeout 120s.
+- Independent production facade probes: gateway registration observed one
+  completion with pendingCount=0; no-disposer compatibility reset retained a
+  function callback and observed one subsequent completion. Both exit 0.
+
+Scope limitation: factory-owned replacement and no-disposer compatibility reset
+are covered. Reusing the same client while an old real async disposer is still
+pending can require a wider client-incarnation contract; that pre-existing case
+is not claimed fixed here. Async shutdown itself still retains sinks until
+adopted settlement, as asserted by the existing lifecycle test.

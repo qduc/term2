@@ -378,7 +378,7 @@ it('rollover resets root history and continuity through the owned client seam wh
   runtime.dispose();
 });
 
-it('exposes the agent client background subagent event sink through runtime.sinks', () => {
+it('registers background event observers without replacing the session lifecycle sink', () => {
   const attached: Array<unknown> = [];
   const runtime = createSessionRuntime({
     sessionId: 'background-sink-test',
@@ -391,14 +391,13 @@ it('exposes the agent client background subagent event sink through runtime.sink
     deps: { logger: makeLogger(), sessionContextService },
   });
 
-  // Composition installs its own conversation-scoped sink first; the host is
-  // still reachable through runtime.sinks for anyone who wants to replace it.
+  // Consumer registration must leave the session's lifecycle owner attached.
   expect(attached).toHaveLength(1);
 
   const sink = noop;
   runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(sink);
 
-  expect(attached[attached.length - 1]).toBe(sink);
+  expect(attached).toHaveLength(1);
   runtime.dispose();
 });
 

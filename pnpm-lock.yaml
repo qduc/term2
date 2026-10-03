@@ -309,8 +309,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@qduc/agent-wire':
-        specifier: workspace:*
-        version: link:packages/wire
+        specifier: file:vendor/qduc-agent-wire-0.1.0.tgz
+        version: file:vendor/qduc-agent-wire-0.1.0.tgz
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
@@ -384,66 +384,11 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
 
-  packages/core:
-    dependencies:
-      '@anthropic-ai/sandbox-runtime':
-        specifier: ^0.0.56
-        version: 0.0.56
-      '@openrouter/ai-sdk-provider':
-        specifier: ^2.9.0
-        version: 2.9.0(ai@6.0.177(zod@4.6.5))(zod@4.6.5)
-      '@types/better-sqlite3':
-        specifier: ^9.6.0
-        version: 9.6.0
-      '@types/node-forge':
-        specifier: ^1.3.14
-        version: 1.3.14
-      ai:
-        specifier: ^6.0.177
-        version: 6.0.177(zod@4.6.5)
-      env-paths:
-        specifier: ^3.0.0
-        version: 3.0.0
-      fast-deep-equal:
-        specifier: ^3.1.3
-        version: 3.1.3
-      openai:
-        specifier: ^6.9.1
-        version: 6.37.0(ws@8.21.0)(zod@4.6.5)
-      unbash:
-        specifier: ^3.0.0
-        version: 3.0.0
-      ws:
-        specifier: ^8.21.0
-        version: 8.21.0
-      zod:
-        specifier: ^4.1.13
-        version: 4.6.5
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.10.1
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.1
-        version: '@typescript/typescript6@6.0.1'
-
-  packages/wire:
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.10.1
-      typescript:
-        specifier: npm:@typescript/typescript6@^6.0.1
-        version: '@typescript/typescript6@6.0.1'
-      vitest:
-        specifier: ^4.1.9
-        version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@24.10.1)(@vitest/coverage-v8@4.1.9)(jsdom@27.4.0)(vite@8.0.16(@types/node@24.10.1)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
-
   web-client:
     dependencies:
       '@qduc/agent-wire':
-        specifier: workspace:*
-        version: link:../packages/wire
+        specifier: file:../vendor/qduc-agent-wire-0.1.0.tgz
+        version: file:vendor/qduc-agent-wire-0.1.0.tgz
       highlight.js:
         specifier: ^11.9.0
         version: 11.12.0
@@ -1162,6 +1107,11 @@ packages:
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
 
+  '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.1.0.tgz':
+    resolution: {integrity: sha512-heg//RXoxZv1YkKJDEyizGfMg8BU2fwJqJOw9bMNi+ISDmnlfIONbXLKRHTYSSKR8SVwwXxvrlaI74E7YYoA+A==, tarball: file:vendor/qduc-agent-wire-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=20'}
+
   '@qduc/web-fetch@0.1.4':
     resolution: {integrity: sha512-URfS47JDaA5EIJk3yYy3RZtSWei+oFJQIjYgGr+CXLpNTSVZ10OeOab5ZVagLhcZN/MUTvHh1Gos0/vpb18Lzw==}
     engines: {node: '>=20'}
@@ -1394,9 +1344,6 @@ packages:
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
-
-  '@types/node-forge@1.3.14':
-    resolution: {integrity: sha512-mhVF2BnD4BO+jtOp7z1CdzaK4mbuK0LLQYAvdOLqHTavxFNq4zA1EmYkpnFjP8HOUzedfQkRnp0E2ulSAYSzAw==}
 
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
@@ -3986,13 +3933,6 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.1.13
 
-  '@ai-sdk/gateway@3.0.112(zod@4.6.5)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@4.6.5)
-      '@vercel/oidc': 3.2.0
-      zod: 4.6.5
-
   '@ai-sdk/google@3.0.72(zod@4.1.13)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
@@ -4005,13 +3945,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 4.1.13
-
-  '@ai-sdk/provider-utils@4.0.27(zod@4.6.5)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
-      zod: 4.6.5
 
   '@ai-sdk/provider@3.0.10':
     dependencies:
@@ -4538,16 +4471,13 @@ snapshots:
       ai: 6.0.177(zod@4.1.13)
       zod: 4.1.13
 
-  '@openrouter/ai-sdk-provider@2.9.0(ai@6.0.177(zod@4.6.5))(zod@4.6.5)':
-    dependencies:
-      ai: 6.0.177(zod@4.6.5)
-      zod: 4.6.5
-
   '@opentelemetry/api@1.9.0': {}
 
   '@oxc-project/types@0.133.0': {}
 
   '@pondwader/socks5-server@1.0.10': {}
+
+  '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.1.0.tgz': {}
 
   '@qduc/web-fetch@0.1.4':
     dependencies:
@@ -4721,10 +4651,6 @@ snapshots:
   '@types/minimist@1.2.5': {}
 
   '@types/ms@2.1.0': {}
-
-  '@types/node-forge@1.3.14':
-    dependencies:
-      '@types/node': 24.10.1
 
   '@types/node@18.19.130':
     dependencies:
@@ -4985,14 +4911,6 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.1.13)
       '@opentelemetry/api': 1.9.0
       zod: 4.1.13
-
-  ai@6.0.177(zod@4.6.5):
-    dependencies:
-      '@ai-sdk/gateway': 3.0.112(zod@4.6.5)
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@4.6.5)
-      '@opentelemetry/api': 1.9.0
-      zod: 4.6.5
 
   ajv@6.15.0:
     dependencies:
@@ -6560,11 +6478,6 @@ snapshots:
     optionalDependencies:
       ws: 8.21.0
       zod: 4.1.13
-
-  openai@6.37.0(ws@8.21.0)(zod@4.6.5):
-    optionalDependencies:
-      ws: 8.21.0
-      zod: 4.6.5
 
   optionator@0.9.4:
     dependencies:

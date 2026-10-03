@@ -31,7 +31,6 @@ const exitCode = await buildWithRollback({
   backupDir: fileURLToPath(new URL('../dist.bak/', import.meta.url)),
   backup: process.env.SKIP_BUILD_BACKUP !== '1',
   steps: [
-    run('pnpm', ['--filter', '@qduc/agent-wire', 'build']),
     run('tsc', ['--project', 'tsconfig.build.json']),
     run(process.execPath, ['scripts/write-build-info.mjs']),
     run('pnpm', ['run', 'post-build']),

@@ -5,7 +5,7 @@ description: Authenticating term2 using API keys and browser-based PKCE OAuth.
 
 ## Browser PKCE OAuth
 
-term2 supports official browser-based PKCE OAuth logins for OpenAI Codex / ChatGPT and xAI Grok. This lets you use your existing subscription without managing API keys or creating billing accounts.
+term2 includes browser-based PKCE OAuth logins for OpenAI Codex / ChatGPT and xAI Grok. Provider account eligibility, billing, and usage limits apply. Login stores credentials; choose a model from that provider with `term2 --model` or `/model` before sending a request.
 
 ### Logging in to Grok
 
@@ -35,7 +35,7 @@ When multiple OAuth accounts exist for a provider:
 
 ## Environment Variables (API Keys)
 
-API keys can be provided through standard environment variables:
+API keys can be provided through environment variables. Direct Anthropic and Gemini access also requires a custom provider entry through `/providers` or settings; the variable alone does not register an adapter. See [provider setup](/term2/providers/).
 
 | Provider | Environment Variable |
 | :--- | :--- |

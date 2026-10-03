@@ -1,31 +1,35 @@
 ---
 title: Overview
-description: What is term2 and why choose it for terminal AI workflows.
+description: What to try with term2, how it works, and where to start.
 ---
 
-**term2** is an open-source terminal AI assistant and autonomous agent runtime built for high-velocity software engineering and system administration.
+term2 is an open-source AI assistant that works with files and tools in your terminal or over SSH. It helps you investigate a project, make a change, and check the result in the same conversation.
 
-Combining an interactive React (Ink) terminal user interface with an application-owned agent run loop, term2 provides fine-grained execution safety, native multi-agent delegation, provider-neutral context compaction, and multi-provider support—giving developers complete agency over their workflow without vendor lock-in or subscription gates.
+## Start with a concrete task
 
-## Core Capabilities
+- **Explore a repo:** “Trace how a request reaches the database. Show me the relevant files.” Use read-only Plan mode before making changes.
+- **Fix a small bug:** “Find the cause of this error, propose a fix, and run the focused test.” Review the diff and shell approval requests.
+- **Investigate over SSH:** Connect to a remote working directory and ask the agent to inspect the service or project there.
+- **Continue later:** Resume a saved conversation or fork it to explore another approach.
 
-- **Universal Provider Support**: Native integration with OpenAI (WebSocket Responses and Chat Completions), ChatGPT/Codex OAuth (browser PKCE), xAI Grok (Responses API with encrypted reasoning and OAuth), and OpenRouter, plus custom adapters for Anthropic, Google Gemini, and local OpenAI-compatible endpoints (Ollama, llama.cpp, vLLM).
-- **Fine-Grained Execution Safety**: Sandboxed shell execution with configurable read/write boundaries (`standard` and `strict`), interactive unified diff previews, and run budget caps.
-- **Smart Shell Auto-Approval**: A hybrid heuristic safety evaluator that auto-approves safe read-only and workspace commands, eliminating prompt fatigue while gating risky operations.
-- **Multi-Agent Swarms**: Spawn specialized foreground or background subagents (`explorer`, `worker`, `mentor`, `librarian`) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`).
-- **Provider-Neutral Context Compaction**: Optional compaction via `/compact` and `agent.contextCompaction.enabled`, preserving cold architectural context and hot-tail tool integrity. Session rollover is a separate, enabled-by-default handoff recommendation at token milestones.
-- **Time-Travel Rewind & Forking**: Non-destructive conversation rewinding with discard inspection (`/rewind`, `/undo`, `/retry`), session resumption (`/resume`, `--resume`), and branching (`--fork`).
-- **Native Remote Development**: Execute commands and manage codebases on remote servers seamlessly over SSH with local SSH agent authentication.
-- **Private Web Gateway**: Launch `term2 serve` to expose an authenticated Unix socket or TLS gateway for programmatic control and external clients.
+Follow [installation](/term2/getting-started/installation/), then the [first-run guide](/term2/getting-started/first-run/) for authentication, model selection, and a first read-only task.
 
-## How term2 Works
+## How a session works
 
-When you launch term2 in a project directory:
-1. **Context Discovery**: term2 inspects the workspace root, detects project instructions (e.g., `AGENTS.md`, `CLAUDE.md`), discovers available skills, and establishes the operating profile.
-2. **Interactive Run Loop**: You interact via a composer supporting multi-line editing, `@` file completion, `!` direct shell execution, and `/` slash commands.
-3. **Safe Tool Execution**: When the agent proposes tool actions (such as editing files, running shell commands, or executing sandboxed JavaScript), term2 renders unified diffs or approval prompts before mutation occurs.
-4. **Resilience & Resumption**: All events are saved to append-only logs in your platform's state directory, allowing full resumption or forking anytime.
+Start term2 in the directory you want to work on. Select a model, describe the outcome you want, and inspect the work. Under default interactive settings, shell commands need approval and use a sandbox. Valid local workspace edits can apply without a prompt, so review the resulting diff. You can change those settings; check the active policy before unattended work.
 
-## Project Instructions and Skills
+Sessions are saved for [resumption and branching](/term2/using-term2/sessions/). Hosted models receive the context and tool results used for the request; a local terminal interface does not make hosted inference local. Provider billing and account limits apply.
 
-Instructions are discovered from `AGENTS.md` or `CLAUDE.md` in the project and its parent directories. Skills are searched in project or user scope directories: `.term2/skills`, `.agents/skills`, and `.claude/skills` (under the project root or home directory). A skill is a directory containing a `SKILL.md` file.
+## Choose your setup
+
+OpenAI, ChatGPT/Codex, Grok, and OpenRouter are built in. Direct Anthropic, Gemini, and local endpoints are configured through `/providers`. See [provider setup](/term2/providers/) for the distinction between authentication and adding a provider.
+
+When you need more than a single-agent session, explore [operating modes](/term2/modes/), [subagents](/term2/modes/subagents/), and [SSH](/term2/remote/ssh/). The private [`term2 serve` gateway](/term2/remote/web-gateway/) is an integration service used by external clients, including the separate `web-client/` app; this documentation site is built from `website/`.
+
+## Project instructions and skills
+
+term2 discovers `AGENTS.md` or `CLAUDE.md` in the project and parent directories. It also looks for skills in `.term2/skills`, `.agents/skills`, and `.claude/skills` in project and user scope. A skill is a directory containing a `SKILL.md` file.
+
+## Release or main?
+
+This site tracks `main`. npm's latest release is **0.30.0**, published September 29, 2026 (checked October 3). Main also includes changes that are not in that release. See [what's new](/term2/getting-started/whats-new/) before relying on newer features.

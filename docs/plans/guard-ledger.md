@@ -2524,8 +2524,9 @@ PASS
 
 ## Subagent cancellation identity classification
 
-Status: repaired on 2026-10-03; focused regressions pass. Combined broad gates
-remain the coordinator's responsibility.
+Status: merged on 2026-10-03 in `5e9cc606343475ed18447335712b05637c5c9a86`
+from builder `eecc61592d3e872b3d6f6e1286a9843a0553c325`; combined validation
+passed at `1bb99a1ed67967e56eabdc00f73a5809a11da5d5`.
 
 `services/subagents/utils.ts:isAbortLike` determines cancellation for subagent
 settlement and for `lib/tool-invoke.ts` error propagation. Diagnostic text is
@@ -2554,8 +2555,19 @@ files / 2,814 tests with two expected failures (104.52s and 102.64s command
 elapsed, exit 0, 300s timeout). Typecheck passed (6.63s, exit 0, 180s timeout).
 Scoped ESLint passed with one existing generator warning; formatting and
 `git diff --check` passed. Related/changed emitted `TimeoutNaNWarning` without a
-test failure. Full unit, integration, and provider-black-box validation remain
-pending the combined coordinator gate.
+test failure.
+
+Final combined coordinator validation at the merged revision passed: unit
+699 files / 10,754 tests, three expected failures and two skipped tests
+(167.91s, exit 0, 600s timeout); integration 12 passed files and one skipped
+file / 106 passed tests and one skipped test (41.87s, exit 0, 300s timeout);
+provider-black-box 20 files / 178 passed tests and one skipped test (84.04s,
+exit 0, 600s timeout). Direct Vitest with `NODE_ENV=test` and
+`--changed=6750a988a989b2d0f4b5bb75cf92515df77df7f2` passed 142 files / 2,819
+tests plus two expected failures (69.27s, exit 0, 300s timeout); final typecheck
+passed (5.00s, exit 0, 180s timeout). Two preceding changed-test invocations
+failed before running tests; the corrected explicit-baseline invocation is the
+final changed gate. Merged public classifier and reset probes also passed.
 
 ## Reference: catalogued guards
 
@@ -2982,6 +2994,10 @@ pending approvals, both before and after awaited settlement; timeout 30s.
 
 ### Async reset background callback ownership transfer
 
+Status: merged on 2026-10-03 in `1bb99a1ed67967e56eabdc00f73a5809a11da5d5`
+from builder `05a599e7cc7b7ffd81ce1434ae2851b461c9784d`; combined validation
+passed at that revision.
+
 The pending-disposer compatibility-reset limitation recorded above is addressed
 at `ConversationService.resetWithNewId`. After replacement factory creation
 succeeds, identical client identity transfers ownership of its background
@@ -3036,3 +3052,14 @@ command 45.48s, timeout 300s, terminal exit 0). Scoped ESLint passed with two
 existing warnings (7.49s, timeout 120s, exit 0); changed-file Prettier and
 `git diff --check` passed. No full-suite or provider run is claimed by this
 scoped repair.
+
+The final combined coordinator gate subsequently passed at the merge revision:
+unit 699 files / 10,754 passed tests, three expected failures and two skipped
+tests (167.91s, exit 0, 600s timeout); integration 12 passed files and one
+skipped file / 106 passed tests and one skipped test (41.87s, exit 0, 300s
+timeout); provider-black-box 20 files / 178 passed tests and one skipped test
+(84.04s, exit 0, 600s timeout). Explicit-baseline changed tests passed 142 files
+/ 2,819 tests plus two expected failures (69.27s, exit 0, 300s timeout), and
+typecheck passed (5.00s, exit 0, 180s timeout). The merged public reset probe
+also passed. These combined results supplement the scoped historical evidence
+above; the cancellation section records the corrected changed-gate invocation.

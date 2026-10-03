@@ -232,6 +232,7 @@ export class ConversationService {
 
   #backgroundSubagentNotificationObserver: (() => void) | null = null;
   #backgroundSubagentTaskObserver: (() => void) | null = null;
+  #backgroundSubagentEventSink: ((event: ConversationEvent) => void) | null = null;
 
   /**
    * Observe background (async) subagent runs settling. The observer fires once
@@ -268,7 +269,8 @@ export class ConversationService {
   }
 
   setBackgroundSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
-    this.#clientHandle.agentClient.setBackgroundSubagentEventSink?.(sink);
+    this.#backgroundSubagentEventSink = sink;
+    this.#runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(sink);
   }
 
   answerBackgroundSubagentQuestion(runId: string, messageId: string, answer: string): boolean {
@@ -350,6 +352,7 @@ export class ConversationService {
     // observers so the new conversation still wakes and updates its overview.
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
     this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
+    this.#runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(this.#backgroundSubagentEventSink);
     this.#runtime.pendingInteraction.setObserver(this.#pendingInteractionObserver);
     this.#runtime.nestedApproval.subscribe(this.#nestedApprovalObserver);
     // The new adapter starts with no observers; re-attach the queue lifecycle

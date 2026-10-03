@@ -4,7 +4,11 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
-import type { BackgroundSubagentApprovalPauseSink } from '../subagents/foreground-subagent-lease.js';
+import {
+  ForegroundSubagentLease,
+  type BackgroundSubagentApprovalPauseSink,
+} from '../subagents/foreground-subagent-lease.js';
+import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 
 const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
   createProductionSessionRuntime({
@@ -144,6 +148,130 @@ it('queues async background subagent completions and notifies the observer once 
     expect.objectContaining({ runId: 'run-1', role: 'explorer', status: 'completed' }),
   ]);
 
+  runtime.dispose();
+});
+
+it.each(['completed', 'failed', 'cancelled', 'interrupted'] as const)(
+  'releases terminal %s background run approvals before notifying and keeps sibling decisions fenced',
+  (status) => {
+    const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+    const runtime = createSessionRuntime({
+      sessionId: `bg-approval-${status}`,
+      agentClient: makeClient(sinks),
+      deps: { logger: makeLogger(), sessionContextService },
+    });
+    const terminalApply = vi.fn(() => false);
+    const siblingApply = vi.fn(() => true);
+    const publish = (runId: string, generation: number, apply: () => boolean) =>
+      sinks.approval?.({
+        runId,
+        generation,
+        role: 'worker',
+        interruption: { name: 'shell', callId: `${runId}-${generation}`, arguments: '{}' },
+        apply,
+      });
+    publish('run-a', 1, terminalApply);
+    publish('run-b', 1, siblingApply);
+    publish('run-a', 2, terminalApply);
+    const stale = runtime.backgroundSubagentApprovals.getSnapshot();
+    sinks.background?.(completion('run-a', false));
+    expect(runtime.backgroundSubagentApprovals.getSnapshot()).toBe(stale);
+    const observer = vi.fn(() => {
+      expect(runtime.backgroundSubagentApprovals.getSnapshot()).toMatchObject({
+        current: { runId: 'run-b' },
+        pendingCount: 1,
+      });
+    });
+    runtime.backgroundSubagentNotifications.setObserver(observer);
+    const terminal: ConversationEvent = {
+      type: 'subagent_completed',
+      async: true,
+      result: {
+        agentId: 'run-a',
+        role: 'worker',
+        status,
+        finalText: '',
+        filesChanged: [],
+        toolsUsed: [],
+        ...(status === 'interrupted' ? { terminalCause: 'budget_exhausted' as const } : {}),
+      },
+    };
+    sinks.background?.(terminal);
+    const promoted = runtime.backgroundSubagentApprovals.getSnapshot();
+    expect(promoted).toMatchObject({ current: { runId: 'run-b' }, pendingCount: 1, revision: stale.revision + 1 });
+    expect(
+      runtime.backgroundSubagentApprovals.resolve({
+        revision: stale.revision,
+        entry: stale.current!,
+        decision: { answer: 'y' },
+      }),
+    ).toEqual({ kind: 'stale', reason: 'revision_mismatch' });
+    expect(terminalApply).not.toHaveBeenCalled();
+    expect(siblingApply).not.toHaveBeenCalled();
+    sinks.background?.(terminal);
+    expect(runtime.backgroundSubagentApprovals.getSnapshot()).toBe(promoted);
+    expect(observer).toHaveBeenCalledOnce();
+    expect(
+      runtime.backgroundSubagentApprovals.resolve({
+        revision: promoted.revision,
+        entry: promoted.current!,
+        decision: { answer: 'y' },
+      }),
+    ).toMatchObject({ kind: 'resolved' });
+    expect(siblingApply).toHaveBeenCalledOnce();
+    expect(runtime.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+    sinks.background?.(terminal);
+    expect(runtime.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+    runtime.dispose();
+  },
+);
+
+it('releases the queued pause after its adopted lease is cancelled and terminal settlement arrives', async () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-lease-cancel',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const lease = new ForegroundSubagentLease({ runId: 'cancelled-run' });
+  lease.adopt();
+  const waiting = lease.waitForBackgroundContinuation(
+    createContinuationHandle({ approve: vi.fn(), reject: vi.fn() }),
+    { name: 'shell', callId: 'cancelled-tool', arguments: '{}' },
+    noop,
+    (snapshot) =>
+      sinks.approval?.({
+        ...snapshot,
+        role: 'worker',
+        apply: (callback) => lease.applyBackgroundApproval(snapshot, callback),
+      }),
+  );
+  const stale = runtime.backgroundSubagentApprovals.getSnapshot();
+  expect(stale.pendingCount).toBe(1);
+  lease.cancel();
+  expect(await waiting).toBe(false);
+  // A cancelled continuation refuses a decision, but the terminal event must
+  // release arbitration rather than strand that dead pause at the FIFO head.
+  expect(
+    runtime.backgroundSubagentApprovals.resolve({
+      revision: stale.revision,
+      entry: stale.current!,
+      decision: { answer: 'n' },
+    }),
+  ).toMatchObject({ kind: 'apply_rejected' });
+  sinks.background?.({
+    type: 'subagent_completed',
+    async: true,
+    result: {
+      agentId: 'cancelled-run',
+      role: 'worker',
+      status: 'cancelled',
+      finalText: '',
+      filesChanged: [],
+      toolsUsed: [],
+    },
+  });
+  expect(runtime.backgroundSubagentApprovals.getSnapshot()).toMatchObject({ current: null, pendingCount: 0 });
   runtime.dispose();
 });
 
@@ -590,4 +718,33 @@ it('shutdown retains the subagent sinks until adopted leases settle', async () =
   await shutdown;
   expect(sinks.background).toBeNull();
   expect(sinks.approval).toBeNull();
+});
+
+it('delivers every subagent lifecycle event to the observer without leaking shared shell events', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'observer-domain',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const observed = vi.fn();
+  runtime.sinks.subagentEvents?.setBackgroundSubagentEventSink?.(observed);
+  const started = start('run-a');
+  const asked = question('question-a', 'run-a');
+  const completed = completion('run-a');
+  sinks.background?.(started);
+  sinks.background?.(asked);
+  sinks.background?.(completed);
+  sinks.background?.(completed);
+  sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-a', command: 'pwd' });
+  sinks.shell?.({
+    type: 'background_shell_completed',
+    jobId: 'shell-a',
+    command: 'pwd',
+    status: 'completed',
+    output: '',
+  });
+  expect(observed.mock.calls).toEqual([[started], [asked], [completed], [completed]]);
+  expect(runtime.backgroundSubagentNotifications.pendingCount).toBe(3);
+  runtime.dispose();
 });

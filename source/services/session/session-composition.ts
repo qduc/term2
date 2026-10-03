@@ -178,7 +178,7 @@ export type SessionRuntimeInternals = {
   journal: AssistantTurnJournal;
   /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
-  /** @internal Resolved subagent event sink host (derived from option or agent client). */
+  /** @internal Session-owned sink facade; background registration observes lifecycle events. */
   resolvedSubagentEventSinkHost: SubagentEventSinkHost | null;
   /** @internal Root shell lifecycle sink; nested runtimes omit this port. */
   resolvedBackgroundShellEventSinkHost: Pick<ConversationAgentClient, 'setBackgroundShellEventSink'> | null;
@@ -470,6 +470,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const notificationStore = new SubagentNotificationStore();
   let notificationObserver: (() => void) | null = null;
   let taskObserver: (() => void) | null = null;
+  let backgroundSubagentEventObserver: ((event: ConversationEvent) => void) | null = null;
   const backgroundSubagentNotifications: BackgroundSubagentNotificationChannel = {
     get pendingCount() {
       return notificationStore.pendingCount;
@@ -654,6 +655,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // same projection and delivery queue, while their concrete registries retain
   // process/run ownership.
   const recordBackgroundEvent = (event: ConversationEvent) => {
+    if (event.type === 'subagent_completed' && event.async === true) {
+      backgroundSubagentApprovals.removeRun(event.result.agentId);
+    }
     conversationLogger.dispatchEventToLog(event);
     if (notificationStore.recordLifecycle(event)) {
       try {
@@ -669,6 +673,20 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     }
     if (event.type.startsWith('background_shell_')) {
       syncPublicStatus();
+    }
+    // The host observer sees all subagent events, including starts and duplicate
+    // completions. Root shell events share this owner but use a separate channel.
+    if (event.type.startsWith('subagent_')) {
+      try {
+        backgroundSubagentEventObserver?.(event);
+      } catch (error) {
+        logger.warn('Background subagent event observer threw', {
+          eventType: 'subagent.event_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     if (!notificationStore.enqueue(event)) return;
     try {
@@ -999,23 +1017,31 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     notificationObserver = null;
     taskObserver = null;
     const subagentDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundSubagents')?.call(agentClient);
-    backgroundSubagentSettlement = subagentDisposal
-      ? Promise.resolve(subagentDisposal).finally(() => {
-          backgroundSubagentApprovals.close();
-          resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
-          resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
-        })
-      : Promise.resolve().then(() => {
-          backgroundSubagentApprovals.close();
-          resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
-          resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
-        });
+    const detachSubagentSinks = (): void => {
+      // Persistence observers need terminal events through asynchronous shutdown.
+      backgroundSubagentEventObserver = null;
+      backgroundSubagentApprovals.close();
+      resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
+      resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+    };
+    if (subagentDisposal) {
+      backgroundSubagentSettlement = Promise.resolve(subagentDisposal).finally(detachSubagentSinks);
+    } else {
+      // Without a disposal promise there is no settlement left to await. A
+      // deferred detach could erase a replacement session's reused client sinks.
+      detachSubagentSinks();
+      backgroundSubagentSettlement = Promise.resolve();
+    }
     const shellDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundShellJobs')?.call(agentClient);
-    backgroundShellSettlement = shellDisposal
-      ? Promise.resolve(shellDisposal).finally(() =>
-          resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null),
-        )
-      : Promise.resolve().then(() => resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null));
+    const detachShellSink = (): void => {
+      resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null);
+    };
+    if (shellDisposal) {
+      backgroundShellSettlement = Promise.resolve(shellDisposal).finally(detachShellSink);
+    } else {
+      detachShellSink();
+      backgroundShellSettlement = Promise.resolve();
+    }
     providerContinuity.clear();
     pendingInteraction.clear();
     nestedApprovalOwner.close();
@@ -1234,7 +1260,21 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     journal,
     resolvedAskUserAnswerSink,
-    resolvedSubagentEventSinkHost,
+    resolvedSubagentEventSinkHost: resolvedSubagentEventSinkHost
+      ? {
+          setSubagentEventSink: resolvedSubagentEventSinkHost.setSubagentEventSink.bind(resolvedSubagentEventSinkHost),
+          setBackgroundSubagentEventSink: (sink) => {
+            if (!disposed) backgroundSubagentEventObserver = sink;
+          },
+          setBackgroundShellEventSink:
+            resolvedSubagentEventSinkHost.setBackgroundShellEventSink?.bind(resolvedSubagentEventSinkHost),
+          setBackgroundSubagentApprovalPauseSink:
+            resolvedSubagentEventSinkHost.setBackgroundSubagentApprovalPauseSink?.bind(resolvedSubagentEventSinkHost),
+          answerBackgroundSubagentQuestion:
+            resolvedSubagentEventSinkHost.answerBackgroundSubagentQuestion?.bind(resolvedSubagentEventSinkHost),
+          cancelSubagentRuns: resolvedSubagentEventSinkHost.cancelSubagentRuns?.bind(resolvedSubagentEventSinkHost),
+        }
+      : null,
     resolvedBackgroundShellEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,

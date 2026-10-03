@@ -88,7 +88,6 @@ total-run containment is unchanged. See
 The old lifetime allowed 15 minutes of successful work after a recovered failure
 to expire the next unrelated recovery before its first replacement request.
 
-
 The retry/recovery budget contract is that ordinary successful tool-loop
 continuations do not consume the physical recovery-attempt allowance. Recovery
 handlers claim the physical dispatch when they schedule a `retry_fresh` plan,
@@ -1789,7 +1788,6 @@ Verification: deterministic delayed-worker red/green, typecheck, provider
 black-box 177 passed / 1 skipped; isolated full suite 8,053 passed / 5 known
 failures (nested approval and file-tool workspace boundaries), not green.
 
-
 Disposition: **repaired on branch `retry-recovery-contract`; seven commits,
 pending merge to main.**
 
@@ -2759,3 +2757,190 @@ and user-input restoration. Rollback is confined to the planner refusal,
 preparer presentation, and these tests. The unresolved source-event coverage,
 legacy undo/snapshot equivalence, and portable reconstruction remain M2/M4 work;
 this interim refusal does not close those semantic gaps.
+
+## Terminal background subagent approval arbitration release (October 3)
+
+Disposition: repaired on `codex/reliability-approval-release`, pending merge.
+A cancelled adopted lease correctly refused stale application and released its
+tool attribution, but its session approval entry remained at the FIFO head.
+Repeated UI answers returned `apply_rejected` and prevented sibling approvals
+from becoming visible. This is an arbitration retention defect, not an
+attribution leak or an authority-policy change.
+
+```text
+Harm prevented: terminal child approvals blocking live sibling approvals.
+Scope and execution paths: adopted background subagents, including completed, failed, cancelled, and terminal containment outcomes.
+Guard class: lifecycle retention cleanup.
+Enforcement owner: BackgroundSubagentApprovalQueue.removeRun.
+Recovery owner: session-composition recordBackgroundEvent via BackgroundSubagentApprovalController.
+Measured signal and observation boundary: async subagent_completed event and result.agentId at the session-owned background sink.
+Direct evidence or proxy: direct terminal lifecycle evidence, no timeout or count proxy.
+Legitimate work that can produce the same signal: none under the terminal-event contract; foreground completions do not release background entries.
+Configuration sources and precedence: none.
+Effective default and clamping: none; no new limit.
+Action and why the signal justifies it: release every queued pause for the settled run, publish a new revision, preserve sibling FIFO order.
+Partial-work settlement: retained child result and notification delivery are unchanged; no approval answer is manufactured.
+Retry, fallback, and provider-continuity semantics: unchanged; nothing is restarted or replayed.
+Observability fields: existing approval revision/current/pendingCount and terminal notification.
+Persisted-setting migration, if any: none.
+Rollback boundary: queue run removal, controller forwarding, session terminal hook, and regression tests.
+Ledger row: terminal background approval arbitration retention.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/approval/background-subagent-approval-queue.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 6 new tests; 51 existing tests passed. Duration 3.59s, terminal exit 1.
+Terminal composition cases retained run-a at head with pendingCount=3
+instead of promoting run-b with pendingCount=1.
+```
+
+Detection gap: queue tests covered exact-entry removal and session closure;
+composition tests covered terminal notification delivery and deduplication.
+Neither connected terminal settlement to approval retention. The repair adds
+a terminal-status matrix, stale-action fencing, hidden-entry removal, release
+callback failures, duplicate completions, real adopted-lease cancellation, and
+reentrant terminalization during resolution. Run cleanup advances arbitration
+before terminal observers run; successful resolution consumes its original
+entry only if it still owns the head.
+
+Sibling audit: `SubagentAsyncRegistry.#settle` and adopted `NestedSubagentRunner`
+success/failure paths all use the async `subagent_completed` lane. Foreground
+completions use the foreground lane, and session disposal already closes the
+queue. The lease's pending-release callback already handles tool attribution.
+No provider, run-loop, registry, or non-interactive implementation is changed.
+
+Verification (all terminal exit 0, finite timeouts):
+
+- Final focused queue and composition tests: 59 passed; Vitest 3.53s,
+  command elapsed 5.35s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts`:
+  75 files passed; 1191 tests passed, one expected failure; Vitest 77.21s,
+  command elapsed 98.28s, timeout 300s.
+- `pnpm test:changed`: same 75 files and 1191 passing tests, one expected
+  failure; Vitest 70.67s, command elapsed 91.33s, timeout 300s.
+- `pnpm typecheck`: passed, command elapsed 13.56s, timeout 180s.
+- Scoped ESLint: passed, command elapsed 16.64s, timeout 120s.
+- Scoped Prettier check: passed, command elapsed 4.72s, timeout 120s.
+
+These are narrow handoff gates. No full-suite or provider-black-box run was
+required or claimed for this session approval arbitration fix.
+
+### Gateway background event observer ownership addendum
+
+Review found that `Gateway` registers `ConversationService.setBackgroundSubagentEventSink`,
+which forwarded directly to the client and replaced the session lifecycle sink.
+The original queue/composition tests did not exercise this public facade path.
+The retained FIFO defect therefore remained reachable after gateway registration.
+
+The session's `sinks.subagentEvents` now wraps background registration as one
+secondary observer while keeping its lifecycle sink attached. Foreground and
+other host methods retain bound forwarding. The service stores the observer
+alongside its task/notification observers and reattaches it on session reset.
+Null registration removes only the observer; disposal clears it with the
+lifecycle sink after adopted terminal settlement. Without an async disposer,
+both detach synchronously.
+
+The observer receives every subagent lifecycle event, including starts, questions
+and duplicate completions, before notification enqueue deduplication can return.
+The shared owner excludes root shell events from this observer channel. Observer
+exceptions are logged and isolated from notification delivery. Terminal approval
+release remains before logging and external callbacks. No gateway, provider,
+registry or client-bridge change, additional bus, mirrored state, or new limit is
+introduced. The existing public setter signature is unchanged.
+
+Red proof before the addendum production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/conversation/conversation-service.facade.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 5 tests; 75 existing tests passed. Duration 1.97s, terminal exit 1.
+Public registration replaced recordBackgroundEvent; throwing observers escaped;
+reset lost the background observer; runtime registration replaced its owner;
+task/notification projection stopped receiving subagent events.
+```
+
+The prevention artifact now tests the real production service facade and runtime
+composition together, rather than only invoking the composition sink directly.
+The obsolete composition test promising raw sink replacement was changed to
+assert observer registration preserves the session lifecycle owner.
+
+Reset follow-up: the caller-owned compatibility factory intentionally reuses the
+same client. With no async disposer, the old runtime deferred sink detachment by
+one microtask and erased the replacement session's newly attached subagent and
+shell callbacks. The no-disposer cleanup branches now detach synchronously;
+real async disposal still retains lifecycle sinks until its promise settles.
+No incarnation tokens or additional ownership maps are needed. Factory-owned
+and caller-owned reset tests assert both channels survive and old observers are
+replaced. The existing adopted-lease shutdown test retains its delayed sink
+detachment assertion.
+
+Additional red evidence before changing disposal:
+`NODE_ENV=test timeout 120s pnpm exec vitest run source/services/conversation/conversation-service.facade.test.ts --testNamePattern='background event observer.*session reset' --reporter=minimal`
+failed only the caller-owned reset row (observer calls 0); factory-owned row
+passed. Vitest 1.61s, terminal exit 1. The old no-disposer microtask cleared the
+shared client callback.
+
+Addendum verification (finite timeouts, terminal exit 0):
+
+- Focused queue/facade/composition/notification tests: 96 passed; Vitest 2.00s,
+  command elapsed 3.14s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts ./source/services/conversation/conversation-service.ts`:
+  75 files passed; 1196 tests passed, one expected failure; Vitest 56.38s,
+  command elapsed 66.06s, timeout 300s.
+- `pnpm test:changed`: 71 files passed; 1167 tests passed, one expected failure;
+  Vitest 53.20s, command elapsed 64.00s, timeout 300s. This gate compares
+  against the initial fix commit; related and focused gates also cover queue
+  contracts from that commit.
+- `pnpm typecheck`: passed, command elapsed 6.66s, timeout 180s.
+- Scoped ESLint: exit 0, command elapsed 10.10s, timeout 120s; existing
+  `require-yield` and `no-this-alias` warnings remain outside changed lines.
+- Scoped Prettier: passed, command elapsed 2.70s, timeout 120s.
+- Independent production facade probes: gateway registration observed one
+  completion with pendingCount=0; no-disposer compatibility reset retained a
+  function callback and observed one subsequent completion. Both exit 0.
+
+Scope limitation: factory-owned replacement and no-disposer compatibility reset
+are covered. Reusing the same client while an old real async disposer is still
+pending can require a wider client-incarnation contract; that pre-existing case
+is not claimed fixed here. Async shutdown itself still retains sinks until
+adopted settlement, as asserted by the existing lifecycle test.
+
+### Shutdown persistence observer correction
+
+Further review found that the first observer addendum cleared its secondary
+event observer immediately on disposal while retaining the raw lifecycle sink
+through async settlement. Gateway uses this observer to persist events and
+awaits session shutdown before closing persistence. Terminal approvals were
+released but their shutdown completion events were missing from persistence.
+
+The event observer now clears inside `detachSubagentSinks`, after the real async
+disposer settles (synchronously when no disposer exists). UI task and notification
+observers still clear immediately. No additional state or machinery is required.
+The public facade regression gates a real disposal promise, publishes a terminal
+event during shutdown, verifies both approval release and observer delivery,
+and verifies post-settlement events cannot reach the detached observer.
+
+Red: the targeted new facade test failed with observer calls 0; 36 existing
+tests skipped. Vitest 1.58s, command 2.70s, timeout 120s, terminal exit 1.
+Focused green: queue/facade/composition/notification tests, 97 passed; Vitest
+1.96s, command 3.09s, timeout 120s, terminal exit 0.
+
+Retro: this was an introduced lifecycle regression in the observer wrapper;
+the previous async shutdown test asserted raw sink retention but did not register
+the public persistence observer. The new facade test covers that consumer
+boundary, including different UI and persistence teardown timing.
+
+Follow-up handoff gates (finite timeouts, terminal exit 0): related composition
+and changed each passed 71 files, 1168 tests plus one expected failure. Related
+Vitest 35.81s / command 48.24s; changed Vitest 35.03s / command 42.53s; each
+timeout 300s. Typecheck 8.51s, timeout 180s; scoped ESLint 11.41s (one existing
+facade `require-yield` warning), timeout 120s; Prettier 1.71s, timeout 120s.
+Production shutdown probe now observes one terminal completion with zero
+pending approvals, both before and after awaited settlement; timeout 30s.

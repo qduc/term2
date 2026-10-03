@@ -230,8 +230,12 @@ export class BackgroundSubagentApprovalQueue {
       this.#resolving = undefined;
     }
     if (application.kind !== 'applied') return { kind: 'apply_rejected', entry: current.entry };
-    this.#pending.shift();
-    this.#changed();
+    // A terminal event may release this run synchronously inside application.
+    // Never consume the sibling promoted by that lifecycle cleanup.
+    if (this.#pending[0] === current) {
+      this.#pending.shift();
+      this.#changed();
+    }
     return { kind: 'resolved', entry: current.entry, decision };
   }
 
@@ -268,6 +272,18 @@ export class BackgroundSubagentApprovalQueue {
       revision: this.#revision,
       ...(releaseErrors.length > 0 ? { releaseErrors } : {}),
     };
+  }
+
+  /**
+   * Releases all pauses belonging to a terminal run, including hidden entries.
+   * Lifecycle owners identify the run; UI actions still use revision fencing.
+   */
+  removeRun(runId: string): readonly unknown[] {
+    const removed = this.#pending.filter((pending) => pending.entry.runId === runId);
+    if (removed.length === 0) return Object.freeze([]);
+    this.#pending = this.#pending.filter((pending) => pending.entry.runId !== runId);
+    this.#changed();
+    return this.#release(removed, { kind: 'removed' });
   }
 
   /**

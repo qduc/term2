@@ -51,6 +51,10 @@ export class BackgroundSubagentApprovalController {
     return this.#queue.close();
   }
 
+  removeRun(runId: string): readonly unknown[] {
+    return this.#queue.removeRun(runId);
+  }
+
   resolve(request: BackgroundSubagentApprovalResolutionRequest) {
     return this.#queue.resolve(request);
   }

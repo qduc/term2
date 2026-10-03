@@ -62,8 +62,11 @@ const emptyConversations = async (): Promise<ConversationListEntry[]> => [];
 
 const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
   const enabled = props.enabled ?? true;
-  const { controller, interactions, stack, cursorOffset, cursorOverride, setCursorOverride } = useInputContext();
+  const { controller, interactions, stack, cursorOffset, cursorOverride, setCursorOverride, inputReplacementRevision } =
+    useInputContext();
   const historyNavigation = useInputHistory(props.historyService);
+  const { reset: resetHistory } = historyNavigation;
+  useEffect(() => resetHistory(), [inputReplacementRevision, resetHistory]);
   const slash = useSlashCommands({ commands: props.slashCommands, onClose: () => {} });
   const path = usePathCompletion({ loggingService: props.loggingService });
   const settings = useSettingsCompletion(props.settingsService);

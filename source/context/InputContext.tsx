@@ -8,6 +8,7 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ImageRef } from 'ink-prompt';
+import type { UserTurn } from '../types/user-turn.js';
 import { MenuControllerImpl } from '../components/input/menu-controller.js';
 import { createDefaultTriggerRegistry } from '../components/input/triggers.js';
 import type { MenuController, MenuFrame, MenuInteractionRegistry, MenuState } from '../components/input/menu-types.js';
@@ -86,6 +87,17 @@ function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): InputMode {
   }
 }
 
+export type QueueInputState = {
+  selectionIndex: number | null;
+  editing: {
+    id: string;
+    turn: UserTurn;
+    restoreDraft: UserTurn;
+    restoreCursor: number;
+  } | null;
+  notice: string | null;
+};
+
 interface InputState {
   input: string;
   stack: MenuState['stack'];
@@ -93,6 +105,8 @@ interface InputState {
   cursorOffset: number;
   triggerIndex: number | null;
   images: ImageRef[];
+  queueInput: QueueInputState;
+  inputReplacementRevision: number;
   cursorOverride: number | null;
   controller: MenuController;
   interactions: MenuInteractionRegistry;
@@ -100,6 +114,7 @@ interface InputState {
 }
 
 interface InputActions {
+  setQueueInput: React.Dispatch<React.SetStateAction<QueueInputState>>;
   setInput: (value: string) => void;
   replaceInput: (value: string) => void;
   setCursorOffset: (offset: number) => void;
@@ -129,6 +144,9 @@ export const InputProvider = ({
   const getSnapshot = useCallback(() => controller.getSnapshot(), [controller]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+  // Composer interaction state must outlive the editor/menu and modal cutovers.
+  const [queueInput, setQueueInput] = useState<QueueInputState>({ selectionIndex: null, editing: null, notice: null });
+  const [inputReplacementRevision, setInputReplacementRevision] = useState(0);
   const [images, setImages] = useState<ImageRef[]>([]);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const [menuPromptLabel, setMenuPromptLabel] = useState<string | undefined>(undefined);
@@ -163,6 +181,10 @@ export const InputProvider = ({
 
   const replaceInput = useCallback(
     (value: string) => {
+      // External replacement (clear, resume, restored turn, etc.) starts a new
+      // composer interaction. Menu edits use the controller directly instead.
+      setQueueInput({ selectionIndex: null, editing: null, notice: null });
+      setInputReplacementRevision((revision) => revision + 1);
       controller.replaceText(value);
     },
     [controller],
@@ -176,6 +198,8 @@ export const InputProvider = ({
       cursorOffset,
       triggerIndex,
       images,
+      queueInput,
+      inputReplacementRevision,
       cursorOverride,
       controller,
       interactions,
@@ -188,6 +212,8 @@ export const InputProvider = ({
       cursorOffset,
       triggerIndex,
       images,
+      queueInput,
+      inputReplacementRevision,
       cursorOverride,
       controller,
       interactions,
@@ -198,6 +224,7 @@ export const InputProvider = ({
   const actions = useMemo<InputActions>(
     () => ({
       setInput,
+      setQueueInput,
       replaceInput,
       setCursorOffset,
       setImages,

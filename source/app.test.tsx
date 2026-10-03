@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNode } from '../node_modules/ink/build/dom.js';
 import reconciler from '../node_modules/ink/build/reconciler.js';
 import App from './app.js';
+import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { renderInAct, rerenderInAct } from './test-helpers/ink-testing.js';
+import { MenuControllerImpl } from './components/input/menu-controller.js';
 
 const mocks = vi.hoisted(() => ({
   bottomAreaProps: null as any,
@@ -82,6 +84,7 @@ const mocks = vi.hoisted(() => ({
   menuController: {
     open: vi.fn(),
     setIntentHost: vi.fn(),
+    getSnapshot: vi.fn(),
   },
   conversationState: {
     pendingApproval: null as { toolName?: string; checkIn?: string } | null,
@@ -428,6 +431,11 @@ beforeEach(() => {
   mocks.registerSandboxNetworkApprovalHandler.mockClear();
   mocks.menuController.open.mockReset();
   mocks.menuController.setIntentHost.mockReset();
+  mocks.menuController.getSnapshot.mockReset();
+  mocks.menuController.getSnapshot.mockImplementation(() => ({
+    editor: { text: mocks.inputValue, cursor: mocks.inputValue.length, revision: 1 },
+    stack: [],
+  }));
   mocks.conversationState.pendingApproval = null;
   mocks.conversationState.waitingForApproval = false;
   mocks.conversationState.waitingForRejectionReason = false;
@@ -927,6 +935,79 @@ describe('App orchestration', () => {
     );
   });
 
+  it.sequential(
+    'keys background approval shortcuts by execution identity, not presentation or queue revision',
+    async () => {
+      const entry = {
+        runId: 'background-1',
+        generation: 1,
+        toolCallId: 'call-1',
+        toolName: 'shell',
+        argumentsText: '{"command":"pwd"}',
+      };
+      mocks.conversationState.backgroundSubagentApproval = {
+        revision: 1,
+        current: entry,
+        pendingCount: 1,
+        closed: false,
+      };
+      const services = createServices();
+      const app = <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />;
+      const view = await renderInAct(app);
+      const identity = () => vi.mocked(useAppKeyboardShortcuts).mock.calls.at(-1)![0].approvalShortcutIdentity;
+      const initialIdentity = identity();
+      expect(initialIdentity).not.toBeNull();
+
+      mocks.conversationState.backgroundSubagentApproval = {
+        revision: 2,
+        current: { ...entry, metadata: { label: 'updated' } },
+        pendingCount: 2,
+        closed: false,
+      };
+      await rerenderInAct(view, React.cloneElement(app));
+      expect(identity()).toBe(initialIdentity);
+
+      for (const replacement of [
+        { ...entry, runId: 'background-2' },
+        { ...entry, generation: 2 },
+        { ...entry, toolCallId: 'call-2' },
+        { ...entry, toolName: 'read_file' },
+        { ...entry, argumentsText: '{"command":"ls"}' },
+      ]) {
+        mocks.conversationState.backgroundSubagentApproval = {
+          revision: 3,
+          current: replacement,
+          pendingCount: 1,
+          closed: false,
+        };
+        await rerenderInAct(view, React.cloneElement(app));
+        expect(identity()).not.toBe(initialIdentity);
+      }
+    },
+  );
+
+  it.sequential('keys nested approval shortcuts by request rather than rebuilt presentation', async () => {
+    mocks.conversationState.nestedApproval = {
+      requestId: 'nested-1',
+      preparedArguments: { path: '/workspace/actual.txt' },
+      approval: { agentName: 'Nested', toolName: 'read_file', argumentsText: '{}', rawInterruption: null },
+    };
+    const services = createServices();
+    const app = <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />;
+    const view = await renderInAct(app);
+    const identity = () => vi.mocked(useAppKeyboardShortcuts).mock.calls.at(-1)![0].approvalShortcutIdentity;
+    const initialIdentity = identity();
+    expect(initialIdentity).not.toBeNull();
+
+    mocks.conversationState.nestedApproval = { ...mocks.conversationState.nestedApproval };
+    await rerenderInAct(view, React.cloneElement(app));
+    expect(identity()).toBe(initialIdentity);
+
+    mocks.conversationState.nestedApproval = { ...mocks.conversationState.nestedApproval, requestId: 'nested-2' };
+    await rerenderInAct(view, React.cloneElement(app));
+    expect(identity()).not.toBe(initialIdentity);
+  });
+
   it.sequential('projects prepared nested tool arguments into the approval prompt', async () => {
     mocks.conversationState.nestedApproval = {
       requestId: 'nested-arguments',
@@ -1022,6 +1103,7 @@ describe('App orchestration', () => {
   });
 
   it.sequential('routes a controller submit-prompt intent through admission', async () => {
+    mocks.inputValue = 'From menu';
     const services = createServices();
     await renderInAct(
       <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
@@ -1094,6 +1176,9 @@ describe('App orchestration', () => {
   });
 
   it.sequential('clears submitted composer text before a slow admission completes', async () => {
+    const controller = new MenuControllerImpl({ initialText: 'Send this' });
+    mocks.menuController.getSnapshot.mockImplementation(() => controller.getSnapshot());
+    mocks.replaceInput.mockImplementation((text: string) => controller.replaceText(text));
     let complete: (() => void) | undefined;
     mocks.submitTurnForAdmission.mockReturnValue({
       kind: 'submitted',
@@ -1116,10 +1201,72 @@ describe('App orchestration', () => {
     });
 
     expect(mocks.replaceInput).toHaveBeenCalledWith('');
+    expect(controller.getSnapshot().editor.text).toBe('');
     expect(settled).toBe(false);
+    controller.replaceText('Next draft');
     complete?.();
     await submission;
+    expect(controller.getSnapshot().editor.text).toBe('Next draft');
   });
+
+  it.sequential.each(['steer', 'follow_up'] as const)(
+    'preserves the current draft when a deferred queued-edit fallback submits older text (%s)',
+    async (busyMode) => {
+      const turn = { text: 'Edited queued message' };
+      const controller = new MenuControllerImpl({ initialText: turn.text });
+      mocks.menuController.getSnapshot.mockImplementation(() => controller.getSnapshot());
+      mocks.replaceInput.mockImplementation((text: string) => controller.replaceText(text));
+      const services = createServices();
+      await renderInAct(
+        <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+      );
+      const deferredSubmit = mocks.bottomAreaProps.onSubmit;
+
+      // A too-late queued edit calls the captured onSubmit after the user has
+      // started another draft. Do not rerender: the controller is authoritative.
+      controller.replaceText('A new unrelated draft', 6);
+      const newDraft = controller.getSnapshot().editor;
+      await act(async () => {
+        await deferredSubmit(turn, { busyMode });
+      });
+
+      expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith(turn, { busyMode });
+      expect(controller.getSnapshot().editor).toEqual(newDraft);
+      expect(mocks.replaceInput).not.toHaveBeenCalled();
+    },
+  );
+
+  it.sequential.each(['A new unrelated draft', 'Send this'])(
+    'preserves a replacement draft typed during pre-admission routing (%s)',
+    async (newText) => {
+      let finishRouting: ((handled: boolean) => void) | undefined;
+      mocks.submitConversationTurn.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          finishRouting = resolve;
+        }),
+      );
+      const controller = new MenuControllerImpl({ initialText: 'Send this' });
+      mocks.menuController.getSnapshot.mockImplementation(() => controller.getSnapshot());
+      mocks.replaceInput.mockImplementation((text: string) => controller.replaceText(text));
+      const services = createServices();
+      await renderInAct(
+        <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+      );
+      const submission = mocks.bottomAreaProps.onSubmit({ text: 'Send this' });
+
+      controller.replaceText('');
+      controller.replaceText(newText, 4);
+      const newDraft = controller.getSnapshot().editor;
+      await act(async () => {
+        finishRouting?.(false);
+        await submission;
+      });
+
+      expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith({ text: 'Send this' });
+      expect(controller.getSnapshot().editor).toEqual(newDraft);
+      expect(mocks.replaceInput).not.toHaveBeenCalled();
+    },
+  );
 
   it.sequential('clears matched approval composer state before a slow admission completes', async () => {
     let complete: (() => void) | undefined;
@@ -1153,6 +1300,7 @@ describe('App orchestration', () => {
   });
 
   it.sequential('preserves an admission completion rejection for the submit caller', async () => {
+    mocks.inputValue = 'Send this';
     const failure = new Error('send failed');
     let rejectCompletion: ((error: Error) => void) | undefined;
     mocks.submitTurnForAdmission.mockReturnValue({

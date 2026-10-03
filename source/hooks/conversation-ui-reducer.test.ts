@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import type { PendingApproval } from '../contracts/conversation.js';
+import type { UserTurn } from '../types/user-turn.js';
 import {
   conversationUIReducer,
   createInitialUIState,
@@ -546,11 +547,47 @@ it('queue/message_pending appends to pendingQueuedMessages', () => {
   const next = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'hello',
+    turn: { text: 'hello' },
     delivery: 'follow_up',
     queuedAt: 1000,
   });
-  expect(next.pendingQueuedMessages).toEqual([{ id: 'm-1', text: 'hello', delivery: 'follow_up', queuedAt: 1000 }]);
+  expect(next.pendingQueuedMessages).toEqual([
+    { id: 'm-1', turn: { text: 'hello' }, text: 'hello', delivery: 'follow_up', queuedAt: 1000 },
+  ]);
+});
+
+it('queue projection retains image-only payloads and replaces removed attachments on edit', () => {
+  const turn: UserTurn = {
+    text: '',
+    images: [{ id: 'image-1', data: 'image-bytes', mimeType: 'image/png', byteSize: 11, displayNumber: 1 }],
+    skill: { name: 'inspect', description: 'Inspect images', body: 'Read the attached image.' },
+  };
+  const pending = conversationUIReducer(createInitialUIState(null), {
+    type: 'queue/message_pending',
+    id: 'image-only',
+    turn,
+    delivery: 'steer',
+    queuedAt: 1,
+  });
+  expect(pending.pendingQueuedMessages).toEqual([
+    { id: 'image-only', turn, text: '[Skill: inspect]\n[1 image attached]', delivery: 'steer', queuedAt: 1 },
+  ]);
+
+  const edited = conversationUIReducer(pending, {
+    type: 'queue/message_edited',
+    id: 'image-only',
+    turn: { text: 'plain text instead' },
+  });
+  expect(edited.pendingQueuedMessages).toEqual([
+    {
+      id: 'image-only',
+      turn: { text: 'plain text instead' },
+      text: 'plain text instead',
+      delivery: 'steer',
+      queuedAt: 1,
+    },
+  ]);
+  expect(pending.pendingQueuedMessages[0]!.turn).toEqual(turn);
 });
 
 it('queue/message_pending accumulates multiple pending messages in order', () => {
@@ -558,14 +595,14 @@ it('queue/message_pending accumulates multiple pending messages in order', () =>
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-2',
-    text: 'second',
+    turn: { text: 'second' },
     delivery: 'follow_up',
     queuedAt: 2,
   });
@@ -579,14 +616,14 @@ it('queue/message_started removes the matching id from pendingQueuedMessages', (
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-2',
-    text: 'second',
+    turn: { text: 'second' },
     delivery: 'follow_up',
     queuedAt: 2,
   });
@@ -599,21 +636,21 @@ it('queue/message_started preserves other pending messages', () => {
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-2',
-    text: 'second',
+    turn: { text: 'second' },
     delivery: 'follow_up',
     queuedAt: 2,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-3',
-    text: 'third',
+    turn: { text: 'third' },
     delivery: 'follow_up',
     queuedAt: 3,
   });
@@ -626,21 +663,21 @@ it('queue/message_removed clears only the matching pending row', () => {
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-2',
-    text: 'second',
+    turn: { text: 'second' },
     delivery: 'follow_up',
     queuedAt: 2,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-3',
-    text: 'third',
+    turn: { text: 'third' },
     delivery: 'follow_up',
     queuedAt: 3,
   });
@@ -655,26 +692,30 @@ it('queue/message_edited updates only the matching pending row, preserving posit
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-2',
-    text: 'second',
+    turn: { text: 'second' },
     delivery: 'follow_up',
     queuedAt: 2,
   });
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-3',
-    text: 'third',
+    turn: { text: 'third' },
     delivery: 'follow_up',
     queuedAt: 3,
   });
 
-  const next = conversationUIReducer(state, { type: 'queue/message_edited', id: 'm-2', text: 'second, edited' });
+  const next = conversationUIReducer(state, {
+    type: 'queue/message_edited',
+    id: 'm-2',
+    turn: { text: 'second, edited' },
+  });
 
   expect(next.pendingQueuedMessages.map((message) => [message.id, message.text])).toEqual([
     ['m-1', 'first'],
@@ -691,11 +732,11 @@ it('queue/message_edited is a no-op when the id is not pending', () => {
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
-  const next = conversationUIReducer(state, { type: 'queue/message_edited', id: 'unknown', text: 'edited' });
+  const next = conversationUIReducer(state, { type: 'queue/message_edited', id: 'unknown', turn: { text: 'edited' } });
   expect(next).toBe(state);
 });
 
@@ -704,7 +745,7 @@ it('queue/message_started is a no-op when the id is not pending', () => {
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });
@@ -717,14 +758,16 @@ it('queue/message_reclassified updates delivery without changing position or tex
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'steer me',
+    turn: { text: 'steer me' },
     delivery: 'steer',
     queuedAt: 1,
   });
 
   const next = conversationUIReducer(state, { type: 'queue/message_reclassified', id: 'm-1', delivery: 'follow_up' });
 
-  expect(next.pendingQueuedMessages).toEqual([{ id: 'm-1', text: 'steer me', delivery: 'follow_up', queuedAt: 1 }]);
+  expect(next.pendingQueuedMessages).toEqual([
+    { id: 'm-1', turn: { text: 'steer me' }, text: 'steer me', delivery: 'follow_up', queuedAt: 1 },
+  ]);
 });
 
 it('reset_all clears pendingQueuedMessages', () => {
@@ -732,7 +775,7 @@ it('reset_all clears pendingQueuedMessages', () => {
   state = conversationUIReducer(state, {
     type: 'queue/message_pending',
     id: 'm-1',
-    text: 'first',
+    turn: { text: 'first' },
     delivery: 'follow_up',
     queuedAt: 1,
   });

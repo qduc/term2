@@ -19,6 +19,7 @@ import type { PendingApproval } from '../contracts/conversation.js';
 import type { QueuePauseReason } from '../services/queue/queue-controller.js';
 import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
 import type { SessionCostSummary } from '../services/cost/model-cost.js';
+import { formatUserTurnForDisplay, type UserTurn } from '../types/user-turn.js';
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -98,6 +99,8 @@ export interface ConversationUIState {
   pendingQueuedMessages: ReadonlyArray<{
     id: string;
     text: string;
+    /** Editable payload; display text cannot reconstruct images or skills. */
+    turn: UserTurn;
     queuedAt: number;
     delivery: 'steer' | 'follow_up';
   }>;
@@ -161,13 +164,13 @@ export type ConversationUIAction =
   // --- Queue state ---
   | { type: 'queue/updated'; snapshot: QueueSnapshot }
   /** A user message is queued behind an in-flight turn; show it above the input box. */
-  | { type: 'queue/message_pending'; id: string; text: string; delivery: 'steer' | 'follow_up'; queuedAt: number }
+  | { type: 'queue/message_pending'; id: string; turn: UserTurn; delivery: 'steer' | 'follow_up'; queuedAt: number }
   /** The queue has started executing the queued message; remove it from the pending list. */
   | { type: 'queue/message_started'; id: string }
   /** A queued message was removed or rejected before execution started. */
   | { type: 'queue/message_removed'; id: string }
   /** A pending submission (steer or queued) was edited in place; stage and position are unchanged. */
-  | { type: 'queue/message_edited'; id: string; text: string }
+  | { type: 'queue/message_edited'; id: string; turn: UserTurn }
   | { type: 'queue/message_reclassified'; id: string; delivery: 'follow_up' }
 
   // --- Compound resets ---
@@ -550,7 +553,13 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         pendingQueuedMessages: [
           ...state.pendingQueuedMessages,
-          { id: action.id, text: action.text, delivery: action.delivery, queuedAt: action.queuedAt },
+          {
+            id: action.id,
+            turn: action.turn,
+            text: formatUserTurnForDisplay(action.turn),
+            delivery: action.delivery,
+            queuedAt: action.queuedAt,
+          },
         ],
       };
 
@@ -590,7 +599,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       return {
         ...state,
         pendingQueuedMessages: state.pendingQueuedMessages.map((m) =>
-          m.id === action.id ? { ...m, text: action.text } : m,
+          m.id === action.id ? { ...m, turn: action.turn, text: formatUserTurnForDisplay(action.turn) } : m,
         ),
       };
 

@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { Text } from 'ink';
-import { renderInAct } from '../test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct } from '../test-helpers/ink-testing.js';
 import { mayConsumeRejectionReasonBridge, useAppKeyboardShortcuts } from './use-app-keyboard-shortcuts.js';
 import type { InputOwner } from '../lib/input-owner.js';
 
@@ -28,10 +28,13 @@ const mocks = vi.hoisted(() => ({
   onReject: vi.fn(),
   submitRejectionReason: vi.fn(),
   onSkillActivationCancelled: vi.fn(),
+  markRejectionReasonInputReady: null as null | (() => void),
 }));
 
-vi.mock('ink', () => ({
-  Text: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock('ink', async (importOriginal) => ({
+  // Keep real host components so the hook commits and retains refs on rerender.
+  // Raw text in a mocked fragment makes Ink abort the render instead.
+  ...(await importOriginal<typeof import('ink')>()),
   useInput: (handler: (input: string, key: Record<string, boolean>) => void, options?: { isActive?: boolean }) => {
     mocks.useInputHandlers.push({
       handler,
@@ -54,7 +57,7 @@ const Harness = (props: Parameters<typeof useAppKeyboardShortcuts>[0]) => {
   // latest render's handlers are live (mirrors Ink's per-render semantics and
   // prevents stale handlers from double-firing in `fireInput`).
   mocks.useInputHandlers = [];
-  useAppKeyboardShortcuts(props);
+  mocks.markRejectionReasonInputReady = useAppKeyboardShortcuts(props).markRejectionReasonInputReady;
   return <Text>ready</Text>;
 };
 
@@ -79,6 +82,7 @@ const createProps = (
   cycleAppModes: mocks.cycleAppModes,
   replaceInput: mocks.replaceInput,
   approvalShortcutsEnabled: true,
+  approvalShortcutIdentity: 'approval-1',
   onApprove: mocks.onApprove,
   onReject: mocks.onReject,
   submitRejectionReason: mocks.submitRejectionReason,
@@ -87,8 +91,11 @@ const createProps = (
   ...overrides,
 });
 
-const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {}) =>
-  renderInAct(<Harness {...createProps(overrides)} />);
+const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {}) => {
+  const view = await renderInAct(<Harness {...createProps(overrides)} />);
+  expect(view.lastFrame()).toBe('ready');
+  return view;
+};
 
 beforeEach(() => {
   mocks.useInputHandlers = [];
@@ -105,6 +112,7 @@ beforeEach(() => {
   mocks.onReject.mockReset();
   mocks.submitRejectionReason.mockReset();
   mocks.onSkillActivationCancelled.mockReset();
+  mocks.markRejectionReasonInputReady = null;
 });
 
 it.sequential('Ctrl+C clears a draft first and exits only on a second press', async () => {
@@ -376,9 +384,13 @@ it.sequential('drops an orphaned bridged reason so y approves the replacement ap
   // The approval the user pressed n on settled or was replaced while they were
   // typing (head change retires the composition, so the flag is false again).
   // The stale bridge must not swallow y — the replacement approval owns input.
-  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
+  const view = await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
 
   await fireInput('nunsafe change', {});
+  await rerenderInAct(
+    view,
+    <Harness {...createProps({ inputOwner: { kind: 'approval' }, approvalShortcutIdentity: 'replacement' })} />,
+  );
   await fireInput('y', {});
 
   expect(mocks.onApprove).toHaveBeenCalledTimes(1);
@@ -387,9 +399,13 @@ it.sequential('drops an orphaned bridged reason so y approves the replacement ap
 });
 
 it.sequential('does not submit an orphaned bridged reason to a replacement approval head on Enter', async () => {
-  await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
+  const view = await renderHarness({ inputOwner: { kind: 'approval' }, waitingForApproval: true });
 
   await fireInput('nunsafe change', {});
+  await rerenderInAct(
+    view,
+    <Harness {...createProps({ inputOwner: { kind: 'approval' }, approvalShortcutIdentity: 'replacement' })} />,
+  );
   await fireInput('', { return: true });
 
   expect(mocks.submitRejectionReason).not.toHaveBeenCalled();
@@ -410,10 +426,100 @@ it.sequential('approves exactly once at the stable approval boundary', async () 
   await renderHarness({ inputOwner: { kind: 'approval' } });
 
   await fireInput('y', {});
+  await fireInput('y', {});
+  await fireInput('n', {});
 
   expect(mocks.onApprove).toHaveBeenCalledTimes(1);
   expect(mocks.onReject).not.toHaveBeenCalled();
 });
+
+it.sequential('does not decide an approval without a pending request identity', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' }, approvalShortcutIdentity: null });
+  await fireInput('y', {});
+  await fireInput('n', {});
+
+  expect(mocks.onApprove).not.toHaveBeenCalled();
+  expect(mocks.onReject).not.toHaveBeenCalled();
+});
+
+it.sequential.each(['y', 'n'])('accepts %s for a replacement approval without an input-owner change', async (key) => {
+  const view = await renderHarness({ inputOwner: { kind: 'approval' }, approvalShortcutIdentity: 'first' });
+  await fireInput('y', {});
+  expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+
+  await rerenderInAct(
+    view,
+    <Harness {...createProps({ inputOwner: { kind: 'approval' }, approvalShortcutIdentity: 'second' })} />,
+  );
+  await fireInput(key, {});
+
+  expect(mocks.onApprove).toHaveBeenCalledTimes(key === 'y' ? 2 : 1);
+  expect(mocks.onReject).toHaveBeenCalledTimes(key === 'n' ? 1 : 0);
+});
+
+it.sequential('does not rearm a consumed approval on rerender or callback replacement', async () => {
+  const view = await renderHarness({ inputOwner: { kind: 'approval' } });
+  await fireInput('y', {});
+  const replacementApprove = vi.fn();
+  await rerenderInAct(
+    view,
+    <Harness {...createProps({ inputOwner: { kind: 'approval' }, onApprove: replacementApprove })} />,
+  );
+  await fireInput('y', {});
+  await fireInput('n', {});
+
+  expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+  expect(replacementApprove).not.toHaveBeenCalled();
+  expect(mocks.onReject).not.toHaveBeenCalled();
+});
+
+it.sequential.each(['background-tasks', 'menu', 'handoff-confirm', 'input'] as const)(
+  'does not rearm a consumed approval when %s temporarily owns input',
+  async (kind) => {
+    const view = await renderHarness({ inputOwner: { kind: 'approval' } });
+    await fireInput('y', {});
+    await rerenderInAct(view, <Harness {...createProps({ inputOwner: { kind } })} />);
+    await fireInput('y', {});
+    await fireInput('n', {});
+    await rerenderInAct(view, <Harness {...createProps({ inputOwner: { kind: 'approval' } })} />);
+    await fireInput('y', {});
+    await fireInput('n', {});
+
+    expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+    expect(mocks.onReject).not.toHaveBeenCalled();
+  },
+);
+
+it.sequential('does not rearm a direct rejection when no reason composer opens', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' } });
+  await fireInput('n', {});
+  await fireInput('y', {});
+
+  expect(mocks.onReject).toHaveBeenCalledTimes(1);
+  expect(mocks.onApprove).not.toHaveBeenCalled();
+  expect(mocks.submitRejectionReason).not.toHaveBeenCalled();
+});
+
+it.sequential.each([false, true])(
+  'allows approving after rejection cancellation (editor ready: %s)',
+  async (editorReady) => {
+    const view = await renderHarness({ inputOwner: { kind: 'approval' } });
+    await fireInput('n', {});
+    await rerenderInAct(
+      view,
+      <Harness {...createProps({ inputOwner: { kind: 'input' }, waitingForRejectionReason: true })} />,
+    );
+    if (editorReady) mocks.markRejectionReasonInputReady?.();
+    await fireInput('', { escape: true });
+    expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(false);
+    await rerenderInAct(view, <Harness {...createProps({ inputOwner: { kind: 'approval' } })} />);
+    await fireInput('y', {});
+
+    expect(mocks.onReject).toHaveBeenCalledTimes(1);
+    expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+    expect(mocks.submitRejectionReason).not.toHaveBeenCalled();
+  },
+);
 
 it.sequential('opens model menu on Ctrl+O when input owner is input', async () => {
   await renderHarness({ inputOwner: { kind: 'input' } });

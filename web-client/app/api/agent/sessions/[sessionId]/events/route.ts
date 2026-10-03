@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { term2GatewayClient } from '@/lib/server/term2-gateway-client.js';
 import { LOCAL_OWNER_USER_ID } from '@/lib/server/gateway-config.js';
-import { errorResponse, rpc, validateCursor } from '@/lib/server/proxy';
+import { errorResponse, rpc, validateEventCursor } from '@/lib/server/proxy';
 import { attachAbortCleanup } from '@/lib/server/request-guards';
 import { resolveSessionWorkspace } from '@/lib/server/session-lookup';
 
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ sess
 
     const url = new URL(request.url);
     let after = url.searchParams.get('after') ?? request.headers.get('last-event-id');
-    after = validateCursor(after);
+    after = validateEventCursor(after);
     const query = after ? `?after=${after}` : '';
 
     const upstreamPromise = term2GatewayClient.stream({

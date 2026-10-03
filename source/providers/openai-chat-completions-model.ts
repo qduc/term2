@@ -43,29 +43,34 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...openAICompatibleMessages(request.input, this.providerId),
     ];
     assertValidOpenAICompatibleMessages(messages);
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      stream: true,
-      // Streaming omits usage unless the request opts in. Without this the
-      // status bar has no token counts, context gauge, or cost for any
-      // chat-completions provider. Placed before `providerOptions` so a
-      // provider whose server rejects it can override.
-      stream_options: { include_usage: true },
-      ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: tool })) } : {}),
-      ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-      ...(request.topP !== undefined ? { top_p: request.topP } : {}),
-      ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
-      ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
-      ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
-      ...(request.toolChoice !== undefined ? { tool_choice: toChatToolChoice(request.toolChoice) } : {}),
-      ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
-      ...(request.providerOptions ?? {}),
-      ...(request.outputType && request.outputType !== 'text'
-        ? { response_format: toChatResponseFormat(request.outputType) }
-        : {}),
-      signal: request.signal,
-    });
+    const response = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        messages,
+        stream: true,
+        // Streaming omits usage unless the request opts in. Without this the
+        // status bar has no token counts, context gauge, or cost for any
+        // chat-completions provider. Placed before `providerOptions` so a
+        // provider whose server rejects it can override.
+        stream_options: { include_usage: true },
+        ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: tool })) } : {}),
+        ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+        ...(request.topP !== undefined ? { top_p: request.topP } : {}),
+        ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+        ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
+        ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
+        ...(request.toolChoice !== undefined ? { tool_choice: toChatToolChoice(request.toolChoice) } : {}),
+        ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
+        ...(request.providerOptions ?? {}),
+        ...(request.outputType && request.outputType !== 'text'
+          ? { response_format: toChatResponseFormat(request.outputType) }
+          : {}),
+      },
+      // The OpenAI client accepts transport options separately from the JSON
+      // body. Putting `signal` in the body silently left live HTTP streams
+      // uncancellable.
+      { signal: request.signal },
+    );
     // Keyed by the tool call's stream `index`, which every provider sends on
     // every chunk. `id` (and often `name`) only arrives on the first chunk for
     // that index; later chunks carry just `{ index, function: { arguments } }`

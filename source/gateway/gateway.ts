@@ -1019,7 +1019,7 @@ export class Term2Gateway {
     const persistence = this.#config.persistence;
     const persisted = await this.#ensurePersistedSession(ownerUserId, sessionId);
     if (!persistence) throw new GatewayPersistenceError('not_found', 'session not found');
-    return await createSessionProjectionSource({
+    const source = await createSessionProjectionSource({
       index: persistence.index,
       layout: persistence.layout,
       ownerUserId,
@@ -1045,6 +1045,15 @@ export class Term2Gateway {
         });
       },
     });
+    const liveSession = this.#sessions.get(sessionId);
+    if (!(liveSession instanceof ServerSession)) return source;
+    return {
+      ...source,
+      // The durable index is deliberately coarse and can still say `idle`
+      // while the in-memory runtime owns an active turn. Reads/reconnects must
+      // expose the live lifecycle so the browser keeps streaming/abort state.
+      session: { ...source.session, status: liveSession.status, activeTurnId: liveSession.activeTurnId ?? undefined },
+    };
   }
 
   async #submitMessage(claims: GatewayAssertionClaims, body: unknown): Promise<GatewayRpcResult> {

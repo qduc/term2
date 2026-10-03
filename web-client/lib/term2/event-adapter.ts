@@ -197,17 +197,34 @@ function transcriptTurns(projection: SessionProjection): Term2TurnView[] {
   for (let index = 0; index < parsed.length; index += 1) {
     const current = parsed[index];
     const next = parsed[index + 1];
-    if (current.role === 'user' && next?.role === 'assistant' && !next.turnId.startsWith('system-interrupted-')) {
+    if (current.role === 'user' && next?.role === 'assistant') {
+      const syntheticInterruption = next.turnId.startsWith('system-interrupted-');
+      const stillRunning = projection.status === 'running' || projection.status === 'awaiting_interaction';
       turns.push({
         turnId: current.turnId,
         role: 'assistant',
         userText: current.text,
-        text: next.text,
+        text: syntheticInterruption && stillRunning ? '' : next.text,
         reasoning: '',
-        status: 'completed',
+        status: stillRunning && index + 1 === parsed.length - 1 ? 'streaming' : 'completed',
         commands: next.commands,
       });
       index += 1;
+      continue;
+    }
+    if (current.role === 'user') {
+      turns.push({
+        turnId: current.turnId,
+        role: 'assistant',
+        userText: current.text,
+        text: '',
+        reasoning: '',
+        status:
+          (projection.status === 'running' || projection.status === 'awaiting_interaction') && index === parsed.length - 1
+            ? 'streaming'
+            : 'completed',
+        commands: current.commands,
+      });
       continue;
     }
     turns.push({

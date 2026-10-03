@@ -105,7 +105,7 @@ export interface UseTerm2SessionResult {
   loadNextSessions: () => Promise<void>;
   createSession: (workspaceId: string) => Promise<SessionProjection>;
   selectSession: (sessionId: string) => void;
-  submit: (text: string) => Promise<void>;
+  submit: (text: string) => Promise<boolean>;
   invokeCommand: (commandId: Term2CommandId) => Promise<void>;
   commandPending: boolean;
   commandNotice: { tone: 'neutral' | 'error'; message: string } | null;
@@ -135,6 +135,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const selectionControllerRef = useRef<AbortController | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTextRef = useRef(new Map<string, string>());
+  const admittingSessionIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     viewRef.current = view;
@@ -180,7 +181,12 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       while (!signal.aborted && generation === generationRef.current && sessionIdRef.current === id) {
         setView((current) => ({
           ...current,
-          status: delay === BACKOFF_BASE ? 'connecting' : 'reconnecting',
+          status:
+            current.status === 'running' || current.status === 'awaiting_interaction'
+              ? current.status
+              : delay === BACKOFF_BASE
+                ? 'connecting'
+                : 'reconnecting',
           error: null,
         }));
         try {
@@ -188,7 +194,12 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           const response = await term2Client.openEvents(id, cursor, signal);
           setView((current) => ({
             ...current,
-            status: current.pendingInteraction?.state === 'pending' ? 'awaiting_interaction' : 'connected',
+            status:
+              current.pendingInteraction?.state === 'pending'
+                ? 'awaiting_interaction'
+                : current.turns.some((turn) => turn.status === 'streaming' || turn.status === 'pending')
+                  ? 'running'
+                  : 'connected',
             error: null,
           }));
           await consumeSseResponse(response.data, {
@@ -379,19 +390,37 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
 
   const submit = useCallback(async (text: string) => {
     const id = sessionIdRef.current;
-    if (!id || !text.trim() || viewRef.current.pendingInteraction?.state === 'pending') return;
+    if (
+      !id ||
+      !text.trim() ||
+      viewRef.current.pendingInteraction?.state === 'pending' ||
+      admittingSessionIdsRef.current.has(id)
+    ) {
+      return false;
+    }
+    const generation = generationRef.current;
     const clientRequestId = crypto.randomUUID();
+    admittingSessionIdsRef.current.add(id);
     pendingTextRef.current.set(clientRequestId, text);
     try {
       await term2Client.submitMessage(id, text, clientRequestId);
+      if (generation !== generationRef.current || sessionIdRef.current !== id) {
+        pendingTextRef.current.delete(clientRequestId);
+        return false;
+      }
       setView((current) => ({ ...current, status: 'running', error: null }));
+      return true;
     } catch (error) {
       pendingTextRef.current.delete(clientRequestId);
+      if (generation !== generationRef.current || sessionIdRef.current !== id) return false;
       setView((current) => ({
         ...current,
         status: 'error',
         error: error instanceof Error ? error.message : 'Message was not accepted',
       }));
+      return false;
+    } finally {
+      admittingSessionIdsRef.current.delete(id);
     }
   }, []);
 
@@ -420,6 +449,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
 
   const abort = useCallback(async () => {
     const id = sessionIdRef.current;
+    const generation = generationRef.current;
     const activeTurnId = viewRef.current.turns.find(
       (item) => item.status === 'streaming' || item.status === 'pending',
     )?.turnId;
@@ -428,6 +458,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     try {
       await term2Client.abort(id, activeTurnId);
     } catch (error) {
+      if (generation !== generationRef.current || sessionIdRef.current !== id) return;
       setView((current) => ({
         ...current,
         status: 'error',
@@ -448,6 +479,17 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
       const id = sessionIdRef.current;
       const pending = viewRef.current.pendingInteraction;
       if (!id || pending?.state !== 'pending') return;
+      const generation = generationRef.current;
+      const stillCurrent = () => {
+        const current = viewRef.current.pendingInteraction;
+        return (
+          generation === generationRef.current &&
+          sessionIdRef.current === id &&
+          current?.state === 'pending' &&
+          current.interaction.interactionId === request.interactionId &&
+          current.interaction.revision === request.revision
+        );
+      };
       try {
         const result = await term2Client.resolveInteraction(id, request.interactionId, {
           revision: request.revision,
@@ -455,6 +497,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           ...(request.rejectionReason === undefined ? {} : { rejectionReason: request.rejectionReason }),
           ...(request.approvalAnswer === undefined ? {} : { approvalAnswer: request.approvalAnswer }),
         });
+        if (!stillCurrent()) return;
         if (!result.accepted) {
           const next = {
             ...viewRef.current,
@@ -469,6 +512,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           setView(next);
         }
       } catch (error) {
+        if (!stillCurrent()) return;
         if (error instanceof Term2ApiError && [409, 410].includes(error.status)) {
           const message =
             error.code && error.code in INTERACTION_CONFLICT_MESSAGES
@@ -477,6 +521,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
           try {
             await refresh();
           } finally {
+            if (generation !== generationRef.current || sessionIdRef.current !== id) return;
             const next = { ...viewRef.current, error: message };
             viewRef.current = next;
             setView(next);

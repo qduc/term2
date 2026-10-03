@@ -323,6 +323,14 @@ function validatePairingResponse(value) {
 }
 
 export class Term2GatewayClient {
+  /**
+   * @param {{
+   *   gatewayConfig?: ReturnType<typeof getGatewayConfig>,
+   *   requestImpl?: (...args: any[]) => any,
+   *   readFile?: typeof fs.readFileSync,
+   *   derivePublicKey?: (privateKey: string | Buffer) => string | Buffer
+   * }} [options]
+   */
   constructor({
     gatewayConfig = getGatewayConfig(),
     requestImpl,

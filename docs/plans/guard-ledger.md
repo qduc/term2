@@ -2682,3 +2682,75 @@ and user-input restoration. Rollback is confined to the planner refusal,
 preparer presentation, and these tests. The unresolved source-event coverage,
 legacy undo/snapshot equivalence, and portable reconstruction remain M2/M4 work;
 this interim refusal does not close those semantic gaps.
+
+## Terminal background subagent approval arbitration release (October 3)
+
+Disposition: repaired on `codex/reliability-approval-release`, pending merge.
+A cancelled adopted lease correctly refused stale application and released its
+tool attribution, but its session approval entry remained at the FIFO head.
+Repeated UI answers returned `apply_rejected` and prevented sibling approvals
+from becoming visible. This is an arbitration retention defect, not an
+attribution leak or an authority-policy change.
+
+```text
+Harm prevented: terminal child approvals blocking live sibling approvals.
+Scope and execution paths: adopted background subagents, including completed, failed, cancelled, and terminal containment outcomes.
+Guard class: lifecycle retention cleanup.
+Enforcement owner: BackgroundSubagentApprovalQueue.removeRun.
+Recovery owner: session-composition recordBackgroundEvent via BackgroundSubagentApprovalController.
+Measured signal and observation boundary: async subagent_completed event and result.agentId at the session-owned background sink.
+Direct evidence or proxy: direct terminal lifecycle evidence, no timeout or count proxy.
+Legitimate work that can produce the same signal: none under the terminal-event contract; foreground completions do not release background entries.
+Configuration sources and precedence: none.
+Effective default and clamping: none; no new limit.
+Action and why the signal justifies it: release every queued pause for the settled run, publish a new revision, preserve sibling FIFO order.
+Partial-work settlement: retained child result and notification delivery are unchanged; no approval answer is manufactured.
+Retry, fallback, and provider-continuity semantics: unchanged; nothing is restarted or replayed.
+Observability fields: existing approval revision/current/pendingCount and terminal notification.
+Persisted-setting migration, if any: none.
+Rollback boundary: queue run removal, controller forwarding, session terminal hook, and regression tests.
+Ledger row: terminal background approval arbitration retention.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test timeout 120s pnpm exec vitest run \
+  source/services/approval/background-subagent-approval-queue.test.ts \
+  source/services/session/session-composition.test.ts \
+  source/services/session/session-composition.subagent-notifications.test.ts --reporter=minimal
+FAIL: 6 new tests; 51 existing tests passed. Duration 3.59s, terminal exit 1.
+Terminal composition cases retained run-a at head with pendingCount=3
+instead of promoting run-b with pendingCount=1.
+```
+
+Detection gap: queue tests covered exact-entry removal and session closure;
+composition tests covered terminal notification delivery and deduplication.
+Neither connected terminal settlement to approval retention. The repair adds
+a terminal-status matrix, stale-action fencing, hidden-entry removal, release
+callback failures, duplicate completions, real adopted-lease cancellation, and
+reentrant terminalization during resolution. Run cleanup advances arbitration
+before terminal observers run; successful resolution consumes its original
+entry only if it still owns the head.
+
+Sibling audit: `SubagentAsyncRegistry.#settle` and adopted `NestedSubagentRunner`
+success/failure paths all use the async `subagent_completed` lane. Foreground
+completions use the foreground lane, and session disposal already closes the
+queue. The lease's pending-release callback already handles tool attribution.
+No provider, run-loop, registry, or non-interactive implementation is changed.
+
+Verification (all terminal exit 0, finite timeouts):
+
+- Final focused queue and composition tests: 59 passed; Vitest 3.53s,
+  command elapsed 5.35s, timeout 120s.
+- `pnpm test:related ./source/services/approval/background-subagent-approval-queue.ts ./source/services/approval/background-subagent-approval-controller.ts ./source/services/session/session-composition.ts`:
+  75 files passed; 1191 tests passed, one expected failure; Vitest 77.21s,
+  command elapsed 98.28s, timeout 300s.
+- `pnpm test:changed`: same 75 files and 1191 passing tests, one expected
+  failure; Vitest 70.67s, command elapsed 91.33s, timeout 300s.
+- `pnpm typecheck`: passed, command elapsed 13.56s, timeout 180s.
+- Scoped ESLint: passed, command elapsed 16.64s, timeout 120s.
+- Scoped Prettier check: passed, command elapsed 4.72s, timeout 120s.
+
+These are narrow handoff gates. No full-suite or provider-black-box run was
+required or claimed for this session approval arbitration fix.

@@ -654,6 +654,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // same projection and delivery queue, while their concrete registries retain
   // process/run ownership.
   const recordBackgroundEvent = (event: ConversationEvent) => {
+    if (event.type === 'subagent_completed' && event.async === true) {
+      backgroundSubagentApprovals.removeRun(event.result.agentId);
+    }
     conversationLogger.dispatchEventToLog(event);
     if (notificationStore.recordLifecycle(event)) {
       try {

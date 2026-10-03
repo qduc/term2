@@ -125,6 +125,85 @@ describe('BackgroundSubagentApprovalQueue', () => {
     expect(queue.getSnapshot()).toEqual({ revision: 3, current: second, pendingCount: 1, closed: false });
   });
 
+  it('releases every pause owned by a terminal run and preserves sibling FIFO order', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const first = entry('call-a');
+    const sibling = entry('call-b', { runId: 'run-b' });
+    const hidden = entry('call-a-hidden', { generation: 2 });
+    const laterSibling = entry('call-c', { runId: 'run-c' });
+    const release = vi.fn();
+    const siblingApply = vi.fn(() => ({ kind: 'applied' as const }));
+    enqueue(queue, first, { onRelease: release });
+    enqueue(queue, sibling, { onResolve: siblingApply });
+    enqueue(queue, hidden, { onRelease: release });
+    enqueue(queue, laterSibling);
+    const stale = queue.getSnapshot();
+
+    expect(queue.removeRun('run-a')).toEqual([]);
+    expect(release.mock.calls).toEqual([
+      [first, { kind: 'removed' }],
+      [hidden, { kind: 'removed' }],
+    ]);
+    const promoted = queue.getSnapshot();
+    expect(promoted).toEqual({ revision: stale.revision + 1, current: sibling, pendingCount: 2, closed: false });
+    expect(queue.resolve({ revision: stale.revision, entry: first, decision: { answer: 'y' } })).toEqual({
+      kind: 'stale',
+      reason: 'revision_mismatch',
+    });
+    expect(siblingApply).not.toHaveBeenCalled();
+    queue.removeRun('run-a');
+    queue.removeRun('unknown');
+    expect(queue.getSnapshot()).toBe(promoted);
+    expect(release).toHaveBeenCalledTimes(2);
+    queue.resolve({ revision: promoted.revision, entry: sibling, decision: { answer: 'y' } });
+    expect(siblingApply).toHaveBeenCalledOnce();
+    expect(queue.getSnapshot()).toMatchObject({ current: laterSibling, pendingCount: 1 });
+  });
+
+  it('removes hidden terminal pauses without releasing the live head and isolates release errors', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const head = entry('head', { runId: 'live' });
+    const error = new Error('release failed');
+    const release = vi.fn(() => {
+      throw error;
+    });
+    const secondRelease = vi.fn();
+    enqueue(queue, head);
+    enqueue(queue, entry('hidden'), { onRelease: release });
+    enqueue(queue, entry('hidden-2', { generation: 2 }), { onRelease: secondRelease });
+    expect(queue.removeRun('run-a')).toEqual([error]);
+    expect(queue.getSnapshot()).toMatchObject({ current: head, pendingCount: 1 });
+    expect(secondRelease).toHaveBeenCalledOnce();
+    queue.close();
+    expect(queue.removeRun('live')).toEqual([]);
+  });
+
+  it('does not consume a sibling when the resolving run terminalizes inside its callback', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const first = entry('call-a');
+    const sibling = entry('call-b', { runId: 'run-b' });
+    const release = vi.fn();
+    enqueue(queue, first, {
+      onResolve: () => {
+        queue.removeRun('run-a');
+        return { kind: 'applied' };
+      },
+      onRelease: release,
+    });
+    enqueue(queue, sibling);
+    const snapshot = queue.getSnapshot();
+    expect(queue.resolve({ revision: snapshot.revision, entry: first, decision: { answer: 'y' } })).toMatchObject({
+      kind: 'resolved',
+    });
+    expect(queue.getSnapshot()).toEqual({
+      revision: snapshot.revision + 1,
+      current: sibling,
+      pendingCount: 1,
+      closed: false,
+    });
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('closes terminally, releases every queued entry explicitly, and rejects later operations', () => {
     const queue = new BackgroundSubagentApprovalQueue();
     const first = entry('call-a');

@@ -1,6 +1,20 @@
 {
   "name": "@qduc/agent-wire",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Dependency-free agent event and interaction wire contracts shared by Term2 and ChatForge",
+  "license": "MIT",
+  "author": "qduc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qduc/term2.git",
+    "directory": "packages/wire"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -13,6 +27,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm run build",
     "test": "tsc -p tsconfig.json && vitest run --config vitest.config.ts"
   },
   "devDependencies": {

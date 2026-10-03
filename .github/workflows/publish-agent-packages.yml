@@ -1,0 +1,82 @@
+name: Prepare or publish agent packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish after validation
+        type: choice
+        options:
+          - both
+          - wire
+          - core
+        default: both
+      publish:
+        description: Publish to npm (requires npm Trusted Publisher setup)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-packages-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: pnpm typecheck
+      - run: pnpm --filter @qduc/agent-wire test
+      - run: node scripts/agent-package-smoke.mjs
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:integration
+      - name: Pack validated artifacts
+        run: |
+          mkdir -p release-artifacts
+          pnpm --filter @qduc/agent-wire pack --pack-destination "$PWD/release-artifacts"
+          pnpm --filter @qduc/agent-core pack --pack-destination "$PWD/release-artifacts"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agent-packages
+          path: release-artifacts/*.tgz
+
+  publish:
+    needs: validate
+    if: inputs.publish
+    environment: npm-agent-packages
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: agent-packages
+          path: release-artifacts
+      - name: Publish wire
+        if: inputs.package == 'both' || inputs.package == 'wire'
+        run: npm publish release-artifacts/qduc-agent-wire-*.tgz --access public --provenance
+      - name: Publish core
+        if: inputs.package == 'both' || inputs.package == 'core'
+        run: npm publish release-artifacts/qduc-agent-core-*.tgz --access public --provenance

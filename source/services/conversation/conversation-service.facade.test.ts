@@ -999,6 +999,107 @@ it.each(['factory-owned', 'caller-owned'] as const)(
   },
 );
 
+it.each([
+  ['caller-owned', 'subagent-first'],
+  ['caller-owned', 'shell-first'],
+  ['same-client-factory', 'subagent-first'],
+  ['same-client-factory', 'shell-first'],
+] as const)('keeps replacement background delivery after %s reset and %s settlement', async (ownership, order) => {
+  const { client, sinks } = backgroundClient();
+  let settleSubagents!: () => void;
+  let settleShell!: () => void;
+  const subagents = new Promise<void>((resolve) => {
+    settleSubagents = resolve;
+  });
+  const shell = new Promise<void>((resolve) => {
+    settleShell = resolve;
+  });
+  const disposeSubagents = vi.fn(() => subagents);
+  const disposeShell = vi.fn(() => shell);
+  Object.assign(client, { disposeBackgroundSubagents: disposeSubagents, disposeBackgroundShellJobs: disposeShell });
+  const service = new ConversationService({
+    ...(ownership === 'caller-owned'
+      ? { agentClient: client, toolOwnership: new ToolOwnershipRegistry() }
+      : { sessionClientFactory: factoryForClients([client, client]) }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const observed = vi.fn();
+  service.setBackgroundSubagentEventSink(observed);
+  const previousEventSink = sinks.event;
+  const previousApprovals = service.backgroundSubagentApprovals;
+  try {
+    service.resetWithNewId('replacement');
+    expect(disposeSubagents).toHaveBeenCalledOnce();
+    expect(disposeShell).toHaveBeenCalledOnce();
+    const settle = order === 'subagent-first' ? [settleSubagents, settleShell] : [settleShell, settleSubagents];
+    for (const [index, release] of settle.entries()) {
+      release();
+      await flushQueue();
+      const runId = `new-${index}`;
+      sinks.pause?.({
+        runId,
+        generation: 1,
+        role: 'worker',
+        interruption: { name: 'shell', callId: `${runId}-tool`, arguments: '{}' },
+        apply: () => false,
+      });
+      expect(service.backgroundSubagentApprovals.getSnapshot()).toMatchObject({ current: { runId }, pendingCount: 1 });
+      const terminal = backgroundCompletion(runId);
+      sinks.event?.(terminal);
+      expect(observed).toHaveBeenLastCalledWith(terminal);
+      expect(service.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+      const jobId = `${runId}-shell`;
+      sinks.shell?.({ type: 'background_shell_started', jobId, command: 'pwd' });
+      expect(service.backgroundSubagentTasks.getSnapshot()).toContainEqual(
+        expect.objectContaining({ jobId, status: 'running' }),
+      );
+      sinks.shell?.({ type: 'background_shell_completed', jobId, command: 'pwd', status: 'completed', output: '' });
+      expect(service.backgroundSubagentNotifications.drain()).toHaveLength(2);
+    }
+    expect(previousApprovals.getSnapshot().closed).toBe(true);
+    previousEventSink?.(backgroundCompletion('late-old-run'));
+    expect(observed).toHaveBeenCalledTimes(2);
+  } finally {
+    settleSubagents();
+    settleShell();
+    await service.shutdown();
+  }
+});
+
+it('keeps the distinct previous client persistence observer until reset shutdown settles', async () => {
+  const first = backgroundClient();
+  const second = backgroundClient();
+  let settle!: () => void;
+  const settlement = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  Object.assign(first.client, { disposeBackgroundSubagents: () => settlement });
+  const service = new ConversationService({
+    sessionClientFactory: factoryForClients([first.client, second.client]),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const observed = vi.fn();
+  service.setBackgroundSubagentEventSink(observed);
+  try {
+    service.resetWithNewId('replacement');
+    const oldTerminal = backgroundCompletion('old-run');
+    first.sinks.event?.(oldTerminal);
+    expect(observed).toHaveBeenCalledWith(oldTerminal);
+    expect(service.backgroundSubagentNotifications.pendingCount).toBe(0);
+    settle();
+    await flushQueue();
+    expect(first.sinks.event).toBeNull();
+    expect(first.sinks.pause).toBeNull();
+    const newTerminal = backgroundCompletion('new-run');
+    second.sinks.event?.(newTerminal);
+    expect(observed).toHaveBeenLastCalledWith(newTerminal);
+    expect(service.backgroundSubagentNotifications.pendingCount).toBe(1);
+  } finally {
+    settle();
+    await service.shutdown();
+  }
+});
+
 it('keeps background notification and task observers attached when the session is reset', async () => {
   const backgroundSinks: Array<((event: ConversationEvent) => void) | null> = [];
   const clients = [0, 1].map((index) =>

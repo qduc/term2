@@ -157,6 +157,7 @@ export type SessionRuntimeInternals = {
    * generation, unsubscribes downgrade listeners, clears per-turn state.
    */
   dispose: () => void;
+  relinquishBackgroundSinkOwnership: () => void;
   shutdown: () => Promise<void>;
   rollover: (newSessionId: string, sessionStartedAt?: string) => void;
   prepareRollover: (newSessionId: string, sessionStartedAt?: string) => () => void;
@@ -356,6 +357,8 @@ export type SessionRuntime = {
    * generation, unsubscribes downgrade listeners, clears per-turn state.
    */
   dispose: () => void;
+  /** Transfer reused client callbacks without bypassing the old runtime's shutdown settlement. */
+  relinquishBackgroundSinkOwnership: () => void;
   shutdown: () => Promise<void>;
   /** Clear root transcript/continuity while retaining the runtime graph. */
   rollover: (newSessionId: string, sessionStartedAt?: string) => void;
@@ -971,6 +974,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   let backgroundShellSettlement: Promise<void> | undefined;
   let backgroundSubagentSettlement: Promise<void> | undefined;
+  let ownsBackgroundSinks = true;
+  const relinquishBackgroundSinkOwnership = (): void => {
+    ownsBackgroundSinks = false;
+  };
   const prepareRollover = (newSessionId: string, newStartedAt = new Date().toISOString()): (() => void) => {
     if (disposed) throw new Error('Session runtime is already disposed.');
     if (!newSessionId) throw new Error('Session rollover requires a session ID.');
@@ -1021,8 +1028,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       // Persistence observers need terminal events through asynchronous shutdown.
       backgroundSubagentEventObserver = null;
       backgroundSubagentApprovals.close();
-      resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
-      resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+      if (ownsBackgroundSinks) {
+        resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
+        resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+      }
     };
     if (subagentDisposal) {
       backgroundSubagentSettlement = Promise.resolve(subagentDisposal).finally(detachSubagentSinks);
@@ -1034,7 +1043,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     }
     const shellDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundShellJobs')?.call(agentClient);
     const detachShellSink = (): void => {
-      resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null);
+      if (ownsBackgroundSinks) {
+        resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null);
+      }
     };
     if (shellDisposal) {
       backgroundShellSettlement = Promise.resolve(shellDisposal).finally(detachShellSink);
@@ -1244,6 +1255,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     stateFacade,
     runtimeController,
     dispose,
+    relinquishBackgroundSinkOwnership,
     shutdown,
     rollover,
     prepareRollover,
@@ -1377,6 +1389,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     backgroundSubagentApprovals,
     backgroundTaskControl,
     dispose,
+    relinquishBackgroundSinkOwnership: internals.relinquishBackgroundSinkOwnership,
     shutdown: internals.shutdown,
     rollover: internals.rollover,
     prepareRollover: internals.prepareRollover,

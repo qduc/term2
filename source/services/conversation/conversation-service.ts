@@ -306,6 +306,8 @@ export class ConversationService {
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
     const previousEventSink = this.#eventSink;
+    const previousRuntime = this.#runtime;
+    const previousClient = this.#clientHandle.agentClient;
     // A reset replaces the session; pending queue work belongs to the session
     // being replaced. Discard it (in memory and in persistence) so the dropped
     // adapter can never start a queued submission after the reset — otherwise
@@ -317,6 +319,11 @@ export class ConversationService {
     this.#deps.skillsService?.discoverSkills();
     const newSessionStartedAt = new Date().toISOString();
     this.#clientHandle = this.#clientFactory.create(newId, { sessionStartedAt: newSessionStartedAt });
+    if (this.#clientHandle.agentClient === previousClient) {
+      // A reused client's callbacks now belong to the replacement. The old
+      // runtime still settles its work, but must not detach these callbacks.
+      previousRuntime.relinquishBackgroundSinkOwnership();
+    }
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
       providerContinuity: this.#clientHandle.providerContinuity,

@@ -2944,3 +2944,60 @@ timeout 300s. Typecheck 8.51s, timeout 180s; scoped ESLint 11.41s (one existing
 facade `require-yield` warning), timeout 120s; Prettier 1.71s, timeout 120s.
 Production shutdown probe now observes one terminal completion with zero
 pending approvals, both before and after awaited settlement; timeout 30s.
+
+### Async reset background callback ownership transfer
+
+The pending-disposer compatibility-reset limitation recorded above is addressed
+at `ConversationService.resetWithNewId`. After replacement factory creation
+succeeds, identical client identity transfers ownership of its background
+callbacks before the replacement composition installs them. The old runtime's
+`relinquishBackgroundSinkOwnership` releases one composition-local ownership
+flag; both real disposal promises still settle, clear the old event observer,
+and close the old approval queue. Their finalizers may no longer null the
+replacement's subagent event, approval pause, or shell event callback.
+
+Contract: prevent stale cleanup from disabling replacement background delivery.
+Scope: synchronous facade reset with a reusable caller-owned client or custom
+factory returning the same client. Class: lifecycle ownership cleanup.
+Enforcement and recovery owner: session composition, with the facade providing
+direct successful-factory and same-client identity evidence. No elapsed-time,
+count, or output proxy, configuration precedence, default, clamping, persisted
+migration, additional logging, retry, fallback, or provider-continuity change is
+introduced. Legitimate old shutdown still performs local cleanup; distinct
+clients retain their terminal persistence callbacks until actual settlement.
+Partial results and notifications retain their existing channels. Observability
+uses existing approval snapshots, task/notification projections, and event
+observers. Rollback is confined to the reset transfer and composition ownership
+flag. Ledger disposition: the same-client pending-disposer callback-loss defect
+is repaired through this explicit transfer seam.
+
+Red proof: `NODE_ENV=test timeout 120s pnpm exec vitest run
+source/services/conversation/conversation-service.facade.test.ts
+--testNamePattern='replacement background delivery|distinct previous client persistence'
+--reporter=minimal` failed four reusable-client cases before production changes
+(Vitest 1.63s, terminal exit 1). Both constructor and custom-factory reuse lost
+public approval or shell task delivery, independently of disposal order. The
+distinct-client terminal persistence control passed.
+
+Detection gap: existing reset clients omitted async disposers; existing async
+shutdown coverage never replaced their runtime. The regression matrix now
+combines real pending disposal promises with public reset and checks approval,
+observer, task, and notification delivery after each independent settlement.
+It also checks old approval closure and event observer release. One explicit
+ownership operation covers all three proven callback slots without per-channel
+tokens or shared maps. The two foreground adapter `finally` paths remain a
+separate unproven ownership lead; this change does not modify them. Stock
+AgentClient's permanently disposed background registries are not resurrected,
+and attribution of late old events through a reused singleton host is unchanged.
+
+Focused verification: facade and composition notification tests passed 61 tests
+in two files (Vitest 1.83s, command 3.63s, timeout 120s, terminal exit 0).
+`pnpm typecheck` passed (command 6.63s, timeout 180s, terminal exit 0).
+`pnpm test:related ./source/services/session/session-composition.ts
+./source/services/conversation/conversation-service.ts` passed 71 files, 1173
+tests and one expected failure (Vitest 47.44s, command 57.76s, timeout 300s,
+terminal exit 0). `pnpm test:changed` passed the same selection (Vitest 35.42s,
+command 45.48s, timeout 300s, terminal exit 0). Scoped ESLint passed with two
+existing warnings (7.49s, timeout 120s, exit 0); changed-file Prettier and
+`git diff --check` passed. No full-suite or provider run is claimed by this
+scoped repair.

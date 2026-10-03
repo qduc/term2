@@ -247,6 +247,99 @@ it('awaits cancellation cleanup, ignores late terminal events, and retains queue
   expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual', queue: [{ text: 'queued' }] });
 });
 
+it.each(
+  [true, false].flatMap((proven) =>
+    (['remove_queued', 'discard_queue'] as const).flatMap((mutation) =>
+      [true, false].map((fresh) => ({ proven, mutation, fresh })),
+    ),
+  ),
+)(
+  'settles cancellation using surviving retained work: proof=$proven, mutation=$mutation, fresh=$fresh',
+  async ({ proven, mutation, fresh }) => {
+    let releaseCleanup!: (proven: boolean) => void;
+    const cleanup = new Promise<boolean>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const starts: string[] = [];
+    const controller = new QueueController({
+      driver: {
+        start: ({ item }) => {
+          starts.push(item.text);
+        },
+        cancel: () => cleanup,
+      },
+      snapshotFactory: () => ({}),
+    });
+    await controller.command({ kind: 'submit', text: 'active' });
+    await controller.command({ kind: 'submit', text: 'retained' });
+    const beforeStop = controller.state();
+    if (beforeStop.kind !== 'running') throw new Error('expected active execution');
+    const cancelling = controller.command({ kind: 'cancel' });
+    await controller.command(
+      mutation === 'remove_queued' ? { kind: mutation, itemId: beforeStop.queue[0]!.id } : { kind: mutation },
+    );
+    if (fresh) await controller.command({ kind: 'submit', text: 'fresh' });
+    expect(controller.state()).toMatchObject({ kind: 'cancelling', active: beforeStop.active });
+    expect(starts).toEqual(['active']);
+
+    releaseCleanup(proven);
+    expect(await cancelling).toEqual(
+      proven ? { kind: 'accepted' } : { kind: 'rejected', reason: 'cancellation_unproven' },
+    );
+    if (!proven) {
+      expect(controller.state()).toMatchObject({ kind: 'cancelling', active: beforeStop.active });
+      expect(starts).toEqual(['active']);
+      await controller.command({ kind: 'cancellation_settled', executionId: beforeStop.active.executionId });
+    }
+    expect(controller.state()).toMatchObject(
+      fresh ? { kind: 'running', active: { item: { text: 'fresh' } }, queue: [] } : { kind: 'idle', queue: [] },
+    );
+    expect(starts).toEqual(fresh ? ['active', 'fresh'] : ['active']);
+  },
+);
+
+it.each([true, false])('keeps surviving stop-retained work paused after cancellation proof=%s', async (proven) => {
+  let releaseCleanup!: (proven: boolean) => void;
+  const cleanup = new Promise<boolean>((resolve) => {
+    releaseCleanup = resolve;
+  });
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: () => cleanup,
+    },
+    snapshotFactory: () => ({}),
+  });
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'removed' });
+  await controller.command({ kind: 'submit', text: 'retained' });
+  const beforeStop = controller.state();
+  if (beforeStop.kind !== 'running') throw new Error('expected active execution');
+  const cancelling = controller.command({ kind: 'cancel' });
+  await controller.command({ kind: 'remove_queued', itemId: beforeStop.queue[0]!.id });
+  await controller.command({ kind: 'submit', text: 'fresh' });
+  const freshItem = controller.state().queue[1]!;
+  await controller.command({ kind: 'remove_queued', itemId: freshItem.id });
+  await controller.command({ kind: 'submit', text: 'fresh-again' });
+  releaseCleanup(proven);
+  await cancelling;
+  if (!proven) {
+    expect(controller.state()).toMatchObject({ kind: 'cancelling', active: beforeStop.active });
+    await controller.command({ kind: 'cancellation_settled', executionId: beforeStop.active.executionId });
+  }
+  expect(controller.state()).toMatchObject({
+    kind: 'paused',
+    reason: 'manual',
+    queue: [{ text: 'retained' }, { text: 'fresh-again' }],
+  });
+  expect(starts).toEqual(['active']);
+  await controller.command({ kind: 'resume_queue' });
+  expect(starts).toEqual(['active', 'retained']);
+});
+
 it('manual cancel retains multiple queued items and resumes them FIFO', async () => {
   const starts: string[] = [];
   const controller = new QueueController({

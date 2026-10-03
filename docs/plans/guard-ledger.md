@@ -27,13 +27,49 @@ identity-fenced `cancellation_settled` transition; projected stream failures
 are not cancellation proof. The controller applies the retained-work decision
 captured at stop: an empty queue at stop releases to idle and dispatches fresh
 input submitted during the wait, while pre-existing queued work is retained in
-a manual pause. Discarding the entire retained queue while proof is pending
-lowers that captured retention decision to empty, but keeps active ownership
-fail-closed until proof settles. Ordinary execution failures continue to use
+a manual pause. The controller's surviving stop-retained item IDs own that
+decision throughout cancellation, including while the driver's cleanup is
+pending. Removing an item deletes its ID; discarding the queue clears those IDs.
+When none survive, proven settlement releases to idle and dispatches fresh
+post-stop input. Queue mutation keeps active ownership fail-closed until proof
+settles. Ordinary execution failures continue to use
 failure-pause policy. If proof never settles, the queue remains fail-closed; runtime abandon /
 reset isolation is a separate product decision. The shell SSH adapter forwards
 the caller's signal and timeout to `SSHService`, which settles the local wait
 but cannot guarantee termination of the remote process.
+
+Cancellation-retention repair contract: prevent deleted stop-time follow-ups
+from blocking fresh foreground input or creating an empty manual pause.
+Class: lifecycle containment with retained-work recovery; `QueueController`
+owns both enforcement and settlement. Surviving stop-time IDs and the driver's
+matching cancellation proof are direct evidence. Fresh submissions are not
+retained stop-time work, even when they arrive before cleanup completes. The
+adapter's injected `activeCancelTimeoutMs` still overrides its fixed 10,000ms
+default; no configuration, clamping, settings migration, retry, fallback,
+provider-continuity, or telemetry change is introduced. Queued content stays
+available through `state()`, and an unproven stop retains its active execution.
+Existing state kind, active execution identity, queue contents, and pause reason
+expose the decision without adding content logging. Rollback is confined to the
+controller's retention bookkeeping and its public-boundary tests.
+
+Red proof: `pnpm exec cross-env NODE_ENV=test vitest run
+source/services/queue/queue-controller.test.ts` failed eight tests before the
+repair: remove/discard during pending cleanup, true/false driver proof, and
+fresh/empty settlement. The same command passed 70 tests afterward (0.274s).
+The matrix also protects surviving retained work and removal of fresh IDs.
+Detection gap: older removal tests mutated only after a false driver result;
+older deferred-cleanup tests never removed retained work. Deleting the duplicate
+retained counts makes the ID set the single decision source for both proof paths.
+Verification on 2026-10-03: `pnpm typecheck` passed (8.11s wall time), and
+changed-file formatting, ESLint, and `git diff --check` passed. Related and
+changed gates each selected 34 files: 670 passed, one expected failure, and one
+unrelated failure in the unknown-role status assertion (expected `failed`, got
+`cancelled`); elapsed wall times were 56.37s and 26.74s. The exact related command
+on unchanged queue files reproduced that sole failure (26.16s); the exact changed
+command with base production behavior and the same selected dependencies
+reproduced it plus the eight new regression failures (29.89s). The narrowed
+repair does not claim either failing gate is green. No full-suite or provider
+gate was run for this controller-only change.
 
 Budget judgment for turns, time, cost, and stall evidence is owned by
 [`run-budget-stall-escalation.md`](./run-budget-stall-escalation.md), not here.

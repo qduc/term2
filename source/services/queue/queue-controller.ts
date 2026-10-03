@@ -310,7 +310,6 @@ export class QueueController<Snapshot, Terminal = unknown> {
   #dispatchHeld = false;
   #cancellationUnproven = false;
   #cancellationExecutionId: ExecutionId | null = null;
-  #cancelRetainedQueueLength = 0;
   #cancelRetainedItemIds = new Set<ItemId>();
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
@@ -406,14 +405,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
         this.#pendingAction = undefined;
         this.#cancellationUnproven = false;
         this.#cancellationExecutionId = null;
-        this.#cancelRetainedItemIds.clear();
-        if (this.#cancelRetainedQueueLength === 0) {
+        if (this.#cancelRetainedItemIds.size === 0) {
           this.#phase = 'idle';
           this.#pauseReason = undefined;
         } else {
           this.#phase = 'paused';
           this.#pauseReason = 'manual';
         }
+        this.#cancelRetainedItemIds.clear();
         await this.#persist();
         if (this.#phase === 'idle') await this.#dispatch();
         return { kind: 'accepted' };
@@ -464,10 +463,9 @@ export class QueueController<Snapshot, Terminal = unknown> {
         return { kind: 'accepted' };
       case 'discard_queue':
         this.#queue = [];
-        if (this.#phase === 'cancelling' && this.#cancellationUnproven) {
+        if (this.#phase === 'cancelling') {
           // Discarding retained work during cancellation changes the stop's
           // effective retention decision, but never releases active ownership.
-          this.#cancelRetainedQueueLength = 0;
           this.#cancelRetainedItemIds.clear();
         }
         if (this.#phase === 'paused' && this.#queue.length === 0) {
@@ -487,10 +485,8 @@ export class QueueController<Snapshot, Terminal = unknown> {
         const index = this.#queue.findIndex((item) => item.id === cmd.itemId);
         if (index < 0) return { kind: 'rejected', reason: 'not_queued' };
         this.#queue.splice(index, 1);
-        if (this.#phase === 'cancelling' && this.#cancellationUnproven) {
-          if (this.#cancelRetainedItemIds.delete(cmd.itemId)) {
-            this.#cancelRetainedQueueLength = this.#cancelRetainedItemIds.size;
-          }
+        if (this.#phase === 'cancelling') {
+          this.#cancelRetainedItemIds.delete(cmd.itemId);
         }
         if (this.#phase === 'awaiting_preflight' && index === 0) {
           this.#phase = 'idle';
@@ -629,17 +625,15 @@ export class QueueController<Snapshot, Terminal = unknown> {
       return { kind: 'no_op' };
     }
     const active = this.#active;
-    // Capture how much work was already queued when the user stopped. A manual
+    // Capture which work was already queued when the user stopped. A manual
     // pause exists only to retain that pre-existing work; items submitted
     // after the stop (including ones raced in while cancel cleanup awaits the
     // active turn) reflect fresh intent and must run, not stick behind an
     // empty pause with nothing to resume.
-    const retainedQueueLength = this.#queue.length;
     this.#cancelRetainedItemIds = new Set(this.#queue.map((item) => item.id));
     this.#phase = 'cancelling';
     this.#cancellationUnproven = false;
     this.#cancellationExecutionId = active.executionId;
-    this.#cancelRetainedQueueLength = retainedQueueLength;
     this.#pendingAction = undefined;
     await this.#persist();
     let proven = true;
@@ -649,21 +643,21 @@ export class QueueController<Snapshot, Terminal = unknown> {
       if (this.#active?.executionId === active.executionId && proven) {
         this.#active = undefined;
         this.#cancellationExecutionId = null;
-        this.#cancelRetainedItemIds.clear();
         // Invariant: a paused queue must contain retained work. When nothing
-        // was queued at stop time, return to idle so the next submission
+        // remains from stop time, return to idle so the next submission
         // starts immediately instead of being queued behind a manual pause
         // with nothing to resume. A submission raced in during cleanup is
         // dispatched below.
-        if (retainedQueueLength === 0) {
+        if (this.#cancelRetainedItemIds.size === 0) {
           this.#phase = 'idle';
           this.#pauseReason = undefined;
         } else {
           this.#phase = 'paused';
           this.#pauseReason = 'manual';
         }
+        this.#cancelRetainedItemIds.clear();
         await this.#persist();
-        if (retainedQueueLength === 0) {
+        if (this.#phase === 'idle') {
           await this.#dispatch();
         }
       } else if (!proven) {

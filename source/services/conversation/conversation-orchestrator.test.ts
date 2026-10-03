@@ -568,7 +568,7 @@ describe('ConversationOrchestrator', () => {
     const pending = orchestrator.sendUserMessage('held steer', { busyMode: 'steer' });
     await Promise.resolve();
     await Promise.resolve();
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'held steer', 'steer');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), { text: 'held steer' }, 'steer');
 
     // /clear resets the session while the steer is still waiting for a request
     // boundary; the reset then releases it with steered=false.

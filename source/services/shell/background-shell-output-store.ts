@@ -132,23 +132,23 @@ export class BackgroundShellOutputStore {
   /**
    * Appends one chunk of a job's output. Chunks may arrive on arbitrary byte
    * boundaries; complete lines enter the buffer, the partial remainder is held
-   * per stream. Throws if the job is unknown or already closed.
+   * per stream. Returns the newly completed lines, including lines evicted
+   * from retention during this push, for live observers. Throws if the job is
+   * unknown or already closed.
    */
-  push(jobId: string, stream: BackgroundShellOutputStream, text: string): void {
+  push(jobId: string, stream: BackgroundShellOutputStream, text: string): readonly BackgroundShellOutputLine[] {
     const job = this.#jobs.get(jobId);
     if (!job) throw new BackgroundShellOutputStoreError(`No output stream open for job ${jobId}.`);
     if (job.closed) throw new BackgroundShellOutputStoreError(`Output stream for job ${jobId} is already closed.`);
-    if (text.length === 0) return;
+    if (text.length === 0) return [];
 
+    const completed: BackgroundShellOutputLine[] = [];
     let pending = (job.remainder[stream] ?? '') + text;
     let newline = pending.indexOf('\n');
     while (newline !== -1) {
-      job.records.push({
-        stream,
-        text: pending.slice(0, newline),
-        seq: job.nextSeq++,
-        terminated: true,
-      });
+      const line = { stream, text: pending.slice(0, newline) };
+      job.records.push({ ...line, seq: job.nextSeq++, terminated: true });
+      completed.push(line);
       pending = pending.slice(newline + 1);
       newline = pending.indexOf('\n');
     }
@@ -163,6 +163,7 @@ export class BackgroundShellOutputStore {
       if (index !== -1) job.remainderOrder.splice(index, 1);
     }
     this.#evictToFit(job);
+    return completed;
   }
 
   /**

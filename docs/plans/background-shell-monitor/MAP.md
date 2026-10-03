@@ -354,6 +354,12 @@ independently reviewable, each in its own worktree.
 
 ## Found in the territory
 
+- 2026-10-03: `BackgroundShellWatches.push` observes newly completed lines
+  returned by `BackgroundShellOutputStore.push`, including lines evicted within
+  the same chunk. Matching an active watch must not depend on the retained tail:
+  arbitrary process chunk boundaries can contain more lines than its cap.
+  Registration replay remains bounded to retained output; store-owned stream
+  assembly, drop accounting, match-text limits, and EOF settlement are unchanged.
 - 2026-08-10: Plan promoted to this phase-tracked MAP. Re-verified the three
   blocking properties against the current tree: `defaultExecImpl`
   (`execute-shell.ts:77`) still delivers settled strings only with no

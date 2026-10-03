@@ -55,6 +55,11 @@ export type UseAppKeyboardShortcutsOptions = {
   replaceInput: (value: string) => void;
   onSkillActivationCancelled: () => void;
   approvalShortcutsEnabled: boolean;
+  /**
+   * Stable identity of the current approval, or null when none is pending.
+   * Must survive presentation updates and change when the pending request does.
+   */
+  approvalShortcutIdentity: string | object | null;
   approvalShortcutApproveAnswer?: string;
   onApprove: (answer?: string) => void;
   onReject: () => void;
@@ -87,6 +92,7 @@ export const useAppKeyboardShortcuts = ({
   replaceInput,
   onSkillActivationCancelled,
   approvalShortcutsEnabled,
+  approvalShortcutIdentity,
   approvalShortcutApproveAnswer,
   onApprove,
   onReject,
@@ -100,7 +106,12 @@ export const useAppKeyboardShortcuts = ({
   const armedRef = useRef(false);
   const [interruptConfirmVisible, setInterruptConfirmVisible] = useState(false);
   const interruptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const approvalDecisionConsumedRef = useRef(false);
+  // Keep the consumed request rather than a global boolean: a queue can
+  // promote its next head without ever relinquishing the approval input owner.
+  // An unrelated modal must not rearm a decision that is still settling.
+  const consumedApprovalIdentityRef = useRef<UseAppKeyboardShortcutsOptions['approvalShortcutIdentity'] | undefined>(
+    undefined,
+  );
   const rejectionReasonBridgeRef = useRef<string | null>(null);
   const ctrlCArmedRef = useRef(false);
   const ctrlCTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,6 +143,7 @@ export const useAppKeyboardShortcuts = ({
     replaceInput,
     onSkillActivationCancelled,
     approvalShortcutsEnabled,
+    approvalShortcutIdentity,
     approvalShortcutApproveAnswer,
     onApprove,
     onReject,
@@ -159,6 +171,7 @@ export const useAppKeyboardShortcuts = ({
     replaceInput,
     onSkillActivationCancelled,
     approvalShortcutsEnabled,
+    approvalShortcutIdentity,
     approvalShortcutApproveAnswer,
     onApprove,
     onReject,
@@ -230,14 +243,15 @@ export const useAppKeyboardShortcuts = ({
         // to is live. If that approval settled or was replaced (head change
         // while the user was typing), the buffered reason is orphaned: drop it
         // and fall through so `y`/`n` reach the replacement approval instead
-        // of the reason being buffered or submitted against it. The consumed
-        // `n` round ends with the composition it started.
+        // of the reason being buffered or submitted against it. Keep the old
+        // request consumed: a direct rejection may still be settling without
+        // ever opening a reason composer.
         rejectionReasonBridgeRef.current = null;
-        approvalDecisionConsumedRef.current = false;
         current.replaceInput('');
       } else {
         if (key.escape) {
           rejectionReasonBridgeRef.current = null;
+          consumedApprovalIdentityRef.current = undefined;
           current.setWaitingForRejectionReason(false);
           current.replaceInput('');
           return;
@@ -267,14 +281,15 @@ export const useAppKeyboardShortcuts = ({
     if (
       current.inputOwner.kind === 'approval' &&
       current.approvalShortcutsEnabled &&
-      !approvalDecisionConsumedRef.current
+      current.approvalShortcutIdentity !== null &&
+      consumedApprovalIdentityRef.current !== current.approvalShortcutIdentity
     ) {
       const decision = input[0];
       if (decision === 'y') {
-        approvalDecisionConsumedRef.current = true;
+        consumedApprovalIdentityRef.current = current.approvalShortcutIdentity;
         current.onApprove(current.approvalShortcutApproveAnswer);
       } else if (decision === 'n') {
-        approvalDecisionConsumedRef.current = true;
+        consumedApprovalIdentityRef.current = current.approvalShortcutIdentity;
         const bufferedReason = current.inputValue + input.slice(1);
         rejectionReasonBridgeRef.current = bufferedReason;
         if (bufferedReason) current.replaceInput(bufferedReason);
@@ -307,6 +322,7 @@ export const useAppKeyboardShortcuts = ({
         }
 
         if (current.waitingForRejectionReason) {
+          consumedApprovalIdentityRef.current = undefined;
           current.setWaitingForRejectionReason(false);
           current.replaceInput('');
           return;
@@ -374,11 +390,10 @@ export const useAppKeyboardShortcuts = ({
   // Escape then means "clear the buffer" — so an armed confirmation can never
   // be completed by a later, unrelated Escape.
   useEffect(() => {
-    if (inputOwner.kind !== 'approval') approvalDecisionConsumedRef.current = false;
     if ((!isProcessing && !waitingForApproval) || inputValue.length > 0) {
       disarmInterrupt();
     }
-  }, [inputOwner.kind, isProcessing, waitingForApproval, inputValue]);
+  }, [isProcessing, waitingForApproval, inputValue]);
 
   useEffect(
     () => () => {

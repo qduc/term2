@@ -842,7 +842,13 @@ it.sequential('BottomArea renders the queued message above the input box', async
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingQueuedMessages: [
-      { id: 'q-1', text: 'Follow-up question about the previous answer', delivery: 'follow_up', queuedAt: 1000 },
+      {
+        id: 'q-1',
+        text: 'Follow-up question about the previous answer',
+        turn: { text: 'Follow-up question about the previous answer' },
+        delivery: 'follow_up',
+        queuedAt: 1000,
+      },
     ],
   });
   const output = lastFrame() ?? '';
@@ -857,7 +863,9 @@ it.sequential('BottomArea truncates unselected queued previews to a single line'
   const longText = 'a'.repeat(120);
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
-    pendingQueuedMessages: [{ id: 'q-1', text: longText, delivery: 'follow_up', queuedAt: 1000 }],
+    pendingQueuedMessages: [
+      { id: 'q-1', text: longText, turn: { text: longText }, delivery: 'follow_up', queuedAt: 1000 },
+    ],
   });
   const output = lastFrame() ?? '';
   expect(output.includes('queued · after this turn')).toBe(true);
@@ -874,8 +882,8 @@ it.sequential('BottomArea renders multiple queued messages in order', async () =
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingQueuedMessages: [
-      { id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 },
-      { id: 'q-2', text: 'second queued', delivery: 'follow_up', queuedAt: 2 },
+      { id: 'q-1', text: 'first queued', turn: { text: 'first queued' }, delivery: 'follow_up', queuedAt: 1 },
+      { id: 'q-2', text: 'second queued', turn: { text: 'second queued' }, delivery: 'follow_up', queuedAt: 2 },
     ],
   });
   const output = lastFrame() ?? '';
@@ -919,7 +927,15 @@ it.sequential('BottomArea renders live streaming speed during processing, thinki
 
 it.sequential('BottomArea separates the live controls from the transcript with a full-width divider', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
-    pendingQueuedMessages: [{ id: 'q-1', text: 'queued above the input', delivery: 'follow_up', queuedAt: 1 }],
+    pendingQueuedMessages: [
+      {
+        id: 'q-1',
+        text: 'queued above the input',
+        turn: { text: 'queued above the input' },
+        delivery: 'follow_up',
+        queuedAt: 1,
+      },
+    ],
   });
   const lines = (lastFrame() ?? '').split('\n');
   const dividerIndex = lines.findIndex((line) => /^─{20,}$/.test(line.trimEnd()));

@@ -6,6 +6,7 @@ import { injectSkillIntoTurn, type UserTurn } from '../../types/user-turn.js';
 export type ConversationBusyMode = 'steer' | 'follow_up';
 
 export type AdmissionOptions = {
+  /** Delivery preference if a turn is active, not evidence of current activity. */
   busyMode?: ConversationBusyMode;
 };
 
@@ -33,6 +34,7 @@ export type AdmissionSubmitResult =
 export type AdmissionResolveResult = AdmissionSubmitResult | { kind: 'declined'; turn: UserTurn } | { kind: 'stale' };
 
 type ConversationPreview = {
+  isQueueActive(): boolean;
   previewInputSurge(turn: UserTurn): InputSurgeDecision;
   previewLargeUncachedInput(turn: UserTurn, now: number): LargeUncachedInputDecision;
 };
@@ -128,7 +130,7 @@ export class ConversationAdmissionWorkflow {
       return { kind: 'confirmation_required', confirmation };
     }
 
-    if (!options.busyMode) {
+    if (!this.#deps.conversation.isQueueActive()) {
       const large = this.#deps.conversation.previewLargeUncachedInput(turn, this.#deps.now());
       if (large.action === 'warn') {
         const confirmation: AdmissionConfirmation = {

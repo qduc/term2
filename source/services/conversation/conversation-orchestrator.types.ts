@@ -3,6 +3,7 @@ import type { ILoggingService } from '../service-interfaces.js';
 import type { ApprovedToolContext } from '../approval/approval-presentation-policy.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { Message } from '../../types/message.js';
+import type { UserTurn } from '../../types/user-turn.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { SessionCostAccumulator, SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { CodexRateLimitInfo } from './conversation-events.js';
@@ -55,7 +56,7 @@ export interface UIPort {
    * NOT yet appended it to the message list. The UI should display it above
    * the input box until the queue actually starts processing the turn.
    */
-  onQueuedMessagePending?(id: string, text: string, delivery: 'steer' | 'follow_up'): void;
+  onQueuedMessagePending?(id: string, turn: UserTurn, delivery: 'steer' | 'follow_up'): void;
   /**
    * The queue has started executing a previously-pending message. The
    * orchestrator has now appended it to the message list. The UI should
@@ -66,9 +67,9 @@ export interface UIPort {
   onQueuedMessageRemoved?(id: string): void;
   /**
    * A pending submission (steer or queued) was edited in place. Stage and
-   * position are unchanged — only the displayed text moves.
+   * position are unchanged. Keep the executable turn for subsequent edits.
    */
-  onQueuedMessageEdited?(id: string, text: string): void;
+  onQueuedMessageEdited?(id: string, turn: UserTurn): void;
   /** A steer could not join the active turn and will run as a queued follow-up instead. */
   onQueuedMessageReclassified?(id: string, delivery: 'follow_up'): void;
 }

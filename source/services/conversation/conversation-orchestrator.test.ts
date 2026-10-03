@@ -11,6 +11,10 @@ import { PendingInteractionState } from '../session/pending-interaction-state.js
 import { issueInputSurgeApproval } from '../input-surge-approval.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 import { createSessionCostAccumulator } from '../cost/model-cost.js';
+import { ConversationAdapter } from './conversation-adapter.js';
+import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { userTurnToProviderItem } from './user-turn-item.js';
 
 function createMessage(id: string, sender: Message['sender'], text: string, overrides: Partial<Message> = {}): Message {
   return { id, sender, text, ...overrides } as Message;
@@ -896,7 +900,7 @@ describe('ConversationOrchestrator', () => {
     await Promise.resolve();
 
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'follow-up', 'follow_up');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), { text: 'follow-up' }, 'follow_up');
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
     const queuedId = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
     expect(orchestrator.listOutstandingSubmissions()).toEqual([{ id: queuedId, text: 'follow-up', stage: 'queued' }]);
@@ -963,7 +967,11 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('while paused');
 
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'while paused', 'follow_up');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(
+      expect.any(String),
+      { text: 'while paused' },
+      'follow_up',
+    );
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
@@ -1031,7 +1039,11 @@ describe('ConversationOrchestrator', () => {
       expect.objectContaining({ text: 'change direction' }),
       expect.objectContaining({ id: expect.any(String) }),
     );
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'change direction', 'steer');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(
+      expect.any(String),
+      { text: 'change direction' },
+      'steer',
+    );
     // No second turn is submitted: the message belongs to the turn in flight.
     expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
     const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
@@ -1058,7 +1070,11 @@ describe('ConversationOrchestrator', () => {
       expect.objectContaining({ busyMode: 'steer' }),
     );
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'too late to steer', 'steer');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(
+      expect.any(String),
+      { text: 'too late to steer' },
+      'steer',
+    );
     expect(cfg.ui.onQueuedMessageReclassified).toHaveBeenCalledWith(expect.any(String), 'follow_up');
     expect(orchestrator.listOutstandingSubmissions()).toEqual([
       { id: vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0], text: 'too late to steer', stage: 'queued' },
@@ -1247,7 +1263,7 @@ describe('ConversationOrchestrator', () => {
       kind: 'applied',
       stage: 'pending_steer',
     });
-    expect(cfg.ui.onQueuedMessageEdited).toHaveBeenCalledWith('steer-1', 'edited text');
+    expect(cfg.ui.onQueuedMessageEdited).toHaveBeenCalledWith('steer-1', { text: 'edited text' });
 
     vi.mocked(cfg.ui.onQueuedMessageEdited!).mockClear();
     vi.mocked(cfg.conversationService.editSubmission).mockResolvedValueOnce({
@@ -1312,6 +1328,151 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
     expect(cfg.ui.onQueuedMessageRemoved).toHaveBeenCalledTimes(1);
   });
+
+  it('does not restore removed attachments when an edited pending steer falls back to the queue', async () => {
+    const logWriter = { append: vi.fn() };
+    const cfg = makeConfig({ logWriter });
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let resolveSteer!: (admitted: boolean) => void;
+    cfg.conversationService.steerActiveTurn = vi.fn(() => new Promise<boolean>((resolve) => (resolveSteer = resolve)));
+    vi.mocked(cfg.conversationService.editSubmission).mockResolvedValue({ kind: 'applied', stage: 'pending_steer' });
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const sending = orchestrator.sendUserMessage(
+      {
+        text: 'original',
+        images: [{ id: 'image-1', data: 'image-bytes', mimeType: 'image/png', byteSize: 11, displayNumber: 1 }],
+        skill: { name: 'inspect', description: 'Inspect images', body: 'Read the attached image.' },
+      },
+      { busyMode: 'steer' },
+    );
+    const id = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]![0];
+    await orchestrator.editPendingSubmission(id, { text: 'plain text instead' });
+    resolveSteer(false);
+    await sending;
+
+    expect(cfg.conversationService.sendMessage).toHaveBeenCalledWith(
+      { text: 'plain text instead' },
+      expect.objectContaining({ preferredMessageId: id }),
+    );
+    expect(cfg.ui.onQueuedMessageReclassified).toHaveBeenCalledWith(id, 'follow_up');
+    expect(logWriter.append).toHaveBeenCalledWith({
+      type: 'user_message',
+      message: { id, sender: 'user', text: 'plain text instead' },
+    });
+  });
+
+  it.each(['steer', 'follow_up'] as const)(
+    'delivers edited skill instructions and image bytes through the actual %s adapter path',
+    async (busyMode) => {
+      const cfg = makeConfig();
+      let releaseActive!: () => void;
+      const activeReleased = new Promise<void>((resolve) => {
+        releaseActive = resolve;
+      });
+      let resolveSteer!: (outcome: 'admitted') => void;
+      const steerPromise = new Promise<'admitted'>((resolve) => {
+        resolveSteer = resolve;
+      });
+      const delivered: ProviderInputItem[] = [];
+      const initialSteer = vi.fn(() => steerPromise);
+      const editSteer = vi.fn((_id: string, items: readonly ProviderInputItem[]) => {
+        delivered.push(...items);
+        return true;
+      });
+      const adapter = new ConversationAdapter({
+        sessionId: 'edited-skill-contract',
+        startedAt: 'now',
+        logger: cfg.loggingService,
+        sessionContextService: {
+          runWithContext: (_context, fn) => fn(),
+          getContext: () => null,
+        },
+        userTurns: { listUserTurns: () => [] },
+        logs: {
+          dispatchEventToLog: vi.fn(),
+          log: vi.fn(),
+          setLogSink: vi.fn(),
+        } as unknown as SessionLogs,
+        approval: {
+          getPending: () => null,
+          getPendingInterruption: () => null,
+        } as unknown as SessionApprovalQuery,
+        turnFlow: {
+          async *start(input) {
+            if (input === 'active') await activeReleased;
+            else delivered.push(userTurnToProviderItem(input));
+            yield { type: 'final' as const, finalText: 'done' };
+          },
+          async *continueAfterApproval() {
+            yield { type: 'final' as const, finalText: 'done' };
+          },
+          steer: initialSteer,
+          editSteer,
+        },
+        queueForeground: true,
+      });
+      Object.assign(cfg.conversationService, {
+        isQueueActive: adapter.isQueueActive.bind(adapter),
+        isQueueOwningSubmissions: adapter.isQueueOwningSubmissions.bind(adapter),
+        sendMessage: adapter.sendMessage.bind(adapter),
+        steerActiveTurn: adapter.steerActiveTurn.bind(adapter),
+        editSubmission: adapter.editSubmission.bind(adapter),
+      });
+      const orchestrator = new ConversationOrchestrator(cfg);
+      const active = adapter.sendMessage('active');
+      await new Promise((resolve) => setImmediate(resolve));
+      const original = {
+        text: 'original request',
+        skill: { name: 'original', description: 'Original skill', body: 'Original instructions.' },
+      };
+      const sending = orchestrator.sendUserMessage(original, { busyMode });
+      await new Promise((resolve) => setImmediate(resolve));
+      const id = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]![0];
+      if (busyMode === 'steer') {
+        expect(initialSteer).toHaveBeenCalledWith(
+          [
+            {
+              role: 'user',
+              type: 'message',
+              content: expect.stringContaining('<skill>\nOriginal instructions.\n</skill>'),
+            },
+          ],
+          expect.objectContaining({ id }),
+        );
+      }
+      const edited = {
+        text: 'edited request',
+        images: [{ id: 'image-1', data: 'aW1hZ2U=', mimeType: 'image/png', byteSize: 5, displayNumber: 1 }],
+        skill: { name: 'edited', description: 'Edited skill', body: 'Edited instructions.' },
+      };
+
+      await expect(orchestrator.editPendingSubmission(id, edited)).resolves.toEqual({
+        kind: 'applied',
+        stage: busyMode === 'steer' ? 'pending_steer' : 'queued',
+      });
+      expect(cfg.ui.onQueuedMessageEdited).toHaveBeenCalledWith(id, edited);
+      resolveSteer('admitted');
+      releaseActive();
+      await Promise.all([active, sending]);
+
+      expect(delivered).toEqual([
+        {
+          role: 'user',
+          type: 'message',
+          content: [
+            { type: 'input_text', text: expect.stringContaining('<skill>\nEdited instructions.\n</skill>') },
+            { type: 'input_image', image: 'data:image/png;base64,aW1hZ2U=', detail: 'auto' },
+          ],
+        },
+      ]);
+    },
+  );
 
   it('does not retain directly-appended id across clearConversation', async () => {
     const cfg = makeConfig();

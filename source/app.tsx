@@ -623,14 +623,25 @@ const App: FC<AppProps> = ({
   }, []);
 
   const submitAdmittedTurn = useCallback(
-    async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => {
+    async (
+      turn: UserTurn,
+      options?: { busyMode?: 'steer' | 'follow_up' },
+      submittedEditor = controller.getSnapshot().editor,
+    ) => {
       const result = options ? submitTurnForAdmission(turn, options) : submitTurnForAdmission(turn);
       if (result.kind === 'submitted') {
-        replaceInput('');
+        // A delayed queued-edit fallback may submit older text, and routing
+        // may yield while another draft is typed. Clear only the submitted draft.
+        if (
+          submittedEditor.text === turn.text &&
+          controller.getSnapshot().editor.revision === submittedEditor.revision
+        ) {
+          replaceInput('');
+        }
         await result.completion;
       }
     },
-    [replaceInput, submitTurnForAdmission],
+    [controller, replaceInput, submitTurnForAdmission],
   );
 
   const redrawMessageList = useCallback(() => {
@@ -1250,6 +1261,20 @@ const App: FC<AppProps> = ({
     onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
     approvalShortcutsEnabled:
       effectivePendingApproval?.toolName !== TOOL_NAME_ASK_USER && !effectivePendingApproval?.dockerHostControl,
+    // Use authoritative request identities, not the rebuilt display descriptor
+    // or queue revision (which also changes when an unrelated item is queued).
+    approvalShortcutIdentity:
+      sandboxPromptRequest ??
+      (backgroundApprovalEntry
+        ? JSON.stringify([
+            'background',
+            backgroundApprovalEntry.runId,
+            backgroundApprovalEntry.generation,
+            backgroundApprovalEntry.toolCallId,
+            backgroundApprovalEntry.toolName,
+            backgroundApprovalEntry.argumentsText,
+          ])
+        : pendingApproval ?? nestedApproval?.requestId ?? null),
     approvalShortcutApproveAnswer:
       sandboxPromptRequest || effectivePendingApproval?.deniedRead ? 'allow-once' : undefined,
     onApprove: handleApprove,
@@ -1259,6 +1284,7 @@ const App: FC<AppProps> = ({
   });
 
   const handleSubmit = async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<void> => {
+    const submittedEditor = controller.getSnapshot().editor;
     if (backgroundApprovalEntry && waitingForRejectionReason) {
       resolveBackgroundSubagentApproval({
         revision: backgroundApprovalState.revision,
@@ -1321,10 +1347,10 @@ const App: FC<AppProps> = ({
       }
 
       case 'message':
-        return await submitAdmittedTurn(attachPendingSkill(turn), options);
+        return await submitAdmittedTurn(attachPendingSkill(turn), options, submittedEditor);
     }
 
-    await submitAdmittedTurn(attachPendingSkill(turn), options);
+    await submitAdmittedTurn(attachPendingSkill(turn), options, submittedEditor);
   };
 
   const handleSettingChange = useCallback(

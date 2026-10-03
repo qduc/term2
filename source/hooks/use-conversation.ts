@@ -394,11 +394,11 @@ export const useConversation = ({
           if (stoppingRef.current) stoppingRef.current = false;
           dispatch({ type: 'queue/updated', snapshot });
         },
-        onQueuedMessagePending: (id, text, delivery) =>
-          dispatch({ type: 'queue/message_pending', id, text, delivery, queuedAt: Date.now() }),
+        onQueuedMessagePending: (id, turn, delivery) =>
+          dispatch({ type: 'queue/message_pending', id, turn, delivery, queuedAt: Date.now() }),
         onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
         onQueuedMessageRemoved: (id) => dispatch({ type: 'queue/message_removed', id }),
-        onQueuedMessageEdited: (id, text) => dispatch({ type: 'queue/message_edited', id, text }),
+        onQueuedMessageEdited: (id, turn) => dispatch({ type: 'queue/message_edited', id, turn }),
         onQueuedMessageReclassified: (id, delivery) => dispatch({ type: 'queue/message_reclassified', id, delivery }),
       },
       approvedContext: approvedContextRef,

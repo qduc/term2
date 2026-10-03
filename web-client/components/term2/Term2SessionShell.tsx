@@ -47,6 +47,16 @@ export function Term2SessionShell({
   const session = useTerm2Session(sessionId);
   const { refreshWorkspaces, refreshSessions, loadNextSessions, setSelectedWorkspaceId } = session;
   const prevUserIdRef = useRef(authUserId ?? null);
+  const draftSessionIdRef = useRef(sessionId);
+
+  useEffect(() => {
+    if (draftSessionIdRef.current === sessionId) return;
+    draftSessionIdRef.current = sessionId;
+    // A draft belongs to the session where it was typed, including navigation
+    // driven by create, browser history, or a URL prop change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInput('');
+  }, [sessionId]);
 
   const getWorkspaceInfo = useCallback(
     (workspaceId: string | null) => {

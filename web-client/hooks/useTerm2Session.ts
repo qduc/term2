@@ -135,6 +135,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   const selectionControllerRef = useRef<AbortController | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTextRef = useRef(new Map<string, string>());
+  const admittingSessionIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     viewRef.current = view;
@@ -389,9 +390,17 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
 
   const submit = useCallback(async (text: string) => {
     const id = sessionIdRef.current;
-    if (!id || !text.trim() || viewRef.current.pendingInteraction?.state === 'pending') return false;
+    if (
+      !id ||
+      !text.trim() ||
+      viewRef.current.pendingInteraction?.state === 'pending' ||
+      admittingSessionIdsRef.current.has(id)
+    ) {
+      return false;
+    }
     const generation = generationRef.current;
     const clientRequestId = crypto.randomUUID();
+    admittingSessionIdsRef.current.add(id);
     pendingTextRef.current.set(clientRequestId, text);
     try {
       await term2Client.submitMessage(id, text, clientRequestId);
@@ -410,6 +419,8 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         error: error instanceof Error ? error.message : 'Message was not accepted',
       }));
       return false;
+    } finally {
+      admittingSessionIdsRef.current.delete(id);
     }
   }, []);
 

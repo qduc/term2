@@ -73,7 +73,7 @@ function apiError(error: unknown): Term2ApiError {
 
 async function getJson<T>(path: string, validator: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
   try {
-    const response = await httpClient.get<unknown>(path, { signal });
+    const response = await httpClient.get<unknown>(path, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -88,7 +88,7 @@ async function postJson<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   try {
-    const response = await httpClient.post<unknown>(path, body, { signal });
+    const response = await httpClient.post<unknown>(path, body, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -103,7 +103,7 @@ async function putJson<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   try {
-    const response = await httpClient.put<unknown>(path, body, { signal });
+    const response = await httpClient.put<unknown>(path, body, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -113,7 +113,7 @@ async function putJson<T>(
 
 async function deleteJson<T>(path: string, validator: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
   try {
-    const response = await httpClient.delete<unknown>(path, { signal });
+    const response = await httpClient.delete<unknown>(path, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -849,6 +849,8 @@ export const term2Client = {
         `/agent/sessions/${encodeURIComponent(sessionId)}/events?after=${encodeURIComponent(String(after))}`,
         {
           signal,
+          skipAuth: true,
+          skipRetry: true,
           headers: { Accept: 'text/event-stream', 'Last-Event-ID': String(after) },
         },
       );

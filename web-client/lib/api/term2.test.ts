@@ -1,6 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateCandidate, validateSelectedCandidate, validateSettings } from './term2.js';
+import { httpClient } from '../http.js';
+import { term2Client, validateCandidate, validateSelectedCandidate, validateSettings } from './term2.js';
+
+test('bypasses application auth handling for local gateway requests and streams', async () => {
+  const client = httpClient as unknown as {
+    get: (path: string, options?: Record<string, unknown>) => Promise<{ data: unknown }>;
+  };
+  const originalGet = client.get;
+  const calls: Array<{ path: string; options?: Record<string, unknown> }> = [];
+  client.get = async (path, options) => {
+    calls.push({ path, options });
+    return { data: path.includes('/events?') ? new Response() : { workspaces: [], nextCursor: null } };
+  };
+  try {
+    await term2Client.listWorkspaces(20);
+    await term2Client.openEvents('session_1', 0);
+  } finally {
+    client.get = originalGet;
+  }
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.options?.skipAuth, true);
+  assert.equal(calls[1]?.options?.skipAuth, true);
+  assert.equal(calls[0]?.options?.skipRetry, true);
+  assert.equal(calls[1]?.options?.skipRetry, true);
+});
 
 test('normalizes the gateway candidate validation response', () => {
   assert.deepEqual(

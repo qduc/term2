@@ -73,7 +73,7 @@ function apiError(error: unknown): Term2ApiError {
 
 async function getJson<T>(path: string, validator: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
   try {
-    const response = await httpClient.get<unknown>(path, { signal });
+    const response = await httpClient.get<unknown>(path, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -88,7 +88,7 @@ async function postJson<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   try {
-    const response = await httpClient.post<unknown>(path, body, { signal });
+    const response = await httpClient.post<unknown>(path, body, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -103,7 +103,7 @@ async function putJson<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   try {
-    const response = await httpClient.put<unknown>(path, body, { signal });
+    const response = await httpClient.put<unknown>(path, body, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -113,7 +113,7 @@ async function putJson<T>(
 
 async function deleteJson<T>(path: string, validator: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
   try {
-    const response = await httpClient.delete<unknown>(path, { signal });
+    const response = await httpClient.delete<unknown>(path, { signal, skipAuth: true, skipRetry: true });
     return validator(response.data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -137,15 +137,21 @@ function text(value: unknown, max = 512): string {
 function optionalText(value: unknown, max = 512): string | undefined {
   return value === undefined ? undefined : text(value, max);
 }
-function validateCandidate(value: unknown): CandidateValidation {
+export function validateCandidate(value: unknown): CandidateValidation {
   const input = object(value);
   only(input, ['candidateId', 'displayName', 'expiresAt', 'checks', 'valid', 'selectable', 'reasonCode', 'reason']);
-  if (!Array.isArray(input.checks) || typeof input.valid !== 'boolean' || typeof input.selectable !== 'boolean')
+  if (
+    !Array.isArray(input.checks) ||
+    typeof input.valid !== 'boolean' ||
+    (input.selectable !== undefined && typeof input.selectable !== 'boolean') ||
+    (input.expiresAt !== undefined && (!Number.isSafeInteger(input.expiresAt) || Number(input.expiresAt) < 0))
+  )
     throw new Term2ApiError(503, 'Invalid agent response');
+  const candidateId = input.candidateId === undefined ? undefined : id(input.candidateId);
   return {
-    ...(input.candidateId === undefined ? {} : { candidateId: id(input.candidateId) }),
+    ...(candidateId === undefined ? {} : { candidateId }),
     ...(input.displayName === undefined ? {} : { displayName: text(input.displayName, 200) }),
-    ...(input.expiresAt === undefined ? {} : { expiresAt: text(input.expiresAt, 128) }),
+    ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt as number }),
     checks: input.checks.map((check) => {
       const item = object(check);
       only(item, ['name', 'status']);
@@ -157,9 +163,31 @@ function validateCandidate(value: unknown): CandidateValidation {
       };
     }),
     valid: input.valid,
-    selectable: input.selectable,
+    // The gateway's validation contract predates the redundant `selectable`
+    // field. A valid response with an opaque candidate id is selectable.
+    selectable: input.selectable === undefined ? input.valid && candidateId !== undefined : input.selectable,
     ...(input.reasonCode === undefined ? {} : { reasonCode: text(input.reasonCode, 128) }),
     ...(input.reason === undefined ? {} : { reason: text(input.reason, 2_048) }),
+  };
+}
+
+export function validateSelectedCandidate(value: unknown): {
+  workspaceId: string;
+  displayName: string;
+  access: 'read' | 'read_write';
+} {
+  const input = object(value);
+  only(input, ['workspaceId', 'displayName', 'access', 'binding']);
+  const binding = input.binding === undefined ? undefined : object(input.binding);
+  if (binding) only(binding, ['sessionId', 'ownerUserId', 'workspaceId', 'grantVersion', 'canonicalRoot', 'access']);
+  const access = input.access ?? binding?.access;
+  if (!['read', 'read_write'].includes(String(access))) throw new Term2ApiError(503, 'Invalid agent response');
+  if (binding?.workspaceId !== undefined && binding.workspaceId !== input.workspaceId)
+    throw new Term2ApiError(503, 'Invalid agent response');
+  return {
+    workspaceId: id(input.workspaceId),
+    displayName: text(input.displayName, 200),
+    access: access as 'read' | 'read_write',
   };
 }
 function validateBrowse(value: unknown): BrowseResult {
@@ -272,7 +300,7 @@ function jsonValue(value: unknown, depth = 0): boolean {
   }
   return false;
 }
-function validateSettings(value: unknown): SettingsProjection {
+export function validateSettings(value: unknown): SettingsProjection {
   const input = object(value);
   only(input, ['schemaVersion', 'revision', 'defaultsRevision', 'settings', 'session']);
   if (input.schemaVersion !== 1 || typeof input.revision !== 'string' || typeof input.defaultsRevision !== 'string')
@@ -332,8 +360,12 @@ function validateSettings(value: unknown): SettingsProjection {
   }
   const providers = settings.providers.map((raw) => {
     const item = object(raw);
-    only(item, ['id', 'label', 'isCustom', 'active', 'credential', 'endpoint']);
-    if (typeof item.active !== 'boolean' || (item.isCustom !== undefined && typeof item.isCustom !== 'boolean'))
+    only(item, ['id', 'label', 'isCustom', 'active', 'disabled', 'credential', 'endpoint']);
+    if (
+      typeof item.active !== 'boolean' ||
+      (item.isCustom !== undefined && typeof item.isCustom !== 'boolean') ||
+      (item.disabled !== undefined && typeof item.disabled !== 'boolean')
+    )
       throw new Term2ApiError(503, 'Invalid agent response');
     const credential = validateCredentialProjection(item.credential);
     return {
@@ -342,6 +374,7 @@ function validateSettings(value: unknown): SettingsProjection {
       active: item.active,
       credential,
       ...(item.isCustom === undefined ? {} : { isCustom: item.isCustom as boolean }),
+      ...(item.disabled === undefined ? {} : { disabled: item.disabled as boolean }),
       ...(item.endpoint === undefined ? {} : { endpoint: validateEndpoint(item.endpoint) }),
     };
   });
@@ -663,17 +696,7 @@ export const term2Client = {
     return postJson(
       '/term2/workspace/candidates/select',
       { candidateId: id(candidateId), access },
-      (value) => {
-        const input = object(value);
-        only(input, ['workspaceId', 'displayName', 'access']);
-        if (!['read', 'read_write'].includes(String(input.access)))
-          throw new Term2ApiError(503, 'Invalid agent response');
-        return {
-          workspaceId: id(input.workspaceId),
-          displayName: text(input.displayName, 200),
-          access: input.access as 'read' | 'read_write',
-        };
-      },
+      validateSelectedCandidate,
       signal,
     );
   },
@@ -826,6 +849,8 @@ export const term2Client = {
         `/agent/sessions/${encodeURIComponent(sessionId)}/events?after=${encodeURIComponent(String(after))}`,
         {
           signal,
+          skipAuth: true,
+          skipRetry: true,
           headers: { Accept: 'text/event-stream', 'Last-Event-ID': String(after) },
         },
       );

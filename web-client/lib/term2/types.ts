@@ -123,7 +123,7 @@ export type CandidateCheckStatus = 'ok' | 'error' | 'pending' | 'warning';
 export interface CandidateValidation {
   candidateId?: string;
   displayName?: string;
-  expiresAt?: string;
+  expiresAt?: number;
   checks: Array<{ name: string; status: CandidateCheckStatus }>;
   valid: boolean;
   selectable: boolean;
@@ -189,6 +189,7 @@ export interface SettingsProjection {
       label: string;
       isCustom?: boolean;
       active: boolean;
+      disabled?: boolean;
       credential: SecretFreeCredential;
       endpoint?: { host: string; path?: string };
     }>;

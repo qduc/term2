@@ -2783,6 +2783,13 @@ describe('gateway startup and assertion verifier', () => {
       );
       const firstTurnId = (first.body as { turnId: string }).turnId;
       await parked!.started;
+      const runningRead = await rpc(
+        socketPath,
+        token('session_read', sessionId),
+        null,
+        `/private/agent/v1/sessions/${sessionId}`,
+      );
+      expect((runningRead.body as { session: { status: string } }).session.status).toBe('running');
       const queued = await rpc(
         socketPath,
         token('message_submit', sessionId),

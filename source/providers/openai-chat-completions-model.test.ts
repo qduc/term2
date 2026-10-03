@@ -35,6 +35,31 @@ function modelFor(chunks: readonly unknown[]) {
 
 const testRequest = { input: [], tools: [] } as const;
 
+it('passes the abort signal as a transport option instead of request JSON', async () => {
+  const signal = new AbortController().signal;
+  let capturedBody: Record<string, unknown> | undefined;
+  let capturedOptions: Record<string, unknown> | undefined;
+  const model = new OpenAIChatCompletionsModel(
+    {
+      chat: {
+        completions: {
+          create: async (body: Record<string, unknown>, options: Record<string, unknown>) => {
+            capturedBody = body;
+            capturedOptions = options;
+            return emptyStream();
+          },
+        },
+      },
+    },
+    'fixture-chat',
+  );
+
+  await collect(model.stream({ input: [], tools: [], signal }));
+
+  expect(capturedBody).not.toHaveProperty('signal');
+  expect(capturedOptions).toEqual({ signal });
+});
+
 it.each([
   ['502', 502],
   ['a non-retryable 400', 400],

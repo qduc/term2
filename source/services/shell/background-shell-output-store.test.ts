@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { BackgroundShellOutputStore, BackgroundShellOutputStoreError } from './background-shell-output-store.js';
 
 describe('BackgroundShellOutputStore', () => {
+  it('returns newly completed lines independently of retention while excluding partial lines', () => {
+    const store = new BackgroundShellOutputStore({ maxLines: 1 });
+    store.open('job-1');
+    expect(store.push('job-1', 'stdout', 'REA')).toEqual([]);
+    expect(store.push('job-1', 'stdout', 'DY\nnoise\npartial')).toEqual([
+      { stream: 'stdout', text: 'READY' },
+      { stream: 'stdout', text: 'noise' },
+    ]);
+    expect(store.readLines('job-1')?.lines).toEqual([{ stream: 'stdout', text: 'noise' }]);
+    expect(store.push('job-1', 'stderr', '')).toEqual([]);
+  });
+
   it('retains stdout and stderr lines in arrival order, interleaved', () => {
     const store = new BackgroundShellOutputStore();
     store.open('job-1');

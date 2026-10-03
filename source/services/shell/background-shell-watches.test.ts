@@ -53,6 +53,94 @@ function setup(store: BackgroundShellOutputStore = new BackgroundShellOutputStor
   return { store, scheduler, watches, firings };
 }
 describe('BackgroundShellWatches', () => {
+  it.each([0, 1, 2, 3])('observes live lines before a single push exceeds maxLines %i', (maxLines) => {
+    const { store, scheduler, watches, firings } = setup(new BackgroundShellOutputStore({ maxLines }));
+    watches.open('job-1');
+    const watchId = watches.registerWatch({ jobId: 'job-1', pattern: /READY/ });
+
+    watches.push('job-1', 'stdout', 'READY\nnoise\nnoise\n');
+    scheduler.advance(1500);
+
+    expect(firings).toEqual([expect.objectContaining({ watchId, matchedLines: 'READY', coalescedCount: 1 })]);
+    expect(store.readLines('job-1')?.lines).toHaveLength(Math.min(maxLines, 3));
+    expect(store.readLines('job-1')?.droppedLines).toBe(Math.max(0, 3 - maxLines));
+  });
+
+  it.each([0, 4, 5, 6])('observes complete live lines even when maxBytes %i evicts them', (maxBytes) => {
+    const { store, scheduler, watches, firings } = setup(new BackgroundShellOutputStore({ maxBytes }));
+    watches.open('job-1');
+    const watchId = watches.registerWatch({ jobId: 'job-1', pattern: /READY/ });
+
+    watches.push('job-1', 'stdout', 'READY\nnoise\n');
+    scheduler.advance(1500);
+
+    expect(firings).toEqual([
+      expect.objectContaining({
+        watchId,
+        matchedLines: 'READY',
+        coalescedCount: 1,
+        droppedBytes: maxBytes < 5 ? 10 : 5,
+      }),
+    ]);
+    expect(store.readLines('job-1')?.lines).toEqual(maxBytes < 5 ? [] : [{ stream: 'stdout', text: 'noise' }]);
+  });
+
+  it('keeps replay bounded and never observes retained live lines twice', () => {
+    const { store, scheduler, watches, firings } = setup(new BackgroundShellOutputStore({ maxLines: 2 }));
+    watches.open('job-1');
+    watches.push('job-1', 'stdout', 'READY old\n');
+    const live = watches.registerWatch({ jobId: 'job-1', pattern: /READY/ });
+    watches.push('job-1', 'stdout', 'READY evicted\nnoise\nREADY retained\n');
+    scheduler.advance(1500);
+    expect(firings).toEqual([
+      expect.objectContaining({
+        watchId: live,
+        matchedLines: 'READY old\nREADY evicted\nREADY retained',
+        coalescedCount: 3,
+      }),
+    ]);
+
+    const replay = watches.registerWatch({ jobId: 'job-1', pattern: /READY/ });
+    watches.push('job-1', 'stdout', 'noise again\n');
+    watches.settleJob('job-1');
+    scheduler.advance(60_000);
+    expect(firings).toEqual([
+      expect.objectContaining({ watchId: live, coalescedCount: 3 }),
+      expect.objectContaining({ watchId: replay, matchedLines: 'READY retained', coalescedCount: 1 }),
+    ]);
+  });
+
+  it('assembles streams separately before observing lines evicted within a push', () => {
+    const { scheduler, watches, firings } = setup(new BackgroundShellOutputStore({ maxLines: 1 }));
+    watches.open('job-1');
+    const stdout = watches.registerWatch({ jobId: 'job-1', pattern: /^READY$/, stream: 'stdout' });
+    const stderr = watches.registerWatch({ jobId: 'job-1', pattern: /^READY$/, stream: 'stderr' });
+    watches.push('job-1', 'stdout', 'REA');
+    watches.push('job-1', 'stderr', 'DY\n');
+    scheduler.advance(1500);
+    expect(firings).toEqual([]);
+
+    watches.push('job-1', 'stdout', 'DY\nnoise\n');
+    scheduler.advance(1500);
+    expect(firings).toEqual([expect.objectContaining({ watchId: stdout, matchedLines: 'READY' })]);
+    expect(firings.some((firing) => firing.watchId === stderr)).toBe(false);
+  });
+
+  it('keeps matching bursts bounded and ignores noise for the live debounce', () => {
+    const { store, scheduler, watches, firings } = setup(new BackgroundShellOutputStore({ maxLines: 2 }));
+    watches.open('job-1');
+    watches.registerWatch({ jobId: 'job-1', pattern: /x+/, idleMs: 1500 });
+    watches.push('job-1', 'stdout', `${'x'.repeat(50)}\n`.repeat(200));
+    scheduler.advance(1000);
+    watches.push('job-1', 'stdout', 'noise\nnoise\nnoise\n');
+    scheduler.advance(500);
+
+    expect(firings).toHaveLength(1);
+    expect(firings[0]).toMatchObject({ coalescedCount: 200 });
+    expect(firings[0].matchedLines.length).toBeLessThanOrEqual(4096);
+    expect(store.readLines('job-1')?.lines).toHaveLength(2);
+  });
+
   it('re-routes firings through a new onFiring subscriber after setOnFiring', () => {
     const { store, scheduler, watches } = setup();
     store.open('job-1');

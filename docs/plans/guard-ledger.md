@@ -1460,6 +1460,47 @@ automatic replay). See
 [docs/plans/evidence-backed-shell-timeouts.md](evidence-backed-shell-timeouts.md)
 for the September 6, 2026 receipts.
 
+### Background shell live observation before retention eviction
+
+Harm prevented: an active output watch silently missing a complete matching line
+because later lines in the same process chunk evicted it before watch evaluation.
+Scope: `BackgroundShellWatches.push` for local background shells. Class: retention
+bound; enforcement owner remains `BackgroundShellOutputStore`. Live observation
+uses the store's newly completed-line return, while registration and EOF replay
+continue to use `readLines`. The signal is direct line/character occupancy, not
+evidence that the process should stop. Large legitimate chunks remain observable
+without increasing retained history or cancelling work.
+
+Configuration is unchanged: constructor options override defaults of 256 KiB
+(UTF-16 code units, excluding terminators), 2,000 complete lines, and 20 settled
+jobs; values must be non-negative integers. The shared session factory uses
+defaults. No settings, migration, retry, fallback, or provider-continuity change.
+Head eviction and partial-line trimming still account for loss through
+`droppedBytes`/`droppedLines`. A firing carries the existing drop count, match
+count, sequence, and bounded matched text; dropped historical output remains
+unavailable for later registration. Live matching retains the existing stream,
+complete-line, debounce, notification-limit, and flush-before-completion rules.
+Rollback is the additive `push` return and the watch consumption of that return.
+
+Disposition: confirmed defect with regression coverage. Red proof:
+`pnpm test source/services/shell/background-shell-watches.test.ts` failed the
+line-cap, byte-cap, and replay/live cases before production edits (eight failures;
+two additional zero-retention EOF probes also failed and were deferred).
+The EOF sibling can still lose final partial lines with `maxLines: 0` or
+`maxRetainedJobs: 0`; preserving the existing `close(): boolean` contract keeps
+that separate from this live-push repair. Detection gap: earlier tests used one
+line per eviction push and matching bursts across separate pushes, so none
+challenged transport chunk size against retention. The new boundary matrix and
+store return contract make live observation independent of retained snapshots.
+
+Verification on 2026-10-03: the focused store/watch pair passed 49 tests
+(0.246s). `pnpm test:related ./source/services/shell/background-shell-output-store.ts
+./source/services/shell/background-shell-watches.ts` and `pnpm test:changed`
+each passed 24 files / 540 tests (26.34s and 25.70s Vitest durations).
+`pnpm typecheck`, changed-source ESLint, changed-file Prettier, and
+`git diff --check` passed. No full-suite trigger or provider boundary changed;
+no full-suite or live-provider run was needed for this scoped repair.
+
 ### Foreground nested shell approval false positive
 
 Disposition: **repaired locally on 2026-08-14; not yet committed or merged.**

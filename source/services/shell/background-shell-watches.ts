@@ -1,4 +1,8 @@
-import type { BackgroundShellOutputStream, BackgroundShellOutputStore } from './background-shell-output-store.js';
+import type {
+  BackgroundShellOutputLine,
+  BackgroundShellOutputStream,
+  BackgroundShellOutputStore,
+} from './background-shell-output-store.js';
 
 /**
  * The session-owned output store + watch layer handed to the shell tool and
@@ -203,11 +207,19 @@ export class BackgroundShellWatches {
    * rejects the push (unknown or already-closed job).
    */
   push(jobId: string, stream: BackgroundShellOutputStream, text: string): void {
-    this.#store.push(jobId, stream, text);
-    for (const record of this.#watches.values()) {
-      if (record.watch.jobId !== jobId) continue;
-      if (this.#evaluateWatch(record)) this.#reschedule(record);
+    const records = [...this.#watches.values()].filter((record) => record.watch.jobId === jobId);
+    // Preserve any retained backlog written directly to the shared store.
+    const matched = new Set(records.filter((record) => this.#evaluateWatch(record)));
+    const completed = this.#store.push(jobId, stream, text);
+    const read = this.#store.readLines(jobId);
+    for (const record of records) {
+      if (this.#matchLines(record, completed)) matched.add(record);
+      // Retained lines from this push were just observed. Scanning them on
+      // the next push or settlement would duplicate their matches.
+      record.nextLine = read?.lines.length ?? 0;
+      record.lastDroppedLines = read?.droppedLines ?? 0;
     }
+    for (const record of matched) this.#reschedule(record);
   }
 
   /**
@@ -332,10 +344,15 @@ export class BackgroundShellWatches {
     record.nextLine = Math.max(0, record.nextLine - evicted);
     record.lastDroppedLines = read.droppedLines;
 
+    const matched = this.#matchLines(record, read.lines.slice(record.nextLine));
+    record.nextLine = read.lines.length;
+    return matched;
+  }
+
+  #matchLines(record: WatchRecord, lines: readonly BackgroundShellOutputLine[]): boolean {
     const { watch } = record;
     let matched = false;
-    for (let i = record.nextLine; i < read.lines.length; i++) {
-      const line = read.lines[i];
+    for (const line of lines) {
       if (!streamAllows(watch.stream, line.stream)) continue;
       if (watch.pattern !== undefined && !patternMatches(watch.pattern, line.text)) continue;
       matched = true;
@@ -356,7 +373,6 @@ export class BackgroundShellWatches {
         if (dropped !== undefined) record.pendingBytes -= dropped.length;
       }
     }
-    record.nextLine = read.lines.length;
     return matched;
   }
 

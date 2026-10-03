@@ -48,7 +48,6 @@
   "scripts": {
     "start": "node dist/cli.js",
     "build": "node scripts/build-with-rollback.mjs",
-    "postinstall": "pnpm --filter @qduc/agent-wire build",
     "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "tsc --build tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
@@ -113,7 +112,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@modelcontextprotocol/server": "2.0.0",
-    "@qduc/agent-wire": "workspace:*",
+    "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.1.0.tgz",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",
     "@types/node": "^24.10.1",

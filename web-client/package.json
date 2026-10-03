@@ -10,7 +10,7 @@
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
-    "@qduc/agent-wire": "workspace:*",
+    "@qduc/agent-wire": "file:../vendor/qduc-agent-wire-0.1.0.tgz",
     "highlight.js": "^11.9.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.462.0",

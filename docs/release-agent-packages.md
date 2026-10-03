@@ -1,101 +1,60 @@
-# Shared agent package release handoff
+# Shared agent package ownership and release handoff
 
-The first release candidates are `@qduc/agent-wire@0.1.0` and
-`@qduc/agent-core@0.1.0`. Preparing these packages does not publish them, migrate
-ChatForge off its vendored tarballs, or make Term2 import the external core.
+`@qduc/agent-core` and `@qduc/agent-wire` belong to the independent
+`qduc/agent-runtime` repository, with the local checkout at
+`/home/qduc/agent-runtime`. The GitHub repository must be created and pushed
+separately; local extraction does not create a remote or publish to npm.
 
-## Local validation
+Package source, tests, tarball validation, licenses, and the publishing workflow
+are maintained there, not in Term2. Follow that repository's README and release
+instructions. Term2's `.github/workflows/publish.yml` publishes only
+`@qduc/term2`.
 
-From the repository root:
+## Term2 consumption before the first npm release
 
-```bash
-pnpm --filter @qduc/agent-core build
-pnpm --filter @qduc/agent-wire test
-pnpm test source/core/core-boundary.test.ts scripts/agent-package-release.test.ts
-node scripts/agent-package-smoke.mjs
-pnpm typecheck
-```
+Term2 consumes the `0.1.0` wire candidate from
+`vendor/qduc-agent-wire-0.1.0.tgz` as a development dependency. Its CLI build
+copies the installed package into `dist/node_modules/@qduc/agent-wire`, keeping
+the root npm tarball self-contained without depending on an unpublished package
+or a sibling checkout. No shared-package build runs during Term2 installation.
 
-The smoke command builds and packs both packages, checks their public entry
-points, license, README, and core prompt assets, then installs the tarballs into
-a temporary consumer outside the repository. It checks runtime imports,
-registry isolation, wire envelope parsing, and public TypeScript declarations.
-It installs dependencies from npm, needs network access, and cleans up its
-temporary consumer. It does not publish or call a live model provider.
-It is a packaging gate, not an end-to-end session execution test.
+After the wire release is visible on npm, switch it to a runtime registry
+dependency and remove `scripts/embed-agent-wire.mjs` and its build step together.
+Validate the root CLI tarball before releasing Term2.
 
-### Why the consumer check is strict
+## Core migration is a separate boundary change
 
-The initial core package compiled inside Term2, but its public declaration
-graph referenced SQLite and sandbox types absent from the package manifest.
-The monorepo supplied those types, and `skipLibCheck` hid the gap in the first
-consumer check. The core now declares those dependencies, including the
-sandbox's transitive node-forge declarations. Both package tarballs are checked
-without `skipLibCheck`, with Node types explicitly enabled. This checks the
-release boundary rather than relying on the monorepo's dependency tree; it also
-covers future missing dependencies in either package.
+The standalone core contains its own implementation source and can build
+without Term2. Term2's existing runtime still uses
+`source/core/session-runtime.ts` and the application-owned implementation.
+The source snapshot retained there is not automatically synchronized with the
+standalone repository. Changes to shared runtime behavior during this transition
+need explicit coordination between the two repositories.
 
-## User-owned npm and GitHub setup
+Replacing only `createSessionRuntime` with a package import is not sufficient:
+the exported session options reference concrete collaborator classes, and
+module-scoped registries and workspace state would otherwise be duplicated.
+An external-core consumer migration must establish shared ownership of these
+ports and state before changing the production factory. Do not use type casts
+to disguise incompatible class instances or assume two module registries are
+the same registry.
 
-The workflow is `.github/workflows/publish-agent-packages.yml`; the existing
-`publish.yml` remains the Term2-only release workflow.
+ChatForge's gateway-based execution does not become in-process session execution
+merely because it installs the core package. Its package-consumer and runtime
+changes need their own validation.
 
-Before any publish:
+## Publishing boundary
 
-1. Push the reviewed preparation commits to `qduc/term2` main. This is a
-   separate external action; local preparation does not push.
-2. In GitHub, create the `npm-agent-packages` environment. Configure required
-   reviewers and restrict deployments to main if your repository plan supports
-   those protections. Merely naming an environment does not configure approval.
-3. Confirm ownership of the `@qduc` npm scope and the availability of both names.
-   If npm requires a first authenticated publish before a package has settings,
-   that bootstrap is a separate user-assisted step using the validated tarballs.
-   Do not add a long-lived npm token to this repository or its workflow.
-4. For each package, configure an npm Trusted Publisher with these values:
+The first candidates are `@qduc/agent-core@0.1.0` and
+`@qduc/agent-wire@0.1.0`. Publishing is a separate user-assisted operation:
 
-   | Field | Value |
-   | --- | --- |
-   | Organization or user | `qduc` |
-   | Repository | `term2` |
-   | Workflow filename | `publish-agent-packages.yml` |
-   | Environment name | `npm-agent-packages` |
-   | Allowed action | Allow direct `npm publish` |
+- Create and push `qduc/agent-runtime`, not a package workflow in `qduc/term2`.
+- Configure the standalone repository's protected GitHub publishing environment.
+- Confirm npm scope ownership and bootstrap each new package if npm requires it.
+- Configure each npm Trusted Publisher for the **agent-runtime** repository and
+  its actual workflow filename/environment, enabling direct `npm publish`.
+- Run validation-only first, then explicitly select publication.
 
-   The filename is not the full `.github/workflows/` path. New npm publisher
-   configurations may allow staged publication without allowing direct
-   publication, so explicitly enable the action this workflow uses. See the
-   [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/).
-
-## Workflow behavior
-
-Run **Prepare or publish agent packages** on main from GitHub Actions.
-Leave `publish` false for a validation-only run. It runs typecheck, wire tests,
-the isolated tarball smoke gate, the root build, unit tests, and integration
-tests, then uploads both tarballs as the `agent-packages` artifact.
-
-Only when publishing is explicitly selected does the second job run. It uses
-the validated artifacts without rebuilding and publishes the selected `wire`,
-`core`, or `both` packages with OIDC/provenance. It passes through the
-`npm-agent-packages` environment. No tag or ordinary push triggers publication.
-
-If wire succeeds but core fails, do not rerun with `both`: npm versions are
-immutable. Inspect the publish output and retry only the failed package. If a
-bootstrap already published `0.1.0`, do not try publishing it again; configure
-Trusted Publishing for its next version instead.
-
-A successful publish can precede npm read visibility by several minutes. An
-immediate 404 is not a reason to bump the version or repeat a successful publish.
-
-## After publication is visible
-
-Only after registry visibility is confirmed:
-
-- Replace ChatForge's `file:vendor/qduc-agent-*-0.0.0.tgz` dependencies with
-  released package versions and regenerate its lockfile. Run its backend
-  protocol/runtime tests and gateway integration tests.
-- Switch Term2's wire workspace dependency to a runtime registry dependency and
-  remove its embedded wire build copy together. Validate the root CLI tarball.
-- Decide separately whether Term2 should import `@qduc/agent-core` externally.
-  Its current session construction uses the internal source seam. Moving source
-  ownership into `packages/core` and running ChatForge sessions in-process are
-  not prerequisites silently included in this release.
+If one package publishes and the other fails, retry only the failed package.
+Registry visibility can lag behind a successful publish; an immediate 404 is
+not a reason to repeat a successful publication or invent another version.

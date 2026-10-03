@@ -1,37 +1,16 @@
 # Releasing `@qduc/agent-wire`
 
-This repository currently consumes `@qduc/agent-wire` as a workspace package,
-but the root `@qduc/term2` package must remain installable without resolving an
-unpublished package. The CLI build copies the compiled wire package into the
-root `dist` output, so the published root tarball is self-contained.
+The wire package is maintained and released from the separate
+`qduc/agent-runtime` repository (`/home/qduc/agent-runtime` locally), not Term2.
+Use that repository's release workflow and npm Trusted Publisher settings.
 
-The `0.1.0` candidate and manual validation/publish workflow are prepared.
-Follow [the shared package release handoff](release-agent-packages.md) for
-validation, npm bootstrap if required, and the exact Trusted Publisher fields.
+Term2 consumes the `0.1.0` candidate through its vendored tarball development
+dependency. The CLI build embeds the installed wire package into root `dist`
+so the published root tarball remains self-contained before wire is on npm.
 
-## Later release sequence
+Once the wire release is visible, replace the vendored development dependency
+with a normal runtime dependency. Remove the embedded copy and its build step
+together, then rebuild and validate the root CLI tarball.
 
-When `@qduc/agent-wire` is ready for its first npm release, do these steps in
-order:
-
-1. Create the npm Trusted Publisher for `@qduc/agent-wire`, pointing at this
-   repository and `publish-agent-packages.yml`, with the `npm-agent-packages`
-   environment and direct `npm publish` enabled. Select `wire` in the workflow
-   to publish this package only. Configure OIDC authentication; do not create or store a long-lived
-   npm token.
-2. Confirm that npm exposes the released version with:
-
-   ```bash
-   pnpm view @qduc/agent-wire@0.1.0 version
-   ```
-
-3. Only after that confirmation, add `@qduc/agent-wire` as a normal runtime
-   dependency of `@qduc/term2` and remove the compiled `dist` inline copy and
-   its embedding build step. Rebuild and rerun the root tarball smoke test.
-
-`.github/workflows/publish.yml` currently publishes `@qduc/term2` only. The
-Trusted Publisher setup is a user-owned step, not performed by local preparation.
-
-Do not run `npm publish`, `pnpm publish`, or `git push` as part of this work.
-The root release script publishes only `@qduc/term2`; publishing the wire
-package is a separate, explicitly approved release operation.
+See [shared package ownership and handoff](release-agent-packages.md) for the
+publication boundary. Term2's existing publish workflow remains Term2-only.

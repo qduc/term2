@@ -11,7 +11,7 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 
 | Mode | Command | Behavior | Safety Guarantee |
 | :--- | :--- | :--- | :--- |
-| **`off`** *(Default)* | `/auto-approve off` | Every mutating tool call and shell command prompts for interactive user confirmation. | Maximum safety. Default policy across all sessions. |
+| **`off`** *(Default)* | `/auto-approve off` | Shell commands prompt for interactive confirmation. Valid local workspace edits can apply without a prompt; file tools have separate boundary and authorization checks. | Shell confirmation under the default interactive policy. |
 | **`advisory`** | `/auto-approve advisory` | Prompts for confirmation on every command, accompanied by a real-time safety explanation. | High safety with consequence analysis. |
 | **`auto`** | `/auto-approve auto` | Opt-in smart approval mode. Automatically approves safe read-only operations and workspace file modifications. Risky commands (e.g. `rm -rf`, `git reset --hard`, network requests, system path edits) are strictly gated for confirmation. | Balanced velocity. Eliminates repetitive prompts on benign actions while intercepting destructive commands. |
 | **`always`** | `/auto-approve always` | Completely unattended execution mode. Every tool runs without prompts except `ask_user`. Selecting `always` automatically disables the shell sandbox (`sandbox.enabled = false`). | For isolated, disposable environments only. |

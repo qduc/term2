@@ -1,12 +1,12 @@
 ---
 title: term2
-description: Terminal-based AI assistant and autonomous agent runtime.
+description: An AI assistant that reads projects, edits files, and runs commands in your terminal or over SSH.
 template: splash
 hero:
-  tagline: A terminal-based AI assistant and autonomous agent runtime built for high-velocity software engineering and system administration.
+  tagline: Work through a repo or a remote task without copying commands between chat and your terminal.
   actions:
-    - text: Get Started
-      link: /term2/getting-started/
+    - text: Try your first task
+      link: /term2/getting-started/first-run/
       icon: right-arrow
       variant: primary
     - text: View on GitHub
@@ -17,64 +17,85 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
+term2 is an open-source AI assistant that can read your project, edit files, and
+run commands in a local or SSH workspace. Choose your provider, review proposed
+actions, and pick up a saved conversation after a break.
+
+<p class="term2-eyebrow">Start with the work</p>
+
+## What would you ask it to do?
+
+<CardGrid>
+  <Card title="Understand an unfamiliar repo" icon="magnifier">
+    “Trace how a request reaches the database. Show me the relevant files.”
+    Use read-only Plan mode to explore before making changes.
+  </Card>
+  <Card title="Make a change and check it" icon="pencil">
+    “Fix this error, explain the diff, and run the focused test.”
+    Review the diff and approve shell commands under default interactive settings.
+  </Card>
+  <Card title="Work over SSH" icon="terminal">
+    “Find why this service fails to start.”
+    Connect to a remote working directory and investigate with the agent there.
+  </Card>
+  <Card title="Continue after a break" icon="restore">
+    Resume a saved conversation with `term2 --resume`, or fork it to try
+    another approach without replacing the original conversation.
+  </Card>
+</CardGrid>
+
+<p class="term2-eyebrow">First session</p>
+
+## Install, connect, explore
+
+Use Node.js 20 or newer (Node 24 recommended). The published 0.30.0 install hook
+requires pnpm 11 on your `PATH`, including for npm installs.
+
 ```bash title="Install"
+npm install --global pnpm@11
 npm install --global @qduc/term2
+term2 --version
 ```
 
-<ul class="term2-providers" aria-label="Supported providers">
-  <li>OpenAI</li>
-  <li>ChatGPT / Codex</li>
-  <li>Anthropic</li>
-  <li>Google Gemini</li>
-  <li>xAI Grok</li>
-  <li>OpenRouter</li>
-  <li>Ollama</li>
-  <li>llama.cpp</li>
-</ul>
+On Linux, sandboxed shell commands also need `bubblewrap`, `socat`, and `ripgrep`.
+See [installation](/term2/getting-started/installation/) for platform details.
 
-<p class="term2-eyebrow">Safe by default</p>
+Authenticate with [a supported provider](/term2/providers/), then run
+`term2 --model` in your project. Select a model from that provider, enter `/plan`,
+and ask where the project starts and how to test it.
 
-## You stay in control
+[Follow the first-run guide →](/term2/getting-started/first-run/)
 
-<CardGrid>
-  <Card title="Execution Safety & Sandboxing">
-    Sandboxed shell execution with configurable read/write boundaries (`standard` and `strict`), interactive diff previews, smart auto-approvals, and run budgets.
-  </Card>
-  <Card title="Scriptable Tool Workflows">
-    Use `run_code` to coordinate tool calls in a sandboxed JavaScript runtime with nested approvals, structured results, and explicit return contracts.
-  </Card>
-</CardGrid>
+<p class="term2-eyebrow">Choose your setup</p>
 
-<p class="term2-eyebrow">Built for real work</p>
+## Your models, your workspace
 
-## One agent, many ways to work
+OpenAI, ChatGPT/Codex, Grok, and OpenRouter are built in. Add direct Anthropic,
+Gemini, or local endpoints through `/providers`. Model capabilities and costs
+depend on the provider and model you choose.
 
-| Mode         | Use it for                                  |
-| ------------ | ------------------------------------------- |
-| Standard     | Full development: read, edit, run           |
-| Plan         | Read-only research, design, and review      |
-| Lite         | Quick shell, DevOps, and admin tasks        |
-| Mentor       | A collaborative second opinion              |
-| Orchestrator | Delegating work to subagents                |
+term2 is MIT licensed. Hosted providers receive the context and tool results
+used for your request, and their billing and account limits apply.
 
-<CardGrid>
-  <Card title="Multi-Agent Swarms">
-    Deploy specialized subagents (Explorer, Worker, Mentor, Librarian, and Reviewer) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`) in foreground or background with `Ctrl+G` task management.
-  </Card>
-  <Card title="Universal Provider Support">
-    Connect to built-in providers (OpenAI, ChatGPT/Codex OAuth, xAI Grok OAuth, OpenRouter), custom Anthropic and Google Gemini adapters, and local OpenAI-compatible endpoints (Ollama, llama.cpp).
-  </Card>
-</CardGrid>
+[Provider setup](/term2/providers/) · [SSH workflows](/term2/remote/ssh/)
 
-<p class="term2-eyebrow">Run it anywhere</p>
+## Review the work as it happens
 
-## Local, remote, or headless
+Start in Plan mode for read-only investigation. In Standard mode, shell commands
+prompt by default; valid local workspace edits can apply without a prompt. The shell
+sandbox constrains command execution; changing approval or sandbox settings
+changes those boundaries.
 
-<CardGrid>
-  <Card title="Native Remote Development">
-    Connect directly to remote servers over SSH with local SSH agent authentication and run full or lightweight agent sessions remotely.
-  </Card>
-  <Card title="Private Web Gateway">
-    Launch `term2 serve` to expose an authenticated, audited Unix socket or TLS gateway for programmatic control and external clients.
-  </Card>
-</CardGrid>
+For longer tasks, explore [subagents](/term2/modes/subagents/),
+[saved sessions](/term2/using-term2/sessions/), and
+[approval controls](/term2/safety/approvals/) when you need them.
+
+## Know which version you're using
+
+npm's latest release is **0.30.0**, published September 29, 2026 (checked October 3).
+This site tracks `main`, which also includes unreleased terminal themes/skins and
+web client fixes. See [what's new](/term2/getting-started/whats-new/).
+
+This is the product documentation site. The separate `web-client/` app uses the
+private [`term2 serve` gateway](/term2/remote/web-gateway/); it is a different
+interface with its own setup.

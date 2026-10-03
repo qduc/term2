@@ -1016,9 +1016,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getMethod<[], void>(agentClient, 'disposeShellChildren')?.call(agentClient);
     notificationObserver = null;
     taskObserver = null;
-    backgroundSubagentEventObserver = null;
     const subagentDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundSubagents')?.call(agentClient);
     const detachSubagentSinks = (): void => {
+      // Persistence observers need terminal events through asynchronous shutdown.
+      backgroundSubagentEventObserver = null;
       backgroundSubagentApprovals.close();
       resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
       resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);

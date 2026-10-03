@@ -2764,8 +2764,9 @@ The session's `sinks.subagentEvents` now wraps background registration as one
 secondary observer while keeping its lifecycle sink attached. Foreground and
 other host methods retain bound forwarding. The service stores the observer
 alongside its task/notification observers and reattaches it on session reset.
-Null registration removes only the observer; disposal clears it while terminal
-settlement still owns the lifecycle sink until adopted runs settle.
+Null registration removes only the observer; disposal clears it with the
+lifecycle sink after adopted terminal settlement. Without an async disposer,
+both detach synchronously.
 
 The observer receives every subagent lifecycle event, including starts, questions
 and duplicate completions, before notification enqueue deduplication can return.
@@ -2833,3 +2834,36 @@ are covered. Reusing the same client while an old real async disposer is still
 pending can require a wider client-incarnation contract; that pre-existing case
 is not claimed fixed here. Async shutdown itself still retains sinks until
 adopted settlement, as asserted by the existing lifecycle test.
+
+### Shutdown persistence observer correction
+
+Further review found that the first observer addendum cleared its secondary
+event observer immediately on disposal while retaining the raw lifecycle sink
+through async settlement. Gateway uses this observer to persist events and
+awaits session shutdown before closing persistence. Terminal approvals were
+released but their shutdown completion events were missing from persistence.
+
+The event observer now clears inside `detachSubagentSinks`, after the real async
+disposer settles (synchronously when no disposer exists). UI task and notification
+observers still clear immediately. No additional state or machinery is required.
+The public facade regression gates a real disposal promise, publishes a terminal
+event during shutdown, verifies both approval release and observer delivery,
+and verifies post-settlement events cannot reach the detached observer.
+
+Red: the targeted new facade test failed with observer calls 0; 36 existing
+tests skipped. Vitest 1.58s, command 2.70s, timeout 120s, terminal exit 1.
+Focused green: queue/facade/composition/notification tests, 97 passed; Vitest
+1.96s, command 3.09s, timeout 120s, terminal exit 0.
+
+Retro: this was an introduced lifecycle regression in the observer wrapper;
+the previous async shutdown test asserted raw sink retention but did not register
+the public persistence observer. The new facade test covers that consumer
+boundary, including different UI and persistence teardown timing.
+
+Follow-up handoff gates (finite timeouts, terminal exit 0): related composition
+and changed each passed 71 files, 1168 tests plus one expected failure. Related
+Vitest 35.81s / command 48.24s; changed Vitest 35.03s / command 42.53s; each
+timeout 300s. Typecheck 8.51s, timeout 180s; scoped ESLint 11.41s (one existing
+facade `require-yield` warning), timeout 120s; Prettier 1.71s, timeout 120s.
+Production shutdown probe now observes one terminal completion with zero
+pending approvals, both before and after awaited settlement; timeout 30s.

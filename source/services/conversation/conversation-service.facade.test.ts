@@ -902,6 +902,51 @@ it('isolates throwing background event observers and clears them on disposal', a
   expect(sinks.event).toBeNull();
 });
 
+it('delivers terminal background events to persistence observers until asynchronous shutdown settles', async () => {
+  const { client, sinks } = backgroundClient();
+  let settle!: () => void;
+  const settlement = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  Object.assign(client, { disposeBackgroundSubagents: () => settlement });
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const observed = vi.fn();
+  const taskObserver = vi.fn();
+  const notificationObserver = vi.fn();
+  service.setBackgroundSubagentEventSink(observed);
+  service.setBackgroundSubagentTaskObserver(taskObserver);
+  service.setBackgroundSubagentNotificationObserver(notificationObserver);
+  sinks.pause?.({
+    runId: 'settling',
+    generation: 1,
+    role: 'worker',
+    interruption: { name: 'shell', callId: 'settling-tool', arguments: '{}' },
+    apply: () => false,
+  });
+  const lifecycleSink = sinks.event!;
+  const shutdown = service.shutdown();
+  const shutdownFinished = vi.fn();
+  void shutdown.then(shutdownFinished);
+  await flushQueue();
+  expect(shutdownFinished).not.toHaveBeenCalled();
+  expect(sinks.event).toBe(lifecycleSink);
+  const terminal = backgroundCompletion('settling');
+  lifecycleSink(terminal);
+  expect(observed).toHaveBeenCalledWith(terminal);
+  expect(service.backgroundSubagentApprovals.getSnapshot().pendingCount).toBe(0);
+  expect(taskObserver).not.toHaveBeenCalled();
+  expect(notificationObserver).not.toHaveBeenCalled();
+  settle();
+  await shutdown;
+  expect(sinks.event).toBeNull();
+  lifecycleSink(backgroundCompletion('late'));
+  expect(observed).toHaveBeenCalledOnce();
+});
+
 it.each(['factory-owned', 'caller-owned'] as const)(
   'preserves the background event observer and lifecycle owner across %s session reset',
   async (ownership) => {

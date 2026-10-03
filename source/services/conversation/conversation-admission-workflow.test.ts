@@ -58,6 +58,7 @@ const createWorkflow = (overrides: Partial<ConstructorParameters<typeof Conversa
   const logger = { debug: vi.fn() };
   const send = vi.fn(async () => {});
   const conversation: ConversationAdmissionWorkflowDependencies['conversation'] = {
+    isQueueActive: vi.fn(() => false),
     previewInputSurge: vi.fn(() => allowedSurge),
     previewLargeUncachedInput: vi.fn(() => allowedLarge),
   };
@@ -102,8 +103,9 @@ describe('ConversationAdmissionWorkflow', () => {
     expect(send).toHaveBeenCalledWith(turn, {});
   });
 
-  it('sends an approved surge with a content-bound capability and preserved busy mode', async () => {
+  it.each([false, true])('requires surge approval regardless of active queue state (%s)', async (isQueueActive) => {
     const { workflow, conversation, logger, send } = createWorkflow();
+    vi.mocked(conversation.isQueueActive).mockReturnValue(isQueueActive);
     (conversation.previewInputSurge as any).mockReturnValue(blockedSurge);
 
     const first = workflow.submit(turn, { busyMode: 'steer' });
@@ -173,17 +175,61 @@ describe('ConversationAdmissionWorkflow', () => {
     );
   });
 
-  it('bypasses large uncached input warning when busyMode is set (agent running)', async () => {
+  it.each(['steer', 'follow_up', undefined] as const)(
+    'requires large uncached input confirmation while idle with busyMode %s',
+    async (busyMode) => {
+      const { workflow, conversation, history, send } = createWorkflow();
+      vi.mocked(conversation.previewLargeUncachedInput).mockReturnValue(warnedLarge);
+      const options = busyMode ? { busyMode } : {};
+
+      const pending = workflow.submit(turn, options);
+      expect(pending.kind).toBe('confirmation_required');
+      if (pending.kind !== 'confirmation_required') throw new Error('Expected confirmation');
+      expect(pending.confirmation).toMatchObject({ kind: 'large_uncached', turn, options });
+      expect(conversation.previewLargeUncachedInput).toHaveBeenCalledWith(turn, 123);
+      expect(history.addMessage).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+
+      const approved = workflow.resolve(pending.confirmation.id, 'approve');
+      if (approved.kind !== 'submitted') throw new Error('Expected submission');
+      await approved.completion;
+      expect(send).toHaveBeenCalledWith(turn, options);
+    },
+  );
+
+  it.each(['steer', 'follow_up', undefined] as const)(
+    'bypasses large uncached input confirmation for an active queue with busyMode %s',
+    async (busyMode) => {
+      const { workflow, conversation, send } = createWorkflow();
+      vi.mocked(conversation.isQueueActive).mockReturnValue(true);
+      vi.mocked(conversation.previewLargeUncachedInput).mockReturnValue(warnedLarge);
+      const options = busyMode ? { busyMode } : {};
+
+      const result = workflow.submit(turn, options);
+      expect(result.kind).toBe('submitted');
+      if (result.kind !== 'submitted') throw new Error('Expected submission');
+      await result.completion;
+
+      expect(conversation.previewLargeUncachedInput).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(turn, options);
+    },
+  );
+
+  it('checks current queue activity again after the running turn finishes', async () => {
     const { workflow, conversation, send } = createWorkflow();
-    (conversation.previewLargeUncachedInput as any).mockReturnValue(warnedLarge);
+    vi.mocked(conversation.isQueueActive).mockReturnValue(true);
+    vi.mocked(conversation.previewLargeUncachedInput).mockReturnValue(warnedLarge);
 
-    const result = workflow.submit(turn, { busyMode: 'steer' });
-    expect(result.kind).toBe('submitted');
-    if (result.kind !== 'submitted') throw new Error('Expected submission');
-    await result.completion;
+    const first = workflow.submit(turn, { busyMode: 'steer' });
+    if (first.kind !== 'submitted') throw new Error('Expected submission');
+    await first.completion;
 
-    expect(conversation.previewLargeUncachedInput).not.toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith(turn, { busyMode: 'steer' });
+    vi.mocked(conversation.isQueueActive).mockReturnValue(false);
+    const second = workflow.submit({ text: 'Start another turn' }, { busyMode: 'steer' });
+
+    expect(second.kind).toBe('confirmation_required');
+    expect(conversation.previewLargeUncachedInput).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('consumes a matching confirmation before awaiting and ignores stale or repeated decisions', async () => {

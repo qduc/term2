@@ -104,6 +104,51 @@ Open work, in order:
 
 ## Guard classes
 
+### Idle interactive large-uncached-input confirmation
+
+Harm prevented: idle Enter silently submitting a large uncached turn because
+the composer's delivery preference was mistaken for evidence of an active turn.
+Scope: interactive `ConversationAdmissionWorkflow.submit`; this does not add
+enforcement to non-interactive or provider-request paths. Class: advisory
+confirmation. Enforcement and recovery owner: `ConversationAdmissionWorkflow`;
+approval sends the staged turn, decline returns it without recording or sending.
+
+Signal: `ConversationService.isQueueActive()` at each synchronous admission
+attempt, followed by the existing `previewLargeUncachedInput` decision. Queue
+activity is direct lifecycle evidence; payload size and cache-risk reasons are
+estimates. `busyMode` remains a delivery preference and supplies no activity
+evidence. Legitimate large idle work still reaches confirmation; an actually
+active foreground turn bypasses this advisory, including when the preference is
+omitted. Input-surge confirmation continues to take precedence in both states.
+
+Configuration, precedence, and clamping: unchanged. The session planner creates
+`LargeUncachedInputGuard` with its fixed defaults: enabled, 64,000 estimated tokens
+(UTF-8 bytes divided by four, rounded up), and a five-minute idle threshold.
+No persisted setting or migration is introduced. The workflow stages a warning
+before history or send side effects; already admitted work is untouched. Retry,
+fallback, provider continuity, and content-bound surge approval are unchanged.
+Observability retains `large_uncached_input_warning_shown`, estimated token/byte
+counts, and cache-risk reasons, without logging turn content. Rollback is the
+workflow's activity dependency and gate plus its regression tests.
+
+Ledger disposition: confirmed bypass repaired and covered at the owning public
+boundary. Detection gap: the previous test explicitly equated a set `busyMode`
+with a running agent. The replacement matrix varies real activity independently
+of steer, follow-up, and omitted preferences, and checks busy-to-idle transition.
+Sibling review: the app's preview is advisory only; the orchestrator independently
+queries queue ownership for routing. Neither supplies this confirmation's state.
+
+Red proof: `pnpm test source/services/conversation/conversation-admission-workflow.test.ts`
+failed four regressions before the repair (both idle preferences, active without
+a preference, and a busy-to-idle transition). Verification on 2026-10-03: focused
+tests passed (16 tests, 0.22s), `pnpm test:related
+./source/services/conversation/conversation-admission-workflow.ts` and
+`pnpm test:changed` each passed eight files / 74 tests (2.03s and 2.00s), and
+`pnpm typecheck`, changed-source ESLint, changed-file Prettier, and
+`git diff --check` passed. No provider, bridge, run-loop, registry, non-interactive,
+or project-wide configuration behavior changed; no full-suite or live-provider
+run was needed for this localized admission repair.
+
 ### Subagent tier-pool entry health (branch-local implementation)
 
 Harm prevented: a first-request billing or credential rejection for one

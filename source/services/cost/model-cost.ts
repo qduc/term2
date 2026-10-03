@@ -81,6 +81,21 @@ export interface CatalogPrice {
 }
 
 /**
+ * Catalog rates must be finite and nonnegative. Optional cache dimensions may
+ * be absent, but an explicitly invalid rate invalidates the whole estimate.
+ * This does not constrain provider-reported charges, which may include credits.
+ */
+export function isValidCatalogPrice(price: Partial<CatalogPrice>): price is CatalogPrice {
+  return (
+    price.inputPerMTok !== undefined &&
+    price.outputPerMTok !== undefined &&
+    [price.inputPerMTok, price.outputPerMTok, price.cacheReadPerMTok, price.cacheWritePerMTok].every(
+      (rate) => rate === undefined || (Number.isFinite(rate) && rate >= 0),
+    )
+  );
+}
+
+/**
  * Result of a pricing lookup. The cost module consumes the typed failure so it
  * can report why a request is unpriced.
  */
@@ -232,6 +247,7 @@ export function computeModelCost(input: ModelCostInput): ModelRequestCost {
   if (!lookup.found) return { ...base, unpricedReason: lookup.reason };
 
   const { price } = lookup;
+  if (!isValidCatalogPrice(price)) return { ...base, unpricedReason: 'unknown_model' };
   const uncachedMicros = toMicros(price.inputPerMTok, tokens.uncachedInputTokens);
   const cachedMicros = price.cacheReadPerMTok != null ? toMicros(price.cacheReadPerMTok, tokens.cachedInputTokens) : 0;
   const cacheWriteMicros =

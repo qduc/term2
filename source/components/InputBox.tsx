@@ -128,6 +128,8 @@ const InputBox: FC<Props> = ({
     cursorOverride: contextCursorOverride,
     setCursorOverride,
     controller,
+    queueInput,
+    setQueueInput,
   } = useInputContext();
   const cursorOverride = propsCursorOverride ?? contextCursorOverride;
   // Selection indexes into the grouped display order, not arrival order.
@@ -137,32 +139,54 @@ const InputBox: FC<Props> = ({
   );
   const { stdin } = useStdin();
   const inputValueRef = useRef(value);
+  const imagesRef = useRef(images);
   const cursorOffsetRef = useRef(cursorOffset);
-  const suppressImagesCallbackRef = useRef(false);
+  // ink-prompt first emits its empty local image state before synchronizing
+  // controlled attachments. A menu/modal remount must not clear the draft.
+  const suppressImagesCallbackRef = useRef(true);
   const stdinBufferRef = useRef('');
   const stdinBufferTimestampRef = useRef(0);
   const consumedAltEnterRef = useRef(false);
+  const queueSaveConsumedRef = useRef(false);
   const altEnterSuppressUntilRef = useRef(0);
 
   inputValueRef.current = value;
+  imagesRef.current = images;
   cursorOffsetRef.current = cursorOffset;
 
   const [inputKey, setInputKey] = useState(0);
-  const [queueSelectionIndex, setQueueSelectionIndex] = useState<number | null>(null);
-  const [editingQueueItem, setEditingQueueItem] = useState<{ id: string; restoreInput: string } | null>(null);
-  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  // Answers, rejection reasons, shell commands and handoff prompts reuse this
+  // component, but they are different composer purposes, not queued edits.
+  const queueInteractionEnabled = !waitingForRejectionReason && !promptLabel && !isShellMode;
+  const queueSelectionIndex = queueInteractionEnabled ? queueInput.selectionIndex : null;
+  const editingQueueItem = queueInteractionEnabled ? queueInput.editing : null;
+  const queueNotice = queueInteractionEnabled ? queueInput.notice : null;
+  const editingQueueItemRef = useRef<typeof editingQueueItem>(null);
+  const setEditingQueueItem = useCallback(
+    (editing: typeof editingQueueItem) => {
+      editingQueueItemRef.current = editing;
+      setQueueInput((previous) => ({ ...previous, editing }));
+    },
+    [setQueueInput],
+  );
+  const setQueueNotice = useCallback(
+    (notice: string | null) => setQueueInput((previous) => ({ ...previous, notice })),
+    [setQueueInput],
+  );
   const queueSelectionIndexRef = useRef<number | null>(null);
   const queueSelectionJustOpenedRef = useRef(false);
-  const editingQueueItemRef = useRef<{ id: string; restoreInput: string } | null>(null);
   const pendingQueuedMessagesRef = useRef<ReadonlyArray<PendingQueueMessage>>(pendingQueuedMessages ?? []);
   queueSelectionIndexRef.current = queueSelectionIndex;
   editingQueueItemRef.current = editingQueueItem;
   pendingQueuedMessagesRef.current = pendingQueuedMessages ?? [];
 
-  const updateQueueSelection = useCallback((next: number | null) => {
-    queueSelectionIndexRef.current = next;
-    setQueueSelectionIndex(next);
-  }, []);
+  const updateQueueSelection = useCallback(
+    (next: number | null) => {
+      queueSelectionIndexRef.current = next;
+      setQueueInput((previous) => ({ ...previous, selectionIndex: next }));
+    },
+    [setQueueInput],
+  );
 
   const editingQueueDelivery = editingQueueItem
     ? pendingQueuedMessages?.find((message) => message.id === editingQueueItem.id)?.delivery
@@ -172,8 +196,21 @@ const InputBox: FC<Props> = ({
     : promptLabel;
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
   const localHistoryNavigation = useInputHistory(historyService);
-  const { navigateUp, navigateDown } = historyNavigation ?? localHistoryNavigation;
+  const { navigateUp, navigateDown, reset: resetHistory } = historyNavigation ?? localHistoryNavigation;
   const remountInput = useCallback(() => setInputKey((previous) => previous + 1), []);
+
+  useEffect(() => {
+    if (queueInteractionEnabled) return;
+    if (queueInput.editing) {
+      suppressImagesCallbackRef.current = true;
+      setImages([]);
+    }
+    setQueueInput((previous) =>
+      previous.editing || previous.selectionIndex !== null || previous.notice
+        ? { selectionIndex: null, editing: null, notice: null }
+        : previous,
+    );
+  }, [queueInteractionEnabled, queueInput.editing, setImages, setQueueInput]);
 
   useEffect(() => {
     if (waitingForRejectionReason) onRejectionReasonInputReady?.();
@@ -197,6 +234,7 @@ const InputBox: FC<Props> = ({
 
   const handleImagesChange = useCallback(
     (nextImages: ImageRef[]) => {
+      if (queueSelectionIndexRef.current !== null) return;
       if (suppressImagesCallbackRef.current) {
         suppressImagesCallbackRef.current = false;
         return;
@@ -212,12 +250,26 @@ const InputBox: FC<Props> = ({
       return true;
     }
     if (editingQueueItemRef.current) {
-      onChange(editingQueueItemRef.current.restoreInput);
+      const { restoreDraft, restoreCursor } = editingQueueItemRef.current;
+      onChange(restoreDraft.text);
+      suppressImagesCallbackRef.current = true;
+      remountInput();
+      setImages(restoreDraft.images ?? []);
+      setCursorOffset(restoreCursor);
+      setCursorOverride(restoreCursor);
       setEditingQueueItem(null);
       return true;
     }
     return false;
-  }, [onChange, updateQueueSelection]);
+  }, [
+    onChange,
+    remountInput,
+    setImages,
+    setCursorOffset,
+    setCursorOverride,
+    setEditingQueueItem,
+    updateQueueSelection,
+  ]);
 
   const handleEscape = useCallback((): boolean => {
     if (controller.getSnapshot().stack.length > 0) {
@@ -234,7 +286,10 @@ const InputBox: FC<Props> = ({
 
   const { escHintVisible } = useEscapeKey({
     value,
-    onChange,
+    onChange: (nextValue) => {
+      resetHistory();
+      onChange(nextValue);
+    },
     onEscape: handleEscape,
     turnInFlight,
   });
@@ -276,11 +331,18 @@ const InputBox: FC<Props> = ({
     }
     if (_input === 'e' || key.return) {
       setQueueNotice(null);
-      setEditingQueueItem({ id: selectedMessage.id, restoreInput: inputValueRef.current });
+      const turn = selectedMessage.turn;
+      setEditingQueueItem({
+        id: selectedMessage.id,
+        turn,
+        restoreDraft: { text: inputValueRef.current, images: imagesRef.current },
+        restoreCursor: cursorOffsetRef.current,
+      });
       updateQueueSelection(null);
-      onChange(selectedMessage.text);
-      setCursorOffset(selectedMessage.text.length);
-      setCursorOverride(selectedMessage.text.length);
+      onChange(turn.text);
+      setImages(turn.images ?? []);
+      setCursorOffset(turn.text.length);
+      setCursorOverride(turn.text.length);
       return;
     }
     if (_input === 'd' && onRetractQueuedMessage) {
@@ -294,10 +356,14 @@ const InputBox: FC<Props> = ({
 
   const handleBoundaryArrow = useCallback(
     (direction: 'up' | 'down' | 'left' | 'right') => {
+      if (!queueInteractionEnabled) return;
       if (direction !== 'up' && direction !== 'down') return;
       if (direction === 'up' && value === '' && pendingQueuedMessages && pendingQueuedMessages.length > 0) {
         setQueueNotice(null);
         queueSelectionJustOpenedRef.current = true;
+        queueMicrotask(() => {
+          queueSelectionJustOpenedRef.current = false;
+        });
         updateQueueSelection(pendingQueuedMessages.length - 1);
         return;
       }
@@ -315,15 +381,24 @@ const InputBox: FC<Props> = ({
       navigateUp,
       onChange,
       pendingQueuedMessages,
+      queueInteractionEnabled,
       remountInput,
       setImages,
+      setQueueNotice,
       updateQueueSelection,
       value,
     ],
   );
 
+  useEffect(() => {
+    // Rearm only after the controlled draft has synchronized. Two Enter events
+    // in one input burst otherwise reuse ink-prompt's pre-submit text/images.
+    queueSaveConsumedRef.current = false;
+  }, [value, images]);
+
   const handleWrapperSubmit = useCallback(
     (submittedValue: string, submittedImages?: ImageRef[], busyMode: 'steer' | 'follow_up' = 'steer') => {
+      if (queueSaveConsumedRef.current) return;
       if (busyMode === 'steer' && Date.now() < altEnterSuppressUntilRef.current) {
         altEnterSuppressUntilRef.current = 0;
         consumedAltEnterRef.current = false;
@@ -331,27 +406,52 @@ const InputBox: FC<Props> = ({
       }
       const turnImages = submittedImages ?? images;
       if (!allowEmptySubmit && !submittedValue.trim() && turnImages.length === 0) return;
-      if (editingQueueItem) {
+      if (queueInteractionEnabled && editingQueueItemRef.current) {
         if (!onEditQueuedMessage) return;
-        const editedItem = editingQueueItem;
-        void onEditQueuedMessage(editedItem.id, {
+        const editedItem = editingQueueItemRef.current;
+        const editedTurn: UserTurn = {
           text: submittedValue,
           ...(turnImages.length ? { images: turnImages } : {}),
-        }).then((result) => {
-          setEditingQueueItem(null);
-          if (result.kind === 'too_late') {
-            setQueueNotice('already sent — the model has it');
-            void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
-          } else if (result.kind === 'unknown_id') {
-            setQueueNotice('queued message is no longer available');
-          }
-        });
+          ...(editedItem.turn.skill ? { skill: editedItem.turn.skill } : {}),
+        };
+        // Enter finishes this editing interaction synchronously. The mutation
+        // can resolve after another draft, queued edit, or modal has taken over;
+        // its completion must never restore an old composer snapshot.
+        queueSaveConsumedRef.current = true;
+        setEditingQueueItem(null);
+        resetHistory();
+        setImages(editedItem.restoreDraft.images ?? []);
+        void onEditQueuedMessage(editedItem.id, editedTurn)
+          .then((result) => {
+            if (result.kind === 'too_late') {
+              setQueueNotice('already sent — the model has it');
+              void onSubmit(editedTurn, { busyMode });
+            } else if (result.kind === 'unknown_id') {
+              setQueueNotice('queued message is no longer available');
+            }
+          })
+          .catch((error: unknown) => {
+            loggingService.warn('Queued message edit failed', { error });
+            setQueueNotice('could not save queued edit — select the queued message to retry');
+          });
         return;
       }
+      resetHistory();
       setImages([]);
       void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
     },
-    [allowEmptySubmit, editingQueueItem, images, onEditQueuedMessage, onSubmit, setImages],
+    [
+      allowEmptySubmit,
+      queueInteractionEnabled,
+      images,
+      loggingService,
+      onEditQueuedMessage,
+      onSubmit,
+      resetHistory,
+      setImages,
+      setEditingQueueItem,
+      setQueueNotice,
+    ],
   );
 
   useEffect(() => {
@@ -414,7 +514,7 @@ const InputBox: FC<Props> = ({
 
   return (
     <Box flexDirection="column">
-      {((pendingQueuedMessages?.length ?? 0) > 0 || queueNotice) && (
+      {queueInteractionEnabled && ((pendingQueuedMessages?.length ?? 0) > 0 || queueNotice) && (
         <PendingQueueList
           messages={pendingQueuedMessages ?? []}
           selectedIndex={queueSelectionIndex}

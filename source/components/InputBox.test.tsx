@@ -71,6 +71,7 @@ type TestProps = {
   pendingQueuedMessages?: ReadonlyArray<{
     id: string;
     text: string;
+    turn: UserTurn;
     delivery: 'steer' | 'follow_up';
     queuedAt: number;
   }>;
@@ -263,8 +264,8 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
     <TestInputBox
       {...defaultProps}
       pendingQueuedMessages={[
-        { id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 },
-        { id: 'q-2', text: 'second queued', delivery: 'follow_up', queuedAt: 2 },
+        { id: 'q-1', text: 'first queued', turn: { text: 'first queued' }, delivery: 'follow_up', queuedAt: 1 },
+        { id: 'q-2', text: 'second queued', turn: { text: 'second queued' }, delivery: 'follow_up', queuedAt: 2 },
       ]}
       onEditQueuedMessage={async (id, turn) => {
         edits.push({ id, turn });
@@ -301,7 +302,9 @@ it.sequential('up past the top queued item reaches input history', async () => {
     <TestInputBox
       {...defaultProps}
       historyService={historyService}
-      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', delivery: 'steer', queuedAt: 1 }]}
+      pendingQueuedMessages={[
+        { id: 'q-1', text: 'waiting steer', turn: { text: 'waiting steer' }, delivery: 'steer', queuedAt: 1 },
+      ]}
     />,
   );
 
@@ -317,8 +320,8 @@ it.sequential('queued selector moves in displayed order with steers grouped abov
     <TestInputBox
       {...defaultProps}
       pendingQueuedMessages={[
-        { id: 'q-1', text: 'later follow-up', delivery: 'follow_up', queuedAt: 1 },
-        { id: 'q-2', text: 'urgent steer', delivery: 'steer', queuedAt: 2 },
+        { id: 'q-1', text: 'later follow-up', turn: { text: 'later follow-up' }, delivery: 'follow_up', queuedAt: 1 },
+        { id: 'q-2', text: 'urgent steer', turn: { text: 'urgent steer' }, delivery: 'steer', queuedAt: 2 },
       ]}
     />,
   );
@@ -1642,7 +1645,9 @@ it.sequential('groups pending steer submissions under a steer header only', asyn
     <TestInputBox
       {...defaultProps}
       turnInFlight={true}
-      pendingQueuedMessages={[{ id: 'q-1', text: 'change direction', delivery: 'steer', queuedAt: 1 }]}
+      pendingQueuedMessages={[
+        { id: 'q-1', text: 'change direction', turn: { text: 'change direction' }, delivery: 'steer', queuedAt: 1 },
+      ]}
     />,
   );
   const output = lastFrame() ?? '';
@@ -1658,7 +1663,9 @@ it.sequential(
       <TestInputBox
         {...defaultProps}
         turnInFlight={true}
-        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 }]}
+        pendingQueuedMessages={[
+          { id: 'q-1', text: 'first queued', turn: { text: 'first queued' }, delivery: 'follow_up', queuedAt: 1 },
+        ]}
       />,
     );
     const output = lastFrame() ?? '';

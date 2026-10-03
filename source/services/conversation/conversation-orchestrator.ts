@@ -707,18 +707,21 @@ export class ConversationOrchestrator {
     const service = this.config.conversationService;
     if (typeof service.editSubmission !== 'function') return { kind: 'unknown_id' };
 
-    const result = await service.editSubmission(id, turn);
+    const editedTurn = normalizeUserTurn(turn);
+    // The adapter consumes executable text; keep the raw skill attachment for
+    // display and any later steer release so it is expanded once per delivery.
+    const result = await service.editSubmission(id, editedTurn.skill ? injectSkillIntoTurn(editedTurn) : editedTurn);
     if (result.kind === 'applied') {
       const outstanding = this.#outstandingSubmissions.get(id);
       if (outstanding)
         this.#outstandingSubmissions.set(id, {
           ...outstanding,
-          text: formatUserTurnForDisplay(normalizeUserTurn(turn)),
+          text: formatUserTurnForDisplay(editedTurn),
         });
       if (result.stage === 'pending_steer') {
-        this.#editedSteerTurns.set(id, structuredClone(normalizeUserTurn(turn)));
+        this.#editedSteerTurns.set(id, structuredClone(editedTurn));
       }
-      this.config.ui.onQueuedMessageEdited?.(id, formatUserTurnForDisplay(normalizeUserTurn(turn)));
+      this.config.ui.onQueuedMessageEdited?.(id, editedTurn);
     }
     return result;
   }
@@ -812,7 +815,7 @@ export class ConversationOrchestrator {
       onSteerSettled?: (steered: boolean) => void;
     },
   ): Promise<void> {
-    const turn = normalizeUserTurn(input);
+    let turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
       return;
     }
@@ -823,7 +826,7 @@ export class ConversationOrchestrator {
     // be the released input this notice exists for.
     if (options?.busyMode !== 'steer') this.#askUserCancelPending = false;
 
-    const userMessage: UserMessage = {
+    let userMessage: UserMessage = {
       id: this.createMessageId(),
       sender: 'user',
       text: formatUserTurnForDisplay(turn),
@@ -881,7 +884,7 @@ export class ConversationOrchestrator {
         // Show "Steering" while the active turn may still be waiting for its
         // next request boundary. A follow-up (Alt+Enter) is the only case that
         // should read as "Queued" here.
-        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
         reportAdmission('steering');
         // Diagnostics for "my steer just queued". The three fields below
         // separate the ways delivery can fail, which otherwise look identical
@@ -900,7 +903,7 @@ export class ConversationOrchestrator {
         const steerStartedAt = Date.now();
         const steerGeneration = this.#lifecycleGeneration;
         const steered = await this.config.conversationService
-          .steerActiveTurn(turn, { id: userMessage.id })
+          .steerActiveTurn(turn.skill ? injectSkillIntoTurn(turn) : turn, { id: userMessage.id })
           .catch((error) => {
             this.logError('Error steering the active turn', error);
             return false;
@@ -923,26 +926,26 @@ export class ConversationOrchestrator {
           return;
         }
         options?.onSteerSettled?.(steered);
+        // An edit belongs to this submission even when the active turn releases
+        // it. Both admission and the queued fallback must use the latest payload.
+        turn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
+        this.#editedSteerTurns.delete(userMessage.id);
+        const { skill: _originalSkill, ...messageWithoutSkill } = userMessage;
+        userMessage = {
+          ...messageWithoutSkill,
+          text: formatUserTurnForDisplay(turn),
+          ...(turn.skill ? { skill: turn.skill } : {}),
+        };
         if (steered) {
           this.#outstandingSubmissions.delete(userMessage.id);
-          const admittedTurn = this.#editedSteerTurns.get(userMessage.id) ?? turn;
-          this.#editedSteerTurns.delete(userMessage.id);
-          const { skill: _originalSkill, ...messageWithoutSkill } = userMessage;
-          const admittedMessage: UserMessage = {
-            ...messageWithoutSkill,
-            text: formatUserTurnForDisplay(admittedTurn),
-            ...(admittedTurn.skill ? { skill: admittedTurn.skill } : {}),
-          };
           this.config.ui.onQueuedMessageStarted?.(userMessage.id);
-          this.config.messages.appendMessages([admittedMessage]);
-          this.config.logWriter?.append({ type: 'user_message', message: { ...admittedMessage } });
+          this.config.messages.appendMessages([userMessage]);
+          this.config.logWriter?.append({ type: 'user_message', message: { ...userMessage } });
           return;
         }
         if (this.#retractedSteerIds.delete(userMessage.id)) {
-          this.#editedSteerTurns.delete(userMessage.id);
           return;
         }
-        this.#editedSteerTurns.delete(userMessage.id);
         this.#outstandingSubmissions.set(userMessage.id, {
           id: userMessage.id,
           text: userMessage.text,
@@ -954,7 +957,7 @@ export class ConversationOrchestrator {
         // cancellation context if the user just cancelled.
         releasedSteerFollowUp = true;
       } else {
-        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, turn, delivery);
         reportAdmission('queued');
       }
     } else {

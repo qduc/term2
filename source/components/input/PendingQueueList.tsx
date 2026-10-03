@@ -1,5 +1,6 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
+import type { UserTurn } from '../../types/user-turn.js';
 import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { type ColorRole, useTheme } from '../theme.js';
 
@@ -8,6 +9,8 @@ export type PendingQueueDelivery = 'steer' | 'follow_up';
 export type PendingQueueMessage = {
   id: string;
   text: string;
+  /** Editable payload, distinct from the rendered attachment summary. */
+  turn: UserTurn;
   queuedAt: number;
   delivery: PendingQueueDelivery;
 };

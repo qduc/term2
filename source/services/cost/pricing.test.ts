@@ -1,5 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TIER_PRICING_OVERLAY } from './pricing-overlay.js';
 import { getCatalogPricingVersion, getModelPricing, getOverlayPricingVersion } from './pricing.js';
+
+const { invalidEntries } = vi.hoisted(() => ({
+  invalidEntries: [
+    'inputPricePerMTok',
+    'outputPricePerMTok',
+    'cacheReadPricePerMTok',
+    'cacheWritePricePerMTok',
+  ].flatMap((field) =>
+    [-1, -1000000, Number.NaN, Infinity, -Infinity].map((value, index) => ({
+      model: `invalid-${field.toLowerCase()}-${index}`,
+      entry: { contextWindow: 1000000, inputPricePerMTok: 2, outputPricePerMTok: 8, [field]: value },
+    })),
+  ),
+}));
 
 // Pricing behavior must not depend on today's upstream model list or rates.
 // The live generated catalog's shape and price coverage are checked in catalog.test.ts.
@@ -7,6 +22,8 @@ vi.mock('../../providers/model-catalog/catalog.generated.js', () => ({
   CATALOG_META: { schemaVersion: 2, source: 'pi-ai@test' },
   MODEL_CATALOG: {
     openai: {
+      'fallback-model': { contextWindow: 128000, inputPricePerMTok: NaN, outputPricePerMTok: 8 },
+      'borrowable-model': { contextWindow: 128000, inputPricePerMTok: 2, outputPricePerMTok: 8 },
       'gpt-4.1': {
         contextWindow: 128000,
         inputPricePerMTok: 2,
@@ -16,11 +33,23 @@ vi.mock('../../providers/model-catalog/catalog.generated.js', () => ({
       },
       'gpt-5.6-sol': { contextWindow: 272000, inputPricePerMTok: 1, outputPricePerMTok: 3 },
     },
-    codex: { 'gpt-5.6-sol': { contextWindow: 128000, inputPricePerMTok: 2, outputPricePerMTok: 4 } },
+    codex: {
+      'fallback-model': { contextWindow: 128000, inputPricePerMTok: 2, outputPricePerMTok: 8 },
+      'gpt-5.6-sol': { contextWindow: 128000, inputPricePerMTok: 2, outputPricePerMTok: 4 },
+    },
     anthropic: {
       'claude-sonnet-4-6': { contextWindow: 1000000, inputPricePerMTok: 3, outputPricePerMTok: 15 },
     },
     openrouter: {
+      ...Object.fromEntries(invalidEntries.map(({ model, entry }) => [model, entry])),
+      'borrowable-model': { contextWindow: 128000, inputPricePerMTok: -1, outputPricePerMTok: -1 },
+      'free-model': {
+        contextWindow: 128000,
+        inputPricePerMTok: 0,
+        outputPricePerMTok: 0,
+        cacheReadPricePerMTok: 0,
+        cacheWritePricePerMTok: 0,
+      },
       'deepseek/deepseek-v4-flash': { contextWindow: 1048576, inputPricePerMTok: 0.2, outputPricePerMTok: 0.5 },
     },
   },
@@ -134,3 +163,50 @@ describe('pricing provenance', () => {
     expect(getOverlayPricingVersion()).toBe('term2-overlay:v1');
   });
 });
+
+describe('invalid catalog prices', () => {
+  it.each(invalidEntries)('rejects $model for direct and borrowed pricing', ({ model }) => {
+    expect(getModelPricing('openrouter', model, 'standard')).toEqual({ found: false, reason: 'unknown_model' });
+    expect(getModelPricing('my-gateway', model, 'standard')).toEqual({ found: false, reason: 'unknown_provider' });
+  });
+
+  it('can still borrow a valid rate when the requested provider has no usable price', () => {
+    expect(getModelPricing('openrouter', 'borrowable-model', 'standard')).toEqual({
+      found: true,
+      price: { inputPerMTok: 2, outputPerMTok: 8 },
+      pricedFromProvider: 'openai',
+    });
+  });
+
+  it('preserves genuine zero-dollar pricing', () => {
+    expect(getModelPricing('openrouter', 'free-model', 'standard')).toEqual({
+      found: true,
+      price: { inputPerMTok: 0, outputPerMTok: 0, cacheReadPerMTok: 0, cacheWritePerMTok: 0 },
+    });
+  });
+});
+
+it('skips invalid fallback candidates and records the valid provider it borrows from', () => {
+  expect(getModelPricing('my-gateway', 'fallback-model', 'standard')).toEqual({
+    found: true,
+    price: { inputPerMTok: 2, outputPerMTok: 8 },
+    pricedFromProvider: 'codex',
+  });
+});
+
+it.each(['inputPerMTok', 'outputPerMTok', 'cacheReadPerMTok', 'cacheWritePerMTok'] as const)(
+  'rejects invalid overlay %s without using standard prices',
+  (field) => {
+    const entry = TIER_PRICING_OVERLAY.openai['gpt-5.4'].flex!;
+    const original = entry[field];
+    try {
+      for (const invalid of [-1, Number.NaN, Infinity, -Infinity]) {
+        entry[field] = invalid;
+        expect(getModelPricing('openai', 'gpt-5.4', 'flex')).toEqual({ found: false, reason: 'unknown_tier' });
+      }
+    } finally {
+      if (original === undefined) delete entry[field];
+      else entry[field] = original;
+    }
+  },
+);

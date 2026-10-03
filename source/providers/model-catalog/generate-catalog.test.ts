@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { generateCatalogSource, VENDORED_PI_PROVIDERS, type PiProviderData } from './generate-catalog.js';
+import {
+  generateCatalogSource,
+  VENDORED_PI_PROVIDERS,
+  type PiCatalogModel,
+  type PiProviderData,
+} from './generate-catalog.js';
 
 const META = { schemaVersion: 1, generatedAt: '2026-07-29T22:27:21.904Z', source: 'pi-ai@0.83.0' };
 
@@ -89,5 +94,45 @@ describe('generateCatalogSource', () => {
       'openai',
       'openrouter',
     ]);
+  });
+});
+
+describe('generated pricing validity', () => {
+  const generate = (cost: PiCatalogModel['cost']) =>
+    generateCatalogSource(
+      {
+        openrouter: {
+          'openai-completions': { 'typesafe/jev-router': { contextWindow: 1000000, maxTokens: 4096, cost } },
+        },
+      },
+      META,
+    );
+
+  it.each(['input', 'output', 'cacheRead', 'cacheWrite'] as const)(
+    'keeps the model unpriced if its supplied %s rate is invalid',
+    (dimension) => {
+      for (const invalid of [-1, -1000000, Number.NaN, Infinity, -Infinity]) {
+        const source = generate({ input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0, [dimension]: invalid });
+        expect(source).toContain("'typesafe/jev-router': { contextWindow: 1000000, maxTokens: 4096 }");
+        expect(source).not.toMatch(/PricePerMTok:/);
+      }
+    },
+  );
+
+  it.each([undefined, {}, { input: 2 }, { output: 8 }])('keeps incomplete pricing unpriced: %j', (cost) => {
+    expect(generate(cost)).not.toMatch(/PricePerMTok:/);
+  });
+
+  it('preserves valid free rates including explicitly free cache dimensions', () => {
+    expect(generate({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })).toContain(
+      'inputPricePerMTok: 0, outputPricePerMTok: 0, cacheReadPricePerMTok: 0, cacheWritePricePerMTok: 0',
+    );
+  });
+
+  it('preserves positive rates and genuinely absent optional cache dimensions', () => {
+    expect(generate({ input: 2, output: 8 })).toContain('inputPricePerMTok: 2, outputPricePerMTok: 8 }');
+    expect(generate({ input: 2, output: 8, cacheRead: 0.5 })).toContain(
+      'inputPricePerMTok: 2, outputPricePerMTok: 8, cacheReadPricePerMTok: 0.5 }',
+    );
   });
 });

@@ -182,13 +182,14 @@ export function Term2SessionShell({
   const selectSession = (id: string) => {
     const selected = session.sessions.find((item) => item.id === id);
     if (selected) session.setSelectedWorkspaceId(selected.workspaceId);
+    setInput('');
     session.selectSession(id);
   };
   const submit = async () => {
     const text = input.trim();
     if (!text) return;
-    setInput('');
-    await session.submit(text);
+    const accepted = await session.submit(text);
+    if (accepted) setInput((current) => (current.trim() === text ? '' : current));
   };
   const interactionPending = session.view.status === 'awaiting_interaction';
   const aborting = session.view.status === 'aborting';
@@ -406,6 +407,7 @@ export function Term2SessionShell({
               ))}
               {session.view.pendingInteraction?.state === 'pending' && (
                 <Term2InteractionPanel
+                  key={`${session.view.pendingInteraction.interaction.interactionId}:${session.view.pendingInteraction.interaction.revision}:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
                   interaction={session.view.pendingInteraction.interaction}
                   subagent={session.view.pendingInteraction.subagent}
                   onResolve={session.resolveInteraction}
@@ -414,6 +416,7 @@ export function Term2SessionShell({
               )}
               {session.view.pendingInteraction?.state === 'recovered' && (
                 <Term2InteractionPanel
+                  key={`${session.view.pendingInteraction.interaction.interactionId}:${session.view.pendingInteraction.interaction.revision}:recovered`}
                   interaction={session.view.pendingInteraction.interaction}
                   recovered
                   onResolve={session.resolveInteraction}

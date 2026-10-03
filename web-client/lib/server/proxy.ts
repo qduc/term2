@@ -38,9 +38,17 @@ export function validateOpaqueId(value: unknown, name: string): string {
   return value;
 }
 
-export function validateCursor(value: string | null): string | null {
+export function validateEventCursor(value: string | null): string | null {
   if (value === null || value === '') return null;
   if (!/^\d{1,15}$/.test(value)) throw new LocalValidationError('Invalid cursor');
+  return value;
+}
+
+export function validatePageCursor(value: string | null): string | null {
+  if (value === null || value === '') return null;
+  // Session-index cursors are opaque base64url tokens. Keep validation local
+  // and bounded without assuming anything about their decoded representation.
+  if (!/^[A-Za-z0-9_-]{1,2048}$/.test(value)) throw new LocalValidationError('Invalid cursor');
   return value;
 }
 
@@ -51,7 +59,7 @@ export function parsePage(request: Request): { limit: number; cursor: string | n
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
     throw new LocalValidationError('Invalid page size');
   }
-  return { limit, cursor: validateCursor(url.searchParams.get('cursor')) };
+  return { limit, cursor: validatePageCursor(url.searchParams.get('cursor')) };
 }
 
 export function buildQuery(page: { limit: number; cursor: string | null }): string {

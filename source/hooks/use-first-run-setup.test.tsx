@@ -80,19 +80,22 @@ it.sequential('opens provider management and rechecks into model selection after
 
   await act(async () => {
     stateSettings.setPersistentDynamic('agent.openrouter.apiKey', 'configured');
-    stateSettings.setPersistentDynamic('agent.provider', 'openrouter');
+    stateSettings.setPersistentDynamic('agent.modelSelection', { model: 'setup-model', provider: 'openrouter' });
+    latest!.onProviderSelected('openrouter');
     await Promise.resolve();
   });
   expect(latest).toEqual(expect.objectContaining({ active: true, phase: 'model', provider: 'openrouter' }));
 
   await act(async () => {
-    stateSettings.setPersistentDynamic('agent.provider', 'codex');
+    stateSettings.setPersistentDynamic('agent.modelSelection', { model: 'setup-model', provider: 'codex' });
+    latest!.onProviderSelected('codex');
     await Promise.resolve();
   });
   expect(latest).toEqual(expect.objectContaining({ active: true, phase: 'provider', provider: 'codex' }));
 
   await act(async () => {
-    stateSettings.setPersistentDynamic('agent.provider', 'openrouter');
+    stateSettings.setPersistentDynamic('agent.modelSelection', { model: 'setup-model', provider: 'openrouter' });
+    latest!.onProviderSelected('openrouter');
     await Promise.resolve();
   });
   expect(latest).toEqual(expect.objectContaining({ active: true, phase: 'model', provider: 'openrouter' }));

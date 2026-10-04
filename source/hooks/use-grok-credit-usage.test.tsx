@@ -57,7 +57,7 @@ afterEach(() => {
 
 // Seeding on entry keeps the bar from being blank for the whole first turn.
 it.sequential('seeds the value once when Grok is the active provider', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'grok-4', provider: 'grok' } });
 
   const { rerender } = await renderInAct(<Probe settingsService={settingsService} isProcessing={false} />);
   expect(refreshIfStale).toHaveBeenCalledTimes(1);
@@ -68,7 +68,7 @@ it.sequential('seeds the value once when Grok is the active provider', async () 
 
 // End-of-turn is both when the number can have changed and when it is visible.
 it.sequential('refreshes on the busy to idle edge', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'grok-4', provider: 'grok' } });
 
   const { rerender } = await renderInAct(<Probe settingsService={settingsService} isProcessing={false} />);
   refreshIfStale.mockClear();
@@ -82,7 +82,7 @@ it.sequential('refreshes on the busy to idle edge', async () => {
 
 // A turn in flight must not trigger a fetch on every re-render.
 it.sequential('does not refresh while a turn is still running', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'grok-4', provider: 'grok' } });
 
   const { rerender } = await renderInAct(<Probe settingsService={settingsService} isProcessing={true} />);
   refreshIfStale.mockClear();
@@ -94,7 +94,9 @@ it.sequential('does not refresh while a turn is still running', async () => {
 });
 
 it.sequential('never fetches or reports for a non-Grok provider', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'openai' });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: 'openai' },
+  });
 
   const { lastFrame, rerender } = await renderInAct(<Probe settingsService={settingsService} isProcessing={true} />);
   await rerender(<Probe settingsService={settingsService} isProcessing={false} />);
@@ -106,7 +108,7 @@ it.sequential('never fetches or reports for a non-Grok provider', async () => {
 });
 
 it.sequential('reports the cached value for Grok', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'grok-4', provider: 'grok' } });
 
   const { lastFrame } = await renderInAct(<Probe settingsService={settingsService} isProcessing={false} />);
 
@@ -124,14 +126,16 @@ it.sequential('force refreshes on explicit request, and only for Grok', async ()
     return <Text>ok</Text>;
   };
 
-  const grokSettings = createMockSettingsService({ 'agent.provider': 'grok' });
+  const grokSettings = createMockSettingsService({ 'agent.modelSelection': { model: 'grok-4', provider: 'grok' } });
   await renderInAct(<CaptureProbe settingsService={grokSettings} />);
   refreshIfStale.mockClear();
 
   capturedRefresh!();
   expect(refreshIfStale).toHaveBeenCalledWith({ force: true });
 
-  const openaiSettings = createMockSettingsService({ 'agent.provider': 'openai' });
+  const openaiSettings = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: 'openai' },
+  });
   await renderInAct(<CaptureProbe settingsService={openaiSettings} />);
   refreshIfStale.mockClear();
 

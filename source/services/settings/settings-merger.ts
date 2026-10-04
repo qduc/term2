@@ -42,7 +42,12 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
     const sourceValue = source[key];
     const settingPath = prefix ? `${prefix}.${key}` : key;
 
-    if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue) && settingPath !== 'agent.modelSelection') {
+    if (
+      sourceValue &&
+      typeof sourceValue === 'object' &&
+      !Array.isArray(sourceValue) &&
+      settingPath !== 'agent.modelSelection'
+    ) {
       if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
         target[key] = {};
       }

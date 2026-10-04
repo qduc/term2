@@ -18,29 +18,26 @@ const getTestSettingsDir = () => {
 
 const getSettingsFilePath = (settingsDir: string) => path.join(settingsDir, 'settings.json');
 
-it.sequential(
-  'persists canonical main and mentor selections across reload and unrelated reconciliation',
-  async () => {
-    await withNonTestEnvironment(async () => {
-      const settingsDir = getTestSettingsDir();
-      const service = new SettingsService({ settingsDir, disableLogging: true });
-      expect(
-        service.setPersistentDynamicTransaction([
-          { key: 'agent.modelSelection', value: { model: 'main-bound', provider: 'zai' } },
-          { key: 'agent.mentorPool', value: [{ model: 'mentor-bound', provider: 'codex' }] },
-        ]).status,
-      ).toBe('saved');
-      service.setDynamic('agent.mentorPool', [{ model: 'mentor-bound', provider: 'anthropic' }], { persist: false });
-      service.setDynamic('logging.logLevel', 'warn');
-      const reloaded = new SettingsService({ settingsDir, disableLogging: true });
-      expect(reloaded.getDynamic('agent.modelSelection')).toEqual({ model: 'main-bound', provider: 'zai' });
-      expect(reloaded.get('agent.mentorPool')).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
-      const persisted = JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf8'));
-      expect(persisted.agent.modelSelection).toEqual({ model: 'main-bound', provider: 'zai' });
-      expect(persisted.agent.mentorPool).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
-    });
-  },
-);
+it.sequential('persists canonical main and mentor selections across reload and unrelated reconciliation', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(
+      service.setPersistentDynamicTransaction([
+        { key: 'agent.modelSelection', value: { model: 'main-bound', provider: 'zai' } },
+        { key: 'agent.mentorPool', value: [{ model: 'mentor-bound', provider: 'codex' }] },
+      ]).status,
+    ).toBe('saved');
+    service.setDynamic('agent.mentorPool', [{ model: 'mentor-bound', provider: 'anthropic' }], { persist: false });
+    service.setDynamic('logging.logLevel', 'warn');
+    const reloaded = new SettingsService({ settingsDir, disableLogging: true });
+    expect(reloaded.getDynamic('agent.modelSelection')).toEqual({ model: 'main-bound', provider: 'zai' });
+    expect(reloaded.get('agent.mentorPool')).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
+    const persisted = JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf8'));
+    expect(persisted.agent.modelSelection).toEqual({ model: 'main-bound', provider: 'zai' });
+    expect(persisted.agent.mentorPool).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
+  });
+});
 
 it('stores main selections atomically and rejects legacy single and batch writes', () => {
   const service = new SettingsService({
@@ -51,10 +48,12 @@ it('stores main selections atomically and rejects legacy single and batch writes
   service.setDynamic('agent.modelSelection', { model: 'pinned', provider: 'zai' });
   expect(service.get('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
   expect(() => service.setDynamic('agent.model', 'replacement')).toThrow();
-  expect(() => service.setDynamicTransaction([
-    { key: 'agent.model', value: 'batch' },
-    { key: 'agent.provider', value: 'codex' },
-  ])).toThrow();
+  expect(() =>
+    service.setDynamicTransaction([
+      { key: 'agent.model', value: 'batch' },
+      { key: 'agent.provider', value: 'codex' },
+    ]),
+  ).toThrow();
   expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
   expect(() => service.setDynamic('agent.modelSelection', { model: 'incomplete' })).toThrow();
   expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
@@ -136,7 +135,11 @@ it('SettingsService initializes with defaults', async () => {
 });
 
 it.each(['cheapModel', 'mentorPool'])('rejects legacy scalar and partial %s entries in runtime transactions', (key) => {
-  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true, disableFilePersistence: true });
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
   for (const value of [['legacy-model'], [{ model: 'partial-model' }]]) {
     expect(() => service.setDynamicTransaction([{ key: `agent.${key}`, value }])).toThrow();
     expect(service.getDynamic(`agent.${key}`)).toEqual(key === 'mentorPool' ? [] : undefined);
@@ -144,24 +147,31 @@ it.each(['cheapModel', 'mentorPool'])('rejects legacy scalar and partial %s entr
 });
 
 it.each(['cheapModel', 'mentorPool'])('rejects incomplete %s entries before persistent batch settlement', (key) => {
-  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true, disableFilePersistence: true });
-  expect(() => service.setPersistentDynamicTransaction([
-    { key: `agent.${key}`, value: [{ model: 'partial-model' }] },
-  ])).toThrow();
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+  expect(() =>
+    service.setPersistentDynamicTransaction([{ key: `agent.${key}`, value: [{ model: 'partial-model' }] }]),
+  ).toThrow();
   expect(service.getDynamic(`agent.${key}`)).toEqual(key === 'mentorPool' ? [] : undefined);
 });
 
-it.sequential.each(['cheapModel', 'mentorPool'])('persists complete %s bindings without rebinding on main selection changes', async (key) => {
-  await withNonTestEnvironment(async () => {
-    const settingsDir = getTestSettingsDir();
-    const service = new SettingsService({ settingsDir, disableLogging: true });
-    const pair = [{ model: 'pinned-model', provider: 'codex' }];
-    expect(service.setPersistentDynamicTransaction([{ key: `agent.${key}`, value: pair }]).status).toBe('saved');
-    service.setDynamic('agent.modelSelection', { model: 'different-model', provider: 'zai' });
-    expect(service.getDynamic(`agent.${key}`)).toEqual(pair);
-    expect(new SettingsService({ settingsDir, disableLogging: true }).getDynamic(`agent.${key}`)).toEqual(pair);
-  });
-});
+it.sequential.each(['cheapModel', 'mentorPool'])(
+  'persists complete %s bindings without rebinding on main selection changes',
+  async (key) => {
+    await withNonTestEnvironment(async () => {
+      const settingsDir = getTestSettingsDir();
+      const service = new SettingsService({ settingsDir, disableLogging: true });
+      const pair = [{ model: 'pinned-model', provider: 'codex' }];
+      expect(service.setPersistentDynamicTransaction([{ key: `agent.${key}`, value: pair }]).status).toBe('saved');
+      service.setDynamic('agent.modelSelection', { model: 'different-model', provider: 'zai' });
+      expect(service.getDynamic(`agent.${key}`)).toEqual(pair);
+      expect(new SettingsService({ settingsDir, disableLogging: true }).getDynamic(`agent.${key}`)).toEqual(pair);
+    });
+  },
+);
 
 it.sequential('migrates the former persisted request-deadline default to disabled', async () => {
   await withNonTestEnvironment(async () => {
@@ -619,7 +629,11 @@ it.sequential('keeps an unregistered agent.provider instead of rewriting it to o
       fs.mkdirSync(settingsDir, { recursive: true });
     }
 
-    fs.writeFileSync(configFile, JSON.stringify({ agent: { modelSelection: { model: 'gpt-5.1', provider: 'not-a-real-provider' } } }), 'utf-8');
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({ agent: { modelSelection: { model: 'gpt-5.1', provider: 'not-a-real-provider' } } }),
+      'utf-8',
+    );
 
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
@@ -684,12 +698,18 @@ it('setDynamic reports not-persisted when file persistence is disabled', () => {
 it('preserves unrelated ancillary reasoning migrations without converting model or provider inputs', () => {
   const settingsDir = getTestSettingsDir();
   fs.mkdirSync(settingsDir, { recursive: true });
-  fs.writeFileSync(getSettingsFilePath(settingsDir), JSON.stringify({ agent: {
-    smartModel: [{ model: 'smart', provider: 'smart-host' }],
-    mentorReasoningEffort: 'high',
-    subagentWorkerReasoningEffort: 'medium',
-    subagentExplorerReasoningEffort: 'low',
-  } }), 'utf-8');
+  fs.writeFileSync(
+    getSettingsFilePath(settingsDir),
+    JSON.stringify({
+      agent: {
+        smartModel: [{ model: 'smart', provider: 'smart-host' }],
+        mentorReasoningEffort: 'high',
+        subagentWorkerReasoningEffort: 'medium',
+        subagentExplorerReasoningEffort: 'low',
+      },
+    }),
+    'utf-8',
+  );
   const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
   expect(service.get('agent.smartModel')).toEqual([{ model: 'smart', provider: 'smart-host' }]);
   expect(service.get('agent.smartReasoningEffort')).toBe('high');
@@ -706,7 +726,9 @@ it.sequential('startup persists migrated ancillary tier settings', async () => {
     const settingsFile = getSettingsFilePath(settingsDir);
     fs.writeFileSync(
       settingsFile,
-      JSON.stringify({ agent: { balancedModel: [{ model: 'worker', provider: 'openai' }], subagentWorkerReasoningEffort: 'high' } }),
+      JSON.stringify({
+        agent: { balancedModel: [{ model: 'worker', provider: 'openai' }], subagentWorkerReasoningEffort: 'high' },
+      }),
       'utf-8',
     );
 

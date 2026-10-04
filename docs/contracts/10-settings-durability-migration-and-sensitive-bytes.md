@@ -91,8 +91,8 @@ settlement it does not use.
 | Durable location | `resolveSettingsDirectory()`; `settings.json`, `.lock`, unique `.tmp` sibling, `settings.json.corrupt-<ts>` quarantine sibling | One directory and replacement target; the lock token identifies only its releaser; the quarantine sibling preserves corrupt bytes verbatim. |
 | Logical state | `SettingsData`, `SettingsSchema`, `DEFAULT_SETTINGS`, `SettingKey` | Full validation precedes a committed snapshot; raw bytes remain distinct for recovery/migration. |
 | Resolution identity | `SettingSource`; defaults < config < env < CLI plus runtime overrides | Contract 04 owns value/source semantics; C10 prevents reconciliation from making a false durable claim. |
-| Provider identity | `providers[].id`, `name`, legacy `identifier`/`displayName`, `agent.provider` | Normalize before registration; distinguish in-memory from durable migration. |
-| Migration identity | former request deadline; ancillary tiers; legacy provider format; unnormalized selected provider | Raw presence decides whether a modern explicit target wins. |
+| Provider identity | `providers[].id`, `name`, legacy `identifier`/`displayName`, `agent.modelSelection.provider` | Normalize before registration; distinguish in-memory from durable migration. |
+| Migration identity | former request deadline; ancillary reasoning; legacy provider format; unnormalized selected provider | Raw presence decides whether a modern explicit target wins. |
 | Credential bytes | Built-in OpenAI/OpenRouter keys; `providers[].apiKey`; Tavily/Exa keys; Codex token-file path | A separate byte classification. Current `SENSITIVE_SETTING_KEYS` contains only shell path and OpenRouter URL/referrer/title. |
 | Durable result | `DurableWriteResult` (`saved` | `not-persisted` with `disabled`/`failed`) returned by `setDynamic`, `setPersistentDynamic`, `reset`; `getLastDurableWrite()` for transaction callers | Known saved/failed settlement at the owner boundary, without conflating Contract 04 effects. |
 | Recovery result | `SettingsCorruptionRecovery` via `getRecoveryResult()` | Truthful `recovered` flag, recovery reason, preserved-bytes path, and salvaged section keys; `recovered: false` otherwise. |
@@ -175,7 +175,7 @@ repair record).
 | Successor lock ownership | persistence: `acquireSettingsLock: a stale owner cannot release its successor lock` | green existing; token protects releaser ownership |
 | Concurrent services | service: `persists distinct changes from independently constructed services without clobbering either` and `last committed write wins when stale services set the same setting` | green existing |
 | Deadline migration | service: `migrates the former persisted request-deadline default to disabled` | green existing |
-| Ancillary migration | service: `migrates legacy ancillary settings into tier settings without overwriting new values` and `startup persists migrated ancillary tier settings` | green existing |
+| Ancillary migration | `ancillary-settings-migration.ts` retains reasoning and Decisions migrations; removed selection settings are rejected by schema | schema contract |
 | Legacy provider-record migration | service: `startup rewrites legacy provider format to new format in settings.json` | green existing |
 | Durable selected-provider normalization (modern record) | service: `durably normalizes the selected provider when provider records already use modern ids` — rewrite persists the normalized id and a fresh service restart sees it | green repaired (red-first) |
 | Durable settlement success | service: `setDynamic returns a saved settlement and a fresh service sees the durable value` | green repaired |
@@ -254,7 +254,7 @@ failure in the Contract 10 files.
    recovered outcome. Unsalvageable syntax and schema-invalid files keep the
    existing fail-stop. No partial-start or silent overwrite is claimed.
 3. **Provider identity:** when `providers[]` already uses modern ids and
-   `agent.provider` still references an unnormalized identity, the
+   `agent.modelSelection.provider` still references an unnormalized identity, the
    normalization is recorded as a startup migration so the durable file is
    rewritten and a fresh service restart sees the normalized identity.
 

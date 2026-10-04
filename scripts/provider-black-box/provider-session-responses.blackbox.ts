@@ -358,8 +358,7 @@ async function createWorkspace(
         join(paths.logDir, 'settings.json'),
         JSON.stringify({
           agent: {
-            model: MODEL,
-            provider: providerCase.provider,
+            modelSelection: { model: MODEL, provider: providerCase.provider },
             transport: providerCase.transport,
             retryAttempts: 0,
             ...(mode === 'runaway-output' ? { maxStreamOutputChars: 32 } : {}),

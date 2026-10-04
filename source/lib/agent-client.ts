@@ -895,7 +895,6 @@ export class AgentClient {
     this.#agentConfig.refreshAgent();
   }
 
-
   getProvider(): string {
     return this.#agentConfig.getProvider();
   }

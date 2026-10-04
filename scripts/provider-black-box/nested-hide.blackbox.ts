@@ -49,8 +49,7 @@ describe('P1 nested hide result chain', () => {
     const approvedPath = join(outsideDir, 'approved.txt');
     const settings = createMockSettingsService({
       'shell.autoApproveMode': 'off',
-      'agent.provider': providerId,
-      'agent.model': 'm4-hide-model',
+      'agent.modelSelection': { model: 'm4-hide-model', provider: providerId },
       'app.searchViaShell': 'off',
     });
     const access = new SessionAccessState(settings);

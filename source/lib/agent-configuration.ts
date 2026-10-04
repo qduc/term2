@@ -183,7 +183,6 @@ export class AgentConfiguration implements AgentSource {
     if (config.agentOverride) {
       this.#isTransientClient = true;
       this.#agent = config.agentOverride;
-
     } else {
       this.#isTransientClient = false;
       const buildResult = buildAgent(
@@ -447,7 +446,6 @@ export class AgentConfiguration implements AgentSource {
   setTemperature(temperature?: number): void {
     this.#temperature = temperature;
   }
-
 
   // Exposed accessors
 

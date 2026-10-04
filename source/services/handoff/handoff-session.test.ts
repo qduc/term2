@@ -2,7 +2,11 @@ import { expect, it, vi } from 'vitest';
 import { HandoffSession } from './handoff-session.js';
 
 const makeSession = (overrides: Record<string, unknown> = {}) => {
-  const settingsService = { get: vi.fn((key) => key === 'agent.modelSelection' ? { model: 'old', provider: 'openai' } : false), set: vi.fn(), ...overrides } as any;
+  const settingsService = {
+    get: vi.fn((key) => (key === 'agent.modelSelection' ? { model: 'old', provider: 'openai' } : false)),
+    set: vi.fn(),
+    ...overrides,
+  } as any;
   const session = new HandoffSession({
     clearConversationAndRefreshBanner: vi.fn(async () => {}),
     addSystemMessage: vi.fn(),
@@ -38,7 +42,10 @@ it('applies the selected model and provider as one policy operation', async () =
   await session.confirmHandoff();
 
   expect(session.selectModel('/model gpt-4 --provider=anthropic')).toBe(true);
-  expect(settingsService.set).toHaveBeenCalledExactlyOnceWith('agent.modelSelection', { model: 'gpt-4', provider: 'anthropic' });
+  expect(settingsService.set).toHaveBeenCalledExactlyOnceWith('agent.modelSelection', {
+    model: 'gpt-4',
+    provider: 'anthropic',
+  });
   expect(session.getState()?.stage).toBe('selecting_effort');
 });
 
@@ -64,7 +71,10 @@ it('updates dependencies while preserving current handoff state', () => {
     clearConversationAndRefreshBanner: vi.fn(async () => {}),
     addSystemMessage: newAddSystemMessage,
     sendUserMessage: vi.fn(async () => {}),
-    settingsService: { get: vi.fn((key) => key === 'agent.modelSelection' ? { model: 'old', provider: 'openai' } : false), set: vi.fn() } as any,
+    settingsService: {
+      get: vi.fn((key) => (key === 'agent.modelSelection' ? { model: 'old', provider: 'openai' } : false)),
+      set: vi.fn(),
+    } as any,
     applyRuntimeSetting: vi.fn(),
     setModelSelection: vi.fn(),
     queueModeNotice: vi.fn(),

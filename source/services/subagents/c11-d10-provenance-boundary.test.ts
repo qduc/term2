@@ -57,7 +57,7 @@ it.fails(
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
         'shell.autoApproveMode': 'auto',
         'agent.choreModel': [{ model: 'mock-auto-approve-model', provider: providerId }],
         'sandbox.enabled': false,

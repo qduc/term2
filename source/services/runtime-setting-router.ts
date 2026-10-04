@@ -161,7 +161,6 @@ function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSet
     return;
   }
 
-
   if (key === 'agent.transport') {
     deps.setModelSelection(deps.settingsService.get('agent.modelSelection'));
     return;

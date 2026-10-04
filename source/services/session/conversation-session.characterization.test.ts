@@ -460,7 +460,9 @@ it('getCurrentSnapshot includes model from settingsService when available', asyn
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
-      settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o-test', provider: 'openai' } }),
+      settingsService: createMockSettingsService({
+        'agent.modelSelection': { model: 'gpt-4o-test', provider: 'openai' },
+      }),
       sessionContextService: createSessionContextService(),
     },
   });

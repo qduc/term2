@@ -66,7 +66,9 @@ const sendEscapeAndWait = async (stdin: { write: (data: string) => void }) => {
 };
 
 it('resolves with the selected model and its home provider on Enter', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   let outcome: StandaloneModelPickerOutcome | undefined;
 
   const { stdin } = await renderInAct(
@@ -83,7 +85,9 @@ it('resolves with the selected model and its home provider on Enter', async () =
 });
 
 it('filters the list as the user types the seeded query further', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   let outcome: StandaloneModelPickerOutcome | undefined;
 
   const { stdin, lastFrame } = await renderInAct(
@@ -109,7 +113,9 @@ it('filters the list as the user types the seeded query further', async () => {
 });
 
 it('Tab switches to the Favorites tab instead of completing a model id', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   let outcome: StandaloneModelPickerOutcome | undefined;
 
   const { stdin, lastFrame } = await renderInAct(
@@ -131,7 +137,9 @@ it('Tab switches to the Favorites tab instead of completing a model id', async (
 });
 
 it('cancels on Escape without selecting anything', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   let outcome: StandaloneModelPickerOutcome | undefined;
 
   const { stdin } = await renderInAct(
@@ -151,7 +159,9 @@ it('locks the tab and shows the fixed-provider message when lockProvider is set'
   const otherProvider = `${providerId}-other`;
   registerProvider({ id: otherProvider, label: 'Other', fetchModels: async () => [{ id: 'other-model' }] });
   try {
-    const settingsService = createMockSettingsService({ 'agent.provider': otherProvider });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'other-model', provider: otherProvider },
+    });
     const { lastFrame, stdin } = await renderInAct(
       <StandaloneModelPickerApp
         settingsService={settingsService}
@@ -184,7 +194,9 @@ it('opens on initialProvider so the seeded query matches instead of showing the 
     fetchModels: async () => [{ id: 'glm-5.3-flash', name: 'GLM 5.3 Flash' }],
   });
   try {
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
     let outcome: StandaloneModelPickerOutcome | undefined;
     const { lastFrame, stdin } = await renderInAct(
       <StandaloneModelPickerApp
@@ -209,7 +221,9 @@ it('opens on initialProvider so the seeded query matches instead of showing the 
   }
 });
 it('renders banner lines above the menu', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   const { lastFrame } = await renderInAct(
     <StandaloneModelPickerApp
       settingsService={settingsService}
@@ -223,7 +237,9 @@ it('renders banner lines above the menu', async () => {
 });
 
 it('toggling a favorite with ctrl+f persists it to settings', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   const { stdin } = await renderInAct(
     <StandaloneModelPickerApp
       settingsService={settingsService}
@@ -239,7 +255,7 @@ it('toggling a favorite with ctrl+f persists it to settings', async () => {
 
 it('Right advances and Left moves backward between model tabs', async () => {
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
     'agent.favoriteModels': [`${providerId}/gpt-5.4`],
   });
   const { stdin, lastFrame } = await renderInAct(
@@ -295,7 +311,9 @@ it('does not select an item flagged unavailable', async () => {
 });
 
 it('opens on the Favorites tab and resolves the row real provider when favorited', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+  });
   toggleFavoriteModel(settingsService, providerId, 'gpt-5.4');
   let outcome: StandaloneModelPickerOutcome | undefined;
 

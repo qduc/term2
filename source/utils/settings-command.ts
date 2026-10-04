@@ -496,9 +496,7 @@ export function createSettingsCommand({
         }
         if (isTierPool) {
           const models = parseSettingValueForKey(key, modelId);
-          const binding =
-            provider ??
-            settingsService.get('agent.modelSelection').provider;
+          const binding = provider ?? settingsService.get('agent.modelSelection').provider;
           parsedValue = Array.isArray(models)
             ? models.map((entry) => (typeof entry === 'string' ? { model: entry, provider: binding } : entry))
             : models;

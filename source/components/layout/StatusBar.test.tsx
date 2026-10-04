@@ -685,7 +685,9 @@ it.sequential('StatusBar renders Grok credit usage with its period reset', async
 });
 
 it.sequential('StatusBar renders Grok credit usage without a period end', async () => {
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'grok' } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'usage-model', provider: 'grok' },
+  });
 
   const { lastFrame } = await renderInAct(
     <StatusBar settingsService={settingsService} grokCreditUsage={{ creditUsagePercent: 4.4, productUsage: [] }} />,
@@ -698,7 +700,9 @@ it.sequential('StatusBar renders Grok credit usage without a period end', async 
 
 // Nothing to show must show nothing, not a zero.
 it.sequential('StatusBar omits the credit slot when there is no Grok usage', async () => {
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'grok' } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'usage-model', provider: 'grok' },
+  });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} grokCreditUsage={null} />);
 
@@ -706,7 +710,9 @@ it.sequential('StatusBar omits the credit slot when there is no Grok usage', asy
 });
 
 it.sequential('StatusBar renders all OpenCode Go usage limits with countdown resets', async () => {
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'opencode go' } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'usage-model', provider: 'opencode go' },
+  });
   const { lastFrame } = await renderInAct(
     <StatusBar
       settingsService={settingsService}

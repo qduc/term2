@@ -300,7 +300,7 @@ export class SettingsService {
     }
 
     // Register any runtime-defined providers from settings.json so they appear
-    // in the model selection menu and can be selected as agent.provider.
+    // in the model selection menu and can be bound in agent.modelSelection.
     this.registerRuntimeProviders();
 
     // Migrate legacy selected provider values (for example values with spaces)
@@ -519,7 +519,7 @@ export class SettingsService {
   }
 
   /**
-   * Get a setting value by typed dot-notation key (e.g., 'agent.model')
+   * Get a setting value by typed dot-notation key (e.g., 'agent.modelSelection')
    */
   get<K extends SettingKey>(key: K): SettingValue<K> {
     return this.getDynamic(key) as SettingValue<K>;

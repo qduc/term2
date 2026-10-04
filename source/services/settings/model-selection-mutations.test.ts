@@ -11,10 +11,12 @@ it.each(['model', 'provider'])('rejects persistent scalar selection child %s wit
 it('rejects scalar selection children even when supplied together in a persistent batch', () => {
   const settings = createMockSettingsService();
   const before = settings.get('agent.modelSelection');
-  expect(() => settings.setPersistentDynamicTransaction([
-    { key: 'agent.modelSelection.model', value: 'other' },
-    { key: 'agent.modelSelection.provider', value: 'other' },
-  ])).toThrow(/atomic/);
+  expect(() =>
+    settings.setPersistentDynamicTransaction([
+      { key: 'agent.modelSelection.model', value: 'other' },
+      { key: 'agent.modelSelection.provider', value: 'other' },
+    ]),
+  ).toThrow(/atomic/);
   expect(settings.get('agent.modelSelection')).toEqual(before);
 });
 

@@ -218,7 +218,11 @@ describe('production gateway runtime factory', () => {
       },
     ) => {
       observedTools = [];
-      settings.set('agent.modelSelection', { model: 'm1-scripted-model-' + access, provider: providerId }, { persist: false });
+      settings.set(
+        'agent.modelSelection',
+        { model: 'm1-scripted-model-' + access, provider: providerId },
+        { persist: false },
+      );
       const session = await factory.create(
         {
           sessionId,
@@ -304,7 +308,11 @@ describe('production gateway runtime factory', () => {
       observedAttemptInputs = [];
       observedAttemptEvents = [];
       settings.set('tools.shell.enabled', mode === 'direct' ? false : true, { persist: false });
-      settings.set('agent.modelSelection', { model: 'm1-attempt-' + mode + '-' + access, provider: providerId }, { persist: false });
+      settings.set(
+        'agent.modelSelection',
+        { model: 'm1-attempt-' + mode + '-' + access, provider: providerId },
+        { persist: false },
+      );
       const session = await factory.create(
         {
           sessionId: 'f1-attempt-' + mode + '-' + access,

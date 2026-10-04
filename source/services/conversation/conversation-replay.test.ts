@@ -536,6 +536,27 @@ it('semantic projection strips provider chain anchors but follows provider/model
   expect(result.state.previousResponseId).toBeNull();
 });
 
+it('semantic projection restores canonical pair events atomically and ignores incomplete pairs', () => {
+  const result = projectSemanticEvents([
+    env({
+      type: 'session_init',
+      id: 'bound-replay',
+      createdAt: '2026-01-01T00:00:00Z',
+      model: 'old-model',
+      provider: 'old-provider',
+    }),
+    env({
+      type: 'settings_changed',
+      key: 'agent.modelSelection',
+      value: { model: 'bound-model', provider: 'bound-provider' },
+    }),
+    env({ type: 'settings_changed', key: 'agent.modelSelection', value: { model: 'incomplete' } }),
+  ]);
+  expect(result.status).toBe('projected');
+  if (result.status !== 'projected') return;
+  expect(result.state).toMatchObject({ model: 'bound-model', provider: 'bound-provider' });
+});
+
 it('semantic projection excludes provider-opaque state from canonical history', () => {
   const result = projectSemanticEvents([
     env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'portable prompt' } }),

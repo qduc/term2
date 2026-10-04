@@ -14,7 +14,6 @@ import { SETTING_DESCRIPTIONS } from './settings-completion-config.js';
 const MOCK_SETTING_KEYS = {
   AGENT_MODEL_SELECTION: 'agent.modelSelection',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
-  AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
@@ -22,8 +21,6 @@ const MOCK_SETTING_KEYS = {
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
-  AGENT_MENTOR_MODEL: 'agent.mentorModel',
-  AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
   AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
@@ -43,7 +40,6 @@ const MOCK_SETTING_KEYS = {
 const MOCK_DESCRIPTIONS: Record<string, string> = {
   'agent.modelSelection': 'The main chat model (e.g. gpt-5.1, claude-sonnet-5)',
   'agent.reasoningEffort': 'Reasoning effort level (default, low, medium, high)',
-  'agent.provider': 'AI provider (openai, openrouter)',
   'agent.maxTurns': 'Maximum conversation turns',
   'agent.retryAttempts': 'Number of retry attempts for failed requests',
   'agent.maxParallelToolCalls': 'Maximum number of tool calls allowed to run at the same time',
@@ -51,8 +47,6 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
   'agent.openrouter.baseUrl': 'OpenRouter base URL',
   'agent.openrouter.referrer': 'OpenRouter referrer',
   'agent.openrouter.title': 'OpenRouter title',
-  'agent.mentorModel': 'Mentor model to use',
-  'agent.mentorProvider': 'Mentor provider to use',
   'agent.mentorReasoningEffort': 'Mentor reasoning effort',
   'shell.timeout': 'Shell command timeout in milliseconds',
   'shell.maxOutputLines': 'Maximum lines of shell output to capture',
@@ -549,6 +543,6 @@ it('Integration - clampIndex with filtered results', () => {
   const filtered = filterSettingsByQuery(settings, 'agent', 3);
 
   // Clamp selection index to filtered results
-  expect(filtered.map((item) => item.key)).toEqual(['agent.modelSelection', 'agent.maxTurns', 'agent.retryAttempts']);
+  expect(filtered.map((item) => item.key)).toEqual(['agent.maxTurns', 'agent.retryAttempts', 'agent.modelSelection']);
   expect([clampIndex(0, filtered.length), clampIndex(10, filtered.length)]).toEqual([0, 2]);
 });

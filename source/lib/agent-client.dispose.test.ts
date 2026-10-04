@@ -406,7 +406,7 @@ it.sequential('disposing one transient client does not close a shared streamed m
     new AgentClient({
       agentOverride: { name: 'transient', model: 'shared-model', instructions: '', tools: [] },
       selection: { model: 'shared-model', provider: providerId },
-      
+
       deps: {
         logger: createMockLogger(),
         settings: createMockSettings({ 'agent.modelSelection': { model: 'shared-model', provider: providerId } }),
@@ -466,7 +466,6 @@ it.sequential('disposes an owned synchronous streamed model exactly once', async
   );
 
   const client = new AgentClient({
-    
     deps: {
       logger: createMockLogger(),
       settings: createMockSettings({ 'agent.modelSelection': { model: 'owned-model', provider: providerId } }),
@@ -517,7 +516,6 @@ it.sequential('disposes an owned promised streamed model after it resolves', asy
   );
 
   const client = new AgentClient({
-    
     deps: {
       logger: createMockLogger(),
       settings: createMockSettings({ 'agent.modelSelection': { model: 'owned-model', provider: providerId } }),
@@ -569,7 +567,7 @@ it.sequential('drops a borrowed promised streamed model without closing it', asy
   const client = new AgentClient({
     agentOverride: { name: 'transient', model: 'borrowed-model', instructions: '', tools: [] },
     selection: { model: 'borrowed-model', provider: providerId },
-    
+
     deps: {
       logger: createMockLogger(),
       settings: createMockSettings({ 'agent.modelSelection': { model: 'borrowed-model', provider: providerId } }),
@@ -612,7 +610,6 @@ it.sequential('disposes safely when an owned streamed model promise rejects', as
   );
 
   const client = new AgentClient({
-    
     deps: {
       logger: createMockLogger(),
       settings: createMockSettings({ 'agent.modelSelection': { model: 'rejected-model', provider: providerId } }),

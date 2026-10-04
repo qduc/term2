@@ -16,7 +16,11 @@ const makeService = (overrides: Record<string, unknown> = {}) => {
     isRuntimeModifiable: vi.fn(() => true),
     getDynamic: vi.fn(() => false),
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:standard' : key === 'agent.modelSelection' ? { model: 'current-model', provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? 'builtin:standard'
+        : key === 'agent.modelSelection'
+        ? { model: 'current-model', provider: 'openai' }
+        : false,
     ),
     ...overrides,
   } as any;
@@ -52,7 +56,11 @@ it('does not invoke runtime effects when the settings transaction rejects', () =
     }),
   });
 
-  expect(() => service.apply([{ key: 'agent.modelSelection', value: { model: 'bad', provider: 'openai' }, persistence: 'runtime' }])).toThrow('invalid');
+  expect(() =>
+    service.apply([
+      { key: 'agent.modelSelection', value: { model: 'bad', provider: 'openai' }, persistence: 'runtime' },
+    ]),
+  ).toThrow('invalid');
   expect(setModelSelection).not.toHaveBeenCalled();
 });
 
@@ -86,7 +94,9 @@ it.each([
 
 it('composes the Plan exit when a legacy mode write replaces Plan', () => {
   const { service, conversationService } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:plan' : { model: 'current-model', provider: 'openai' })),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:plan' : { model: 'current-model', provider: 'openai' },
+    ),
   });
 
   service.apply([{ key: 'app.liteMode', value: true, persistence: 'runtime' }]);
@@ -96,7 +106,9 @@ it('composes the Plan exit when a legacy mode write replaces Plan', () => {
 
 it('activating the plan profile queues its notice without rebuilding the agent', () => {
   const { service, settingsService, conversationService, setModelSelection } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' })),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' },
+    ),
   });
 
   service.apply([{ key: 'app.activeProfileId', value: 'builtin:plan', persistence: 'runtime' }]);
@@ -108,7 +120,9 @@ it('activating the plan profile queues its notice without rebuilding the agent',
 
 it('activating the mentor profile rebuilds the agent and queues its notice', () => {
   const { service, settingsService, conversationService, setModelSelection } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' })),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' },
+    ),
   });
 
   service.apply([{ key: 'app.activeProfileId', value: 'builtin:mentor', persistence: 'runtime' }]);
@@ -121,7 +135,9 @@ it('activating the mentor profile rebuilds the agent and queues its notice', () 
 it('plans the profile transition before the settings transaction commits it', () => {
   let activeProfileId = 'builtin:standard';
   const { service, settingsService, conversationService, setModelSelection } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' })),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' },
+    ),
     setDynamicTransaction: vi.fn(() => {
       activeProfileId = 'builtin:mentor';
     }),
@@ -154,7 +170,11 @@ it('does not rebuild the agent for restart-persisted tool capability toggles', (
 it('warns when a disabled tool toggle conflicts with the active built-in profile', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? 'builtin:lite'
+        : key === 'agent.modelSelection'
+        ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' }
+        : false,
     ),
     getDynamic: vi.fn((key: string) => (key === 'tools.shell.enabled' ? true : false)),
   });
@@ -170,7 +190,11 @@ it('warns when a disabled tool toggle conflicts with the active built-in profile
 it('composes every conflicting toggle from one batch into a single notice', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? 'builtin:lite'
+        : key === 'agent.modelSelection'
+        ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' }
+        : false,
     ),
     getDynamic: vi.fn((key: string) => key === 'tools.shell.enabled' || key === 'tools.web.enabled'),
   });
@@ -189,7 +213,11 @@ it('composes every conflicting toggle from one batch into a single notice', () =
 it('does not warn when a toggle is enabled or was already disabled', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? 'builtin:lite'
+        : key === 'agent.modelSelection'
+        ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' }
+        : false,
     ),
     // tools.shell.enabled reads false before the change: disabling it again is
     // not news, and enabling it never conflicts.
@@ -211,7 +239,11 @@ it('warns on a capability toggle applied alongside a workflow-profile switch (bo
   let activeProfileId = 'builtin:standard';
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? activeProfileId
+        : key === 'agent.modelSelection'
+        ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' }
+        : false,
     ),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
@@ -238,7 +270,11 @@ it('warns on capability toggle applied before workflow-profile switch in reverse
   let activeProfileId = 'builtin:standard';
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
+      key === 'app.activeProfileId'
+        ? activeProfileId
+        : key === 'agent.modelSelection'
+        ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' }
+        : false,
     ),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
@@ -262,7 +298,9 @@ it('warns on capability toggle applied before workflow-profile switch in reverse
 it('maps legacy mode changes in transaction order', () => {
   let activeProfileId = 'builtin:standard';
   const { service, settingsService } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' })),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' },
+    ),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
         if (change.key === 'app.activeProfileId') activeProfileId = String(change.value);

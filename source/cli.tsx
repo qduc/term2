@@ -709,7 +709,6 @@ if (resumedConversation) {
   }
 }
 
-
 if (validatedReasoningEffort) {
   cliOverrides.agent = {
     ...cliOverrides.agent,
@@ -759,7 +758,11 @@ if (modelFlagGivenWithoutValue && canUseInteractiveModelPicker) {
   if (picked.status === 'cancelled') {
     // Escape keeps the configured (or resumed) model and continues startup.
   } else {
-    settings.set('agent.modelSelection', { model: picked.selection.modelId, provider: picked.selection.provider }, { persist: false });
+    settings.set(
+      'agent.modelSelection',
+      { model: picked.selection.modelId, provider: picked.selection.provider },
+      { persist: false },
+    );
   }
 }
 
@@ -814,7 +817,11 @@ if (modelFlag) {
 
     // --model is a per-session override like every other CLI flag; it must not
     // rewrite the user's persisted defaults (set() persists by default).
-    settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+    settings.set(
+      'agent.modelSelection',
+      { model: resolution.modelId, provider: resolution.provider },
+      { persist: false },
+    );
     if (resolution.reasoningEffort && !validatedReasoningEffort) {
       settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
     }
@@ -1235,7 +1242,8 @@ if (conversationService.hookEvents) {
 if (resumedConversation) {
   const savedProviderMatches =
     !resumedConversation.provider || resumedConversation.provider === settings.get('agent.modelSelection').provider;
-  const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.modelSelection').model;
+  const savedModelMatches =
+    !resumedConversation.model || resumedConversation.model === settings.get('agent.modelSelection').model;
   const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
 
   conversationService.importState({
@@ -1273,7 +1281,9 @@ function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
     activeProfileId,
     appMode: legacyModeFromProfileId(activeProfileId),
     ...(settings.get('agent.modelSelection').model ? { model: settings.get('agent.modelSelection').model } : {}),
-    ...(settings.get('agent.modelSelection').provider ? { provider: settings.get('agent.modelSelection').provider } : {}),
+    ...(settings.get('agent.modelSelection').provider
+      ? { provider: settings.get('agent.modelSelection').provider }
+      : {}),
     ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),
     ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
     ...(persistedRolloverFrom ? { rolloverFrom: persistedRolloverFrom } : {}),

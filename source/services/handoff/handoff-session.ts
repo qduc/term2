@@ -114,7 +114,10 @@ export class HandoffSession {
     const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : text;
     const { modelId, provider } = parseModelProviderArg(modelArg);
     if (modelId) {
-      const selection = { model: modelId, provider: provider ?? this.#deps.settingsService.get('agent.modelSelection').provider };
+      const selection = {
+        model: modelId,
+        provider: provider ?? this.#deps.settingsService.get('agent.modelSelection').provider,
+      };
       const changes = [{ key: 'agent.modelSelection', value: selection, persistence: 'runtime' as const }];
       if (this.#deps.configurationService) {
         this.#deps.configurationService.apply(changes);

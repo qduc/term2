@@ -103,7 +103,7 @@ describe('write boundary enforcement', () => {
 
     // 1. Test apply_patch tool under gpt-5 model
     const settingsGpt = createMockSettings({
-'agent.modelSelection': { model: 'gpt-5', provider: providerId },
+      'agent.modelSelection': { model: 'gpt-5', provider: providerId },
     });
     const managerGpt = new TestSubagentManager({
       logger: createMockLogger(),
@@ -154,7 +154,7 @@ describe('write boundary enforcement', () => {
 
     // 2. Test search_replace tool under non-gpt model
     const settingsNonGpt = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+      'agent.modelSelection': { model: 'mock-model', provider: providerId },
     });
     const managerNonGpt = new TestSubagentManager({
       logger: createMockLogger(),
@@ -195,7 +195,7 @@ describe('write boundary enforcement', () => {
     const mockExecutionContext = createMockExecutionContext(tmpDir);
 
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+      'agent.modelSelection': { model: 'mock-model', provider: providerId },
       'app.editMode': false,
     });
     const manager = new TestSubagentManager({
@@ -230,7 +230,7 @@ describe('write boundary enforcement', () => {
     const mockExecutionContext = createMockExecutionContext(tmpDir);
 
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+      'agent.modelSelection': { model: 'mock-model', provider: providerId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -313,7 +313,7 @@ describe('write boundary enforcement', () => {
     const managerGpt = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'gpt-5', provider: filesChangedProviderId },
+        'agent.modelSelection': { model: 'gpt-5', provider: filesChangedProviderId },
       }),
       executionContext: createMockExecutionContext(tmpDir),
     });
@@ -325,7 +325,7 @@ describe('write boundary enforcement', () => {
     const managerNonGpt = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: filesChangedProviderId },
+        'agent.modelSelection': { model: 'mock-model', provider: filesChangedProviderId },
       }),
       executionContext: createMockExecutionContext(tmpDir),
     });
@@ -376,7 +376,7 @@ describe('write boundary enforcement', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: lockProviderId },
+        'agent.modelSelection': { model: 'mock-model', provider: lockProviderId },
       }),
       executionContext: createMockExecutionContext(tmpDir),
     });
@@ -435,7 +435,7 @@ describe('worker shell tool safety gating', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
       }),
       sessionContextService: createSessionContextService() as any,
       executionContext: createMockExecutionContext(tmpDir),
@@ -479,7 +479,7 @@ describe('worker shell tool safety gating', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
         'sandbox.enabled': false,
       }),
       sessionContextService: createSessionContextService() as any,
@@ -525,7 +525,7 @@ describe('worker shell tool safety gating', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
         'shell.autoApproveMode': 'auto',
         'agent.choreModel': [{ model: 'mock-auto-approve-model', provider: providerId }],
         'sandbox.enabled': false,
@@ -579,7 +579,7 @@ describe('worker shell tool safety gating', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
         'shell.autoApproveMode': 'auto',
         'agent.choreModel': [{ model: 'mock-auto-approve-model', provider: providerId }],
         'sandbox.enabled': false,
@@ -621,7 +621,7 @@ describe('worker shell tool safety gating', () => {
     });
 
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: providerId },
+      'agent.modelSelection': { model: 'mock-model', provider: providerId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),

@@ -54,10 +54,9 @@ export type SettingsOrigin =
 
 // Mirrors the fields of utils/ai/model-settings.ts's ModelSettingConfig that
 // the settings-backed model frame actually needs: enough to build one
-// `apply-settings` intent carrying both the model and provider changes.
+// `apply-settings` intent carrying one bound selection.
 export type ModelSettingConfig = Readonly<{
   modelKey: string;
-  fallbackProviderKey?: string;
 }>;
 
 export type MenuFrame =

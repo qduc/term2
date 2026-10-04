@@ -3,7 +3,6 @@ import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
 export type ModelSettingConfig = {
   modelKey: string;
   trigger: string;
-  fallbackProviderKey?: string;
   /**
    * True when the setting is a tier model pool: it is still handled by the
    * settings command (including the --provider flag) but does not open the

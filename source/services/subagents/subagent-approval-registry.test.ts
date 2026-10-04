@@ -156,14 +156,18 @@ describe('subagent graph approval registry', () => {
 
   it('exposes the supplied subagent registry on transient clients and resolves it at session composition', () => {
     const logger = createMockLogger();
-    const settings = createMockSettings({ 'agent.modelSelection': { model: 'test-model' , provider: 'test-provider' }});
+    const settings = createMockSettings({ 'agent.modelSelection': { model: 'test-model', provider: 'test-provider' } });
     const sessionContextService = createSessionContextService();
     const registry = new ToolApprovalPolicyRegistry();
     registry.register({ toolName: 'graph_policy_test', needsApproval: () => false });
     const overrideAgent = { name: 'Subagent', model: 'test-model', instructions: '', tools: [] } as any;
 
     const config = new AgentConfiguration(
-      { agentOverride: overrideAgent, selection: { model: 'test-model', provider: 'test-provider' }, approvalPolicyRegistry: registry },
+      {
+        agentOverride: overrideAgent,
+        selection: { model: 'test-model', provider: 'test-provider' },
+        approvalPolicyRegistry: registry,
+      },
       {
         logger,
         settings,

@@ -11,8 +11,8 @@ it('contains only the main and flat ancillary tiers', () => {
   ]);
 
   expect(getModelSettingConfigForInput('/settings agent.cheapModel ')).toMatchObject({
-    providerKey: 'agent.cheapProvider',
-    fallbackProviderKey: 'agent.provider',
+    modelKey: 'agent.cheapModel',
+    pool: true,
   });
   expect(getModelSettingConfigForInput('/settings agent.efficientModel ')).toBeUndefined();
 });

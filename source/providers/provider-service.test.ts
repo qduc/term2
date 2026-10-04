@@ -428,29 +428,37 @@ it('saveProvider edits an existing provider', () => {
   expect(providers[0].baseUrl).toBe('http://localhost:9090/v1');
 });
 
-it('saveProvider renames an existing provider', () => {
-  const settingsService = createMockSettingsService(
-    [
-      {
-        id: 'old-name',
-        name: 'Old Name',
-        type: 'openai-compatible',
-        baseUrl: 'http://localhost:8080/v1',
-      },
-    ],
-    'openai',
-  );
-  const result = saveProvider(
-    settingsService,
-    { name: 'new-name', type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
-    'old-name',
-  );
-  expect(result.success).toBe(true);
-  const providers = settingsService.get('providers');
-  expect(providers.length).toBe(1);
-  expect(providers[0].id).toBe('new-name');
-  expect(providers[0].name).toBe('new-name');
-});
+it.each(['openai', 'old-name'])(
+  'saveProvider renames an existing provider while preserving the model bound to %s',
+  (activeProvider) => {
+    const newName = `renamed-${activeProvider}`;
+    const settingsService = createMockSettingsService(
+      [
+        {
+          id: 'old-name',
+          name: 'Old Name',
+          type: 'openai-compatible',
+          baseUrl: 'http://localhost:8080/v1',
+        },
+      ],
+      activeProvider,
+    );
+    const result = saveProvider(
+      settingsService,
+      { name: newName, type: 'openai-compatible', baseUrl: 'http://localhost:8080/v1' },
+      'old-name',
+    );
+    expect(result.success).toBe(true);
+    const providers = settingsService.get('providers');
+    expect(providers.length).toBe(1);
+    expect(providers[0].id).toBe(newName);
+    expect(providers[0].name).toBe(newName);
+    expect(settingsService.get('agent.modelSelection')).toEqual({
+      model: 'custom-model',
+      provider: activeProvider === 'old-name' ? newName : 'openai',
+    });
+  },
+);
 
 it('saveProvider saves API key for built-in provider', () => {
   const settingsService = createMockSettingsService([], 'openai');

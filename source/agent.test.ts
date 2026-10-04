@@ -387,8 +387,21 @@ it('gates mentor and subagent tools on resolved capabilities while retaining ask
     getAskUserAnswer: () => 'answer',
     ...orchestratorSubagentDeps,
   };
-  const standard = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }] }, fullDeps);
-  const lite = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }], 'app.liteMode': true }, fullDeps);
+  const standard = getToolNames(
+    {
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }],
+    },
+    fullDeps,
+  );
+  const lite = getToolNames(
+    {
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }],
+      'app.liteMode': true,
+    },
+    fullDeps,
+  );
   const delegatedTools = [
     'ask_mentor',
     'run_subagent',
@@ -508,7 +521,10 @@ it('gates MCP by capability and keeps members out of the provider tool list', ()
 it('uses the patch editing surface for modern GPT models in standard and lite modes', () => {
   for (const liteMode of [false, true]) {
     for (const model of ['gpt-5', 'gpt-6']) {
-      const names = getToolNames({ 'agent.modelSelection': { model: model, provider: 'openai' }, ...(liteMode ? { 'app.liteMode': true } : {}) });
+      const names = getToolNames({
+        'agent.modelSelection': { model: model, provider: 'openai' },
+        ...(liteMode ? { 'app.liteMode': true } : {}),
+      });
 
       expect(names).toContain('apply_patch');
       expect(names).not.toEqual(expect.arrayContaining(['create_file', 'search_replace']));
@@ -533,7 +549,10 @@ it('omits dedicated search tools in standard and lite modes when searchViaShell 
 it('omits code-context tools in standard and lite modes for remote execution', () => {
   for (const liteMode of [false, true]) {
     const names = getToolNames(
-      { 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, ...(liteMode ? { 'app.liteMode': true } : {}) },
+      {
+        'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+        ...(liteMode ? { 'app.liteMode': true } : {}),
+      },
       { executionContext: new ExecutionContext({ isRemote: () => true } as any, '/remote') },
     );
 
@@ -548,11 +567,24 @@ it('keeps plan, mentor, and orchestrator tool surfaces equal to standard', () =>
     getAskUserAnswer: () => 'answer',
     ...orchestratorSubagentDeps,
   };
-  const standard = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }] }, fullDeps);
+  const standard = getToolNames(
+    {
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }],
+    },
+    fullDeps,
+  );
 
   for (const mode of ['app.planMode', 'app.mentorMode', 'app.orchestratorMode']) {
     const dependencies = mode === 'app.orchestratorMode' ? { ...fullDeps, ...orchestratorSubagentDeps } : fullDeps;
-    const names = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }], [mode]: true }, dependencies);
+    const names = getToolNames(
+      {
+        'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+        'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }],
+        [mode]: true,
+      },
+      dependencies,
+    );
     expect([...names].sort()).toEqual([...standard].sort());
   }
 });
@@ -588,7 +620,10 @@ it('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer 
 
 it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.liteMode': true }),
+    settingsService: createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'app.liteMode': true,
+    }),
     loggingService: mockLogger,
     getAskUserAnswer: () => 'test answer',
   });
@@ -599,7 +634,10 @@ it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is p
 
 it('getAgentDefinition allows file modification in lite mode for patch-capable models', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5', provider: 'openai' }, 'app.liteMode': true }),
+    settingsService: createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
+      'app.liteMode': true,
+    }),
     loggingService: mockLogger,
   });
 
@@ -612,7 +650,10 @@ it('getAgentDefinition allows file modification in lite mode for patch-capable m
 
 it('getAgentDefinition allows file modification in lite mode for non-patch models', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.liteMode': true }),
+    settingsService: createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'app.liteMode': true,
+    }),
     loggingService: mockLogger,
   });
 
@@ -624,7 +665,10 @@ it('getAgentDefinition allows file modification in lite mode for non-patch model
 
 it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.orchestratorMode': true }),
+    settingsService: createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
+      'app.orchestratorMode': true,
+    }),
     loggingService: mockLogger,
     ...orchestratorSubagentDeps,
     getAskUserAnswer: () => 'test answer',

@@ -125,9 +125,10 @@ export const useStandaloneModelPicker = (deps: {
     for (const providerId of providerIds) {
       const credentials = resolveProviderCredentials(settingsService, providerId);
       if (credentials.required && !credentials.configured) {
-        const configuredModel = settingsService.get('agent.modelSelection').model;
+        const configuredSelection = settingsService.get('agent.modelSelection');
+        const configuredModel = configuredSelection.model;
         const unavailable =
-          lockProvider && typeof configuredModel === 'string' && configuredModel
+          lockProvider && configuredSelection.provider === providerId && configuredModel
             ? [
                 {
                   id: configuredModel,

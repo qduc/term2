@@ -111,7 +111,9 @@ const createDeps = (
 
   const settingsService = {
     getAll: () => baseSettings,
-    get: (key: any): any => overrides.values?.[key] ?? (key === 'agent.modelSelection' ? { model: 'initial', provider: 'openai' } : 'value-for-' + key),
+    get: (key: any): any =>
+      overrides.values?.[key] ??
+      (key === 'agent.modelSelection' ? { model: 'initial', provider: 'openai' } : 'value-for-' + key),
     getDynamic: (key: string): unknown => overrides.values?.[key] ?? 'value-for-' + key,
     getSource: (key: string) => overrides.sources?.[key] ?? 'default',
     reset: (key: string) => resetCalls.push(key),
@@ -435,12 +437,8 @@ it('setting agent.modelSelection strips --provider=openai flag from value', () =
   command.action('agent.modelSelection gpt-4o --provider=openai');
 
   // Should save the provider and the model ID
-  expect(deps.setCalls).toEqual([
-    { key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } },
-  ]);
-  expect(deps.applied).toEqual([
-    { key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } },
-  ]);
+  expect(deps.setCalls).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
+  expect(deps.applied).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
   expect(deps.messages[0].includes('Set agent.modelSelection to {')).toBe(true);
 });
 

@@ -162,7 +162,10 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing g
   expect(out.recovery?.recovered).toBe(true);
   expect(out.recovery?.recoveredSectionKeys).toEqual(['agent', 'app']);
   expect(out.validated.agent?.modelSelection.model).toBe('gpt-5.1');
-  expect(out.raw).toEqual({ agent: { modelSelection: { model: 'gpt-5.1', provider: 'openai' } }, app: { liteMode: true } });
+  expect(out.raw).toEqual({
+    agent: { modelSelection: { model: 'gpt-5.1', provider: 'openai' } },
+    app: { liteMode: true },
+  });
 });
 
 it('loadSettingsFromFile: scan fallback recovers a JSON document from leading garbage', () => {
@@ -224,12 +227,18 @@ it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON documen
     settingsDir: dir,
     schema: SettingsSchema,
     defaults: DEFAULT_SETTINGS,
-    mutate: (current) => ({ ...current, agent: { ...current.agent, modelSelection: { model: 'gpt-4o', provider: 'openai' } } }),
+    mutate: (current) => ({
+      ...current,
+      agent: { ...current.agent, modelSelection: { model: 'gpt-4o', provider: 'openai' } },
+    }),
     stripSensitiveSettings,
     disableLogging: true,
   });
 
-  expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.modelSelection).toEqual({ model: 'gpt-4o', provider: 'openai' });
+  expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.modelSelection).toEqual({
+    model: 'gpt-4o',
+    provider: 'openai',
+  });
   expect(fs.existsSync(lockFile)).toBe(false);
   expect(fs.readdirSync(dir).filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
 });

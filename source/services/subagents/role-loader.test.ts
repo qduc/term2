@@ -96,20 +96,32 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
 it.each(['model: explicit-model', 'provider: explicit-host'])('rejects incomplete role frontmatter %s', (override) => {
   const read = vi.spyOn(fs, 'readFileSync').mockReturnValue(`---\n${override}\n---\nRole instructions`);
   try {
-    expect(() => loadRoleDefinition('worker', settings({
-      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
-    }))).toThrow(/model and provider together/);
+    expect(() =>
+      loadRoleDefinition(
+        'worker',
+        settings({
+          'agent.modelSelection': { model: 'main-model', provider: 'openai' },
+        }),
+      ),
+    ).toThrow(/model and provider together/);
   } finally {
     read.mockRestore();
   }
 });
 
 it('uses a complete frontmatter override without borrowing either field from the main selection', () => {
-  const read = vi.spyOn(fs, 'readFileSync').mockReturnValue('---\nmodel: explicit-model\nprovider: explicit-host\n---\nRole instructions');
+  const read = vi
+    .spyOn(fs, 'readFileSync')
+    .mockReturnValue('---\nmodel: explicit-model\nprovider: explicit-host\n---\nRole instructions');
   try {
-    expect(loadRoleDefinition('worker', settings({
-      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
-    }))).toMatchObject({ model: 'explicit-model', provider: 'explicit-host' });
+    expect(
+      loadRoleDefinition(
+        'worker',
+        settings({
+          'agent.modelSelection': { model: 'main-model', provider: 'openai' },
+        }),
+      ),
+    ).toMatchObject({ model: 'explicit-model', provider: 'explicit-host' });
   } finally {
     read.mockRestore();
   }

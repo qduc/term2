@@ -73,6 +73,20 @@ const TestComponent = ({
   return <Text>picker</Text>;
 };
 
+it('does not rehost the configured model under a different locked provider without credentials', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'configured-only', provider: 'openai' },
+  });
+  let captured: any;
+  await flush(() => {
+    render(
+      <TestComponent settingsService={settingsService} lockProvider="openrouter" onResults={(r) => (captured = r)} />,
+    );
+  });
+  await waitForIdle(() => captured);
+  expect(captured.filteredModels).toEqual([]);
+});
+
 it('lists a nicknamed model on the Nicknames tab without pinning it onto All', async () => {
   const testProvider = `test-nick-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({
@@ -105,7 +119,9 @@ it('lists a nicknamed model on the Nicknames tab without pinning it onto All', a
 it('pins favorites at the top of the unified list', async () => {
   const testProvider = `test-fav-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => []) as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
   toggleFavoriteModel(settingsService, testProvider, 'fav-model');
 
   let captured: any;
@@ -122,7 +138,9 @@ it('loads and searches configured provider catalogs as one unified list', async 
   const otherProvider = `test-other-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => [{ id: 'alpha' }]) as any });
   registerTestProvider({ id: otherProvider, label: otherProvider, fetchModels: (async () => [{ id: 'beta' }]) as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
 
   let captured: any;
   await flush(() => {
@@ -169,7 +187,9 @@ it('prioritizes initialProvider while retaining the unified list', async () => {
     label: providerB,
     fetchModels: (async () => [{ id: 'glm-5.3-flash' }]) as any,
   });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerA } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerA },
+  });
   toggleFavoriteModel(settingsService, providerA, 'fav-model');
 
   let captured: any;
@@ -193,7 +213,9 @@ it('lockProvider still wins over initialProvider', async () => {
   const providerB = `test-lb-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => []) as any });
   registerTestProvider({ id: providerB, label: providerB, fetchModels: (async () => []) as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerA } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerA },
+  });
 
   let captured: any;
   await flush(() => {
@@ -215,7 +237,9 @@ it('scopes the catalog when lockProvider is given', async () => {
   const providerB = `test-b-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: providerA, label: providerA, fetchModels: (async () => []) as any });
   registerTestProvider({ id: providerB, label: providerB, fetchModels: (async () => []) as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerA } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerA },
+  });
 
   let captured: any;
   await flush(() => {
@@ -235,7 +259,9 @@ it('seeds the query from initialQuery and filters loaded models against it', asy
     { id: 'claude', provider: testProvider },
   ];
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: fetcher as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
 
   let captured: any;
   await flush(() => {
@@ -257,7 +283,9 @@ it('seeds the query from initialQuery and filters loaded models against it', asy
 it('typeQuery and backspaceQuery update the query incrementally', async () => {
   const testProvider = `test-type-${Math.random().toString(36).slice(2)}`;
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: (async () => []) as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
 
   let captured: any;
   await flush(() => {
@@ -279,7 +307,9 @@ it('moveDown wraps to the first item past the last', async () => {
     { id: 'b', provider: testProvider },
   ];
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: fetcher as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
 
   let captured: any;
   await flush(() => {
@@ -300,7 +330,9 @@ it('toggleFavorite persists the currently selected model as a favorite', async (
   const testProvider = `test-favtoggle-${Math.random().toString(36).slice(2)}`;
   const fetcher: TestModelFetcher = async () => [{ id: 'model-x', provider: testProvider }];
   registerTestProvider({ id: testProvider, label: testProvider, fetchModels: fetcher as any });
-  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider } });
+  const settingsService = createMockSettingsService({
+    'agent.modelSelection': { model: 'gpt-5.1', provider: testProvider },
+  });
 
   let captured: any;
   await flush(() => {

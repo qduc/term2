@@ -119,7 +119,7 @@ describe('mentor role', () => {
 
   it('run() with mentor role uses mentorModel setting', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
       'agent.mentorPool': [{ model: MODEL_MENTOR, provider: mentorProviderId }],
     });
     const manager = new TestSubagentManager({
@@ -139,7 +139,7 @@ describe('mentor role', () => {
 
   it('run() with mentor role falls back to the smart tier when mentorModel is not set', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -155,7 +155,7 @@ describe('mentor role', () => {
 
   it('run() mentor maintains conversation history across calls', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
       'agent.mentorPool': [{ model: MODEL_MENTOR, provider: mentorProviderId }],
     });
     const manager = new TestSubagentManager({
@@ -175,7 +175,7 @@ describe('mentor role', () => {
 
   it('resetMentorSession() clears conversation history', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
       'agent.mentorPool': [{ model: MODEL_MENTOR, provider: mentorProviderId }],
     });
     const manager = new TestSubagentManager({
@@ -196,7 +196,7 @@ describe('mentor role', () => {
 
   it('resetMentorSession() does not cancel an async worker retained for the successor session', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
       'agent.retryAttempts': 0,
     });
     let releaseWorker!: () => void;
@@ -244,7 +244,7 @@ describe('mentor role', () => {
 
   it('retains an async worker through the public rollover and successor config refresh', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
+      'agent.modelSelection': { model: MODEL_MAIN, provider: mentorProviderId },
       'agent.retryAttempts': 0,
     });
     let releaseWorker!: () => void;
@@ -377,7 +377,7 @@ describe('explorer role', () => {
 
   it('run() with explorer role returns SubagentResult', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
+      'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
       'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
@@ -397,7 +397,7 @@ describe('explorer role', () => {
 
   it('run() passes parent abort signal into the delegated provider run', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
+      'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
       'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
@@ -440,7 +440,7 @@ describe('explorer role', () => {
     });
 
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: abortProviderId },
+      'agent.modelSelection': { model: MODEL_MOCK, provider: abortProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -463,7 +463,7 @@ describe('explorer role', () => {
 
   it('explorer shell tool executes GREEN commands and blocks YELLOW and RED commands', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
+      'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
       'sandbox.enabled': false,
     });
     const manager = new TestSubagentManager({
@@ -517,7 +517,7 @@ describe('explorer role', () => {
       writeFileSync(join(tmpDir, TEMP_SOURCE_FILE), 'source content');
 
       const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
+        'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
       });
       const manager = new TestSubagentManager({
         logger: createMockLogger(),
@@ -543,7 +543,7 @@ describe('explorer role', () => {
 
   it('run() with explorer role uses read-only tools only', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
+      'agent.modelSelection': { model: MODEL_MOCK, provider: explorerProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -603,7 +603,7 @@ describe('explorer role includes web tools', () => {
 
   it('run() with explorer role includes read, web, and shell tools', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: explorerWebProviderId },
+      'agent.modelSelection': { model: 'mock-model', provider: explorerWebProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -657,7 +657,7 @@ describe('worker role', () => {
 
   it('run() with worker role includes write and shell tools for non-gpt model', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: workerProviderId },
+      'agent.modelSelection': { model: 'mock-model', provider: workerProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -684,7 +684,7 @@ describe('worker role', () => {
 
   it('run() with worker role includes write and shell tools for gpt model', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'gpt-5', provider: workerProviderId },
+      'agent.modelSelection': { model: 'gpt-5', provider: workerProviderId },
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
@@ -711,7 +711,7 @@ describe('worker role', () => {
 
   it('run() result contains agentId and correct role', async () => {
     const settings = createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: workerProviderId },
+      'agent.modelSelection': { model: 'mock-model', provider: workerProviderId },
     });
     const manager = new TestSubagentManager({ logger: createMockLogger(), settings });
 
@@ -753,7 +753,7 @@ describe('worker role agent tool caching', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
+        'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
       }),
     });
 
@@ -770,7 +770,7 @@ describe('worker role agent tool caching', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
+        'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
       }),
     });
 
@@ -796,7 +796,7 @@ describe('worker role agent tool caching', () => {
       const manager = new TestSubagentManager({
         logger: createMockLogger(),
         settings: createMockSettings({
-'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
+          'agent.modelSelection': { model: 'mock-model', provider: boundaryProviderId },
           'sandbox.enabled': false,
         }),
         executionContext: createMockExecutionContext(tmpDir),

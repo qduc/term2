@@ -30,8 +30,6 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = getAllSettingDescrip
 
 /**
  * Settings that should be hidden from the UI (not for security, but for UX/workflow)
- * - agent.provider: Can only be changed at the start of a new conversation via model menu
- * - agent.autoApproveProvider: Controlled via model/provider selection workflows, hide from the general settings list
  */
 export const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -64,7 +62,7 @@ export const COMMON_SETTINGS: string[] = [
 
 export const CATEGORY_KEYS = {
   models: new Set<string>([
-  SETTING_KEYS.AGENT_MODEL_SELECTION,
+    SETTING_KEYS.AGENT_MODEL_SELECTION,
     SETTING_KEYS.AGENT_FAVORITE_MODELS,
     SETTING_KEYS.AGENT_MODEL_NICKNAMES,
     SETTING_KEYS.AGENT_DISABLED_PROVIDERS,

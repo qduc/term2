@@ -289,6 +289,13 @@ function safeValue(value: unknown): boolean {
   if (typeof value === 'number') return Number.isFinite(value);
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length <= 2_048);
 }
+function modelSelectionValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const selection = value as Record<string, unknown>;
+  return Object.keys(selection).length === 2 &&
+    typeof selection.model === 'string' && selection.model.trim().length > 0 &&
+    typeof selection.provider === 'string' && selection.provider.trim().length > 0;
+}
 function jsonValue(value: unknown, depth = 0): boolean {
   if (depth > 8 || value === undefined) return false;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
@@ -329,7 +336,7 @@ export function validateSettings(value: unknown): SettingsProjection {
       !['global', 'session'].includes(String(item.scope)) ||
       typeof item.confirmRequired !== 'boolean' ||
       typeof item.persistable !== 'boolean' ||
-      (item.value !== undefined && !safeValue(item.value))
+      (item.value !== undefined && !(key === 'agent.modelSelection' ? modelSelectionValue(item.value) : safeValue(item.value)))
     )
       throw new Term2ApiError(503, 'Invalid agent response');
     safeDefaults[key] = {

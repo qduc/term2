@@ -44,7 +44,10 @@ describe('settings RPC policy boundary', () => {
       'sandbox.enabled': true,
     });
     const projection = buildSettingsProjection(settings);
-    expect(projection.settings.safeDefaults['agent.modelSelection']).toMatchObject({ value: { model: 'gpt-5', provider: 'openai' }, source: 'config' });
+    expect(projection.settings.safeDefaults['agent.modelSelection']).toMatchObject({
+      value: { model: 'gpt-5', provider: 'openai' },
+      source: 'config',
+    });
     expect(projection.settings.safeDefaults['agent.modelSelection']?.scope).toBe('session');
     expect(projection.settings.safeDefaults['logging.logLevel']?.scope).toBe('global');
     expect(projection.settings.credentials.openai).toMatchObject({

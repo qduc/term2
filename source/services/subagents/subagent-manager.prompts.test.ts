@@ -24,7 +24,7 @@ it('subagent direct streamed model preserves the final response contract', async
   });
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
-    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }}),
+    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } }),
     sessionContextService: createSessionContextService() as any,
   });
   const result = await manager.run({ role: 'explorer', task: 'mock task' });

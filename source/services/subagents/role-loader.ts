@@ -110,9 +110,9 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   if (inheritsModel !== inheritsProvider) {
     throw new Error(`Role "${role}" must override model and provider together.`);
   }
-  const selection = ModelSelectionSchema.parse(inheritsModel
-    ? tierModel
-    : { model: frontmatter.model, provider: frontmatter.provider });
+  const selection = ModelSelectionSchema.parse(
+    inheritsModel ? tierModel : { model: frontmatter.model, provider: frontmatter.provider },
+  );
 
   return {
     role,

@@ -364,8 +364,14 @@ it.sequential(
     });
     await flush();
 
-    expect(deps.settingsService.set).toHaveBeenCalledWith('agent.modelSelection', { model: 'gpt-4', provider: 'anthropic' });
-    expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('agent.modelSelection', { model: 'gpt-4', provider: 'anthropic' });
+    expect(deps.settingsService.set).toHaveBeenCalledWith('agent.modelSelection', {
+      model: 'gpt-4',
+      provider: 'anthropic',
+    });
+    expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('agent.modelSelection', {
+      model: 'gpt-4',
+      provider: 'anthropic',
+    });
     expect(deps.setModelSelection).toHaveBeenCalledWith({ model: 'gpt-4', provider: 'anthropic' });
     expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
     expect(getSnapshot().controller.getSnapshot().editor.text).toBe('/effort ');

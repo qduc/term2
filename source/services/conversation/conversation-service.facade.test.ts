@@ -160,7 +160,10 @@ it('rollover keeps the caller-owned client alive while replacing root identity',
 
 it('keeps the owned client identity aligned when rollover follows ordinary clear', () => {
   const ownedFactory = createOwnedSessionClientFactory(
-    { get: (key: string) => key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: 'openai' } : undefined, getDynamic: () => undefined } as any,
+    {
+      get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: 'openai' } : undefined),
+      getDynamic: () => undefined,
+    } as any,
     () => partialClient(),
   );
   const handles: SessionClientHandle[] = [];
@@ -745,7 +748,13 @@ it('re-primes Plan Mode notice after resetWithNewId when planMode is on', async 
       sessionContextService,
       settingsService: {
         get: (key: string) =>
-          key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: 'openai' } : key === 'app.activeProfileId' ? 'builtin:plan' : key === 'app.planMode' ? true : undefined,
+          key === 'agent.modelSelection'
+            ? { model: 'gpt-4o', provider: 'openai' }
+            : key === 'app.activeProfileId'
+            ? 'builtin:plan'
+            : key === 'app.planMode'
+            ? true
+            : undefined,
       } as any,
     },
   });

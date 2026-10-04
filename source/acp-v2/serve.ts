@@ -134,7 +134,11 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
     }
     // A per-session override like every other CLI flag; it must not rewrite the
     // user's persisted defaults, so nothing here persists.
-    settingsAuthority.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+    settingsAuthority.set(
+      'agent.modelSelection',
+      { model: resolution.modelId, provider: resolution.provider },
+      { persist: false },
+    );
     if (resolution.reasoningEffort && !args.effort) {
       settingsAuthority.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
     }

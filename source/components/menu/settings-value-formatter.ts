@@ -117,10 +117,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     ) {
       return { text: '(default)', tone: 'textSubtle' };
     }
-    if (
-      key === SETTING_KEYS.WEB_SEARCH_PROVIDER ||
-      key === SETTING_KEYS.UI_PASTE_THRESHOLD
-    ) {
+    if (key === SETTING_KEYS.WEB_SEARCH_PROVIDER || key === SETTING_KEYS.UI_PASTE_THRESHOLD) {
       return { text: '(none)', tone: 'textSubtle' };
     }
     return { text: '(unset)', tone: 'textSubtle' };

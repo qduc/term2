@@ -1824,7 +1824,7 @@ describe('outbound steering', () => {
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
-    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }});
+    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } });
     const logger = createMockLogger();
     const sessionContextService = createSessionContextService();
     const toolOwnership = new ToolOwnershipRegistry();
@@ -1945,7 +1945,7 @@ describe('provider traffic scoping', () => {
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
-    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }});
+    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } });
     const logger = createMockLogger();
     const toolOwnership = new ToolOwnershipRegistry();
     const runtime = createSubagentRuntime({

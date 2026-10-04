@@ -40,7 +40,7 @@ describe('local launcher seams', () => {
   it('does not share the mutable policy object with the authority caller', () => {
     const policy = { allowWrite: true };
     const snapshot = createSessionSettingsSnapshot({
-      settings: settings({ 'agent.modelSelection': { model: 'fixture-model' , provider: 'fixture' }}),
+      settings: settings({ 'agent.modelSelection': { model: 'fixture-model', provider: 'fixture' } }),
       effectiveToolPolicy: policy,
     });
     policy.allowWrite = false;

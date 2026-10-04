@@ -22,27 +22,45 @@ it('requires complete main selections and exposes no scalar projections', () => 
   expect(() => AgentSettingsSchema.parse({ modelSelection: { model: 'missing-host' } })).toThrow();
 });
 
-it.each(['model', 'provider', 'efficientModel', 'capableModel', 'mentorModel', 'mentorProvider',
-  'subagentExplorerModel', 'subagentExplorerProvider', 'subagentWorkerModel', 'subagentWorkerProvider',
-  'subagentLibrarianModel', 'subagentLibrarianProvider', 'autoApproveModel', 'autoApproveProvider',
-  'smartProvider', 'balancedProvider', 'cheapProvider', 'choreProvider'])('rejects removed scalar selection key %s', (key) => {
+it.each([
+  'model',
+  'provider',
+  'efficientModel',
+  'capableModel',
+  'mentorModel',
+  'mentorProvider',
+  'subagentExplorerModel',
+  'subagentExplorerProvider',
+  'subagentWorkerModel',
+  'subagentWorkerProvider',
+  'subagentLibrarianModel',
+  'subagentLibrarianProvider',
+  'autoApproveModel',
+  'autoApproveProvider',
+  'smartProvider',
+  'balancedProvider',
+  'cheapProvider',
+  'choreProvider',
+])('rejects removed scalar selection key %s', (key) => {
   expect(() => AgentSettingsSchema.parse({ [key]: 'legacy' })).toThrow();
 });
 
-it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel', 'mentorPool'])('requires complete entries in %s', (key) => {
-  for (const value of ['legacy', ['legacy'], [{ model: 'unbound' }], [{ model: 'empty', provider: '' }]]) {
-    expect(() => AgentSettingsSchema.parse({ [key]: value })).toThrow();
-  }
-  const pair = { model: 'pinned', provider: 'zai' };
-  expect((AgentSettingsSchema.parse({ [key]: [pair] }) as any)[key]).toEqual([pair]);
-});
+it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel', 'mentorPool'])(
+  'requires complete entries in %s',
+  (key) => {
+    for (const value of ['legacy', ['legacy'], [{ model: 'unbound' }], [{ model: 'empty', provider: '' }]]) {
+      expect(() => AgentSettingsSchema.parse({ [key]: value })).toThrow();
+    }
+    const pair = { model: 'pinned', provider: 'zai' };
+    expect((AgentSettingsSchema.parse({ [key]: [pair] }) as any)[key]).toEqual([pair]);
+  },
+);
 
 it('rejects legacy edit-healing scalars and provider overrides', () => {
   expect(() => ToolsSettingsSchema.parse({ editHealingModel: 'healer' })).toThrow();
   expect(() => ToolsSettingsSchema.parse({ editHealingProvider: 'zai' })).toThrow();
   expect(() => ToolsSettingsSchema.parse({ editHealingModel: { model: 'healer', provider: 'zai' } })).toThrow();
 });
-
 
 it('keeps the structured Contract 04 consumer inventory complete and duplicate-free', () => {
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
@@ -207,10 +225,13 @@ it('accepts the exact maximum mentor samples and mentor pool size', () => {
 });
 
 it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
-  'bounds complete selection pools for agent.%s', (key) => {
+  'bounds complete selection pools for agent.%s',
+  (key) => {
     const pool = Array.from({ length: 8 }, (_, index) => ({ model: `role-${index + 1}`, provider: 'codex' }));
     expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent?.[key]).toEqual(pool);
-    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, { model: 'role-9', provider: 'codex' }] } })).toThrow();
+    expect(() =>
+      SettingsSchema.parse({ agent: { [key]: [...pool, { model: 'role-9', provider: 'codex' }] } }),
+    ).toThrow();
     expect(AgentSettingsSchema.parse({})[key]).toBeUndefined();
     expect(RUNTIME_MODIFIABLE_SETTINGS.has(`agent.${key}`)).toBe(true);
   },
@@ -219,7 +240,9 @@ it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
 it('does not rebind canonical pools when the parent selection changes', () => {
   const pool = [{ model: 'gpt-6-luna', provider: 'codex' }];
   const bound = AgentSettingsSchema.parse({ modelSelection: { model: 'main', provider: 'codex' }, cheapModel: pool });
-  expect(AgentSettingsSchema.parse({ ...bound, modelSelection: { model: 'other', provider: 'zai' } }).cheapModel).toEqual(pool);
+  expect(
+    AgentSettingsSchema.parse({ ...bound, modelSelection: { model: 'other', provider: 'zai' } }).cheapModel,
+  ).toEqual(pool);
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {

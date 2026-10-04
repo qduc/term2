@@ -159,7 +159,7 @@ function buildNestedRunner(
   const runner = new NestedSubagentRunner({
     logger: options.logger ?? createMockLogger(),
     settings: createMockSettings({
-'agent.modelSelection': { model: 'nested-model', provider: providerId },
+      'agent.modelSelection': { model: 'nested-model', provider: providerId },
       'agent.runBudget.extensionPercent': 0,
       ...(options.workerPool
         ? { 'agent.balancedModel': options.workerPool.map((model) => ({ model, provider: providerId })) }

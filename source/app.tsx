@@ -714,10 +714,19 @@ const App: FC<AppProps> = ({
 
         const profileId =
           restored.activeProfileId ?? (restored.appMode ? profileIdFromLegacyMode(restored.appMode) : undefined);
+        const currentSelection = settingsService.get('agent.modelSelection');
         const changes = [
-          ...(restored.model ? [{ key: 'agent.model', value: restored.model, persistence: 'runtime' as const }] : []),
-          ...(restored.provider
-            ? [{ key: 'agent.provider', value: restored.provider, persistence: 'runtime' as const }]
+          ...(restored.model || restored.provider
+            ? [
+                {
+                  key: 'agent.modelSelection',
+                  value: {
+                    model: restored.model ?? currentSelection.model,
+                    provider: restored.provider ?? currentSelection.provider,
+                  },
+                  persistence: 'runtime' as const,
+                },
+              ]
             : []),
           ...(restored.reasoningEffort &&
           ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(restored.reasoningEffort)
@@ -727,8 +736,10 @@ const App: FC<AppProps> = ({
         ];
         configurationService.apply(changes);
 
-        const savedProviderMatches = !restored.provider || restored.provider === settingsService.get('agent.modelSelection').provider;
-        const savedModelMatches = !restored.model || restored.model === settingsService.get('agent.modelSelection').model;
+        const savedProviderMatches =
+          !restored.provider || restored.provider === settingsService.get('agent.modelSelection').provider;
+        const savedModelMatches =
+          !restored.model || restored.model === settingsService.get('agent.modelSelection').model;
         restoreConversation({
           ...restored,
           previousResponseId: savedProviderMatches && savedModelMatches ? restored.previousResponseId : null,
@@ -1415,7 +1426,7 @@ const App: FC<AppProps> = ({
       if (
         result?.ok &&
         intentRequest.intent.type === 'apply-settings' &&
-        intentRequest.intent.changes.some((change) => change.key === 'agent.model')
+        intentRequest.intent.changes.some((change) => change.key === 'agent.modelSelection')
       ) {
         firstRunSetup.completeModelSelection();
       }

@@ -370,7 +370,7 @@ export async function resolveModelFlag(deps: {
   }
 
   // Explicit --provider is the user deliberately scoping the search (it also
-  // sets agent.provider for the session), so it narrows PERMANENTLY: a miss
+  // binds the resolved selection's provider), so it narrows PERMANENTLY: a miss
   // there errors out rather than silently resolving to a provider the user
   // didn't name. A provider-style prefix parsed out of the flag itself (e.g.
   // the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) is a

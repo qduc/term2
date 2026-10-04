@@ -224,7 +224,7 @@ it('positional launch durably records its goal before the first provider request
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, provider: 'mockprov', model: 'mock-alpha' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
   try {
@@ -772,7 +772,7 @@ it('CLI --model reports error and exits 1 when no models match pattern', async (
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha', 'mock-beta']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -795,12 +795,12 @@ it('CLI --model reports error and exits 1 when no models match pattern', async (
 it('CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog', async () => {
   // Regression: the resolution block used settings.set() without
   // { persist: false }, so a one-off --model run rewrote the user's persisted
-  // agent.model (and provider). Passthrough (all catalogs fail to load) also
+  // agent.modelSelection. Passthrough (all catalogs fail to load) also
   // reaches those set() calls, so an unreachable provider is enough to
   // exercise the persistence boundary.
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const settingsFile = writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'keep-session-model' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'openai' } },
     providers: [
       { name: 'mockprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
     ],
@@ -812,7 +812,10 @@ it('CLI --model keeps settings.json session-only when resolution passes through 
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
     });
-    const { status, stderr } = await spawnCli([cliPath(), '--model', 'some-brand-new-model', 'hello'], childEnv);
+    const { status, stderr } = await spawnCli(
+      [cliPath(), '--provider', 'mockprov', '--model', 'some-brand-new-model', 'hello'],
+      childEnv,
+    );
 
     // The chat turn itself fails against the unreachable provider, but the
     // settings file must be byte-identical to what we wrote.
@@ -832,7 +835,7 @@ it('CLI --json routes the ambiguous --model disambiguation prompt to stderr, kee
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha', 'mock-beta']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -866,7 +869,7 @@ it('CLI --model vendor/id resolves the literal id on the serving provider, warns
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['openai/gpt-test', 'mock-alpha']);
   const settingsFile = writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'original-default', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'original-default', provider: 'mockprov' } },
     providers: [
       { name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' },
       { name: 'brokenprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
@@ -896,8 +899,8 @@ it('CLI --model vendor/id resolves the literal id on the serving provider, warns
 
     // Session-only override: persisted defaults untouched.
     const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-    expect(persisted.agent.model).toBe('original-default');
-    expect(persisted.agent.provider).toBe('mockprov');
+    expect(persisted.agent.modelSelection.model).toBe('original-default');
+    expect(persisted.agent.modelSelection.provider).toBe('mockprov');
 
     // stdout stays machine-readable.
     expect(stdout).not.toContain('Multiple models match');
@@ -922,7 +925,7 @@ it('CLI resolves --model <value> as the last argument to the model, not a prompt
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha', 'mock-beta']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -948,7 +951,7 @@ it('CLI resolves -p <provider> -m <model> with nothing else to the model, not a 
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha', 'mock-beta']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -975,7 +978,7 @@ it('CLI still treats --model <value> <prompt> (two or more trailing tokens) as u
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha', 'mock-beta']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -999,7 +1002,7 @@ it('CLI "term2 <prompt>" with no --model is unchanged', async () => {
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 
@@ -1030,7 +1033,7 @@ it('CLI bare --model (no value) is a no-op outside a TTY session, not a picker a
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const mock = await startModelMock(['mock-alpha']);
   writeSettings(tempHome, {
-    agent: { retryAttempts: 0, model: 'mock-alpha', provider: 'mockprov' },
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
 

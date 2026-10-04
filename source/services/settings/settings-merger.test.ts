@@ -36,7 +36,9 @@ it('does not complete a partial explicit selection from a lower-priority layer',
 it('mergeSettings: cli > env > config > defaults precedence', () => {
   const defaults = DEFAULT_SETTINGS;
 
-  const config: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-config', provider: 'config-host' } } };
+  const config: DeepPartial<SettingsData> = {
+    agent: { modelSelection: { model: 'from-config', provider: 'config-host' } },
+  };
   const env: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-env', provider: 'env-host' } } };
   const cli: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-cli', provider: 'cli-host' } } };
 
@@ -47,7 +49,9 @@ it('mergeSettings: cli > env > config > defaults precedence', () => {
 it('trackSettingSources: reports correct source for overridden keys', () => {
   const defaults = DEFAULT_SETTINGS;
 
-  const config: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-config', provider: 'config-host' } } };
+  const config: DeepPartial<SettingsData> = {
+    agent: { modelSelection: { model: 'from-config', provider: 'config-host' } },
+  };
   const env: DeepPartial<SettingsData> = { agent: { reasoningEffort: 'low' } };
   const cli: DeepPartial<SettingsData> = { shell: { timeout: 123 } };
 

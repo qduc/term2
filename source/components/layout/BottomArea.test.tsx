@@ -180,11 +180,7 @@ it.sequential('keeps the active first-run provider menu interactive through cred
 
   await act(async () => view.stdin.write('\u001b[B'));
   await act(async () => view.stdin.write('\r'));
-  await waitForBottomArea(
-    () =>
-      view.lastFrame()?.includes('Step 4: API Key') === true,
-    'the provider credential step',
-  );
+  await waitForBottomArea(() => view.lastFrame()?.includes('Step 4: API Key') === true, 'the provider credential step');
   expect(settingsService.get('agent.modelSelection').provider).toBe('openai');
   expect(view.lastFrame()).toContain('Step 4: API Key');
   expect(onSubmit).not.toHaveBeenCalled();

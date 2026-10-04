@@ -8,7 +8,7 @@ import type { SettingCompletionItem } from '../../hooks/use-settings-completion.
 
 const items: SettingCompletionItem[] = [
   {
-    key: 'agent.model',
+    key: 'agent.modelSelection',
     description: 'The AI model to use',
     currentValue: 'gpt-5',
   },
@@ -53,7 +53,7 @@ it.sequential('SettingsSelectionMenu renders settings list and their current val
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('agent.model')).toBe(true);
+  expect(output.includes('agent.modelSelection')).toBe(true);
   expect(output.includes('gpt-5')).toBe(true);
   expect(output.includes('shell.timeout')).toBe(true);
   expect(output.includes('2m')).toBe(true);
@@ -94,7 +94,7 @@ it.sequential('SettingsSelectionMenu hides category headers while searching all 
     />,
   );
   const output = lastFrame() ?? '';
-  expect(output.includes('agent.model')).toBe(true);
+  expect(output.includes('agent.modelSelection')).toBe(true);
   expect(output.includes('shell.timeout')).toBe(true);
   expect(output.includes('Model & Reasoning')).toBe(false);
   expect(output.includes('Shell Execution')).toBe(false);
@@ -117,8 +117,8 @@ it.sequential('SettingsSelectionMenu marks the selected item', async () => {
   const markedRows = plain.split('\n').filter((line) => line.includes('❯'));
   expect(markedRows).toHaveLength(1);
   expect(markedRows[0]).toContain('shell.timeout');
-  expect(markedRows[0]).not.toContain('agent.model');
-  const unmarkedRow = plain.split('\n').find((line) => line.includes('agent.model')) ?? '';
+  expect(markedRows[0]).not.toContain('agent.modelSelection');
+  const unmarkedRow = plain.split('\n').find((line) => line.includes('agent.modelSelection')) ?? '';
   expect(unmarkedRow.includes('❯')).toBe(false);
 });
 
@@ -193,7 +193,7 @@ it.sequential(
     expect(output.includes('1h')).toBe(true);
     expect(output.includes('80%')).toBe(true);
     expect(output.includes('200k, 300k, 400k')).toBe(true);
-    expect(output.includes('(inherits agent.model)')).toBe(true);
+    expect(output.includes('(inherits agent.modelSelection)')).toBe(true);
   },
 );
 
@@ -203,7 +203,7 @@ it.sequential(
     const { lastFrame } = await renderInAct(
       <SettingsSelectionMenu
         items={[
-          { key: 'agent.model', currentValue: 'gpt-5', source: 'config', requiresRestart: false },
+          { key: 'agent.modelSelection', currentValue: 'gpt-5', source: 'config', requiresRestart: false },
           { key: 'agent.maxTurns', currentValue: 20, source: 'default', requiresRestart: true },
         ]}
         selectedIndex={0}
@@ -213,7 +213,7 @@ it.sequential(
       />,
     );
     const lines = (lastFrame() ?? '').split('\n');
-    expect(lines.find((line) => line.includes('agent.model') && line.includes('gpt-5'))).toContain('●');
+    expect(lines.find((line) => line.includes('agent.modelSelection') && line.includes('gpt-5'))).toContain('●');
     const maxTurnsLine = lines.find((line) => line.includes('agent.maxTurns'));
     expect(maxTurnsLine).not.toContain('●');
     expect(maxTurnsLine).toContain('↻');

@@ -120,9 +120,6 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-
-
-
   it('falls back from unset cheap tier settings to the terminal model fallback', () => {
     const s = settings({
       'agent.cheapModel': undefined,
@@ -166,7 +163,6 @@ describe('resolveModelPolicy', () => {
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('cheap-model');
   });
 
-
   it('falls back to the parent model for relative lower tier when all settings are unset', () => {
     const s = settings({
       'agent.cheapModel': undefined,
@@ -195,7 +191,6 @@ describe('resolveModelPolicy', () => {
       model: 'gpt-4.1',
     });
   });
-
 
   it('falls back to the parent model for relative higher tier when all settings are unset', () => {
     const s = settings({
@@ -250,7 +245,10 @@ describe('tier model pools with a pinned provider', () => {
   // DeepSeek-provider tier) lost the pick's provider and was sent to DeepSeek.
   it("resolves a tier to its first entry together with that entry's pinned provider", () => {
     const s = settings({
-      'agent.balancedModel': [{ model: 'gpt-6-luna', provider: 'codex' }, { model: 'deepseek-flash', provider: 'DeepSeek' }],
+      'agent.balancedModel': [
+        { model: 'gpt-6-luna', provider: 'codex' },
+        { model: 'deepseek-flash', provider: 'DeepSeek' },
+      ],
     });
 
     expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'codex', model: 'gpt-6-luna' });
@@ -259,7 +257,10 @@ describe('tier model pools with a pinned provider', () => {
 
   it('keeps the first entry provider when the pool crosses providers', () => {
     const s = settings({
-      'agent.balancedModel': [{ model: 'deepseek-flash', provider: 'DeepSeek' }, { model: 'gpt-6-luna', provider: 'codex' }],
+      'agent.balancedModel': [
+        { model: 'deepseek-flash', provider: 'DeepSeek' },
+        { model: 'gpt-6-luna', provider: 'codex' },
+      ],
     });
 
     expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'DeepSeek', model: 'deepseek-flash' });

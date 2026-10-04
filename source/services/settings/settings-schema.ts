@@ -19,7 +19,12 @@ function rejectRemovedSelectionKeys(keys: readonly string[]) {
     if (value && typeof value === 'object') {
       for (const key of keys) {
         if (Object.hasOwn(value, key)) {
-          ctx.addIssue({ code: 'custom', path: [key], message: 'Removed model/provider setting; use complete bound selections in modelSelection or tier/mentor pools' });
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message:
+              'Removed model/provider setting; use complete bound selections in modelSelection or tier/mentor pools',
+          });
         }
       }
     }
@@ -36,7 +41,9 @@ const tierModelPoolSchema = (description: string) =>
   z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).optional().describe(description);
 
 const AgentSettingsObjectSchema = z.object({
-  modelSelection: ModelSelectionSchema.default({ model: 'gpt-5.1', provider: 'openai' }).describe('Bound provider and model selection for the main agent'),
+  modelSelection: ModelSelectionSchema.default({ model: 'gpt-5.1', provider: 'openai' }).describe(
+    'Bound provider and model selection for the main agent',
+  ),
   smartModel: tierModelPoolSchema(
     'Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.',
   ),
@@ -241,12 +248,29 @@ const AgentSettingsObjectSchema = z.object({
     .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
 });
 
-export const AgentSettingsSchema = z.preprocess(rejectRemovedSelectionKeys([
-  'model', 'provider', 'efficientModel', 'capableModel', 'mentorModel', 'mentorProvider',
-  'subagentExplorerModel', 'subagentExplorerProvider', 'subagentWorkerModel', 'subagentWorkerProvider',
-  'subagentLibrarianModel', 'subagentLibrarianProvider', 'autoApproveModel', 'autoApproveProvider',
-  'smartProvider', 'balancedProvider', 'cheapProvider', 'choreProvider',
-]), AgentSettingsObjectSchema);
+export const AgentSettingsSchema = z.preprocess(
+  rejectRemovedSelectionKeys([
+    'model',
+    'provider',
+    'efficientModel',
+    'capableModel',
+    'mentorModel',
+    'mentorProvider',
+    'subagentExplorerModel',
+    'subagentExplorerProvider',
+    'subagentWorkerModel',
+    'subagentWorkerProvider',
+    'subagentLibrarianModel',
+    'subagentLibrarianProvider',
+    'autoApproveModel',
+    'autoApproveProvider',
+    'smartProvider',
+    'balancedProvider',
+    'cheapProvider',
+    'choreProvider',
+  ]),
+  AgentSettingsObjectSchema,
+);
 
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
@@ -461,9 +485,9 @@ const ToolsSettingsObjectSchema = z.object({
     ),
 });
 
-
 export const ToolsSettingsSchema = z.preprocess(
-  rejectRemovedSelectionKeys(['editHealingModel', 'editHealingProvider']), ToolsSettingsObjectSchema,
+  rejectRemovedSelectionKeys(['editHealingModel', 'editHealingProvider']),
+  ToolsSettingsObjectSchema,
 );
 
 export const DebugSettingsSchema = z.object({

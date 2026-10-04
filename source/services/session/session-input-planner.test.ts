@@ -303,7 +303,9 @@ it('drops chaining and uses full history after the configured model changes sinc
     agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
     toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
     providerContinuity: continuity,
-    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: currentModel, provider: 'openai' } : undefined) } as any,
+    settingsService: {
+      get: (key: string) => (key === 'agent.modelSelection' ? { model: currentModel, provider: 'openai' } : undefined),
+    } as any,
   });
 
   // Turn 1 dispatches to luna and chains normally.
@@ -330,7 +332,9 @@ it('keeps chaining when the configured model is unchanged since the last dispatc
     agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
     toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
     providerContinuity: continuity,
-    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.6-sol', provider: 'openai' } : undefined) } as any,
+    settingsService: {
+      get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.6-sol', provider: 'openai' } : undefined),
+    } as any,
   });
 
   planner.build({ text: 'first' }, { includeTurn: false, pendingModeNotice: null });
@@ -348,7 +352,9 @@ it('does not treat the first turn as a model switch when no dispatch has been re
     agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
     toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
     providerContinuity: continuity,
-    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.6-sol', provider: 'openai' } : undefined) } as any,
+    settingsService: {
+      get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.6-sol', provider: 'openai' } : undefined),
+    } as any,
   });
 
   const plan = planner.build({ text: 'first' }, { includeTurn: true, pendingModeNotice: null });
@@ -366,7 +372,9 @@ it('previewInputSurge does not record a dispatch model', () => {
     agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
     toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
     providerContinuity: continuity,
-    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: currentModel, provider: 'openai' } : undefined) } as any,
+    settingsService: {
+      get: (key: string) => (key === 'agent.modelSelection' ? { model: currentModel, provider: 'openai' } : undefined),
+    } as any,
   });
 
   planner.build({ text: 'first' }, { includeTurn: false, pendingModeNotice: null });
@@ -542,7 +550,12 @@ it('uses the canonical active profile when recording large-input guard mode cont
     toolTracker: { getReconciledHistory: () => [] } as any,
     providerContinuity: new ProviderContinuity(),
     settingsService: {
-      get: (key: string) => key === 'agent.modelSelection' ? { model: 'gpt-5', provider: 'openai' } : key === 'app.activeProfileId' ? activeProfileId : undefined,
+      get: (key: string) =>
+        key === 'agent.modelSelection'
+          ? { model: 'gpt-5', provider: 'openai' }
+          : key === 'app.activeProfileId'
+          ? activeProfileId
+          : undefined,
     } as any,
   });
 

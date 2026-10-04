@@ -143,7 +143,13 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
               const provider = resolvedProvider;
               const persistenceFor = (key: string) =>
                 settingsService.isRuntimeModifiable(key) ? 'runtime' : 'restart';
-              const changes = [{ key: config.modelKey, value: { model: modelId, provider }, persistence: persistenceFor(config.modelKey) as 'runtime' | 'restart' }];
+              const changes = [
+                {
+                  key: config.modelKey,
+                  value: { model: modelId, provider },
+                  persistence: persistenceFor(config.modelKey) as 'runtime' | 'restart',
+                },
+              ];
               return {
                 stack: { type: 'keep' },
                 intent: {

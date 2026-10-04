@@ -100,7 +100,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.modelSelection': { model: 'dynamic-model', provider: providerId  }}),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'dynamic-model', provider: providerId } }),
       sessionContextService: createSessionContextService() as any,
     });
 
@@ -149,7 +149,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.modelSelection': { model: 'pre-resolved-model', provider: providerId  }}),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'pre-resolved-model', provider: providerId } }),
       sessionContextService: createSessionContextService() as any,
     });
     const resolvedDefinition = {
@@ -182,7 +182,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   it('rejects generic specs that request capabilities outside their permission allowlist', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.modelSelection': { model: 'gpt-4o' , provider: 'openai' }}),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
       sessionContextService: createSessionContextService() as any,
     });
 
@@ -202,7 +202,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
   it('rejects unsupported delegated budget fields and invalid integer budgets', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.modelSelection': { model: 'gpt-4o' , provider: 'openai' }}),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
       sessionContextService: createSessionContextService() as any,
     });
     const request = (budget: any) =>
@@ -229,7 +229,7 @@ describe('SubagentManager.getAgentRuntime()', () => {
     });
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.modelSelection': { model: 'foreground-generic', provider: providerId  }}),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'foreground-generic', provider: providerId } }),
       sessionContextService: createSessionContextService() as any,
     });
 

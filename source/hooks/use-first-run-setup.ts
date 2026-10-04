@@ -19,7 +19,8 @@ type Dependencies = {
   controller: MenuController;
 };
 
-const getMainProvider = (settingsService: SettingsService): string => settingsService.get('agent.modelSelection').provider || 'openai';
+const getMainProvider = (settingsService: SettingsService): string =>
+  settingsService.get('agent.modelSelection').provider || 'openai';
 
 const hasInspectableCredentials = (settingsService: SettingsService, provider: string): boolean => {
   // Lightweight App harnesses may intentionally provide only the read-only
@@ -62,14 +63,10 @@ export function useFirstRunSetupGate({ settingsService, controller }: Dependenci
     return unsubscribe;
   }, [settingsService]);
 
-  const onProviderSelected = useCallback(
-    (nextProvider: string) => {
-      setProvider(nextProvider);
-      setSettingsRevision((revision) => revision + 1);
-
-    },
-    [],
-  );
+  const onProviderSelected = useCallback((nextProvider: string) => {
+    setProvider(nextProvider);
+    setSettingsRevision((revision) => revision + 1);
+  }, []);
 
   const requestSetup = useCallback((nextProvider: string) => {
     setProvider(nextProvider);

@@ -594,7 +594,8 @@ export async function runNonInteractive(
         clientHandle.hookEvents.create('session.start', {
           cwd: process.cwd(),
           mode: 'non-interactive',
-          providerName: clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.modelSelection').provider,
+          providerName:
+            clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.modelSelection').provider,
           modelName: config.settingsService.get('agent.modelSelection').model,
         }),
       );

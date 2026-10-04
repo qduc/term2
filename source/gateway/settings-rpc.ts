@@ -304,7 +304,9 @@ function sessionScopedKey(key: SafeSettingsKey): boolean {
   );
 }
 
-function asSafeSettingValue(value: unknown): string | number | boolean | string[] | { model: string; provider: string } | null | undefined {
+function asSafeSettingValue(
+  value: unknown,
+): string | number | boolean | string[] | { model: string; provider: string } | null | undefined {
   const selection = ModelSelectionSchema.safeParse(value);
   if (selection.success) return selection.data;
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')

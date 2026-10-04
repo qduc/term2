@@ -674,8 +674,7 @@ async function writeSettings(
   await mkdir(settingsDir, { recursive: true });
   const settings: Record<string, unknown> = {
     agent: {
-      model: route.model,
-      provider: route.provider,
+      modelSelection: { model: route.model, provider: route.provider },
       transport: 'url' in server ? 'websocket' : 'http',
       retryAttempts: 0,
       maxTurns: 4,

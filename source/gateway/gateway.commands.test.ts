@@ -180,7 +180,11 @@ describe('Gateway commands RPC route', () => {
           env: {},
           cli: {},
         });
-        settings.set('agent.modelSelection', { model: options?.modelId ?? 'gpt-4', provider: defaults.providerId }, { persist: false });
+        settings.set(
+          'agent.modelSelection',
+          { model: options?.modelId ?? 'gpt-4', provider: defaults.providerId },
+          { persist: false },
+        );
         settings.set('agent.contextCompaction.compactThresholdTokens', 10_000, { persist: false });
         return settings;
       },

@@ -578,9 +578,7 @@ it.sequential('execute uses the chore tier for edit healing', async () => {
     const tool = createTool(
       createMockSettingsService({
         'tools.enableEditHealing': true,
-        'agent.choreModel': 'chore-model',
-        'agent.choreProvider': 'chore-provider',
-        'tools.editHealingModel': 'legacy-healing-model',
+        'agent.choreModel': [{ model: 'chore-model', provider: 'chore-provider' }],
       }),
       async (params, _content, model, _apiKey, deps) => {
         invocation = { model, providerId: deps?.providerId };

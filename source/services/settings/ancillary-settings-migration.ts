@@ -8,7 +8,10 @@ type Migration = {
 const MIGRATIONS: Migration[] = [
   { target: 'agent.smartReasoningEffort', legacy: ['agent.mentorReasoningEffort'] },
   { target: 'agent.balancedReasoningEffort', legacy: ['agent.subagentWorkerReasoningEffort'] },
-  { target: 'agent.cheapReasoningEffort', legacy: ['agent.subagentExplorerReasoningEffort', 'agent.subagentLibrarianReasoningEffort'] },
+  {
+    target: 'agent.cheapReasoningEffort',
+    legacy: ['agent.subagentExplorerReasoningEffort', 'agent.subagentLibrarianReasoningEffort'],
+  },
   { target: 'agent.decisionModel', legacy: ['agent.decisionShadowModel', 'agent.autoApproveDecisionShadowModel'] },
 ];
 

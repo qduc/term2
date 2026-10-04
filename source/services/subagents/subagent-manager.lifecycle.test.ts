@@ -73,7 +73,7 @@ it('refuses foreground adoption until the session installs an approval-pause sin
   });
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
-    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }}),
+    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } }),
     sessionContextService: createSessionContextService() as any,
   });
 

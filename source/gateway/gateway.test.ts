@@ -2347,7 +2347,11 @@ describe('gateway startup and assertion verifier', () => {
         });
 
         // The launcher default moves to an also-available provider/model B.
-        settings.set('agent.modelSelection', { model: 'model-b1', provider: 'snapshot-provider-b' }, { persist: false });
+        settings.set(
+          'agent.modelSelection',
+          { model: 'model-b1', provider: 'snapshot-provider-b' },
+          { persist: false },
+        );
 
         const capture = { inputs: [] as unknown[], created: 0, snapshots: [] as unknown[] };
         const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
@@ -2404,7 +2408,11 @@ describe('gateway startup and assertion verifier', () => {
             { id: 'replacement-model', name: 'Replacement model', default_reasoning_level: 'medium' },
           ],
         });
-        settings.set('agent.modelSelection', { model: 'replacement-model', provider: 'replacement-provider' }, { persist: false });
+        settings.set(
+          'agent.modelSelection',
+          { model: 'replacement-model', provider: 'replacement-provider' },
+          { persist: false },
+        );
 
         const capture = { inputs: [] as unknown[], created: 0 };
         const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
@@ -2535,7 +2543,11 @@ describe('gateway startup and assertion verifier', () => {
 
           // The failed revival must not wedge the session: after the operator
           // fixes the model, the same session revives on the next submit.
-          settings.set('agent.modelSelection', { model: 'other-model', provider: 'retry-provider' }, { persist: false });
+          settings.set(
+            'agent.modelSelection',
+            { model: 'other-model', provider: 'retry-provider' },
+            { persist: false },
+          );
           const retried = await rpc(
             socketPath,
             tokenFor('message_submit', sessionId),

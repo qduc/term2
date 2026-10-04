@@ -217,7 +217,10 @@ export const saveProvider = (
     upsertProvider(def);
 
     if (isEdit && originalName && originalName === settingsService.get('agent.modelSelection').provider) {
-      settingsService.set('agent.modelSelection', { ...settingsService.get('agent.modelSelection'), provider: providerIdentifier });
+      settingsService.set('agent.modelSelection', {
+        ...settingsService.get('agent.modelSelection'),
+        provider: providerIdentifier,
+      });
     }
 
     return { success: true };
@@ -234,7 +237,6 @@ export const deleteCustomProvider = (settingsService: ISettingsService, name: st
 
   settingsService?.setPersistentDynamic('providers', updated);
   unregisterProvider(name);
-
 };
 
 export const validateWizardName = (

@@ -612,7 +612,9 @@ it.sequential('rejects a tool that ambiguously defines both post-execute mechani
 });
 
 it.sequential('buildAgent creates Agent with correct model name', () => {
-  const { deps } = createDeps({ settingsValues: { 'agent.modelSelection': { model: 'gpt-4o-mini', provider: 'openai' } } });
+  const { deps } = createDeps({
+    settingsValues: { 'agent.modelSelection': { model: 'gpt-4o-mini', provider: 'openai' } },
+  });
 
   const result = buildAgent({ selection: { model: 'gpt-4o-mini', provider: deps.providerId } }, deps);
 
@@ -621,7 +623,9 @@ it.sequential('buildAgent creates Agent with correct model name', () => {
 });
 
 it.sequential('buildAgent uses the caller-supplied selection from settings', () => {
-  const { deps } = createDeps({ settingsValues: { 'agent.modelSelection': { model: 'gpt-4.1-mini', provider: 'openai' } } });
+  const { deps } = createDeps({
+    settingsValues: { 'agent.modelSelection': { model: 'gpt-4.1-mini', provider: 'openai' } },
+  });
 
   const result = buildAgent({ selection: deps.settings.get('agent.modelSelection') }, deps);
 
@@ -926,7 +930,10 @@ it.sequential('buildAgent sends high effort for neuralwatt when the setting is d
     },
   });
 
-  const result = buildAgent({ selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
   const agent = result.agent as any;
 
   expect(agent.modelSettings?.reasoning?.effort).toBe('high');
@@ -942,7 +949,10 @@ it.sequential('buildAgent matches the neuralwatt provider id case-insensitively'
     },
   });
 
-  const result = buildAgent({ selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('high');
 });
@@ -956,7 +966,10 @@ it.sequential('buildAgent leaves an explicit neuralwatt effort alone', () => {
     },
   });
 
-  const result = buildAgent({ selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'low' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'low' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('low');
 });
@@ -970,7 +983,10 @@ it.sequential('buildAgent honours an explicit neuralwatt effort of none', () => 
     },
   });
 
-  const result = buildAgent({ selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'none' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'none' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('none');
 });
@@ -984,7 +1000,10 @@ it.sequential('buildAgent still omits reasoning for providers with no default le
     },
   });
 
-  const result = buildAgent({ selection: { model: 'some-local-model', provider: deps.providerId }, reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'some-local-model', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning).toBeFalsy();
   expect((result.agent as any).defaultRunOptions).toBeUndefined();
@@ -1114,7 +1133,10 @@ it.sequential('buildModelSettings omits reasoning when effort is default', () =>
     },
   });
 
-  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId }, reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'gpt-4o', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning).toBeFalsy();
 });

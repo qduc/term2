@@ -69,11 +69,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.openrouter.referrer',
     'agent.openrouter.title',
   ],
-  'Mentor consultation — next mentor run': [
-    'agent.mentorReasoningEffort',
-    'agent.mentorSamples',
-    'agent.mentorPool',
-  ],
+  'Mentor consultation — next mentor run': ['agent.mentorReasoningEffort', 'agent.mentorSamples', 'agent.mentorPool'],
   'Context compaction — next request': [
     'agent.contextCompaction.enabled',
     'agent.contextCompaction.mode',
@@ -99,9 +95,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'sandbox.dockerHostControlProjects',
     'sandbox.allowNetworking',
   ],
-  'Non-interactive auto-approval — next approval decision': [
-    'agent.autoApproveReasoningEffort',
-  ],
+  'Non-interactive auto-approval — next approval decision': ['agent.autoApproveReasoningEffort'],
   'Decision approval fast path and comparisons — next approval, root turn, or failure': ['agent.decisionModel'],
   'Subagent launch/retention — next child run or registry operation': [
     'agent.subagentExplorerReasoningEffort',

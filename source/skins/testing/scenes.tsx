@@ -48,8 +48,7 @@ export interface Scene {
 
 const settings = () =>
   createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'high',
     'shell.autoApproveMode': 'auto',
     'sandbox.enabled': true,

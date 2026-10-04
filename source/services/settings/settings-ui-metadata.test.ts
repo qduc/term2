@@ -13,14 +13,14 @@ import {
 
 describe('settings-ui-metadata (M3)', () => {
   it('derives string setting metadata', () => {
-    const meta = getSettingMetadata(SETTING_KEYS.AGENT_MODEL);
+    const meta = getSettingMetadata(SETTING_KEYS.AGENT_DECISION_MODEL);
     expect(meta).toBeDefined();
     expect(meta?.type).toBe('string');
     expect(meta?.isArray).toBe(false);
     expect(meta?.isSecret).toBe(false);
     expect(meta?.description).toBeTruthy();
-    expect(isStringSetting(SETTING_KEYS.AGENT_MODEL)).toBe(true);
-    expect(isNumberSetting(SETTING_KEYS.AGENT_MODEL)).toBe(false);
+    expect(isStringSetting(SETTING_KEYS.AGENT_DECISION_MODEL)).toBe(true);
+    expect(isNumberSetting(SETTING_KEYS.AGENT_DECISION_MODEL)).toBe(false);
   });
 
   it('derives number setting metadata', () => {
@@ -65,7 +65,7 @@ describe('settings-ui-metadata (M3)', () => {
     expect(isSecretSetting(SETTING_KEYS.WEB_SEARCH_EXA_API_KEY)).toBe(true);
     expect(isSecretSetting('agent.custom_provider.apiKey')).toBe(true);
 
-    expect(isSecretSetting(SETTING_KEYS.AGENT_MODEL)).toBe(false);
+    expect(isSecretSetting(SETTING_KEYS.AGENT_DECISION_MODEL)).toBe(false);
     expect(isSecretSetting(SETTING_KEYS.AGENT_OPENROUTER_BASE_URL)).toBe(false);
   });
 
@@ -73,7 +73,7 @@ describe('settings-ui-metadata (M3)', () => {
     const modifiableMeta = getSettingMetadata(SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS);
     expect(modifiableMeta?.isRuntimeModifiable).toBe(true);
 
-    const nonModifiableKey = SETTING_KEYS.AGENT_MODEL;
+    const nonModifiableKey = SETTING_KEYS.AGENT_DECISION_MODEL;
     const isActuallyModifiable = RUNTIME_MODIFIABLE_SETTINGS.has(nonModifiableKey);
     const meta = getSettingMetadata(nonModifiableKey);
     expect(meta?.isRuntimeModifiable).toBe(isActuallyModifiable);

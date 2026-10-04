@@ -843,8 +843,7 @@ describe('run_code agent capability foreground child approvals (real nested runn
     const runner = new NestedSubagentRunner({
       logger: createMockLogger(),
       settings: createMockSettings({
-        'agent.model': 'nested-model',
-        'agent.provider': providerId,
+        'agent.modelSelection': { model: 'nested-model', provider: providerId },
         'agent.runBudget.extensionPercent': 0,
       }),
       sessionContextService: createSessionContextService(),

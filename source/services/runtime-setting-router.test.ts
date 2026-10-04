@@ -16,46 +16,44 @@ const makeService = (overrides: Record<string, unknown> = {}) => {
     isRuntimeModifiable: vi.fn(() => true),
     getDynamic: vi.fn(() => false),
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:standard' : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? 'builtin:standard' : key === 'agent.modelSelection' ? { model: 'current-model', provider: 'openai' } : false,
     ),
     ...overrides,
   } as any;
-  const conversationService = { switchProvider: vi.fn(), queueModeNotice: vi.fn() };
-  const setModel = vi.fn();
+  const conversationService = { queueModeNotice: vi.fn() };
+  const setModelSelection = vi.fn();
   const service = new ConversationConfigurationService({
     settingsService,
     conversationService,
-    setModel,
+    setModelSelection,
     setReasoningEffort: vi.fn(),
     setTemperature: vi.fn(),
   });
-  return { service, settingsService, conversationService, setModel };
+  return { service, settingsService, conversationService, setModelSelection };
 };
 
 it('applies all runtime changes through one settings transaction before runtime effects', () => {
-  const { service, settingsService, conversationService } = makeService();
+  const { service, settingsService, setModelSelection } = makeService();
 
   service.apply([
-    { key: 'agent.provider', value: 'openrouter', persistence: 'runtime' },
-    { key: 'agent.model', value: 'x', persistence: 'runtime' },
+    { key: 'agent.modelSelection', value: { model: 'x', provider: 'openrouter' }, persistence: 'runtime' },
   ]);
 
   expect(settingsService.setDynamicTransaction).toHaveBeenCalledWith([
-    { key: 'agent.provider', value: 'openrouter' },
-    { key: 'agent.model', value: 'x' },
+    { key: 'agent.modelSelection', value: { model: 'x', provider: 'openrouter' } },
   ]);
-  expect(conversationService.switchProvider).toHaveBeenCalledWith('openrouter');
+  expect(setModelSelection).toHaveBeenCalledWith({ model: 'x', provider: 'openrouter' });
 });
 
 it('does not invoke runtime effects when the settings transaction rejects', () => {
-  const { service, settingsService, conversationService } = makeService({
+  const { service, setModelSelection } = makeService({
     setDynamicTransaction: vi.fn(() => {
       throw new Error('invalid');
     }),
   });
 
-  expect(() => service.apply([{ key: 'agent.provider', value: 'bad', persistence: 'runtime' }])).toThrow('invalid');
-  expect(conversationService.switchProvider).not.toHaveBeenCalled();
+  expect(() => service.apply([{ key: 'agent.modelSelection', value: { model: 'bad', provider: 'openai' }, persistence: 'runtime' }])).toThrow('invalid');
+  expect(setModelSelection).not.toHaveBeenCalled();
 });
 
 it('canonicalizes a legacy Plan write before routing its transition', () => {
@@ -78,17 +76,17 @@ it.each([
   ['app.mentorMode', true],
   ['app.orchestratorMode', true],
 ])('canonicalizes legacy %s writes before routing', (key, value) => {
-  const { service, conversationService, setModel } = makeService();
+  const { service, conversationService, setModelSelection } = makeService();
 
   service.apply([{ key, value, persistence: 'runtime' }]);
 
   expect(conversationService.queueModeNotice).toHaveBeenCalled();
-  expect(setModel).toHaveBeenCalledWith('current-model');
+  expect(setModelSelection).toHaveBeenCalledWith({ model: 'current-model', provider: 'openai' });
 });
 
 it('composes the Plan exit when a legacy mode write replaces Plan', () => {
   const { service, conversationService } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:plan' : 'current-model')),
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:plan' : { model: 'current-model', provider: 'openai' })),
   });
 
   service.apply([{ key: 'app.liteMode', value: true, persistence: 'runtime' }]);
@@ -97,33 +95,33 @@ it('composes the Plan exit when a legacy mode write replaces Plan', () => {
 });
 
 it('activating the plan profile queues its notice without rebuilding the agent', () => {
-  const { service, settingsService, conversationService, setModel } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : 'gpt-4o')),
+  const { service, settingsService, conversationService, setModelSelection } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' })),
   });
 
   service.apply([{ key: 'app.activeProfileId', value: 'builtin:plan', persistence: 'runtime' }]);
 
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_ENTER_NOTICE);
-  expect(setModel).not.toHaveBeenCalled();
+  expect(setModelSelection).not.toHaveBeenCalled();
   expect(settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:plan');
 });
 
 it('activating the mentor profile rebuilds the agent and queues its notice', () => {
-  const { service, settingsService, conversationService, setModel } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : 'gpt-4o')),
+  const { service, settingsService, conversationService, setModelSelection } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : { model: 'gpt-4o', provider: 'openai' })),
   });
 
   service.apply([{ key: 'app.activeProfileId', value: 'builtin:mentor', persistence: 'runtime' }]);
 
-  expect(setModel).toHaveBeenCalledWith('gpt-4o');
+  expect(setModelSelection).toHaveBeenCalledWith({ model: 'gpt-4o', provider: 'openai' });
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
   expect(settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:mentor');
 });
 
 it('plans the profile transition before the settings transaction commits it', () => {
   let activeProfileId = 'builtin:standard';
-  const { service, settingsService, conversationService, setModel } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : 'gpt-4o')),
+  const { service, settingsService, conversationService, setModelSelection } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' })),
     setDynamicTransaction: vi.fn(() => {
       activeProfileId = 'builtin:mentor';
     }),
@@ -131,32 +129,32 @@ it('plans the profile transition before the settings transaction commits it', ()
 
   service.apply([{ key: 'app.activeProfileId', value: 'builtin:mentor', persistence: 'runtime' }]);
 
-  expect(setModel).toHaveBeenCalledWith('gpt-4o');
+  expect(setModelSelection).toHaveBeenCalledWith({ model: 'gpt-4o', provider: 'openai' });
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
   expect(settingsService.set).not.toHaveBeenCalled();
 });
 
 it('rebuilds the agent when a tool capability toggle changes at runtime', () => {
-  const { service, setModel } = makeService();
+  const { service, setModelSelection } = makeService();
 
   service.apply([{ key: 'tools.shell.enabled', value: false, persistence: 'runtime' }]);
 
-  expect(setModel).toHaveBeenCalledWith('current-model');
+  expect(setModelSelection).toHaveBeenCalledWith({ model: 'current-model', provider: 'openai' });
 });
 
 it('does not rebuild the agent for restart-persisted tool capability toggles', () => {
-  const { service, setModel, settingsService } = makeService();
+  const { service, setModelSelection, settingsService } = makeService();
 
   service.apply([{ key: 'tools.shell.enabled', value: false, persistence: 'restart' }]);
 
   expect(settingsService.setPersistentDynamic).toHaveBeenCalledWith('tools.shell.enabled', false);
-  expect(setModel).not.toHaveBeenCalled();
+  expect(setModelSelection).not.toHaveBeenCalled();
 });
 
 it('warns when a disabled tool toggle conflicts with the active built-in profile', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
     ),
     getDynamic: vi.fn((key: string) => (key === 'tools.shell.enabled' ? true : false)),
   });
@@ -172,7 +170,7 @@ it('warns when a disabled tool toggle conflicts with the active built-in profile
 it('composes every conflicting toggle from one batch into a single notice', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
     ),
     getDynamic: vi.fn((key: string) => key === 'tools.shell.enabled' || key === 'tools.web.enabled'),
   });
@@ -191,7 +189,7 @@ it('composes every conflicting toggle from one batch into a single notice', () =
 it('does not warn when a toggle is enabled or was already disabled', () => {
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
     ),
     // tools.shell.enabled reads false before the change: disabling it again is
     // not news, and enabling it never conflicts.
@@ -213,7 +211,7 @@ it('warns on a capability toggle applied alongside a workflow-profile switch (bo
   let activeProfileId = 'builtin:standard';
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
     ),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
@@ -240,7 +238,7 @@ it('warns on capability toggle applied before workflow-profile switch in reverse
   let activeProfileId = 'builtin:standard';
   const { service, conversationService } = makeService({
     get: vi.fn((key: string) =>
-      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.model' ? 'current-model' : false,
+      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.modelSelection' ? { model: { model: 'current-model', provider: 'openai' }, provider: 'openai' } : false,
     ),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
@@ -264,7 +262,7 @@ it('warns on capability toggle applied before workflow-profile switch in reverse
 it('maps legacy mode changes in transaction order', () => {
   let activeProfileId = 'builtin:standard';
   const { service, settingsService } = makeService({
-    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : 'gpt-4o')),
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : { model: 'gpt-4o', provider: 'openai' })),
     setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
       for (const change of changes) {
         if (change.key === 'app.activeProfileId') activeProfileId = String(change.value);

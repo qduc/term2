@@ -1,12 +1,7 @@
 import { z } from 'zod';
 import envPaths from 'env-paths';
 import path from 'node:path';
-import {
-  ModelSelectionSchema,
-  mainSelectionForLayer,
-  LEGACY_BOUND_MODEL_KEYS,
-  type ModelSelection,
-} from './model-selection.js';
+import { ModelSelectionSchema, type ModelSelection } from './model-selection.js';
 import { THEME_SETTING_VALUES, type ThemeSetting } from '../../theme/resolve-theme.js';
 import { SKIN_NAMES, type SkinName } from '../../skins/names.js';
 import {
@@ -19,86 +14,32 @@ import {
 export const SubagentPoolEntrySchema = ModelSelectionSchema.extend({
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
 });
+function rejectRemovedSelectionKeys(keys: readonly string[]) {
+  return (value: unknown, ctx: z.RefinementCtx): unknown => {
+    if (value && typeof value === 'object') {
+      for (const key of keys) {
+        if (Object.hasOwn(value, key)) {
+          ctx.addIssue({ code: 'custom', path: [key], message: 'Removed model/provider setting; use complete bound selections in modelSelection or tier/mentor pools' });
+        }
+      }
+    }
+    return value;
+  };
+}
 const MAX_SUBAGENT_POOL_ENTRIES = 8;
 const subagentPoolSchema = (description: string) =>
   z.array(SubagentPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).default([]).describe(description);
 
-// Runtime and persisted entries bind the host and model as one value. Legacy
-// strings are accepted only at the agent-settings parsing boundary below.
 export const TierModelPoolEntrySchema = ModelSelectionSchema;
 export type TierModelPoolSetting = z.infer<typeof TierModelPoolEntrySchema>[];
 const tierModelPoolSchema = (description: string) =>
-  z
-    .preprocess((value) => {
-      if (value === undefined || value === null || value === '') return undefined;
-      return Array.isArray(value) ? value : [value];
-    }, z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).optional())
-    .describe(description);
-
-// Define schemas for validation
-function bindLegacyModelPools(value: unknown): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const agent = { ...value } as Record<string, unknown>;
-  agent.modelSelection = mainSelectionForLayer(agent);
-  const selection = ModelSelectionSchema.safeParse(agent.modelSelection);
-  if (selection.success) {
-    agent.model = selection.data.model;
-    agent.provider = selection.data.provider;
-  }
-  for (const key of LEGACY_BOUND_MODEL_KEYS) {
-    const model = agent[key] === undefined && key === 'autoApproveModel' ? 'gpt-4o-mini' : agent[key];
-    if (typeof model === 'string' && model !== '') {
-      const providerKey = key.replace(/Model$/, 'Provider');
-      agent[key] = { model, provider: agent[providerKey] ?? agent.provider ?? 'openai' };
-    } else if (model === '' && key === 'mentorModel') {
-      agent[key] = undefined;
-    }
-  }
-  for (const tier of ['smart', 'balanced', 'cheap', 'chore']) {
-    const key = `${tier}Model`;
-    const pool = agent[key];
-    if (pool === undefined || pool === null || pool === '') continue;
-    const provider = agent[`${tier}Provider`] ?? agent.provider ?? 'openai';
-    agent[key] = (Array.isArray(pool) ? pool : [pool]).map((entry: unknown) => {
-      if (typeof entry === 'string') return { model: entry, provider };
-      if (entry && typeof entry === 'object' && !Object.hasOwn(entry, 'provider')) {
-        return { ...entry, provider };
-      }
-      return entry;
-    });
-  }
-  if (Array.isArray(agent.mentorPool)) {
-    const provider = agent.mentorProvider ?? agent.provider ?? 'openai';
-    agent.mentorPool = agent.mentorPool.map((entry: unknown) => {
-      if (typeof entry === 'string') return { model: entry, provider };
-      if (entry && typeof entry === 'object' && !Object.hasOwn(entry, 'provider')) {
-        return { ...entry, provider };
-      }
-      return entry;
-    });
-  }
-  return agent;
-}
+  z.array(TierModelPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).optional().describe(description);
 
 const AgentSettingsObjectSchema = z.object({
-  modelSelection: ModelSelectionSchema.describe('Bound provider and model selection for the main agent'),
-  model: z.string().min(1).default('gpt-5.1'),
-  efficientModel: ModelSelectionSchema.optional().describe(
-    'Model for lower-tier workflow agents. Falls back to agent.model when unset.',
-  ),
-  capableModel: ModelSelectionSchema.optional().describe(
-    'Model for higher-tier workflow agents. Falls back to agent.model when unset.',
-  ),
+  modelSelection: ModelSelectionSchema.default({ model: 'gpt-5.1', provider: 'openai' }).describe('Bound provider and model selection for the main agent'),
   smartModel: tierModelPoolSchema(
-    'Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.',
   ),
-  smartProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Provider for smart-tier helper agents (the hardest side tasks). Falls back to agent.provider when unset.',
-    ),
   smartReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
@@ -106,15 +47,8 @@ const AgentSettingsObjectSchema = z.object({
       'Reasoning effort for smart-tier helper agents (the hardest side tasks). Falls back to agent.reasoningEffort when unset.',
     ),
   balancedModel: tierModelPoolSchema(
-    'Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.',
   ),
-  balancedProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Provider for balanced-tier helper agents (everyday side tasks). Falls back to agent.provider when unset.',
-    ),
   balancedReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
@@ -122,15 +56,8 @@ const AgentSettingsObjectSchema = z.object({
       'Reasoning effort for balanced-tier helper agents (everyday side tasks). Falls back to agent.reasoningEffort when unset.',
     ),
   cheapModel: tierModelPoolSchema(
-    'Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset.',
+    'Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset.',
   ),
-  cheapProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Provider for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.provider when unset.',
-    ),
   cheapReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
@@ -138,17 +65,8 @@ const AgentSettingsObjectSchema = z.object({
       'Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset.',
     ),
   choreModel: tierModelPoolSchema(
-    'Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.model when unset.',
+    'Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset.',
   ),
-  choreProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Provider for small background jobs like repairing failed file edits and reviewing shell auto-approvals. Falls back to agent.provider when unset.',
-    ),
-  // 'default' signals we should *not* explicitly pass a reasoningEffort
-  // to the API, allowing it to decide what to use.
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
   // Temperature controls randomness. We keep it optional so providers/models
   // can use their own defaults when unset.
@@ -232,7 +150,6 @@ const AgentSettingsObjectSchema = z.object({
   // NOTE: We do NOT validate provider existence here because the provider
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
-  provider: z.string().min(1).default('openai').describe('Provider to use for the agent'),
   favoriteModels: z
     .array(z.string())
     .optional()
@@ -271,12 +188,6 @@ const AgentSettingsObjectSchema = z.object({
       websocketInterFrameTimeoutMs: z.number().int().positive().finite().default(600_000),
     })
     .default({ websocketFirstFrameTimeoutMs: 90_000, websocketInterFrameTimeoutMs: 600_000 }),
-  mentorModel: ModelSelectionSchema.optional().describe('Bound model to use as a mentor'),
-  mentorProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider to use for the mentor model (defaults to agent.provider when unset)'),
   mentorReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('default')
@@ -305,12 +216,6 @@ const AgentSettingsObjectSchema = z.object({
     })
     .default({ enabled: false, mode: 'auto', compactThreshold: 0.8, compactThresholdTokens: null })
     .describe('Native and application-owned context compaction settings'),
-  autoApproveModel: ModelSelectionSchema.optional().describe('Faster model to use for auto-approval evaluation'),
-  autoApproveProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider to use for the auto-approval model (defaults to agent.provider when unset)'),
   autoApproveReasoningEffort: z
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('low')
@@ -322,44 +227,26 @@ const AgentSettingsObjectSchema = z.object({
     .describe(
       'OpenRouter Decisions model shared by the approval fast path and failure-triage comparisons. For approval, only low/medium-risk, explicit/implied decisions at confidence 0.8 or higher can authorize execution; every other outcome falls back to the chore reviewer. Sends approval context plus failure evidence. Adds API charges',
     ),
-  subagentExplorerModel: ModelSelectionSchema.optional().describe(
-    'Model override for the explorer subagent. Falls back to agent.model when unset.',
-  ),
-  subagentExplorerProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider override for the explorer subagent. Falls back to agent.provider when unset.'),
   subagentExplorerReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentWorkerModel: ModelSelectionSchema.optional().describe(
-    'Model override for the worker subagent. Falls back to agent.model when unset.',
-  ),
-  subagentWorkerProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider override for the worker subagent. Falls back to agent.provider when unset.'),
   subagentWorkerReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset.'),
-  subagentLibrarianModel: ModelSelectionSchema.optional().describe(
-    'Model override for the librarian subagent. Falls back to agent.model when unset.',
-  ),
-  subagentLibrarianProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider override for the librarian subagent. Falls back to agent.provider when unset.'),
   subagentLibrarianReasoningEffort: z
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional()
     .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
 });
-export const AgentSettingsSchema = z.preprocess(bindLegacyModelPools, AgentSettingsObjectSchema);
+
+export const AgentSettingsSchema = z.preprocess(rejectRemovedSelectionKeys([
+  'model', 'provider', 'efficientModel', 'capableModel', 'mentorModel', 'mentorProvider',
+  'subagentExplorerModel', 'subagentExplorerProvider', 'subagentWorkerModel', 'subagentWorkerProvider',
+  'subagentLibrarianModel', 'subagentLibrarianProvider', 'autoApproveModel', 'autoApproveProvider',
+  'smartProvider', 'balancedProvider', 'cheapProvider', 'choreProvider',
+]), AgentSettingsObjectSchema);
 
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
@@ -480,25 +367,9 @@ export const AppSettingsSchema = z.object({
     .default('auto'),
 });
 
-function bindLegacyTools(value: unknown, parentProvider: unknown = 'openai'): unknown {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const tools = { ...value } as Record<string, unknown>;
-  const model = tools.editHealingModel === undefined ? 'gpt-4o-mini' : tools.editHealingModel;
-  if (typeof model === 'string') {
-    tools.editHealingModel = { model, provider: tools.editHealingProvider ?? parentProvider };
-  }
-  return tools;
-}
-
 const ToolsSettingsObjectSchema = z.object({
   logFileOperations: z.boolean().optional().default(true),
   enableEditHealing: z.boolean().optional().default(true),
-  editHealingModel: ModelSelectionSchema,
-  editHealingProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider to use for the edit-healing model (defaults to agent.provider when unset)'),
   // Per-tool-group kill switches for the main agent. Each masks exactly one
   // capability group from the profile's tool capabilities (tool-toggles.ts),
   // removing that group's tools and capability-gated prompt fragments on the
@@ -590,7 +461,10 @@ const ToolsSettingsObjectSchema = z.object({
     ),
 });
 
-export const ToolsSettingsSchema = z.preprocess((value) => bindLegacyTools(value), ToolsSettingsObjectSchema);
+
+export const ToolsSettingsSchema = z.preprocess(
+  rejectRemovedSelectionKeys(['editHealingModel', 'editHealingProvider']), ToolsSettingsObjectSchema,
+);
 
 export const DebugSettingsSchema = z.object({
   debugBashTool: z.boolean().optional().default(false),
@@ -755,14 +629,7 @@ const SettingsObjectSchema = z.object({
   hooks: HooksSettingsSchema.optional().default(HooksSettingsSchema.parse({})),
 });
 
-export const SettingsSchema = z.preprocess((value) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const settings = { ...value } as Record<string, unknown>;
-  const agent = settings.agent as Record<string, unknown> | undefined;
-  const main = agent ? (mainSelectionForLayer(agent) as ModelSelection) : undefined;
-  if (settings.tools) settings.tools = bindLegacyTools(settings.tools, main?.provider ?? 'openai');
-  return settings;
-}, SettingsObjectSchema);
+export const SettingsSchema = SettingsObjectSchema;
 
 // Type definitions
 export interface SettingsData {
@@ -795,20 +662,13 @@ export interface SettingWithSource<T = any> {
 export interface SettingsWithSources {
   agent: {
     modelSelection: SettingWithSource<ModelSelection>;
-    model: SettingWithSource<string>;
-    efficientModel: SettingWithSource<ModelSelection | undefined>;
-    capableModel: SettingWithSource<ModelSelection | undefined>;
     smartModel: SettingWithSource<TierModelPoolSetting | undefined>;
-    smartProvider: SettingWithSource<string | undefined>;
     smartReasoningEffort: SettingWithSource<string | undefined>;
     balancedModel: SettingWithSource<TierModelPoolSetting | undefined>;
-    balancedProvider: SettingWithSource<string | undefined>;
     balancedReasoningEffort: SettingWithSource<string | undefined>;
     cheapModel: SettingWithSource<TierModelPoolSetting | undefined>;
-    cheapProvider: SettingWithSource<string | undefined>;
     cheapReasoningEffort: SettingWithSource<string | undefined>;
     choreModel: SettingWithSource<TierModelPoolSetting | undefined>;
-    choreProvider: SettingWithSource<string | undefined>;
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
@@ -844,15 +704,12 @@ export interface SettingsWithSources {
       milestones: SettingWithSource<number[]>;
       autoBrief: SettingWithSource<boolean>;
     };
-    provider: SettingWithSource<string>;
     favoriteModels: SettingWithSource<string[]>;
     modelNicknames: SettingWithSource<Record<string, string>>;
     disabledProviders: SettingWithSource<string[]>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
     codex: SettingWithSource<{ websocketFirstFrameTimeoutMs: number; websocketInterFrameTimeoutMs: number }>;
-    mentorModel: SettingWithSource<ModelSelection | undefined>;
-    mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
     mentorSamples: SettingWithSource<number>;
     mentorPool: SettingWithSource<{ model: string; provider: string; reasoningEffort?: string }[]>;
@@ -863,18 +720,10 @@ export interface SettingsWithSources {
       compactThreshold: SettingWithSource<number>;
       compactThresholdTokens: SettingWithSource<number | null>;
     };
-    autoApproveModel: SettingWithSource<ModelSelection | undefined>;
-    autoApproveProvider: SettingWithSource<string | undefined>;
     autoApproveReasoningEffort: SettingWithSource<string>;
     decisionModel: SettingWithSource<string | undefined>;
-    subagentExplorerModel: SettingWithSource<ModelSelection | undefined>;
-    subagentExplorerProvider: SettingWithSource<string | undefined>;
     subagentExplorerReasoningEffort: SettingWithSource<string | undefined>;
-    subagentWorkerModel: SettingWithSource<ModelSelection | undefined>;
-    subagentWorkerProvider: SettingWithSource<string | undefined>;
     subagentWorkerReasoningEffort: SettingWithSource<string | undefined>;
-    subagentLibrarianModel: SettingWithSource<ModelSelection | undefined>;
-    subagentLibrarianProvider: SettingWithSource<string | undefined>;
     subagentLibrarianReasoningEffort: SettingWithSource<string | undefined>;
   };
   shell: {
@@ -926,8 +775,6 @@ export interface SettingsWithSources {
   tools: {
     logFileOperations: SettingWithSource<boolean>;
     enableEditHealing: SettingWithSource<boolean>;
-    editHealingModel: SettingWithSource<ModelSelection>;
-    editHealingProvider: SettingWithSource<string | undefined>;
     shell: { enabled: SettingWithSource<boolean> };
     web: { enabled: SettingWithSource<boolean> };
     fileRead: { enabled: SettingWithSource<boolean> };
@@ -982,24 +829,16 @@ export interface SettingsWithSources {
  */
 export const SETTING_KEYS = {
   ENABLE_AGENT_WORKFLOW: 'enable_agent_workflow',
-  AGENT_MODEL: 'agent.model',
   AGENT_MODEL_SELECTION: 'agent.modelSelection',
-  AGENT_EFFICIENT_MODEL: 'agent.efficientModel',
-  AGENT_CAPABLE_MODEL: 'agent.capableModel',
   AGENT_SMART_MODEL: 'agent.smartModel',
-  AGENT_SMART_PROVIDER: 'agent.smartProvider',
   AGENT_SMART_REASONING_EFFORT: 'agent.smartReasoningEffort',
   AGENT_BALANCED_MODEL: 'agent.balancedModel',
-  AGENT_BALANCED_PROVIDER: 'agent.balancedProvider',
   AGENT_BALANCED_REASONING_EFFORT: 'agent.balancedReasoningEffort',
   AGENT_CHEAP_MODEL: 'agent.cheapModel',
-  AGENT_CHEAP_PROVIDER: 'agent.cheapProvider',
   AGENT_CHEAP_REASONING_EFFORT: 'agent.cheapReasoningEffort',
   AGENT_CHORE_MODEL: 'agent.choreModel',
-  AGENT_CHORE_PROVIDER: 'agent.choreProvider',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
   AGENT_TEMPERATURE: 'agent.temperature',
-  AGENT_PROVIDER: 'agent.provider',
   AGENT_FAVORITE_MODELS: 'agent.favoriteModels',
   AGENT_MODEL_NICKNAMES: 'agent.modelNicknames',
   AGENT_DISABLED_PROVIDERS: 'agent.disabledProviders',
@@ -1037,8 +876,6 @@ export const SETTING_KEYS = {
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
   AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS: 'agent.codex.websocketFirstFrameTimeoutMs',
   AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS: 'agent.codex.websocketInterFrameTimeoutMs',
-  AGENT_MENTOR_MODEL: 'agent.mentorModel',
-  AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
   AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
   AGENT_MENTOR_SAMPLES: 'agent.mentorSamples',
   AGENT_MENTOR_POOL: 'agent.mentorPool',
@@ -1057,18 +894,10 @@ export const SETTING_KEYS = {
   SANDBOX_ALLOW_READ_EXTRA: 'sandbox.allowReadExtra',
   SANDBOX_DOCKER_HOST_CONTROL_PROJECTS: 'sandbox.dockerHostControlProjects',
   SANDBOX_ALLOW_NETWORKING: 'sandbox.allowNetworking',
-  AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
-  AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   AGENT_AUTO_APPROVE_REASONING_EFFORT: 'agent.autoApproveReasoningEffort',
   AGENT_DECISION_MODEL: 'agent.decisionModel',
-  AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
-  AGENT_SUBAGENT_EXPLORER_PROVIDER: 'agent.subagentExplorerProvider',
   AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
-  AGENT_SUBAGENT_WORKER_MODEL: 'agent.subagentWorkerModel',
-  AGENT_SUBAGENT_WORKER_PROVIDER: 'agent.subagentWorkerProvider',
   AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
-  AGENT_SUBAGENT_LIBRARIAN_MODEL: 'agent.subagentLibrarianModel',
-  AGENT_SUBAGENT_LIBRARIAN_PROVIDER: 'agent.subagentLibrarianProvider',
   AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT: 'agent.subagentLibrarianReasoningEffort',
   SUBAGENT_ASYNC_SESSION_TTL_MS: 'subagent.asyncSessionTtlMs',
   SUBAGENT_ASYNC_MESSAGE_CAP: 'subagent.asyncMessageCap',
@@ -1094,8 +923,6 @@ export const SETTING_KEYS = {
   APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
-  TOOLS_EDIT_HEALING_MODEL: 'tools.editHealingModel',
-  TOOLS_EDIT_HEALING_PROVIDER: 'tools.editHealingProvider',
   TOOLS_SHELL_ENABLED: 'tools.shell.enabled',
   TOOLS_WEB_ENABLED: 'tools.web.enabled',
   TOOLS_FILE_READ_ENABLED: 'tools.fileRead.enabled',
@@ -1139,25 +966,17 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   'agent.modelSelection',
   SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
   SETTING_KEYS.AGENT_OPENAI_API_KEY,
-  SETTING_KEYS.AGENT_MODEL,
-  SETTING_KEYS.AGENT_EFFICIENT_MODEL,
-  SETTING_KEYS.AGENT_CAPABLE_MODEL,
   SETTING_KEYS.AGENT_SMART_MODEL,
-  SETTING_KEYS.AGENT_SMART_PROVIDER,
   SETTING_KEYS.AGENT_SMART_REASONING_EFFORT,
   SETTING_KEYS.AGENT_BALANCED_MODEL,
-  SETTING_KEYS.AGENT_BALANCED_PROVIDER,
   SETTING_KEYS.AGENT_BALANCED_REASONING_EFFORT,
   SETTING_KEYS.AGENT_CHEAP_MODEL,
-  SETTING_KEYS.AGENT_CHEAP_PROVIDER,
   SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT,
   SETTING_KEYS.AGENT_CHORE_MODEL,
-  SETTING_KEYS.AGENT_CHORE_PROVIDER,
   SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,
   SETTING_KEYS.AGENT_DECISION_MODEL,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
-  SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_FAVORITE_MODELS,
   SETTING_KEYS.AGENT_MODEL_NICKNAMES,
   SETTING_KEYS.AGENT_DISABLED_PROVIDERS,
@@ -1186,8 +1005,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED,
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES,
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF,
-  SETTING_KEYS.AGENT_MENTOR_MODEL,
-  SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
   SETTING_KEYS.AGENT_MENTOR_POOL,
   SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
@@ -1220,21 +1037,11 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.UI_THEME,
   SETTING_KEYS.UI_SKIN,
-  SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
-  SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
-  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_MODEL,
-  SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_LIBRARIAN_REASONING_EFFORT,
   SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
   SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
-  SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
-  SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.TOOLS_SHELL_ENABLED,
   SETTING_KEYS.TOOLS_WEB_ENABLED,
   SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
@@ -1271,20 +1078,13 @@ export const DEFAULT_SETTINGS: SettingsData = {
   enable_agent_workflow: false,
   agent: {
     modelSelection: { model: 'gpt-5.1', provider: 'openai' },
-    model: 'gpt-5.1',
-    efficientModel: undefined,
-    capableModel: undefined,
     smartModel: undefined,
-    smartProvider: undefined,
     smartReasoningEffort: undefined,
     balancedModel: undefined,
-    balancedProvider: undefined,
     balancedReasoningEffort: undefined,
     cheapModel: undefined,
-    cheapProvider: undefined,
     cheapReasoningEffort: undefined,
     choreModel: undefined,
-    choreProvider: undefined,
     reasoningEffort: 'default',
     maxTurns: 100,
     maxOutputTokens: 32_000,
@@ -1319,7 +1119,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
       milestones: [200_000, 300_000, 400_000],
       autoBrief: true,
     },
-    provider: 'openai',
     favoriteModels: [],
     modelNicknames: {},
     disabledProviders: [],
@@ -1334,8 +1133,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
       websocketFirstFrameTimeoutMs: 90_000,
       websocketInterFrameTimeoutMs: 600_000,
     },
-    mentorModel: undefined,
-    mentorProvider: undefined,
     mentorReasoningEffort: 'default',
     mentorSamples: 1,
     mentorPool: [],
@@ -1346,18 +1143,10 @@ export const DEFAULT_SETTINGS: SettingsData = {
       compactThreshold: 0.8,
       compactThresholdTokens: null,
     },
-    autoApproveModel: { model: 'gpt-4o-mini', provider: 'openai' },
-    autoApproveProvider: undefined,
     autoApproveReasoningEffort: 'low',
     decisionModel: undefined,
-    subagentExplorerModel: undefined,
-    subagentExplorerProvider: undefined,
     subagentExplorerReasoningEffort: undefined,
-    subagentWorkerModel: undefined,
-    subagentWorkerProvider: undefined,
     subagentWorkerReasoningEffort: undefined,
-    subagentLibrarianModel: undefined,
-    subagentLibrarianProvider: undefined,
     subagentLibrarianReasoningEffort: undefined,
   },
   shell: {
@@ -1417,8 +1206,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
   tools: {
     logFileOperations: true,
     enableEditHealing: true,
-    editHealingModel: { model: 'gpt-4o-mini', provider: 'openai' },
-    editHealingProvider: undefined,
     shell: { enabled: true },
     web: { enabled: true },
     fileRead: { enabled: true },

@@ -114,7 +114,7 @@ registerProvider(
         contextCompactionSessionState,
       },
     ) => {
-      const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
+      const defaultModel = settingsService.get('agent.modelSelection').model || 'gpt-4o';
       const resolvedModel = model || defaultModel;
       const cacheKey = sessionContextService as object | undefined;
       const fingerprint = openaiStreamedModelFingerprint(settingsService, resolvedModel, retryAttempts);

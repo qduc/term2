@@ -27,8 +27,7 @@ if (source.history.some((item) => item.providerOpaque))
 const settings = new SettingsService({ disableFilePersistence: true, disableLogging: true });
 const logger = new LoggingService({ disableLogging: true });
 const client = new AgentClient({
-  model,
-  providerOverride: provider,
+  selection: { model, provider },
   maxTurns: 1,
   deps: { logger, settings, sessionContextService: new SessionContextService() },
   toolOwnership: new ToolOwnershipRegistry(),

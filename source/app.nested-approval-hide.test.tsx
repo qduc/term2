@@ -194,8 +194,7 @@ it.sequential(
     });
 
     const providerClient = new AgentClient({
-      model: 'm4-hide-model',
-      providerOverride: providerId,
+      selection: { model: 'm4-hide-model', provider: providerId },
       approvalPolicyRegistry,
       deps: { logger, settings, executionContext, sessionContextService },
       toolOwnership,

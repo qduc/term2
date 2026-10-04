@@ -274,8 +274,7 @@ it('does not select an item flagged unavailable', async () => {
   registerProvider({ id: otherProvider, label: 'Locked', isRuntimeDefined: true, fetchModels: async () => [] });
   try {
     const settingsService = createMockSettingsService({
-      'agent.provider': otherProvider,
-      'agent.model': 'configured-model',
+      'agent.modelSelection': { model: 'configured-model', provider: otherProvider },
     });
     let outcome: StandaloneModelPickerOutcome | undefined;
     const { stdin, lastFrame } = await renderInAct(

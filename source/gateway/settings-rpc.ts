@@ -1,12 +1,12 @@
 import crypto from 'node:crypto';
+import { ModelSelectionSchema } from '../services/settings/model-selection.js';
 import type { ISettingsService } from '../services/service-interfaces.js';
 import { loadProviderItems } from '../providers/provider-service.js';
 import { resolveProviderCredentials, type ProviderCredentialResolution } from '../utils/ai/provider-credentials.js';
 import { listOAuthAccounts } from '../providers/oauth-accounts.js';
 
 const SAFE_SETTINGS_KEYS = [
-  'agent.model',
-  'agent.provider',
+  'agent.modelSelection',
   'agent.reasoningEffort',
   'agent.temperature',
   'agent.maxTurns',
@@ -56,7 +56,7 @@ export type SettingsProjection = {
     safeDefaults: Record<
       string,
       {
-        value?: string | number | boolean | string[] | null;
+        value?: string | number | boolean | string[] | { model: string; provider: string } | null;
         source: string;
         scope: 'global' | 'session';
         confirmRequired: boolean;
@@ -294,8 +294,7 @@ function isEnvironmentSource(source: string | undefined): boolean {
 
 function sessionScopedKey(key: SafeSettingsKey): boolean {
   return (
-    key === 'agent.model' ||
-    key === 'agent.provider' ||
+    key === 'agent.modelSelection' ||
     key === 'agent.reasoningEffort' ||
     key === 'app.activeProfileId' ||
     key === 'app.mentorMode' ||
@@ -305,7 +304,9 @@ function sessionScopedKey(key: SafeSettingsKey): boolean {
   );
 }
 
-function asSafeSettingValue(value: unknown): string | number | boolean | string[] | null | undefined {
+function asSafeSettingValue(value: unknown): string | number | boolean | string[] | { model: string; provider: string } | null | undefined {
+  const selection = ModelSelectionSchema.safeParse(value);
+  if (selection.success) return selection.data;
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
     return value;
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value;

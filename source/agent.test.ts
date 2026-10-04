@@ -96,7 +96,7 @@ it('omits worktree switching from a read-only local agent surface', () => {
   const executionContext = new ExecutionContext();
   executionContext.enterWorkspace('/tmp/agent-read-only-workspace');
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     executionContext,
     readOnly: true,
@@ -113,7 +113,7 @@ it('keeps the base instructions stable while resolving the latest goal for each 
   };
   const build = () =>
     getAgentDefinition({
-      settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+      settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
       loggingService: mockLogger,
       getGoal: () => currentGoal,
     });
@@ -138,7 +138,7 @@ it('keeps the base instructions stable while resolving the latest goal for each 
 it('keeps the dedicated search tools on a read-only full-mode surface', () => {
   for (const model of ['gpt-4o', 'gpt-5']) {
     const definition = getAgentDefinition({
-      settingsService: createMockSettingsService({ 'agent.model': model }),
+      settingsService: createMockSettingsService({ 'agent.modelSelection': { model: model, provider: 'openai' } }),
       loggingService: mockLogger,
       readOnly: true,
     });
@@ -156,7 +156,7 @@ it('keeps the dedicated search tools on a read-only full-mode surface', () => {
 
 it('registers and names only apply_patch on a writable GPT-5 patch surface', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5.6' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.6', provider: 'openai' } }),
     loggingService: mockLogger,
   });
   const toolNames = definition.tools.map((tool) => tool.name);
@@ -325,7 +325,7 @@ it('leaves run_subagent and ask_mentor available when workflow feature is disabl
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({
       enable_agent_workflow: false,
-      'agent.smartModel': 'gpt-4o-mini',
+      'agent.smartModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
     }),
     loggingService: mockLogger,
     askMentor: async () => 'mentor',
@@ -355,8 +355,8 @@ it('uses configured workflow limits without exposing them in tool arguments', as
 });
 
 it('keeps standard and lite tool names identical with bare dependencies', () => {
-  const standard = getToolNames({ 'agent.model': 'gpt-4o' });
-  const lite = getToolNames({ 'agent.model': 'gpt-4o', 'app.liteMode': true });
+  const standard = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } });
+  const lite = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.liteMode': true });
 
   expect([...standard].sort()).toEqual([...lite].sort());
   expect(standard).toEqual(
@@ -387,8 +387,8 @@ it('gates mentor and subagent tools on resolved capabilities while retaining ask
     getAskUserAnswer: () => 'answer',
     ...orchestratorSubagentDeps,
   };
-  const standard = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o' }, fullDeps);
-  const lite = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o', 'app.liteMode': true }, fullDeps);
+  const standard = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }] }, fullDeps);
+  const lite = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }], 'app.liteMode': true }, fullDeps);
   const delegatedTools = [
     'ask_mentor',
     'run_subagent',
@@ -421,7 +421,7 @@ it('exposes only the tool groups selected by the resolved Profile', () => {
   try {
     const names = getToolNames(
       {
-        'agent.model': 'gpt-4o',
+        'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
         'app.activeProfileId': profileId,
         enable_agent_workflow: true,
       },
@@ -508,7 +508,7 @@ it('gates MCP by capability and keeps members out of the provider tool list', ()
 it('uses the patch editing surface for modern GPT models in standard and lite modes', () => {
   for (const liteMode of [false, true]) {
     for (const model of ['gpt-5', 'gpt-6']) {
-      const names = getToolNames({ 'agent.model': model, ...(liteMode ? { 'app.liteMode': true } : {}) });
+      const names = getToolNames({ 'agent.modelSelection': { model: model, provider: 'openai' }, ...(liteMode ? { 'app.liteMode': true } : {}) });
 
       expect(names).toContain('apply_patch');
       expect(names).not.toEqual(expect.arrayContaining(['create_file', 'search_replace']));
@@ -521,7 +521,7 @@ it('uses the patch editing surface for modern GPT models in standard and lite mo
 it('omits dedicated search tools in standard and lite modes when searchViaShell is on', () => {
   for (const liteMode of [false, true]) {
     const names = getToolNames({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'app.searchViaShell': 'on',
       ...(liteMode ? { 'app.liteMode': true } : {}),
     });
@@ -533,7 +533,7 @@ it('omits dedicated search tools in standard and lite modes when searchViaShell 
 it('omits code-context tools in standard and lite modes for remote execution', () => {
   for (const liteMode of [false, true]) {
     const names = getToolNames(
-      { 'agent.model': 'gpt-4o', ...(liteMode ? { 'app.liteMode': true } : {}) },
+      { 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, ...(liteMode ? { 'app.liteMode': true } : {}) },
       { executionContext: new ExecutionContext({ isRemote: () => true } as any, '/remote') },
     );
 
@@ -548,11 +548,11 @@ it('keeps plan, mentor, and orchestrator tool surfaces equal to standard', () =>
     getAskUserAnswer: () => 'answer',
     ...orchestratorSubagentDeps,
   };
-  const standard = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o' }, fullDeps);
+  const standard = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }] }, fullDeps);
 
   for (const mode of ['app.planMode', 'app.mentorMode', 'app.orchestratorMode']) {
     const dependencies = mode === 'app.orchestratorMode' ? { ...fullDeps, ...orchestratorSubagentDeps } : fullDeps;
-    const names = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o', [mode]: true }, dependencies);
+    const names = getToolNames({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }], [mode]: true }, dependencies);
     expect([...names].sort()).toEqual([...standard].sort());
   }
 });
@@ -560,7 +560,7 @@ it('keeps plan, mentor, and orchestrator tool surfaces equal to standard', () =>
 it('getAgentDefinition includes grep and glob when searchViaShell is false', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -577,7 +577,7 @@ it('getAgentDefinition includes grep and glob when searchViaShell is false', () 
 
 it('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     getAskUserAnswer: () => 'test answer',
   });
@@ -588,7 +588,7 @@ it('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer 
 
 it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.liteMode': true }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.liteMode': true }),
     loggingService: mockLogger,
     getAskUserAnswer: () => 'test answer',
   });
@@ -599,7 +599,7 @@ it('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is p
 
 it('getAgentDefinition allows file modification in lite mode for patch-capable models', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5', 'app.liteMode': true }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5', provider: 'openai' }, 'app.liteMode': true }),
     loggingService: mockLogger,
   });
 
@@ -612,7 +612,7 @@ it('getAgentDefinition allows file modification in lite mode for patch-capable m
 
 it('getAgentDefinition allows file modification in lite mode for non-patch models', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.liteMode': true }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.liteMode': true }),
     loggingService: mockLogger,
   });
 
@@ -624,7 +624,7 @@ it('getAgentDefinition allows file modification in lite mode for non-patch model
 
 it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.orchestratorMode': true }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'app.orchestratorMode': true }),
     loggingService: mockLogger,
     ...orchestratorSubagentDeps,
     getAskUserAnswer: () => 'test answer',
@@ -636,7 +636,7 @@ it('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAns
 
 it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
   });
 
@@ -646,7 +646,7 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
 
 it('getAgentDefinition includes propose_goal when the interactive proposal callbacks are supplied', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     getGoal: () => undefined,
     proposeGoal: { appendGoal: () => {}, hasPriorProposal: () => false },
@@ -658,7 +658,7 @@ it('getAgentDefinition includes propose_goal when the interactive proposal callb
 
 it('getAgentDefinition omits propose_goal when the proposal callbacks are absent', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     getGoal: () => undefined,
   });
@@ -669,7 +669,7 @@ it('getAgentDefinition omits propose_goal when the proposal callbacks are absent
 
 it('getAgentDefinition omits ask_user when allowAskUser is false even if getAskUserAnswer is provided', () => {
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     getAskUserAnswer: () => 'test answer',
     allowAskUser: false,
@@ -681,7 +681,7 @@ it('getAgentDefinition omits ask_user when allowAskUser is false even if getAskU
 
 it('getAgentDefinition exposes the cache-stable delegation surface in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'app.orchestratorMode': true,
   });
 
@@ -772,16 +772,16 @@ it('advertises one background-only delegation tool when standard mode has async 
 it('getAgentDefinition registers root background shell controls only with its session registry', () => {
   const registry = new BackgroundShellRegistry<any>();
   const enabled = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     backgroundShellRegistry: registry,
   });
   const disabled = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
   });
   const nonInteractive = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     backgroundShellRegistry: registry,
     allowBackgroundShell: false,
@@ -856,7 +856,7 @@ it('getAgentDefinition requires parent controls when orchestrator mode enables a
 
 it('getAgentDefinition includes foreground delegation guidance in standard mode when runSubagent is provided', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -871,7 +871,7 @@ it('getAgentDefinition includes foreground delegation guidance in standard mode 
 
 it('getAgentDefinition omits delegation guidance when runSubagent is absent', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -886,7 +886,7 @@ it('getAgentDefinition omits delegation guidance when runSubagent is absent', ()
 it('getAgentDefinition omits delegation guidance in lite mode', () => {
   const settingsService = createMockSettingsService({
     'app.liteMode': true,
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -902,7 +902,7 @@ it('getAgentDefinition omits delegation guidance in lite mode', () => {
 it('getAgentDefinition keeps the orchestrator tool surface cache-stable with standard mode', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
-    'agent.model': 'gpt-5',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -912,7 +912,7 @@ it('getAgentDefinition keeps the orchestrator tool surface cache-stable with sta
   });
 
   const standard = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5', provider: 'openai' } }),
     loggingService: mockLogger,
     ...orchestratorSubagentDeps,
   });
@@ -934,7 +934,7 @@ it('getAgentDefinition keeps the orchestrator tool surface cache-stable with sta
 it('getAgentDefinition keeps orchestrator behavior in the mode notice, not the prefix', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
-    'agent.model': 'gpt-5',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -953,7 +953,7 @@ it('getAgentDefinition keeps orchestrator behavior in the mode notice, not the p
 it('getAgentDefinition in orchestrator mode retains full memory authority for non-gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -983,7 +983,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
 it('getAgentDefinition keeps search tools stable in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1008,7 +1008,7 @@ it('getAgentDefinition keeps search tools stable in orchestrator mode', () => {
 it('getAgentDefinition throws if orchestratorMode is true and async delegation is missing', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   expect(() =>
@@ -1022,7 +1022,7 @@ it('getAgentDefinition throws if orchestratorMode is true and async delegation i
 it('getAgentDefinition excludes grep and glob when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1040,7 +1040,7 @@ it('getAgentDefinition excludes grep and glob when searchViaShell is true', () =
 it('getAgentDefinition preserves read_file and editing tools when searchViaShell is true', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1061,7 +1061,7 @@ it('getAgentDefinition excludes grep and glob in lite mode when searchViaShell i
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
     'app.liteMode': true,
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1081,7 +1081,7 @@ it('getAgentDefinition excludes grep and glob in lite mode when searchViaShell i
 it('getAgentDefinition for gpt-5 keeps grep and glob when searchViaShell is off', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
-    'agent.model': 'gpt-5',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1106,7 +1106,7 @@ it('getAgentDefinition for gpt-5 keeps grep and glob when searchViaShell is off'
 it('getAgentDefinition search tools do not reference glob when glob is omitted', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1123,7 +1123,7 @@ it('getAgentDefinition search tools do not reference glob when glob is omitted',
 
 it('getAgentDefinition treats the unconfigured searchViaShell default as off for gpt-5 models', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1140,7 +1140,7 @@ it('getAgentDefinition treats the unconfigured searchViaShell default as off for
 it('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 models', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
-    'agent.model': 'gpt-5',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1153,7 +1153,7 @@ it('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 mod
 
 it('getAgentDefinition does not default searchViaShell to true for non-gpt-5 models', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1173,7 +1173,7 @@ it('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explic
   try {
     const settingsService = createMockSettingsService({
       'app.searchViaShell': 'on',
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
 
     const definition = getAgentDefinition({
@@ -1194,7 +1194,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
   try {
     const settingsService = createMockSettingsService({
       'app.searchViaShell': 'on',
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
 
     const definition = getAgentDefinition({
@@ -1212,7 +1212,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
 // it('getAgentDefinition includes GPT version-specific prompt fragments', () => {
 //   const gpt55 = getAgentDefinition({
 //     settingsService: createMockSettingsService({
-//       'agent.model': 'gpt-5.5-2026-04-23',
+//       'agent.modelSelection': { model: 'gpt-5.5-2026-04-23', provider: 'openai' },
 //     }),
 //     loggingService: mockLogger,
 //   });
@@ -1221,7 +1221,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
 //
 //   const gpt54 = getAgentDefinition({
 //     settingsService: createMockSettingsService({
-//       'agent.model': 'gpt-5.4',
+//       'agent.modelSelection': { model: 'gpt-5.4', provider: 'openai' },
 //     }),
 //     loggingService: mockLogger,
 //   });
@@ -1230,7 +1230,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
 //
 //   const gpt54Mini = getAgentDefinition({
 //     settingsService: createMockSettingsService({
-//       'agent.model': 'gpt-5.4-mini',
+//       'agent.modelSelection': { model: 'gpt-5.4-mini', provider: 'openai' },
 //     }),
 //     loggingService: mockLogger,
 //   });
@@ -1239,7 +1239,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
 //
 //   const gpt53Codex = getAgentDefinition({
 //     settingsService: createMockSettingsService({
-//       'agent.model': 'gpt-5.3-codex',
+//       'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'openai' },
 //     }),
 //     loggingService: mockLogger,
 //   });
@@ -1249,7 +1249,7 @@ it('getAgentDefinition falls back to naming grep when ripgrep is missing', () =>
 it('getAgentDefinition appends search-via-shell addendum when enabled', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const definition = getAgentDefinition({
@@ -1265,7 +1265,7 @@ it('getAgentDefinition omits dedicated search tool references from prompt when s
   try {
     const settingsService = createMockSettingsService({
       'app.searchViaShell': 'on',
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
 
     const definition = getAgentDefinition({
@@ -1283,7 +1283,7 @@ it('getAgentDefinition omits dedicated search tool references from prompt when s
 it('getAgentDefinition uses fallback search prompt for remote execution', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const mockExecutionContext = {
@@ -1308,7 +1308,7 @@ it('getAgentDefinition uses fallback search prompt for remote execution', () => 
 it('getAgentDefinition excludes code-context tools in remote (SSH) execution', () => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': 'off',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const mockExecutionContext = {
@@ -1331,7 +1331,7 @@ it('getAgentDefinition excludes code-context tools in remote (SSH) execution', (
 
 it('getAgentDefinition does not filter tools based on planMode setting', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'app.planMode': true,
   });
 
@@ -1345,7 +1345,7 @@ it('getAgentDefinition does not filter tools based on planMode setting', () => {
   expect(toolsWithPlan.includes('search_replace')).toBe(true);
 
   const settingsServiceWithoutPlan = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'app.planMode': false,
   });
 
@@ -1362,7 +1362,7 @@ it('getAgentDefinition does not filter tools based on planMode setting', () => {
 it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode and plan mode', () => {
   // Test Orchestrator Mode
   const settingsOrchestrator = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'app.orchestratorMode': true,
   });
   const definitionOrchestrator = getAgentDefinition({
@@ -1375,7 +1375,7 @@ it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode
 
   // Test Plan Mode
   const settingsPlan = createMockSettingsService({
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'app.planMode': true,
   });
   const definitionPlan = getAgentDefinition({
@@ -1462,7 +1462,7 @@ it('getAgentsInstructions skips an empty global AGENTS.md but still loads the pr
 it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', () => {
   const standard = getAgentDefinition({
     settingsService: createMockSettingsService({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     }),
     loggingService: mockLogger,
   });
@@ -1470,7 +1470,7 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
 
   const mentor = getAgentDefinition({
     settingsService: createMockSettingsService({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'app.mentorMode': true,
     }),
     loggingService: mockLogger,
@@ -1479,7 +1479,7 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
 
   const plan = getAgentDefinition({
     settingsService: createMockSettingsService({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'app.planMode': true,
     }),
     loggingService: mockLogger,
@@ -1488,7 +1488,7 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
 
   const orchestrator = getAgentDefinition({
     settingsService: createMockSettingsService({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'app.orchestratorMode': true,
     }),
     loggingService: mockLogger,
@@ -1506,7 +1506,7 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
 it('getAgentDefinition omits worktree hygiene fragment in lite mode', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'app.liteMode': true,
     }),
     loggingService: mockLogger,
@@ -1531,7 +1531,7 @@ it('getAgentDefinition registers activate_skill tool and includes catalog when s
   } as any;
 
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     skillsService: mockSkillsService,
   });
@@ -1548,7 +1548,7 @@ it('getAgentDefinition omits activate_skill tool and catalog when skills do not 
   } as any;
 
   const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
     loggingService: mockLogger,
     skillsService: mockSkillsService,
   });
@@ -1664,9 +1664,9 @@ const toggleTestDeps = {
 };
 
 const toggleTestSettings = {
-  'agent.model': 'gpt-4o',
+  'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   'app.searchViaShell': 'off',
-  'agent.smartModel': 'gpt-4o-mini',
+  'agent.smartModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
 };
 
 it('tools.<group>.enabled toggles remove exactly their own tools and prompt fragments', () => {

@@ -401,7 +401,7 @@ it.sequential('Codex fetchModels parses custom models endpoint', async () => {
 
   const deps = {
     settingsService: {
-      get: () => 'gpt-5-codex',
+      get: (key: string) => key === 'agent.modelSelection' ? { model: 'gpt-5-codex', provider: 'codex' } : undefined,
     },
     loggingService: {
       info: () => {},
@@ -678,7 +678,7 @@ it('Codex fetchModels appends correct client_version from cache/resolver', async
   };
 
   const deps = {
-    settingsService: { get: () => 'gpt-4o' },
+    settingsService: { get: (key: string) => key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: 'codex' } : undefined },
     loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
   };
 
@@ -823,7 +823,7 @@ it.sequential('Codex fetchModels injects ChatGPT-Account-Id header if present', 
   };
 
   const deps = {
-    settingsService: { get: () => 'gpt-5-codex' },
+    settingsService: { get: (key: string) => key === 'agent.modelSelection' ? { model: 'gpt-5-codex', provider: 'codex' } : undefined },
     loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
   };
 
@@ -1001,7 +1001,7 @@ it.sequential('Codex provider createStreamedModel custom fetch injects chatgpt-a
   };
 
   const deps = {
-    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.3-codex', provider: 'codex' } : undefined) },
     loggingService: mockLogging,
   };
 
@@ -1052,7 +1052,7 @@ it.sequential('Codex provider uses CODEX_BASE_URL for local server simulation', 
 
   try {
     const model = provider.createStreamedModel!('gpt-5.3-codex', {
-      settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+      settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.3-codex', provider: 'codex' } : undefined) },
       loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
     } as any);
     expect(model).toBeTruthy();
@@ -1400,7 +1400,7 @@ it.sequential('Codex provider rejects transport changes while cached continuatio
 
   {
     const settings = new Map<string, unknown>([
-      ['agent.model', 'gpt-5.3-codex'],
+      ['agent.modelSelection', { model: 'gpt-5.3-codex', provider: 'codex' }],
       ['agent.transport', 'websocket'],
       ['agent.retryAttempts', 2],
       ['agent.codex.websocketFirstFrameTimeoutMs', 90_000],
@@ -1426,7 +1426,7 @@ it.sequential('Codex provider does not share continuation state when no session 
   if (!provider?.createStreamedModel) return;
 
   const deps = {
-    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+    settingsService: { get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-5.3-codex', provider: 'codex' } : undefined) },
     loggingService: {} as any,
   } as any;
   const first = (await provider.createStreamedModel('gpt-5.3-codex', deps)) as any;

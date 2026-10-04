@@ -1,3 +1,4 @@
+import { ModelSelectionSchema, type ModelSelection } from './settings/model-selection.js';
 import type { SettingsService } from './settings/settings-service.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { setTrimConfig } from '../utils/output/output-trim.js';
@@ -7,14 +8,13 @@ import { isLegacyModeSettingKey } from './profiles/legacy-adapter.js';
 import { buildToggleConflictNotice, isToolToggleKey } from './tool-toggles.js';
 
 export interface RuntimeSettingRouterConversationService {
-  switchProvider(provider: string): void;
   queueModeNotice(text: string): void;
 }
 
 export interface RuntimeSettingRouterDeps {
   conversationService: RuntimeSettingRouterConversationService;
   settingsService: SettingsService;
-  setModel: (model: string) => void;
+  setModelSelection: (selection: ModelSelection) => void;
   setReasoningEffort: (effort: ReasoningEffortSetting) => void;
   setTemperature: (temp: number | undefined) => void;
 }
@@ -59,7 +59,7 @@ export class ConversationConfigurationService {
       const profileTransition = activeProfileChange
         ? new ProfileTransitionService({
             settingsService: this.#deps.settingsService,
-            rebuildAgent: () => this.#deps.setModel(this.#deps.settingsService.get('agent.model')),
+            rebuildAgent: () => this.#deps.setModelSelection(this.#deps.settingsService.get('agent.modelSelection')),
             queueModeNotice: (text) => this.#deps.conversationService.queueModeNotice(text),
           })
         : undefined;
@@ -125,15 +125,15 @@ function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSet
   if (key === 'app.activeProfileId') {
     const transitionService = new ProfileTransitionService({
       settingsService: deps.settingsService,
-      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      rebuildAgent: () => deps.setModelSelection(deps.settingsService.get('agent.modelSelection')),
       queueModeNotice: (text) => deps.conversationService.queueModeNotice(text),
     });
     transitionService.activate(String(value));
     return;
   }
 
-  if (key === 'agent.model') {
-    deps.setModel(String(value));
+  if (key === 'agent.modelSelection') {
+    deps.setModelSelection(ModelSelectionSchema.parse(value));
     return;
   }
 
@@ -141,7 +141,7 @@ function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSet
     // A capability toggle changes which tools the next request may use, so the
     // agent rebuilds exactly like a model change. The settings transaction has
     // already been applied by the caller.
-    deps.setModel(deps.settingsService.get('agent.model'));
+    deps.setModelSelection(deps.settingsService.get('agent.modelSelection'));
     return;
   }
 
@@ -161,30 +161,20 @@ function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSet
     return;
   }
 
-  if (key === 'agent.provider') {
-    deps.conversationService.switchProvider(String(value));
-    return;
-  }
 
   if (key === 'agent.transport') {
-    deps.setModel(deps.settingsService.get('agent.model'));
+    deps.setModelSelection(deps.settingsService.get('agent.modelSelection'));
     return;
   }
 
   if (
     key === 'agent.smartModel' ||
-    key === 'agent.smartProvider' ||
     key === 'agent.balancedModel' ||
-    key === 'agent.balancedProvider' ||
     key === 'agent.cheapModel' ||
-    key === 'agent.cheapProvider' ||
     key === 'agent.choreModel' ||
-    key === 'agent.choreProvider' ||
-    key === 'agent.mentorModel' ||
-    key === 'agent.mentorProvider' ||
     key === 'agent.mentorReasoningEffort'
   ) {
-    deps.setModel(deps.settingsService.get('agent.model'));
+    deps.setModelSelection(deps.settingsService.get('agent.modelSelection'));
     return;
   }
 

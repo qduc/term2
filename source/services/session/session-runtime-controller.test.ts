@@ -12,7 +12,7 @@ const makeAgentClient = (overrides: Partial<ConversationAgentClient> = {}): Conv
       throw new Error('not implemented');
     },
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     chat: async () => '',
     ...overrides,
@@ -78,29 +78,22 @@ it('setTemperature resets session state before invoking supported setter', () =>
   expect(calls).toEqual(['afterProviderChanged', 'setTemperature:default']);
 });
 
-it('setProvider does not reset session state when unsupported', () => {
+it('selection mutation resets state before publishing the complete pair', () => {
   const calls: string[] = [];
-  const controller = makeController(makeAgentClient(), calls);
-
-  controller.setProvider('openrouter');
-
-  expect(calls).toEqual([]);
-});
-
-it('switchProvider uses setProvider behavior and resets before invoking supported setter', () => {
-  const calls: string[] = [];
+  const selection = { model: 'gpt-next', provider: 'openai' };
   const controller = makeController(
     makeAgentClient({
-      setProvider: (provider) => {
-        calls.push(`setProvider:${provider}`);
+      setModelSelection: (received) => {
+        expect(received).toBe(selection);
+        calls.push('setModelSelection');
       },
     }),
     calls,
   );
 
-  controller.switchProvider('openai');
+  controller.setModelSelection(selection);
 
-  expect(calls).toEqual(['afterProviderChanged', 'setProvider:openai']);
+  expect(calls).toEqual(['afterProviderChanged', 'setModelSelection']);
 });
 
 it('leaves retry callback configuration alone when the client lacks the setter', () => {

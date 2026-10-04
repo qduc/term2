@@ -11,7 +11,6 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ISubagentClient, ISubagentClientFactory } from '../subagent-client-types.js';
 import { SubagentManager as RealSubagentManager } from '../subagent-manager.js';
 import { AgentSettingsSchema } from '../../settings/settings-schema.js';
-import { LEGACY_BOUND_MODEL_KEYS } from '../../settings/model-selection.js';
 
 const ROLE_MENTOR = 'mentor';
 const ROLE_EXPLORER = 'explorer';
@@ -71,9 +70,7 @@ export function createMockSettings(values: Record<string, unknown> = {}): ISetti
       .map(([key, value]) => [key.slice(6), value]),
   );
   const parsed = AgentSettingsSchema.parse(agent);
-  for (const key of LEGACY_BOUND_MODEL_KEYS) {
-    if (Object.hasOwn(agent, key)) store[`agent.${key}`] = parsed[key];
-  }
+  for (const [key, value] of Object.entries(parsed)) store[`agent.${key}`] = value;
 
   const getNested = (key: string): unknown => {
     const keys = key.split('.');
@@ -205,7 +202,7 @@ export class TestSubagentManager extends RealSubagentManager {
         deps.createClient ??
         (({ agent, provider, maxTurns, retryAttempts, approvalPolicyRegistry }: any) =>
           new AgentClient({
-            model: agent.model,
+            selection: { model: agent.model, provider },
             maxTurns,
             retryAttempts,
             approvalPolicyRegistry,
@@ -217,7 +214,6 @@ export class TestSubagentManager extends RealSubagentManager {
               skillsService: deps.skillsService,
             },
             agentOverride: agent,
-            providerOverride: provider,
             toolOwnership,
           })),
     });

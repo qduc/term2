@@ -796,11 +796,10 @@ const ModelSelectionSubmitHarness = ({
     if (!insertion) return;
 
     if (models.modelSettingConfig) {
-      const { modelKey, providerKey } = models.modelSettingConfig;
-      settingsService.setDynamic(modelKey, selected.id);
-      if (models.provider) {
-        settingsService.setDynamic(providerKey, models.provider);
-      }
+      const { modelKey } = models.modelSettingConfig;
+      if (!selected.provider) throw new Error('Model row has no provider binding');
+      const selection = { model: selected.id, provider: selected.provider };
+      settingsService.setDynamic(modelKey, modelKey === 'agent.modelSelection' ? selection : [selection]);
       setInput(SETTINGS_TRIGGER);
       setCursorOffset(SETTINGS_TRIGGER.length);
       settings.open(SETTINGS_TRIGGER.length, modelKey);
@@ -898,26 +897,26 @@ it.sequential('settings-backed model selection restores settings menu after subm
   });
 
   const settingsService = createMockSettingsService({
-    'agent.provider': mockProviderId,
+    'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
   });
 
   const { lastFrame } = await renderAndFlush(
     <InputProvider>
       <ModelSelectionSubmitHarness
-        trigger="/settings agent.model "
+        trigger="/settings agent.modelSelection "
         settingsService={settingsService}
         onSubmit={() => {}}
       />
     </InputProvider>,
   );
 
-  const frame = await waitFor(lastFrame, (f) => f.includes('agent.model'));
+  const frame = await waitFor(lastFrame, (f) => f.includes('agent.modelSelection'));
   const visibleFrame = toVisibleText(frame);
 
-  expect(settingsService.get('agent.model')).toBe('gpt-test');
-  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+  expect(settingsService.get('agent.modelSelection').model).toBe('gpt-test');
+  expect(settingsService.get('agent.modelSelection').provider).toBe(mockProviderId);
   expect(visibleFrame.includes('Input:/settings ')).toBe(true);
-  expect(visibleFrame.includes('❯ agent.model')).toBe(true);
+  expect(visibleFrame.includes('❯ agent.modelSelection')).toBe(true);
 
   // Cleanup after test
   clearModelCache();
@@ -936,7 +935,7 @@ const assertSettingsTierTriggerOpensPoolEditor = async (
   });
 
   const settingsService = createMockSettingsService({
-    'agent.provider': mockProviderId,
+    'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
   });
   const settingsSlashCommand: SlashCommand = {
     name: '/settings',
@@ -1002,7 +1001,7 @@ it.sequential('command-backed model selection still submits after selection', as
 
   let submitted = false;
   const settingsService = createMockSettingsService({
-    'agent.provider': mockProviderId,
+    'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
   });
 
   await renderAndFlush(
@@ -1023,7 +1022,7 @@ it.sequential('command-backed model selection still submits after selection', as
   );
 
   expect(submitted).toBe(true);
-  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+  expect(settingsService.get('agent.modelSelection').provider).toBe(mockProviderId);
 
   // Cleanup after test
   clearModelCache();
@@ -1042,14 +1041,14 @@ it.sequential(
     });
 
     const settingsService = createMockSettingsService({
-      'agent.provider': mockProviderId,
+      'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
     });
 
     // Named the way real commands are (`model-command.ts` registers
     // `name: 'model'`, no leading slash) so this exercises the same
     // `resolveSlashCommand` matching production goes through.
     const modelAction = vi.fn((args?: string) => {
-      settingsService.set('agent.model', args?.split(' ')[0] ?? '');
+      settingsService.set('agent.modelSelection', { model: args?.split(' ')[0] ?? '', provider: mockProviderId });
       return true;
     });
     const modelCommand: SlashCommand = {
@@ -1101,7 +1100,7 @@ it.sequential(
     // picker — not post the literal command text to the model as a chat
     // message.
     expect(modelAction).toHaveBeenCalledWith(`gpt-test --provider=${mockProviderId}`);
-    expect(settingsService.get('agent.model')).toBe('gpt-test');
+    expect(settingsService.get('agent.modelSelection').model).toBe('gpt-test');
     expect(sentAsChatMessages).toEqual([]);
 
     const frame = await waitFor(lastFrame, (f) => f.includes('Mode:text'), { timeoutMs: 3000 });
@@ -1126,7 +1125,7 @@ it.sequential('Ctrl+R refreshes the current provider model list when model selec
   });
 
   const settingsService = createMockSettingsService({
-    'agent.provider': mockProviderId,
+    'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
   });
 
   const modelCommand: SlashCommand = {
@@ -1168,7 +1167,7 @@ it.sequential('settings-backed model selection saves a typed custom model when n
   });
 
   const settingsService = createMockSettingsService({
-    'agent.provider': mockProviderId,
+    'agent.modelSelection': { model: 'initial-model', provider: mockProviderId },
   });
 
   const settingsSlashCommand: SlashCommand = {
@@ -1193,20 +1192,20 @@ it.sequential('settings-backed model selection saves a typed custom model when n
     </InputProvider>,
   );
 
-  await writeInput(stdin, '/settings agent.model custom-model');
+  await writeInput(stdin, '/settings agent.modelSelection custom-model');
 
   await waitFor(lastFrame, (f) => f.includes('No models match "custom-model"'), { timeoutMs: 3000 });
 
   await writeInput(stdin, '\r');
 
   await waitForCondition(
-    () => settingsService.get('agent.model'),
+    () => settingsService.get('agent.modelSelection').model,
     (value) => value === 'custom-model',
     { timeoutMs: 3000 },
   );
 
-  expect(settingsService.get('agent.model')).toBe('custom-model');
-  expect(settingsService.get('agent.provider')).toBe(mockProviderId);
+  expect(settingsService.get('agent.modelSelection').model).toBe('custom-model');
+  expect(settingsService.get('agent.modelSelection').provider).toBe(mockProviderId);
 
   const frame = await waitFor(lastFrame, (f) => f.includes('Mode:settings_completion'), { timeoutMs: 3000 });
   expect(frame.includes('Input:/settings '), frame).toBe(true);

@@ -11,17 +11,15 @@ it('flattenSettings: flattens nested objects into dot notation', () => {
   });
 });
 
-it('merges legacy higher-priority input into the prior bound main selection', () => {
+it('rejects legacy higher-priority scalar inputs rather than rebinding a prior selection', () => {
   const merged = mergeSettings(
     DEFAULT_SETTINGS,
     { agent: { modelSelection: { model: 'file-model', provider: 'zai' } } },
-    { agent: { model: 'env-model' } },
-    { agent: { provider: 'codex' } },
+    { agent: { model: 'env-model' } } as never,
+    { agent: { provider: 'codex' } } as never,
     { disableLogging: true },
   );
-  expect(merged.agent.modelSelection).toEqual({ model: 'env-model', provider: 'codex' });
-  expect(merged.agent.model).toBe('env-model');
-  expect(merged.agent.provider).toBe('codex');
+  expect(merged).toBe(DEFAULT_SETTINGS);
 });
 
 it('does not complete a partial explicit selection from a lower-priority layer', () => {
@@ -38,24 +36,24 @@ it('does not complete a partial explicit selection from a lower-priority layer',
 it('mergeSettings: cli > env > config > defaults precedence', () => {
   const defaults = DEFAULT_SETTINGS;
 
-  const config: DeepPartial<SettingsData> = { agent: { model: 'from-config' } };
-  const env: DeepPartial<SettingsData> = { agent: { model: 'from-env' } };
-  const cli: DeepPartial<SettingsData> = { agent: { model: 'from-cli' } };
+  const config: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-config', provider: 'config-host' } } };
+  const env: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-env', provider: 'env-host' } } };
+  const cli: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-cli', provider: 'cli-host' } } };
 
   const merged = mergeSettings(defaults, config, env, cli, { disableLogging: true });
-  expect(merged.agent.model).toBe('from-cli');
+  expect(merged.agent.modelSelection).toEqual({ model: 'from-cli', provider: 'cli-host' });
 });
 
 it('trackSettingSources: reports correct source for overridden keys', () => {
   const defaults = DEFAULT_SETTINGS;
 
-  const config: DeepPartial<SettingsData> = { agent: { model: 'from-config' } };
+  const config: DeepPartial<SettingsData> = { agent: { modelSelection: { model: 'from-config', provider: 'config-host' } } };
   const env: DeepPartial<SettingsData> = { agent: { reasoningEffort: 'low' } };
   const cli: DeepPartial<SettingsData> = { shell: { timeout: 123 } };
 
   const sources = trackSettingSources(defaults, config, env, cli);
 
-  expect(sources.get('agent.model')).toBe('config');
+  expect(sources.get('agent.modelSelection')).toBe('config');
   expect(sources.get('agent.reasoningEffort')).toBe('env');
   expect(sources.get('shell.timeout')).toBe('cli');
   expect(sources.get('ui.historySize')).toBe('default');

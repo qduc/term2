@@ -1,6 +1,5 @@
 import { SettingsSchema, type SettingSource, type SettingsData } from './settings-schema.js';
 import type { DeepPartial } from './settings-env.js';
-import { mainSelectionForLayer, type ModelSelection } from './model-selection.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -21,13 +20,7 @@ export function flattenSettings(obj: unknown, prefix = ''): Record<string, unkno
     const value = record[key];
     const newKey = prefix ? `${prefix}.${key}` : key;
 
-    if (
-      value &&
-      typeof value === 'object' &&
-      'model' in value &&
-      'provider' in value &&
-      Object.keys(value).every((key) => key === 'model' || key === 'provider' || key === 'reasoningEffort')
-    ) {
+    if (newKey === 'agent.modelSelection') {
       result[newKey] = value;
     } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       Object.assign(result, flattenSettings(value, newKey));
@@ -42,34 +35,22 @@ export function flattenSettings(obj: unknown, prefix = ''): Record<string, unkno
 /**
  * Deep merge source into target (mutates target).
  */
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>, prefix = ''): void {
   for (const key in source) {
     if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
 
     const sourceValue = source[key];
+    const settingPath = prefix ? `${prefix}.${key}` : key;
 
-    if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
+    if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue) && settingPath !== 'agent.modelSelection') {
       if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
         target[key] = {};
       }
 
-      deepMerge(target[key] as Record<string, unknown>, sourceValue as Record<string, unknown>);
+      deepMerge(target[key] as Record<string, unknown>, sourceValue as Record<string, unknown>, settingPath);
     } else {
       target[key] = sourceValue;
     }
-  }
-}
-
-function mergeLayer(target: Record<string, unknown>, source: Record<string, unknown>): void {
-  const agent = source.agent as Record<string, unknown> | undefined;
-  const previous = (target.agent && typeof target.agent === 'object' ? target.agent : {}) as Record<string, unknown>;
-  const selection =
-    agent && typeof agent === 'object' && !Array.isArray(agent)
-      ? mainSelectionForLayer(agent, previous.modelSelection as ModelSelection)
-      : previous.modelSelection;
-  deepMerge(target, source);
-  if (target.agent && typeof target.agent === 'object' && !Array.isArray(target.agent)) {
-    (target.agent as Record<string, unknown>).modelSelection = selection;
   }
 }
 
@@ -91,13 +72,13 @@ export function mergeSettings(
   const result = JSON.parse(JSON.stringify(defaults)) as Record<string, unknown>;
 
   // Merge file config
-  mergeLayer(result, fileConfig as Record<string, unknown>);
+  deepMerge(result, fileConfig as Record<string, unknown>);
 
   // Merge env
-  mergeLayer(result, env as Record<string, unknown>);
+  deepMerge(result, env as Record<string, unknown>);
 
   // Merge cli (highest priority)
-  mergeLayer(result, cli as Record<string, unknown>);
+  deepMerge(result, cli as Record<string, unknown>);
 
   // Ensure all required fields are present
   const merged: SettingsData = {
@@ -187,26 +168,6 @@ export function trackSettingSources(
       sources.set(key, 'config');
     } else {
       sources.set(key, 'default');
-    }
-  }
-
-  for (const [layer, source] of [
-    [fileConfig, 'config'],
-    [env, 'env'],
-    [cli, 'cli'],
-  ] as const) {
-    const agent = layer.agent;
-    if (
-      agent &&
-      (Object.hasOwn(agent, 'modelSelection') || Object.hasOwn(agent, 'model') || Object.hasOwn(agent, 'provider'))
-    ) {
-      sources.set('agent.modelSelection', source);
-      if (Object.hasOwn(agent, 'modelSelection')) {
-        sources.set('agent.model', source);
-        sources.set('agent.provider', source);
-      }
-      if (Object.hasOwn(agent, 'model')) sources.set('agent.model', source);
-      if (Object.hasOwn(agent, 'provider')) sources.set('agent.provider', source);
     }
   }
 

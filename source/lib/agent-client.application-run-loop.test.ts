@@ -20,8 +20,7 @@ import { tmpdir } from 'node:os';
 const providers = new Set<string>();
 const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
   const values: Record<string, unknown> = {
-    'agent.provider': provider,
-    'agent.model': 'test-model',
+    'agent.modelSelection': { model: 'test-model', provider },
     'agent.retryAttempts': 2,
     'agent.reasoningEffort': 'default',
     ...overrides,
@@ -1493,6 +1492,7 @@ describe('AgentClient codex session-history compaction', () => {
     const instance = client(
       'codex',
       {
+        selection: { model: 'gpt-6-luna', provider: 'codex' },
         agentOverride: {
           name: 'override',
           model: 'gpt-6-luna',
@@ -1729,7 +1729,7 @@ describe('AgentClient codex session-history compaction', () => {
         await instance.startStream(coldHistory as any)
       ).completed;
       expect(compact).toHaveBeenCalledTimes(1);
-      instance.setModel('gpt-other');
+      instance.setModelSelection({ model: 'gpt-other', provider: instance.getProvider() });
       await (
         await instance.startStream(coldHistory as any)
       ).completed;
@@ -1770,7 +1770,7 @@ describe('AgentClient codex session-history compaction', () => {
     );
 
     const instance = new AgentClient({
-      providerOverride: 'codex',
+      selection: { model: 'gpt-test', provider: 'codex' },
       agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
       deps: {
         logger,
@@ -1839,7 +1839,7 @@ describe('AgentClient codex session-history compaction', () => {
 
   const codexClient = (provider: string) =>
     client(provider, {
-      providerOverride: 'codex',
+      selection: { model: 'gpt-test', provider: 'codex' },
       agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
     });
 
@@ -1860,7 +1860,7 @@ describe('AgentClient codex session-history compaction', () => {
       history: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' }],
     }));
     const instance = new AgentClient({
-      providerOverride: 'codex',
+      selection: { model: 'gpt-test', provider: 'codex' },
       agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
       deps: { logger: loggingLogger, settings: makeSettings(provider), sessionContextService },
       toolOwnership: new ToolOwnershipRegistry(),

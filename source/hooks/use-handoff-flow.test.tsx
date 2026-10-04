@@ -38,7 +38,7 @@ type HarnessProps = {
   sendUserMessage: (turn: { text: string; images?: unknown[] }) => Promise<void>;
   settingsService: { set: (key: string, value: unknown) => void; get: (key: string) => unknown };
   applyRuntimeSetting: (key: string, value: unknown) => void;
-  setModel: (model: string) => void;
+  setModelSelection: (selection: { model: string; provider: string }) => void;
   queueModeNotice: (text: string) => void;
   controller: MenuController;
 };
@@ -49,10 +49,10 @@ const createDeps = () => {
   const sendUserMessage = vi.fn(async () => {});
   const settingsService = {
     set: vi.fn(),
-    get: vi.fn(),
+    get: vi.fn((_key: string): unknown => ({ model: 'initial', provider: 'openai' })),
   };
   const applyRuntimeSetting = vi.fn();
-  const setModel = vi.fn();
+  const setModelSelection = vi.fn();
   const queueModeNotice = vi.fn();
   const controller: MenuController = new MenuControllerImpl({
     triggerRegistry: createDefaultTriggerRegistry([modelSlashCommand], ['command-model']),
@@ -64,7 +64,7 @@ const createDeps = () => {
     sendUserMessage,
     settingsService,
     applyRuntimeSetting,
-    setModel,
+    setModelSelection,
     queueModeNotice,
     controller,
   };
@@ -84,7 +84,7 @@ const Harness = ({
   sendUserMessage,
   settingsService,
   applyRuntimeSetting,
-  setModel,
+  setModelSelection,
   queueModeNotice,
   controller,
 }: HarnessProps) => {
@@ -96,7 +96,7 @@ const Harness = ({
     controller,
     settingsService: settingsService as any,
     applyRuntimeSetting,
-    setModel,
+    setModelSelection,
     queueModeNotice,
   });
 
@@ -364,11 +364,9 @@ it.sequential(
     });
     await flush();
 
-    expect(deps.settingsService.set).toHaveBeenCalledWith('agent.model', 'gpt-4');
-    expect(deps.settingsService.set).toHaveBeenCalledWith('agent.provider', 'anthropic');
-    expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('agent.provider', 'anthropic');
-    expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('agent.model', 'gpt-4');
-    expect(deps.setModel).toHaveBeenCalledWith('gpt-4');
+    expect(deps.settingsService.set).toHaveBeenCalledWith('agent.modelSelection', { model: 'gpt-4', provider: 'anthropic' });
+    expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('agent.modelSelection', { model: 'gpt-4', provider: 'anthropic' });
+    expect(deps.setModelSelection).toHaveBeenCalledWith({ model: 'gpt-4', provider: 'anthropic' });
     expect(getSnapshot().handoffState?.stage).toBe('selecting_effort');
     expect(getSnapshot().controller.getSnapshot().editor.text).toBe('/effort ');
     // The model frame is gone; nothing was auto-sent by the "closed without
@@ -446,7 +444,7 @@ it.sequential('escaping the model picker without choosing sends only the capture
   // No model/effort was chosen, so the message composed from just the
   // captured text is sent — matching the pre-migration escape fallback.
   expect(deps.settingsService.set).not.toHaveBeenCalled();
-  expect(deps.setModel).not.toHaveBeenCalled();
+  expect(deps.setModelSelection).not.toHaveBeenCalled();
   expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
   expect(getSnapshot().handoffState).toBeNull();
 

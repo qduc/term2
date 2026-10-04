@@ -17,10 +17,9 @@ export type FirstRunSetupGate = {
 type Dependencies = {
   settingsService: SettingsService;
   controller: MenuController;
-  applyProvider?: (provider: string) => void;
 };
 
-const getMainProvider = (settingsService: SettingsService): string => settingsService.get('agent.provider') || 'openai';
+const getMainProvider = (settingsService: SettingsService): string => settingsService.get('agent.modelSelection').provider || 'openai';
 
 const hasInspectableCredentials = (settingsService: SettingsService, provider: string): boolean => {
   // Lightweight App harnesses may intentionally provide only the read-only
@@ -34,7 +33,7 @@ const modelFrame = {
   kind: 'model' as const,
   target: {
     type: 'setting' as const,
-    config: { modelKey: 'agent.model', providerKey: 'agent.provider' },
+    config: { modelKey: 'agent.modelSelection' },
   },
   back: { type: 'close-clear-input' as const },
   binding: {
@@ -49,7 +48,7 @@ const modelFrame = {
  * Owns the narrow first-run lifecycle. Provider/model sessions still own all
  * selection, editing, credential persistence, and typed-model behavior.
  */
-export function useFirstRunSetupGate({ settingsService, controller, applyProvider }: Dependencies): FirstRunSetupGate {
+export function useFirstRunSetupGate({ settingsService, controller }: Dependencies): FirstRunSetupGate {
   const initialProvider = useMemo(() => getMainProvider(settingsService), [settingsService]);
   const [active, setActive] = useState(() => !hasInspectableCredentials(settingsService, initialProvider));
   const [phase, setPhase] = useState<FirstRunSetupPhase | null>(() =>
@@ -67,11 +66,9 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
     (nextProvider: string) => {
       setProvider(nextProvider);
       setSettingsRevision((revision) => revision + 1);
-      if (nextProvider !== getMainProvider(settingsService)) {
-        applyProvider?.(nextProvider);
-      }
+
     },
-    [applyProvider, settingsService],
+    [],
   );
 
   const requestSetup = useCallback((nextProvider: string) => {
@@ -87,13 +84,6 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
 
   useEffect(() => {
     const currentProvider = getMainProvider(settingsService);
-    if (active && currentProvider !== provider) {
-      setProvider(currentProvider);
-      if (phase === 'model' && !hasInspectableCredentials(settingsService, currentProvider)) {
-        setPhase('provider');
-      }
-      return;
-    }
 
     if (!active && !hasInspectableCredentials(settingsService, currentProvider)) {
       setProvider(currentProvider);
@@ -118,7 +108,7 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
       return;
     }
 
-    if (!hasInspectableCredentials(settingsService, currentProvider)) {
+    if (!hasInspectableCredentials(settingsService, provider)) {
       setPhase('provider');
       return;
     }
@@ -134,7 +124,7 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
   const currentProviderUnavailable = !hasInspectableCredentials(settingsService, currentProvider);
   const visibleActive = active || currentProviderUnavailable;
   const visiblePhase = visibleActive
-    ? active && phase === 'model' && currentProviderUnavailable
+    ? active && phase === 'model' && !hasInspectableCredentials(settingsService, provider)
       ? 'provider'
       : phase ?? 'provider'
     : null;
@@ -142,7 +132,7 @@ export function useFirstRunSetupGate({ settingsService, controller, applyProvide
   return {
     active: visibleActive,
     phase: visiblePhase,
-    provider: currentProviderUnavailable ? currentProvider : provider,
+    provider: active ? provider : currentProvider,
     onProviderSelected,
     requestSetup,
     completeModelSelection,

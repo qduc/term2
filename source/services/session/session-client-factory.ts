@@ -103,7 +103,7 @@ export function createOwnedSessionClientFactory(
     create(sessionId, options) {
       const sessionIdentity = new SessionIdentity(sessionId, options?.sessionStartedAt);
       const continuationProjectionMode: ContinuationProjectionMode =
-        settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
+        settings.get('agent.modelSelection').provider === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
       const access = new SessionAccessState(settings, { allowEdit: defaults?.allowEdit });
       const postExecutePending = new PostExecutePendingRegistry({

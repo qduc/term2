@@ -577,8 +577,8 @@ export async function runNonInteractive(
         id: sessionId,
         createdAt: createdRuntime.runtime.sessionStartedAt,
         projectPath: process.cwd(),
-        model: config.settingsService.get('agent.model'),
-        provider: config.settingsService.get('agent.provider'),
+        model: config.settingsService.get('agent.modelSelection').model,
+        provider: config.settingsService.get('agent.modelSelection').provider,
       });
       logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
       config.onGoalPersisted?.(config.initialGoal);
@@ -594,8 +594,8 @@ export async function runNonInteractive(
         clientHandle.hookEvents.create('session.start', {
           cwd: process.cwd(),
           mode: 'non-interactive',
-          providerName: clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.provider'),
-          modelName: config.settingsService.get('agent.model'),
+          providerName: clientHandle.agentClient.getProvider?.() ?? config.settingsService.get('agent.modelSelection').provider,
+          modelName: config.settingsService.get('agent.modelSelection').model,
         }),
       );
     }

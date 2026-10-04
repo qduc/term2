@@ -44,14 +44,14 @@ const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
 const Banner: FC<BannerProps> = ({ settingsService }) => {
   const { Banner: SkinBanner } = useSkin();
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
-  const model = useSetting(settingsService, 'agent.model');
+  const selection = useSetting(settingsService, 'agent.modelSelection');
+  const model = selection.model;
   const smartPool = useSetting(settingsService, 'agent.smartModel');
   // Display uses the pool's first entry; the pool cursor only advances per
   // subagent spawn.
   const smartModel = toTierModelPoolEntries(smartPool)[0]?.model;
-  const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
-  const mentorModel = smartModel ?? legacyMentorModel;
-  const providerKey = useSetting(settingsService, 'agent.provider') ?? 'openai';
+  const mentorModel = smartModel;
+  const providerKey = selection.provider;
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
   const mentorReasoningEffort = useSetting(settingsService, 'agent.mentorReasoningEffort') ?? 'default';
 

@@ -73,6 +73,7 @@ const makeDeps = (
   const agentClient: any = { chat };
   const settingsService: any = {
     get: <T>(key: string): T | undefined => {
+      if (key === 'agent.modelSelection') return { model: 'gpt-4o', provider: 'openai' } as unknown as T;
       if (key === 'shell.autoApproveMode') return mode as unknown as T;
       if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
       return undefined;
@@ -663,7 +664,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
       '{"results":[{"id":"c1","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   };
   const settingsService: any = {
-    get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
+    get: <T>(key: string): T | undefined => (key === 'agent.modelSelection' ? ({ model: 'gpt-4o', provider: 'openai' } as unknown as T) : key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
     getDynamic: (key: string) => (key === 'shell.autoApproveMode' ? 'auto' : undefined),
   };
   const shellAutoApproval = new ShellAutoApprovalResolver({
@@ -938,7 +939,7 @@ it('explicit Docker host control is not auto-approved by LLM advisory mode', asy
     agentClient,
     logger,
     settingsService: {
-      get: (key: any): any => 'auto',
+      get: (key: any): any => key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: 'openai' } : key === 'shell.autoApproveMode' ? 'auto' : undefined,
       getDynamic: (key: string): unknown => 'auto',
       set: () => {},
       setDynamic: () => {},

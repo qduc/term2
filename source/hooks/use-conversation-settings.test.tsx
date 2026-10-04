@@ -10,7 +10,7 @@ type HookResult = ReturnType<typeof useConversationSettings>;
 
 function createMockConversationService() {
   return {
-    setModel: (_model: string) => {},
+    setModelSelection: (_selection: { model: string; provider: string }) => {},
     setReasoningEffort: (_effort: any) => {},
     setTemperature: (_temperature?: number) => {},
   } as unknown as ConversationService;
@@ -32,16 +32,16 @@ const renderHarness = async (conversationService: ConversationService) => {
   return { rerender };
 };
 
-it.sequential('setModel delegates to conversationService.setModel', async () => {
+it.sequential('setModelSelection delegates to conversationService.setModelSelection', async () => {
   const service = createMockConversationService();
   let calledWith: any = '';
-  service.setModel = (m) => {
+  service.setModelSelection = (m) => {
     calledWith = m;
   };
 
   await renderHarness(service);
-  outerBox.current!.setModel('gpt-4o');
-  expect(calledWith).toBe('gpt-4o');
+  outerBox.current!.setModelSelection({ model: 'gpt-4o', provider: 'openai' });
+  expect(calledWith).toEqual({ model: 'gpt-4o', provider: 'openai' });
 });
 
 it.sequential('setReasoningEffort delegates to conversationService.setReasoningEffort', async () => {
@@ -72,7 +72,7 @@ it.sequential('callback identity is stable across rerenders with the same conver
   const service = createMockConversationService();
   const { rerender } = await renderHarness(service);
 
-  const initialSetModel = outerBox.current!.setModel;
+  const initialSetModel = outerBox.current!.setModelSelection;
   const initialSetReasoningEffort = outerBox.current!.setReasoningEffort;
   const initialSetTemperature = outerBox.current!.setTemperature;
 
@@ -81,7 +81,7 @@ it.sequential('callback identity is stable across rerenders with the same conver
     rerender(<Harness service={service} />);
   });
 
-  expect(outerBox.current!.setModel).toBe(initialSetModel);
+  expect(outerBox.current!.setModelSelection).toBe(initialSetModel);
   expect(outerBox.current!.setReasoningEffort).toBe(initialSetReasoningEffort);
   expect(outerBox.current!.setTemperature).toBe(initialSetTemperature);
 });
@@ -91,12 +91,12 @@ it.sequential('callbacks are updated when a new conversationService is provided'
   const service2 = createMockConversationService();
   const { rerender } = await renderHarness(service1);
 
-  const initialSetModel = outerBox.current!.setModel;
+  const initialSetModel = outerBox.current!.setModelSelection;
 
   // Rerender with a new service instance
   await act(async () => {
     rerender(<Harness service={service2} />);
   });
 
-  expect(outerBox.current!.setModel).not.toBe(initialSetModel);
+  expect(outerBox.current!.setModelSelection).not.toBe(initialSetModel);
 });

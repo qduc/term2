@@ -15,67 +15,41 @@ import {
   SETTING_KEYS,
 } from './settings-schema.js';
 
-it('binds main legacy input and makes the complete selection authoritative', () => {
-  const agent = AgentSettingsSchema.parse({ model: 'custom-model', provider: 'zai' });
-  expect(agent.modelSelection).toEqual({ model: 'custom-model', provider: 'zai' });
-  const selected = AgentSettingsSchema.parse({
-    model: 'stale-model',
-    provider: 'openai',
-    modelSelection: { model: 'pinned-model', provider: 'codex' },
-  });
-  expect(selected.model).toBe('pinned-model');
-  expect(selected.provider).toBe('codex');
+it('requires complete main selections and exposes no scalar projections', () => {
+  const selected = AgentSettingsSchema.parse({ modelSelection: { model: 'pinned-model', provider: 'codex' } });
+  expect(selected).not.toHaveProperty('model');
+  expect(selected).not.toHaveProperty('provider');
   expect(() => AgentSettingsSchema.parse({ modelSelection: { model: 'missing-host' } })).toThrow();
 });
 
-it('binds legacy edit-healing input to its configured host without rebinding explicit pairs', () => {
-  const parsed = SettingsSchema.parse({ agent: { provider: 'zai' }, tools: { editHealingModel: 'healer' } });
-  expect(parsed.tools?.editHealingModel).toEqual({ model: 'healer', provider: 'zai' });
-  const reparsed = SettingsSchema.parse({ ...parsed, tools: { ...parsed.tools, editHealingProvider: 'codex' } });
-  expect(reparsed.tools?.editHealingModel).toEqual({ model: 'healer', provider: 'zai' });
+it.each(['model', 'provider', 'efficientModel', 'capableModel', 'mentorModel', 'mentorProvider',
+  'subagentExplorerModel', 'subagentExplorerProvider', 'subagentWorkerModel', 'subagentWorkerProvider',
+  'subagentLibrarianModel', 'subagentLibrarianProvider', 'autoApproveModel', 'autoApproveProvider',
+  'smartProvider', 'balancedProvider', 'cheapProvider', 'choreProvider'])('rejects removed scalar selection key %s', (key) => {
+  expect(() => AgentSettingsSchema.parse({ [key]: 'legacy' })).toThrow();
 });
 
-it.each([
-  ['mentorModel', 'mentorProvider'],
-  ['subagentExplorerModel', 'subagentExplorerProvider'],
-  ['subagentWorkerModel', 'subagentWorkerProvider'],
-  ['subagentLibrarianModel', 'subagentLibrarianProvider'],
-  ['autoApproveModel', 'autoApproveProvider'],
-  ['efficientModel', 'provider'],
-  ['capableModel', 'provider'],
-])('binds legacy %s once and preserves explicit pairs', (modelKey, providerKey) => {
-  const agent = AgentSettingsSchema.parse({ [modelKey]: 'legacy', [providerKey]: 'zai' });
-  expect((agent as any)[modelKey]).toEqual({ model: 'legacy', provider: 'zai' });
-  const rebound = AgentSettingsSchema.parse({ ...agent, [providerKey]: 'codex' });
-  expect((rebound as any)[modelKey]).toEqual({ model: 'legacy', provider: 'zai' });
+it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel', 'mentorPool'])('requires complete entries in %s', (key) => {
+  for (const value of ['legacy', ['legacy'], [{ model: 'unbound' }], [{ model: 'empty', provider: '' }]]) {
+    expect(() => AgentSettingsSchema.parse({ [key]: value })).toThrow();
+  }
+  const pair = { model: 'pinned', provider: 'zai' };
+  expect((AgentSettingsSchema.parse({ [key]: [pair] }) as any)[key]).toEqual([pair]);
 });
 
-it('pins legacy mentor pool models to the mentor provider at parsing', () => {
-  const agent = AgentSettingsSchema.parse({
-    provider: 'openai',
-    mentorProvider: 'codex',
-    mentorPool: [{ model: 'mentor-a' }, { model: 'mentor-b', provider: 'zai' }],
-  });
-  expect(agent.mentorPool).toEqual([
-    { model: 'mentor-a', provider: 'codex' },
-    { model: 'mentor-b', provider: 'zai' },
-  ]);
-  expect(AgentSettingsSchema.parse({ ...agent, mentorProvider: 'anthropic' }).mentorPool).toEqual(agent.mentorPool);
+it('rejects legacy edit-healing scalars and provider overrides', () => {
+  expect(() => ToolsSettingsSchema.parse({ editHealingModel: 'healer' })).toThrow();
+  expect(() => ToolsSettingsSchema.parse({ editHealingProvider: 'zai' })).toThrow();
+  expect(() => ToolsSettingsSchema.parse({ editHealingModel: { model: 'healer', provider: 'zai' } })).toThrow();
 });
 
-it('pins mentor pool legacy strings to the parent provider and rejects empty bindings', () => {
-  expect(AgentSettingsSchema.parse({ provider: 'zai', mentorPool: ['mentor-a'] }).mentorPool).toEqual([
-    { model: 'mentor-a', provider: 'zai' },
-  ]);
-  expect(() => AgentSettingsSchema.parse({ mentorPool: [{ model: 'mentor-a', provider: '' }] })).toThrow();
-});
 
 it('keeps the structured Contract 04 consumer inventory complete and duplicate-free', () => {
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(151);
-  expect(new Set(exportedKeys).size).toBe(151);
+  expect(exportedKeys).toHaveLength(131);
+  expect(new Set(exportedKeys).size).toBe(131);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -222,7 +196,7 @@ it('run-budget policy defaults are runtime-modifiable and reject invalid limits'
 });
 
 it('accepts the exact maximum mentor samples and mentor pool size', () => {
-  const mentorPool = Array.from({ length: 8 }, (_, index) => ({ model: `mentor-${index + 1}` }));
+  const mentorPool = Array.from({ length: 8 }, (_, index) => ({ model: `mentor-${index + 1}`, provider: 'codex' }));
 
   expect(SettingsSchema.parse({ agent: { mentorSamples: 8, mentorPool } }).agent).toMatchObject({
     mentorSamples: 8,
@@ -233,36 +207,19 @@ it('accepts the exact maximum mentor samples and mentor pool size', () => {
 });
 
 it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
-  'tier model settings are pools: strings normalize to one entry, max size is enforced for agent.%s',
-  (key) => {
-    const pool = Array.from({ length: 8 }, (_, index) => `role-${index + 1}`);
-
-    expect(SettingsSchema.parse({ agent: { [key]: 'single-model' } }).agent).toMatchObject({
-      [key]: [{ model: 'single-model', provider: 'openai' }],
-    });
-    expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent).toMatchObject({
-      [key]: pool.map((model) => ({ model, provider: 'openai' })),
-    });
-    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, 'role-9'] } })).toThrow();
+  'bounds complete selection pools for agent.%s', (key) => {
+    const pool = Array.from({ length: 8 }, (_, index) => ({ model: `role-${index + 1}`, provider: 'codex' }));
+    expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent?.[key]).toEqual(pool);
+    expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, { model: 'role-9', provider: 'codex' }] } })).toThrow();
     expect(AgentSettingsSchema.parse({})[key]).toBeUndefined();
+    expect(RUNTIME_MODIFIABLE_SETTINGS.has(`agent.${key}`)).toBe(true);
   },
 );
 
-it('tier model pools bind legacy entries once and preserve explicit provider pairs', () => {
-  const pool = ['deepseek-flash', { model: 'gpt-6-luna', provider: 'codex' }];
-
-  expect(SettingsSchema.parse({ agent: { provider: 'zai', balancedModel: pool } }).agent?.balancedModel).toEqual([
-    { model: 'deepseek-flash', provider: 'zai' },
-    { model: 'gpt-6-luna', provider: 'codex' },
-  ]);
-  expect(() => SettingsSchema.parse({ agent: { balancedModel: [{ provider: 'codex' }] } })).toThrow();
-});
-
-it('does not rebind canonical pools when the tier or parent provider changes', () => {
-  const bound = AgentSettingsSchema.parse({ provider: 'codex', cheapModel: ['gpt-6-luna'] });
-  expect(AgentSettingsSchema.parse({ ...bound, provider: 'zai', cheapProvider: 'DeepSeek' }).cheapModel).toEqual([
-    { model: 'gpt-6-luna', provider: 'codex' },
-  ]);
+it('does not rebind canonical pools when the parent selection changes', () => {
+  const pool = [{ model: 'gpt-6-luna', provider: 'codex' }];
+  const bound = AgentSettingsSchema.parse({ modelSelection: { model: 'main', provider: 'codex' }, cheapModel: pool });
+  expect(AgentSettingsSchema.parse({ ...bound, modelSelection: { model: 'other', provider: 'zai' } }).cheapModel).toEqual(pool);
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
@@ -551,70 +508,6 @@ it('shell.backgroundTimeout defaults to 30 minutes, is runtime modifiable, and i
   // Capped: never zero, never negative, never unbounded.
   for (const value of [0, -1, 1.5, Infinity, Number.NaN]) {
     expect(() => SettingsSchema.parse({ shell: { backgroundTimeout: value } })).toThrow();
-  }
-});
-
-it('SettingsSchema preserves user-configured workflow model tiers', () => {
-  const parsed = SettingsSchema.parse({
-    agent: { efficientModel: 'gpt-5-mini', capableModel: 'gpt-5.3-codex' },
-  });
-
-  expect(parsed.agent?.efficientModel).toEqual({ model: 'gpt-5-mini', provider: 'openai' });
-  expect(parsed.agent?.capableModel).toEqual({ model: 'gpt-5.3-codex', provider: 'openai' });
-  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_EFFICIENT_MODEL)).toBe(true);
-  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CAPABLE_MODEL)).toBe(true);
-  expect(() => SettingsSchema.parse({ agent: { efficientModel: '' } })).toThrow();
-  expect(() => SettingsSchema.parse({ agent: { capableModel: '' } })).toThrow();
-});
-
-it('SettingsSchema preserves optional flat ancillary model tiers and their providers', () => {
-  const parsed = SettingsSchema.parse({
-    agent: {
-      smartModel: 'smart-model',
-      smartProvider: 'smart-provider',
-      balancedModel: 'balanced-model',
-      balancedProvider: 'balanced-provider',
-      cheapModel: 'cheap-model',
-      cheapProvider: 'cheap-provider',
-      choreModel: 'chore-model',
-      choreProvider: 'chore-provider',
-    },
-  });
-
-  expect(parsed.agent).toMatchObject({
-    smartModel: [{ model: 'smart-model', provider: 'smart-provider' }],
-    smartProvider: 'smart-provider',
-    balancedModel: [{ model: 'balanced-model', provider: 'balanced-provider' }],
-    balancedProvider: 'balanced-provider',
-    cheapModel: [{ model: 'cheap-model', provider: 'cheap-provider' }],
-    cheapProvider: 'cheap-provider',
-    choreModel: [{ model: 'chore-model', provider: 'chore-provider' }],
-    choreProvider: 'chore-provider',
-  });
-  const defaults = AgentSettingsSchema.parse({});
-  for (const key of [
-    'smartModel',
-    'smartProvider',
-    'balancedModel',
-    'balancedProvider',
-    'cheapModel',
-    'cheapProvider',
-    'choreModel',
-    'choreProvider',
-  ]) {
-    expect(defaults[key as keyof typeof defaults]).toBeUndefined();
-  }
-  for (const key of [
-    SETTING_KEYS.AGENT_SMART_MODEL,
-    SETTING_KEYS.AGENT_SMART_PROVIDER,
-    SETTING_KEYS.AGENT_BALANCED_MODEL,
-    SETTING_KEYS.AGENT_BALANCED_PROVIDER,
-    SETTING_KEYS.AGENT_CHEAP_MODEL,
-    SETTING_KEYS.AGENT_CHEAP_PROVIDER,
-    SETTING_KEYS.AGENT_CHORE_MODEL,
-    SETTING_KEYS.AGENT_CHORE_PROVIDER,
-  ]) {
-    expect(RUNTIME_MODIFIABLE_SETTINGS.has(key)).toBe(true);
   }
 });
 

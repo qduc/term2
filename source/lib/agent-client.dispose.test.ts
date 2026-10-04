@@ -27,8 +27,7 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
   _triggerChange: (key?: string) => void;
 } {
   const store: Record<string, any> = {
-    'agent.provider': 'mock-provider-dispose',
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-dispose' },
     'agent.maxTurns': 20,
     'agent.temperature': undefined,
     ...values,
@@ -251,7 +250,7 @@ it.sequential('setModel after dispose does not crash', () => {
 
   // After disposal, setModel should not cause errors
   expect(() => {
-    client.setModel('gpt-4o-mini');
+    client.setModelSelection({ model: 'gpt-4o-mini', provider: 'mock-provider-dispose' });
   }).not.toThrow();
 });
 
@@ -406,10 +405,11 @@ it.sequential('disposing one transient client does not close a shared streamed m
   const createTransientClient = () =>
     new AgentClient({
       agentOverride: { name: 'transient', model: 'shared-model', instructions: '', tools: [] },
-      providerOverride: providerId,
+      selection: { model: 'shared-model', provider: providerId },
+      
       deps: {
         logger: createMockLogger(),
-        settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'shared-model' }),
+        settings: createMockSettings({ 'agent.modelSelection': { model: 'shared-model', provider: providerId } }),
         sessionContextService,
       },
       toolOwnership: new ToolOwnershipRegistry(),
@@ -466,10 +466,10 @@ it.sequential('disposes an owned synchronous streamed model exactly once', async
   );
 
   const client = new AgentClient({
-    providerOverride: providerId,
+    
     deps: {
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'owned-model' }),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'owned-model', provider: providerId } }),
       sessionContextService: {
         runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
         getContext: () => null,
@@ -517,10 +517,10 @@ it.sequential('disposes an owned promised streamed model after it resolves', asy
   );
 
   const client = new AgentClient({
-    providerOverride: providerId,
+    
     deps: {
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'owned-model' }),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'owned-model', provider: providerId } }),
       sessionContextService: {
         runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
         getContext: () => null,
@@ -568,10 +568,11 @@ it.sequential('drops a borrowed promised streamed model without closing it', asy
 
   const client = new AgentClient({
     agentOverride: { name: 'transient', model: 'borrowed-model', instructions: '', tools: [] },
-    providerOverride: providerId,
+    selection: { model: 'borrowed-model', provider: providerId },
+    
     deps: {
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'borrowed-model' }),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'borrowed-model', provider: providerId } }),
       sessionContextService: {
         runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
         getContext: () => null,
@@ -611,10 +612,10 @@ it.sequential('disposes safely when an owned streamed model promise rejects', as
   );
 
   const client = new AgentClient({
-    providerOverride: providerId,
+    
     deps: {
       logger: createMockLogger(),
-      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'rejected-model' }),
+      settings: createMockSettings({ 'agent.modelSelection': { model: 'rejected-model', provider: providerId } }),
       sessionContextService: {
         runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
         getContext: () => null,

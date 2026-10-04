@@ -14,15 +14,12 @@ const flushEffects = async () => {
   await Promise.resolve();
 };
 
-it.sequential('useRuntimeSettings routes agent.provider changes through switchProvider', async () => {
+it.sequential('useRuntimeSettings publishes a complete selection after settings commit', async () => {
   const calls: string[] = [];
   const settingsService = createMockSettingsService({
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'initial', provider: 'openai' },
   });
-  const conversationService: Pick<ConversationService, 'switchProvider' | 'queueModeNotice'> = {
-    switchProvider(provider: string) {
-      calls.push(`switch:${provider}`);
-    },
+  const conversationService: Pick<ConversationService, 'queueModeNotice'> = {
     queueModeNotice() {
       // no-op for this test
     },
@@ -30,7 +27,10 @@ it.sequential('useRuntimeSettings routes agent.provider changes through switchPr
 
   const Harness = () => {
     const applyRuntimeSetting = useRuntimeSettings({
-      setModel: () => {},
+      setModelSelection: (selection) => {
+        expect(settingsService.get('agent.modelSelection')).toEqual(selection);
+        calls.push(`${selection.provider}:${selection.model}`);
+      },
       setReasoningEffort: () => {},
       setTemperature: () => {},
       conversationService,
@@ -38,7 +38,8 @@ it.sequential('useRuntimeSettings routes agent.provider changes through switchPr
     });
 
     useEffect(() => {
-      applyRuntimeSetting('agent.provider', 'openrouter');
+      settingsService.set('agent.modelSelection', { model: 'next', provider: 'openrouter' });
+      applyRuntimeSetting('agent.modelSelection', { model: 'next', provider: 'openrouter' });
     }, [applyRuntimeSetting]);
 
     return <Text>runtime</Text>;
@@ -47,5 +48,5 @@ it.sequential('useRuntimeSettings routes agent.provider changes through switchPr
   await renderInAct(<Harness />);
   await flushEffects();
 
-  expect(calls).toEqual(['switch:openrouter']);
+  expect(calls).toEqual(['openrouter:next']);
 });

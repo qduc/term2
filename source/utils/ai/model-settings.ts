@@ -3,7 +3,6 @@ import { SETTING_KEYS } from '../../services/settings/settings-schema.js';
 export type ModelSettingConfig = {
   modelKey: string;
   trigger: string;
-  providerKey: string;
   fallbackProviderKey?: string;
   /**
    * True when the setting is a tier model pool: it is still handled by the
@@ -17,36 +16,27 @@ export const MODEL_CMD_TRIGGER = '/model ';
 
 export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
   {
-    modelKey: SETTING_KEYS.AGENT_MODEL,
-    trigger: '/settings agent.model ',
-    providerKey: SETTING_KEYS.AGENT_PROVIDER,
+    modelKey: SETTING_KEYS.AGENT_MODEL_SELECTION,
+    trigger: '/settings agent.modelSelection ',
   },
   {
     modelKey: SETTING_KEYS.AGENT_SMART_MODEL,
     trigger: '/settings agent.smartModel ',
-    providerKey: SETTING_KEYS.AGENT_SMART_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
     pool: true,
   },
   {
     modelKey: SETTING_KEYS.AGENT_BALANCED_MODEL,
     trigger: '/settings agent.balancedModel ',
-    providerKey: SETTING_KEYS.AGENT_BALANCED_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
     pool: true,
   },
   {
     modelKey: SETTING_KEYS.AGENT_CHEAP_MODEL,
     trigger: '/settings agent.cheapModel ',
-    providerKey: SETTING_KEYS.AGENT_CHEAP_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
     pool: true,
   },
   {
     modelKey: SETTING_KEYS.AGENT_CHORE_MODEL,
     trigger: '/settings agent.choreModel ',
-    providerKey: SETTING_KEYS.AGENT_CHORE_PROVIDER,
-    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
     pool: true,
   },
 ];

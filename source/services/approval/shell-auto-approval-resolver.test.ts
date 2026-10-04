@@ -12,12 +12,13 @@ const createSessionContextService = () => ({
 const logger = new LoggingService({ disableLogging: true });
 
 const makeMockSettings = (mode: 'off' | 'advisory' | 'auto' | 'always') => ({
-  get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
+  get: <T>(key: string): T | undefined => (key === 'agent.modelSelection' ? ({ model: 'gpt-4o', provider: 'openai' } as unknown as T) : key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
   getDynamic: (key: string) => (key === 'shell.autoApproveMode' ? mode : undefined),
 });
 
 const makeSandboxAwareSettings = (mode: 'off' | 'advisory' | 'auto' | 'always', sandboxEnabled: boolean) => ({
   get: <T>(key: string): T | undefined => {
+      if (key === 'agent.modelSelection') return { model: 'gpt-4o', provider: 'openai' } as unknown as T;
     if (key === 'shell.autoApproveMode') return mode as unknown as T;
     if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
     return undefined;

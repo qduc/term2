@@ -693,7 +693,7 @@ describe('resolveModelFlag', () => {
     });
   });
 
-  it('passes through when all providers yield 0 loaded models without explicit error', async () => {
+  it('rejects an unbound model when no catalog can resolve its provider', async () => {
     const emptyGroups = [makeGroup('prov-a', []), makeGroup('prov-b', [])];
     const deps = mockDeps(emptyGroups);
     const result = await resolveModelFlag({
@@ -706,10 +706,8 @@ describe('resolveModelFlag', () => {
     });
 
     expect(result).toEqual<ModelResolutionResult>({
-      status: 'passthrough',
-      modelId: 'fallback-model',
-      provider: undefined,
-      reasoningEffort: undefined,
+      status: 'no_match',
+      error: 'Error: Cannot bind "fallback-model" to a provider; pass --provider or <provider>/<model>.',
     });
   });
 

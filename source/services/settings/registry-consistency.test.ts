@@ -144,17 +144,11 @@ describe('registry-consistency guards (M0)', () => {
     expect(overlap.length).toBe(0);
   });
 
-  it('every MODEL_SETTING_CONFIGS model/provider key is a SETTING_KEYS member', () => {
+  it('every MODEL_SETTING_CONFIGS selection key is a SETTING_KEYS member', () => {
     const invalidKeys: string[] = [];
     for (const config of MODEL_SETTING_CONFIGS) {
       if (!exportedKeySet.has(config.modelKey)) {
         invalidKeys.push(`modelKey:${config.modelKey}`);
-      }
-      if (!exportedKeySet.has(config.providerKey)) {
-        invalidKeys.push(`providerKey:${config.providerKey}`);
-      }
-      if (config.fallbackProviderKey && !exportedKeySet.has(config.fallbackProviderKey)) {
-        invalidKeys.push(`fallbackProviderKey:${config.fallbackProviderKey}`);
       }
     }
     expect(invalidKeys).toEqual([]);

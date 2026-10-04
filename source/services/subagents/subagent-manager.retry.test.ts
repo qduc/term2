@@ -143,8 +143,7 @@ it.each(retryCases)('$title', async (c) => {
       },
     },
     settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
+'agent.modelSelection': { model: 'mock-model', provider: providerId },
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,
@@ -212,8 +211,7 @@ describe('run() aborted subagent', () => {
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-        'agent.model': 'mock-model',
-        'agent.provider': providerId,
+'agent.modelSelection': { model: 'mock-model', provider: providerId },
       }),
       sessionContextService: createSessionContextService() as any,
       executionContext: createMockExecutionContext(tmpDir),
@@ -261,8 +259,7 @@ it('run() retries a mid-stream transport drop instead of failing the subagent', 
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
+'agent.modelSelection': { model: 'mock-model', provider: providerId },
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,
@@ -309,8 +306,7 @@ it('run() recovers an incomplete chat stream inside the application loop without
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
+'agent.modelSelection': { model: 'mock-model', provider: providerId },
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,

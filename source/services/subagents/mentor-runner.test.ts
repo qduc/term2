@@ -24,8 +24,7 @@ it('returns a cancelled result when its provider run aborts', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [{ model: 'mentor-model', provider: providerId }],
     }),
     sessionContextService: createSessionContextService(),
   });
@@ -63,8 +62,7 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [{ model: 'mentor-model', provider: providerId }],
     }),
     sessionContextService: createSessionContextService(),
     onEvent: (event) => {
@@ -110,8 +108,7 @@ it('passes the settings-backed policy to direct mentor runs and activates critic
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [{ model: 'mentor-model', provider: providerId }],
       'agent.runBudget.turnBackstop': 0,
       'agent.runBudget.extensionPercent': 0,
     }),
@@ -153,8 +150,7 @@ it('samples the mentor N times without letting samples see each other', async ()
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.smartModel': [{ model: 'mentor-model', provider: providerId }],
       'agent.mentorSamples': 3,
     }),
     sessionContextService: createSessionContextService(),
@@ -197,8 +193,7 @@ it('returns the samples that succeeded when one fails', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.smartModel': [{ model: 'mentor-model', provider: providerId }],
       'agent.mentorSamples': 3,
     }),
     sessionContextService: createSessionContextService(),
@@ -225,8 +220,7 @@ it('fails only when every sample fails', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.smartModel': [{ model: 'mentor-model', provider: providerId }],
       'agent.mentorSamples': 2,
     }),
     sessionContextService: createSessionContextService(),
@@ -260,8 +254,6 @@ it('consults every model in the pool and labels each answer generically', async 
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'model-a',
-      'agent.mentorProvider': providerId,
       'agent.mentorPool': [
         { model: 'model-a', provider: providerId },
         { model: 'model-b', provider: providerId },
@@ -302,8 +294,6 @@ it('reports which pool model failed and keeps the rest', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'model-a',
-      'agent.mentorProvider': providerId,
       'agent.mentorPool': [
         { model: 'model-a', provider: providerId },
         { model: 'model-b', provider: providerId },
@@ -341,8 +331,6 @@ it('lets the pool override mentorSamples', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'model-a',
-      'agent.mentorProvider': providerId,
       'agent.mentorSamples': 5,
       'agent.mentorPool': [
         { model: 'model-a', provider: providerId },
@@ -383,8 +371,7 @@ it('keeps the persistent session when sampling is not configured', async () => {
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.mentorModel': 'mentor-model',
-      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [{ model: 'mentor-model', provider: providerId }],
     }),
     sessionContextService: createSessionContextService(),
   });

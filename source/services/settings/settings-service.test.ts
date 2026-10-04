@@ -19,51 +19,45 @@ const getTestSettingsDir = () => {
 const getSettingsFilePath = (settingsDir: string) => path.join(settingsDir, 'settings.json');
 
 it.sequential(
-  'persists canonical main and legacy role selections across reload and unrelated reconciliation',
+  'persists canonical main and mentor selections across reload and unrelated reconciliation',
   async () => {
     await withNonTestEnvironment(async () => {
       const settingsDir = getTestSettingsDir();
       const service = new SettingsService({ settingsDir, disableLogging: true });
       expect(
         service.setPersistentDynamicTransaction([
-          { key: 'agent.model', value: 'main-bound' },
-          { key: 'agent.provider', value: 'zai' },
-          { key: 'agent.mentorModel', value: 'mentor-bound' },
-          { key: 'agent.mentorProvider', value: 'codex' },
+          { key: 'agent.modelSelection', value: { model: 'main-bound', provider: 'zai' } },
+          { key: 'agent.mentorPool', value: [{ model: 'mentor-bound', provider: 'codex' }] },
         ]).status,
       ).toBe('saved');
-      service.setDynamic('agent.mentorProvider', 'anthropic');
+      service.setDynamic('agent.mentorPool', [{ model: 'mentor-bound', provider: 'anthropic' }], { persist: false });
       service.setDynamic('logging.logLevel', 'warn');
       const reloaded = new SettingsService({ settingsDir, disableLogging: true });
       expect(reloaded.getDynamic('agent.modelSelection')).toEqual({ model: 'main-bound', provider: 'zai' });
-      expect(reloaded.get('agent.mentorModel')).toEqual({ model: 'mentor-bound', provider: 'codex' });
+      expect(reloaded.get('agent.mentorPool')).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
       const persisted = JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf8'));
       expect(persisted.agent.modelSelection).toEqual({ model: 'main-bound', provider: 'zai' });
-      expect(persisted.agent.mentorModel).toEqual({ model: 'mentor-bound', provider: 'codex' });
+      expect(persisted.agent.mentorPool).toEqual([{ model: 'mentor-bound', provider: 'codex' }]);
     });
   },
 );
 
-it('stores main selections atomically and projects legacy single and batch writes', () => {
+it('stores main selections atomically and rejects legacy single and batch writes', () => {
   const service = new SettingsService({
     settingsDir: getTestSettingsDir(),
     disableLogging: true,
     disableFilePersistence: true,
   });
   service.setDynamic('agent.modelSelection', { model: 'pinned', provider: 'zai' });
-  expect(service.get('agent.model')).toBe('pinned');
-  expect(service.get('agent.provider')).toBe('zai');
-  service.setDynamic('agent.model', 'replacement');
-  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'replacement', provider: 'zai' });
-  service.setDynamicTransaction([
+  expect(service.get('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
+  expect(() => service.setDynamic('agent.model', 'replacement')).toThrow();
+  expect(() => service.setDynamicTransaction([
     { key: 'agent.model', value: 'batch' },
     { key: 'agent.provider', value: 'codex' },
-  ]);
-  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'batch', provider: 'codex' });
+  ])).toThrow();
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
   expect(() => service.setDynamic('agent.modelSelection', { model: 'incomplete' })).toThrow();
-  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'batch', provider: 'codex' });
-  service.reset('agent.model');
-  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'gpt-5.1', provider: 'codex' });
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'pinned', provider: 'zai' });
   service.reset('agent.modelSelection');
   expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'gpt-5.1', provider: 'openai' });
 });
@@ -124,7 +118,7 @@ it('SettingsService initializes with defaults', async () => {
   });
 
   expect(service).toBeTruthy();
-  expect(service.get('agent.model')).toBe('gpt-5.1');
+  expect(service.get('agent.modelSelection').model).toBe('gpt-5.1');
   expect(service.get('agent.reasoningEffort')).toBe('default');
   expect(service.get('agent.temperature')).toBe(undefined);
   expect(service.get('agent.maxTurns')).toBe(100);
@@ -141,95 +135,31 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('logging.logLevel')).toBe('info');
 });
 
-it.sequential('binds legacy pools once across runtime edits, persistence and reload', async () => {
-  await withNonTestEnvironment(async () => {
-    const settingsDir = getTestSettingsDir();
-    fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(
-      getSettingsFilePath(settingsDir),
-      JSON.stringify({
-        agent: {
-          provider: 'openai',
-          cheapProvider: 'codex',
-          cheapModel: ['gpt-6-luna'],
-        },
-      }),
-    );
-    const service = new SettingsService({ settingsDir, disableLogging: true });
-    const pair = [{ model: 'gpt-6-luna', provider: 'codex' }];
-    expect(service.get('agent.cheapModel')).toEqual(pair);
-    expect(JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf-8')).agent.cheapModel).toEqual(pair);
-    service.setDynamic('agent.cheapProvider', 'zai');
-    expect(service.get('agent.cheapModel')).toEqual(pair);
-    const reloaded = new SettingsService({ settingsDir, disableLogging: true });
-    expect(reloaded.get('agent.cheapModel')).toEqual(pair);
-    reloaded.setDynamic('agent.cheapModel', ['glm-5.3-flash']);
-    const next = [{ model: 'glm-5.3-flash', provider: 'zai' }];
-    expect(reloaded.get('agent.cheapModel')).toEqual(next);
-    expect(JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf-8')).agent.cheapModel).toEqual(next);
-    reloaded.setDynamic('agent.cheapProvider', 'codex');
-    expect(reloaded.get('agent.cheapModel')).toEqual(next);
-  });
+it.each(['cheapModel', 'mentorPool'])('rejects legacy scalar and partial %s entries in runtime transactions', (key) => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true, disableFilePersistence: true });
+  for (const value of [['legacy-model'], [{ model: 'partial-model' }]]) {
+    expect(() => service.setDynamicTransaction([{ key: `agent.${key}`, value }])).toThrow();
+    expect(service.getDynamic(`agent.${key}`)).toEqual(key === 'mentorPool' ? [] : undefined);
+  }
 });
 
-it('binds legacy pool input to the provider in the same runtime transaction regardless of field order', () => {
-  const service = new SettingsService({
-    settingsDir: getTestSettingsDir(),
-    disableLogging: true,
-    disableFilePersistence: true,
-  });
-  service.setDynamicTransaction([
-    { key: 'agent.cheapModel', value: ['gpt-6-luna'] },
-    { key: 'agent.cheapProvider', value: 'codex' },
-  ]);
-  expect(service.get('agent.cheapModel')).toEqual([{ model: 'gpt-6-luna', provider: 'codex' }]);
+it.each(['cheapModel', 'mentorPool'])('rejects incomplete %s entries before persistent batch settlement', (key) => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true, disableFilePersistence: true });
+  expect(() => service.setPersistentDynamicTransaction([
+    { key: `agent.${key}`, value: [{ model: 'partial-model' }] },
+  ])).toThrow();
+  expect(service.getDynamic(`agent.${key}`)).toEqual(key === 'mentorPool' ? [] : undefined);
 });
 
-it('pins mentor pool legacy input against the complete runtime transaction', () => {
-  const service = new SettingsService({
-    settingsDir: getTestSettingsDir(),
-    disableLogging: true,
-    disableFilePersistence: true,
-  });
-  service.setDynamicTransaction([
-    { key: 'agent.mentorPool', value: [{ model: 'mentor-a' }] },
-    { key: 'agent.mentorProvider', value: 'codex' },
-  ]);
-  expect(service.get('agent.mentorPool')).toEqual([{ model: 'mentor-a', provider: 'codex' }]);
-  service.setDynamic('agent.mentorProvider', 'zai');
-  expect(service.get('agent.mentorPool')).toEqual([{ model: 'mentor-a', provider: 'codex' }]);
-});
-
-it.sequential('persists mentor pool bindings across batch writes and reload', async () => {
+it.sequential.each(['cheapModel', 'mentorPool'])('persists complete %s bindings without rebinding on main selection changes', async (key) => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const service = new SettingsService({ settingsDir, disableLogging: true });
-    expect(
-      service.setPersistentDynamicTransaction([
-        { key: 'agent.mentorPool', value: [{ model: 'mentor-a' }] },
-        { key: 'agent.mentorProvider', value: 'codex' },
-      ]).status,
-    ).toBe('saved');
-    service.setDynamic('agent.mentorProvider', 'zai');
-    const pair = [{ model: 'mentor-a', provider: 'codex' }];
-    expect(service.get('agent.mentorPool')).toEqual(pair);
-    expect(new SettingsService({ settingsDir, disableLogging: true }).get('agent.mentorPool')).toEqual(pair);
-  });
-});
-
-it.sequential('binds legacy pool input before settling a persistent transaction', async () => {
-  await withNonTestEnvironment(async () => {
-    const settingsDir = getTestSettingsDir();
-    const service = new SettingsService({ settingsDir, disableLogging: true });
-    expect(
-      service.setPersistentDynamicTransaction([
-        { key: 'agent.cheapModel', value: ['gpt-6-luna'] },
-        { key: 'agent.cheapProvider', value: 'codex' },
-      ]).status,
-    ).toBe('saved');
-    const pair = [{ model: 'gpt-6-luna', provider: 'codex' }];
-    expect(service.get('agent.cheapModel')).toEqual(pair);
-    expect(new SettingsService({ settingsDir, disableLogging: true }).get('agent.cheapModel')).toEqual(pair);
+    const pair = [{ model: 'pinned-model', provider: 'codex' }];
+    expect(service.setPersistentDynamicTransaction([{ key: `agent.${key}`, value: pair }]).status).toBe('saved');
+    service.setDynamic('agent.modelSelection', { model: 'different-model', provider: 'zai' });
+    expect(service.getDynamic(`agent.${key}`)).toEqual(pair);
+    expect(new SettingsService({ settingsDir, disableLogging: true }).getDynamic(`agent.${key}`)).toEqual(pair);
   });
 });
 
@@ -272,7 +202,7 @@ it('skips file writes in test environment (constructor + set)', async () => {
 
   expect(fs.existsSync(settingsFile)).toBe(false);
 
-  service.set('agent.model', 'gpt-4o');
+  service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
   expect(fs.existsSync(settingsFile)).toBe(false);
 });
 
@@ -289,7 +219,7 @@ it.sequential('disableFilePersistence: true prevents writes even outside test en
 
     expect(fs.existsSync(settingsFile)).toBe(false);
 
-    service.set('agent.model', 'gpt-4o');
+    service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
     expect(fs.existsSync(settingsFile)).toBe(false);
   });
 });
@@ -306,11 +236,11 @@ it.sequential('normal operation persists settings.json when not in test environm
 
     expect(fs.existsSync(settingsFile)).toBe(true);
 
-    service.set('agent.model', 'gpt-4o');
+    service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
 
     const content = fs.readFileSync(settingsFile, 'utf-8');
     const config = JSON.parse(content);
-    expect(config.agent.model).toBe('gpt-4o');
+    expect(config.agent.modelSelection.model).toBe('gpt-4o');
   });
 });
 
@@ -320,15 +250,15 @@ it.sequential('startup does not persist CLI or environment overrides', async () 
     const service = new SettingsService({
       settingsDir,
       disableLogging: true,
-      cli: { agent: { model: 'cli-model' } } as any,
+      cli: { agent: { modelSelection: { model: 'cli-model', provider: 'openai' } } } as any,
       env: { shell: { timeout: 60_000 } } as any,
     });
 
-    expect(service.get('agent.model')).toBe('cli-model');
+    expect(service.get('agent.modelSelection').model).toBe('cli-model');
     expect(service.get('shell.timeout')).toBe(60_000);
 
     const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
-    expect(persisted.agent.model).toBe('gpt-5.1');
+    expect(persisted.agent.modelSelection.model).toBe('gpt-5.1');
     expect(persisted.shell.timeout).toBe(120_000);
   });
 });
@@ -350,13 +280,13 @@ it('CLI overrides take highest precedence', async () => {
     disableLogging: true,
     cli: {
       agent: {
-        model: 'gpt-4o',
+        modelSelection: { model: 'gpt-4o', provider: 'openai' },
       },
     } as any,
   });
 
-  expect(service.get('agent.model')).toBe('gpt-4o');
-  expect(service.getSource('agent.model')).toBe('cli');
+  expect(service.get('agent.modelSelection').model).toBe('gpt-4o');
+  expect(service.getSource('agent.modelSelection')).toBe('cli');
 });
 
 it('env overrides config file but not CLI', async () => {
@@ -372,7 +302,7 @@ it('env overrides config file but not CLI', async () => {
     configFile,
     JSON.stringify({
       agent: {
-        model: 'gpt-3.5-turbo',
+        modelSelection: { model: 'gpt-3.5-turbo', provider: 'openai' },
       },
     }),
     'utf-8',
@@ -383,13 +313,13 @@ it('env overrides config file but not CLI', async () => {
     disableLogging: true,
     env: {
       agent: {
-        model: 'gpt-4-turbo',
+        modelSelection: { model: 'gpt-4-turbo', provider: 'openai' },
       },
     } as any,
   });
 
-  expect(service.get('agent.model')).toBe('gpt-4-turbo');
-  expect(service.getSource('agent.model')).toBe('env');
+  expect(service.get('agent.modelSelection').model).toBe('gpt-4-turbo');
+  expect(service.getSource('agent.modelSelection')).toBe('env');
 
   // Now test with CLI override
   const service2 = new SettingsService({
@@ -397,18 +327,18 @@ it('env overrides config file but not CLI', async () => {
     disableLogging: true,
     env: {
       agent: {
-        model: 'gpt-4-turbo',
+        modelSelection: { model: 'gpt-4-turbo', provider: 'openai' },
       },
     } as any,
     cli: {
       agent: {
-        model: 'gpt-5.1',
+        modelSelection: { model: 'gpt-5.1', provider: 'openai' },
       },
     } as any,
   });
 
-  expect(service2.get('agent.model')).toBe('gpt-5.1');
-  expect(service2.getSource('agent.model')).toBe('cli');
+  expect(service2.get('agent.modelSelection').model).toBe('gpt-5.1');
+  expect(service2.getSource('agent.modelSelection')).toBe('cli');
 });
 
 it('config file overrides defaults', async () => {
@@ -466,7 +396,7 @@ it('registers custom OpenAI-compatible providers from settings.json', async () =
         },
       ],
       agent: {
-        provider: providerName,
+        modelSelection: { model: 'gpt-5.1', provider: providerName },
       },
     }),
     'utf-8',
@@ -480,7 +410,7 @@ it('registers custom OpenAI-compatible providers from settings.json', async () =
   // Provider should be registered and selectable
   expect(getProvider(providerName)).toBeTruthy();
   expect(getAllProviders().some((p) => p.id === providerName)).toBe(true);
-  expect(service.get('agent.provider')).toBe(providerName);
+  expect(service.get('agent.modelSelection').provider).toBe(providerName);
 });
 
 it('custom providers default missing type for old settings.json files', async () => {
@@ -505,7 +435,7 @@ it('custom providers default missing type for old settings.json files', async ()
         },
       ],
       agent: {
-        provider: providerName,
+        modelSelection: { model: 'gpt-5.1', provider: providerName },
       },
     }),
     'utf-8',
@@ -542,7 +472,7 @@ it('migrates name-only custom provider to id with underscores', async () => {
         },
       ],
       agent: {
-        provider: 'My_Local_Provider',
+        modelSelection: { model: 'gpt-5.1', provider: 'My_Local_Provider' },
       },
     }),
     'utf-8',
@@ -557,7 +487,7 @@ it('migrates name-only custom provider to id with underscores', async () => {
   const providers = service.getDynamic('providers') as any[];
   expect(providers[0].id).toBe('My_Local_Provider');
   expect(providers[0].name).toBe('My Local Provider');
-  expect(service.get('agent.provider')).toBe('My_Local_Provider');
+  expect(service.get('agent.modelSelection').provider).toBe('My_Local_Provider');
   expect(getProvider('My_Local_Provider')).toBeTruthy();
 });
 
@@ -580,7 +510,7 @@ it('migrates legacy agent.provider names with spaces to normalized provider id',
         },
       ],
       agent: {
-        provider: 'My Local Provider',
+        modelSelection: { model: 'gpt-5.1', provider: 'My Local Provider' },
       },
     }),
     'utf-8',
@@ -592,7 +522,7 @@ it('migrates legacy agent.provider names with spaces to normalized provider id',
     disableFilePersistence: true,
   });
 
-  expect(service.get('agent.provider')).toBe('My_Local_Provider');
+  expect(service.get('agent.modelSelection').provider).toBe('My_Local_Provider');
   expect(getProvider('My_Local_Provider')).toBeTruthy();
 });
 
@@ -617,7 +547,7 @@ it.sequential('startup rewrites legacy provider format to new format in settings
             },
           ],
           agent: {
-            provider: 'Legacy_Local_Provider',
+            modelSelection: { model: 'gpt-5.1', provider: 'Legacy_Local_Provider' },
           },
         },
         null,
@@ -631,7 +561,7 @@ it.sequential('startup rewrites legacy provider format to new format in settings
       disableLogging: true,
     });
 
-    expect(service.get('agent.provider')).toBe('Legacy_Local_Provider');
+    expect(service.get('agent.modelSelection').provider).toBe('Legacy_Local_Provider');
 
     const rewritten = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
     expect(rewritten.providers[0].id).toBe('Legacy_Local_Provider');
@@ -660,7 +590,7 @@ it.sequential('durably normalizes the selected provider when provider records al
               baseUrl: 'http://localhost:1234',
             },
           ],
-          agent: { provider: 'My Local Provider' },
+          agent: { modelSelection: { model: 'gpt-5.1', provider: 'My Local Provider' } },
         },
         null,
         2,
@@ -670,13 +600,13 @@ it.sequential('durably normalizes the selected provider when provider records al
 
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
-    expect(service.get('agent.provider')).toBe('My_Local_Provider');
+    expect(service.get('agent.modelSelection').provider).toBe('My_Local_Provider');
 
     const rewritten = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-    expect(rewritten.agent.provider).toBe('My_Local_Provider');
+    expect(rewritten.agent.modelSelection.provider).toBe('My_Local_Provider');
 
     const freshService = new SettingsService({ settingsDir, disableLogging: true });
-    expect(freshService.get('agent.provider')).toBe('My_Local_Provider');
+    expect(freshService.get('agent.modelSelection').provider).toBe('My_Local_Provider');
   });
 });
 
@@ -689,16 +619,16 @@ it.sequential('keeps an unregistered agent.provider instead of rewriting it to o
       fs.mkdirSync(settingsDir, { recursive: true });
     }
 
-    fs.writeFileSync(configFile, JSON.stringify({ agent: { provider: 'not-a-real-provider' } }), 'utf-8');
+    fs.writeFileSync(configFile, JSON.stringify({ agent: { modelSelection: { model: 'gpt-5.1', provider: 'not-a-real-provider' } } }), 'utf-8');
 
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
     // The unregistered value survives: the agent fails loudly at first stream
     // instead of having its persisted selection silently erased.
-    expect(service.get('agent.provider')).toBe('not-a-real-provider');
+    expect(service.get('agent.modelSelection').provider).toBe('not-a-real-provider');
 
     const untouched = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
-    expect(untouched.agent.provider).toBe('not-a-real-provider');
+    expect(untouched.agent.modelSelection.provider).toBe('not-a-real-provider');
   });
 });
 
@@ -707,11 +637,11 @@ it.sequential('setDynamic returns a saved settlement and a fresh service sees th
     const settingsDir = getTestSettingsDir();
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
-    const result = service.setDynamic('agent.model', 'durable-model');
+    const result = service.setDynamic('agent.modelSelection', { model: 'durable-model', provider: 'openai' });
     expect(result.status).toBe('saved');
 
     const freshService = new SettingsService({ settingsDir, disableLogging: true });
-    expect(freshService.get('agent.model')).toBe('durable-model');
+    expect(freshService.get('agent.modelSelection').model).toBe('durable-model');
   });
 });
 
@@ -719,21 +649,21 @@ it.sequential('setDynamic reports a failed settlement and the predecessor surviv
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     const service = new SettingsService({ settingsDir, disableLogging: true });
-    service.set('agent.model', 'predecessor-model');
+    service.set('agent.modelSelection', { model: 'predecessor-model', provider: 'openai' });
 
     const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
       throw new Error('rename failed');
     });
 
     try {
-      const result = service.setDynamic('agent.model', 'replacement-model');
+      const result = service.setDynamic('agent.modelSelection', { model: 'replacement-model', provider: 'openai' });
       expect(result.status).toBe('not-persisted');
       if (result.status === 'not-persisted') {
         expect(result.reason).toBe('failed');
       }
 
       const freshService = new SettingsService({ settingsDir, disableLogging: true });
-      expect(freshService.get('agent.model')).toBe('predecessor-model');
+      expect(freshService.get('agent.modelSelection').model).toBe('predecessor-model');
     } finally {
       rename.mockRestore();
     }
@@ -744,68 +674,29 @@ it('setDynamic reports not-persisted when file persistence is disabled', () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({ settingsDir, disableLogging: true });
 
-  const result = service.setDynamic('agent.model', 'gpt-5.1');
+  const result = service.setDynamic('agent.modelSelection', { model: 'gpt-5.1', provider: 'openai' });
   expect(result.status).toBe('not-persisted');
   if (result.status === 'not-persisted') {
     expect(result.reason).toBe('disabled');
   }
 });
 
-it('migrates legacy ancillary settings into tier settings without overwriting new values', () => {
+it('preserves unrelated ancillary reasoning migrations without converting model or provider inputs', () => {
   const settingsDir = getTestSettingsDir();
   fs.mkdirSync(settingsDir, { recursive: true });
-  fs.writeFileSync(
-    getSettingsFilePath(settingsDir),
-    JSON.stringify({
-      agent: {
-        capableModel: 'legacy-capable',
-        mentorProvider: 'legacy-smart-provider',
-        mentorReasoningEffort: 'high',
-        subagentWorkerModel: 'legacy-worker',
-        subagentWorkerProvider: 'legacy-balanced-provider',
-        subagentWorkerReasoningEffort: 'medium',
-        efficientModel: 'legacy-efficient',
-        subagentExplorerProvider: 'legacy-cheap-provider',
-        subagentExplorerReasoningEffort: 'low',
-        autoApproveModel: 'legacy-chore',
-        autoApproveProvider: 'legacy-chore-provider',
-        smartModel: 'new-smart',
-      },
-    }),
-    'utf-8',
-  );
-
+  fs.writeFileSync(getSettingsFilePath(settingsDir), JSON.stringify({ agent: {
+    smartModel: [{ model: 'smart', provider: 'smart-host' }],
+    mentorReasoningEffort: 'high',
+    subagentWorkerReasoningEffort: 'medium',
+    subagentExplorerReasoningEffort: 'low',
+  } }), 'utf-8');
   const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
-
-  expect({
-    smart: [
-      service.get('agent.smartModel'),
-      service.get('agent.smartProvider'),
-      service.get('agent.smartReasoningEffort'),
-    ],
-    balanced: [
-      service.get('agent.balancedModel'),
-      service.get('agent.balancedProvider'),
-      service.get('agent.balancedReasoningEffort'),
-    ],
-    cheap: [
-      service.get('agent.cheapModel'),
-      service.get('agent.cheapProvider'),
-      service.get('agent.cheapReasoningEffort'),
-    ],
-    chore: [service.get('agent.choreModel'), service.get('agent.choreProvider')],
-  }).toEqual({
-    // Tier model settings are pools; a legacy string value normalizes to a
-    // single-entry pool.
-    smart: [[{ model: 'new-smart', provider: 'legacy-smart-provider' }], 'legacy-smart-provider', 'high'],
-    balanced: [
-      [{ model: 'legacy-worker', provider: 'legacy-balanced-provider' }],
-      'legacy-balanced-provider',
-      'medium',
-    ],
-    cheap: [[{ model: 'legacy-efficient', provider: 'openai' }], 'legacy-cheap-provider', 'low'],
-    chore: [[{ model: 'legacy-chore', provider: 'legacy-chore-provider' }], 'legacy-chore-provider'],
-  });
+  expect(service.get('agent.smartModel')).toEqual([{ model: 'smart', provider: 'smart-host' }]);
+  expect(service.get('agent.smartReasoningEffort')).toBe('high');
+  expect(service.get('agent.balancedReasoningEffort')).toBe('medium');
+  expect(service.get('agent.cheapReasoningEffort')).toBe('low');
+  expect(service.get('agent.balancedModel')).toBeUndefined();
+  expect(service.get('agent.cheapModel')).toBeUndefined();
 });
 
 it.sequential('startup persists migrated ancillary tier settings', async () => {
@@ -815,14 +706,14 @@ it.sequential('startup persists migrated ancillary tier settings', async () => {
     const settingsFile = getSettingsFilePath(settingsDir);
     fs.writeFileSync(
       settingsFile,
-      JSON.stringify({ agent: { subagentWorkerModel: 'legacy-worker', subagentWorkerReasoningEffort: 'high' } }),
+      JSON.stringify({ agent: { balancedModel: [{ model: 'worker', provider: 'openai' }], subagentWorkerReasoningEffort: 'high' } }),
       'utf-8',
     );
 
     new SettingsService({ settingsDir, disableLogging: true });
 
     const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-    expect(persisted.agent.balancedModel).toEqual([{ model: 'legacy-worker', provider: 'openai' }]);
+    expect(persisted.agent.balancedModel).toEqual([{ model: 'worker', provider: 'openai' }]);
     expect(persisted.agent.balancedReasoningEffort).toBe('high');
   });
 });
@@ -891,9 +782,9 @@ it('set() modifies runtime-modifiable settings', async () => {
     disableLogging: true,
   });
 
-  service.set('agent.model', 'gpt-4o');
-  expect(service.get('agent.model')).toBe('gpt-4o');
-  expect(service.getSource('agent.model')).toBe('cli');
+  service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
+  expect(service.get('agent.modelSelection').model).toBe('gpt-4o');
+  expect(service.getSource('agent.modelSelection')).toBe('cli');
 
   service.set('agent.temperature', 0.2);
   expect(service.get('agent.temperature')).toBe(0.2);
@@ -955,7 +846,7 @@ it('isRuntimeModifiable identifies correct settings', async () => {
   });
 
   // Runtime-modifiable settings
-  expect(service.isRuntimeModifiable('agent.model')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.modelSelection')).toBe(true);
   expect(service.isRuntimeModifiable('agent.reasoningEffort')).toBe(true);
   expect(service.isRuntimeModifiable('agent.temperature')).toBe(true);
   expect(service.isRuntimeModifiable('agent.retryAttempts')).toBe(true);
@@ -965,8 +856,8 @@ it('isRuntimeModifiable identifies correct settings', async () => {
   expect(service.isRuntimeModifiable('agent.maxParallelToolCalls')).toBe(true);
   expect(service.isRuntimeModifiable('agent.runBudget.maxUsdMicros')).toBe(true);
   expect(service.isRuntimeModifiable('agent.runBudget.identicalToolCallThreshold')).toBe(true);
-  expect(service.isRuntimeModifiable('tools.editHealingModel')).toBe(true);
-  expect(service.isRuntimeModifiable('tools.editHealingProvider')).toBe(true);
+  expect(service.isRuntimeModifiable('tools.editHealingModel')).toBe(false);
+  expect(service.isRuntimeModifiable('tools.editHealingProvider')).toBe(false);
   expect(service.isRuntimeModifiable('shell.timeout')).toBe(true);
   expect(service.isRuntimeModifiable('shell.maxOutputLines')).toBe(true);
   expect(service.isRuntimeModifiable('shell.maxOutputChars')).toBe(true);
@@ -1032,7 +923,7 @@ it('getAll() returns all settings with sources', async () => {
     disableLogging: true,
     cli: {
       agent: {
-        model: 'gpt-4o',
+        modelSelection: { model: 'gpt-4o', provider: 'openai' },
       },
     } as any,
   });
@@ -1043,8 +934,8 @@ it('getAll() returns all settings with sources', async () => {
   expect(all.shell).toBeTruthy();
   expect(all.ui).toBeTruthy();
   expect(all.logging).toBeTruthy();
-  expect(all.agent.model.value).toBe('gpt-4o');
-  expect(all.agent.model.source).toBe('cli');
+  expect(all.agent.modelSelection.value.model).toBe('gpt-4o');
+  expect(all.agent.modelSelection.source).toBe('cli');
   expect(all.agent.reasoningEffort.value).toBe('default');
   expect(all.agent.reasoningEffort.source).toBe('default');
   expect(all.agent.maxParallelToolCalls.value).toBe(3);
@@ -1158,7 +1049,7 @@ it.sequential(
         expect(recovery.recoveredSectionKeys).toContain('app');
         expect(recovery.quarantinedPath).toBeDefined();
         expect(fs.readFileSync(recovery.quarantinedPath!, 'utf-8')).toBe(corrupt);
-        expect(service.get('agent.model')).toBe('gpt-5.1');
+        expect(service.get('agent.modelSelection').model).toBe('gpt-5.1');
         expect(fs.existsSync(settingsFile)).toBe(true);
       }
     });
@@ -1207,7 +1098,7 @@ it('loads settings from config file on startup', async () => {
     configFile,
     JSON.stringify({
       agent: {
-        model: 'custom-model',
+        modelSelection: { model: 'custom-model', provider: 'openai' },
         reasoningEffort: 'high',
       },
     }),
@@ -1219,7 +1110,7 @@ it('loads settings from config file on startup', async () => {
     disableLogging: true,
   });
 
-  expect(service.get('agent.model')).toBe('custom-model');
+  expect(service.get('agent.modelSelection').model).toBe('custom-model');
   expect(service.get('agent.reasoningEffort')).toBe('high');
 });
 
@@ -1259,14 +1150,14 @@ it.sequential('persists changes to config file', async () => {
       disableLogging: true,
     });
 
-    service.set('agent.model', 'gpt-4o');
+    service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
 
     // Read the config file directly
     const configFile = path.join(settingsDir, 'settings.json');
     const content = fs.readFileSync(configFile, 'utf-8');
     const config = JSON.parse(content);
 
-    expect(config.agent.model).toBe('gpt-4o');
+    expect(config.agent.modelSelection.model).toBe('gpt-4o');
   });
 });
 
@@ -1278,13 +1169,13 @@ it.sequential(
       const first = new SettingsService({ settingsDir, disableLogging: true });
       const second = new SettingsService({ settingsDir, disableLogging: true });
 
-      first.set('agent.model', 'gpt-4o');
+      first.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
       second.set('shell.timeout', 60_000);
 
       const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
-      expect(persisted.agent.model).toBe('gpt-4o');
+      expect(persisted.agent.modelSelection.model).toBe('gpt-4o');
       expect(persisted.shell.timeout).toBe(60_000);
-      expect(second.get('agent.model')).toBe('gpt-4o');
+      expect(second.get('agent.modelSelection').model).toBe('gpt-4o');
       expect(second.get('shell.timeout')).toBe(60_000);
     });
   },
@@ -1296,11 +1187,11 @@ it.sequential("reset from a stale service preserves a different service's commit
     const first = new SettingsService({ settingsDir, disableLogging: true });
     const second = new SettingsService({ settingsDir, disableLogging: true });
 
-    first.set('agent.model', 'gpt-4o');
+    first.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
     second.reset('shell.timeout');
 
     const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
-    expect(persisted.agent.model).toBe('gpt-4o');
+    expect(persisted.agent.modelSelection.model).toBe('gpt-4o');
     expect(persisted.shell.timeout).toBe(120_000);
   });
 });
@@ -1330,11 +1221,11 @@ it.sequential('last committed write wins when stale services set the same settin
     const first = new SettingsService({ settingsDir, disableLogging: true });
     const second = new SettingsService({ settingsDir, disableLogging: true });
 
-    first.set('agent.model', 'gpt-4o');
-    second.set('agent.model', 'gpt-5.1');
+    first.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
+    second.set('agent.modelSelection', { model: 'gpt-5.1', provider: 'openai' });
 
     const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
-    expect(persisted.agent.model).toBe('gpt-5.1');
+    expect(persisted.agent.modelSelection.model).toBe('gpt-5.1');
   });
 });
 
@@ -1378,12 +1269,12 @@ it('tracks setting sources correctly', async () => {
     } as any,
     cli: {
       agent: {
-        model: 'gpt-4o',
+        modelSelection: { model: 'gpt-4o', provider: 'openai' },
       },
     } as any,
   });
 
-  expect(service.getSource('agent.model')).toBe('cli');
+  expect(service.getSource('agent.modelSelection')).toBe('cli');
   expect(service.getSource('agent.reasoningEffort')).toBe('env');
   expect(service.getSource('shell.timeout')).toBe('config');
   expect(service.getSource('agent.maxTurns')).toBe('default');
@@ -1397,7 +1288,7 @@ it('deep merges partial settings from multiple sources', async () => {
     disableLogging: true,
     cli: {
       agent: {
-        model: 'cli-model',
+        modelSelection: { model: 'cli-model', provider: 'openai' },
         // reasoningEffort not set in CLI
       },
     } as any,
@@ -1410,7 +1301,7 @@ it('deep merges partial settings from multiple sources', async () => {
   });
 
   // CLI should override for agent.model
-  expect(service.get('agent.model')).toBe('cli-model');
+  expect(service.get('agent.modelSelection').model).toBe('cli-model');
 
   // Default for agent.reasoningEffort since not in CLI
   expect(service.get('agent.reasoningEffort')).toBe('default');
@@ -1429,7 +1320,7 @@ it('getSource() returns default when setting not overridden', async () => {
     disableLogging: true,
   });
 
-  expect(service.getSource('agent.model')).toBe('default');
+  expect(service.getSource('agent.modelSelection')).toBe('default');
   expect(service.getSource('shell.timeout')).toBe('default');
   expect(service.getSource('ui.historySize')).toBe('default');
 });
@@ -1476,7 +1367,7 @@ it.sequential('updates config file when new settings are added', async () => {
       configFile,
       JSON.stringify({
         agent: {
-          model: 'gpt-4o',
+          modelSelection: { model: 'gpt-4o', provider: 'openai' },
           reasoningEffort: 'default',
           maxTurns: 20,
           retryAttempts: 2,
@@ -1493,13 +1384,13 @@ it.sequential('updates config file when new settings are added', async () => {
     });
 
     // Verify service has the provider setting with default value
-    expect(service.get('agent.provider')).toBe('openai');
+    expect(service.get('agent.modelSelection').provider).toBe('openai');
 
     // Verify the file was updated with the new setting
     const updatedContent = fs.readFileSync(configFile, 'utf-8');
     const updatedConfig = JSON.parse(updatedContent);
 
-    expect(updatedConfig.agent.provider).toBe('openai');
+    expect(updatedConfig.agent.modelSelection.provider).toBe('openai');
   });
 });
 
@@ -1514,12 +1405,11 @@ it.sequential('does not update config file when no new settings are added', asyn
 
   const originalConfig = {
     agent: {
-      model: 'gpt-4o',
+      modelSelection: { model: 'gpt-4o', provider: 'openai' },
       reasoningEffort: 'default',
       maxTurns: 20,
       retryAttempts: 2,
 
-      provider: 'openai',
       openrouter: {},
     },
     shell: {
@@ -1591,11 +1481,10 @@ it.sequential('does not update config file when format differs but content is sa
   // Write config with compact JSON (no formatting, different key order)
   const compactConfig = {
     agent: {
-      model: 'gpt-4o',
+      modelSelection: { model: 'gpt-4o', provider: 'openai' },
       reasoningEffort: 'default',
       maxTurns: 20,
       retryAttempts: 2,
-      provider: 'openai',
       openrouter: {},
     },
     shell: {
@@ -1710,7 +1599,7 @@ it.sequential('sensitive settings are never saved to config file', async () => {
             baseUrl: 'https://internal.api.com',
             referrer: 'internal-app',
             title: 'My Secret App',
-            model: 'gpt-4', // NOT sensitive
+            modelSelection: { model: 'gpt-4', provider: 'openai' }, // NOT sensitive
           },
         },
         app: {
@@ -1763,7 +1652,7 @@ it.sequential('sensitive settings loaded from env are accessible at runtime', as
     expect(service.get('app.shellPath')).toBe('/bin/bash');
 
     // An unrelated persisted setting must not reintroduce environment secrets.
-    service.set('agent.model', 'gpt-4o');
+    service.set('agent.modelSelection', { model: 'gpt-4o', provider: 'openai' });
 
     // But they should not be in the saved file
     const configFile = path.join(settingsDir, 'settings.json');

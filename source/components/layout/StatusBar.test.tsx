@@ -23,8 +23,7 @@ it.sequential('StatusBar displays an active persistent Docker host-control proje
 
 it.sequential('StatusBar renders reasoning effort on the first row with the model', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'agent.reasoningEffort': 'low',
     'shell.autoApproveMode': 'off',
   });
@@ -39,8 +38,7 @@ it.sequential('StatusBar renders reasoning effort on the first row with the mode
 
 it.sequential('StatusBar puts all configuration on the first row and quota on the alert row', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'high',
     'shell.autoApproveMode': 'auto',
     'sandbox.enabled': false,
@@ -73,8 +71,7 @@ it.sequential('StatusBar puts all configuration on the first row and quota on th
 
 it.sequential('StatusBar renders cache usage', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -93,8 +90,7 @@ it.sequential('StatusBar renders cache usage', async () => {
 
 it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -107,8 +103,7 @@ it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', 
 
 it.sequential('StatusBar renders context usage as used/window', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'claude-sonnet-4-6',
-    'agent.provider': 'anthropic',
+    'agent.modelSelection': { model: 'claude-sonnet-4-6', provider: 'anthropic' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -122,8 +117,7 @@ it.sequential('StatusBar renders context usage as used/window', async () => {
 
 it.sequential('StatusBar renders context usage for an OpenAI model with a k-scale window', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-sol',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5.6-sol', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -203,8 +197,7 @@ it.sequential('StatusBar preserves non-zero precision for sub-cent session costs
 
 it.sequential('StatusBar places session cost beside token and context usage', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-sol',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5.6-sol', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
   const { lastFrame } = await renderInAct(
@@ -222,8 +215,7 @@ it.sequential('StatusBar warns about run-budget evidence instead of the run stop
   // In warn mode the run continues past its envelope, so this line is the only
   // signal the human gets that the budget is running out.
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-sol',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5.6-sol', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
   const { lastFrame } = await renderInAct(
@@ -242,8 +234,7 @@ it.sequential('StatusBar warns about run-budget evidence instead of the run stop
 
 it.sequential('StatusBar formats USD run-budget evidence clearly', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-sol',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5.6-sol', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
   const { lastFrame } = await renderInAct(
@@ -262,8 +253,7 @@ it.sequential('StatusBar formats USD run-budget evidence clearly', async () => {
 
 it.sequential('StatusBar renders known context used without window when the model is not in the catalog', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'model-that-does-not-exist',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'model-that-does-not-exist', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -278,8 +268,7 @@ it.sequential('StatusBar renders known context used without window when the mode
 
 it.sequential('StatusBar hides context usage when lastUsage has no prompt tokens', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -293,8 +282,7 @@ it.sequential('StatusBar hides context usage when lastUsage has no prompt tokens
 
 it.sequential('StatusBar resolves the context window by model id for providers not in the catalog', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'claude-sonnet-4-6',
-    'agent.provider': 'custom-local-llm',
+    'agent.modelSelection': { model: 'claude-sonnet-4-6', provider: 'custom-local-llm' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -308,8 +296,7 @@ it.sequential('StatusBar resolves the context window by model id for providers n
 
 it.sequential('StatusBar renders Plan mode badge', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
     'app.activeProfileId': 'builtin:plan',
   });
@@ -323,8 +310,7 @@ it.sequential('StatusBar renders Plan mode badge', async () => {
 
 it.sequential('StatusBar renders Orchestrator mode badge instead of Standard', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
     'shell.autoApproveMode': 'off',
     'app.activeProfileId': 'builtin:orchestrator',
   });
@@ -338,8 +324,7 @@ it.sequential('StatusBar renders Orchestrator mode badge instead of Standard', a
 
 it.sequential('StatusBar renders Lite mode badge from the active profile', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
     'shell.autoApproveMode': 'off',
     'app.activeProfileId': 'builtin:lite',
   });
@@ -353,8 +338,7 @@ it.sequential('StatusBar renders Lite mode badge from the active profile', async
 
 it.sequential('StatusBar renders Codex rate limits when valid, but hides them when invalid or NaN', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -398,8 +382,7 @@ it.sequential('StatusBar renders Codex rate limits when valid, but hides them wh
 
 it.sequential('StatusBar labels a Codex window by its length, not by which slot carries it', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -424,8 +407,7 @@ it.sequential('StatusBar labels a Codex window by its length, not by which slot 
 
 it.sequential('StatusBar shows a date for a Codex reset more than a day away', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -447,8 +429,7 @@ it.sequential('StatusBar shows a date for a Codex reset more than a day away', a
 
 it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -473,8 +454,7 @@ it.sequential('StatusBar shows a clock time for a Codex reset within 24 hours', 
 
 it.sequential('StatusBar dates a day-scale Codex window that resets within 24 hours', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -496,8 +476,7 @@ it.sequential('StatusBar dates a day-scale Codex window that resets within 24 ho
 
 it.sequential('StatusBar renders large uncached prompt warning and confirmation warning', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -536,8 +515,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
 
 it.sequential('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTokens', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -557,8 +535,7 @@ it.sequential('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTo
 
 it.sequential('StatusBar shows Sandboxed when sandbox.enabled is true, replacing Auto: ...', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'auto',
     'sandbox.enabled': true,
   });
@@ -572,10 +549,9 @@ it.sequential('StatusBar shows Sandboxed when sandbox.enabled is true, replacing
 
 it.sequential('StatusBar shows compact auto approval without the model name', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'auto',
-    'agent.choreModel': 'very-long-auto-approval-model-name',
+    'agent.choreModel': [{ model: 'very-long-auto-approval-model-name', provider: 'openai' }],
     'sandbox.enabled': false,
   });
 
@@ -594,8 +570,7 @@ it.sequential(
     // mode alongside an enabled sandbox is demoted to 'auto' at load time, so
     // the status bar must reflect the normalized state (sandbox on -> Sandboxed).
     const settingsService = createMockSettingsService({
-      'agent.model': 'gpt-4o',
-      'agent.provider': 'openai',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
       'shell.autoApproveMode': 'always',
       'sandbox.enabled': true,
     });
@@ -611,8 +586,7 @@ it.sequential(
 
 it.sequential('StatusBar shows YOLO when mode is always and the sandbox is off', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
   });
@@ -628,8 +602,7 @@ it.sequential('StatusBar shows YOLO when mode is always and the sandbox is off',
 
 it.sequential('StatusBar hides static commit blocker details outside debug logging', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -656,8 +629,7 @@ it.sequential('StatusBar hides static commit blocker details outside debug loggi
 
 it.sequential('StatusBar shows queue badge when queueLength > 0', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -669,8 +641,7 @@ it.sequential('StatusBar shows queue badge when queueLength > 0', async () => {
 
 it.sequential('StatusBar hides queue badge when queueLength is 0', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -682,8 +653,7 @@ it.sequential('StatusBar hides queue badge when queueLength is 0', async () => {
 
 it.sequential('StatusBar hides queue badge when queueLength is undefined', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'shell.autoApproveMode': 'off',
   });
 
@@ -697,8 +667,7 @@ it.sequential('StatusBar hides queue badge when queueLength is undefined', async
 // reports, so it renders through its own formatter in the same slot.
 it.sequential('StatusBar renders Grok credit usage with its period reset', async () => {
   const settingsService = createMockSettingsService({
-    'agent.provider': 'grok',
-    'agent.model': 'grok-4.6',
+    'agent.modelSelection': { model: 'grok-4.6', provider: 'grok' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -716,7 +685,7 @@ it.sequential('StatusBar renders Grok credit usage with its period reset', async
 });
 
 it.sequential('StatusBar renders Grok credit usage without a period end', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'grok' } });
 
   const { lastFrame } = await renderInAct(
     <StatusBar settingsService={settingsService} grokCreditUsage={{ creditUsagePercent: 4.4, productUsage: [] }} />,
@@ -729,7 +698,7 @@ it.sequential('StatusBar renders Grok credit usage without a period end', async 
 
 // Nothing to show must show nothing, not a zero.
 it.sequential('StatusBar omits the credit slot when there is no Grok usage', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'grok' } });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} grokCreditUsage={null} />);
 
@@ -737,7 +706,7 @@ it.sequential('StatusBar omits the credit slot when there is no Grok usage', asy
 });
 
 it.sequential('StatusBar renders all OpenCode Go usage limits with countdown resets', async () => {
-  const settingsService = createMockSettingsService({ 'agent.provider': 'opencode go' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'usage-model', provider: 'opencode go' } });
   const { lastFrame } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
@@ -767,8 +736,7 @@ it.sequential('StatusBar renders all OpenCode Go usage limits with countdown res
 // for the same pattern), so only it can catch a real reflow.
 it.sequential('StatusBar never breaks a word across lines at a narrow width', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'medium',
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
@@ -813,8 +781,7 @@ it.sequential('StatusBar never breaks a word across lines at a narrow width', ()
 
 it.sequential('StatusBar preserves the complete model and safety mode across common terminal widths', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
   });
@@ -844,10 +811,9 @@ it.sequential('StatusBar preserves the complete model and safety mode across com
 
 it.sequential('StatusBar drops cost and cache before dropping the mode label or provider/model', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'medium',
-    'agent.smartModel': 'claude-sonnet-4-6',
+    'agent.smartModel': [{ model: 'claude-sonnet-4-6', provider: 'anthropic' }],
     'app.activeProfileId': 'builtin:mentor',
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
@@ -890,8 +856,7 @@ it.sequential('StatusBar drops cost and cache before dropping the mode label or 
 
 it.sequential('StatusBar renders config and metrics on a single line at a wide width', () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'medium',
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
@@ -923,8 +888,7 @@ it.sequential('StatusBar renders config and metrics on a single line at a wide w
 
 it.sequential('StatusBar renders token streaming speed when present in lastUsage', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -943,8 +907,7 @@ it.sequential('StatusBar renders token streaming speed when present in lastUsage
 
 it.sequential('StatusBar prefixes estimated token speed with a tilde', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -964,8 +927,7 @@ it.sequential('StatusBar prefixes estimated token speed with a tilde', async () 
 
 it.sequential('StatusBar hides a burst-inflated decode rate', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -987,8 +949,7 @@ it.sequential('StatusBar hides a burst-inflated decode rate', async () => {
 
 it.sequential('StatusBar shows a sustained rate', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -1007,8 +968,7 @@ it.sequential('StatusBar shows a sustained rate', async () => {
 
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -1020,8 +980,7 @@ it.sequential('StatusBar renders live streaming speed during in-flight generatio
 
 it.sequential('StatusBar displays OpenRouter upstream provider from lastUsage', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
-    'agent.provider': 'openrouter',
+    'agent.modelSelection': { model: 'meta-llama/llama-3.3-70b-instruct', provider: 'openrouter' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -1036,8 +995,7 @@ it.sequential('StatusBar displays OpenRouter upstream provider from lastUsage', 
 
 it.sequential('StatusBar displays OpenRouter upstream provider from openRouterUpstream prop', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
-    'agent.provider': 'openrouter',
+    'agent.modelSelection': { model: 'meta-llama/llama-3.3-70b-instruct', provider: 'openrouter' },
   });
 
   const { lastFrame } = await renderInAct(
@@ -1049,8 +1007,7 @@ it.sequential('StatusBar displays OpenRouter upstream provider from openRouterUp
 
 it.sequential('StatusBar renders OpenRouter cleanly without upstream when not present', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
-    'agent.provider': 'openrouter',
+    'agent.modelSelection': { model: 'meta-llama/llama-3.3-70b-instruct', provider: 'openrouter' },
   });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
@@ -1061,8 +1018,7 @@ it.sequential('StatusBar renders OpenRouter cleanly without upstream when not pr
 
 it.sequential('StatusBar does not display upstream provider on non-OpenRouter provider', async () => {
   const settingsService = createMockSettingsService({
-    'agent.model': 'gpt-4o',
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
   });
 
   const { lastFrame } = await renderInAct(

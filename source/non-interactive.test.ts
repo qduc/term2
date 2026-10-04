@@ -1026,8 +1026,7 @@ it('runNonInteractive exposes configured provider and model through its session 
   const logger: any = createNoopLogger();
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.provider') return 'configured-provider';
-      if (key === 'agent.model') return 'configured-model';
+      if (key === 'agent.modelSelection') return { model: 'configured-model', provider: 'configured-provider' };
       return undefined;
     },
     getDynamic() {
@@ -1060,7 +1059,7 @@ it('runNonInteractive exposes configured provider and model through its session 
           agentClient: {
             chat: async () => '',
             abort() {},
-            setModel() {},
+            setModelSelection() {},
             addToolInterceptor() {
               return () => {};
             },
@@ -1114,7 +1113,7 @@ it('runNonInteractive prefixes Plan Mode workflow onto the first turn when planM
           agentClient: {
             chat: async () => '',
             abort() {},
-            setModel() {},
+            setModelSelection() {},
             addToolInterceptor() {
               return () => {};
             },
@@ -1168,7 +1167,7 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
         const agentClient: any = {
           chat: async () => '',
           abort() {},
-          setModel() {},
+          setModelSelection() {},
           addToolInterceptor(interceptor: (name: string, params: unknown) => Promise<string | null>) {
             toolInterceptors.push(interceptor);
             return () => {
@@ -1219,7 +1218,7 @@ it('runNonInteractive() blocks background shell and ask_user execution for calle
   const agentClient: any = {
     chat: async () => '',
     abort() {},
-    setModel() {},
+    setModelSelection() {},
     addToolInterceptor(interceptor: (name: string, params: unknown) => Promise<string | null>) {
       toolInterceptors.push(interceptor);
       return () => {
@@ -1267,8 +1266,7 @@ it('runNonInteractive auto-approves only the finite parent run-budget extensions
   let toolExecutions = 0;
   const logger: any = createNoopLogger();
   const values: Record<string, unknown> = {
-    'agent.provider': provider,
-    'agent.model': 'budget-model',
+    'agent.modelSelection': { model: 'budget-model', provider },
     'agent.retryAttempts': 0,
     'agent.reasoningEffort': 'default',
     'agent.maxParallelToolCalls': 1,

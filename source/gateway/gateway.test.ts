@@ -490,7 +490,7 @@ async function createChildInteractionGateway(root: string, mode: 'approval' | 'q
       ({
         chat: async () => '',
         abort: () => {},
-        setModel: () => {},
+        setModelSelection: () => {},
         addToolInterceptor: () => () => {},
         setSubagentEventSink: () => {},
         setBackgroundSubagentEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
@@ -1196,7 +1196,7 @@ describe('gateway startup and assertion verifier', () => {
         ({
           chat: async () => '',
           abort: () => {},
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => {
             const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
@@ -1359,7 +1359,7 @@ describe('gateway startup and assertion verifier', () => {
         ({
           chat: async () => '',
           abort: () => {},
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => {
             startCalls += 1;
@@ -1656,7 +1656,7 @@ describe('gateway startup and assertion verifier', () => {
         ({
           chat: async () => '',
           abort: () => {},
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => {
             const stream = createMockStream([]);
@@ -1957,7 +1957,7 @@ describe('gateway startup and assertion verifier', () => {
           return {
             chat: async () => '',
             abort: () => {},
-            setModel: () => {},
+            setModelSelection: () => {},
             addToolInterceptor: () => () => {},
             setSubagentEventSink: () => {},
             setBackgroundSubagentEventSink: () => {},
@@ -2030,8 +2030,7 @@ describe('gateway startup and assertion verifier', () => {
         env: {},
         cli: {},
       });
-      settings.set('agent.provider', providerId, { persist: false });
-      settings.set('agent.model', modelId, { persist: false });
+      settings.set('agent.modelSelection', { model: modelId, provider: providerId }, { persist: false });
       return settings;
     };
 
@@ -2252,8 +2251,7 @@ describe('gateway startup and assertion verifier', () => {
         env: {},
         cli: {},
       });
-      settings.set('agent.provider', 'ghost-provider', { persist: false });
-      settings.set('agent.model', 'ghost-model', { persist: false });
+      settings.set('agent.modelSelection', { model: 'ghost-model', provider: 'ghost-provider' }, { persist: false });
       const factory = createProductionRuntimeFactory({
         settingsAuthority: settings,
         tmpDir: path.join(root, 'runtime'),
@@ -2349,8 +2347,7 @@ describe('gateway startup and assertion verifier', () => {
         });
 
         // The launcher default moves to an also-available provider/model B.
-        settings.set('agent.provider', 'snapshot-provider-b', { persist: false });
-        settings.set('agent.model', 'model-b1', { persist: false });
+        settings.set('agent.modelSelection', { model: 'model-b1', provider: 'snapshot-provider-b' }, { persist: false });
 
         const capture = { inputs: [] as unknown[], created: 0, snapshots: [] as unknown[] };
         const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
@@ -2407,8 +2404,7 @@ describe('gateway startup and assertion verifier', () => {
             { id: 'replacement-model', name: 'Replacement model', default_reasoning_level: 'medium' },
           ],
         });
-        settings.set('agent.provider', 'replacement-provider', { persist: false });
-        settings.set('agent.model', 'replacement-model', { persist: false });
+        settings.set('agent.modelSelection', { model: 'replacement-model', provider: 'replacement-provider' }, { persist: false });
 
         const capture = { inputs: [] as unknown[], created: 0 };
         const factory = scriptedFactory(root, capture, 'second answer', { settingsAuthority: settings });
@@ -2539,7 +2535,7 @@ describe('gateway startup and assertion verifier', () => {
 
           // The failed revival must not wedge the session: after the operator
           // fixes the model, the same session revives on the next submit.
-          settings.set('agent.model', 'other-model', { persist: false });
+          settings.set('agent.modelSelection', { model: 'other-model', provider: 'retry-provider' }, { persist: false });
           const retried = await rpc(
             socketPath,
             tokenFor('message_submit', sessionId),
@@ -2726,7 +2722,7 @@ describe('gateway startup and assertion verifier', () => {
         ({
           chat: async () => '',
           abort: () => parked?.release(),
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => {
             parked ??= parkedStream();

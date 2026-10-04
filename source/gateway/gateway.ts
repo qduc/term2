@@ -861,13 +861,16 @@ export class Term2Gateway {
       return publicError(409, 'session_busy', 'session is busy');
     const settings = session.resources.sessionSettingsService as SettingsAuthority | undefined;
     if (!settings) return publicError(503, 'settings_unavailable', 'session settings unavailable', true);
-    if (body.model !== undefined) {
+    if (body.modelSelection !== undefined) {
       if (!this.#modelCatalog) return publicError(503, 'settings_unavailable', 'model catalog unavailable', true);
-      const provider = String(settings.getDynamic('agent.provider') ?? '');
+      const selection = body.modelSelection;
+      const provider = session.resources.settings.providerId;
+      if (selection.provider !== provider)
+        return publicError(422, 'validation_error', 'provider is bound to this session; create a new session to change it');
       const models = await this.#modelCatalog.load(provider);
-      if (!models.models.some((model) => model.id === body.model))
+      if (!models.models.some((model) => model.id === selection.model))
         return publicError(422, 'validation_error', 'model is unavailable');
-      session.service.setModel(body.model);
+      session.service.setModelSelection(selection);
     }
     if (body.reasoningEffort !== undefined) session.service.setReasoningEffort(body.reasoningEffort as any);
     if (body.mode !== undefined) {
@@ -2864,15 +2867,18 @@ function isOAuthSelectBody(body: unknown): body is { accountId: string } {
   );
 }
 
-function isSessionUpdateBody(body: unknown): body is { model?: string; reasoningEffort?: string; mode?: string } {
+function isSessionUpdateBody(body: unknown): body is { modelSelection?: { model: string; provider: string }; reasoningEffort?: string; mode?: string } {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
-  if (Object.keys(value).some((key) => !['model', 'reasoningEffort', 'mode'].includes(key))) return false;
-  if (
-    value.model !== undefined &&
-    (typeof value.model !== 'string' || value.model.length === 0 || value.model.length > 512)
-  )
-    return false;
+  if (Object.keys(value).some((key) => !['modelSelection', 'reasoningEffort', 'mode'].includes(key))) return false;
+  if (value.modelSelection !== undefined) {
+    const selection = value.modelSelection;
+    if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
+    const pair = selection as Record<string, unknown>;
+    if (Object.keys(pair).length !== 2 || !['model', 'provider'].every((key) =>
+      typeof pair[key] === 'string' && pair[key].length > 0 && pair[key].length <= 512
+    )) return false;
+  }
   if (
     value.reasoningEffort !== undefined &&
     !['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(value.reasoningEffort))
@@ -2903,9 +2909,10 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
     allowUnsandboxed: sessionPolicy.allowUnsandboxed ?? snapshotPolicy.allowUnsandboxed ?? false,
     sshEnabled: sessionPolicy.sshEnabled ?? snapshotPolicy.sshEnabled ?? false,
   };
+  const selection = get('agent.modelSelection', { model: snapshot.modelId, provider: snapshot.providerId }) as { model: string; provider: string };
   const settings = {
-    providerId: get('agent.provider', snapshot.providerId),
-    modelId: get('agent.model', snapshot.modelId),
+    providerId: selection.provider,
+    modelId: selection.model,
     reasoningEffort: get('agent.reasoningEffort', snapshot.reasoningEffort ?? 'default'),
     mode:
       (activeProfileId === undefined ? undefined : modeByProfileId[String(activeProfileId)]) ??

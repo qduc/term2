@@ -152,7 +152,7 @@ export const useConversation = ({
     maxMessageCount: MAX_MESSAGE_COUNT,
   });
 
-  const { setModel, setReasoningEffort, setTemperature } = useConversationSettings({
+  const { setModelSelection, setReasoningEffort, setTemperature } = useConversationSettings({
     conversationService,
   });
 
@@ -187,7 +187,7 @@ export const useConversation = ({
     import('../services/approval/approval-presentation-policy.js').ApprovedToolContext | null
   >(null);
 
-  const provider = useSetting(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
+  const provider = useSetting(settingsService || dummySettingsService, 'agent.modelSelection').provider;
   const readBackgroundSubagentTasks = useCallback(
     (): { tasks: readonly BackgroundTask[]; now: number } => ({
       tasks: conversationService.backgroundSubagentTasks?.getSnapshot?.() ?? [],
@@ -750,7 +750,7 @@ export const useConversation = ({
     retryLastFailedTurn,
     compactContext,
     getUserMessages,
-    setModel,
+    setModelSelection,
     setReasoningEffort,
     setTemperature,
     addSystemMessage,

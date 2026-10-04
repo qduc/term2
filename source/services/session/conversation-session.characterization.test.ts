@@ -69,7 +69,7 @@ const createMockAgentClient = (overrides: Record<string, unknown> = {}): Convers
     startStream: async () => new MockStream([]),
     continueRunStream: async () => new MockStream([]),
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     chat: async () => '',
     ...overrides,
@@ -460,7 +460,7 @@ it('getCurrentSnapshot includes model from settingsService when available', asyn
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
-      settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o-test' }),
+      settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o-test', provider: 'openai' } }),
       sessionContextService: createSessionContextService(),
     },
   });
@@ -475,7 +475,7 @@ it('getCurrentSnapshot includes model from settingsService when available', asyn
 //    afterProviderChanged before mutating agent client
 // ══════════════════════════════════════════════════════════════════════════
 
-it('setModel calls afterProviderChanged then agentClient.setModel', async () => {
+it('selection mutation delegates a complete pair to the agent client', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -485,8 +485,8 @@ it('setModel calls afterProviderChanged then agentClient.setModel', async () => 
       stream.lastResponseId = 'resp-set-model';
       return stream;
     },
-    setModel(model: string) {
-      calls.push({ method: 'setModel', model });
+    setModelSelection(selection: { model: string; provider: string }) {
+      calls.push({ method: 'setModelSelection', selection });
     },
   });
 
@@ -497,14 +497,14 @@ it('setModel calls afterProviderChanged then agentClient.setModel', async () => 
   });
   const { runtimeController } = bundle;
 
-  runtimeController.setModel('gpt-4');
+  runtimeController.setModelSelection({ model: 'gpt-4', provider: 'openai' });
 
   expect(calls.length).toBe(1);
-  expect(calls[0].method).toBe('setModel');
-  expect(calls[0].model).toBe('gpt-4');
+  expect(calls[0].method).toBe('setModelSelection');
+  expect(calls[0].selection).toEqual({ model: 'gpt-4', provider: 'openai' });
 });
 
-it('setProvider calls afterProviderChanged then agentClient.setProvider', async () => {
+it('selection mutation installs another host without inheriting its model', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -514,8 +514,8 @@ it('setProvider calls afterProviderChanged then agentClient.setProvider', async 
       stream.lastResponseId = 'resp-set-provider';
       return stream;
     },
-    setProvider(provider: string) {
-      calls.push({ method: 'setProvider', provider });
+    setModelSelection(selection: { model: string; provider: string }) {
+      calls.push({ method: 'setModelSelection', selection });
     },
   });
 
@@ -526,14 +526,14 @@ it('setProvider calls afterProviderChanged then agentClient.setProvider', async 
   });
   const { runtimeController } = bundle;
 
-  runtimeController.setProvider('anthropic');
+  runtimeController.setModelSelection({ model: 'claude', provider: 'anthropic' });
 
   expect(calls.length).toBe(1);
-  expect(calls[0].method).toBe('setProvider');
-  expect(calls[0].provider).toBe('anthropic');
+  expect(calls[0].method).toBe('setModelSelection');
+  expect(calls[0].selection.provider).toBe('anthropic');
 });
 
-it('setProvider is idempotent via switchProvider alias', async () => {
+it('selection mutation publishes the supplied host', async () => {
   const calls: any[] = [];
 
   const mockClient = createMockAgentClient({
@@ -543,8 +543,8 @@ it('setProvider is idempotent via switchProvider alias', async () => {
       stream.lastResponseId = 'resp-switch';
       return stream;
     },
-    setProvider(provider: string) {
-      calls.push({ method: 'setProvider', provider });
+    setModelSelection(selection: { model: string; provider: string }) {
+      calls.push({ method: 'setModelSelection', selection });
     },
   });
 
@@ -555,10 +555,10 @@ it('setProvider is idempotent via switchProvider alias', async () => {
   });
   const { runtimeController } = bundle;
 
-  runtimeController.switchProvider('openai');
+  runtimeController.setModelSelection({ model: 'gpt-4', provider: 'openai' });
 
   expect(calls.length).toBe(1);
-  expect(calls[0].provider).toBe('openai');
+  expect(calls[0].selection.provider).toBe('openai');
 });
 
 it('setTemperature calls afterProviderChanged then agentClient.setTemperature', async () => {
@@ -721,8 +721,7 @@ it('auto-approve: cumulative usage from continuation supersedes first-turn usage
       logger: mockLogger,
       settingsService: createMockSettingsService({
         'shell.autoApproveMode': 'auto',
-        'agent.autoApproveModel': 'test-model',
-        'agent.autoApproveProvider': 'test-provider',
+        'agent.cheapModel': [{ model: 'test-model', provider: 'test-provider' }],
       }),
       sessionContextService: createSessionContextService(),
     },
@@ -780,8 +779,7 @@ it('auto-approve: finalText comes from auto-approved continuation', async () => 
       logger: mockLogger,
       settingsService: createMockSettingsService({
         'shell.autoApproveMode': 'auto',
-        'agent.autoApproveModel': 'test-model',
-        'agent.autoApproveProvider': 'test-provider',
+        'agent.cheapModel': [{ model: 'test-model', provider: 'test-provider' }],
       }),
       sessionContextService: createSessionContextService(),
     },
@@ -836,8 +834,7 @@ it('auto-approve: command messages from continuation are preserved in final resu
       logger: mockLogger,
       settingsService: createMockSettingsService({
         'shell.autoApproveMode': 'auto',
-        'agent.autoApproveModel': 'test-model',
-        'agent.autoApproveProvider': 'test-provider',
+        'agent.cheapModel': [{ model: 'test-model', provider: 'test-provider' }],
       }),
       sessionContextService: createSessionContextService(),
     },
@@ -894,8 +891,7 @@ it('auto-approve: two auto-approved commands continue until approval_required or
       logger: mockLogger,
       settingsService: createMockSettingsService({
         'shell.autoApproveMode': 'auto',
-        'agent.autoApproveModel': 'test-model',
-        'agent.autoApproveProvider': 'test-provider',
+        'agent.cheapModel': [{ model: 'test-model', provider: 'test-provider' }],
       }),
       sessionContextService: createSessionContextService(),
     },

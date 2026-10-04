@@ -194,7 +194,7 @@ const openModelFrame = async (settingsOverrides: Record<string, unknown> = {}): 
     ),
   );
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     ...settingsOverrides,
   });
 

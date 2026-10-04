@@ -142,8 +142,7 @@ describe('worktree authority wiring in production getAgentDefinition and AgentCo
   it('AgentConfiguration executes run_code agent launches: admits valid in-repo worktree with actual child pin, rejects malformed and outside', async () => {
     ensureProvider();
     const settings = createMockSettingsService();
-    settings.set('agent.provider', 'mock-worktree-provider');
-    settings.set('agent.model', 'mock-model');
+    settings.set('agent.modelSelection', { model: 'mock-model', provider: 'mock-worktree-provider' });
     const logger = mockLogger();
     const executionContext = ExecutionContext.pin(REPO_HOME);
 
@@ -249,8 +248,7 @@ describe('worktree authority wiring in production getAgentDefinition and AgentCo
   it('rejects retargeted or moved worktrees before child effect in foreground and async script starts, while unchanged worktree launches', async () => {
     ensureProvider();
     const settings = createMockSettingsService();
-    settings.set('agent.provider', 'mock-worktree-provider');
-    settings.set('agent.model', 'mock-model');
+    settings.set('agent.modelSelection', { model: 'mock-model', provider: 'mock-worktree-provider' });
     const logger = mockLogger();
     const executionContext = ExecutionContext.pin(REPO_HOME);
 

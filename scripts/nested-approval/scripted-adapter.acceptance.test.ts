@@ -62,8 +62,7 @@ describe('scripted nested approval acceptance entry point', () => {
     const logPath = join(workspace, 'nested-calls.jsonl');
     const settings = createMockSettingsService({
       'shell.autoApproveMode': 'off',
-      'agent.provider': providerId,
-      'agent.model': 'm2b-model',
+      'agent.modelSelection': { model: 'm2b-model', provider: providerId },
     });
     const access = new SessionAccessState(settings);
     const toolOwnership = new ToolOwnershipRegistry();

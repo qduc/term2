@@ -67,10 +67,7 @@ export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: IS
   return (
     first ??
     ModelSelectionSchema.parse(
-      settings.getDynamic('agent.modelSelection') ?? {
-        provider: settings.get('agent.provider') ?? 'openai',
-        model: settings.get('agent.model') ?? 'gpt-4o',
-      },
+      settings.get('agent.modelSelection'),
     )
   );
 }

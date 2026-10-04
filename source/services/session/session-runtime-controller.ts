@@ -1,3 +1,4 @@
+import type { ModelSelection } from '../settings/model-selection.js';
 import type { ReasoningEffortSetting } from '../../contracts/conversation.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { getMethod } from '../interruption-info.js';
@@ -20,9 +21,9 @@ export class SessionRuntimeController {
     this.#state = deps.state;
   }
 
-  setModel(model: string): void {
+  setModelSelection(selection: ModelSelection): void {
     this.#state.afterProviderChanged();
-    this.#agentClient.setModel(model);
+    this.#agentClient.setModelSelection(selection);
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
@@ -41,20 +42,6 @@ export class SessionRuntimeController {
     }
     this.#state.afterProviderChanged();
     setTemperature.call(this.#agentClient, temperature);
-  }
-
-  setProvider(provider: string): void {
-    const setProvider = getMethod<[string], void>(this.#agentClient, 'setProvider');
-    if (!setProvider) {
-      return;
-    }
-    this.#state.afterProviderChanged();
-    setProvider.call(this.#agentClient, provider);
-  }
-
-  /** Alias for setProvider, kept for public API surface. */
-  switchProvider(provider: string): void {
-    this.setProvider(provider);
   }
 
   setRetryCallback(callback: () => void): void {

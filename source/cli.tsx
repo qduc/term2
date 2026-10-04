@@ -691,11 +691,8 @@ const cliOverrides: CliOverrides = {};
 
 if (resumedConversation) {
   cliOverrides.agent = {};
-  if (resumedConversation.model && !modelFlag) {
-    cliOverrides.agent.model = resumedConversation.model;
-  }
-  if (resumedConversation.provider) {
-    cliOverrides.agent.provider = resumedConversation.provider;
+  if (resumedConversation.model && resumedConversation.provider && !modelFlag) {
+    cliOverrides.agent.modelSelection = { model: resumedConversation.model, provider: resumedConversation.provider };
   }
   if (
     resumedConversation.reasoningEffort &&
@@ -712,9 +709,6 @@ if (resumedConversation) {
   }
 }
 
-if (providerFlag) {
-  cliOverrides.agent = { ...cliOverrides.agent, provider: providerFlag };
-}
 
 if (validatedReasoningEffort) {
   cliOverrides.agent = {
@@ -754,14 +748,18 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
   process.exit(1);
 }
 
+if (providerFlag && !modelFlag && !modelFlagGivenWithoutValue) {
+  console.error('Error: --provider requires --model; provider-only selection is not supported.');
+  process.exit(1);
+}
+
 if (modelFlagGivenWithoutValue && canUseInteractiveModelPicker) {
   const { runModelPickerHost } = await import('./services/models/model-picker-host.js');
   const picked = await runModelPickerHost({ settingsService: settings, loggingService: logger });
   if (picked.status === 'cancelled') {
     // Escape keeps the configured (or resumed) model and continues startup.
   } else {
-    settings.set('agent.model', picked.selection.modelId, { persist: false });
-    settings.set('agent.provider', picked.selection.provider, { persist: false });
+    settings.set('agent.modelSelection', { model: picked.selection.modelId, provider: picked.selection.provider }, { persist: false });
   }
 }
 
@@ -816,10 +814,7 @@ if (modelFlag) {
 
     // --model is a per-session override like every other CLI flag; it must not
     // rewrite the user's persisted defaults (set() persists by default).
-    settings.set('agent.model', resolution.modelId, { persist: false });
-    if (resolution.provider) {
-      settings.set('agent.provider', resolution.provider, { persist: false });
-    }
+    settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
     if (resolution.reasoningEffort && !validatedReasoningEffort) {
       settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
     }
@@ -1067,7 +1062,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
     allowAskUser,
   ) => {
     const agentClient = new AgentClient({
-      model: settings.get('agent.model'),
+      selection: settings.get('agent.modelSelection'),
       reasoningEffort: settings.get('agent.reasoningEffort') as ModelSettingsReasoningEffort,
       maxTurns: settings.get('agent.maxTurns'),
       retryAttempts: settings.get('agent.retryAttempts'),
@@ -1231,16 +1226,16 @@ if (conversationService.hookEvents) {
     conversationService.hookEvents.create('session.start', {
       cwd: localHookRuntime.cwd,
       mode: 'interactive',
-      providerName: settings.get('agent.provider'),
-      modelName: settings.get('agent.model'),
+      providerName: settings.get('agent.modelSelection').provider,
+      modelName: settings.get('agent.modelSelection').model,
     }),
   );
 }
 
 if (resumedConversation) {
   const savedProviderMatches =
-    !resumedConversation.provider || resumedConversation.provider === settings.get('agent.provider');
-  const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.model');
+    !resumedConversation.provider || resumedConversation.provider === settings.get('agent.modelSelection').provider;
+  const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.modelSelection').model;
   const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
 
   conversationService.importState({
@@ -1277,8 +1272,8 @@ function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
     ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
     activeProfileId,
     appMode: legacyModeFromProfileId(activeProfileId),
-    ...(settings.get('agent.model') ? { model: settings.get('agent.model') } : {}),
-    ...(settings.get('agent.provider') ? { provider: settings.get('agent.provider') } : {}),
+    ...(settings.get('agent.modelSelection').model ? { model: settings.get('agent.modelSelection').model } : {}),
+    ...(settings.get('agent.modelSelection').provider ? { provider: settings.get('agent.modelSelection').provider } : {}),
     ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),
     ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
     ...(persistedRolloverFrom ? { rolloverFrom: persistedRolloverFrom } : {}),

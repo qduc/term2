@@ -1121,8 +1121,7 @@ it.sequential('session logging writes compact v3 assistant_turn state without cu
     deps: {
       logger: stubLogger,
       settingsService: createMockSettingsService({
-        'agent.model': 'gpt-5',
-        'agent.provider': 'openai',
+        'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
       }),
       sessionContextService: createSessionContextService() as any,
     },
@@ -1227,8 +1226,7 @@ it.sequential('session logging persists displayUsage separately from cumulative 
     deps: {
       logger: stubLogger,
       settingsService: createMockSettingsService({
-        'agent.model': 'gpt-5',
-        'agent.provider': 'openai',
+        'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
       }),
       sessionContextService: createSessionContextService() as any,
     },
@@ -1373,8 +1371,7 @@ it.sequential(
       deps: {
         logger: stubLogger,
         settingsService: createMockSettingsService({
-          'agent.model': 'gpt-5',
-          'agent.provider': 'openai',
+          'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
         }),
         sessionContextService: createSessionContextService() as any,
       },

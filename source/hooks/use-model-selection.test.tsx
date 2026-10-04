@@ -98,7 +98,7 @@ it.sequential('loads configured provider catalogs into one unified result list',
   const two = `unified-two-${Math.random()}`;
   registerTestProvider(one);
   registerTestProvider(two);
-  const settings = createMockSettingsService({ 'agent.provider': one });
+  const settings = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: one } });
   const picker = await renderPicker({
     settings,
     fetcher: async (provider) => (provider === one ? [{ id: 'alpha' }] : provider === two ? [{ id: 'beta' }] : []),
@@ -173,8 +173,7 @@ it.sequential('retains the configured model as unavailable when its provider has
   testProviderIds.add(unavailable);
   registerProvider({ id: unavailable, label: unavailable, isRuntimeDefined: true, fetchModels: async () => [] });
   const settings = createMockSettingsService({
-    'agent.provider': unavailable,
-    'agent.model': 'configured-model',
+    'agent.modelSelection': { model: 'configured-model', provider: unavailable },
   });
   const fetcher = vi.fn(async () => []);
   const picker = await renderPicker({ settings, fetcher });
@@ -196,8 +195,7 @@ it.sequential('preselects the configured provider and model when ids collide', a
   registerTestProvider(one);
   registerTestProvider(two);
   const settings = createMockSettingsService({
-    'agent.provider': two,
-    'agent.model': 'shared',
+    'agent.modelSelection': { model: 'shared', provider: two },
   });
   const picker = await renderPicker({ settings, fetcher: async () => [{ id: 'shared' }] });
 
@@ -208,7 +206,7 @@ it.sequential('preselects the configured provider and model when ids collide', a
 it.sequential('exposes setting-specific model and provider keys', async () => {
   const provider = `setting-${Math.random()}`;
   registerTestProvider(provider);
-  const settings = createMockSettingsService({ 'agent.provider': provider });
+  const settings = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: provider } });
   const picker = await renderPicker({
     settings,
     input: '/settings agent.smartModel ',
@@ -217,7 +215,6 @@ it.sequential('exposes setting-specific model and provider keys', async () => {
 
   expect(picker.state.modelSettingConfig).toMatchObject({
     modelKey: 'agent.smartModel',
-    providerKey: 'agent.smartProvider',
   });
   picker.renderer.unmount();
 });
@@ -226,8 +223,7 @@ it.sequential('pins favorites and toggles the highlighted model without changing
   const provider = `favorite-${Math.random()}`;
   registerTestProvider(provider);
   const settings = createMockSettingsService({
-    'agent.provider': provider,
-    'agent.model': 'beta',
+    'agent.modelSelection': { model: 'beta', provider: provider },
     'agent.favoriteModels': [`${provider}/beta`],
   });
   const picker = await renderPicker({
@@ -248,8 +244,7 @@ it.sequential(
     const provider = `nickname-${Math.random()}`;
     registerTestProvider(provider);
     const settings = createMockSettingsService({
-      'agent.provider': provider,
-      'agent.model': 'favorite',
+      'agent.modelSelection': { model: 'favorite', provider: provider },
       'agent.favoriteModels': [`${provider}/favorite`],
     });
     const picker = await renderPicker({

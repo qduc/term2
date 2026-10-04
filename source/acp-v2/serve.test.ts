@@ -175,7 +175,7 @@ describe('runAcp', () => {
     mkdirSync(settingsDir, { recursive: true });
     writeFileSync(
       path.join(settingsDir, 'settings.json'),
-      JSON.stringify({ agent: { provider: providerId, model: modelId, retryAttempts: 0 } }),
+      JSON.stringify({ agent: { modelSelection: { provider: providerId, model: modelId }, retryAttempts: 0 } }),
       'utf8',
     );
     isolateEnv({
@@ -257,7 +257,7 @@ describe('runAcp', () => {
     mkdirSync(settingsDir, { recursive: true });
     writeFileSync(
       path.join(settingsDir, 'settings.json'),
-      JSON.stringify({ agent: { provider: providerId, model: modelId, retryAttempts: 0 } }),
+      JSON.stringify({ agent: { modelSelection: { provider: providerId, model: modelId }, retryAttempts: 0 } }),
       'utf8',
     );
     isolateEnv({

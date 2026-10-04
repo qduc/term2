@@ -125,7 +125,7 @@ export const useStandaloneModelPicker = (deps: {
     for (const providerId of providerIds) {
       const credentials = resolveProviderCredentials(settingsService, providerId);
       if (credentials.required && !credentials.configured) {
-        const configuredModel = settingsService.getDynamic('agent.model');
+        const configuredModel = settingsService.get('agent.modelSelection').model;
         const unavailable =
           lockProvider && typeof configuredModel === 'string' && configuredModel
             ? [
@@ -165,8 +165,8 @@ export const useStandaloneModelPicker = (deps: {
   }, [providerIds, catalogSession]);
 
   const filteredModels = useMemo(() => {
-    const configuredProvider = settingsService.getDynamic('agent.provider');
-    const configuredModel = settingsService.getDynamic('agent.model');
+    const configuredProvider = settingsService.get('agent.modelSelection').provider;
+    const configuredModel = settingsService.get('agent.modelSelection').model;
     const unavailableConfigured =
       !lockProvider &&
       typeof configuredProvider === 'string' &&
@@ -217,8 +217,8 @@ export const useStandaloneModelPicker = (deps: {
     }
 
     if (shouldPreselectRef.current) {
-      const currentModelValue = settingsService.getDynamic('agent.model');
-      const currentProviderValue = settingsService.getDynamic('agent.provider');
+      const currentModelValue = settingsService.get('agent.modelSelection').model;
+      const currentProviderValue = settingsService.get('agent.modelSelection').provider;
       if (typeof currentModelValue === 'string' && currentModelValue) {
         const index = filteredModels.findIndex(
           (m) =>

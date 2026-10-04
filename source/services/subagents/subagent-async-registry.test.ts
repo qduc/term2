@@ -232,8 +232,7 @@ describe('background observations', () => {
     const runtime = createSubagentRuntime({
       logger: createMockLogger(),
       settings: createMockSettings({
-        'agent.mentorModel': 'default-mentor',
-        'agent.mentorProvider': providerId,
+        'agent.smartModel': [{ model: 'default-mentor', provider: providerId }],
         'agent.mentorSamples': 5,
         'agent.mentorPool': [
           { model: 'mentor-a', provider: providerId },
@@ -255,8 +254,7 @@ describe('background observations', () => {
     const singleRuntime = createSubagentRuntime({
       logger: createMockLogger(),
       settings: createMockSettings({
-        'agent.mentorModel': 'default-mentor',
-        'agent.mentorProvider': providerId,
+        'agent.smartModel': [{ model: 'default-mentor', provider: providerId }],
       }),
       sessionContextService: createSessionContextService(),
       toolOwnership: new ToolOwnershipRegistry(),
@@ -1826,7 +1824,7 @@ describe('outbound steering', () => {
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
-    const settings = createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId });
+    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }});
     const logger = createMockLogger();
     const sessionContextService = createSessionContextService();
     const toolOwnership = new ToolOwnershipRegistry();
@@ -1837,12 +1835,11 @@ describe('outbound steering', () => {
       toolOwnership,
       createClient: ({ agent, provider, maxTurns, retryAttempts }) =>
         new AgentClient({
-          model: agent.model,
+          selection: { model: agent.model, provider },
           maxTurns,
           retryAttempts,
           deps: { logger, settings, sessionContextService },
           agentOverride: agent,
-          providerOverride: provider,
           toolOwnership,
         }),
     });
@@ -1948,7 +1945,7 @@ describe('provider traffic scoping', () => {
         } as any),
       fetchModels: async () => [{ id: 'mock-model' }],
     });
-    const settings = createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId });
+    const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId  }});
     const logger = createMockLogger();
     const toolOwnership = new ToolOwnershipRegistry();
     const runtime = createSubagentRuntime({
@@ -1958,12 +1955,11 @@ describe('provider traffic scoping', () => {
       toolOwnership,
       createClient: ({ agent, provider, maxTurns, retryAttempts }) =>
         new AgentClient({
-          model: agent.model,
+          selection: { model: agent.model, provider },
           maxTurns,
           retryAttempts,
           deps: { logger, settings, sessionContextService },
           agentOverride: agent,
-          providerOverride: provider,
           toolOwnership,
         }),
     });

@@ -41,9 +41,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
       const current = modelsRef.current;
       const selectedProvider = current.getSelectedItem()?.provider;
       if (selectedProvider) return selectedProvider;
-      const providerKey = current.modelSettingConfig?.providerKey ?? 'agent.provider';
-      const configured = settingsService.getDynamic(providerKey);
-      return typeof configured === 'string' ? configured : null;
+      return settingsService.get('agent.modelSelection').provider;
     };
 
     return {
@@ -136,7 +134,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             const selectedUnavailable = models.getSelectedItem()?.unavailableReason;
             if (unavailable || selectedUnavailable) {
               const requestSetup = services.onUnavailableModelSelected as ((provider: string) => void) | undefined;
-              requestSetup?.(resolvedProvider ?? settingsService.get('agent.provider'));
+              requestSetup?.(resolvedProvider ?? settingsService.get('agent.modelSelection').provider);
               return keep();
             }
 
@@ -145,16 +143,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
               const provider = resolvedProvider;
               const persistenceFor = (key: string) =>
                 settingsService.isRuntimeModifiable(key) ? 'runtime' : 'restart';
-              const changes: { key: string; value: unknown; persistence: 'runtime' | 'restart' }[] = [
-                { key: config.modelKey, value: modelId, persistence: persistenceFor(config.modelKey) },
-              ];
-              if (provider) {
-                changes.push({
-                  key: config.providerKey,
-                  value: provider,
-                  persistence: persistenceFor(config.providerKey),
-                });
-              }
+              const changes = [{ key: config.modelKey, value: { model: modelId, provider }, persistence: persistenceFor(config.modelKey) as 'runtime' | 'restart' }];
               return {
                 stack: { type: 'keep' },
                 intent: {

@@ -179,7 +179,7 @@ it('selecting a free-form string setting seeds its value frame with the current 
 });
 it('does not seed a pool-backed key when opening the tier pool editor', async () => {
   const controller = buildController();
-  const settingsService = createMockSettingsService({ 'agent.smartModel': 'claude-sonnet-x' });
+  const settingsService = createMockSettingsService({ 'agent.smartModel': [{ model: 'claude-sonnet-x', provider: 'anthropic' }] });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -294,7 +294,7 @@ it('pressing Space on a boolean setting toggles it in place without opening a ch
 
 it('selecting a model-backed key pushes a settings-backed model child instead of a settings_value child', async () => {
   const controller = buildController();
-  const settingsService = createMockSettingsService({ 'agent.provider': 'openai' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: 'openai' } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -325,7 +325,7 @@ it('selecting a model-backed key pushes a settings-backed model child instead of
   if (child?.kind !== 'model') throw new Error('expected model child');
   expect(child.target).toEqual({
     type: 'setting',
-    config: { modelKey: 'agent.model', providerKey: 'agent.provider', fallbackProviderKey: undefined },
+    config: { modelKey: 'agent.modelSelection' },
   });
   expect(child.back).toEqual({
     type: 'restore',

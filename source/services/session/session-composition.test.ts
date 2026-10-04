@@ -89,7 +89,7 @@ const makeMockClient = (overrides = {}) =>
     },
     abort: noop,
     continueRunStream: noop as any,
-    setModel: noop as any,
+    setModelSelection: noop as any,
     addToolInterceptor: noop as any,
     chat: noop as any,
     ...overrides,
@@ -301,7 +301,7 @@ it('createSessionRuntime exposes runtime capabilities without conversation adapt
   expect(typeof runtime.turns.continueAfterApproval).toBe('function');
   expect(typeof runtime.turns.abort).toBe('function');
   expect(typeof runtime.state.getCurrentSnapshot).toBe('function');
-  expect(typeof runtime.settings.setModel).toBe('function');
+  expect(typeof runtime.settings.setModelSelection).toBe('function');
   expect(typeof runtime.logs.setLogSink).toBe('function');
   expect(typeof runtime.logs.dispatchEventToLog).toBe('function');
   expect(typeof runtime.logs.log).toBe('function');
@@ -482,9 +482,9 @@ it('createConversationSession returns runtimeController with model/provider oper
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  expect(typeof runtimeController.setModel).toBe('function');
-  expect(typeof runtimeController.setProvider).toBe('function');
-  expect(typeof runtimeController.switchProvider).toBe('function');
+  expect(typeof runtimeController.setModelSelection).toBe('function');
+  expect('setProvider' in runtimeController).toBe(false);
+  expect('switchProvider' in runtimeController).toBe(false);
   expect(typeof runtimeController.setRetryCallback).toBe('function');
 });
 

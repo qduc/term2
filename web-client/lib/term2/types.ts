@@ -225,7 +225,7 @@ export interface SessionConfigRecord {
   };
 }
 export interface SessionConfigUpdate {
-  model?: string;
+  modelSelection?: { model: string; provider: string };
   reasoningEffort?: string;
   mode?: SessionConfigRecord['mode'];
 }

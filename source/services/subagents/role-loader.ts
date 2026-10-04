@@ -10,7 +10,7 @@ import { getShellSandboxAddendum } from '../../prompts/shell-sandbox.js';
 import { getSearchViaShellAddendum } from '../../prompts/search-via-shell.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
-import { getTierModelPoolEntries, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
+import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { getAncillaryTierForRole } from './subagent-pool-config.js';
 import { ModelSelectionSchema } from '../settings/model-selection.js';
 
@@ -102,17 +102,17 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
 
   const tier = getAncillaryTierForRole(role);
   const tierModel = resolveAncillaryModelTier(tier, settings);
-  const legacyValue = settings.getDynamic(`${subagentPrefix}Model`);
-  const legacyModel = legacyValue === undefined ? undefined : ModelSelectionSchema.parse(legacyValue);
   const configuredLegacyReasoningEffort = settings.getDynamic(`${subagentPrefix}ReasoningEffort`) as string | undefined;
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
-  const firstPoolEntry = getTierModelPoolEntries(tier, settings)[0];
-  const inheritedModel = firstPoolEntry ?? legacyModel ?? tierModel;
-  const selection = ModelSelectionSchema.parse({
-    model: isInherited(frontmatter.model) ? inheritedModel.model : frontmatter.model,
-    provider: isInherited(frontmatter.provider) ? inheritedModel.provider : frontmatter.provider,
-  });
+  const inheritsModel = isInherited(frontmatter.model);
+  const inheritsProvider = isInherited(frontmatter.provider);
+  if (inheritsModel !== inheritsProvider) {
+    throw new Error(`Role "${role}" must override model and provider together.`);
+  }
+  const selection = ModelSelectionSchema.parse(inheritsModel
+    ? tierModel
+    : { model: frontmatter.model, provider: frontmatter.provider });
 
   return {
     role,

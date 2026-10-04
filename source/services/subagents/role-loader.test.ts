@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
 import type { ISettingsService } from '../service-interfaces.js';
 import { loadRoleDefinition, ROLE_MAX_TURNS_DEFAULT } from './role-loader.js';
 
@@ -16,8 +17,7 @@ function settings(values: Record<string, unknown>): ISettingsService {
 describe('loadRoleDefinition turn budgets', () => {
   it('gives tool-using roles a generous tripwire budget and keeps mentor single-turn', () => {
     const base = {
-      'agent.model': 'main-model',
-      'agent.provider': 'openai',
+      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
       'memory.enabled': true,
     };
     expect(ROLE_MAX_TURNS_DEFAULT).toBe(200);
@@ -32,7 +32,7 @@ describe('loadRoleDefinition reviewer', () => {
   it('grants no direct workspace, shell, write, or web authority', () => {
     const definition = loadRoleDefinition(
       'reviewer',
-      settings({ 'agent.model': 'main-model', 'agent.provider': 'openai', 'memory.enabled': true }),
+      settings({ 'agent.modelSelection': { model: 'main-model', provider: 'openai' }, 'memory.enabled': true }),
     );
 
     expect(definition).toMatchObject({ canRead: false, canWrite: false, canRunShell: false, canSearchWeb: false });
@@ -45,8 +45,7 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
     const definition = loadRoleDefinition(
       'explorer',
       settings({
-        'agent.model': 'main-model',
-        'agent.provider': 'openai',
+        'agent.modelSelection': { model: 'main-model', provider: 'openai' },
         'agent.reasoningEffort': 'low',
         'memory.enabled': true,
       }),
@@ -63,8 +62,7 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
     const definition = loadRoleDefinition(
       'mentor',
       settings({
-        'agent.model': 'main-model',
-        'agent.provider': 'openai',
+        'agent.modelSelection': { model: 'main-model', provider: 'openai' },
         'agent.reasoningEffort': 'high',
         'agent.mentorReasoningEffort': 'default',
         'memory.enabled': true,
@@ -84,8 +82,7 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
     const definition = loadRoleDefinition(
       role,
       settings({
-        'agent.model': 'main-model',
-        'agent.provider': 'openai',
+        'agent.modelSelection': { model: 'main-model', provider: 'openai' },
         'agent.reasoningEffort': 'minimal',
         [`agent.${tier}ReasoningEffort`]: effort,
         'memory.enabled': true,
@@ -94,4 +91,26 @@ describe('loadRoleDefinition ancillary tier reasoning', () => {
 
     expect(definition.reasoningEffort).toBe(effort);
   });
+});
+
+it.each(['model: explicit-model', 'provider: explicit-host'])('rejects incomplete role frontmatter %s', (override) => {
+  const read = vi.spyOn(fs, 'readFileSync').mockReturnValue(`---\n${override}\n---\nRole instructions`);
+  try {
+    expect(() => loadRoleDefinition('worker', settings({
+      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
+    }))).toThrow(/model and provider together/);
+  } finally {
+    read.mockRestore();
+  }
+});
+
+it('uses a complete frontmatter override without borrowing either field from the main selection', () => {
+  const read = vi.spyOn(fs, 'readFileSync').mockReturnValue('---\nmodel: explicit-model\nprovider: explicit-host\n---\nRole instructions');
+  try {
+    expect(loadRoleDefinition('worker', settings({
+      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
+    }))).toMatchObject({ model: 'explicit-model', provider: 'explicit-host' });
+  } finally {
+    read.mockRestore();
+  }
 });

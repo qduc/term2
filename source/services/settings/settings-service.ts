@@ -35,7 +35,6 @@ import {
   type SettingsFileRecovery,
 } from './settings-persistence.js';
 import { resolveSettingsDirectory } from './settings-path.js';
-import { isMainSelectionKey, mainSelectionForLayer, LEGACY_BOUND_MODEL_KEYS } from './model-selection.js';
 
 /**
  * Result of a public settings mutation at the SettingsService owner boundary.
@@ -487,7 +486,7 @@ export class SettingsService {
   }
 
   private migrateSelectedProviderId(): boolean {
-    const current = this.settings?.agent?.provider;
+    const current = this.settings?.agent?.modelSelection.provider;
     if (!current || typeof current !== 'string') {
       return false;
     }
@@ -510,13 +509,11 @@ export class SettingsService {
       return false;
     }
 
-    this.settings.agent.provider = normalized;
     this.settings.agent.modelSelection = { ...this.settings.agent.modelSelection, provider: normalized };
-    this.sources.set('agent.provider', 'config');
+    this.sources.set('agent.modelSelection', 'config');
     // Durable normalization: a fresh restart must see the same identity that
     // the current process resolved, so the replacement is part of the startup
     // rewrite instead of living only in memory.
-    this.startupMigrations.push(['agent.provider', normalized]);
     this.startupMigrations.push(['agent.modelSelection', this.settings.agent.modelSelection]);
     return true;
   }
@@ -564,9 +561,6 @@ export class SettingsService {
    * Get the source of a setting
    */
   getSource(key: string): SettingSource {
-    if (isMainSelectionKey(key) && this.runtimeOverrideSources.has('agent.modelSelection')) {
-      return this.runtimeOverrideSources.get('agent.modelSelection')!;
-    }
     return this.sources.get(key) || 'default';
   }
 
@@ -594,6 +588,7 @@ export class SettingsService {
   }
 
   private validateAndApplySetting(key: string, value: any): void {
+    this.assertAtomicModelSelectionKey(key);
     const nextSettings = structuredClone(this.settings);
     const keys = key.split('.');
     let obj: any = nextSettings;
@@ -641,12 +636,6 @@ export class SettingsService {
     value: unknown,
     currentProfileId = String(this.settings.app.activeProfileId),
   ): { key: string; value: unknown } {
-    if (key === 'agent.model' || key === 'agent.provider') {
-      return {
-        key: 'agent.modelSelection',
-        value: mainSelectionForLayer({ [key.slice('agent.'.length)]: value }, this.settings.agent.modelSelection),
-      };
-    }
     const profileId = profileIdFromLegacyModeSetting(key, value, currentProfileId);
     return profileId ? { key: 'app.activeProfileId', value: profileId } : { key, value };
   }
@@ -655,17 +644,7 @@ export class SettingsService {
     changes: readonly { key: string; value: unknown }[],
   ): Array<{ key: string; value: unknown }> {
     let currentProfileId = String(this.settings.app.activeProfileId);
-    const mainChanges = changes.filter((change) => isMainSelectionKey(change.key));
-    const layer = Object.fromEntries(mainChanges.map(({ key, value }) => [key.slice('agent.'.length), value]));
-    let mainEmitted = false;
     return changes.flatMap(({ key, value }) => {
-      if (isMainSelectionKey(key)) {
-        if (mainEmitted) return [];
-        mainEmitted = true;
-        return [
-          { key: 'agent.modelSelection', value: mainSelectionForLayer(layer, this.settings.agent.modelSelection) },
-        ];
-      }
       const canonical = this.canonicalizeProfileChange(key, value, currentProfileId);
       if (canonical.key === 'app.activeProfileId' && typeof canonical.value === 'string') {
         currentProfileId = canonical.value;
@@ -769,10 +748,6 @@ export class SettingsService {
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
-    if (key === 'agent.modelSelection') {
-      this.notifyChange('agent.model');
-      this.notifyChange('agent.provider');
-    }
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
@@ -860,10 +835,6 @@ export class SettingsService {
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
-    if (key === 'agent.modelSelection') {
-      this.notifyChange('agent.model');
-      this.notifyChange('agent.provider');
-    }
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
@@ -880,20 +851,6 @@ export class SettingsService {
 
     const canonicalChanges = this.canonicalizeProfileChanges(changes);
     let candidate = structuredClone(this.settings) as SettingsData;
-    const bindingContext = structuredClone(this.settings) as unknown as Record<string, any>;
-    for (const change of canonicalChanges) setSettingValue(bindingContext, change.key, change.value);
-    const boundSettings = SettingsSchema.parse(bindingContext);
-    const boundAgent = boundSettings.agent!;
-    for (const change of canonicalChanges) {
-      if (change.key === 'agent.mentorPool') change.value = boundAgent.mentorPool;
-      if (change.key === 'tools.editHealingModel') change.value = boundSettings.tools!.editHealingModel;
-      for (const key of LEGACY_BOUND_MODEL_KEYS) {
-        if (change.key === `agent.${key}`) change.value = boundAgent[key];
-      }
-      const match = /^agent\.(smart|balanced|cheap|chore)Model$/.exec(change.key);
-      if (match)
-        change.value = boundAgent[`${match[1]}Model` as 'smartModel' | 'balancedModel' | 'cheapModel' | 'choreModel'];
-    }
     for (const change of canonicalChanges) {
       if (this.isSensitive(change.key)) {
         throw new Error(
@@ -922,10 +879,6 @@ export class SettingsService {
       this.recordRuntimeOverride(change.key, change.value, 'cli');
       this.sources.set(change.key, 'cli');
       this.notifyChange(change.key);
-      if (change.key === 'agent.modelSelection') {
-        this.notifyChange('agent.model');
-        this.notifyChange('agent.provider');
-      }
     }
     if (previousProviders) this.invalidateChangedProviderModelCaches(previousProviders, candidate.providers);
     return durableResult;
@@ -936,17 +889,6 @@ export class SettingsService {
    * Sensitive settings cannot be reset as they should only come from env.
    */
   reset(key?: string): DurableWriteResult {
-    const mainReset = key !== undefined && isMainSelectionKey(key);
-    const mainDefault =
-      key && mainReset
-        ? key === 'agent.modelSelection'
-          ? this.getDefault(key)
-          : mainSelectionForLayer(
-              { [key.slice('agent.'.length)]: this.getDefault(key) },
-              this.settings.agent.modelSelection,
-            )
-        : undefined;
-    if (mainReset) key = 'agent.modelSelection';
     if (key && this.isSensitive(key)) {
       throw new Error(
         `Cannot reset '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -975,11 +917,10 @@ export class SettingsService {
 
       // Reset to default
       const lastKey = keys[keys.length - 1];
-      const defaultValue = mainReset ? mainDefault : this.getDefault(key);
+      const defaultValue = this.getDefault(key);
 
       const previousProviders = key === 'providers' ? this.settings.providers : undefined;
       obj[lastKey] = cloneSettingValue(defaultValue);
-      if (mainReset) this.settings = SettingsSchema.parse(this.settings) as SettingsData;
       if (key === 'app.activeProfileId') {
         this.normalizeProfileSelection(key, defaultValue);
       }
@@ -1002,7 +943,7 @@ export class SettingsService {
 
     const durableResult = this.saveToFile((current) => {
       if (!key) return structuredClone(DEFAULT_SETTINGS);
-      return this.applyPersistedSetting(current, key, mainReset ? mainDefault : this.defaultValueFor(key));
+      return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
     });
     this.lastDurableWrite = durableResult;
 
@@ -1095,7 +1036,14 @@ export class SettingsService {
     return cloneSettingValue(value);
   }
 
+  private assertAtomicModelSelectionKey(key: string): void {
+    if (key.startsWith('agent.modelSelection.')) {
+      throw new Error('Model selection is atomic; write agent.modelSelection with both model and provider.');
+    }
+  }
+
   private applyPersistedSetting(current: SettingsData, key: string, value: unknown): SettingsData {
+    this.assertAtomicModelSelectionKey(key);
     const next = structuredClone(current) as Record<string, any>;
     setSettingValue(next, key, value);
 

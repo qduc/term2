@@ -87,8 +87,6 @@ const pushChildEffect = (
           type: 'setting' as const,
           config: {
             modelKey: modelConfig.modelKey,
-            providerKey: modelConfig.providerKey,
-            fallbackProviderKey: modelConfig.fallbackProviderKey,
           },
         },
         back,

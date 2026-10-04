@@ -31,8 +31,7 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
   _triggerChange: (key?: string) => void;
 } {
   const store: Record<string, any> = {
-    'agent.provider': 'mock-provider-for-config',
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-for-config' },
     'agent.maxTurns': 20,
     'agent.temperature': undefined,
     ...values,
@@ -148,7 +147,7 @@ it.sequential('constructor with agentOverride uses the override', () => {
     clone: () => overrideAgent,
   } as any;
 
-  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'override-model' }, deps);
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, selection: { model: 'override-model', provider: 'mock-provider-for-config' } }, deps);
 
   expect(config.getAgent(), 'getAgent() returns the override agent').toBe(overrideAgent);
   expect(config.getModel(), 'getModel returns the override model').toBe('override-model');
@@ -180,7 +179,7 @@ it.sequential('getProvider returns override provider when provided', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
-  const config = new AgentConfiguration({ providerOverride: 'mock-provider-for-config' }, deps);
+  const config = new AgentConfiguration({ selection: { model: 'mock-model', provider: 'mock-provider-for-config' } }, deps);
 
   expect(config.getProvider(), 'getProvider returns the override').toBe('mock-provider-for-config');
 });
@@ -189,7 +188,7 @@ it.sequential('getModel returns the resolved model', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, deps);
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, deps);
 
   const resolvedModel = config.getModel();
   expect(resolvedModel).toBeTruthy();
@@ -200,13 +199,13 @@ it.sequential('rebuildAgent updates agent and model after setModel', () => {
   ensureProviderRegistered();
 
   const { deps } = createDeps();
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, deps);
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, deps);
 
   const originalAgent = config.getAgent();
   void config.getModel();
 
   // Change model and rebuild
-  config.setModel('gpt-4o-mini');
+  config.setModelSelection({ model: 'gpt-4o-mini', provider: 'mock-provider-for-config' });
   config.rebuildAgent();
 
   const newAgent = config.getAgent();
@@ -222,7 +221,7 @@ it.sequential('pins global memories across rebuilds and refreshes them for a new
   try {
     const settings = createMockSettingsService({
       'memory.directory': directory,
-      'agent.provider': 'mock-provider-for-config',
+      'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-for-config' },
     });
     const { deps } = createDeps();
     deps.settings = settings;
@@ -252,7 +251,7 @@ it.sequential('pins global memories across rebuilds and refreshes them for a new
 it.sequential('rebuildAgent gives the new graph a policy registry without mutating the old graph', async () => {
   ensureProviderRegistered();
   const { deps } = createDeps();
-  const config = new AgentConfiguration({ model: 'mock-model' }, deps);
+  const config = new AgentConfiguration({ selection: { model: 'mock-model', provider: 'mock-provider-for-config' } }, deps);
   const oldRegistry = config.approvalPolicyRegistry;
   oldRegistry.register({ toolName: 'old-graph-only', needsApproval: () => true });
 
@@ -287,7 +286,7 @@ it.sequential('transient client adopts a supplied subagent graph registry', () =
   const subagentRegistry = { size: 1 } as any;
 
   const config = new AgentConfiguration(
-    { agentOverride: overrideAgent, model: 'override-model', approvalPolicyRegistry: subagentRegistry },
+    { agentOverride: overrideAgent, selection: { model: 'override-model', provider: 'mock-provider-for-config' }, approvalPolicyRegistry: subagentRegistry },
     deps,
   );
 
@@ -305,9 +304,9 @@ it.sequential('rebuildAgent is no-op for transient client', () => {
     clone: () => overrideAgent,
   } as any;
 
-  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'override-model' }, deps);
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, selection: { model: 'override-model', provider: 'mock-provider-for-config' } }, deps);
 
-  config.setModel('different-model');
+  config.setModelSelection({ model: 'different-model', provider: 'mock-provider-for-config' });
   config.rebuildAgent();
 
   expect(config.getAgent(), 'agent still returns the override').toBe(overrideAgent);
@@ -337,8 +336,8 @@ it.sequential('getAgent with sessionId clones agent for providers with prompt ca
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 
-  const { deps } = createDeps({ settingsValues: { 'agent.provider': 'mock-provider-cache' } });
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, deps);
+  const { deps } = createDeps({ settingsValues: { 'agent.modelSelection': { model: 'gpt-4o', provider: 'mock-provider-cache' } } });
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, deps);
 
   const agentWithSession = config.getAgent('test-session-123');
   expect(agentWithSession).toBeTruthy();
@@ -354,8 +353,7 @@ it.sequential('getAgent with sessionId clones agent for providers with prompt ca
 it.sequential('getApplicationAgent projects Codex session settings into typed Codex options', () => {
   const { deps } = createDeps({
     settingsValues: {
-      'agent.provider': 'codex',
-      'agent.model': 'gpt-5.3-codex',
+      'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'codex' },
     },
   });
   const config = new AgentConfiguration({}, deps);
@@ -377,8 +375,7 @@ it.sequential('getApplicationAgent projects Codex session settings into typed Co
 it.sequential('getApplicationAgent keeps cache affinity independent from the logical session id', () => {
   const { deps } = createDeps({
     settingsValues: {
-      'agent.provider': 'codex',
-      'agent.model': 'gpt-5.3-codex',
+      'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'codex' },
     },
   });
   const config = new AgentConfiguration({}, deps);
@@ -389,7 +386,7 @@ it.sequential('getApplicationAgent keeps cache affinity independent from the log
 });
 
 it.sequential('transient application agents do not inherit a Codex session cache key', () => {
-  const { deps } = createDeps({ settingsValues: { 'agent.provider': 'codex' } });
+  const { deps } = createDeps({ settingsValues: { 'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'codex' } } });
   const overrideAgent = {
     name: 'Transient Codex',
     model: 'gpt-5.3-codex',
@@ -397,7 +394,7 @@ it.sequential('transient application agents do not inherit a Codex session cache
     tools: [],
     modelSettings: { include: ['reasoning.encrypted_content'] },
   } as any;
-  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'gpt-5.3-codex' }, deps);
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, selection: { model: 'gpt-5.3-codex', provider: 'codex' } }, deps);
 
   expect(config.getApplicationAgent('session-one').modelSettings?.codex).toEqual({
     include: ['reasoning.encrypted_content'],
@@ -517,7 +514,7 @@ it.sequential('subscribeToSettings is no-op for transient client', () => {
     clone: () => overrideAgent,
   } as any;
 
-  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'override-model' }, result.deps);
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, selection: { model: 'override-model', provider: 'mock-provider-for-config' } }, result.deps);
 
   config.subscribeToSettings();
 
@@ -542,7 +539,7 @@ it.sequential('refreshAgent calls onConfigChanged callback', () => {
   expect(config.getAgent()).toBeTruthy();
 });
 
-it.sequential('setProvider persists to settings', () => {
+it.sequential('setModelSelection updates configuration without publishing settings', () => {
   ensureProviderRegistered();
 
   const result = createDeps();
@@ -551,10 +548,10 @@ it.sequential('setProvider persists to settings', () => {
 
   expect(config.getProvider(), 'starts with default provider').toBe('mock-provider-for-config');
 
-  config.setProvider('mock-provider-cache');
+  config.setModelSelection({ model: 'mock-model', provider: 'mock-provider-cache' });
 
   expect(config.getProvider(), 'provider updated').toBe('mock-provider-cache');
-  expect(settings.get('agent.provider'), 'settings updated').toBe('mock-provider-cache');
+  expect(settings.get('agent.modelSelection')).toEqual({ model: 'mock-model', provider: 'mock-provider-for-config' });
 });
 
 it.sequential('settings change triggers rebuild via subscribeToSettings', () => {
@@ -562,14 +559,14 @@ it.sequential('settings change triggers rebuild via subscribeToSettings', () => 
 
   const result = createDeps();
   const settings = result.settings as ReturnType<typeof createMockSettings>;
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, result.deps);
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, result.deps);
 
   const originalAgent = config.getAgent();
 
   config.subscribeToSettings();
 
   // Simulate a settings change that should trigger rebuild
-  settings._triggerChange('agent.model');
+  settings._triggerChange('agent.modelSelection');
 
   const newAgent = config.getAgent();
   expect(newAgent, 'agent was rebuilt after settings change').not.toBe(originalAgent);
@@ -580,7 +577,7 @@ it.sequential('context compaction settings changes trigger an agent rebuild', ()
 
   const result = createDeps();
   const settings = result.settings as ReturnType<typeof createMockSettings>;
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, result.deps);
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, result.deps);
   const originalAgent = config.getAgent();
 
   config.subscribeToSettings();
@@ -594,7 +591,7 @@ it.sequential('settings change with non-rebuild key does not trigger rebuild', (
 
   const result = createDeps();
   const settings = result.settings as ReturnType<typeof createMockSettings>;
-  const config = new AgentConfiguration({ model: 'gpt-4o' }, result.deps);
+  const config = new AgentConfiguration({ selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } }, result.deps);
 
   const originalAgent = config.getAgent();
 
@@ -621,9 +618,9 @@ it.sequential('settings change triggers onConfigChanged via subscribeToSettings'
 
   config.subscribeToSettings();
 
-  settings._triggerChange('agent.model');
+  settings._triggerChange('agent.modelSelection');
 
-  expect(calledWithKey, 'onConfigChanged called with changed key').toBe('agent.model');
+  expect(calledWithKey, 'onConfigChanged called with changed key').toBe('agent.modelSelection');
 });
 
 it.sequential('provider factory settings changes trigger cache invalidation hook', () => {
@@ -661,7 +658,7 @@ it.sequential('refreshAgent is no-op for transient client', () => {
     clone: () => overrideAgent,
   } as any;
 
-  const config = new AgentConfiguration({ agentOverride: overrideAgent, model: 'override-model' }, deps);
+  const config = new AgentConfiguration({ agentOverride: overrideAgent, selection: { model: 'override-model', provider: 'mock-provider-for-config' } }, deps);
 
   config.refreshAgent();
 
@@ -678,8 +675,7 @@ it.sequential('refreshAgent is no-op for transient client', () => {
 it.sequential('routes the prompt cache key by adapter, so Grok gets the Responses placement', () => {
   const { deps } = createDeps({
     settingsValues: {
-      'agent.provider': 'grok',
-      'agent.model': 'grok-4.6',
+      'agent.modelSelection': { model: 'grok-4.6', provider: 'grok' },
     },
   });
   const config = new AgentConfiguration({}, deps);

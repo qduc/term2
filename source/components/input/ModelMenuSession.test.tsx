@@ -112,7 +112,7 @@ it.each([
     const requestSetup = vi.fn();
     const intentHost = vi.fn();
     const controller = buildController(intentHost);
-    const settingsService = createMockSettingsService({ 'agent.provider': provider });
+    const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: provider } });
 
     await renderInAct(
       <InputProvider controller={controller}>
@@ -154,7 +154,7 @@ it.each([
 it('routes acceptance of the retained unavailable model row back to setup', async () => {
   const requestSetup = vi.fn();
   const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({ 'agent.provider': 'openai' });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: 'openai' } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -206,7 +206,7 @@ it('accepting a fetched model applies the model and provider in one apply-settin
     }),
   );
   const controller = buildController(intentHost);
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -215,7 +215,7 @@ it('accepting a fetched model applies the model and provider in one apply-settin
   );
 
   await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model ', cursor: 22 });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.modelSelection ', cursor: 31 });
     await Promise.resolve();
   });
 
@@ -254,8 +254,7 @@ it('accepting a fetched model applies the model and provider in one apply-settin
   expect(call.intentRequest.intent).toEqual({
     type: 'apply-settings',
     changes: [
-      { key: 'agent.model', value: 'gpt-test', persistence: 'runtime' },
-      { key: 'agent.provider', value: providerId, persistence: 'runtime' },
+      { key: 'agent.modelSelection', value: { model: 'gpt-test', provider: providerId }, persistence: 'runtime' },
     ],
   });
   expect(controller.getSnapshot().stack).toHaveLength(0);
@@ -271,7 +270,7 @@ it('accepting a typed custom model id (no menu item matches) still applies via t
     }),
   );
   const controller = buildController(intentHost);
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -280,7 +279,7 @@ it('accepting a typed custom model id (no menu item matches) still applies via t
   );
 
   await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model custom-model', cursor: 35 });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.modelSelection custom-model', cursor: 44 });
     await Promise.resolve();
   });
   await act(async () => {
@@ -306,8 +305,7 @@ it('accepting a typed custom model id (no menu item matches) still applies via t
   expect(call.intentRequest.intent).toEqual({
     type: 'apply-settings',
     changes: [
-      { key: 'agent.model', value: 'custom-model', persistence: 'runtime' },
-      { key: 'agent.provider', value: providerId, persistence: 'runtime' },
+      { key: 'agent.modelSelection', value: { model: 'custom-model', provider: providerId }, persistence: 'runtime' },
     ],
   });
 });
@@ -322,7 +320,7 @@ it('a field-error IntentResult keeps the model frame open instead of reopening o
     }),
   );
   const controller = buildController(intentHost);
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -331,7 +329,7 @@ it('a field-error IntentResult keeps the model frame open instead of reopening o
   );
 
   await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model bogus', cursor: 27 });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.modelSelection bogus', cursor: 36 });
     await Promise.resolve();
   });
   await act(async () => {
@@ -362,7 +360,7 @@ it('a field-error IntentResult keeps the model frame open instead of reopening o
 it('Tab switches the Favorites/All tab instead of inserting the model id', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   const view = await renderInAct(
     <InputProvider controller={controller}>
@@ -397,7 +395,7 @@ it('a second Tab lands on the Nicknames tab', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.modelNicknames': { op: `${providerId}/offline-named` },
   });
 
@@ -431,7 +429,7 @@ it('a second Tab lands on the Nicknames tab', async () => {
 
 it('the left arrow moves to the previous model tab', async () => {
   const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
   const view = await renderInAct(
     <InputProvider controller={controller}>
       <ControllerHost controller={controller} settingsService={settingsService} />
@@ -456,7 +454,7 @@ it('the left arrow moves to the previous model tab', async () => {
 it('Tab does not complete a model id into a settings-model frame', async () => {
   const intentHost = vi.fn();
   const controller = buildController(intentHost);
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -465,7 +463,7 @@ it('Tab does not complete a model id into a settings-model frame', async () => {
   );
 
   await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model ', cursor: 22 });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.modelSelection ', cursor: 31 });
     await Promise.resolve();
   });
   await act(async () => {
@@ -479,12 +477,12 @@ it('Tab does not complete a model id into a settings-model frame', async () => {
 
   expect(intentHost).not.toHaveBeenCalled();
   expect(controller.getSnapshot().stack).toHaveLength(1);
-  expect(controller.getSnapshot().editor.text).toBe('/settings agent.model ');
+  expect(controller.getSnapshot().editor.text).toBe('/settings agent.modelSelection ');
 });
 
 it('ctrl+f (command "favorite") toggles the highlighted model immediately, with no naming prompt or modal state', async () => {
   const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   await renderInAct(
     <InputProvider controller={controller}>
@@ -531,7 +529,7 @@ it('selecting a pinned favorite applies the provider carried by its unified-list
   );
   const controller = buildController(intentHost);
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.favoriteModels': [`${providerId}/gpt-test`],
   });
 
@@ -542,7 +540,7 @@ it('selecting a pinned favorite applies the provider carried by its unified-list
   );
 
   await act(async () => {
-    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.model ', cursor: 22 });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.modelSelection ', cursor: 31 });
     await Promise.resolve();
   });
   await act(async () => {
@@ -570,8 +568,7 @@ it('selecting a pinned favorite applies the provider carried by its unified-list
   expect(call.intentRequest.intent).toEqual({
     type: 'apply-settings',
     changes: [
-      { key: 'agent.model', value: 'gpt-test', persistence: 'runtime' },
-      { key: 'agent.provider', value: providerId, persistence: 'runtime' },
+      { key: 'agent.modelSelection', value: { model: 'gpt-test', provider: providerId }, persistence: 'runtime' },
     ],
   });
 });
@@ -579,7 +576,7 @@ it('selecting a pinned favorite applies the provider carried by its unified-list
 it('ctrl+n opens the inline nickname editor on a favorited row; typed keys fill the draft, not the filter query', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.favoriteModels': [providerId + '/gpt-test'],
   });
 
@@ -619,7 +616,7 @@ it('ctrl+n opens the inline nickname editor on a favorited row; typed keys fill 
 it('Enter on a name owned by another model offers replacement, and the next Enter moves it', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.favoriteModels': [providerId + '/gpt-test'],
     'agent.modelNicknames': { op: 'anthropic/claude-opus-4' },
   });
@@ -678,7 +675,7 @@ it('Enter on a name owned by another model offers replacement, and the next Ente
 it('Enter commits a valid nickname, persists it, and keeps the menu open with the editor closed', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.favoriteModels': [providerId + '/gpt-test'],
   });
 
@@ -727,7 +724,7 @@ it('Enter commits a valid nickname, persists it, and keeps the menu open with th
 
 it('creates a nickname directly from All for a non-favorited row', async () => {
   const controller = buildController(vi.fn());
-  const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+  const settingsService = createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-5.1', provider: providerId } });
 
   const { lastFrame } = await renderInAct(
     <InputProvider controller={controller}>
@@ -774,7 +771,7 @@ it('creates a nickname directly from All for a non-favorited row', async () => {
 it('edits and removes a non-favorited model nickname directly from the Nicknames tab', async () => {
   const controller = buildController(vi.fn());
   const settingsService = createMockSettingsService({
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'gpt-5.1', provider: providerId },
     'agent.modelNicknames': { testAlias: `${providerId}/gpt-test` },
   });
 

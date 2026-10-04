@@ -57,7 +57,6 @@ export type SettingsOrigin =
 // `apply-settings` intent carrying both the model and provider changes.
 export type ModelSettingConfig = Readonly<{
   modelKey: string;
-  providerKey: string;
   fallbackProviderKey?: string;
 }>;
 

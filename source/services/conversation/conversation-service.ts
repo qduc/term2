@@ -1,3 +1,4 @@
+import type { ModelSelection } from '../settings/model-selection.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../../contracts/conversation.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
@@ -471,8 +472,8 @@ export class ConversationService {
     return this.#runtime.state.peekLastToolOutput();
   }
 
-  setModel(model: string): void {
-    this.#runtime.settings.setModel(model);
+  setModelSelection(selection: ModelSelection): void {
+    this.#runtime.settings.setModelSelection(selection);
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
@@ -481,14 +482,6 @@ export class ConversationService {
 
   setTemperature(temperature?: number): void {
     this.#runtime.settings.setTemperature(temperature);
-  }
-
-  setProvider(provider: string): void {
-    this.#runtime.settings.setProvider(provider);
-  }
-
-  switchProvider(provider: string): void {
-    this.#runtime.settings.switchProvider(provider);
   }
 
   #retryCallback: (() => void) | null = null;
@@ -627,7 +620,7 @@ export class ConversationService {
   /** Typed manual compaction; compactContext() projects this to its display message. */
   async compactContextDetailed(): Promise<ConversationCompactionOutcome> {
     const startedAt = Date.now();
-    const provider = (): string => this.#deps.settingsService?.get('agent.provider') ?? 'openai';
+    const provider = (): string => this.#deps.settingsService?.get('agent.modelSelection').provider ?? 'openai';
     // Invariant (contract 13 §8): every context_compaction_started frame is
     // followed by exactly one terminal frame, and the command response agrees
     // in kind with that terminal frame. The runtime invokes onStarted exactly
@@ -724,7 +717,7 @@ export class ConversationService {
       for (const record of outcome.costRecords) await this.#eventSink?.({ type: 'cost_update', record });
       await this.#eventSink?.({
         type: 'context_compaction_completed',
-        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        provider: this.#deps.settingsService?.get('agent.modelSelection').provider ?? 'openai',
         sessionId: this.sessionId,
         inputTokensBefore: outcome.checkpoint.contextSummary.estimatedTokensBefore,
         inputTokensAfter: outcome.checkpoint.contextSummary.estimatedTokensAfter,

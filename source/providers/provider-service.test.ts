@@ -17,7 +17,7 @@ import { isProviderDisabled, setProviderDisabled } from '../utils/ai/provider-cr
 function createMockSettingsService(initialProviders: unknown[] = [], initialActive = 'openai') {
   const settings = new Map<string, unknown>([
     ['providers', initialProviders],
-    ['agent.provider', initialActive],
+    ['agent.modelSelection', { model: 'custom-model', provider: initialActive }],
   ]);
 
   return {
@@ -474,7 +474,7 @@ it('deleteCustomProvider removes provider from settings and registry', () => {
   deleteCustomProvider(settingsService, 'custom-ollama');
   const providers = settingsService.get('providers');
   expect(providers.length).toBe(0);
-  expect(settingsService.get('agent.provider')).toBe('openai');
+  expect(settingsService.get('agent.modelSelection')).toEqual({ model: 'custom-model', provider: 'custom-ollama' });
 });
 
 it('loadProviderItems flags providers listed in agent.disabledProviders', () => {
@@ -512,5 +512,5 @@ it('deleteCustomProvider does not change active provider when deleting inactive 
     'openai',
   );
   deleteCustomProvider(settingsService, 'custom-ollama');
-  expect(settingsService.get('agent.provider')).toBe('openai');
+  expect(settingsService.get('agent.modelSelection')).toEqual({ model: 'custom-model', provider: 'openai' });
 });

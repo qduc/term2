@@ -22,7 +22,10 @@ export const sessionContextService: ISessionContextService = {
 export type ClientCall = { input: unknown; opts?: unknown; provider?: string };
 
 export const createMockSettingsService = (entries: [string, unknown][] = []): ISettingsService => {
-  const settings = new Map(entries);
+  const settings = new Map<string, unknown>([
+    ['agent.modelSelection', { model: 'test-model', provider: 'openai' }],
+    ...entries,
+  ]);
   return {
     get: (key: any): any => settings.get(key),
     getDynamic: (key: string): unknown => settings.get(key),
@@ -39,7 +42,7 @@ export const createMockAgentClient = (overrides: Record<string, unknown> = {}): 
     startStream: async () => new MockStream([]),
     continueRunStream: async () => new MockStream([]),
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     chat: async () => '',
     getApprovalPolicyRegistry: () => approvalPolicyRegistry,

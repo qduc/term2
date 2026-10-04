@@ -296,7 +296,7 @@ const App: FC<AppProps> = ({
     retryLastFailedTurn,
     compactContext,
     getUserMessages,
-    setModel,
+    setModelSelection,
     setReasoningEffort,
     addSystemMessage,
     addDividerMessage,
@@ -380,13 +380,13 @@ const App: FC<AppProps> = ({
   const configurationService = useMemo(
     () =>
       new ConversationConfigurationService({
-        setModel,
+        setModelSelection,
         setReasoningEffort,
         setTemperature,
         conversationService,
         settingsService,
       }),
-    [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
+    [setModelSelection, setReasoningEffort, setTemperature, conversationService, settingsService],
   );
   const queueModeNotice = useCallback(
     (text: string) => conversationService.queueModeNotice(text),
@@ -396,25 +396,18 @@ const App: FC<AppProps> = ({
     () =>
       new ProfileTransitionService({
         settingsService,
-        rebuildAgent: () => setModel(settingsService.get('agent.model')),
+        rebuildAgent: () => setModelSelection(settingsService.get('agent.modelSelection')),
         queueModeNotice,
       }),
-    [setModel, queueModeNotice, settingsService],
+    [setModelSelection, queueModeNotice, settingsService],
   );
   const applyRuntimeSetting = useCallback(
     (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
     [configurationService],
   );
-  const applySetupProvider = useCallback(
-    (provider: string) => {
-      configurationService.apply([{ key: 'agent.provider', value: provider, persistence: 'runtime' }]);
-    },
-    [configurationService],
-  );
   const firstRunSetup = useFirstRunSetupGate({
     settingsService,
     controller,
-    applyProvider: applySetupProvider,
   });
 
   const shellInteractionSession = useMemo(
@@ -532,7 +525,7 @@ const App: FC<AppProps> = ({
     settingsService,
     applyRuntimeSetting,
     queueModeNotice,
-    setModel,
+    setModelSelection,
     configurationService,
   });
 
@@ -734,8 +727,8 @@ const App: FC<AppProps> = ({
         ];
         configurationService.apply(changes);
 
-        const savedProviderMatches = !restored.provider || restored.provider === settingsService.get('agent.provider');
-        const savedModelMatches = !restored.model || restored.model === settingsService.get('agent.model');
+        const savedProviderMatches = !restored.provider || restored.provider === settingsService.get('agent.modelSelection').provider;
+        const savedModelMatches = !restored.model || restored.model === settingsService.get('agent.modelSelection').model;
         restoreConversation({
           ...restored,
           previousResponseId: savedProviderMatches && savedModelMatches ? restored.previousResponseId : null,
@@ -939,7 +932,7 @@ const App: FC<AppProps> = ({
     },
     exit: exitFromCommand,
     messages,
-    setModel,
+    setModelSelection,
     getRewindItems: openRewindPickerItems,
     rewindToTarget: (item) => rewindToTarget(item.targetId, item.uiIndex),
     restoreTurnToInput,

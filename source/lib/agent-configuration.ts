@@ -25,7 +25,7 @@ import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-cod
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import { TurnStableMcpToolSource } from '../services/mcp/turn-stable-mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
-import { ModelSelectionSchema, isMainSelectionKey, type ModelSelection } from '../services/settings/model-selection.js';
+import { ModelSelectionSchema, type ModelSelection } from '../services/settings/model-selection.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -126,10 +126,9 @@ export class AgentConfiguration implements AgentSource {
 
   constructor(
     config: {
-      model?: string;
+      selection?: ModelSelection;
       reasoningEffort?: ReasoningEffortSetting | null;
       temperature?: number;
-      providerOverride?: string;
       agentOverride?: ApplicationAgent;
       /**
        * Externally built graph registry (subagent runs). A transient client
@@ -179,18 +178,12 @@ export class AgentConfiguration implements AgentSource {
     // Initialize config
     this.#reasoningEffort = config.reasoningEffort;
     this.#temperature = config.temperature ?? this.#settings.get('agent.temperature');
-    this.#selection = ModelSelectionSchema.parse({
-      model: config.model?.trim() || this.#settings.get('agent.model') || 'gpt-5.1',
-      provider: config.providerOverride ?? this.#settings.get('agent.provider') ?? 'openai',
-    });
+    this.#selection = ModelSelectionSchema.parse(config.selection ?? this.#settings.get('agent.modelSelection'));
 
     if (config.agentOverride) {
       this.#isTransientClient = true;
       this.#agent = config.agentOverride;
-      this.#selection = ModelSelectionSchema.parse({
-        ...this.#selection,
-        model: config.model ?? config.agentOverride.model ?? this.#selection.model,
-      });
+
     } else {
       this.#isTransientClient = false;
       const buildResult = buildAgent(
@@ -369,9 +362,7 @@ export class AgentConfiguration implements AgentSource {
       'app.activeProfileId',
       'enable_agent_workflow',
       'app.searchViaShell',
-      'agent.model',
       'agent.modelSelection',
-      'agent.provider',
       'agent.transport',
       'agent.retryAttempts',
       'agent.maxOutputTokens',
@@ -397,24 +388,13 @@ export class AgentConfiguration implements AgentSource {
       'agent.contextCompaction.compactThreshold',
       'agent.contextCompaction.compactThresholdTokens',
       'agent.smartModel',
-      'agent.smartProvider',
       'agent.balancedModel',
-      'agent.balancedProvider',
       'agent.cheapModel',
-      'agent.cheapProvider',
       'agent.choreModel',
-      'agent.choreProvider',
-      'agent.mentorModel',
-      'agent.mentorProvider',
+      'agent.mentorPool',
       'agent.mentorReasoningEffort',
-      'agent.subagentExplorerModel',
-      'agent.subagentWorkerModel',
-      'agent.subagentExplorerProvider',
-      'agent.subagentWorkerProvider',
       'agent.subagentExplorerReasoningEffort',
       'agent.subagentWorkerReasoningEffort',
-      'agent.subagentLibrarianModel',
-      'agent.subagentLibrarianProvider',
       'agent.subagentLibrarianReasoningEffort',
       'logging.logLevel',
       'logging.suppressConsoleOutput',
@@ -426,13 +406,8 @@ export class AgentConfiguration implements AgentSource {
       if (this.#isDisposed) return;
       if (!changedKey) return;
       if (rebuildKeys.includes(changedKey)) {
-        if (isMainSelectionKey(changedKey)) {
-          this.#selection = ModelSelectionSchema.parse(
-            this.#settings.getDynamic('agent.modelSelection') ?? {
-              model: this.#settings.get('agent.model'),
-              provider: this.#settings.get('agent.provider'),
-            },
-          );
+        if (changedKey === 'agent.modelSelection') {
+          this.#selection = ModelSelectionSchema.parse(this.#settings.get('agent.modelSelection'));
         }
         this.#onConfigChanged?.(changedKey);
         this.rebuildAgent();
@@ -461,8 +436,8 @@ export class AgentConfiguration implements AgentSource {
 
   // Setters — used by AgentClient before calling rebuildAgent()
 
-  setModel(model: string): void {
-    this.#selection = ModelSelectionSchema.parse({ ...this.#selection, model });
+  setModelSelection(selection: ModelSelection): void {
+    this.#selection = ModelSelectionSchema.parse(selection);
   }
 
   setReasoningEffort(effort?: ReasoningEffortSetting): void {
@@ -473,10 +448,6 @@ export class AgentConfiguration implements AgentSource {
     this.#temperature = temperature;
   }
 
-  setProvider(provider: string): void {
-    this.#selection = ModelSelectionSchema.parse({ ...this.#selection, provider });
-    this.#settings.set('agent.provider', provider);
-  }
 
   // Exposed accessors
 

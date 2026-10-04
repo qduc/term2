@@ -202,7 +202,7 @@ it('binds each owned root observer to its handle continuity and leaves caller-ow
 it('freezes the OpenAI projection mode at owned-handle creation and passes it to the client callback', () => {
   let provider = 'openai';
   const settings = {
-    get: (key: string) => (key === 'agent.provider' ? provider : undefined),
+    get: (key: string) => (key === 'agent.modelSelection' ? { model: 'gpt-4o', provider: provider } : undefined),
   } as any;
   const modes: string[] = [];
   const factory = createOwnedSessionClientFactory(

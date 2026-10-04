@@ -130,7 +130,6 @@ export interface AgentFactoryDeps {
 
 export interface AgentBuildResult {
   agent: ApplicationAgent;
-  resolvedModel: string;
   selection: ModelSelection;
 }
 
@@ -494,24 +493,17 @@ function buildModelSettings({
 
 export function buildAgent(
   {
-    model,
     selection,
     reasoningEffort,
     temperature,
   }: {
-    model?: string;
-    selection?: ModelSelection;
+    selection: ModelSelection;
     reasoningEffort?: ReasoningEffortSetting | null;
     temperature?: number;
   },
   deps: AgentFactoryDeps,
 ): AgentBuildResult {
-  const resolvedSelection = ModelSelectionSchema.parse(
-    selection ?? {
-      model: model?.trim() || deps.settings.get('agent.model'),
-      provider: deps.providerId,
-    },
-  );
+  const resolvedSelection = ModelSelectionSchema.parse(selection);
   deps = { ...deps, providerId: resolvedSelection.provider };
   const resolvedModel = resolvedSelection.model;
   const resolvedTemperature = temperature ?? deps.settings.get('agent.temperature');
@@ -616,5 +608,5 @@ export function buildAgent(
     };
   }
 
-  return { agent, resolvedModel, selection: resolvedSelection };
+  return { agent, selection: resolvedSelection };
 }

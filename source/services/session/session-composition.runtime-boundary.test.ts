@@ -25,7 +25,7 @@ function partialClient(): ConversationAgentClient {
   return {
     chat: async () => '',
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     startStream: async () => createMockStream([]),
     continueRunStream: async () => createMockStream([]),

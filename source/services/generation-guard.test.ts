@@ -219,7 +219,7 @@ it('integration - model change during active stream work prevents mutation and a
     getProvider() {
       return 'openai';
     },
-    setModel(_m: string) {},
+    setModelSelection(_selection: { model: string; provider: string }) {},
     async startStream() {
       const s = new GatedStream([]);
       s.finalOutput = 'part 1part 2';
@@ -238,7 +238,7 @@ it('integration - model change during active stream work prevents mutation and a
   await new Promise((r) => setTimeout(r, 10));
 
   // Trigger model change
-  composition.runtimeController.setModel('gpt-next');
+  composition.runtimeController.setModelSelection({ model: 'gpt-next', provider: 'openai' });
 
   releaseGate();
   await runPromise;

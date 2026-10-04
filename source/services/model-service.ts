@@ -215,7 +215,7 @@ export async function fetchModels(
   fetchImpl: FetchFn = fetch,
 ): Promise<ModelInfo[]> {
   const { settingsService, loggingService } = deps;
-  const provider = providerOverride || settingsService.get('agent.provider');
+  const provider = providerOverride || settingsService.get('agent.modelSelection').provider;
   const cacheKey = provider;
   const now = deps.now ?? testClock ?? Date.now;
   const ttlMs = deps.ttlMs ?? MODEL_CACHE_TTL_MS;

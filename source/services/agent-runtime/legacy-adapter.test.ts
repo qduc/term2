@@ -5,8 +5,7 @@ import type { AgentConfig, ResolvedAgentDefinition } from './index.js';
 
 function settings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = {
-    'agent.provider': 'openai',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     ...values,
   };
   return {
@@ -34,13 +33,11 @@ describe('adaptLegacyRole', () => {
     expect(def.tools).toEqual([]);
   });
 
-  it('maps role defaults to their ancillary tiers while preserving legacy role overrides', () => {
+  it('maps role defaults to complete ancillary tier selections', () => {
     const configured = settings({
       'agent.smartModel': [{ model: 'smart-model', provider: 'openai' }],
       'agent.balancedModel': [{ model: 'balanced-model', provider: 'openai' }],
       'agent.cheapModel': [{ model: 'cheap-model', provider: 'openai' }],
-      'agent.mentorModel': { model: 'legacy-mentor-model', provider: 'openai' },
-      'agent.subagentExplorerModel': { model: 'legacy-explorer-model', provider: 'openai' },
     });
 
     expect(adaptLegacyRole('mentor', configured).model.model).toBe('smart-model');
@@ -48,12 +45,7 @@ describe('adaptLegacyRole', () => {
     expect(adaptLegacyRole('explorer', configured).model.model).toBe('cheap-model');
     expect(adaptLegacyRole('librarian', configured).model.model).toBe('cheap-model');
 
-    const legacyOnly = settings({
-      'agent.mentorModel': { model: 'legacy-mentor-model', provider: 'openai' },
-      'agent.subagentExplorerModel': { model: 'legacy-explorer-model', provider: 'openai' },
-    });
-    expect(adaptLegacyRole('mentor', legacyOnly).model.model).toBe('legacy-mentor-model');
-    expect(adaptLegacyRole('explorer', legacyOnly).model.model).toBe('legacy-explorer-model');
+    expect(adaptLegacyRole('mentor', settings()).model).toEqual({ model: 'gpt-4o', provider: 'openai' });
   });
 
   it('adapts worker role to ResolvedAgentDefinition', () => {

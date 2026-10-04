@@ -446,8 +446,7 @@ export interface LogEnvelope<TEvent = LogEvent> {
 }
 
 export const AGENT_AFFECTING_SETTINGS = new Set<string>([
-  'agent.model',
-  'agent.provider',
+  'agent.modelSelection',
   'agent.reasoningEffort',
   'agent.temperature',
   'app.activeProfileId',

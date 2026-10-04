@@ -5,9 +5,6 @@ import {
   isStringSetting,
   isNumberSetting,
 } from '../services/settings/settings-ui-metadata.js';
-import { getProvider, getProviderIds } from '../providers/index.js';
-import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
-import { KNOWN_CUSTOM_PROVIDER_TYPES } from '../services/settings/settings-schema.js';
 import { fetchDecisionModels, isDecisionModelKey } from '../services/models/decision-model-listing.js';
 
 export { isSecretSetting, isStringSetting, isNumberSetting };
@@ -28,79 +25,14 @@ export const AUTO_APPROVE_MODE_DESCRIPTIONS = {
     'Bypass tool approval prompts; ask_user still pauses for your answer. In-workspace apply-patch edits are automatic in every mode.',
 } as const;
 
-const CURATED_PROVIDER_DESCRIPTIONS: Record<string, string> = {
-  openai: 'OpenAI official API',
-  openrouter: 'OpenRouter.ai',
-  'openai-compatible': 'Local models/Ollama',
-  anthropic: 'Anthropic Claude',
-  google: 'Google Gemini',
-  codex: 'ChatGPT Codex (OAuth)',
-  grok: 'xAI Grok (OAuth)',
-  'llama.cpp': 'Local llama.cpp server',
-  opencode: 'OpenCode runtime',
-};
-
-export function isProviderSettingKey(key: string): boolean {
-  return key === 'agent.provider' || key.endsWith('Provider');
-}
-
-export function buildProviderSuggestions(): SettingValueSuggestion[] {
-  const providerIds = new Set<string>();
-
-  for (const id of getProviderIds()) {
-    providerIds.add(id);
-  }
-
-  for (const id of OAUTH_ACCOUNT_PROVIDERS) {
-    providerIds.add(id);
-  }
-
-  for (const type of KNOWN_CUSTOM_PROVIDER_TYPES) {
-    providerIds.add(type);
-  }
-
-  const preferredOrder = [
-    'openai',
-    'openrouter',
-    'openai-compatible',
-    'anthropic',
-    'google',
-    'codex',
-    'grok',
-    'llama.cpp',
-    'opencode',
-  ];
-
-  const orderedIds: string[] = [];
-  for (const id of preferredOrder) {
-    if (providerIds.has(id)) {
-      orderedIds.push(id);
-      providerIds.delete(id);
-    }
-  }
-  for (const id of providerIds) {
-    orderedIds.push(id);
-  }
-
-  return orderedIds.map((id) => ({
-    value: id,
-    description: CURATED_PROVIDER_DESCRIPTIONS[id] ?? getProvider(id)?.label,
-  }));
-}
-
 // Curated suggestions for settings where the schema alone can't express them:
-// - Temperature / auto-approve model have opinionated presets, not enum values.
+// - Temperature have opinionated presets, not enum values.
 // - Some enum/boolean fields carry custom descriptions that enrich the UX.
 const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
   'agent.useFlexServiceTier': [
     { value: 'true', description: 'Enable Flex Service Tier (lower cost)' },
     { value: 'false', description: 'Use standard service tier' },
-  ],
-  'agent.autoApproveModel': [
-    { value: 'gpt-4o-mini', description: 'OpenAI fast model' },
-    { value: 'claude-3-haiku-20240307', description: 'Anthropic fast model' },
-    { value: 'gemini-1.5-flash', description: 'Google fast model' },
   ],
   // Fallback while the live decisions-catalog fetch (see
   // fetchLiveSettingValueSuggestions) is in flight or fails.
@@ -285,9 +217,6 @@ export function buildSettingValueSuggestions(key: string): SettingValueSuggestio
       { value: 'xhigh', description: 'Use extra-high reasoning effort' },
       { value: 'default', description: 'Use the model default' },
     ];
-  }
-  if (isProviderSettingKey(key)) {
-    return buildProviderSuggestions();
   }
   // If we have curated suggestions, use them (they may include descriptions,
   // custom ordering, or non-schema data like known provider list).

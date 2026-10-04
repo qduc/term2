@@ -50,7 +50,7 @@ function partialClient(methods: Record<string, unknown> = {}): ConversationAgent
   return {
     chat: async () => '',
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     startStream: async () => createMockStream([]),
     continueRunStream: async () => createMockStream([]),
@@ -1418,11 +1418,11 @@ it('does not dispose a caller-owned compatibility client during reset or service
   expect(disposeCalls).toBe(0);
 });
 
-it('setModel() delegates to agent client', () => {
+it('setModelSelection() delegates to agent client', () => {
   let setModelCalledWith: any = null;
   const mockClient = partialClient({
-    setModel(model: string) {
-      setModelCalledWith = model;
+    setModelSelection(selection: { model: string; provider: string }) {
+      setModelCalledWith = selection;
     },
   });
 
@@ -1430,9 +1430,9 @@ it('setModel() delegates to agent client', () => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setModel('gpt-4');
+  service.setModelSelection({ model: 'gpt-4', provider: 'openai' });
 
-  expect(setModelCalledWith).toBe('gpt-4');
+  expect(setModelCalledWith).toEqual({ model: 'gpt-4', provider: 'openai' });
 });
 
 it('setTemperature() delegates to agent client when supported', () => {
@@ -1525,7 +1525,7 @@ it('abort() omits the abandoned tool turn from exported provider history', async
   }
 });
 
-it('switchProvider() after abort does not replay the abandoned tool turn in the next full-history request', async () => {
+it('setModelSelection() after abort does not replay the abandoned tool turn in the next full-history request', async () => {
   const interruption = {
     name: 'shell',
     agent: { name: 'CLI Agent' },
@@ -1549,7 +1549,7 @@ it('switchProvider() after abort does not replay the abandoned tool turn in the 
       return 'openrouter';
     },
     abort() {},
-    setProvider() {},
+    setModelSelection() {},
     clearConversations() {},
     async startStream(input: any) {
       startCalls.push(input);
@@ -1566,7 +1566,7 @@ it('switchProvider() after abort does not replay the abandoned tool turn in the 
   expect(first.type).toBe('approval_required');
 
   service.abort();
-  service.switchProvider('openrouter');
+  service.setModelSelection({ model: 'gpt-4', provider: 'openrouter' });
 
   const secondPromise = service.sendMessage('next');
   await service.resumeQueue();

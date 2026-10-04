@@ -251,7 +251,7 @@ export function createProductionRuntimeFactory(input: {
       readOnly,
     }) => {
       const client = new AgentClient({
-        model: sessionSettingsSnapshot.modelId,
+        selection: { model: sessionSettingsSnapshot.modelId, provider: sessionSettingsSnapshot.providerId },
         reasoningEffort: sessionSettingsSnapshot.reasoningEffort as ModelSettingsReasoningEffort,
         maxTurns: settings.get('agent.maxTurns'),
         retryAttempts: settings.get('agent.retryAttempts'),
@@ -338,8 +338,7 @@ function createDefaultSettings(
     env: {},
     cli: {},
   });
-  settings.set('agent.provider', defaults.providerId, { persist: false });
-  settings.set('agent.model', defaults.modelId, { persist: false });
+  settings.set('agent.modelSelection', { model: defaults.modelId, provider: defaults.providerId }, { persist: false });
   if (snapshot) {
     settings.set('agent.reasoningEffort', snapshot.reasoningEffort as never, { persist: false });
   }

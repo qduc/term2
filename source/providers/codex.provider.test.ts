@@ -1173,7 +1173,15 @@ it.sequential('Codex registry boundary preserves the full streamed-turn request 
     const model = await provider.createStreamedModel('gpt-5.3-codex', {
       settingsService: {
         get: (key: string) =>
-          key === 'agent.transport' ? 'websocket' : key === 'agent.retryAttempts' ? 0 : 'gpt-5.3-codex',
+          key === 'agent.transport'
+            ? 'websocket'
+            : key === 'agent.retryAttempts'
+            ? 0
+            : key === 'agent.codex.websocketFirstFrameTimeoutMs'
+            ? 90_000
+            : key === 'agent.codex.websocketInterFrameTimeoutMs'
+            ? 600_000
+            : 'gpt-5.3-codex',
       },
       loggingService: transport,
     } as any);

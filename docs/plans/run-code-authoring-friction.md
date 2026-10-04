@@ -106,6 +106,28 @@ prefer the failure-time expansion if the difference is material.
 
 ## M4 — Partial results and per-item recovery
 
+Re-measurement (2026-10-04): retained September 28–30 and October 2–4 logs,
+frozen before 15:30 UTC+7 on October 4, contain 5,170 completions in 211
+sessions. Of 3,520 canonical-source matches, 63 failed `Promise.all` invocations
+explicitly report losing successful sibling results; inspected continuations
+repeat completed reads. This crosses the sample and recurrence gate below.
+Missing dates and 1,650 unmatched invocations prevent a full-window incidence
+claim. Evidence: coordinator task `4b755f9a`, `artifacts/retained-log-evidence.json`.
+
+Recovery contract: `settleResolved` snapshots normalized script-visible values
+on settled tool calls; `renderResult` exposes them when the script fails, with
+call identity and outcome. Recovery reuses the existing per-call result limit,
+call-admission limit, and final presentation clip/artifact mechanism. It never
+replays tools, certifies task success, or treats an unsettled call as failed.
+Clipped string results carry per-item retrieval metadata; failed artifact writes
+explicitly mark the omitted data unavailable. Oversized structured results retain
+their existing rejection and retrieval path rather than exposing partial JSON.
+
+Detection gap: the former public test asserted the lost-result warning rather
+than recoverability. Category tests now cover batch failure, later script error,
+mutation non-replay, normalized snapshots, and clipped-result storage failure.
+The call record owns recovery evidence; telemetry continues to emit counts only.
+
 **Problem.** One bad nested argument rejects the whole `Promise.all`, and
 successful sibling reads are re-run in the next script
 (`~/.local/share/term2-nodejs/conversations/57c18684-1b1e-416d-8d46-73c5ce2f7d96.jsonl:250`).

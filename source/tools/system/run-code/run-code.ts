@@ -572,21 +572,24 @@ function renderResult(
         ? `Script was cancelled. ${message}`
         : `Script failed: ${message}`,
     );
-    const successfulNestedCalls = calls.filter((call) => call.outcome === 'ok').length;
-    const hasFailedNestedCall = calls.some((call) => call.outcome !== 'ok' && call.outcome !== 'describe');
-    if (
-      code !== 'timeout' &&
-      code !== 'deadline' &&
-      code !== 'cancellation' &&
-      successfulNestedCalls > 0 &&
-      hasFailedNestedCall
-    ) {
+    if (calls.some((call) => call.recovery)) {
       sections.push(
-        `${successfulNestedCalls} nested tool call${
-          successfulNestedCalls === 1 ? '' : 's'
-        } completed successfully, but ${
-          successfulNestedCalls === 1 ? 'its result was' : 'their results were'
-        } lost because the script failed. If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch to keep the other results.`,
+        'Recovered nested results (host-observed):\n' +
+          JSON.stringify(
+            calls
+              .filter((call) => call.outcome !== 'describe')
+              .map((call) => ({
+                callId: call.callId,
+                tool: call.tool,
+                outcome: call.outcome,
+                ...(call.recovery?.truncated ? { truncated: true } : {}),
+                ...(call.recovery?.fullOutputPath ? { fullOutputPath: call.recovery.fullOutputPath } : {}),
+                ...(call.recovery?.unavailable ? { unavailable: true } : {}),
+                ...(call.reason ? { reason: call.reason } : {}),
+                ...(call.recovery ? { result: call.recovery.result } : {}),
+              })),
+          ) +
+          '\nUse these completed results instead of repeating calls. Unknown outcomes are not proof of failure; inspect state before retrying. This is call evidence, not task success.',
       );
     }
   } else if (execution.script.voidOutput) {

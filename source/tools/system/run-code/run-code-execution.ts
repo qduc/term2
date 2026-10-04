@@ -45,6 +45,13 @@ export interface RunCodeExecutionCall {
   readonly directlyCallable?: boolean;
   readonly diagnostic?: RunCodeDiagnosticCode;
   readonly reason?: string;
+  /** Already-normalized script-visible result; bounded by the existing per-call limit. */
+  readonly recovery?: {
+    readonly result: JsonValue;
+    readonly truncated?: boolean;
+    readonly fullOutputPath?: string;
+    readonly unavailable?: boolean;
+  };
 }
 
 export interface RunCodeExecutionAction {

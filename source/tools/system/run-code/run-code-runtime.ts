@@ -275,10 +275,22 @@ export const serializeResult = async (
   limit: number,
   toolName: string,
   callsCompleted: number,
-): Promise<{ ok: true; result: JsonValue } | { ok: false; error: string }> => {
+): Promise<
+  { ok: true; result: JsonValue; recovery?: RunCodeCallRecord['recovery'] } | { ok: false; error: string }
+> => {
   const execution = getRunCodeExecutionResult(result);
   if (execution && result instanceof String) result = String(result);
-  if (typeof result === 'string') return { ok: true, result: truncate(result, limit) };
+  if (typeof result === 'string') {
+    const clipped = truncate(result, limit);
+    if (result.length <= limit) return { ok: true, result: clipped };
+    let retrieval: { fullOutputPath: string } | { unavailable: true };
+    try {
+      retrieval = { fullOutputPath: await saveOutputArtifact(result, { filenamePrefix: 'tool-overflow' }) };
+    } catch {
+      retrieval = { unavailable: true };
+    }
+    return { ok: true, result: clipped, recovery: { result: clipped, truncated: true, ...retrieval } };
+  }
   try {
     const encoded = JSON.stringify(result);
     if (encoded === undefined) return { ok: true, result: null };
@@ -638,6 +650,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       callId?: string,
       diagnostic?: RunCodeDiagnosticCode,
       reason?: string,
+      recovery?: RunCodeCallRecord['recovery'],
     ) => {
       calls.push({
         tool,
@@ -647,6 +660,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         ...(callId ? { callId } : {}),
         ...(diagnostic ? { diagnostic } : {}),
         ...(reason ? { reason: clipReason(reason) } : {}),
+        ...(recovery ? { recovery } : {}),
       });
       if (outcome !== 'describe') {
         writeNestedCallRecord(
@@ -967,7 +981,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure');
+          record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure', message);
           if (isActionTool(prepared.tool.name)) recordReceipt(callId, prepared.tool.name, 'failed', message);
           return failed(message);
         }
@@ -1012,7 +1026,15 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           calls.filter((call) => call.outcome !== 'describe').length + 1,
         );
         if (!serialized.ok) {
-          record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'invalid_nested_output');
+          record(
+            prepared.tool.name,
+            'error',
+            prepared.started,
+            undefined,
+            callId,
+            'invalid_nested_output',
+            serialized.error,
+          );
           return { kind: 'result', result: serialized as JsonValue };
         }
         const contract = validateScriptedReturn(prepared.tool, serialized.result);
@@ -1025,7 +1047,12 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
             message: `Tool "${prepared.tool.name}" returned a value that violates its scripted output contract: ${contract.message}`,
           };
         }
-        record(prepared.tool.name, 'ok', prepared.started, undefined, callId);
+        if (!abortedCallIds.has(callId)) {
+          // Snapshot only the normalized, bounded script-visible value. Media references
+          // remain inert markers; raw payloads never enter recovery or telemetry.
+          const recovery = serialized.recovery ?? { result: JSON.parse(JSON.stringify(contract.value)) as JsonValue };
+          record(prepared.tool.name, 'ok', prepared.started, undefined, callId, undefined, undefined, recovery);
+        }
         return { kind: 'result', result: { ok: true, result: contract.value } as JsonValue };
       } catch (error) {
         record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure');

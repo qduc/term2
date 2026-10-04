@@ -9,7 +9,6 @@ it('buildSettingsWithSources maps nested values and sources including optional u
       ...DEFAULT_SETTINGS.agent,
       temperature: undefined,
       smartModel: [{ model: 'smart-model', provider: 'smart-provider' }],
-      smartProvider: 'smart-provider',
       codex: {
         websocketFirstFrameTimeoutMs: 12_345,
         websocketInterFrameTimeoutMs: 67_890,
@@ -22,7 +21,7 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   };
 
   const getSource = (key: string): SettingSource => {
-    if (key === 'agent.model') {
+    if (key === 'agent.modelSelection') {
       return 'cli';
     }
 
@@ -43,14 +42,13 @@ it('buildSettingsWithSources maps nested values and sources including optional u
 
   const result = buildSettingsWithSources(settings, getSource);
 
-  expect(result.agent.model.value).toBe(settings.agent.model);
-  expect(result.agent.model.source).toBe('cli');
+  expect(result.agent.modelSelection.value).toEqual(settings.agent.modelSelection);
+  expect(result.agent.modelSelection.source).toBe('cli');
   expect(result.agent.temperature.value).toBe(undefined);
   expect(result.agent.temperature.source).toBe('default');
   expect(result.agent.smartModel.value).toEqual([{ model: 'smart-model', provider: 'smart-provider' }]);
   expect(result.agent.smartModel.source).toBe('config');
-  expect(result.agent.smartProvider.value).toBe('smart-provider');
-  expect(result.agent.smartProvider.source).toBe('default');
+  expect(result.agent).not.toHaveProperty('smartProvider');
   expect(result.webSearch.tavily.value).toBe(undefined);
   expect(result.webSearch.tavily.source).toBe('env');
   expect(result.webSearch.provider.value).toEqual(settings.webSearch.provider);

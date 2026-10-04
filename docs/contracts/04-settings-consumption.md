@@ -66,35 +66,35 @@ changes, `/settings` command for user entry).
   `DISABLE_LOGGING`, `DEBUG_LOGGING`, `NODE_ENV`, `SHELL/COMSPEC`,
   `LOG_FILE_OPERATIONS`, `DEBUG_BASH_TOOL`, Tavily/Exa/web-search)
   (`settings-env.ts:15-67`).
-- **Role override:** frontmatter explicit > inherited per-tier
-  `agent.<tier>*` > legacy role-specific > tier resolver; reasoning falls back
-  to `agent.reasoningEffort` then `'default'`
-  (`subagents/role-loader.ts:103-140`).
+- **Role model override:** complete frontmatter pair > bound per-tier pool >
+  complete main selection (`loadRoleDefinition`, `resolveAncillaryModelTier`).
+  Reasoning independently falls back through tier effort, role effort,
+  `agent.reasoningEffort`, then `'default'`.
 - **Per-invocation:** mentor consultation values override role/definition
   (`mentor-runner.ts:244-250`, `:283-290`); shell tool `timeout_ms` and
   `max_output_length` override settings (`source/tools/system/shell.ts:843-858`);
-  `config.providerOverride`/`config.temperature` override settings
-  (`lib/agent-configuration.ts:109-125`); model resolver: model argument >
-  `agent.model` > `'gpt-4o'` fallback (`model-resolver.ts:43-44`).
+  `AgentConfiguration` receives a complete selection and optional temperature.
+  Exact policies require a pair; relative policies select a tier entry or
+  inherit the complete parent (`resolveModelPolicy`).
 
 ## 6. Settlement semantics
 
 ### Provider/model binding
 
 `ModelSelectionSchema` requires a nonempty `{provider, model}` pair. The main
-agent's `agent.modelSelection` is authoritative; `agent.model` and
-`agent.provider` are compatibility projections. `mainSelectionForLayer` converts
-legacy fields at each settings layer, while explicit pairs replace the prior
-pair rather than deep-merging a missing member. `SettingsService` translates
-legacy main writes and batches into one pair before publication and persistence.
+agent's `agent.modelSelection` is authoritative. Scalar `agent.model` and
+`agent.provider` settings are rejected rather than projected or migrated.
+Pairs replace prior pairs atomically at each layer; incomplete pairs cannot
+borrow a member from another layer. `SettingsService` rejects selection child
+writes and validates a complete pair before publication and persistence.
 `AgentConfiguration` stores one selection and passes it to `buildAgent`.
 
-Tier pools, mentor pools, legacy role overrides, efficient/capable overrides,
-and legacy auto-approval/edit-healing model settings parse to complete pairs.
-Legacy strings bind once to their own configured host; subsequent default-host
-edits do not rebind saved entries. `migrateLegacyAncillarySettings` carries the
-selected legacy model's parsed pair into its tier rather than borrowing another
-role's provider. This prevents independent strings from drifting after parsing.
+Tier pools and mentor pools require arrays of complete pairs. Scalar pool
+strings, missing-provider entries, role model/provider settings, efficient/capable
+overrides, and former auto-approval/edit-healing selection settings are rejected.
+Reasoning migrations and Decisions identifiers remain independent of model identity.
+Historical conversation replay still reads old scalar events; live resume
+publishes their restored identity as one canonical pair, not scalar setting writes.
 
 The model-only `agent.reasoningModel` and `agent.reasoning.<effort>` lookups were
 not declared by the settings schema and are not supported resolution paths;
@@ -155,7 +155,7 @@ an OpenRouter Decisions identifier, not a general provider-model selection;
 
 ### 8.1 C4.1 consumer and classification inventory
 
-This is the current exhaustive inventory of the **126 values** exported by
+This is the current exhaustive inventory of the values exported by
 `SETTING_KEYS` (not a second runtime registry). The canonical structured
 consumer inventory is settings-owned, imported by `settings-schema.test.ts`,
 and rejects missing, duplicate, or unknown keys against the runtime export.
@@ -186,13 +186,13 @@ live router or at their documented next-request boundary.
 
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |
-| Schema-to-consumer classification | `settings-consumer-inventory.ts`, imported by `settings-schema.test.ts` "keeps the structured Contract 04 consumer inventory complete and duplicate-free", classifies every runtime `SETTING_KEYS` export (126 values) and rejects missing, duplicate, or unknown keys | covered |
+| Schema-to-consumer classification | `settings-consumer-inventory.ts`, imported by `settings-schema.test.ts` "keeps the structured Contract 04 consumer inventory complete and duplicate-free", classifies every runtime `SETTING_KEYS` export and rejects missing, duplicate, or unknown keys | covered |
 | Default value | `settings-service.test.ts` "SettingsService initializes with defaults"; targeted `settings-schema.test.ts` cases for context compaction, run-budget policy, sandbox settings, workflow limits, and background timeout | covered |
 | Customized value | `settings-service.test.ts` "set() modifies runtime-modifiable settings", "config file overrides defaults" | covered |
 | Minimum bound | `settings-schema.test.ts` cases "context compaction defaults...", "includes agent.maxParallelToolCalls...", "shell.backgroundTimeout defaults...", and "memory settings default..." exercise exact minima and reject below-minimum values | covered |
 | Maximum bound | `settings-schema.test.ts` "accepts the exact maximum mentor samples and mentor pool size" accepts 8 and rejects 9; "context compaction defaults..." covers ratio endpoints | covered |
 | Invalid value rejection | `settings-schema.test.ts` request-deadline, Codex-timeout, compaction, run-budget, parallel-tool, and background-timeout cases; `settings-service.test.ts` "setPersistent() rejects invalid values", "refuses to start on invalid config file (invalid JSON)", "refuses to start on invalid schema in config file" | covered |
-| Migrated value | `settings-service.test.ts` "migrates the former persisted request-deadline default to disabled", custom-provider migrations ("migrates name-only custom provider to id with underscores", "migrates legacy agent.provider names with spaces to normalized provider id"); `ancillary-settings-migration.ts` | covered |
+| Migrated value | `settings-service.test.ts` "migrates the former persisted request-deadline default to disabled", custom-provider migrations ("migrates name-only custom provider to id with underscores", "migrates selected provider names with spaces to normalized provider id"); `ancillary-settings-migration.ts` | covered |
 | Root consumer | `agent-client.application-run-loop.test.ts` "applies a changed maxParallelToolCalls setting to the next request" | covered |
 | Nested (subagent) consumer | `nested-runner.test.ts` "passes the settings-backed policy to direct nested runs and activates critical tool-free wrap-up" | covered |
 | Mentor consumer | `mentor-runner.test.ts` "samples the mentor N times without letting samples see each other" and "lets the pool override mentorSamples" | covered |

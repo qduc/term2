@@ -8,8 +8,7 @@ import { z } from 'zod';
 const settings = {
   get(key: string): unknown {
     return {
-      'agent.provider': 'openai',
-      'agent.model': 'gpt-5.6-luna',
+      'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'openai' },
       'agent.transport': 'http',
       'agent.retryAttempts': 0,
     }[key];
@@ -38,13 +37,12 @@ const logger = {
 function makeLifecycleClient(providerId: string, agentOverride?: any): AgentClient {
   return new AgentClient({
     ...(agentOverride ? { agentOverride } : {}),
-    providerOverride: providerId,
+    selection: { model: 'lifecycle-model', provider: providerId },
     deps: {
       logger,
       settings: {
         get(key: string): unknown {
-          if (key === 'agent.provider') return providerId;
-          if (key === 'agent.model') return 'lifecycle-model';
+          if (key === 'agent.modelSelection') return { model: 'lifecycle-model', provider: providerId };
           return settings.get(key);
         },
         getDynamic(key: string): unknown {
@@ -106,7 +104,7 @@ it('uses the supplied provider registry for the chaining capability', () => {
 
   try {
     const client = new AgentClient({
-      providerOverride: providerId,
+      selection: { model: 'lifecycle-model', provider: providerId },
       deps: {
         logger,
         settings,
@@ -253,7 +251,7 @@ it.sequential('routes tool-batch diagnostics to debug with stable event identiti
     info: (message: string, meta?: Record<string, unknown>) => infoLogs.push({ message, meta }),
   };
   const client = new AgentClient({
-    providerOverride: providerId,
+    selection: { model: 'lifecycle-model', provider: providerId },
     maxTurns: 2,
     agentOverride: {
       name: 'diagnostic-routing-agent',
@@ -274,8 +272,7 @@ it.sequential('routes tool-batch diagnostics to debug with stable event identiti
       logger: testLogger,
       settings: {
         get(key: string): unknown {
-          if (key === 'agent.provider') return providerId;
-          if (key === 'agent.model') return 'lifecycle-model';
+          if (key === 'agent.modelSelection') return { model: 'lifecycle-model', provider: providerId };
           if (key === 'agent.retryAttempts') return 0;
           return settings.get(key);
         },

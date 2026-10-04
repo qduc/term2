@@ -23,14 +23,19 @@ import {
  * unqualified success line; a failed replacement is reported as memory-only so
  * the user is never told the value survived a restart.
  */
+function formatSettingValue(value: unknown): string {
+  if (value !== null && typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 function formatDurableSetMessage(result: DurableWriteResult | undefined, key: string, value: unknown): string {
   if (result?.status === 'not-persisted') {
     if (result.reason === 'failed') {
       return `Error: failed to save ${key} to disk; the change is applied in memory only and will be lost on restart.`;
     }
-    return `Set ${key} to ${value} (memory only - persistence is disabled).`;
+    return `Set ${key} to ${formatSettingValue(value)} (memory only - persistence is disabled).`;
   }
-  return `Set ${key} to ${value}`;
+  return `Set ${key} to ${formatSettingValue(value)}`;
 }
 
 function formatDurableResetMessage(result: DurableWriteResult | undefined, key: string): string {
@@ -129,9 +134,9 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
   const lines: string[] = [];
   const entries: Array<{ key: string; value: any; source: string }> = [
     {
-      key: SETTING_KEYS.AGENT_MODEL,
-      value: settings.agent.model.value,
-      source: settings.agent.model.source,
+      key: SETTING_KEYS.AGENT_MODEL_SELECTION,
+      value: settings.agent.modelSelection.value,
+      source: settings.agent.modelSelection.source,
     },
     {
       key: SETTING_KEYS.AGENT_SMART_MODEL,
@@ -193,7 +198,6 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       value: settings.agent.contextCompaction.compactThresholdTokens.value,
       source: settings.agent.contextCompaction.compactThresholdTokens.source,
     },
-    // agent.provider is hidden - it can only be changed in a new conversation via model menu
     {
       key: SETTING_KEYS.AGENT_MAX_TURNS,
       value: settings.agent.maxTurns.value,
@@ -402,7 +406,7 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
   ];
 
   for (const entry of entries) {
-    const value = Array.isArray(entry.value) ? entry.value.join(', ') : entry.value;
+    const value = formatSettingValue(entry.value);
     lines.push(`${entry.key}: ${value} (${entry.source})`);
   }
 
@@ -441,7 +445,7 @@ export function createSettingsCommand({
         const key = parts[0];
         const value = settingsService.getDynamic(key);
         const source = settingsService.getSource(key);
-        addSystemMessage(`${key}: ${value} (${source})`);
+        addSystemMessage(`${key}: ${formatSettingValue(value)} (${source})`);
         return true;
       }
 
@@ -489,33 +493,16 @@ export function createSettingsCommand({
             addSystemMessage(`Error: Unknown provider '${provider}'`);
             return false;
           }
-          if (!isTierPool) {
-            const providerKey = modelSettingConfig.providerKey;
-            settingsService.setDynamic(providerKey, provider);
-            if (applyRuntimeSetting) applyRuntimeSetting(providerKey, provider);
-          }
         }
         if (isTierPool) {
           const models = parseSettingValueForKey(key, modelId);
-          const binding =
-            provider ??
-            settingsService.getDynamic(modelSettingConfig.providerKey) ??
-            settingsService.get('agent.provider');
+          const binding = provider ?? settingsService.get('agent.modelSelection').provider;
           parsedValue = Array.isArray(models)
             ? models.map((entry) => (typeof entry === 'string' ? { model: entry, provider: binding } : entry))
             : models;
         } else {
-          parsedValue = modelId;
+          parsedValue = { model: modelId, provider: provider ?? settingsService.get('agent.modelSelection').provider };
         }
-      }
-
-      // Prevent changing provider via settings command - it can only be changed
-      // at the start of a new conversation via the model selection menu
-      if (key === 'agent.provider') {
-        addSystemMessage(
-          `Cannot change provider mid-conversation. Choose a model from the desired provider in the model menu at the start of a new conversation.`,
-        );
-        return true;
       }
 
       // Validate temperature values early for a nicer UX.

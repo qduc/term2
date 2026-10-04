@@ -17,7 +17,7 @@ const findConfig = (settingsService: SettingsService, provider: string) =>
   ).find((entry) => entry.id === provider || entry.name === provider);
 
 export const useOpenCodeGoUsage = (settingsService: SettingsService, isProcessing: boolean): OpenCodeGoUsageHandle => {
-  const provider = useSetting(settingsService, 'agent.provider') ?? '';
+  const provider = useSetting(settingsService, 'agent.modelSelection').provider;
   const config = findConfig(settingsService, provider);
   const isGo = config?.baseUrl?.toLowerCase().includes('/zen/go/') === true;
   const apiKey = isGo ? config?.apiKey ?? process.env.OPENCODE_API_KEY : undefined;

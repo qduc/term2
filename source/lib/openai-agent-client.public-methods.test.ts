@@ -40,8 +40,7 @@ function createMockLogger(): ILoggingService {
 
 function createMockSettings(values: Record<string, any> = {}): ISettingsService {
   const store: Record<string, any> = {
-    'agent.provider': 'mock-provider-public-methods',
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-public-methods' },
     ...values,
   };
   return {
@@ -319,14 +318,14 @@ beforeEach(() => {
 
 // ========== setModel tests ==========
 
-it.sequential('setModel updates the internal model', async () => {
+it.sequential('setModelSelection updates the internal model', async () => {
   const settings = createMockSettings();
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   // Set a new model
-  client.setModel('gpt-4-turbo');
+  client.setModelSelection({ model: 'gpt-4-turbo', provider: client.getProvider() });
 
   // Trigger a chat to see what model is used
   await client.chat('test');
@@ -338,7 +337,9 @@ it.sequential('setModel updates the internal model', async () => {
 // ========== setProvider / getProvider tests ==========
 
 it.sequential('getProvider returns current provider', () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-public-methods' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -346,27 +347,37 @@ it.sequential('getProvider returns current provider', () => {
   expect(client.getProvider()).toBe('mock-provider-public-methods');
 });
 
-it.sequential('setProvider updates provider and persists to settings', () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
+it.sequential('setModelSelection installs the pair without changing settings', () => {
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-public-methods' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  client.setProvider('openai');
+  client.setModelSelection({ model: 'mock-model', provider: 'openai' });
   expect(client.getProvider()).toBe('openai');
-  expect(settings.get('agent.provider')).toBe('openai');
+  expect(settings.get('agent.modelSelection')).toEqual({
+    model: 'mock-model',
+    provider: 'mock-provider-public-methods',
+  });
 });
 
-it.sequential('setProvider does not initialize provider credentials eagerly', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
+it.sequential('setModelSelection does not initialize provider credentials eagerly', async () => {
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-public-methods' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  client.setProvider('mock-missing-creds');
+  client.setModelSelection({ model: 'mock-model', provider: 'mock-missing-creds' });
 
   expect(client.getProvider()).toBe('mock-missing-creds');
-  expect(settings.get('agent.provider')).toBe('mock-missing-creds');
+  expect(settings.get('agent.modelSelection')).toEqual({
+    model: 'mock-model',
+    provider: 'mock-provider-public-methods',
+  });
 
   await expect(async () => client.chat('test')).rejects.toThrow('Missing credentials');
 });
@@ -375,7 +386,7 @@ it.sequential('application-owned startStream forwards previousResponseId to the 
   ensureApplicationContinuityProviderRegistered();
   applicationContinuityRequests = [];
   const settings = createMockSettings({
-    'agent.provider': 'mock-application-continuity',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-application-continuity' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -389,7 +400,7 @@ it.sequential('application-owned startStream forwards previousResponseId to the 
 
 it.sequential('startStream only passes previousResponseId when provider supports chaining', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-false',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-false' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -399,14 +410,16 @@ it.sequential('startStream only passes previousResponseId when provider supports
   expect(chainingRunnerCalls.length).toBe(1);
   expect('previousResponseId' in chainingRunnerCalls[0].options).toBe(false);
 
-  client.setProvider('mock-chaining-true');
+  client.setModelSelection({ model: 'mock-model', provider: 'mock-chaining-true' });
   await client.startStream('Hello', { previousResponseId: 'prev-2' });
   expect(chainingRunnerCalls.length).toBe(2);
   expect(chainingRunnerCalls[1].options.previousResponseId).toBe('prev-2');
 });
 
 it.sequential('continueRunStream preserves canonical history when chaining', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-true' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -420,7 +433,9 @@ it.sequential('continueRunStream preserves canonical history when chaining', asy
 });
 
 it.sequential('direct chained models receive canonical accumulated input', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-true' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -436,7 +451,9 @@ it.sequential('direct chained models receive canonical accumulated input', async
 // ========== Characterization tests for stream lifecycle ==========
 
 it.sequential('startStream with direct chaining model', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-true' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -448,7 +465,9 @@ it.sequential('startStream with direct chaining model', async () => {
 });
 
 it.sequential('continueRunStream resumes a direct model continuation', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-true' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -495,8 +514,7 @@ it.sequential('abort during an active startStream', async () => {
   } as any;
 
   const settings = createMockSettings({
-    'agent.provider': testProviderId,
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: testProviderId },
   });
   const client = new AgentClient({
     deps: { logger, settings, sessionContextService: createSessionContextService() as any },
@@ -544,7 +562,10 @@ it.sequential('abort before Codex start preparation prevents model dispatch', as
     },
     { allowOverride: true },
   );
-  const settings = createMockSettings({ 'agent.provider': 'codex', 'agent.reasoningEffort': 'default' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'codex' },
+    'agent.reasoningEffort': 'default',
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -556,7 +577,9 @@ it.sequential('abort before Codex start preparation prevents model dispatch', as
 });
 
 it.sequential('clearConversations aborts active direct runs and resets provider state', async () => {
-  const settings = createMockSettings({ 'agent.provider': 'mock-chaining-true', 'agent.model': 'mock-model' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-true' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
@@ -588,8 +611,7 @@ it.sequential('chat and chatJson with temp provider/reasoning-effort overrides',
   });
 
   const settings = createMockSettings({
-    'agent.provider': 'mock-provider-public-methods',
-    'agent.model': 'default-model',
+    'agent.modelSelection': { model: 'default-model', provider: 'mock-provider-public-methods' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -650,7 +672,7 @@ it.sequential('chat and chatJson with temp provider/reasoning-effort overrides',
 
 it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'mock-model', provider: 'codex' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -665,7 +687,7 @@ it.sequential('codex startStream puts prompt_cache_key on agent modelSettings, n
 
 it.sequential('openai startStream puts prompt_cache_key in public providerData, not run options', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'openai',
+    'agent.modelSelection': { model: 'mock-model', provider: 'openai' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -680,7 +702,7 @@ it.sequential('openai startStream puts prompt_cache_key in public providerData, 
 
 it.sequential('startStream omits prompt_cache_key when provider does not support it', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'mock-provider-public-methods',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-public-methods' },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -714,7 +736,7 @@ it.sequential('abort logs with active trace id before clearing correlation', asy
     log: () => {},
   } as any;
   const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-false',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-chaining-false' },
   });
   const client = new AgentClient({
     deps: { logger, settings, sessionContextService: createSessionContextService() as any },
@@ -877,8 +899,7 @@ it.sequential('setRetryCallback is forwarded to the provider runner', async () =
   });
 
   const settings = createMockSettings({
-    'agent.provider': providerId,
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: providerId },
   });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
@@ -918,8 +939,7 @@ it.sequential('getAskUserAnswer returns undefined for unknown call ids', () => {
 
 it.sequential('ask_user tool executes using the stored approval answer', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'mock-main-mentor-refresh',
-    'agent.model': 'mock-model',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-main-mentor-refresh' },
     'app.liteMode': false,
   });
   const client = new AgentClient({
@@ -933,13 +953,11 @@ it.sequential('ask_user tool executes using the stored approval answer', async (
   expect(askUserTool.parameters).toBeTruthy();
 });
 
-it.sequential('setModel resets mentor conversation chain used by ask_mentor', async () => {
+it.sequential('setModelSelection resets mentor conversation chain used by ask_mentor', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'mock-main-mentor-refresh',
-    'agent.model': 'mock-model',
-    'agent.smartModel': 'mock-mentor-model',
-    'agent.mentorModel': 'mock-mentor-model',
-    'agent.mentorProvider': 'mock-mentor-refresh',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-main-mentor-refresh' },
+    'agent.smartModel': [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh' }],
+    'agent.mentorPool': [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh' }],
     'app.liteMode': false,
   });
   const client = new AgentClient({
@@ -951,7 +969,7 @@ it.sequential('setModel resets mentor conversation chain used by ask_mentor', as
   const askMentorTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(askMentorTool).toBeTruthy();
 
-  client.setModel('mock-model-v2');
+  client.setModelSelection({ model: 'mock-model-v2', provider: client.getProvider() });
   await client.chat('after model change');
   const refreshedTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(refreshedTool).toBeTruthy();
@@ -960,11 +978,9 @@ it.sequential('setModel resets mentor conversation chain used by ask_mentor', as
 
 it.sequential('ask_mentor resets conversation chain when mentor provider changes', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'mock-main-mentor-refresh',
-    'agent.model': 'mock-model',
-    'agent.smartModel': 'mock-mentor-model',
-    'agent.mentorModel': 'mock-mentor-model',
-    'agent.mentorProvider': 'mock-mentor-refresh',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-main-mentor-refresh' },
+    'agent.smartModel': [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh' }],
+    'agent.mentorPool': [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh' }],
     'app.liteMode': false,
   });
   const client = new AgentClient({
@@ -976,7 +992,7 @@ it.sequential('ask_mentor resets conversation chain when mentor provider changes
   const askMentorTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(askMentorTool).toBeTruthy();
 
-  settings.set('agent.mentorProvider', 'mock-mentor-refresh-alt');
+  settings.set('agent.mentorPool', [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh-alt' }]);
   await client.chat('after mentor provider change');
   const refreshedTool = applicationModelCalls.at(-1)?.request.tools?.find((tool: any) => tool?.name === 'ask_mentor');
   expect(refreshedTool).toBeTruthy();
@@ -1003,11 +1019,9 @@ it.sequential('setSubagentEventSink defers cleanup to null when subagents are ac
   });
 
   const settings = createMockSettings({
-    'agent.provider': 'mock-main-mentor-refresh',
-    'agent.model': 'mock-model',
-    'agent.smartModel': 'mock-mentor-model',
-    'agent.mentorModel': 'mock-mentor-model',
-    'agent.mentorProvider': 'mock-deferred-sink-provider',
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-main-mentor-refresh' },
+    'agent.smartModel': [{ model: 'mock-mentor-model', provider: 'mock-mentor-refresh' }],
+    'agent.mentorPool': [{ model: 'mock-mentor-model', provider: 'mock-deferred-sink-provider' }],
     'app.liteMode': false,
   });
   const client = new AgentClient({
@@ -1028,8 +1042,7 @@ it.sequential('setSubagentEventSink defers cleanup to null when subagents are ac
 
 it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'codex',
-    'agent.model': 'gpt-5.3-codex',
+    'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'codex' },
     'agent.reasoningEffort': 'default',
   });
 
@@ -1065,8 +1078,7 @@ it.sequential('codex resolves default_reasoning_level if agent.reasoningEffort i
 
 it.sequential('codex chat resolves default_reasoning_level if agent.reasoningEffort is default', async () => {
   const settings = createMockSettings({
-    'agent.provider': 'codex',
-    'agent.model': 'gpt-5.3-codex',
+    'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'codex' },
     'agent.reasoningEffort': 'default',
   });
 
@@ -1232,7 +1244,9 @@ it.sequential('main agent client executes tools through the direct model loop', 
     }),
     fetchModels: async () => [{ id: 'mock-model' }],
   });
-  const settings = createMockSettings({ 'agent.provider': 'mock-provider-direct-tool', 'agent.model': 'mock-model' });
+  const settings = createMockSettings({
+    'agent.modelSelection': { model: 'mock-model', provider: 'mock-provider-direct-tool' },
+  });
   const client = new AgentClient({
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });

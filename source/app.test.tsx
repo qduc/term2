@@ -9,6 +9,7 @@ import App from './app.js';
 import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { renderInAct, rerenderInAct } from './test-helpers/ink-testing.js';
 import { MenuControllerImpl } from './components/input/menu-controller.js';
+import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 
 const mocks = vi.hoisted(() => ({
   bottomAreaProps: null as any,
@@ -37,7 +38,7 @@ const mocks = vi.hoisted(() => ({
   sendSessionRolloverBrief: vi.fn(),
   getUserMessages: vi.fn(() => []),
   undoToUserMessage: vi.fn(),
-  setModel: vi.fn(),
+  setModelSelection: vi.fn(),
   setReasoningEffort: vi.fn(),
   setTemperature: vi.fn(),
   addShellMessage: vi.fn(),
@@ -215,7 +216,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
       retryLastToolOutput: vi.fn(async () => false),
       getUserMessages: mocks.getUserMessages,
       undoToUserMessage: mocks.undoToUserMessage,
-      setModel: mocks.setModel,
+      setModelSelection: mocks.setModelSelection,
       setReasoningEffort: mocks.setReasoningEffort,
       setTemperature: mocks.setTemperature,
       addSystemMessage: mocks.addSystemMessage,
@@ -387,7 +388,7 @@ beforeEach(() => {
   mocks.getUserMessages.mockReset();
   mocks.getUserMessages.mockReturnValue([]);
   mocks.undoToUserMessage.mockReset();
-  mocks.setModel.mockReset();
+  mocks.setModelSelection.mockReset();
   mocks.setReasoningEffort.mockReset();
   mocks.setTemperature.mockReset();
   mocks.addShellMessage.mockReset();
@@ -448,6 +449,10 @@ beforeEach(() => {
 describe('App orchestration', () => {
   it.sequential('publishes a restored active/terminal goal to UI and prompt state on live resume', async () => {
     const services = createServices();
+    services.settingsService = createMockSettingsService({
+      'agent.openai.apiKey': 'configured',
+      'agent.openrouter.apiKey': 'configured',
+    });
     const restoredGoal = { id: 'goal-b', outcome: 'Goal B', status: 'achieved' as const };
     mocks.loadConversationForProject.mockReturnValue({
       status: 'loaded',
@@ -455,6 +460,8 @@ describe('App orchestration', () => {
         id: 'session-b',
         createdAt: '2026-08-01T00:00:00.000Z',
         goal: restoredGoal,
+        model: 'restored-model',
+        provider: 'openrouter',
         messages: [],
         replayWarnings: [],
       },
@@ -477,6 +484,10 @@ describe('App orchestration', () => {
     expect(mocks.restoreConversation).toHaveBeenCalledWith(expect.objectContaining({ goal: restoredGoal }));
     expect(mocks.onGoalRestore).toHaveBeenCalledWith(restoredGoal);
     expect(mocks.getGoal?.()).toEqual(restoredGoal);
+    expect(services.settingsService.get('agent.modelSelection')).toEqual({
+      model: 'restored-model',
+      provider: 'openrouter',
+    });
   });
 
   it.sequential('clears the live goal after successfully resuming a goal-less session', async () => {

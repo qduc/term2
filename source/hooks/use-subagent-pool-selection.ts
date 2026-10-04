@@ -19,7 +19,6 @@ import {
   previousModelTab,
   selectModelsForTab,
 } from '../services/models/model-tabs.js';
-import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
 import { TierModelPoolEntrySchema, type TierModelPoolSetting } from '../services/settings/settings-schema.js';
 
 export const SUBAGENT_POOL_REASONING_EFFORTS = [
@@ -214,7 +213,6 @@ export type SubagentPoolSelectionConfig = {
   /** 'models' pools hold bound pairs (tiers); 'entries' also support reasoning (mentor). */
   entryShape: 'entries' | 'models';
   /** Setting key the "inherit provider" fallback reads from, when one exists. */
-  fallbackProviderKey?: string;
 };
 
 export function useSubagentPoolSelection(
@@ -224,7 +222,6 @@ export function useSubagentPoolSelection(
   config: SubagentPoolSelectionConfig,
 ) {
   const { settingKey, roleLabel, entryShape } = config;
-  const fallbackProviderKey = config.fallbackProviderKey ?? getSubagentPoolFallbackProviderKey(settingKey);
   const { input, setInput, replaceInput } = useInputContext();
   const [phase, setPhase] = useState<SubagentPoolPhase>('list');
   const [entries, setEntries] = useState<SubagentPoolEntry[]>([]);
@@ -249,17 +246,12 @@ export function useSubagentPoolSelection(
   const [browsingProvider, setBrowsingProvider] = useState<string | null>(null);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
-  const roleProvider = fallbackProviderKey
-    ? (settingsService.get(fallbackProviderKey as any) as string | undefined)
-    : undefined;
   const fallbackModelProvider = resolveSubagentPoolBrowseProvider({
     draftProvider: draft?.provider,
-    roleProvider,
-    agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
+    agentProvider: settingsService.get(SETTING_KEYS.AGENT_MODEL_SELECTION).provider,
   });
   const modelProvider = browsingProvider ?? fallbackModelProvider;
-  // Initial provider for browsing and legacy custom-id input.
-  const tierProvider = roleProvider || settingsService.get(SETTING_KEYS.AGENT_PROVIDER) || 'openai';
+  const tierProvider = settingsService.get(SETTING_KEYS.AGENT_MODEL_SELECTION).provider;
   const providerIds = useMemo(
     () => orderedProviderIds(settingsService, getProviderIds()),
     [settingsService, modelRefreshKey],
@@ -434,12 +426,9 @@ export function useSubagentPoolSelection(
     (draftProvider?: string) =>
       resolveSubagentPoolBrowseProvider({
         draftProvider,
-        roleProvider: fallbackProviderKey
-          ? (settingsService.get(fallbackProviderKey as any) as string | undefined)
-          : undefined,
-        agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
+        agentProvider: settingsService.get(SETTING_KEYS.AGENT_MODEL_SELECTION).provider,
       }),
-    [fallbackProviderKey, settingsService],
+    [settingsService],
   );
 
   const openDraft = useCallback(

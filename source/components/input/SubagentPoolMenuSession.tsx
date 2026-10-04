@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../../context/InputContext.js';
 import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 import { useSubagentPoolSelection } from '../../hooks/use-subagent-pool-selection.js';
-import { getSubagentPoolFallbackProviderKey } from '../../services/subagents/subagent-pool-config.js';
 import SubagentPoolSelectionMenu from '../menu/SubagentPoolSelectionMenu.js';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
@@ -26,7 +25,6 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
     settingKey: frame.settingKey,
     roleLabel: frame.roleLabel,
     entryShape: frame.entryShape,
-    fallbackProviderKey: getSubagentPoolFallbackProviderKey(frame.settingKey),
   });
   const [applyError, setApplyError] = useState<string | null>(null);
 

@@ -18,7 +18,7 @@ export type HandoffSessionDeps = {
   sendUserMessage: (turn: { text: string }) => Promise<void>;
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: unknown) => void;
-  setModel: (model: string) => void;
+  setModelSelection: (selection: import('../settings/model-selection.js').ModelSelection) => void;
   queueModeNotice: (text: string) => void;
   configurationService?: ConversationConfigurationService;
 };
@@ -37,7 +37,7 @@ export class HandoffSession {
     this.#deps = deps;
     this.#transitionService = new ProfileTransitionService({
       settingsService: deps.settingsService,
-      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      rebuildAgent: () => deps.setModelSelection(deps.settingsService.get('agent.modelSelection')),
       queueModeNotice: deps.queueModeNotice,
     });
   }
@@ -46,7 +46,7 @@ export class HandoffSession {
     this.#deps = deps;
     this.#transitionService = new ProfileTransitionService({
       settingsService: deps.settingsService,
-      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      rebuildAgent: () => deps.setModelSelection(deps.settingsService.get('agent.modelSelection')),
       queueModeNotice: deps.queueModeNotice,
     });
   }
@@ -114,18 +114,17 @@ export class HandoffSession {
     const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : text;
     const { modelId, provider } = parseModelProviderArg(modelArg);
     if (modelId) {
-      const changes = [{ key: 'agent.model', value: modelId, persistence: 'runtime' as const }];
-      if (provider) changes.push({ key: 'agent.provider', value: provider, persistence: 'runtime' as const });
+      const selection = {
+        model: modelId,
+        provider: provider ?? this.#deps.settingsService.get('agent.modelSelection').provider,
+      };
+      const changes = [{ key: 'agent.modelSelection', value: selection, persistence: 'runtime' as const }];
       if (this.#deps.configurationService) {
         this.#deps.configurationService.apply(changes);
       } else {
-        this.#deps.settingsService.set('agent.model', modelId);
-        if (provider) {
-          this.#deps.settingsService.set('agent.provider', provider);
-          this.#deps.applyRuntimeSetting('agent.provider', provider);
-        }
-        this.#deps.applyRuntimeSetting('agent.model', modelId);
-        this.#deps.setModel(modelId);
+        this.#deps.settingsService.set('agent.modelSelection', selection);
+        this.#deps.applyRuntimeSetting('agent.modelSelection', selection);
+        this.#deps.setModelSelection(selection);
       }
     }
     this.#dispatch({ type: 'handoff/model_selected' });

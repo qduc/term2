@@ -29,8 +29,7 @@ const mockLogger: ILoggingService = {
 const createMockSettings = (providerId: string): ISettingsService =>
   ({
     get: (key: string) => {
-      if (key === 'agent.provider') return providerId;
-      if (key === 'agent.model') return 'mock-model';
+      if (key === 'agent.modelSelection') return { model: 'mock-model', provider: providerId };
       return undefined;
     },
     // ISettingsService.getDynamic is read unconditionally by the

@@ -761,7 +761,7 @@ function fixtureBaseUrl(providerCase: ProviderCase): string {
 
 function createSettings(providerCase: ProviderCase): ISettingsService {
   const values: Record<string, unknown> = {
-    'agent.model': providerCase.model,
+    'agent.modelSelection': { model: providerCase.model, provider: providerCase.registryId },
     'agent.retryAttempts': 0,
     'agent.transport': 'http',
     'agent.openai.apiKey': 'fixture-key',

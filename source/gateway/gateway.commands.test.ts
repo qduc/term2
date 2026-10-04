@@ -42,7 +42,7 @@ const completedTurnClient = (): ConversationAgentClient =>
   ({
     chat: async () => '',
     abort: () => {},
-    setModel: () => {},
+    setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     startStream: async () => {
       const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
@@ -163,7 +163,7 @@ describe('Gateway commands RPC route', () => {
           ({
             chat: async () => '',
             abort: () => {},
-            setModel: () => {},
+            setModelSelection: () => {},
             addToolInterceptor: () => () => {},
             startStream: async () => {
               const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
@@ -180,8 +180,11 @@ describe('Gateway commands RPC route', () => {
           env: {},
           cli: {},
         });
-        settings.set('agent.provider', defaults.providerId, { persist: false });
-        settings.set('agent.model', options?.modelId ?? 'gpt-4', { persist: false });
+        settings.set(
+          'agent.modelSelection',
+          { model: options?.modelId ?? 'gpt-4', provider: defaults.providerId },
+          { persist: false },
+        );
         settings.set('agent.contextCompaction.compactThresholdTokens', 10_000, { persist: false });
         return settings;
       },
@@ -348,7 +351,7 @@ describe('Gateway commands RPC route', () => {
         ({
           chat: async () => '',
           abort: () => {},
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => {
             await new Promise<void>((resolve) => {
@@ -456,7 +459,7 @@ describe('Gateway commands RPC route', () => {
       ({
         chat: async () => '',
         abort: () => {},
-        setModel: () => {},
+        setModelSelection: () => {},
         addToolInterceptor: () => () => {},
         getProvider: () => 'codex',
         compactCodexSessionHistory: async () => ({ kind: 'failed', provider: 'codex' }),
@@ -566,7 +569,7 @@ describe('Gateway commands RPC route', () => {
       ({
         chat: async () => '',
         abort: () => {},
-        setModel: () => {},
+        setModelSelection: () => {},
         addToolInterceptor: () => () => {},
         getProvider: () => 'codex',
         compactCodexSessionHistory: async () => ({ kind: 'unchanged' }),

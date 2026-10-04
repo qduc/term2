@@ -52,8 +52,7 @@ const widest = (frame: string): number => Math.max(...linesOf(frame).map((line) 
 
 const settings = (overrides: Record<string, unknown> = {}) =>
   createMockSettingsService({
-    'agent.model': 'gpt-5.6-luna',
-    'agent.provider': 'codex',
+    'agent.modelSelection': { model: 'gpt-5.6-luna', provider: 'codex' },
     'agent.reasoningEffort': 'high',
     'shell.autoApproveMode': 'auto',
     'sandbox.enabled': true,

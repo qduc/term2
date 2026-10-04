@@ -77,10 +77,8 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
   const logger = createLogger('acp-launcher', sessionContext);
 
   const cliOverrides: { agent?: Record<string, unknown> } = {};
-  if (args.provider || args.model || args.effort) {
+  if (args.effort) {
     cliOverrides.agent = {
-      ...(args.provider ? { provider: args.provider } : {}),
-      ...(args.model ? { model: args.model } : {}),
       ...(args.effort ? { reasoningEffort: args.effort } : {}),
     };
   }
@@ -102,6 +100,11 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
     for (const provider of getAllProviders()) {
       io.writeStderr(`  - ${provider.id}  (${provider.label})`);
     }
+    return 1;
+  }
+
+  if (args.provider && !args.model) {
+    io.writeStderr('term2 acp: --provider requires --model; provider-only selection is not supported.');
     return 1;
   }
 
@@ -131,8 +134,11 @@ export async function runAcp(argv: readonly string[], io: AcpServeIo): Promise<n
     }
     // A per-session override like every other CLI flag; it must not rewrite the
     // user's persisted defaults, so nothing here persists.
-    settingsAuthority.set('agent.model', resolution.modelId, { persist: false });
-    if (resolution.provider) settingsAuthority.set('agent.provider', resolution.provider, { persist: false });
+    settingsAuthority.set(
+      'agent.modelSelection',
+      { model: resolution.modelId, provider: resolution.provider },
+      { persist: false },
+    );
     if (resolution.reasoningEffort && !args.effort) {
       settingsAuthority.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
     }

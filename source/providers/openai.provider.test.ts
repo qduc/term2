@@ -84,7 +84,7 @@ it('reuses the streamed websocket model for a session so sequential turns keep o
   };
   const mockSettingsService: any = {
     get: (key: string) => {
-      if (key === 'agent.model') return 'gpt-4o';
+      if (key === 'agent.modelSelection') return { model: 'gpt-4o', provider: 'openai' };
       if (key === 'agent.openai.apiKey') return 'sk-test';
       if (key === 'agent.transport') return 'websocket';
       return undefined;
@@ -109,7 +109,7 @@ it('creates a streamed model via provider registry and executes stream()', async
 
   const mockSettingsService: any = {
     get: (key: string) => {
-      if (key === 'agent.model') return 'gpt-4o';
+      if (key === 'agent.modelSelection') return { model: 'gpt-4o', provider: 'openai' };
       if (key === 'agent.openai.apiKey') return 'sk-test';
       if (key === 'agent.transport') return 'http';
       return undefined;

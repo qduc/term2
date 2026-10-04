@@ -66,7 +66,7 @@ export type ModelResolutionResult =
   | {
       status: 'resolved';
       modelId: string;
-      provider?: string;
+      provider: string;
       reasoningEffort?: ModelSettingsReasoningEffort;
       /** Provider catalogs that failed to load while resolution still proceeded. */
       warnings?: string[];
@@ -82,7 +82,7 @@ export type ModelResolutionResult =
   | {
       status: 'passthrough';
       modelId: string;
-      provider?: string;
+      provider: string;
       reasoningEffort?: ModelSettingsReasoningEffort;
       /** Provider catalogs that failed to load while resolution still proceeded. */
       warnings?: string[];
@@ -364,13 +364,13 @@ export async function resolveModelFlag(deps: {
     return {
       status: 'passthrough',
       modelId: parsed.rawPattern,
-      provider: parsed.provider,
+      provider: parsed.provider ?? deps.settingsService.get('agent.modelSelection').provider,
       reasoningEffort: parsed.reasoningEffort,
     };
   }
 
   // Explicit --provider is the user deliberately scoping the search (it also
-  // sets agent.provider for the session), so it narrows PERMANENTLY: a miss
+  // binds the resolved selection's provider), so it narrows PERMANENTLY: a miss
   // there errors out rather than silently resolving to a provider the user
   // didn't name. A provider-style prefix parsed out of the flag itself (e.g.
   // the `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) is a
@@ -543,6 +543,12 @@ export async function resolveModelFlag(deps: {
 
   // If providers yielded 0 models, pass through rather than blocking startup
   if (totalLoadedModels === 0) {
+    if (!parsed.provider) {
+      return {
+        status: 'no_match',
+        error: `Error: Cannot bind "${deps.modelFlag}" to a provider; pass --provider or <provider>/<model>.`,
+      };
+    }
     return {
       status: 'passthrough',
       // Fail open with the flag as typed, matching pre-resolution behavior.

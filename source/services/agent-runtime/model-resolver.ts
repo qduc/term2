@@ -42,8 +42,7 @@ function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModel
 export type TierModelPoolEntry = TierModelPoolSetting[number];
 
 /**
- * Validate the canonical runtime shape. Legacy conversion belongs to settings
- * parsing, never to a consumer that could rebind entries after a settings edit.
+ * Validate the canonical runtime shape without rebinding entries after a settings edit.
  */
 export function toTierModelPoolEntries(value: unknown): TierModelPoolEntry[] {
   if (value === undefined) return [];
@@ -64,15 +63,7 @@ export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: IS
   // execution paths, so the cursor must not advance here. Round-robin over
   // the pool happens once per subagent spawn in SubagentRolePoolSelector.
   const first = getTierModelPoolEntries(tier, settings)[0];
-  return (
-    first ??
-    ModelSelectionSchema.parse(
-      settings.getDynamic('agent.modelSelection') ?? {
-        provider: settings.get('agent.provider') ?? 'openai',
-        model: settings.get('agent.model') ?? 'gpt-4o',
-      },
-    )
-  );
+  return first ?? ModelSelectionSchema.parse(settings.get('agent.modelSelection'));
 }
 
 function resolveRelativePolicy(

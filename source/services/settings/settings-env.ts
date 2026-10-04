@@ -60,7 +60,6 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   if (env.OPENAI_API_KEY) openai.apiKey = env.OPENAI_API_KEY;
 
   const agent: DeepPartial<SettingsData['agent']> = { openrouter, openai };
-  if (env.OPENROUTER_MODEL) agent.model = env.OPENROUTER_MODEL;
 
   return {
     agent,

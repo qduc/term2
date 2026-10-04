@@ -1,3 +1,4 @@
+import type { ModelSelection } from '../services/settings/model-selection.js';
 import {
   normalizeApplicationInput,
   type ApplicationAgent,
@@ -614,12 +615,11 @@ export class AgentClient {
   }
 
   constructor({
-    model,
+    selection,
     reasoningEffort,
     maxTurns,
     retryAttempts,
     agentOverride,
-    providerOverride,
     approvalPolicyRegistry,
     deps,
     subagentBridge,
@@ -636,12 +636,11 @@ export class AgentClient {
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
-    model?: string;
+    selection?: ModelSelection;
     reasoningEffort?: ReasoningEffortSetting | null;
     maxTurns?: number;
     retryAttempts?: number;
     agentOverride?: ApplicationAgent;
-    providerOverride?: string;
     /**
      * Externally built graph registry for transient (agentOverride) clients
      * whose tools were wrapped outside AgentConfiguration (subagent runs).
@@ -704,7 +703,7 @@ export class AgentClient {
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
     this.#agentConfig = new AgentConfiguration(
-      { model, reasoningEffort, providerOverride, agentOverride, approvalPolicyRegistry },
+      { selection, reasoningEffort, agentOverride, approvalPolicyRegistry },
       {
         logger: deps.logger,
         settings: deps.settings,
@@ -813,7 +812,7 @@ export class AgentClient {
           approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
         }) =>
           new AgentClient({
-            model: agent.model,
+            selection: { model: agent.model, provider },
             maxTurns,
             retryAttempts,
             approvalPolicyRegistry,
@@ -826,7 +825,6 @@ export class AgentClient {
               readOnly: deps.readOnly,
             },
             agentOverride: agent,
-            providerOverride: provider,
             toolOwnership,
             wrapUpOnCriticalRunBudget: true,
             ...(this.#toolLifecycle && agentId
@@ -849,7 +847,7 @@ export class AgentClient {
       this.#agentConfig.subscribeToSettings();
 
       this.#logger.debug('OpenAI Agent Client initialized', {
-        model: model || this.#settings.get('agent.model'),
+        model: this.#agentConfig.getModel(),
         reasoningEffort: reasoningEffort ?? 'default',
         temperature: this.#agentConfig.temperature,
         maxTurns: this.#maxTurns,
@@ -878,8 +876,8 @@ export class AgentClient {
     this.#localCheckpointSink = sink;
   }
 
-  setModel(model: string): void {
-    this.#agentConfig.setModel(model);
+  setModelSelection(selection: ModelSelection): void {
+    this.#agentConfig.setModelSelection(selection);
     this.#agentConfig.refreshAgent();
   }
 
@@ -895,12 +893,6 @@ export class AgentClient {
   setTemperature(temperature?: number): void {
     this.#agentConfig.setTemperature(temperature);
     this.#agentConfig.refreshAgent();
-  }
-
-  setProvider(provider: string): void {
-    this.#agentConfig.setProvider(provider); // persists to settings
-    this.#agentConfig.refreshAgent(); // triggers onConfigChanged + rebuild
-    this.#chatService.clearModelCache();
   }
 
   getProvider(): string {

@@ -449,7 +449,9 @@ it.sequential(
     });
     try {
       const controller = new MenuControllerImpl();
-      const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+      const settingsService = createMockSettingsService({
+        'agent.modelSelection': { model: 'ctrl-f-model', provider: providerId },
+      });
       const { stdin, lastFrame } = await renderSurface(controller, [...slashCommands, modelCommand], undefined, {
         settingsService,
       });
@@ -486,8 +488,7 @@ it.sequential(
     try {
       const controller = new MenuControllerImpl();
       const settingsService = createMockSettingsService({
-        'agent.provider': providerId,
-        'agent.model': 'ctrl-n-model',
+        'agent.modelSelection': { model: 'ctrl-n-model', provider: providerId },
         'agent.favoriteModels': [`${providerId}/ctrl-n-model`],
       });
       const { stdin, lastFrame } = await renderSurface(controller, [...slashCommands, modelCommand], undefined, {

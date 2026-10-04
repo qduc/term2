@@ -153,7 +153,10 @@ describe('TurnStableMcpToolSource', () => {
     const logger = createMockLogger();
     const settings = createMockSettings();
     const config = new AgentConfiguration(
-      { agentOverride: { name: 'test', model: 'test', tools: [], clone: () => ({}) } as any, model: 'test' },
+      {
+        agentOverride: { name: 'test', model: 'test', tools: [], clone: () => ({}) } as any,
+        selection: { model: 'test', provider: 'mock-provider-for-config' },
+      },
       {
         logger,
         settings,

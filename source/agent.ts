@@ -325,7 +325,7 @@ export const getAgentDefinition = (
     mcpToolSource,
   } = deps;
   const resolvedApprovalPolicyRegistry = approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry();
-  const defaultModel = settingsService.get('agent.model');
+  const defaultModel = settingsService.get('agent.modelSelection').model;
   const resolvedModel = model?.trim() || defaultModel;
 
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
@@ -634,12 +634,9 @@ export const getAgentDefinition = (
     }
   }
 
-  // Add mentor tool if the smart tier has a configured model pool. Mock
-  // settings and unmigrated configs may still surface a bare string.
+  // Add mentor tool if the smart tier has a configured model pool.
   const smartPool = settingsService.get('agent.smartModel');
-  const smartConfigured = Array.isArray(smartPool)
-    ? smartPool.length > 0
-    : typeof smartPool === 'string' && smartPool !== '';
+  const smartConfigured = Array.isArray(smartPool) && smartPool.length > 0;
   if (hasCapability('mentor') && smartConfigured && askMentor) {
     tools.push(createAskMentorToolDefinition(askMentor));
   }

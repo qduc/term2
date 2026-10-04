@@ -43,8 +43,7 @@ function logger(): ILoggingService {
 
 function settings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = {
-    'agent.provider': 'openai',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     ...values,
   };
   return {

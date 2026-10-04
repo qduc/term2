@@ -585,8 +585,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     logger,
     getAssistantTurnState: () => {
       const fn = getMethod<[], string>(agentClient, 'getProvider');
-      const provider = fn ? fn.call(agentClient) : settingsService?.get('agent.provider');
-      const model = settingsService?.get('agent.model');
+      const provider = fn ? fn.call(agentClient) : settingsService?.get('agent.modelSelection').provider;
+      const model = settingsService?.get('agent.modelSelection').model;
       return {
         previousResponseId: providerContinuity.previousResponseId,
         ...(model ? { model } : {}),
@@ -1077,9 +1077,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     const snapshot = conversationStore.getProviderHistorySnapshot();
     const provider =
       getMethod<[], string>(agentClient, 'getProvider')?.call(agentClient) ??
-      settingsService?.get('agent.provider') ??
+      settingsService?.get('agent.modelSelection').provider ??
       'openai';
-    const model = settingsService?.get('agent.model') ?? 'gpt-5';
+    const model = settingsService?.get('agent.modelSelection').model ?? 'gpt-5';
     const reasoningEffort = settingsService?.get('agent.reasoningEffort');
     const catalog = getCatalogModel(provider, model);
     const compactThreshold = settingsService?.get('agent.contextCompaction.compactThreshold') ?? 0.8;

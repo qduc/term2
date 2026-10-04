@@ -246,8 +246,7 @@ it('previewLargeUncachedInput() does not mutate history or consume pending mode 
     },
   });
   const settingsService = createMockSettingsService([
-    ['agent.model', 'gpt-5'],
-    ['agent.provider', 'codex'],
+    ['agent.modelSelection', { model: 'gpt-5', provider: 'codex' }],
     ['agent.reasoningEffort', 'medium'],
     ['app.planMode', true],
   ]);
@@ -274,8 +273,7 @@ it('previewLargeUncachedInput() skips the expensive estimate when no warning is 
     },
   });
   const settingsService = createMockSettingsService([
-    ['agent.model', 'gpt-5'],
-    ['agent.provider', 'codex'],
+    ['agent.modelSelection', { model: 'gpt-5', provider: 'codex' }],
     ['agent.reasoningEffort', 'medium'],
   ]);
   const bundle = createConversationSession({
@@ -311,8 +309,7 @@ it('sendMessage() records successful large guard state after provider request co
     },
   });
   const settingsService = createMockSettingsService([
-    ['agent.model', 'gpt-5'],
-    ['agent.provider', 'codex'],
+    ['agent.modelSelection', { model: 'gpt-5', provider: 'codex' }],
     ['agent.reasoningEffort', 'medium'],
   ]);
   const bundle = createConversationSession({
@@ -445,7 +442,7 @@ it('run() keeps follow-up input as a user turn after abandoning an aborted appro
   expect(stateFacade.listUserTurns().map((turn) => turn.text)).toEqual(['follow up text']);
 });
 
-it('switchProvider() clears provider continuity but preserves transcript history', async () => {
+it('setModelSelection() clears provider continuity but preserves transcript history', async () => {
   const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   firstStream.finalOutput = 'First reply';
   firstStream.lastResponseId = 'resp-openai-1';
@@ -461,8 +458,8 @@ it('switchProvider() clears provider continuity but preserves transcript history
     getProvider() {
       return provider;
     },
-    setProvider(nextProvider: string) {
-      provider = nextProvider;
+    setModelSelection(selection: { model: string; provider: string }) {
+      provider = selection.provider;
     },
     clearConversations() {
       clearConversationsCalls++;
@@ -491,7 +488,7 @@ it('switchProvider() clears provider continuity but preserves transcript history
   });
   approvalState.abortPending();
 
-  runtimeController.switchProvider('openrouter');
+  runtimeController.setModelSelection({ model: 'test-model', provider: 'openrouter' });
 
   expect(
     await terminalAdapter.handleApprovalDecision('y'),
@@ -514,7 +511,7 @@ it('switchProvider() clears provider continuity but preserves transcript history
   expect(stateFacade.listUserTurns().map((turn) => turn.text)).toEqual(['First message', 'Second message']);
 });
 
-it('setModel() clears provider continuity and forces full-history replay on the next turn', async () => {
+it('setModelSelection() clears provider continuity and forces full-history replay on the next turn', async () => {
   const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   firstStream.finalOutput = 'First reply';
   firstStream.lastResponseId = 'resp-model-1';
@@ -529,8 +526,8 @@ it('setModel() clears provider continuity and forces full-history replay on the 
     getProvider() {
       return 'openai';
     },
-    setModel(model: string) {
-      models.push(model);
+    setModelSelection(selection: { model: string; provider: string }) {
+      models.push(selection.model);
     },
     clearConversations() {},
     async startStream(input: unknown, opts?: unknown) {
@@ -549,7 +546,7 @@ it('setModel() clears provider continuity and forces full-history replay on the 
   for await (const _ of turnCoordinator.start('First message')) {
   }
 
-  runtimeController.setModel('gpt-next');
+  runtimeController.setModelSelection({ model: 'gpt-next', provider: 'openai' });
 
   for await (const _ of turnCoordinator.start('Second message')) {
   }

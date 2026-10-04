@@ -152,17 +152,17 @@ it('formatSettingDisplayValue formats empty arrays and collections as (none)', (
 
 it('formatSettingDisplayValue formats undefined/inherited values with informative fallbacks', () => {
   const smartModel = formatSettingDisplayValue(SETTING_KEYS.AGENT_SMART_MODEL, undefined);
-  expect(smartModel.text).toBe('(inherits agent.model)');
+  expect(smartModel.text).toBe('(inherits agent.modelSelection)');
   expect(smartModel.tone).toBe('textSubtle');
 
-  const balancedProvider = formatSettingDisplayValue(SETTING_KEYS.AGENT_BALANCED_PROVIDER, undefined);
-  expect(balancedProvider.text).toBe('(inherits agent.provider)');
+  const balancedModel = formatSettingDisplayValue(SETTING_KEYS.AGENT_BALANCED_MODEL, undefined);
+  expect(balancedModel.text).toBe('(inherits agent.modelSelection)');
 
   const smartReasoning = formatSettingDisplayValue(SETTING_KEYS.AGENT_SMART_REASONING_EFFORT, undefined);
   expect(smartReasoning.text).toBe('(default)');
 
-  const unsetGeneral = formatSettingDisplayValue(SETTING_KEYS.AGENT_MENTOR_MODEL, undefined);
-  expect(unsetGeneral.text).toBe('(none)');
+  const unsetGeneral = formatSettingDisplayValue(SETTING_KEYS.AGENT_MENTOR_POOL, undefined);
+  expect(unsetGeneral.text).toBe('(unset)');
 });
 
 it('formatSettingDisplayValue formats null values correctly', () => {

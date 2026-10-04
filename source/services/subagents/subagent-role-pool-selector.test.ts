@@ -8,7 +8,10 @@ function settings(
   values: Record<string, unknown>,
 ): ISettingsService & { setValues: (v: Record<string, unknown>) => void } {
   const bind = (values: Record<string, unknown>): Record<string, unknown> => {
-    const store: Record<string, unknown> = { 'agent.provider': 'base-provider', ...values };
+    const store: Record<string, unknown> = {
+      'agent.modelSelection': { model: 'base-model', provider: 'base-provider' },
+      ...values,
+    };
     const agent = AgentSettingsSchema.parse(
       Object.fromEntries(Object.entries(store).map(([key, value]) => [key.slice(6), value])),
     );
@@ -46,11 +49,11 @@ const baseDefinition: SubagentDefinition = {
 };
 
 describe('SubagentRolePoolSelector', () => {
-  it('uses the live tier provider instead of a stale definition for bare entries', () => {
-    const svc = settings({ 'agent.cheapModel': ['model-a'], 'agent.cheapProvider': 'codex' });
+  it('uses the live bound pool selection instead of a stale definition', () => {
+    const svc = settings({ 'agent.cheapModel': [{ model: 'model-a', provider: 'codex' }] });
     const selector = new SubagentRolePoolSelector(svc);
     expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({ provider: 'codex' });
-    svc.setValues({ 'agent.cheapModel': ['model-a'], 'agent.cheapProvider': 'zai' });
+    svc.setValues({ 'agent.cheapModel': [{ model: 'model-a', provider: 'zai' }] });
     expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({ provider: 'zai' });
   });
 
@@ -60,7 +63,6 @@ describe('SubagentRolePoolSelector', () => {
         { model: 'same-name', provider: 'codex' },
         { model: 'same-name', provider: 'zai' },
       ],
-      'agent.balancedProvider': 'DeepSeek',
     });
     const selector = new SubagentRolePoolSelector(svc);
     const first = selector.resolveForSpawn('worker', baseDefinition);
@@ -75,12 +77,21 @@ describe('SubagentRolePoolSelector', () => {
   });
 
   it('returns the definition unchanged for a role with no tier pool (mentor)', () => {
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.mentorPool': [{ model: 'pool-model' }] }));
+    const selector = new SubagentRolePoolSelector(
+      settings({ 'agent.mentorPool': [{ model: 'pool-model', provider: 'base-provider' }] }),
+    );
     expect(selector.resolveForSpawn('mentor', baseDefinition)).toBe(baseDefinition);
   });
 
   it('advances round-robin across spawns and wraps modulo the tier pool length', () => {
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['model-a', 'model-b'] }));
+    const selector = new SubagentRolePoolSelector(
+      settings({
+        'agent.cheapModel': [
+          { model: 'model-a', provider: 'base-provider' },
+          { model: 'model-b', provider: 'base-provider' },
+        ],
+      }),
+    );
 
     expect(selector.hasPool('explorer')).toBe(true);
     const first = selector.resolveForSpawn('explorer', baseDefinition);
@@ -94,7 +105,15 @@ describe('SubagentRolePoolSelector', () => {
 
   it('skips an unhealthy provider/model across roles and admits it after cooldown', () => {
     let now = 1000;
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['a', 'b'] }), () => now);
+    const selector = new SubagentRolePoolSelector(
+      settings({
+        'agent.cheapModel': [
+          { model: 'a', provider: 'base-provider' },
+          { model: 'b', provider: 'base-provider' },
+        ],
+      }),
+      () => now,
+    );
     const first = selector.resolveForSpawn('explorer', baseDefinition);
     selector.markUnhealthy(first, 'balance');
     expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('b');
@@ -104,7 +123,14 @@ describe('SubagentRolePoolSelector', () => {
   });
 
   it('reports every failed entry when the pool has no healthy option', () => {
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['a', 'b'] }));
+    const selector = new SubagentRolePoolSelector(
+      settings({
+        'agent.cheapModel': [
+          { model: 'a', provider: 'base-provider' },
+          { model: 'b', provider: 'base-provider' },
+        ],
+      }),
+    );
     selector.markUnhealthy(selector.resolveForSpawn('explorer', baseDefinition), 'balance');
     selector.markUnhealthy(selector.resolveForSpawn('explorer', baseDefinition), 'authentication');
     expect(() => selector.resolveForSpawn('explorer', baseDefinition)).toThrow(/a.*balance.*b.*authentication/);
@@ -115,8 +141,11 @@ describe('SubagentRolePoolSelector', () => {
       settings({
         // Explorer and librarian share the cheap tier pool; each role keeps
         // its own cursor into it.
-        'agent.cheapModel': ['cheap-a', 'cheap-b'],
-        'agent.balancedModel': ['worker-a'],
+        'agent.cheapModel': [
+          { model: 'cheap-a', provider: 'base-provider' },
+          { model: 'cheap-b', provider: 'base-provider' },
+        ],
+        'agent.balancedModel': [{ model: 'worker-a', provider: 'base-provider' }],
       }),
     );
 
@@ -127,10 +156,8 @@ describe('SubagentRolePoolSelector', () => {
     expect(selector.resolveForSpawn('worker', baseDefinition).model).toBe('worker-a');
   });
 
-  it('treats a legacy bare-string tier setting as a single-entry pool', () => {
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': 'only-model' }));
-    expect(selector.hasPool('explorer')).toBe(true);
-    expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('only-model');
+  it('rejects a legacy bare-string tier setting', () => {
+    expect(() => settings({ 'agent.cheapModel': 'only-model' })).toThrow();
   });
 
   it('reads the pool live from settings, so edits apply without restart', () => {
@@ -139,23 +166,29 @@ describe('SubagentRolePoolSelector', () => {
 
     expect(selector.resolveForSpawn('explorer', baseDefinition)).toBe(baseDefinition);
 
-    svc.setValues({ 'agent.cheapModel': ['new-model'] });
+    svc.setValues({ 'agent.cheapModel': [{ model: 'new-model', provider: 'base-provider' }] });
     expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('new-model');
   });
 
   it('shrinking the pool wraps the cursor modulo the new length instead of throwing', () => {
-    const svc = settings({ 'agent.cheapModel': ['a', 'b', 'c'] });
+    const svc = settings({
+      'agent.cheapModel': [
+        { model: 'a', provider: 'base-provider' },
+        { model: 'b', provider: 'base-provider' },
+        { model: 'c', provider: 'base-provider' },
+      ],
+    });
     const selector = new SubagentRolePoolSelector(svc);
     selector.resolveForSpawn('explorer', baseDefinition); // cursor -> 1 (picked 'a')
     selector.resolveForSpawn('explorer', baseDefinition); // cursor -> 2 (picked 'b')
 
-    svc.setValues({ 'agent.cheapModel': ['x'] });
+    svc.setValues({ 'agent.cheapModel': [{ model: 'x', provider: 'base-provider' }] });
     expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('x');
   });
 
   it('resolves provider live while preserving the definition reasoning effort', () => {
     const selector = new SubagentRolePoolSelector(
-      settings({ 'agent.cheapModel': ['librarian-model'], 'agent.cheapProvider': 'inherited-provider' }),
+      settings({ 'agent.cheapModel': [{ model: 'librarian-model', provider: 'inherited-provider' }] }),
     );
     const resolved = selector.resolveForSpawn('librarian', {
       ...baseDefinition,
@@ -170,9 +203,14 @@ describe('SubagentRolePoolSelector', () => {
     });
   });
 
-  it('runs each pinned pool entry on its own provider and bare entries on the tier provider', () => {
+  it('runs each bound pool entry on its own provider', () => {
     const selector = new SubagentRolePoolSelector(
-      settings({ 'agent.cheapModel': ['model-a', { model: 'model-b', provider: 'codex' }] }),
+      settings({
+        'agent.cheapModel': [
+          { model: 'model-a', provider: 'base-provider' },
+          { model: 'model-b', provider: 'codex' },
+        ],
+      }),
     );
 
     expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({
@@ -186,13 +224,15 @@ describe('SubagentRolePoolSelector', () => {
     });
   });
 
-  it("does not carry a pinned first entry's provider onto bare entries", () => {
+  it('does not carry the first entry provider onto other bound entries', () => {
     // loadRoleDefinition pairs the definition with the first entry, so its
     // provider is that entry's pin, not the tier's.
     const selector = new SubagentRolePoolSelector(
       settings({
-        'agent.cheapModel': [{ model: 'model-a', provider: 'codex' }, 'model-b'],
-        'agent.cheapProvider': 'DeepSeek',
+        'agent.cheapModel': [
+          { model: 'model-a', provider: 'codex' },
+          { model: 'model-b', provider: 'DeepSeek' },
+        ],
       }),
     );
     const pinnedDefinition = { ...baseDefinition, model: 'model-a', provider: 'codex' };

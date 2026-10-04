@@ -23,7 +23,7 @@ async function writeFixtureSettings(paths: IsolatedWorkspacePaths, options: { tr
   await writeFile(
     join(paths.logDir, 'settings.json'),
     JSON.stringify({
-      agent: { model: 'fixture', provider: 'fixture-provider', transport: 'http' },
+      agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' }, transport: 'http' },
       app: { liteMode: true },
       hooks: {
         user: { enabled: true },

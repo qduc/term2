@@ -441,7 +441,7 @@ export class SessionInputPlanner {
   }
 
   #getModelForGuard(): string | null {
-    return this.#settingsService?.get('agent.model') ?? null;
+    return this.#settingsService?.get('agent.modelSelection').model ?? null;
   }
 
   #getReasoningEffortForGuard(): string | null {
@@ -452,7 +452,7 @@ export class SessionInputPlanner {
   #getCurrentProvider(nullable?: false): string;
   #getCurrentProvider(nullable?: boolean): string | null {
     const fn = getMethod<[], string>(this.#agentClient, 'getProvider');
-    const result = fn ? fn.call(this.#agentClient) : this.#settingsService?.get('agent.provider');
+    const result = fn ? fn.call(this.#agentClient) : this.#settingsService?.get('agent.modelSelection').provider;
     return nullable ? result ?? null : result!;
   }
 

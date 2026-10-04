@@ -180,7 +180,7 @@ it('healSearchReplaceParams returns unmodified params with low confidence reason
   expect(result.failureReason).toBe('model output similarity was below threshold');
 });
 
-it('healSearchReplaceParams ignores the legacy tools.editHealingProvider override (D1)', async () => {
+it('healSearchReplaceParams inherits the provider from the canonical main selection', async () => {
   const fileContent = 'const foo = 1;\n';
   let providerId = '';
   const runModel = async (_prompt: string, meta: { providerId: string }) => {
@@ -189,8 +189,7 @@ it('healSearchReplaceParams ignores the legacy tools.editHealingProvider overrid
   };
   const settingsService = {
     get: (key: string) => {
-      if (key === 'tools.editHealingProvider') return 'openrouter';
-      if (key === 'agent.provider') return 'openai';
+      if (key === 'agent.modelSelection') return { model: 'fast-healer', provider: 'openai' };
       return undefined;
     },
   };

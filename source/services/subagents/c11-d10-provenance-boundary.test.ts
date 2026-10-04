@@ -57,11 +57,9 @@ it.fails(
     const manager = new TestSubagentManager({
       logger: createMockLogger(),
       settings: createMockSettings({
-        'agent.model': 'mock-model',
-        'agent.provider': providerId,
+        'agent.modelSelection': { model: 'mock-model', provider: providerId },
         'shell.autoApproveMode': 'auto',
-        'agent.autoApproveModel': 'mock-auto-approve-model',
-        'agent.autoApproveProvider': providerId,
+        'agent.choreModel': [{ model: 'mock-auto-approve-model', provider: providerId }],
         'sandbox.enabled': false,
       }),
       sessionContextService: createSessionContextService() as any,

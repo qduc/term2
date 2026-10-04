@@ -148,7 +148,7 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing g
 
   fs.writeFileSync(
     path.join(dir, 'settings.json'),
-    '{"agent":{"model":"gpt-5.1"},"app":{"liteMode":true}} trailing garbage {',
+    '{"agent":{"modelSelection":{"model":"gpt-5.1","provider":"openai"}},"app":{"liteMode":true}} trailing garbage {',
     'utf-8',
   );
 
@@ -161,8 +161,11 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing g
   expect(out.hadErrors).toBe(true);
   expect(out.recovery?.recovered).toBe(true);
   expect(out.recovery?.recoveredSectionKeys).toEqual(['agent', 'app']);
-  expect(out.validated.agent?.model).toBe('gpt-5.1');
-  expect(out.raw).toEqual({ agent: { model: 'gpt-5.1' }, app: { liteMode: true } });
+  expect(out.validated.agent?.modelSelection.model).toBe('gpt-5.1');
+  expect(out.raw).toEqual({
+    agent: { modelSelection: { model: 'gpt-5.1', provider: 'openai' } },
+    app: { liteMode: true },
+  });
 });
 
 it('loadSettingsFromFile: scan fallback recovers a JSON document from leading garbage', () => {
@@ -170,7 +173,7 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from leading ga
 
   fs.writeFileSync(
     path.join(dir, 'settings.json'),
-    'corrupt log line before the document {"agent":{"model":"gpt-5.1"}}',
+    'corrupt log line before the document {"agent":{"modelSelection":{"model":"gpt-5.1","provider":"openai"}}}',
     'utf-8',
   );
 
@@ -182,7 +185,7 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from leading ga
 
   expect(out.hadErrors).toBe(true);
   expect(out.recovery?.recovered).toBe(true);
-  expect(out.validated.agent?.model).toBe('gpt-5.1');
+  expect(out.validated.agent?.modelSelection.model).toBe('gpt-5.1');
 });
 
 it('scanForRecoverableJson: bounded scan gives up on a pathological all-brackets file', () => {
@@ -224,12 +227,18 @@ it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON documen
     settingsDir: dir,
     schema: SettingsSchema,
     defaults: DEFAULT_SETTINGS,
-    mutate: (current) => ({ ...current, agent: { ...current.agent, model: 'gpt-4o' } }),
+    mutate: (current) => ({
+      ...current,
+      agent: { ...current.agent, modelSelection: { model: 'gpt-4o', provider: 'openai' } },
+    }),
     stripSensitiveSettings,
     disableLogging: true,
   });
 
-  expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.model).toBe('gpt-4o');
+  expect(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf-8')).agent.modelSelection).toEqual({
+    model: 'gpt-4o',
+    provider: 'openai',
+  });
   expect(fs.existsSync(lockFile)).toBe(false);
   expect(fs.readdirSync(dir).filter((entry) => entry.endsWith('.tmp'))).toEqual([]);
 });

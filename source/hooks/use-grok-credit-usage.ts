@@ -38,7 +38,7 @@ export interface GrokCreditUsageHandle extends GrokCreditUsageSnapshot {
 }
 
 export const useGrokCreditUsage = (settingsService: SettingsService, isProcessing: boolean): GrokCreditUsageHandle => {
-  const provider = useSetting(settingsService, 'agent.provider');
+  const provider = useSetting(settingsService, 'agent.modelSelection').provider;
   const isGrok = provider === 'grok';
 
   const service = getGrokCreditUsageService({ resolveAccessToken, resolveAccountId });

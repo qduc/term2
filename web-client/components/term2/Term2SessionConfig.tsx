@@ -35,7 +35,9 @@ export function Term2SessionConfig({
     setBusy(true);
     setError(null);
     try {
-      await term2Client.updateSessionConfig(sessionId, { [field]: value });
+      await term2Client.updateSessionConfig(sessionId, field === 'model'
+        ? { modelSelection: { model: value, provider: config.providerId } }
+        : { [field]: value });
     } catch (reason) {
       setError(reason instanceof Term2ApiError ? reason.message : 'Session configuration was not updated.');
     } finally {

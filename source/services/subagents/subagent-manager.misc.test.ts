@@ -11,8 +11,7 @@ it('run() returns failed result when createClient factory is not provided', asyn
   const manager = new RealSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': 'openai',
+      'agent.modelSelection': { model: 'mock-model', provider: 'openai' },
     }),
     sessionContextService: createSessionContextService() as any,
     toolOwnership: new ToolOwnershipRegistry(),

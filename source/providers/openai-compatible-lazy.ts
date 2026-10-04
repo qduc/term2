@@ -25,7 +25,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         apiKey: resolveProviderCredentialValue(settingsService, providerId),
       };
       const provider = createCustomProviderModelProvider(resolvedConfig, {
-        defaultModel: model || settingsService.get('agent.model') || '',
+        defaultModel: model || settingsService.get('agent.modelSelection').model || '',
         loggingService,
         sessionContextService,
         settingsService,

@@ -70,7 +70,12 @@ test('accepts the gateway provider disabled flag in settings projections', () =>
     revision: 'r1',
     defaultsRevision: 'r1',
     settings: {
-      safeDefaults: {},
+      safeDefaults: {
+        'agent.modelSelection': {
+          value: { model: 'bound-model', provider: 'qa-mock' },
+          source: 'config', scope: 'session', confirmRequired: false, persistable: false,
+        },
+      },
       credentials: {},
       providers: [
         {
@@ -93,4 +98,14 @@ test('accepts the gateway provider disabled flag in settings projections', () =>
     },
   });
   assert.equal(projection.settings.providers[0]?.disabled, false);
+  assert.deepEqual(projection.settings.safeDefaults['agent.modelSelection']?.value, { model: 'bound-model', provider: 'qa-mock' });
+});
+
+test('rejects incomplete or extra-field selection values from the gateway', () => {
+  for (const value of [{ model: 'alone' }, { provider: 'alone' }, { model: 'm', provider: 'p', secret: 'hidden' }, 'scalar']) {
+    assert.throws(() => validateSettings({
+      schemaVersion: 1, revision: 'r1', defaultsRevision: 'r1',
+      settings: { safeDefaults: { 'agent.modelSelection': { value, source: 'config', scope: 'session', confirmRequired: false, persistable: false } }, credentials: {}, providers: [], oauthAccounts: {}, safety: {} },
+    }));
+  }
 });

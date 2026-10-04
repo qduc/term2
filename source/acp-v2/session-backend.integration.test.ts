@@ -114,8 +114,7 @@ describe('ACP v2 production backend integration', () => {
       env: {},
       cli: {},
     });
-    settings.set('agent.provider', providerId, { persist: false });
-    settings.set('agent.model', 'acp-m1-model', { persist: false });
+    settings.set('agent.modelSelection', { model: 'acp-m1-model', provider: providerId }, { persist: false });
     settings.set('agent.openai.apiKey', 'test-key', { persist: false });
     const runtimeFactory = createProductionRuntimeFactory({
       settingsAuthority: settings,
@@ -296,8 +295,7 @@ const withBridgeSession = async (
     env: {},
     cli: {},
   });
-  settings.set('agent.provider', bridgeProviderId, { persist: false });
-  settings.set('agent.model', 'acp-m3-model', { persist: false });
+  settings.set('agent.modelSelection', { model: 'acp-m3-model', provider: bridgeProviderId }, { persist: false });
   settings.set('agent.openai.apiKey', 'test-key', { persist: false });
   const runtimeFactory = createProductionRuntimeFactory({
     settingsAuthority: settings,

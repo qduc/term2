@@ -43,8 +43,7 @@ it('run() creates isolated sessions for each subagent call', async () => {
   });
 
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'mock-model', provider: providerId },
   });
   const manager = new TestSubagentManager({ logger: createMockLogger(), settings });
 
@@ -74,7 +73,7 @@ it('refuses foreground adoption until the session installs an approval-pause sin
   });
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
-    settings: createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId }),
+    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } }),
     sessionContextService: createSessionContextService() as any,
   });
 
@@ -118,8 +117,7 @@ it('run() emits started and completed events', async () => {
   });
 
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'mock-model', provider: providerId },
   });
   const events: any[] = [];
   const manager = new TestSubagentManager({
@@ -150,7 +148,7 @@ it('run() emits started and completed events', async () => {
 });
 
 it('run() emits a completed event even when the role is unknown', async () => {
-  const settings = createMockSettings({ 'agent.model': 'mock-model' });
+  const settings = createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: 'openai' } });
   const events: any[] = [];
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
@@ -196,10 +194,8 @@ it('mentor base instructions come from the mentor role markdown', async () => {
   });
 
   const settings = createMockSettings({
-    'agent.model': 'main-model',
-    'agent.provider': providerId,
-    'agent.mentorModel': 'mentor-model',
-    'agent.mentorProvider': providerId,
+    'agent.modelSelection': { model: 'main-model', provider: providerId },
+    'agent.mentorPool': [{ model: 'mentor-model', provider: providerId }],
     'app.mentorMode': false,
   });
   const manager = new TestSubagentManager({
@@ -250,8 +246,7 @@ it('finalText is the assistant message after the last tool item', async () => {
   });
 
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': providerId,
+    'agent.modelSelection': { model: 'mock-model', provider: providerId },
   });
   const manager = new TestSubagentManager({
     logger: createMockLogger(),

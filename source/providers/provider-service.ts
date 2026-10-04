@@ -89,7 +89,7 @@ export const hasProviderNameConflict = (
 export const loadProviderItems = (settingsService: ISettingsService): ProviderSelectionItem[] => {
   const all = getAllProviders();
   const customList = getCustomProviderConfigs(settingsService);
-  const activeProvider = settingsService.get('agent.provider') || 'openai';
+  const activeProvider = settingsService.get('agent.modelSelection').provider || 'openai';
 
   const providerItems: ProviderSelectionItem[] = all
     .filter((p) => !p.isRuntimeDefined)
@@ -216,8 +216,11 @@ export const saveProvider = (
     });
     upsertProvider(def);
 
-    if (isEdit && originalName && originalName === settingsService.get('agent.provider')) {
-      settingsService.set('agent.provider', providerIdentifier);
+    if (isEdit && originalName && originalName === settingsService.get('agent.modelSelection').provider) {
+      settingsService.set('agent.modelSelection', {
+        ...settingsService.get('agent.modelSelection'),
+        provider: providerIdentifier,
+      });
     }
 
     return { success: true };
@@ -234,11 +237,6 @@ export const deleteCustomProvider = (settingsService: ISettingsService, name: st
 
   settingsService?.setPersistentDynamic('providers', updated);
   unregisterProvider(name);
-
-  const activeProvider = settingsService.get('agent.provider');
-  if (activeProvider === name) {
-    settingsService.set('agent.provider', 'openai');
-  }
 };
 
 export const validateWizardName = (

@@ -24,7 +24,7 @@ it('subagent direct streamed model preserves the final response contract', async
   });
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
-    settings: createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId }),
+    settings: createMockSettings({ 'agent.modelSelection': { model: 'mock-model', provider: providerId } }),
     sessionContextService: createSessionContextService() as any,
   });
   const result = await manager.run({ role: 'explorer', task: 'mock task' });
@@ -97,8 +97,7 @@ it.each(promptCases)('execution subagent prompt selects the $title base profile 
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': c.model,
-      'agent.provider': providerId,
+      'agent.modelSelection': { model: c.model, provider: providerId },
     }),
     sessionContextService: createSessionContextService() as any,
   });
@@ -140,8 +139,7 @@ it('execution subagent prompts exclude top-level-only prompt content', async () 
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'gpt-5-codex',
-      'agent.provider': providerId,
+      'agent.modelSelection': { model: 'gpt-5-codex', provider: providerId },
     }),
     sessionContextService: createSessionContextService() as any,
   });
@@ -177,10 +175,8 @@ it('mentor subagent is NOT affected by prompt profiles', async () => {
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'main-model',
-      'agent.provider': providerId,
-      'agent.mentorModel': 'gpt-5-codex',
-      'agent.mentorProvider': providerId,
+      'agent.modelSelection': { model: 'main-model', provider: providerId },
+      'agent.mentorPool': [{ model: 'gpt-5-codex', provider: providerId }],
       'app.mentorMode': false,
     }),
     sessionContextService: createSessionContextService() as any,

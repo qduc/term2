@@ -250,8 +250,7 @@ async function writeStatelessSettings(settingsDir: string, row: StatelessProvide
     join(settingsDir, 'settings.json'),
     JSON.stringify({
       agent: {
-        model: row.model,
-        provider: row.providerId,
+        modelSelection: { model: row.model, provider: row.providerId },
         reasoningEffort: 'medium',
         retryAttempts: 0,
         transport: 'http',

@@ -28,8 +28,8 @@ export function createSessionSettingsSnapshot(input: {
     ...(input.effectiveToolPolicy ?? {}),
   });
   return Object.freeze({
-    providerId: input.providerId ?? settings.get('agent.provider'),
-    modelId: input.modelId ?? settings.get('agent.model'),
+    providerId: input.providerId ?? settings.get('agent.modelSelection').provider,
+    modelId: input.modelId ?? settings.get('agent.modelSelection').model,
     reasoningEffort: input.reasoningEffort ?? String(settings.get('agent.reasoningEffort') ?? 'default'),
     mode,
     effectiveToolPolicy: policy,

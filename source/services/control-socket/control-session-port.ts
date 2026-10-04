@@ -36,8 +36,8 @@ export function createControlSessionPort(input: {
 }): ControlSessionPort {
   const { conversationService, orchestrator, settingsService, usageAccumulator, controlSocket } = input;
   const contextWindow = () => {
-    const provider = settingsService.get('agent.provider');
-    const model = settingsService.get('agent.model');
+    const provider = settingsService.get('agent.modelSelection').provider;
+    const model = settingsService.get('agent.modelSelection').model;
     return provider && model ? getModelContextWindow(provider, model) ?? null : null;
   };
   const toolCalls = () => conversationService.getUnsettledToolExecutions();
@@ -106,8 +106,8 @@ export function createControlSessionPort(input: {
         currentTool: calls[0] ?? null,
         context: { contextWindow: contextWindow(), promptTokens: null },
         cost: orchestrator.getCostSummary(),
-        model: settingsService.get('agent.model') ?? null,
-        provider: settingsService.get('agent.provider') ?? null,
+        model: settingsService.get('agent.modelSelection').model ?? null,
+        provider: settingsService.get('agent.modelSelection').provider ?? null,
         reasoningEffort: settingsService.get('agent.reasoningEffort') ?? null,
       };
     },
@@ -126,8 +126,8 @@ export function createControlSessionPort(input: {
       }
       if (topic === 'model') {
         return {
-          provider: settingsService.get('agent.provider') ?? null,
-          model: settingsService.get('agent.model') ?? null,
+          provider: settingsService.get('agent.modelSelection').provider ?? null,
+          model: settingsService.get('agent.modelSelection').model ?? null,
           reasoningEffort: settingsService.get('agent.reasoningEffort') ?? null,
           autoApproveMode: settingsService.get('shell.autoApproveMode') ?? null,
         };

@@ -23,7 +23,7 @@ describe('assembled provider CLI black-box', () => {
         await writeFile(
           join(settingsDir, 'settings.json'),
           JSON.stringify({
-            agent: { model: 'fixture', provider: 'fixture-provider', transport: 'http' },
+            agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' }, transport: 'http' },
             app: { liteMode: true },
             providers: [
               {
@@ -60,8 +60,7 @@ describe('assembled provider CLI black-box', () => {
           join(settingsDir, 'settings.json'),
           JSON.stringify({
             agent: {
-              model: 'fixture',
-              provider: 'openai',
+              modelSelection: { model: 'fixture', provider: 'openai' },
               transport: 'http',
               openai: { apiKey: 'fixture-key' },
             },
@@ -91,7 +90,7 @@ describe('assembled provider CLI black-box', () => {
         await writeFile(
           join(settingsDir, 'settings.json'),
           JSON.stringify({
-            agent: { model: 'fixture', provider: 'fixture-provider' },
+            agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
             app: { liteMode: true },
             providers: [
               {

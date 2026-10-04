@@ -153,7 +153,9 @@ describe('runModelPickerHost', () => {
     const stdin = new FakeStdin();
     stdin.isTTY = false;
     const stdout = new FakeStdout();
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
 
     const result = await runModelPickerHost({
       settingsService,
@@ -171,7 +173,9 @@ describe('runModelPickerHost', () => {
     const stdin = new FakeStdin();
     const stdout = new FakeStdout();
     const stderr = new FakeStdout();
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
 
     const resultPromise = runModelPickerHost({
       settingsService,
@@ -198,7 +202,9 @@ describe('runModelPickerHost', () => {
   it('erases the picker frame before committing its exit', async () => {
     const stdin = new FakeStdin();
     const stdout = new FakeStdout();
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
 
     const resultPromise = runModelPickerHost({
       settingsService,
@@ -225,7 +231,9 @@ describe('runModelPickerHost', () => {
   it('cancels on Escape and still restores the terminal', async () => {
     const stdin = new FakeStdin();
     const stdout = new FakeStdout();
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
 
     const resultPromise = runModelPickerHost({
       settingsService,
@@ -250,7 +258,9 @@ describe('runModelPickerHost', () => {
   it('seeds the initial query and lock-provider banner through to the mounted menu', async () => {
     const stdin = new FakeStdin();
     const stdout = new FakeStdout();
-    const settingsService = createMockSettingsService({ 'agent.provider': providerId });
+    const settingsService = createMockSettingsService({
+      'agent.modelSelection': { model: 'gpt-5.4', provider: providerId },
+    });
 
     const resultPromise = runModelPickerHost({
       settingsService,

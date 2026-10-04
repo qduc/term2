@@ -75,7 +75,7 @@ describe('OpenAI endpoint redirection', () => {
       const settings = {
         get(key: string) {
           return ({
-            'agent.model': 'fixture',
+            'agent.modelSelection': { model: 'fixture', provider: 'openai' },
             'agent.openai.apiKey': 'fixture-key',
             'agent.retryAttempts': 0,
             'agent.transport': 'http',

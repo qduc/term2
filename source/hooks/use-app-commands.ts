@@ -53,7 +53,7 @@ interface UseAppCommandsProps {
   refreshProviderUsage?: () => void;
   exit: () => void;
   messages: Message[];
-  setModel: (model: string) => void;
+  setModelSelection: (selection: import('../services/settings/model-selection.js').ModelSelection) => void;
   getRewindItems: () => readonly RewindItem[];
   rewindToTarget: (item: RewindItem) => { text: string; images?: UserTurn['images'] } | null;
   restoreTurnToInput: (turn: { text: string; images?: UserTurn['images'] }) => void;

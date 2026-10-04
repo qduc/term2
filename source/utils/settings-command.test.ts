@@ -14,18 +14,15 @@ import { SettingsService } from '../services/settings/settings-service.js';
 
 const baseSettings = {
   agent: {
-    model: { value: 'gpt-5.1', source: 'default' },
-    smartModel: { value: 'gpt-5.1', source: 'default' },
-    balancedModel: { value: 'gpt-5-mini', source: 'config' },
+    modelSelection: { value: { model: 'gpt-5.1', provider: 'openai' }, source: 'default' },
+    smartModel: { value: [{ model: 'gpt-5.1', provider: 'openai' }], source: 'default' },
+    balancedModel: { value: [{ model: 'gpt-5-mini', provider: 'openai' }], source: 'config' },
     cheapModel: { value: undefined, source: 'default' },
     choreModel: { value: undefined, source: 'default' },
     decisionModel: { value: '~typesafe/jev-latest', source: 'config' },
-    efficientModel: { value: 'gpt-5-mini', source: 'config' },
-    capableModel: { value: undefined, source: 'default' },
     reasoningEffort: { value: 'default', source: 'default' },
     temperature: { value: undefined, source: 'default' },
-    mentorModel: { value: undefined, source: 'default' },
-    mentorProvider: { value: undefined, source: 'default' },
+    mentorPool: { value: [], source: 'default' },
     mentorReasoningEffort: { value: 'default', source: 'default' },
     mentorSamples: { value: 1, source: 'default' },
     useFlexServiceTier: { value: false, source: 'default' },
@@ -35,7 +32,6 @@ const baseSettings = {
       compactThreshold: { value: 0.8, source: 'default' },
       compactThresholdTokens: { value: null, source: 'default' },
     },
-    provider: { value: 'openai', source: 'default' },
     maxTurns: { value: 20, source: 'default' },
     retryAttempts: { value: 2, source: 'default' },
     transport: { value: 'websocket', source: 'default' },
@@ -115,7 +111,9 @@ const createDeps = (
 
   const settingsService = {
     getAll: () => baseSettings,
-    get: (key: any): any => overrides.values?.[key] ?? 'value-for-' + key,
+    get: (key: any): any =>
+      overrides.values?.[key] ??
+      (key === 'agent.modelSelection' ? { model: 'initial', provider: 'openai' } : 'value-for-' + key),
     getDynamic: (key: string): unknown => overrides.values?.[key] ?? 'value-for-' + key,
     getSource: (key: string) => overrides.sources?.[key] ?? 'default',
     reset: (key: string) => resetCalls.push(key),
@@ -142,9 +140,9 @@ const createDeps = (
 it('formatSettingsSummary renders values with sources', () => {
   const summary = formatSettingsSummary(baseSettings);
 
-  expect(summary.includes('agent.model: gpt-5.1 (default)')).toBe(true);
-  expect(summary.includes('agent.smartModel: gpt-5.1 (default)')).toBe(true);
-  expect(summary.includes('agent.balancedModel: gpt-5-mini (config)')).toBe(true);
+  expect(summary.includes('agent.modelSelection: {"model":"gpt-5.1","provider":"openai"} (default)')).toBe(true);
+  expect(summary.includes('agent.smartModel: [{"model":"gpt-5.1","provider":"openai"}] (default)')).toBe(true);
+  expect(summary.includes('agent.balancedModel: [{"model":"gpt-5-mini","provider":"openai"}] (config)')).toBe(true);
   expect(summary.includes('agent.cheapModel: undefined (default)')).toBe(true);
   expect(summary.includes('agent.choreModel: undefined (default)')).toBe(true);
   expect(summary.includes('agent.decisionModel: ~typesafe/jev-latest (config)')).toBe(true);
@@ -235,14 +233,14 @@ it('does not apply a second legacy fallback for active profile changes', () => {
 
 it('viewing a single setting shows value and source', () => {
   const deps = createDeps({
-    values: { 'agent.model': 'gpt-4o' },
-    sources: { 'agent.model': 'cli' },
+    values: { 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } },
+    sources: { 'agent.modelSelection': 'cli' },
   });
   const command = createSettingsCommand(deps);
-  command.action('agent.model');
+  command.action('agent.modelSelection');
 
   expect(deps.messages.length).toBe(1);
-  expect(deps.messages[0].includes('agent.model: gpt-4o (cli)')).toBe(true);
+  expect(deps.messages[0].includes('agent.modelSelection: {"model":"gpt-4o","provider":"openai"} (cli)')).toBe(true);
 });
 
 it('does not claim a failed durable replacement succeeded', () => {
@@ -253,7 +251,7 @@ it('does not claim a failed durable replacement succeeded', () => {
     disableLogging: true,
     disableFilePersistence: false,
   });
-  service.set('agent.model', 'predecessor-model');
+  service.set('agent.modelSelection', { model: 'predecessor-model', provider: 'openai' });
 
   const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
     throw new Error('rename failed');
@@ -267,16 +265,16 @@ it('does not claim a failed durable replacement succeeded', () => {
       replaceInput: () => {},
     });
 
-    command.action('agent.model replacement-model');
+    command.action('agent.modelSelection replacement-model');
 
     const freshService = new SettingsService({
       settingsDir,
       disableLogging: true,
       disableFilePersistence: false,
     });
-    expect(freshService.get('agent.model')).toBe('predecessor-model');
-    expect(messages).not.toContain('Set agent.model to replacement-model');
-    expect(messages.some((message) => message.includes('failed to save agent.model to disk'))).toBe(true);
+    expect(freshService.get('agent.modelSelection').model).toBe('predecessor-model');
+    expect(messages).not.toContain('Set agent.modelSelection to replacement-model');
+    expect(messages.some((message) => message.includes('failed to save agent.modelSelection to disk'))).toBe(true);
   } finally {
     rename.mockRestore();
     fs.rmSync(settingsDir, { recursive: true, force: true });
@@ -299,7 +297,7 @@ it('reports a memory-only outcome when persistence is disabled', () => {
       replaceInput: () => {},
     });
 
-    command.action('agent.model gpt-5.1');
+    command.action('agent.modelSelection gpt-5.1');
 
     expect(messages.some((message) => message.includes('memory only'))).toBe(true);
   } finally {
@@ -325,11 +323,11 @@ it('renders direct credential bytes in /settings queries (President decision: di
 it('setting runtime-modifiable values updates service and applies runtime hook', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('agent.model gpt-4o');
+  command.action('agent.modelSelection gpt-4o');
 
-  expect(deps.setCalls).toEqual([{ key: 'agent.model', value: 'gpt-4o' }]);
-  expect(deps.applied).toEqual([{ key: 'agent.model', value: 'gpt-4o' }]);
-  expect(deps.messages[0].includes('Set agent.model to gpt-4o')).toBe(true);
+  expect(deps.setCalls).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
+  expect(deps.applied).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
+  expect(deps.messages[0].includes('Set agent.modelSelection to {')).toBe(true);
 });
 
 it('setting agent.maxParallelToolCalls validates positive integers', () => {
@@ -404,13 +402,13 @@ it('parseSettingValueForKey still accepts JSON array input for array settings', 
 });
 
 it('parseSettingValueForKey leaves non-array settings with commas untouched', () => {
-  expect(parseSettingValueForKey('agent.model', 'gpt-4o,extra')).toBe('gpt-4o,extra');
+  expect(parseSettingValueForKey('agent.modelSelection', 'gpt-4o,extra')).toBe('gpt-4o,extra');
 });
 
 it('parseSettingValueForKey round-trips string settings verbatim instead of coercing', () => {
   // "true"/numeric-looking text is a valid string value for a z.string() key;
   // coercion before the schema made such values impossible to set (E3).
-  expect(parseSettingValueForKey('agent.provider', 'true')).toBe('true');
+  expect(parseSettingValueForKey('webSearch.exa.apiKey', 'true')).toBe('true');
   expect(parseSettingValueForKey('webSearch.exa.apiKey', '3.0')).toBe('3.0');
   expect(parseSettingValueForKey('webSearch.exa.apiKey', '  padded  ')).toBe('padded');
   // Non-string keys keep the coercion behavior.
@@ -418,49 +416,41 @@ it('parseSettingValueForKey round-trips string settings verbatim instead of coer
   expect(parseSettingValueForKey('app.mentorMode', 'true')).toBe(true);
 });
 
-it('setting agent.model strips --provider flag from value', () => {
+it('setting agent.modelSelection strips --provider flag from value', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('agent.model mistralai/devstral-2512:free --provider=openrouter');
+  command.action('agent.modelSelection mistralai/devstral-2512:free --provider=openrouter');
 
   // Should save the provider and the model ID
   expect(deps.setCalls).toEqual([
-    { key: 'agent.provider', value: 'openrouter' },
-    { key: 'agent.model', value: 'mistralai/devstral-2512:free' },
+    { key: 'agent.modelSelection', value: { model: 'mistralai/devstral-2512:free', provider: 'openrouter' } },
   ]);
   expect(deps.applied).toEqual([
-    { key: 'agent.provider', value: 'openrouter' },
-    { key: 'agent.model', value: 'mistralai/devstral-2512:free' },
+    { key: 'agent.modelSelection', value: { model: 'mistralai/devstral-2512:free', provider: 'openrouter' } },
   ]);
-  expect(deps.messages[0].includes('Set agent.model to mistralai/devstral-2512:free')).toBe(true);
+  expect(deps.messages[0].includes('Set agent.modelSelection to {')).toBe(true);
 });
 
-it('setting agent.model strips --provider=openai flag from value', () => {
+it('setting agent.modelSelection strips --provider=openai flag from value', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('agent.model gpt-4o --provider=openai');
+  command.action('agent.modelSelection gpt-4o --provider=openai');
 
   // Should save the provider and the model ID
-  expect(deps.setCalls).toEqual([
-    { key: 'agent.provider', value: 'openai' },
-    { key: 'agent.model', value: 'gpt-4o' },
-  ]);
-  expect(deps.applied).toEqual([
-    { key: 'agent.provider', value: 'openai' },
-    { key: 'agent.model', value: 'gpt-4o' },
-  ]);
-  expect(deps.messages[0].includes('Set agent.model to gpt-4o')).toBe(true);
+  expect(deps.setCalls).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
+  expect(deps.applied).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-4o', provider: 'openai' } }]);
+  expect(deps.messages[0].includes('Set agent.modelSelection to {')).toBe(true);
 });
 
-it('setting agent.model without provider flag works normally', () => {
+it('setting agent.modelSelection without provider flag works normally', () => {
   const deps = createDeps();
   const command = createSettingsCommand(deps);
-  command.action('agent.model gpt-5.1');
+  command.action('agent.modelSelection gpt-5.1');
 
   // Should save the model ID as-is
-  expect(deps.setCalls).toEqual([{ key: 'agent.model', value: 'gpt-5.1' }]);
-  expect(deps.applied).toEqual([{ key: 'agent.model', value: 'gpt-5.1' }]);
-  expect(deps.messages[0].includes('Set agent.model to gpt-5.1')).toBe(true);
+  expect(deps.setCalls).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-5.1', provider: 'openai' } }]);
+  expect(deps.applied).toEqual([{ key: 'agent.modelSelection', value: { model: 'gpt-5.1', provider: 'openai' } }]);
+  expect(deps.messages[0].includes('Set agent.modelSelection to {')).toBe(true);
 });
 
 it('setting agent.smartModel strips --provider flag and saves smart provider', () => {
@@ -487,7 +477,7 @@ it('setting agent.choreModel strips --provider flag and saves chore provider', (
   expect(deps.applied).toEqual([{ key: 'agent.choreModel', value: [{ model: 'fast-chore', provider: 'openrouter' }] }]);
 });
 
-it('setting agent.model accepts provider names with spaces', () => {
+it('setting agent.modelSelection accepts provider names with spaces', () => {
   const providerId = 'opencode go settings command test';
   upsertProvider({
     id: providerId,
@@ -498,15 +488,13 @@ it('setting agent.model accepts provider names with spaces', () => {
   try {
     const deps = createDeps();
     const command = createSettingsCommand(deps);
-    command.action(`agent.model deepseek-v4-flash --provider=${providerId}`);
+    command.action(`agent.modelSelection deepseek-v4-flash --provider=${providerId}`);
 
     expect(deps.setCalls).toEqual([
-      { key: 'agent.provider', value: providerId },
-      { key: 'agent.model', value: 'deepseek-v4-flash' },
+      { key: 'agent.modelSelection', value: { model: 'deepseek-v4-flash', provider: providerId } },
     ]);
     expect(deps.applied).toEqual([
-      { key: 'agent.provider', value: providerId },
-      { key: 'agent.model', value: 'deepseek-v4-flash' },
+      { key: 'agent.modelSelection', value: { model: 'deepseek-v4-flash', provider: providerId } },
     ]);
   } finally {
     unregisterProvider(providerId);

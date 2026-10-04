@@ -2,7 +2,15 @@ import { expect, it } from 'vitest';
 import { getProvider } from './index.js';
 
 const deps: any = {
-  settingsService: { get: (key: string) => (key === 'agent.openrouter.apiKey' ? 'sk-test' : undefined), set: () => {} },
+  settingsService: {
+    get: (key: string) =>
+      key === 'agent.openrouter.apiKey'
+        ? 'sk-test'
+        : key === 'agent.modelSelection'
+        ? { model: 'openrouter/auto', provider: 'openrouter' }
+        : undefined,
+    set: () => {},
+  },
   loggingService: {
     info() {},
     warn() {},

@@ -26,7 +26,7 @@ function createOpenRouterModel(deps: ProviderDeps, model: string) {
       appName: settingsService.get('agent.openrouter.title') || 'term2',
       fetch: createProviderFetch({
         providerId: 'openrouter',
-        defaultModel: settingsService.get('agent.model') || model,
+        defaultModel: settingsService.get('agent.modelSelection').model || model,
         deps: {
           loggingService,
           sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,

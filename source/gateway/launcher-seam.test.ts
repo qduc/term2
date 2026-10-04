@@ -11,8 +11,7 @@ describe('local launcher seams', () => {
   it('captures a frozen, secret-free per-session settings snapshot', () => {
     const snapshot = createSessionSettingsSnapshot({
       settings: settings({
-        'agent.provider': 'openai',
-        'agent.model': 'gpt-5',
+        'agent.modelSelection': { model: 'gpt-5', provider: 'openai' },
         'agent.reasoningEffort': 'high',
         'app.activeProfileId': 'builtin:plan',
         'agent.openai.apiKey': 'must-not-copy',
@@ -41,7 +40,7 @@ describe('local launcher seams', () => {
   it('does not share the mutable policy object with the authority caller', () => {
     const policy = { allowWrite: true };
     const snapshot = createSessionSettingsSnapshot({
-      settings: settings({ 'agent.provider': 'fixture', 'agent.model': 'fixture-model' }),
+      settings: settings({ 'agent.modelSelection': { model: 'fixture-model', provider: 'fixture' } }),
       effectiveToolPolicy: policy,
     });
     policy.allowWrite = false;

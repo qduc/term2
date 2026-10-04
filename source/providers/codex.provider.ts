@@ -697,7 +697,7 @@ registerProvider(
         sessionAccountStore,
       },
     ) => {
-      const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
+      const defaultModel = settingsService.get('agent.modelSelection').model || 'gpt-5.3-codex';
       // A session context is the ownership boundary for continuation state. Do
       // not fall back to the settings service: it can be shared by independent
       // sessions, which would leak server-managed response history.

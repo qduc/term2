@@ -121,10 +121,9 @@ export const useModelSelection = (deps: {
     [settingsService, credentialRevision],
   );
   const unavailableConfiguredModels = useMemo(() => {
-    const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
-    const providerKey = modelSettingConfig ? modelSettingConfig.providerKey : 'agent.provider';
-    const configuredModel = settingsService.getDynamic(modelKey);
-    const configuredProvider = settingsService.getDynamic(providerKey);
+    const selection = settingsService.get('agent.modelSelection');
+    const configuredModel = selection.model;
+    const configuredProvider = selection.provider;
     if (
       typeof configuredModel !== 'string' ||
       !configuredModel ||
@@ -265,10 +264,9 @@ export const useModelSelection = (deps: {
     }
 
     if (shouldPreselectRef.current) {
-      const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
-      const currentModelValue = settingsService.getDynamic(modelKey);
-      const providerKey = modelSettingConfig ? modelSettingConfig.providerKey : 'agent.provider';
-      const currentProviderValue = settingsService.getDynamic(providerKey);
+      const selection = settingsService.get('agent.modelSelection');
+      const currentModelValue = selection.model;
+      const currentProviderValue = selection.provider;
       if (typeof currentModelValue === 'string' && currentModelValue) {
         const index = filteredModels.findIndex(
           (m) =>

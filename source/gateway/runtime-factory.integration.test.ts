@@ -139,8 +139,7 @@ describe('production gateway runtime factory', () => {
       env: {},
       cli: {},
     });
-    settings.set('agent.provider', providerId, { persist: false });
-    settings.set('agent.model', 'm1-scripted-model', { persist: false });
+    settings.set('agent.modelSelection', { model: 'm1-scripted-model', provider: providerId }, { persist: false });
     settings.set('agent.openai.apiKey', 'launcher-secret', { persist: false });
     settings.set('shell.autoApproveMode', 'always', { persist: false });
     settings.set('sandbox.enabled', true, { persist: false });
@@ -194,8 +193,7 @@ describe('production gateway runtime factory', () => {
       env: {},
       cli: {},
     });
-    settings.set('agent.provider', providerId, { persist: false });
-    settings.set('agent.model', 'm1-scripted-model', { persist: false });
+    settings.set('agent.modelSelection', { model: 'm1-scripted-model', provider: providerId }, { persist: false });
     const workspace = tempRoot('f1-workspace-');
     let revivedReadOnlyFromAccess: boolean | undefined;
     let captureRevivedAccess = false;
@@ -220,7 +218,11 @@ describe('production gateway runtime factory', () => {
       },
     ) => {
       observedTools = [];
-      settings.set('agent.model', 'm1-scripted-model-' + access, { persist: false });
+      settings.set(
+        'agent.modelSelection',
+        { model: 'm1-scripted-model-' + access, provider: providerId },
+        { persist: false },
+      );
       const session = await factory.create(
         {
           sessionId,
@@ -282,7 +284,7 @@ describe('production gateway runtime factory', () => {
       env: {},
       cli: {},
     });
-    settings.set('agent.provider', providerId, { persist: false });
+    settings.set('agent.modelSelection', { model: 'm1-attempt-model', provider: providerId }, { persist: false });
     const workspace = tempRoot('f1-attempt-workspace-');
     let composedReadOnly: boolean | undefined;
     const factory = createProductionRuntimeFactory({
@@ -306,7 +308,11 @@ describe('production gateway runtime factory', () => {
       observedAttemptInputs = [];
       observedAttemptEvents = [];
       settings.set('tools.shell.enabled', mode === 'direct' ? false : true, { persist: false });
-      settings.set('agent.model', 'm1-attempt-' + mode + '-' + access, { persist: false });
+      settings.set(
+        'agent.modelSelection',
+        { model: 'm1-attempt-' + mode + '-' + access, provider: providerId },
+        { persist: false },
+      );
       const session = await factory.create(
         {
           sessionId: 'f1-attempt-' + mode + '-' + access,

@@ -98,8 +98,7 @@ it.each(toolCases)('$title', async (c) => {
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': c.model,
-      'agent.provider': providerId,
+      'agent.modelSelection': { model: c.model, provider: providerId },
       'app.searchViaShell': c.searchViaShell,
     }),
     sessionContextService: createSessionContextService() as any,
@@ -139,8 +138,7 @@ it('remote execution disables code-context tools and guidance', async () => {
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'gpt-4o',
-      'agent.provider': providerId,
+      'agent.modelSelection': { model: 'gpt-4o', provider: providerId },
     }),
     executionContext: {
       getCwd: () => '/tmp/remote-workspace',
@@ -184,8 +182,7 @@ it('subagent runtime registers activate_skill tool and appends skills catalog to
   const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'gpt-4o',
-      'agent.provider': providerId,
+      'agent.modelSelection': { model: 'gpt-4o', provider: providerId },
     }),
     sessionContextService: createSessionContextService() as any,
     skillsService: mockSkillsService as any,

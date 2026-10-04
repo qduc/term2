@@ -37,15 +37,10 @@ export function createModelSlashCommand({
         }
       }
 
-      settingsService.set('agent.model', modelId);
-      applyRuntimeSetting('agent.model', modelId);
-
-      let providerMsg = '';
-      if (provider) {
-        settingsService.set('agent.provider', provider);
-        applyRuntimeSetting('agent.provider', provider);
-        providerMsg = ` (${provider})`;
-      }
+      const selection = { model: modelId, provider: provider ?? settingsService.get('agent.modelSelection').provider };
+      settingsService.set('agent.modelSelection', selection);
+      applyRuntimeSetting('agent.modelSelection', selection);
+      const providerMsg = ` (${selection.provider})`;
 
       addSystemMessage(`Set model to ${modelId}${providerMsg}`);
 

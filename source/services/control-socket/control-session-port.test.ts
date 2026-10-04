@@ -80,8 +80,7 @@ describe('control session port', () => {
     const settings = {
       get: vi.fn((key: string) => {
         const values: Record<string, unknown> = {
-          'agent.provider': 'openai',
-          'agent.model': 'gpt-4o',
+          'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
           'agent.reasoningEffort': 'high',
           'shell.autoApproveMode': 'ask',
           'app.activeProfileId': 'builtin:standard',

@@ -119,7 +119,7 @@ describe('v1 compacted cursor over the gateway events route', () => {
         ({
           chat: async () => '',
           abort: () => {},
-          setModel: () => {},
+          setModelSelection: () => {},
           addToolInterceptor: () => () => {},
           startStream: async () => createMockStream([{ type: 'final', finalText: 'done' }]),
           continueRunStream: async () => createMockStream([]),

@@ -1,3 +1,4 @@
+import type { ModelSelection } from './settings/model-selection.js';
 import type { ProviderInput, ProviderInputItem } from '../contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
@@ -121,7 +122,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   retractSteer?(id: string): boolean;
   /** Replace a waiting steer's items in place, keeping its position. */
   editSteer?(id: string, items: readonly ProviderInputItem[]): boolean;
-  setModel(model: string): void;
+  setModelSelection(selection: ModelSelection): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
   /**
    * Wire session tool-ledger dispatch marking. Called after composition creates

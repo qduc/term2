@@ -145,7 +145,7 @@ export async function fetchGrokModels(
 }
 
 export function createGrokStreamedModel(model: string, deps: ProviderDeps): StreamedModelTurn {
-  const resolvedModel = (model || deps.settingsService.get('agent.model') || DEFAULT_GROK_MODEL).trim();
+  const resolvedModel = (model || deps.settingsService.get('agent.modelSelection').model || DEFAULT_GROK_MODEL).trim();
   const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
 
   const openAIClient = new OpenAI({

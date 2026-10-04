@@ -108,16 +108,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
       key === SETTING_KEYS.AGENT_CHEAP_MODEL ||
       key === SETTING_KEYS.AGENT_CHORE_MODEL
     ) {
-      return { text: '(inherits agent.model)', tone: 'textSubtle' };
-    }
-    if (
-      key === SETTING_KEYS.AGENT_SMART_PROVIDER ||
-      key === SETTING_KEYS.AGENT_BALANCED_PROVIDER ||
-      key === SETTING_KEYS.AGENT_CHEAP_PROVIDER ||
-      key === SETTING_KEYS.AGENT_CHORE_PROVIDER ||
-      key === SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER
-    ) {
-      return { text: '(inherits agent.provider)', tone: 'textSubtle' };
+      return { text: '(inherits agent.modelSelection)', tone: 'textSubtle' };
     }
     if (
       key === SETTING_KEYS.AGENT_SMART_REASONING_EFFORT ||
@@ -126,12 +117,7 @@ export function formatSettingDisplayValue(key: string, value: unknown): Formatte
     ) {
       return { text: '(default)', tone: 'textSubtle' };
     }
-    if (
-      key === SETTING_KEYS.AGENT_MENTOR_MODEL ||
-      key === SETTING_KEYS.AGENT_MENTOR_PROVIDER ||
-      key === SETTING_KEYS.WEB_SEARCH_PROVIDER ||
-      key === SETTING_KEYS.UI_PASTE_THRESHOLD
-    ) {
+    if (key === SETTING_KEYS.WEB_SEARCH_PROVIDER || key === SETTING_KEYS.UI_PASTE_THRESHOLD) {
       return { text: '(none)', tone: 'textSubtle' };
     }
     return { text: '(unset)', tone: 'textSubtle' };

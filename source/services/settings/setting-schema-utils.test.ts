@@ -48,10 +48,10 @@ it('unwrapSchema handles null/undefined input gracefully', () => {
   expect(unwrapSchema(undefined)).toBeUndefined();
 });
 
-it('resolveSettingAtPath returns string schema for agent.model (after unwrap)', () => {
-  const result = resolveSettingAtPath('agent.model');
+it('resolveSettingAtPath returns object schema for agent.modelSelection (after unwrap)', () => {
+  const result = resolveSettingAtPath('agent.modelSelection');
   const unwrapped = unwrapSchema(result);
-  expect(unwrapped).toBeInstanceOf(z.ZodString);
+  expect(unwrapped).toBeInstanceOf(z.ZodObject);
 });
 
 it('resolveSettingAtPath returns enum schema for agent.reasoningEffort (after unwrap)', () => {
@@ -109,7 +109,7 @@ it('resolveSettingAtPath navigates through optional wrapper objects', () => {
 
 it('unwrapSchema and resolveSettingAtPath agree on type for all simple settings', () => {
   const cases: Array<{ key: string; expectedCtor: new (...args: any[]) => any }> = [
-    { key: 'agent.model', expectedCtor: z.ZodString },
+    { key: 'agent.modelSelection', expectedCtor: z.ZodObject },
     { key: 'shell.timeout', expectedCtor: z.ZodNumber },
     { key: 'logging.logLevel', expectedCtor: z.ZodEnum },
     { key: 'app.mentorMode', expectedCtor: z.ZodBoolean },

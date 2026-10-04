@@ -26,7 +26,7 @@ export function getAncillaryTierForRole(role: SupportedSubagentRole | string): A
  * `roleLabel` supplies the editor's copy ("Mentor Pool", "Smart Pool", ...).
  *
  * `entryShape` selects the editor's entry model: tier model pools hold plain
- * model-id strings (`'models'`), while the mentor pool holds
+ * bound selections (`'models'`, with no per-entry reasoning), while the mentor pool holds
  * `{model, provider, reasoningEffort}` entries (`'entries'`).
  */
 const SUBAGENT_POOL_SETTINGS: ReadonlyArray<{
@@ -70,27 +70,5 @@ export function getSubagentPoolSettingKeyForRole(role: SupportedSubagentRole): s
       return SETTING_KEYS.AGENT_CHEAP_MODEL;
     case 'chore':
       return SETTING_KEYS.AGENT_CHORE_MODEL;
-  }
-}
-
-/**
- * Fallback provider setting per pool: the "inherit" copy and the model
- * picker's default provider come from the pool's own provider setting
- * (mentor: `agent.mentorProvider`; tiers: `agent.<tier>Provider`).
- */
-export function getSubagentPoolFallbackProviderKey(settingKey: string): string | undefined {
-  switch (settingKey) {
-    case SETTING_KEYS.AGENT_MENTOR_POOL:
-      return SETTING_KEYS.AGENT_MENTOR_PROVIDER;
-    case SETTING_KEYS.AGENT_SMART_MODEL:
-      return SETTING_KEYS.AGENT_SMART_PROVIDER;
-    case SETTING_KEYS.AGENT_BALANCED_MODEL:
-      return SETTING_KEYS.AGENT_BALANCED_PROVIDER;
-    case SETTING_KEYS.AGENT_CHEAP_MODEL:
-      return SETTING_KEYS.AGENT_CHEAP_PROVIDER;
-    case SETTING_KEYS.AGENT_CHORE_MODEL:
-      return SETTING_KEYS.AGENT_CHORE_PROVIDER;
-    default:
-      return undefined;
   }
 }

@@ -226,7 +226,7 @@ describe('term2 serve (child process)', () => {
       path.join(settingsDir, 'settings.json'),
       JSON.stringify(
         {
-          agent: { provider: 'mockprov', model: 'serve-mock-model', retryAttempts: 0 },
+          agent: { modelSelection: { provider: 'mockprov', model: 'serve-mock-model' }, retryAttempts: 0 },
           providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
         },
         null,

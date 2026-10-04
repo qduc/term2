@@ -195,15 +195,14 @@ async function run() {
 
   async function runModelEvaluation(run: { provider: string; model: string }) {
     const settingsService = createMockSettingsService({
-      'agent.autoApproveModel': run.model,
-      'agent.autoApproveProvider': run.provider,
+      'agent.cheapModel': [{ model: run.model, provider: run.provider }],
       'shell.autoApproveMode': 'auto',
       // Pass provider API keys from environment so runners can be initialized
       ...(process.env['OPENROUTER_API_KEY'] ? { 'agent.openrouter.apiKey': process.env['OPENROUTER_API_KEY'] } : {}),
     });
 
     const agentClient = new AgentClient({
-      model: run.model,
+      selection: { model: run.model, provider: run.provider },
       deps: {
         logger,
         settings: settingsService,

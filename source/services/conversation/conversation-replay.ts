@@ -1,4 +1,5 @@
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { ModelSelectionSchema } from '../settings/model-selection.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
@@ -541,6 +542,14 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     }
     case 'settings_changed': {
       switch (event.key) {
+        case 'agent.modelSelection': {
+          const selection = ModelSelectionSchema.safeParse(event.value);
+          if (selection.success) {
+            state.model = selection.data.model;
+            state.provider = selection.data.provider;
+          }
+          return;
+        }
         case 'agent.model':
           state.model = typeof event.value === 'string' ? event.value : state.model;
           return;

@@ -5,7 +5,7 @@ import type { SettingsService } from '../services/settings/settings-service.js';
 import { ConversationConfigurationService } from '../services/runtime-setting-router.js';
 
 interface UseRuntimeSettingsProps {
-  setModel: (model: string) => void;
+  setModelSelection: (selection: import('../services/settings/model-selection.js').ModelSelection) => void;
   setReasoningEffort: (effort: ReasoningEffortSetting) => void;
   setTemperature: (temp: number | undefined) => void;
   conversationService: RuntimeSettingRouterConversationService;
@@ -13,7 +13,7 @@ interface UseRuntimeSettingsProps {
 }
 
 export const useRuntimeSettings = ({
-  setModel,
+  setModelSelection,
   setReasoningEffort,
   setTemperature,
   conversationService,
@@ -24,11 +24,11 @@ export const useRuntimeSettings = ({
       new ConversationConfigurationService({
         conversationService,
         settingsService,
-        setModel,
+        setModelSelection,
         setReasoningEffort,
         setTemperature,
       }),
-    [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
+    [setModelSelection, setReasoningEffort, setTemperature, conversationService, settingsService],
   );
   return useCallback(
     (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),

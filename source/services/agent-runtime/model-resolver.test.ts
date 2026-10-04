@@ -11,8 +11,7 @@ import { AgentSettingsSchema } from '../settings/settings-schema.js';
 
 function settings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = {
-    'agent.provider': 'openai',
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     ...values,
   };
   const parsed = AgentSettingsSchema.parse(
@@ -35,13 +34,13 @@ function settings(values: Record<string, unknown> = {}): ISettingsService {
 }
 
 describe('resolveModelPolicy', () => {
-  it('inherits the complete parent pair when a tier pool is unset despite a tier provider', () => {
-    expect(resolveAncillaryModelTier('cheap', settings({ 'agent.cheapProvider': 'other' }))).toEqual({
+  it('inherits complete main and parent pairs when a tier pool is unset', () => {
+    expect(resolveAncillaryModelTier('cheap', settings())).toEqual({
       provider: 'openai',
       model: 'gpt-4o',
     });
     expect(
-      resolveModelPolicy({ tier: 'lower' }, settings({ 'agent.cheapProvider': 'other' }), {
+      resolveModelPolicy({ tier: 'lower' }, settings(), {
         provider: 'codex',
         model: 'parent',
       }),
@@ -69,16 +68,11 @@ describe('resolveModelPolicy', () => {
 
   it('resolves ancillary tiers independently from the main agent model', () => {
     const s = settings({
-      'agent.model': 'main-model',
-      'agent.provider': 'main-provider',
-      'agent.smartModel': 'smart-model',
-      'agent.smartProvider': 'smart-provider',
-      'agent.balancedModel': 'balanced-model',
-      'agent.balancedProvider': 'balanced-provider',
-      'agent.cheapModel': 'cheap-model',
-      'agent.cheapProvider': 'cheap-provider',
-      'agent.choreModel': 'chore-model',
-      'agent.choreProvider': 'chore-provider',
+      'agent.modelSelection': { model: 'main-model', provider: 'main-provider' },
+      'agent.smartModel': [{ model: 'smart-model', provider: 'smart-provider' }],
+      'agent.balancedModel': [{ model: 'balanced-model', provider: 'balanced-provider' }],
+      'agent.cheapModel': [{ model: 'cheap-model', provider: 'cheap-provider' }],
+      'agent.choreModel': [{ model: 'chore-model', provider: 'chore-provider' }],
     });
 
     expect(resolveModelPolicy('capable', s)).toEqual({ provider: 'smart-provider', model: 'smart-model' });
@@ -88,7 +82,7 @@ describe('resolveModelPolicy', () => {
 
   // ── Named tiers ────────────────────────────────────────
   it('resolves "balanced" from agent.model setting', () => {
-    const s = settings({ 'agent.model': 'gpt-4o' });
+    const s = settings({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } });
     expect(resolveModelPolicy('balanced', s)).toEqual({
       provider: 'openai',
       model: 'gpt-4o',
@@ -97,8 +91,7 @@ describe('resolveModelPolicy', () => {
 
   it('resolves "efficient" from agent.cheapModel setting', () => {
     const s = settings({
-      'agent.cheapModel': 'gpt-4o-mini',
-      'agent.provider': 'openai',
+      'agent.cheapModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
     });
     expect(resolveModelPolicy('efficient', s)).toEqual({
       provider: 'openai',
@@ -108,8 +101,7 @@ describe('resolveModelPolicy', () => {
 
   it('resolves "capable" from agent.smartModel setting', () => {
     const s = settings({
-      'agent.smartModel': 'gpt-4o',
-      'agent.provider': 'openai',
+      'agent.smartModel': [{ model: 'gpt-4o', provider: 'openai' }],
     });
     expect(resolveModelPolicy('capable', s)).toEqual({
       provider: 'openai',
@@ -119,8 +111,7 @@ describe('resolveModelPolicy', () => {
 
   it('falls back to agent.model for efficient/capable when not configured', () => {
     const s = settings({
-      'agent.model': 'gpt-4o',
-      'agent.provider': 'openai',
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
     // No agent.cheapModel set → falls back to agent.model
     expect(resolveModelPolicy('efficient', s)).toEqual({
@@ -129,41 +120,10 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  // ── Legacy keys ignored (D1 deprecation-window closure) ──
-  // settings-legacy-debt D1: legacy role keys stay parse-accepted and
-  // migration-mapped, but the resolver must read tier keys only.
-  it('ignores legacy efficient-tier keys instead of falling back through them', () => {
-    const s = settings({
-      'agent.efficientModel': 'legacy-efficient',
-      'agent.subagentExplorerModel': 'legacy-explorer',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('efficient', s).model).toBe('main-model');
-  });
-
-  it('ignores legacy capable-tier keys instead of falling back through them', () => {
-    const s = settings({
-      'agent.capableModel': 'legacy-capable',
-      'agent.mentorModel': 'legacy-mentor',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('capable', s).model).toBe('main-model');
-  });
-
-  it('prefers tier keys over any legacy keys', () => {
-    const s = settings({
-      'agent.cheapModel': 'cheap-model',
-      'agent.efficientModel': 'legacy-efficient',
-      'agent.subagentExplorerModel': 'legacy-explorer',
-      'agent.model': 'main-model',
-    });
-    expect(resolveModelPolicy('efficient', s).model).toBe('cheap-model');
-  });
-
   it('falls back from unset cheap tier settings to the terminal model fallback', () => {
     const s = settings({
       'agent.cheapModel': undefined,
-      'agent.model': undefined,
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
     expect(resolveModelPolicy('efficient', s).model).toBe('gpt-4o');
   });
@@ -171,7 +131,7 @@ describe('resolveModelPolicy', () => {
   it('falls back from unset smart tier settings to the terminal model fallback', () => {
     const s = settings({
       'agent.smartModel': undefined,
-      'agent.model': undefined,
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
     expect(resolveModelPolicy('capable', s).model).toBe('gpt-4o');
   });
@@ -185,8 +145,7 @@ describe('resolveModelPolicy', () => {
   // ── Relative tier with parent ─────────────────────────
   it('resolves relative "lower" tier against parent exact model', () => {
     const s = settings({
-      'agent.cheapModel': 'gpt-4o-mini',
-      'agent.provider': 'openai',
+      'agent.cheapModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent)).toEqual({
@@ -197,27 +156,17 @@ describe('resolveModelPolicy', () => {
 
   it('prefers cheapModel for relative lower tier over agent.model', () => {
     const s = settings({
-      'agent.cheapModel': 'cheap-model',
-      'agent.model': 'main-model',
+      'agent.cheapModel': [{ model: 'cheap-model', provider: 'openai' }],
+      'agent.modelSelection': { model: 'main-model', provider: 'openai' },
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('cheap-model');
   });
 
-  it('ignores legacy keys for relative lower tier and falls back to agent.model', () => {
-    const s = settings({
-      'agent.efficientModel': 'legacy-efficient',
-      'agent.subagentExplorerModel': 'legacy-explorer',
-      'agent.model': 'main-model',
-    });
-    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('parent-model');
-  });
-
   it('falls back to the parent model for relative lower tier when all settings are unset', () => {
     const s = settings({
       'agent.cheapModel': undefined,
-      'agent.model': undefined,
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('parent-model');
@@ -234,8 +183,7 @@ describe('resolveModelPolicy', () => {
 
   it('resolves relative "higher" tier against parent exact model', () => {
     const s = settings({
-      'agent.smartModel': 'gpt-4.1',
-      'agent.provider': 'openai',
+      'agent.smartModel': [{ model: 'gpt-4.1', provider: 'openai' }],
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'higher' }, s, parent)).toEqual({
@@ -244,20 +192,10 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('ignores legacy keys for relative higher tier and falls back to agent.model', () => {
-    const s = settings({
-      'agent.capableModel': 'legacy-capable',
-      'agent.mentorModel': 'legacy-mentor',
-      'agent.model': 'main-model',
-    });
-    const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('parent-model');
-  });
-
   it('falls back to the parent model for relative higher tier when all settings are unset', () => {
     const s = settings({
       'agent.smartModel': undefined,
-      'agent.model': undefined,
+      'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
     expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('parent-model');
@@ -266,7 +204,6 @@ describe('resolveModelPolicy', () => {
   it('ignores undeclared model-only reasoning overrides and inherits the complete parent', () => {
     const s = settings({
       'agent.reasoningModel': 'o1-mini',
-      'agent.provider': 'openai',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'lower', reasoning: 'high' }, s, parent)).toEqual({
@@ -279,7 +216,6 @@ describe('resolveModelPolicy', () => {
     const s = settings({
       'agent.reasoning.low': 'o1-mini',
       'agent.reasoning.high': 'o1-pro',
-      'agent.provider': 'openai',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'lower', reasoning: 'low' }, s, parent)).toEqual({
@@ -309,18 +245,22 @@ describe('tier model pools with a pinned provider', () => {
   // DeepSeek-provider tier) lost the pick's provider and was sent to DeepSeek.
   it("resolves a tier to its first entry together with that entry's pinned provider", () => {
     const s = settings({
-      'agent.balancedModel': [{ model: 'gpt-6-luna', provider: 'codex' }, 'deepseek-flash'],
-      'agent.balancedProvider': 'DeepSeek',
+      'agent.balancedModel': [
+        { model: 'gpt-6-luna', provider: 'codex' },
+        { model: 'deepseek-flash', provider: 'DeepSeek' },
+      ],
     });
 
     expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'codex', model: 'gpt-6-luna' });
     expect(getTierModelPool('balanced', s)).toEqual(['gpt-6-luna', 'deepseek-flash']);
   });
 
-  it('keeps the tier provider for a bare first entry', () => {
+  it('keeps the first entry provider when the pool crosses providers', () => {
     const s = settings({
-      'agent.balancedModel': ['deepseek-flash', { model: 'gpt-6-luna', provider: 'codex' }],
-      'agent.balancedProvider': 'DeepSeek',
+      'agent.balancedModel': [
+        { model: 'deepseek-flash', provider: 'DeepSeek' },
+        { model: 'gpt-6-luna', provider: 'codex' },
+      ],
     });
 
     expect(resolveAncillaryModelTier('balanced', s)).toEqual({ provider: 'DeepSeek', model: 'deepseek-flash' });

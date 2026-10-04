@@ -147,7 +147,7 @@ export interface BrowseResult {
 }
 
 export type SettingSource = 'default' | 'config' | 'cli' | 'environment' | 'computed';
-export type SettingValue = string | number | boolean | string[] | null;
+export type SettingValue = string | number | boolean | string[] | { model: string; provider: string } | null;
 export interface SecretFreeCredential {
   configured: boolean;
   required: boolean;
@@ -225,7 +225,7 @@ export interface SessionConfigRecord {
   };
 }
 export interface SessionConfigUpdate {
-  model?: string;
+  modelSelection?: { model: string; provider: string };
   reasoningEffort?: string;
   mode?: SessionConfigRecord['mode'];
 }

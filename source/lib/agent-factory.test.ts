@@ -50,10 +50,9 @@ const createMockLogger = (): MockLogger => {
 
 const createMockSettings = (values: Record<string, any> = {}): ISettingsService => {
   const store: Record<string, any> = {
-    'agent.model': 'gpt-4o',
+    'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' },
     'agent.temperature': undefined,
     'agent.reasoningEffort': 'default',
-    'agent.provider': 'openai',
     'agent.useFlexServiceTier': false,
     'agent.contextCompaction.enabled': false,
     'agent.contextCompaction.compactThreshold': 0.8,
@@ -464,7 +463,7 @@ it.sequential('buildAgent keeps root background shell controls reachable through
   const registry = new BackgroundShellRegistry<any>();
   const { deps } = createDeps({ backgroundShellRegistry: registry });
 
-  const { agent } = buildAgent({}, deps);
+  const { agent } = buildAgent({ selection: deps.settings.get('agent.modelSelection') }, deps);
 
   expect(agent.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['shell', 'run_code']));
   expect(agent.tools?.map((tool) => tool.name)).not.toContain('get_shell_job');
@@ -613,38 +612,42 @@ it.sequential('rejects a tool that ambiguously defines both post-execute mechani
 });
 
 it.sequential('buildAgent creates Agent with correct model name', () => {
-  const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4o-mini' } });
+  const { deps } = createDeps({
+    settingsValues: { 'agent.modelSelection': { model: 'gpt-4o-mini', provider: 'openai' } },
+  });
 
-  const result = buildAgent({ model: 'gpt-4o-mini' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o-mini', provider: deps.providerId } }, deps);
 
   expect(result.agent.model).toBe('gpt-4o-mini');
-  expect(result.resolvedModel).toBe('gpt-4o-mini');
+  expect(result.selection.model).toBe('gpt-4o-mini');
 });
 
-it.sequential('buildAgent resolves model from settings when model param is omitted', () => {
-  const { deps } = createDeps({ settingsValues: { 'agent.model': 'gpt-4.1-mini' } });
+it.sequential('buildAgent uses the caller-supplied selection from settings', () => {
+  const { deps } = createDeps({
+    settingsValues: { 'agent.modelSelection': { model: 'gpt-4.1-mini', provider: 'openai' } },
+  });
 
-  const result = buildAgent({}, deps);
+  const result = buildAgent({ selection: deps.settings.get('agent.modelSelection') }, deps);
 
-  expect(result.resolvedModel).toBe('gpt-4.1-mini');
+  expect(result.selection.model).toBe('gpt-4.1-mini');
   expect(result.agent.model).toBe('gpt-4.1-mini');
 });
 
-it.sequential('buildAgent returns resolvedModel', () => {
+it.sequential('buildAgent returns its bound selection', () => {
   const { deps } = createDeps();
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
-  expect(result.resolvedModel).toBe('gpt-4o');
+  expect(result.selection.model).toBe('gpt-4o');
 });
 
 it.sequential('buildAgent applies strict tool schema when provider supports it', () => {
   const { deps } = createDeps({
     providerId: 'openai',
-    settingsValues: { 'agent.model': 'gpt-4o', 'tools.shell.enabled': false },
+    settingsValues: { 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' }, 'tools.shell.enabled': false },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
   const readFileTool = result.agent.tools.find((tool: any) => tool.name === 'read_file') as any;
 
   expect(readFileTool).toBeTruthy();
@@ -672,7 +675,7 @@ it.sequential('buildAgent advertises apply_patch as patch-only to strict-schema 
 it.sequential('buildAgent hides apply_patch from the direct list when run_code exists', () => {
   const { deps } = createDeps({ providerId: 'openai' });
 
-  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
   const toolNames = result.agent.tools.map((tool: any) => tool.name);
 
   expect(toolNames).toContain('run_code');
@@ -682,7 +685,7 @@ it.sequential('buildAgent hides apply_patch from the direct list when run_code e
 it.sequential('binds JSON apply_patch into run_code instead of native freeform when run_code exists', async () => {
   const { deps, logger } = createDeps({ providerId: 'openai' });
 
-  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
   const runCode = result.agent.tools.find((tool: any) => tool.name === 'run_code') as any;
   expect(runCode).toBeTruthy();
   expect(String(runCode.description)).toContain('tools.apply_patch');
@@ -707,7 +710,7 @@ it.sequential('keeps native apply_patch on the direct list when run_code is unav
     settingsValues: { 'tools.shell.enabled': false },
   });
 
-  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
   expect(result.agent.tools.map((tool: any) => tool.name)).not.toContain('run_code');
   expect(applyPatch).toBeTruthy();
@@ -725,7 +728,7 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
     settingsValues: { 'tools.shell.enabled': false },
   });
 
-  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
 
   expect(applyPatch).toBeTruthy();
@@ -762,7 +765,7 @@ it.sequential('registers the final native apply_patch policy for nested consumer
     settingsValues: { 'tools.shell.enabled': false },
   });
 
-  buildAgent({ model: 'gpt-5.1' }, deps);
+  buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
 
   await expect(
     deps.approvalPolicyRegistry.evaluate({
@@ -793,7 +796,7 @@ it.sequential(
       settingsValues: { 'tools.shell.enabled': false },
     });
 
-    buildAgent({ model: 'gpt-5.1' }, deps);
+    buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
 
     await expect(
       deps.approvalPolicyRegistry.evaluate({
@@ -864,7 +867,7 @@ it.sequential('YOLO bypasses native apply_patch approval for paths outside the w
     settingsValues: { 'shell.autoApproveMode': 'always', 'tools.shell.enabled': false },
   });
 
-  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.1', provider: deps.providerId } }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
 
   expect(applyPatch).toBeTruthy();
@@ -895,7 +898,7 @@ it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
   const { deps } = createDeps({
     providerId: 'codex',
     settingsValues: {
-      'agent.model': 'gpt-5.3-codex',
+      'agent.modelSelection': { model: 'gpt-5.3-codex', provider: 'openai' },
       'agent.reasoningEffort': 'default',
     },
   });
@@ -910,10 +913,10 @@ it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
       } as any),
   );
 
-  const result = buildAgent({ model: 'gpt-5.3-codex' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.3-codex', provider: deps.providerId } }, deps);
   const agent = result.agent as any;
 
-  expect(result.resolvedModel).toBe('gpt-5.3-codex');
+  expect(result.selection.model).toBe('gpt-5.3-codex');
   expect(agent.modelSettings?.reasoning?.effort).toBe('medium');
   expect(agent.defaultRunOptions?.reasoning?.effort).toBe('medium');
 });
@@ -922,12 +925,15 @@ it.sequential('buildAgent sends high effort for neuralwatt when the setting is d
   const { deps } = createDeps({
     providerId: 'neuralwatt',
     settingsValues: {
-      'agent.model': 'deepseek-v4-flash',
+      'agent.modelSelection': { model: 'deepseek-v4-flash', provider: 'openai' },
       'agent.reasoningEffort': 'default',
     },
   });
 
-  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
   const agent = result.agent as any;
 
   expect(agent.modelSettings?.reasoning?.effort).toBe('high');
@@ -938,12 +944,15 @@ it.sequential('buildAgent matches the neuralwatt provider id case-insensitively'
   const { deps } = createDeps({
     providerId: 'Neuralwatt',
     settingsValues: {
-      'agent.model': 'deepseek-v4-flash',
+      'agent.modelSelection': { model: 'deepseek-v4-flash', provider: 'openai' },
       'agent.reasoningEffort': 'default',
     },
   });
 
-  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('high');
 });
@@ -952,12 +961,15 @@ it.sequential('buildAgent leaves an explicit neuralwatt effort alone', () => {
   const { deps } = createDeps({
     providerId: 'neuralwatt',
     settingsValues: {
-      'agent.model': 'deepseek-v4-flash',
+      'agent.modelSelection': { model: 'deepseek-v4-flash', provider: 'openai' },
       'agent.reasoningEffort': 'low',
     },
   });
 
-  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'low' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'low' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('low');
 });
@@ -966,12 +978,15 @@ it.sequential('buildAgent honours an explicit neuralwatt effort of none', () => 
   const { deps } = createDeps({
     providerId: 'neuralwatt',
     settingsValues: {
-      'agent.model': 'deepseek-v4-flash',
+      'agent.modelSelection': { model: 'deepseek-v4-flash', provider: 'openai' },
       'agent.reasoningEffort': 'none',
     },
   });
 
-  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'none' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'deepseek-v4-flash', provider: deps.providerId }, reasoningEffort: 'none' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning?.effort).toBe('none');
 });
@@ -980,12 +995,15 @@ it.sequential('buildAgent still omits reasoning for providers with no default le
   const { deps } = createDeps({
     providerId: 'openai-compatible',
     settingsValues: {
-      'agent.model': 'some-local-model',
+      'agent.modelSelection': { model: 'some-local-model', provider: 'openai' },
       'agent.reasoningEffort': 'default',
     },
   });
 
-  const result = buildAgent({ model: 'some-local-model', reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'some-local-model', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning).toBeFalsy();
   expect((result.agent as any).defaultRunOptions).toBeUndefined();
@@ -999,7 +1017,7 @@ it.sequential('buildAgent sets flex service tier when enabled', () => {
     },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.providerData?.service_tier).toBe('flex');
 });
@@ -1013,7 +1031,7 @@ it.sequential('buildAgent passes enabled context compaction to the OpenAI adapte
     },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
     enabled: true,
@@ -1031,7 +1049,7 @@ it.sequential('buildAgent passes an optional raw context compaction threshold wi
       'agent.contextCompaction.compactThresholdTokens': 120_000,
     },
   });
-  const result = buildAgent({ model: 'gpt-5.4-nano' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.4-nano', provider: deps.providerId } }, deps);
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
     enabled: true,
     threshold: 0.8,
@@ -1062,7 +1080,7 @@ it.sequential('buildAgent keeps context_management out of the Codex adapter', ()
     },
   });
 
-  const result = buildAgent({ model: 'gpt-5.3-codex-spark' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.3-codex-spark', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toBeUndefined();
 });
@@ -1075,7 +1093,7 @@ it.sequential('buildAgent keeps context compaction out of providers without the 
     },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toBeUndefined();
 });
@@ -1084,11 +1102,11 @@ it.sequential('buildAgent leaves parallel tool calls enabled by provider policy 
   const { deps } = createDeps({
     providerId: 'codex',
     settingsValues: {
-      'agent.model': 'gpt-5.4-mini',
+      'agent.modelSelection': { model: 'gpt-5.4-mini', provider: 'openai' },
     },
   });
 
-  const result = buildAgent({ model: 'gpt-5.4-mini' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.4-mini', provider: deps.providerId } }, deps);
 
   expect('parallelToolCalls' in (result.agent.modelSettings ?? {})).toBe(false);
 });
@@ -1102,7 +1120,7 @@ it.sequential('buildAgent omits flex service tier when serviceTierOverrideForNex
     },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.providerData?.service_tier).toBeFalsy();
 });
@@ -1115,7 +1133,10 @@ it.sequential('buildModelSettings omits reasoning when effort is default', () =>
     },
   });
 
-  const result = buildAgent({ model: 'gpt-4o', reasoningEffort: 'default' }, deps);
+  const result = buildAgent(
+    { selection: { model: 'gpt-4o', provider: deps.providerId }, reasoningEffort: 'default' },
+    deps,
+  );
 
   expect(result.agent.modelSettings?.reasoning).toBeFalsy();
 });
@@ -1130,7 +1151,7 @@ it.sequential('buildModelSettings forwards generation safety limits', () => {
     },
   });
 
-  const result = buildAgent({ model: 'gpt-5.6-luna' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-5.6-luna', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings).toMatchObject({
     maxTokens: 12_345,
@@ -1145,7 +1166,7 @@ it.sequential('buildModelSettings clamps the configured token cap to the model c
     settingsValues: { 'agent.maxOutputTokens': 32_000 },
   });
 
-  const result = buildAgent({ model: 'gpt-4o' }, deps);
+  const result = buildAgent({ selection: { model: 'gpt-4o', provider: deps.providerId } }, deps);
 
   expect(result.agent.modelSettings?.maxTokens).toBe(16_384);
 });

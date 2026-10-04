@@ -87,8 +87,6 @@ export function createDefaultTriggerRegistry(
               type: 'setting',
               config: {
                 modelKey: config.modelKey,
-                providerKey: config.providerKey,
-                fallbackProviderKey: config.fallbackProviderKey,
               },
             },
             back: { type: 'restore', point: settingsListRestorePoint(editor.revision) },

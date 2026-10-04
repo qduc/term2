@@ -6,7 +6,7 @@ const MOCK_SETTINGS_DIR = join(tmpdir(), 'term2-mock-settings');
 
 /**
  * Helper to unflatten dot-notation keys into nested objects.
- * e.g. {'agent.model': 'gpt-4'} -> {agent: {model: 'gpt-4'}}
+ * e.g. {'agent.temperature': 0.2} -> {agent: {temperature: 0.2}}
  */
 function unflatten(data: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
@@ -39,7 +39,7 @@ export function createMockSettingsService(
   }> = {},
 ): SettingsService {
   // Unflatten overrides so they match the nested structure expected by SettingsService
-  // This allows passing {'agent.model': 'val'} convenience keys
+  // This allows passing {'agent.temperature': 0.2} convenience keys
   const nestedOverrides = unflatten(overrides);
 
   // Create a mock settings service with isolated storage

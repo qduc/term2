@@ -49,7 +49,7 @@ const flush = async () => {
 function createMockSettingsService(initialProviders: any[] = [], initialActive = 'openai') {
   const settings = new Map<string, any>([
     ['providers', initialProviders],
-    ['agent.provider', initialActive],
+    ['agent.modelSelection', { model: 'gpt-5.1', provider: initialActive }],
   ]);
 
   return {
@@ -357,7 +357,7 @@ it.sequential('useProviderSelection - requestDelete on a custom provider opens c
   await flush();
   expect(hook!.phase).toBe('list');
   expect(settingsService.get('providers').length).toBe(0);
-  expect(settingsService.get('agent.provider')).toBe('openai');
+  expect(settingsService.get('agent.modelSelection')).toEqual({ model: 'gpt-5.1', provider: 'openai' });
 
   await act(async () => {
     renderer.unmount();

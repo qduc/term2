@@ -141,7 +141,7 @@ describe('term2 acp (child process)', () => {
       path.join(settingsDir, 'settings.json'),
       JSON.stringify(
         {
-          agent: { provider: 'acpmock', model: 'acp-mock-model', retryAttempts: 0 },
+          agent: { modelSelection: { provider: 'acpmock', model: 'acp-mock-model' }, retryAttempts: 0 },
           providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
         },
         null,
@@ -310,7 +310,7 @@ const runAcpChild = async (
     path.join(settingsDir, 'settings.json'),
     JSON.stringify(
       {
-        agent: { provider: 'acpmock', model: 'acp-mock-model', retryAttempts: 0 },
+        agent: { modelSelection: { provider: 'acpmock', model: 'acp-mock-model' }, retryAttempts: 0 },
         sandbox: { enabled: false },
         providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
       },

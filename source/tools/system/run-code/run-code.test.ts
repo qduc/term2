@@ -1546,17 +1546,65 @@ describe('run_code', () => {
     expect(output).toContain('script failed on purpose');
   });
 
-  it('reports successful nested calls whose Promise.all result was discarded', async () => {
+  it('recovers successful nested calls when Promise.all fails without replaying them', async () => {
+    const execute = vi.fn(() => 'saved sibling');
     const output = await run(
-      [tool({ name: 'fast' }), tool({ name: 'broken', execute: () => Promise.reject(new Error('failure')) })],
+      [tool({ name: 'fast', execute }), tool({ name: 'broken', execute: () => Promise.reject(new Error('failure')) })],
       'await Promise.all([tools.fast({ value: "ok" }), tools.broken({ value: "bad" })]);',
     );
-    expect(output).toContain(
-      '1 nested tool call completed successfully, but its result was lost because the script failed',
+    expect(output).toContain('Recovered nested results (host-observed)');
+    expect(output).toContain('saved sibling');
+    expect(output).toContain('"tool":"fast"');
+    expect(output).toContain('"callId":');
+    expect(output).toContain('"tool":"broken"');
+    expect(output).not.toContain('result was lost');
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a clipped nested string with a retrieval artifact on batch failure', async () => {
+    const value = 'large-result-'.repeat(RUN_CODE_LIMITS.maxResultChars);
+    const save = vi.spyOn(shellOutput, 'saveOutputArtifact').mockResolvedValue('/tmp/recovered-full.txt');
+    const output = await run(
+      [
+        tool({ name: 'fast', execute: () => value }),
+        tool({ name: 'broken', execute: () => Promise.reject(new Error('failure')) }),
+      ],
+      'await Promise.all([tools.fast({ value: "ok" }), tools.broken({ value: "bad" })]);',
     );
-    expect(output).toContain(
-      'If one failing call inside Promise.all caused this, use Promise.allSettled or a per-call try/catch',
+    expect(save).toHaveBeenCalledWith(value, { filenamePrefix: 'tool-overflow' });
+    expect(output).toContain('/tmp/recovered-full.txt');
+    expect(output).toContain('"truncated":true');
+  });
+
+  it('labels unavailable clipped recovery honestly when artifact storage fails', async () => {
+    vi.spyOn(shellOutput, 'saveOutputArtifact').mockRejectedValue(new Error('disk unavailable'));
+    const output = await run(
+      [tool({ name: 'fast', execute: () => 'x'.repeat(RUN_CODE_LIMITS.maxResultChars + 1) })],
+      'await tools.fast({ value: "ok" }); throw new Error("later failure");',
     );
+    expect(output).toContain('"unavailable":true');
+    expect(output).not.toContain('"fullOutputPath":');
+    expect(output.length).toBeLessThanOrEqual(30_000);
+  });
+
+  it('recovers a completed mutation without replay or invented action evidence', async () => {
+    const execute = vi.fn(() => 'Created /tmp/one-file.txt');
+    const output = await run(
+      [tool({ name: 'create_file', execute })],
+      'await tools.create_file({ value: "ok" }); throw new Error("later failure");',
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(output).toContain('Created /tmp/one-file.txt');
+    expect(output).not.toContain('Action outcomes (host-observed)');
+    expect(output).toContain('not task success');
+  });
+
+  it('snapshots recovered object results before later script failure', async () => {
+    const output = await run(
+      [tool({ name: 'fast', execute: () => ({ original: true }) })],
+      'const result = await tools.fast({ value: "ok" }); result.original = false; throw new Error("later failure");',
+    );
+    expect(output).toContain('"result":{"original":true}');
   });
 
   it('does not claim successful nested results were lost when later script code throws', async () => {

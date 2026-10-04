@@ -139,6 +139,34 @@ Open work, in order:
 
 ## Guard classes
 
+### run_code failed-script nested-result recovery
+
+Harm prevented: completed sibling reads or mutations being repeated because a
+failed script discarded their returned values. Scope: `createRunCodeRuntime`
+tool calls and `renderResult` failed-script presentation; agent capability
+results are not included. Class: information-loss recovery, with no new guard.
+Enforcement stays with existing `RUN_CODE_LIMITS` and final display clipping.
+`settleResolved` owns normalized per-call snapshots; the renderer and
+`saveOutputArtifact` own display and retrieval. Only settled normalized results
+are retained, bounded per call and by the existing admitted-call count; raw
+media stays represented by inert references. No settings, defaults, admission,
+timeouts, provider continuity, retry or approval behavior changes.
+
+On failure, recover completed results and call identities; never replay tools
+or infer domain success from resolution. Clipped string values preserve their
+full output in an artifact, or report unavailable storage honestly. Structured
+overflow keeps its existing reject-with-retrieval contract. The aggregate display
+uses the existing 30,000-character clip and retrieval artifact. Recovery data is
+not emitted in completion telemetry. Rollback is confined to call recovery
+fields, string overflow preservation and failed-script rendering.
+
+Red proof: public `run-code.test.ts` tests for recovered siblings and clipped
+string retrieval both failed before implementation. The baseline suite passed
+129 tests. Final verification is recorded with the delivery task `1fdc6148`.
+Detection gap: the previous test pinned a warning rather than retained data;
+category tests also exercise later errors, mutation non-replay, immutable
+snapshots and unavailable artifact storage.
+
 ### Idle interactive large-uncached-input confirmation
 
 Harm prevented: idle Enter silently submitting a large uncached turn because

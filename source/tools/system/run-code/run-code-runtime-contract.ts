@@ -1,4 +1,5 @@
 import type { RunCodeDiagnosticCode } from './run-code-execution.js';
+import type { RunCodeExecutionCall } from './run-code-execution.js';
 
 /** Terminal semantic outcome of one observed nested action call. */
 export type RunCodeActionOutcome = 'applied' | 'not_applied' | 'failed' | 'unknown';
@@ -31,4 +32,5 @@ export interface RunCodeCallRecord {
   readonly directlyCallable?: boolean;
   readonly diagnostic?: RunCodeDiagnosticCode;
   readonly reason?: string;
+  readonly recovery?: RunCodeExecutionCall['recovery'];
 }

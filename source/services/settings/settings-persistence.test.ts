@@ -14,6 +14,178 @@ import {
 } from './settings-persistence.js';
 
 const tempDirs: string[] = [];
+const legacySelections = {
+  model: 'legacy-main',
+  provider: 'anthropic',
+  smartModel: 'smart',
+  smartProvider: 'codex',
+  balancedModel: ['balanced', { model: 'pinned', provider: 'zai' }],
+  mentorModel: 'mentor',
+  mentorProvider: 'openrouter',
+  mentorPool: ['sample', { model: 'second', reasoningEffort: 'high' }],
+  subagentExplorerModel: 'explorer',
+  subagentExplorerProvider: 'google',
+  autoApproveModel: 'approval',
+  autoApproveProvider: 'openai',
+};
+
+it('migrates persisted legacy selections before validation and the locked save reload', () => {
+  const dir = makeTempDir();
+  const file = path.join(dir, 'settings.json');
+  const raw = { agent: legacySelections };
+  fs.writeFileSync(file, JSON.stringify(raw));
+  const loaded = loadSettingsFromFile({ settingsDir: dir, schema: SettingsSchema, disableLogging: true });
+  expect(loaded.hadErrors).toBe(false);
+  expect(loaded.raw).toEqual(raw);
+  expect(loaded.validated.agent).toMatchObject({
+    modelSelection: { model: 'legacy-main', provider: 'anthropic' },
+    smartModel: [{ model: 'smart', provider: 'codex' }],
+    balancedModel: [
+      { model: 'balanced', provider: 'anthropic' },
+      { model: 'pinned', provider: 'zai' },
+    ],
+    cheapModel: [{ model: 'explorer', provider: 'google' }],
+    choreModel: [{ model: 'approval', provider: 'openai' }],
+    mentorPool: [
+      { model: 'sample', provider: 'openrouter' },
+      { model: 'second', provider: 'openrouter', reasoningEffort: 'high' },
+    ],
+  });
+  const saved = saveSettingsToFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    defaults: DEFAULT_SETTINGS,
+    mutate: (current) => current,
+    stripSensitiveSettings,
+    disableLogging: true,
+  });
+  expect(saved).toBeDefined();
+  const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
+  expect(SettingsSchema.safeParse(persisted).success).toBe(true);
+  expect(persisted.agent).not.toHaveProperty('model');
+  expect(persisted.agent).not.toHaveProperty('mentorProvider');
+  expect(persisted.agent.smartModel).toEqual(loaded.validated.agent?.smartModel);
+});
+
+it.each([
+  { model: 42 },
+  { provider: null },
+  { smartModel: '' },
+  { smartProvider: 42 },
+  { mentorModel: null },
+  { mentorPool: [{ model: 'mentor', provider: null }] },
+  { capableModel: { model: 'incomplete' } },
+  { subagentWorkerModel: false },
+  { modelSelection: { model: 'incomplete' }, model: 'valid', provider: 'openai' },
+])('does not overwrite malformed legacy selections: %j', (agent) => {
+  const dir = makeTempDir();
+  const file = path.join(dir, 'settings.json');
+  const content = JSON.stringify({ agent });
+  fs.writeFileSync(file, content);
+  expect(loadSettingsFromFile({ settingsDir: dir, schema: SettingsSchema, disableLogging: true }).hadErrors).toBe(true);
+  expect(
+    saveSettingsToFile({
+      settingsDir: dir,
+      schema: SettingsSchema,
+      defaults: DEFAULT_SETTINGS,
+      mutate: (current) => current,
+      stripSensitiveSettings,
+      disableLogging: true,
+    }),
+  ).toBeUndefined();
+  expect(fs.readFileSync(file, 'utf8')).toBe(content);
+});
+
+it('preserves explicit canonical selections over valid obsolete role selections', () => {
+  const dir = makeTempDir();
+  fs.writeFileSync(
+    path.join(dir, 'settings.json'),
+    JSON.stringify({
+      agent: {
+        ...legacySelections,
+        modelSelection: { model: 'canonical', provider: 'zai' },
+        smartModel: [{ model: 'canonical-smart', provider: 'google' }],
+        mentorPool: [],
+      },
+    }),
+  );
+  const loaded = loadSettingsFromFile({ settingsDir: dir, schema: SettingsSchema, disableLogging: true });
+  expect(loaded.hadErrors).toBe(false);
+  expect(loaded.validated.agent?.modelSelection).toEqual({ model: 'canonical', provider: 'zai' });
+  expect(loaded.validated.agent?.smartModel).toEqual([{ model: 'canonical-smart', provider: 'google' }]);
+  expect(loaded.validated.agent?.mentorPool).toEqual([]);
+});
+
+it.each([
+  [
+    { agent: { capableModel: 'capable', provider: 'codex', mentorModel: 'mentor', mentorProvider: 'google' } },
+    { smartModel: [{ model: 'capable', provider: 'codex' }], mentorPool: [{ model: 'mentor', provider: 'google' }] },
+  ],
+  [
+    { agent: { subagentWorkerModel: 'worker', subagentWorkerProvider: 'zai' } },
+    { balancedModel: [{ model: 'worker', provider: 'zai' }] },
+  ],
+  [
+    {
+      agent: {
+        efficientModel: 'efficient',
+        provider: 'google',
+        subagentExplorerModel: 'explorer',
+        subagentExplorerProvider: 'codex',
+      },
+    },
+    { cheapModel: [{ model: 'efficient', provider: 'google' }] },
+  ],
+  [
+    { agent: { subagentLibrarianModel: { model: 'librarian', provider: 'anthropic' } } },
+    { cheapModel: [{ model: 'librarian', provider: 'anthropic' }] },
+  ],
+  [
+    { agent: { provider: 'google' }, tools: { editHealingModel: 'heal', editHealingProvider: 'codex' } },
+    { choreModel: [{ model: 'heal', provider: 'codex' }] },
+  ],
+  [
+    { tools: { editHealingModel: { model: 'heal', provider: 'zai' } } },
+    { choreModel: [{ model: 'heal', provider: 'zai' }] },
+  ],
+  [{ agent: { model: 'main', mentorModel: '' } }, { mentorPool: [] }],
+])('uses historical role precedence with the winning model own provider: %j', (raw, expected) => {
+  const dir = makeTempDir();
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(raw));
+  const loaded = loadSettingsFromFile({ settingsDir: dir, schema: SettingsSchema, disableLogging: true });
+  expect(loaded.hadErrors).toBe(false);
+  expect(loaded.validated.agent).toMatchObject(expected);
+});
+
+it('rejects malformed superseded legacy values rather than dropping them', () => {
+  const dir = makeTempDir();
+  const raw = {
+    agent: { modelSelection: { model: 'main', provider: 'openai' }, choreModel: [] },
+    tools: { editHealingModel: 42 },
+  };
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(raw));
+  const loaded = loadSettingsFromFile({ settingsDir: dir, schema: SettingsSchema, disableLogging: true });
+  expect(loaded.hadErrors).toBe(true);
+  expect(loaded.raw).toEqual(raw);
+});
+
+it('still rejects legacy runtime mutations after a migrated locked reload', () => {
+  const dir = makeTempDir();
+  const file = path.join(dir, 'settings.json');
+  const content = JSON.stringify({ agent: legacySelections });
+  fs.writeFileSync(file, content);
+  expect(
+    saveSettingsToFile({
+      settingsDir: dir,
+      schema: SettingsSchema,
+      defaults: DEFAULT_SETTINGS,
+      mutate: (current) => Object.assign(current, { agent: { ...current.agent, model: 'runtime-legacy' } }),
+      stripSensitiveSettings,
+      disableLogging: true,
+    }),
+  ).toBeUndefined();
+  expect(fs.readFileSync(file, 'utf8')).toBe(content);
+});
 const makeTempDir = (): string => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
   tempDirs.push(dir);

@@ -183,19 +183,31 @@ it.each(['smartModel', 'balancedModel', 'cheapModel', 'choreModel'] as const)(
     const pool = Array.from({ length: 8 }, (_, index) => `role-${index + 1}`);
 
     expect(SettingsSchema.parse({ agent: { [key]: 'single-model' } }).agent).toMatchObject({
-      [key]: ['single-model'],
+      [key]: [{ model: 'single-model', provider: 'openai' }],
     });
-    expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent).toMatchObject({ [key]: pool });
+    expect(SettingsSchema.parse({ agent: { [key]: pool } }).agent).toMatchObject({
+      [key]: pool.map((model) => ({ model, provider: 'openai' })),
+    });
     expect(() => SettingsSchema.parse({ agent: { [key]: [...pool, 'role-9'] } })).toThrow();
     expect(AgentSettingsSchema.parse({})[key]).toBeUndefined();
   },
 );
 
-it('tier model pools accept entries that pin their own provider', () => {
+it('tier model pools bind legacy entries once and preserve explicit provider pairs', () => {
   const pool = ['deepseek-flash', { model: 'gpt-6-luna', provider: 'codex' }];
 
-  expect(SettingsSchema.parse({ agent: { balancedModel: pool } }).agent?.balancedModel).toEqual(pool);
+  expect(SettingsSchema.parse({ agent: { provider: 'zai', balancedModel: pool } }).agent?.balancedModel).toEqual([
+    { model: 'deepseek-flash', provider: 'zai' },
+    { model: 'gpt-6-luna', provider: 'codex' },
+  ]);
   expect(() => SettingsSchema.parse({ agent: { balancedModel: [{ provider: 'codex' }] } })).toThrow();
+});
+
+it('does not rebind canonical pools when the tier or parent provider changes', () => {
+  const bound = AgentSettingsSchema.parse({ provider: 'codex', cheapModel: ['gpt-6-luna'] });
+  expect(AgentSettingsSchema.parse({ ...bound, provider: 'zai', cheapProvider: 'DeepSeek' }).cheapModel).toEqual([
+    { model: 'gpt-6-luna', provider: 'codex' },
+  ]);
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
@@ -515,13 +527,13 @@ it('SettingsSchema preserves optional flat ancillary model tiers and their provi
   });
 
   expect(parsed.agent).toMatchObject({
-    smartModel: ['smart-model'],
+    smartModel: [{ model: 'smart-model', provider: 'smart-provider' }],
     smartProvider: 'smart-provider',
-    balancedModel: ['balanced-model'],
+    balancedModel: [{ model: 'balanced-model', provider: 'balanced-provider' }],
     balancedProvider: 'balanced-provider',
-    cheapModel: ['cheap-model'],
+    cheapModel: [{ model: 'cheap-model', provider: 'cheap-provider' }],
     cheapProvider: 'cheap-provider',
-    choreModel: ['chore-model'],
+    choreModel: [{ model: 'chore-model', provider: 'chore-provider' }],
     choreProvider: 'chore-provider',
   });
   const defaults = AgentSettingsSchema.parse({});

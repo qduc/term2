@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { getTierModelPool, resolveAncillaryModelTier, resolveModelPolicy } from './model-resolver.js';
+import {
+  getTierModelPool,
+  resolveAncillaryModelTier,
+  resolveModelPolicy,
+  toTierModelPoolEntries,
+} from './model-resolver.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ModelPolicy } from './types.js';
+import { AgentSettingsSchema } from '../settings/settings-schema.js';
 
 function settings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = {
@@ -9,6 +15,15 @@ function settings(values: Record<string, unknown> = {}): ISettingsService {
     'agent.model': 'gpt-4o',
     ...values,
   };
+  const parsed = AgentSettingsSchema.parse(
+    Object.fromEntries(
+      Object.entries(store)
+        .filter(([key]) => key.startsWith('agent.'))
+        .map(([key, value]) => [key.slice(6), value]),
+    ),
+  );
+  for (const tier of ['smart', 'balanced', 'cheap', 'chore'] as const)
+    store[`agent.${tier}Model`] = parsed[`${tier}Model`];
   return {
     get: (key: any) => store[key] as any,
     getDynamic: (key: string) => store[key],
@@ -20,6 +35,31 @@ function settings(values: Record<string, unknown> = {}): ISettingsService {
 }
 
 describe('resolveModelPolicy', () => {
+  it('inherits the complete parent pair when a tier pool is unset despite a tier provider', () => {
+    expect(resolveAncillaryModelTier('cheap', settings({ 'agent.cheapProvider': 'other' }))).toEqual({
+      provider: 'openai',
+      model: 'gpt-4o',
+    });
+    expect(
+      resolveModelPolicy({ tier: 'lower' }, settings({ 'agent.cheapProvider': 'other' }), {
+        provider: 'codex',
+        model: 'parent',
+      }),
+    ).toEqual({
+      provider: 'codex',
+      model: 'parent',
+    });
+  });
+  it('rejects unbound models at the runtime boundary', () => {
+    expect(() => toTierModelPoolEntries([{ model: 'unbound' }])).toThrow();
+    expect(() => toTierModelPoolEntries(['unbound'])).toThrow();
+  });
+  it.each(['', '   ', null, 42])(
+    'rejects malformed explicit provider %j instead of inheriting another provider',
+    (provider) => {
+      expect(() => toTierModelPoolEntries([{ model: 'selected-model', provider }])).toThrow(/provider/i);
+    },
+  );
   // ── Exact ──────────────────────────────────────────────
   it('resolves exact {provider, model} directly', () => {
     const policy: ModelPolicy = { provider: 'anthropic', model: 'claude-sonnet' };
@@ -171,7 +211,7 @@ describe('resolveModelPolicy', () => {
       'agent.model': 'main-model',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('main-model');
+    expect(resolveModelPolicy({ tier: 'lower' }, s, parent).model).toBe('parent-model');
   });
 
   it('falls back to the parent model for relative lower tier when all settings are unset', () => {
@@ -211,7 +251,7 @@ describe('resolveModelPolicy', () => {
       'agent.model': 'main-model',
     });
     const parent: ModelPolicy = { provider: 'openai', model: 'parent-model' };
-    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('main-model');
+    expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('parent-model');
   });
 
   it('falls back to the parent model for relative higher tier when all settings are unset', () => {
@@ -252,9 +292,9 @@ describe('resolveModelPolicy', () => {
     });
   });
 
-  it('preserves parent provider when resolving relative tier', () => {
+  it('uses the configured bound pair rather than the parent provider for a relative tier', () => {
     const s = settings({
-      'agent.cheapModel': 'claude-haiku',
+      'agent.cheapModel': [{ model: 'claude-haiku', provider: 'anthropic' }],
     });
     const parent: ModelPolicy = { provider: 'anthropic', model: 'claude-sonnet' };
     expect(resolveModelPolicy({ tier: 'lower' }, s, parent)).toEqual({

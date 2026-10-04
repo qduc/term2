@@ -480,23 +480,33 @@ export function createSettingsCommand({
       // Special handling for model settings: handle --provider flag and save
       // the associated provider setting.
       const modelSettingConfig = getModelSettingConfig(key);
-      if (modelSettingConfig && typeof parsedValue === 'string') {
-        const { modelId, provider } = parseModelProviderArg(parsedValue);
+      const isTierPool = /^agent\.(smart|balanced|cheap|chore)Model$/.test(key);
+      if (modelSettingConfig && (isTierPool || typeof parsedValue === 'string')) {
+        const { modelId, provider } = parseModelProviderArg(rawValue);
         if (provider) {
           // Validate provider
           if (!getProvider(provider)) {
             addSystemMessage(`Error: Unknown provider '${provider}'`);
             return false;
           }
-          // Update provider setting
-          const providerKey = modelSettingConfig.providerKey;
-          settingsService.setDynamic(providerKey, provider);
-          // Apply runtime provider change
-          if (applyRuntimeSetting) {
-            applyRuntimeSetting(providerKey, provider);
+          if (!isTierPool) {
+            const providerKey = modelSettingConfig.providerKey;
+            settingsService.setDynamic(providerKey, provider);
+            if (applyRuntimeSetting) applyRuntimeSetting(providerKey, provider);
           }
         }
-        parsedValue = modelId;
+        if (isTierPool) {
+          const models = parseSettingValueForKey(key, modelId);
+          const binding =
+            provider ??
+            settingsService.getDynamic(modelSettingConfig.providerKey) ??
+            settingsService.get('agent.provider');
+          parsedValue = Array.isArray(models)
+            ? models.map((entry) => (typeof entry === 'string' ? { model: entry, provider: binding } : entry))
+            : models;
+        } else {
+          parsedValue = modelId;
+        }
       }
 
       // Prevent changing provider via settings command - it can only be changed

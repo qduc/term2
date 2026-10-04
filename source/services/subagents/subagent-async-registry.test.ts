@@ -769,7 +769,16 @@ it('adopts a live foreground generic run into the async registry and retains its
 
 it('fails over a fresh provider rejection once per entry and keeps the new model for status', async () => {
   const { SubagentRolePoolSelector } = await import('./subagent-role-pool-selector.js');
-  const selector = new SubagentRolePoolSelector({ getDynamic: () => ['a', 'b'], get: () => 'openai' } as any);
+  const selector = new SubagentRolePoolSelector({
+    getDynamic: (key: string) =>
+      key === 'agent.cheapModel'
+        ? [
+            { model: 'a', provider: 'openai' },
+            { model: 'b', provider: 'openai' },
+          ]
+        : undefined,
+    get: () => 'openai',
+  } as any);
   const base = { role: 'explorer', provider: 'openai', model: 'a' } as any;
   const seen: string[] = [];
   const registry = new SubagentAsyncRegistry({
@@ -813,7 +822,16 @@ it('does not replay a failed run after its first tool effect', async () => {
 
 it('settles with all pool failures when every entry rejects the first request', async () => {
   const { SubagentRolePoolSelector } = await import('./subagent-role-pool-selector.js');
-  const selector = new SubagentRolePoolSelector({ getDynamic: () => ['a', 'b'], get: () => 'openai' } as any);
+  const selector = new SubagentRolePoolSelector({
+    getDynamic: (key: string) =>
+      key === 'agent.cheapModel'
+        ? [
+            { model: 'a', provider: 'openai' },
+            { model: 'b', provider: 'openai' },
+          ]
+        : undefined,
+    get: () => 'openai',
+  } as any);
   const run = vi.fn(async () => ({
     ...result('explorer'),
     status: 'failed' as const,

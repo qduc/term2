@@ -1,5 +1,6 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ModelPolicy, ExactModelPolicy } from './types.js';
+import { TierModelPoolEntrySchema, type TierModelPoolSetting } from '../settings/settings-schema.js';
 
 export type AncillaryModelTier = 'smart' | 'balanced' | 'cheap' | 'chore';
 
@@ -36,32 +37,16 @@ function resolveTierPolicy(tier: string, settings: ISettingsService): ExactModel
   return resolveAncillaryModelTier(policyTierToAncillaryTier(tier), settings);
 }
 
-/**
- * One tier pool entry. A bare model id runs on the tier's provider; an entry
- * picked from another provider's catalog pins that provider, so one pool can
- * round-robin across providers.
- */
-export type TierModelPoolEntry = { model: string; provider?: string };
+/** A model and its provider are inseparable after settings parsing. */
+export type TierModelPoolEntry = TierModelPoolSetting[number];
 
 /**
- * Normalize a raw tier pool value (a bare string from an older config, or a
- * list of model ids and pinned entries). Malformed entries are dropped.
+ * Validate the canonical runtime shape. Legacy conversion belongs to settings
+ * parsing, never to a consumer that could rebind entries after a settings edit.
  */
 export function toTierModelPoolEntries(value: unknown): TierModelPoolEntry[] {
-  const raw = Array.isArray(value) ? value : [value];
-  const entries: TierModelPoolEntry[] = [];
-  for (const entry of raw) {
-    if (typeof entry === 'string') {
-      if (entry !== '') entries.push({ model: entry });
-      continue;
-    }
-    if (entry && typeof entry === 'object' && typeof (entry as { model?: unknown }).model === 'string') {
-      const { model, provider } = entry as { model: string; provider?: unknown };
-      if (model === '') continue;
-      entries.push(typeof provider === 'string' && provider !== '' ? { model, provider } : { model });
-    }
-  }
-  return entries;
+  if (value === undefined) return [];
+  return TierModelPoolEntrySchema.array().parse(value);
 }
 
 export function getTierModelPoolEntries(tier: AncillaryModelTier, settings: ISettingsService): TierModelPoolEntry[] {
@@ -73,22 +58,17 @@ export function getTierModelPool(tier: AncillaryModelTier, settings: ISettingsSe
   return getTierModelPoolEntries(tier, settings).map((entry) => entry.model);
 }
 
-/** The provider a bare (unpinned) entry of this tier runs on. */
-export function resolveTierProvider(tier: AncillaryModelTier, settings: ISettingsService): string {
-  return (
-    (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? settings.get('agent.provider') ?? 'openai'
-  );
-}
-
 export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: ISettingsService): ExactModelPolicy {
   // Stable first-entry pick: resolution runs from display paths as well as
   // execution paths, so the cursor must not advance here. Round-robin over
   // the pool happens once per subagent spawn in SubagentRolePoolSelector.
   const first = getTierModelPoolEntries(tier, settings)[0];
-  return {
-    provider: first?.provider ?? resolveTierProvider(tier, settings),
-    model: first?.model ?? settings.get('agent.model') ?? 'gpt-4o',
-  };
+  return (
+    first ?? {
+      provider: settings.get('agent.provider') ?? 'openai',
+      model: settings.get('agent.model') ?? 'gpt-4o',
+    }
+  );
 }
 
 function resolveRelativePolicy(
@@ -116,10 +96,7 @@ function resolveRelativePolicy(
 
   const tier = policy.tier === 'lower' ? 'cheap' : 'smart';
   const first = getTierModelPoolEntries(tier as AncillaryModelTier, settings)[0];
-  const model = first?.model ?? settings.get('agent.model') ?? parentExact.model;
-  const provider =
-    first?.provider ?? (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ?? parentExact.provider;
-  return { provider, model };
+  return first ?? parentExact;
 }
 
 function policyTierToAncillaryTier(tier: string): AncillaryModelTier {

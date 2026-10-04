@@ -108,7 +108,7 @@ export function mergeSettings(
     return {
       providers: merged.providers,
       enable_agent_workflow: merged.enable_agent_workflow,
-      agent: merged.agent,
+      agent: validated.data.agent!,
       shell: merged.shell,
       sandbox: merged.sandbox,
       agentWorkflow: merged.agentWorkflow,

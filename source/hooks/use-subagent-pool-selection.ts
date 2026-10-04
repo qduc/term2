@@ -20,7 +20,7 @@ import {
   selectModelsForTab,
 } from '../services/models/model-tabs.js';
 import { getSubagentPoolFallbackProviderKey } from '../services/subagents/subagent-pool-config.js';
-import { TierModelPoolEntrySchema } from '../services/settings/settings-schema.js';
+import { TierModelPoolEntrySchema, type TierModelPoolSetting } from '../services/settings/settings-schema.js';
 
 export const SUBAGENT_POOL_REASONING_EFFORTS = [
   'default',
@@ -76,9 +76,8 @@ const noOpLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-// Tier model pools persist bare model ids, or `{model, provider}` for a model
-// picked from another provider's catalog (a bare string normalizes to a
-// single-entry pool); the editor surfaces them as {model, provider?} entries.
+// Tier pools always persist provider/model pairs; optional providers belong
+// only to the separate mentor editor's draft format.
 const tierPoolSchema = z.preprocess(
   (value) =>
     value === undefined || value === null || value === '' ? undefined : Array.isArray(value) ? value : [value],
@@ -88,9 +87,7 @@ const tierPoolSchema = z.preprocess(
 const cloneEntries = (value: unknown, roleLabel: string, entryShape: 'entries' | 'models'): SubagentPoolEntry[] => {
   if (entryShape === 'models') {
     const parsed = tierPoolSchema.safeParse(value);
-    return parsed.success
-      ? parsed.data.map((entry) => (typeof entry === 'string' ? { model: entry } : { ...entry }))
-      : [];
+    return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
   }
   const parsed = subagentPoolSchema(roleLabel).safeParse(value);
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
@@ -185,20 +182,14 @@ export function applySubagentPoolModelPick(
   };
 }
 
-/**
- * A tier pool entry for a catalog pick. A pick from the tier's own provider
- * stays bare so it follows later tier-provider changes; a pick from any other
- * provider pins it, or the model would be sent to the tier's provider.
- */
-export function tierPoolEntryForPick(model: string, provider: string, tierProvider: string): SubagentPoolEntry {
-  return provider && provider !== tierProvider ? { model, provider } : { model };
+/** Every catalog pick binds its provider, including the tier's current default. */
+export function tierPoolEntryForPick(model: string, provider: string): TierModelPoolSetting[number] {
+  return TierModelPoolEntrySchema.parse({ model, provider });
 }
 
-/** Tier pools persist bare model ids, and `{model, provider}` only when pinned. */
-export function serializeTierPoolEntries(
-  entries: readonly SubagentPoolEntry[],
-): Array<string | { model: string; provider: string }> {
-  return entries.map((entry) => (entry.provider ? { model: entry.model, provider: entry.provider } : entry.model));
+/** Refuse to persist a tier model without its provider binding. */
+export function serializeTierPoolEntries(entries: readonly SubagentPoolEntry[]): TierModelPoolSetting {
+  return TierModelPoolEntrySchema.array().parse(entries);
 }
 
 export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
@@ -221,7 +212,7 @@ export type SubagentPoolSelectionConfig = {
   settingKey: string;
   /** Human label used in editor copy ("Mentor", "Smart", ...). */
   roleLabel: string;
-  /** 'models' pools hold plain model-id strings (tiers); 'entries' pools hold rich entries (mentor). */
+  /** 'models' pools hold bound pairs (tiers); 'entries' also support reasoning (mentor). */
   entryShape: 'entries' | 'models';
   /** Setting key the "inherit provider" fallback reads from, when one exists. */
   fallbackProviderKey?: string;
@@ -268,7 +259,7 @@ export function useSubagentPoolSelection(
     agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
   });
   const modelProvider = browsingProvider ?? fallbackModelProvider;
-  // Where a bare tier pool entry runs (resolveTierProvider).
+  // Initial provider for browsing and legacy custom-id input.
   const tierProvider = roleProvider || settingsService.get(SETTING_KEYS.AGENT_PROVIDER) || 'openai';
   const providerIds = useMemo(
     () => orderedProviderIds(settingsService, getProviderIds()),
@@ -627,7 +618,7 @@ export function useSubagentPoolSelection(
       if (entryShape === 'models') {
         // Model-only pools commit immediately: there is no provider or
         // reasoning field to review afterwards.
-        const next = tierPoolEntryForPick(model, provider, tierProvider);
+        const next = tierPoolEntryForPick(model, provider);
         setEntries((current) => {
           if (draft._isNew || editingIndex === null) return [...current, next];
           return current.map((entry, index) => (index === editingIndex ? next : entry));

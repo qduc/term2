@@ -115,15 +115,24 @@ it('resolves the model browser starting provider from the entry, then the role, 
 it('pins the provider of a tier pool pick made from another provider catalog', () => {
   // Regression: codex/gpt-6-luna picked into a DeepSeek-provider tier was
   // stored bare and sent to DeepSeek.
-  expect(tierPoolEntryForPick('gpt-6-luna', 'codex', 'DeepSeek')).toEqual({ model: 'gpt-6-luna', provider: 'codex' });
-  expect(tierPoolEntryForPick('deepseek-flash', 'DeepSeek', 'DeepSeek')).toEqual({ model: 'deepseek-flash' });
+  expect(tierPoolEntryForPick('gpt-6-luna', 'codex')).toEqual({ model: 'gpt-6-luna', provider: 'codex' });
+  expect(tierPoolEntryForPick('deepseek-flash', 'DeepSeek')).toEqual({ model: 'deepseek-flash', provider: 'DeepSeek' });
 });
 
-it('persists pinned tier pool entries with their provider and bare entries as ids', () => {
-  expect(serializeTierPoolEntries([{ model: 'deepseek-flash' }, { model: 'gpt-6-luna', provider: 'codex' }])).toEqual([
-    'deepseek-flash',
+it('persists every tier pool entry as a provider/model pair', () => {
+  expect(
+    serializeTierPoolEntries([
+      { model: 'deepseek-flash', provider: 'DeepSeek' },
+      { model: 'gpt-6-luna', provider: 'codex' },
+    ]),
+  ).toEqual([
+    { model: 'deepseek-flash', provider: 'DeepSeek' },
     { model: 'gpt-6-luna', provider: 'codex' },
   ]);
+});
+
+it('refuses to serialize an unbound tier model', () => {
+  expect(() => serializeTierPoolEntries([{ model: 'unbound' }])).toThrow();
 });
 
 it('labels a pinned pool entry with its provider', () => {

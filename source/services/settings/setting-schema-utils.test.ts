@@ -38,6 +38,11 @@ it('unwrapSchema handles .transform() (ZodPipe in Zod v4)', () => {
   expect(result).toBeInstanceOf(z.ZodString);
 });
 
+it('unwrapSchema follows the output schema of preprocessing', () => {
+  const schema = z.preprocess((value) => value, z.object({ model: z.string() }));
+  expect(unwrapSchema(schema)).toBeInstanceOf(z.ZodObject);
+});
+
 it('unwrapSchema handles null/undefined input gracefully', () => {
   expect(unwrapSchema(null)).toBeNull();
   expect(unwrapSchema(undefined)).toBeUndefined();

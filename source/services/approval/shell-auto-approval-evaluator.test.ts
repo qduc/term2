@@ -308,7 +308,7 @@ const createMockSettings = (
 ) => {
   const map: Record<string, unknown> = {
     'shell.autoApproveMode': mode,
-    'agent.choreModel': model,
+    'agent.choreModel': [{ model, provider }],
     'agent.choreProvider': provider,
     'agent.autoApproveModel': model,
     'agent.autoApproveProvider': provider,
@@ -502,7 +502,7 @@ it('uses the chore tier model and provider ahead of legacy auto-approval setting
     get: (key: string) =>
       ({
         'shell.autoApproveMode': 'advisory',
-        'agent.choreModel': 'chore-model',
+        'agent.choreModel': [{ model: 'chore-model', provider: 'chore-provider' }],
         'agent.choreProvider': 'chore-provider',
         'agent.autoApproveModel': 'legacy-auto-model',
         'agent.autoApproveProvider': 'legacy-auto-provider',
@@ -510,7 +510,7 @@ it('uses the chore tier model and provider ahead of legacy auto-approval setting
     getDynamic: (key: string) =>
       ({
         'shell.autoApproveMode': 'advisory',
-        'agent.choreModel': 'chore-model',
+        'agent.choreModel': [{ model: 'chore-model', provider: 'chore-provider' }],
         'agent.choreProvider': 'chore-provider',
         'agent.autoApproveModel': 'legacy-auto-model',
         'agent.autoApproveProvider': 'legacy-auto-provider',

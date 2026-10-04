@@ -107,17 +107,11 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
   const firstPoolEntry = getTierModelPoolEntries(tier, settings)[0];
-  const model = isInherited(frontmatter.model)
-    ? firstPoolEntry?.model ?? legacyModel ?? tierModel.model
-    : frontmatter.model;
-  // A pool entry picked from another provider pins it; keep model and
-  // provider paired so the definition never runs a model on the wrong host.
-  const provider = isInherited(frontmatter.provider)
-    ? firstPoolEntry?.provider ??
-      (settings.getDynamic(`agent.${tier}Provider`) as string | undefined) ??
-      legacyProvider ??
-      tierModel.provider
-    : frontmatter.provider;
+  const inheritedModel =
+    firstPoolEntry ??
+    (legacyModel ? { model: legacyModel, provider: legacyProvider ?? settings.get('agent.provider') } : tierModel);
+  const model = isInherited(frontmatter.model) ? inheritedModel.model : frontmatter.model;
+  const provider = isInherited(frontmatter.provider) ? inheritedModel.provider : frontmatter.provider;
 
   return {
     role,

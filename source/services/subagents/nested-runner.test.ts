@@ -162,7 +162,9 @@ function buildNestedRunner(
       'agent.model': 'nested-model',
       'agent.provider': providerId,
       'agent.runBudget.extensionPercent': 0,
-      ...(options.workerPool ? { 'agent.balancedModel': options.workerPool } : {}),
+      ...(options.workerPool
+        ? { 'agent.balancedModel': options.workerPool.map((model) => ({ model, provider: providerId })) }
+        : {}),
       ...(options.turnBackstop !== undefined
         ? { 'agent.runBudget.turnBackstop': options.turnBackstop }
         : options.alwaysCallsTool

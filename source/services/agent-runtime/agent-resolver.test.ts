@@ -52,7 +52,7 @@ describe('resolveAgent', () => {
 
   it('resolves explicit model tier', () => {
     const s = settings({
-      'agent.cheapModel': 'gpt-4o-mini',
+      'agent.cheapModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
       'agent.provider': 'openai',
     });
     const config: AgentConfig = {
@@ -166,7 +166,7 @@ describe('resolveAgent', () => {
 
   it('resolves relative model with parent', () => {
     const s = settings({
-      'agent.cheapModel': 'gpt-4o-mini',
+      'agent.cheapModel': [{ model: 'gpt-4o-mini', provider: 'openai' }],
       'agent.provider': 'openai',
     });
     const config: AgentConfig = {

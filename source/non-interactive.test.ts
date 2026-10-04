@@ -930,11 +930,11 @@ it('with autoApprove=true: exits without continuing when configured YELLOW histo
 
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.choreModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return [{ model: 'gpt-4o-mini', provider: 'openai' }];
       return undefined;
     },
     getDynamic(key: string) {
-      if (key === 'agent.choreModel') return ['gpt-4o-mini'];
+      if (key === 'agent.choreModel') return [{ model: 'gpt-4o-mini', provider: 'openai' }];
       return undefined;
     },
   };
@@ -988,11 +988,11 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
 
   const settingsService: any = {
     get(key: string) {
-      if (key === 'agent.choreModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return [{ model: 'gpt-4o-mini', provider: 'openai' }];
       return undefined;
     },
     getDynamic(key: string) {
-      if (key === 'agent.choreModel') return 'gpt-4o-mini';
+      if (key === 'agent.choreModel') return [{ model: 'gpt-4o-mini', provider: 'openai' }];
       return undefined;
     },
   };

@@ -2,11 +2,21 @@ import { describe, expect, it } from 'vitest';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { SubagentDefinition } from './types.js';
 import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
+import { AgentSettingsSchema } from '../settings/settings-schema.js';
 
 function settings(
   values: Record<string, unknown>,
 ): ISettingsService & { setValues: (v: Record<string, unknown>) => void } {
-  let store = values;
+  const bind = (values: Record<string, unknown>): Record<string, unknown> => {
+    const store: Record<string, unknown> = { 'agent.provider': 'base-provider', ...values };
+    const agent = AgentSettingsSchema.parse(
+      Object.fromEntries(Object.entries(store).map(([key, value]) => [key.slice(6), value])),
+    );
+    for (const tier of ['smart', 'balanced', 'cheap', 'chore'] as const)
+      store[`agent.${tier}Model`] = agent[`${tier}Model`];
+    return store;
+  };
+  let store = bind(values);
   return {
     get: (key: any) => store[key] as any,
     getDynamic: (key: string) => store[key],
@@ -15,7 +25,7 @@ function settings(
     setPersistent: () => {},
     setPersistentDynamic: () => {},
     setValues: (v: Record<string, unknown>) => {
-      store = v;
+      store = bind(v);
     },
   };
 }
@@ -36,6 +46,28 @@ const baseDefinition: SubagentDefinition = {
 };
 
 describe('SubagentRolePoolSelector', () => {
+  it('uses the live tier provider instead of a stale definition for bare entries', () => {
+    const svc = settings({ 'agent.cheapModel': ['model-a'], 'agent.cheapProvider': 'codex' });
+    const selector = new SubagentRolePoolSelector(svc);
+    expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({ provider: 'codex' });
+    svc.setValues({ 'agent.cheapModel': ['model-a'], 'agent.cheapProvider': 'zai' });
+    expect(selector.resolveForSpawn('explorer', baseDefinition)).toMatchObject({ provider: 'zai' });
+  });
+
+  it('keeps explicit provider bindings across fallback changes and health failures', () => {
+    const svc = settings({
+      'agent.balancedModel': [
+        { model: 'same-name', provider: 'codex' },
+        { model: 'same-name', provider: 'zai' },
+      ],
+      'agent.balancedProvider': 'DeepSeek',
+    });
+    const selector = new SubagentRolePoolSelector(svc);
+    const first = selector.resolveForSpawn('worker', baseDefinition);
+    expect(first).toMatchObject({ provider: 'codex', model: 'same-name' });
+    selector.markUnhealthy(first, 'balance');
+    expect(selector.resolveForSpawn('worker', baseDefinition)).toMatchObject({ provider: 'zai', model: 'same-name' });
+  });
   it('returns the definition unchanged when no tier pool is configured for the role', () => {
     const selector = new SubagentRolePoolSelector(settings({}));
     expect(selector.resolveForSpawn('explorer', baseDefinition)).toBe(baseDefinition);
@@ -121,8 +153,10 @@ describe('SubagentRolePoolSelector', () => {
     expect(selector.resolveForSpawn('explorer', baseDefinition).model).toBe('x');
   });
 
-  it('leaves provider and reasoningEffort to the tier-resolved base definition', () => {
-    const selector = new SubagentRolePoolSelector(settings({ 'agent.cheapModel': ['librarian-model'] }));
+  it('resolves provider live while preserving the definition reasoning effort', () => {
+    const selector = new SubagentRolePoolSelector(
+      settings({ 'agent.cheapModel': ['librarian-model'], 'agent.cheapProvider': 'inherited-provider' }),
+    );
     const resolved = selector.resolveForSpawn('librarian', {
       ...baseDefinition,
       role: 'librarian',

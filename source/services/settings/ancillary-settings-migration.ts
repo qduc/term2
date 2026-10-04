@@ -1,4 +1,4 @@
-import type { SettingsData } from './settings-schema.js';
+import { AgentSettingsSchema, type SettingsData } from './settings-schema.js';
 
 type Migration = {
   target: string;
@@ -93,5 +93,14 @@ export function migrateLegacyAncillarySettings(
     migrated = true;
   }
 
+  // Rebind only legacy inputs after their legacy provider keys have migrated.
+  // Already-explicit pairs are preserved by the parser.
+  for (const target of TIER_MODEL_TARGETS) {
+    const raw = getOwnValue(rawConfig, target);
+    if (raw.found) setValue(migratedConfig, target, raw.value);
+  }
+  if (migratedConfig.agent) {
+    migratedConfig.agent = AgentSettingsSchema.parse(migratedConfig.agent);
+  }
   return { config: migratedConfig as Partial<SettingsData>, migrated };
 }

@@ -21,16 +21,12 @@ const MAX_SUBAGENT_POOL_ENTRIES = 8;
 const subagentPoolSchema = (description: string) =>
   z.array(SubagentPoolEntrySchema).max(MAX_SUBAGENT_POOL_ENTRIES).default([]).describe(description);
 
-// Tier model settings are model pools: a list of model ids round-robined for
-// subagent spawns (see SubagentRolePoolSelector) and read first-entry for
-// other ancillary consumers. A bare id runs on the tier's provider; an entry
-// picked from another provider's catalog pins it as `{model, provider}`. A
-// bare string from older configs (or the legacy migration) normalizes to a
-// single-entry pool.
-export const TierModelPoolEntrySchema = z.union([
-  z.string().min(1),
-  z.object({ model: z.string().min(1), provider: z.string().min(1).optional() }),
-]);
+// Runtime and persisted entries bind the host and model as one value. Legacy
+// strings are accepted only at the agent-settings parsing boundary below.
+export const TierModelPoolEntrySchema = z.object({
+  model: z.string().trim().min(1),
+  provider: z.string().trim().min(1),
+});
 export type TierModelPoolSetting = z.infer<typeof TierModelPoolEntrySchema>[];
 const tierModelPoolSchema = (description: string) =>
   z
@@ -41,7 +37,26 @@ const tierModelPoolSchema = (description: string) =>
     .describe(description);
 
 // Define schemas for validation
-export const AgentSettingsSchema = z.object({
+function bindLegacyTierPools(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const agent = { ...value } as Record<string, unknown>;
+  for (const tier of ['smart', 'balanced', 'cheap', 'chore']) {
+    const key = `${tier}Model`;
+    const pool = agent[key];
+    if (pool === undefined || pool === null || pool === '') continue;
+    const provider = agent[`${tier}Provider`] ?? agent.provider ?? 'openai';
+    agent[key] = (Array.isArray(pool) ? pool : [pool]).map((entry: unknown) => {
+      if (typeof entry === 'string') return { model: entry, provider };
+      if (entry && typeof entry === 'object' && !Object.hasOwn(entry, 'provider')) {
+        return { ...entry, provider };
+      }
+      return entry;
+    });
+  }
+  return agent;
+}
+
+const AgentSettingsObjectSchema = z.object({
   model: z.string().min(1).default('gpt-5.1'),
   efficientModel: z
     .string()
@@ -333,6 +348,7 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .describe('Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset.'),
 });
+export const AgentSettingsSchema = z.preprocess(bindLegacyTierPools, AgentSettingsObjectSchema);
 
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),

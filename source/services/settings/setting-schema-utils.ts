@@ -26,8 +26,11 @@ export function unwrapSchema(schema: any): any {
     } else if (typeName === 'effects' || typeName === 'ZodEffects') {
       current = def.schema;
     } else if (typeName === 'pipe' || typeName === 'ZodPipe') {
-      // Zod v4: .transform() produces a ZodPipe; follow the input side.
-      current = def.in || def.schema;
+      // Preprocessing puts a transform on the input side; its output owns
+      // the settings shape. Ordinary transforms retain the input schema.
+      const input = def.in;
+      const inputType = input?.def?.type ?? input?._def?.typeName;
+      current = inputType === 'transform' || inputType === 'ZodTransform' ? def.out : input || def.schema;
     } else {
       break;
     }

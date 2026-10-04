@@ -246,6 +246,14 @@ export class SettingsService {
     if (migratedLegacyAncillarySettings || migratedRequestDeadlineDefault) {
       this.startupMigrations = changedSettingPaths(validated, fileConfig);
     }
+    for (const tier of ['smart', 'balanced', 'cheap', 'chore'] as const) {
+      const key = `${tier}Model` as const;
+      const rawAgent = (rawFileConfig as { agent?: Record<string, unknown> })?.agent;
+      const pool = fileConfig.agent?.[key];
+      if (rawAgent && Object.hasOwn(rawAgent, key) && JSON.stringify(rawAgent[key]) !== JSON.stringify(pool)) {
+        this.startupMigrations.push([`agent.${key}`, pool]);
+      }
+    }
     this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
@@ -689,6 +697,7 @@ export class SettingsService {
     if (canonical.key !== key) return this.setDynamic(canonical.key, canonical.value, options);
 
     this.validateAndApplySetting(key, value);
+    value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
     this.recordRuntimeOverride(key, value, 'cli');
@@ -775,7 +784,10 @@ export class SettingsService {
     }
 
     for (const change of canonicalChanges) {
-      this.setDynamic(change.key, change.value);
+      const value = change.key
+        .split('.')
+        .reduce<unknown>((current, part) => (current as Record<string, unknown>)?.[part], result.data);
+      this.setDynamic(change.key, value);
     }
   }
 
@@ -805,6 +817,7 @@ export class SettingsService {
     const previousProviders = key === 'providers' ? this.settings.providers : undefined;
 
     this.validateAndApplySetting(key, value);
+    value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
     if (key === 'providers') {
@@ -837,6 +850,14 @@ export class SettingsService {
 
     const canonicalChanges = this.canonicalizeProfileChanges(changes);
     let candidate = structuredClone(this.settings) as SettingsData;
+    const bindingContext = structuredClone(this.settings) as unknown as Record<string, any>;
+    for (const change of canonicalChanges) setSettingValue(bindingContext, change.key, change.value);
+    const boundAgent = SettingsSchema.parse(bindingContext).agent!;
+    for (const change of canonicalChanges) {
+      const match = /^agent\.(smart|balanced|cheap|chore)Model$/.exec(change.key);
+      if (match)
+        change.value = boundAgent[`${match[1]}Model` as 'smartModel' | 'balancedModel' | 'cheapModel' | 'choreModel'];
+    }
     for (const change of canonicalChanges) {
       if (this.isSensitive(change.key)) {
         throw new Error(

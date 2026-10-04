@@ -36,9 +36,9 @@ describe('adaptLegacyRole', () => {
 
   it('maps role defaults to their ancillary tiers while preserving legacy role overrides', () => {
     const configured = settings({
-      'agent.smartModel': 'smart-model',
-      'agent.balancedModel': 'balanced-model',
-      'agent.cheapModel': 'cheap-model',
+      'agent.smartModel': [{ model: 'smart-model', provider: 'openai' }],
+      'agent.balancedModel': [{ model: 'balanced-model', provider: 'openai' }],
+      'agent.cheapModel': [{ model: 'cheap-model', provider: 'openai' }],
       'agent.mentorModel': 'legacy-mentor-model',
       'agent.subagentExplorerModel': 'legacy-explorer-model',
     });

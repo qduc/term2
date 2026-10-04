@@ -1,7 +1,7 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import type { SubagentDefinition, SupportedSubagentRole } from './types.js';
-import { getAncillaryTierForRole, getSubagentPoolSettingKeyForRole } from './subagent-pool-config.js';
-import { resolveTierProvider, toTierModelPoolEntries } from '../agent-runtime/model-resolver.js';
+import { getSubagentPoolSettingKeyForRole } from './subagent-pool-config.js';
+import { toTierModelPoolEntries } from '../agent-runtime/model-resolver.js';
 
 export const POOL_ENTRY_COOLDOWN_MS = 10 * 60 * 1000;
 export type PoolEntryFailure = 'balance' | 'authentication';
@@ -14,8 +14,7 @@ const entryKey = (entry: Pick<SubagentDefinition, 'provider' | 'model'>): string
  * role's `agent.<tier>Model` setting), one cursor per role.
  * `resolveForSpawn` reads the pool live from settings and, when it is
  * non-empty, advances that role's cursor by exactly one and returns a
- * definition with the picked model applied. An entry that pins a provider
- * runs there; a bare entry runs on the tier's provider. Reasoning effort
+ * definition with the picked provider/model pair applied. Reasoning effort
  * already resolves through the same tier in `loadRoleDefinition` and is left
  * untouched. An empty or unconfigured pool returns `definition` unchanged and
  * never touches the cursor.
@@ -49,18 +48,12 @@ export class SubagentRolePoolSelector {
     const entries = toTierModelPoolEntries(this.settings.getDynamic(settingKey));
     if (entries.length === 0) return definition;
 
-    // loadRoleDefinition pairs the definition with the first entry, so its
-    // provider is the tier's only when that entry is bare.
-    const tierProvider =
-      entries[0]!.provider === undefined
-        ? definition.provider
-        : resolveTierProvider(getAncillaryTierForRole(role), this.settings);
     const cursor = this.#cursors.get(role) ?? 0;
     const failures: string[] = [];
     for (let offset = 0; offset < entries.length; offset++) {
       const index = (cursor + offset) % entries.length;
       const entry = entries[index]!;
-      const candidate = { ...definition, model: entry.model, provider: entry.provider ?? tierProvider };
+      const candidate = { ...definition, ...entry };
       const health = this.#unhealthy.get(entryKey(candidate));
       if (health && health.until > this.now()) {
         failures.push(`${candidate.provider}/${candidate.model}: ${health.failure}`);

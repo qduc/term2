@@ -25,7 +25,7 @@ function settings(): ISettingsService {
     'agent.provider': 'openai',
     'agent.model': 'gpt-4o',
     'agent.efficientModel': 'gpt-4o-mini',
-    'agent.balancedModel': 'gpt-4o',
+    'agent.balancedModel': [{ model: 'gpt-4o', provider: 'openai' }],
     'agent.capableModel': 'gpt-5',
   };
   return {

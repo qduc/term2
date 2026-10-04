@@ -469,12 +469,10 @@ it('setting agent.smartModel strips --provider flag and saves smart provider', (
   command.action('agent.smartModel some/smart-model --provider=openrouter');
 
   expect(deps.setCalls).toEqual([
-    { key: 'agent.smartProvider', value: 'openrouter' },
-    { key: 'agent.smartModel', value: 'some/smart-model' },
+    { key: 'agent.smartModel', value: [{ model: 'some/smart-model', provider: 'openrouter' }] },
   ]);
   expect(deps.applied).toEqual([
-    { key: 'agent.smartProvider', value: 'openrouter' },
-    { key: 'agent.smartModel', value: 'some/smart-model' },
+    { key: 'agent.smartModel', value: [{ model: 'some/smart-model', provider: 'openrouter' }] },
   ]);
 });
 
@@ -484,13 +482,9 @@ it('setting agent.choreModel strips --provider flag and saves chore provider', (
   command.action('agent.choreModel fast-chore --provider=openrouter');
 
   expect(deps.setCalls).toEqual([
-    { key: 'agent.choreProvider', value: 'openrouter' },
-    { key: 'agent.choreModel', value: 'fast-chore' },
+    { key: 'agent.choreModel', value: [{ model: 'fast-chore', provider: 'openrouter' }] },
   ]);
-  expect(deps.applied).toEqual([
-    { key: 'agent.choreProvider', value: 'openrouter' },
-    { key: 'agent.choreModel', value: 'fast-chore' },
-  ]);
+  expect(deps.applied).toEqual([{ key: 'agent.choreModel', value: [{ model: 'fast-chore', provider: 'openrouter' }] }]);
 });
 
 it('setting agent.model accepts provider names with spaces', () => {

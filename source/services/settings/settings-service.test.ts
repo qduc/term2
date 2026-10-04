@@ -91,6 +91,66 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('logging.logLevel')).toBe('info');
 });
 
+it.sequential('binds legacy pools once across runtime edits, persistence and reload', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      getSettingsFilePath(settingsDir),
+      JSON.stringify({
+        agent: {
+          provider: 'openai',
+          cheapProvider: 'codex',
+          cheapModel: ['gpt-6-luna'],
+        },
+      }),
+    );
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    const pair = [{ model: 'gpt-6-luna', provider: 'codex' }];
+    expect(service.get('agent.cheapModel')).toEqual(pair);
+    expect(JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf-8')).agent.cheapModel).toEqual(pair);
+    service.setDynamic('agent.cheapProvider', 'zai');
+    expect(service.get('agent.cheapModel')).toEqual(pair);
+    const reloaded = new SettingsService({ settingsDir, disableLogging: true });
+    expect(reloaded.get('agent.cheapModel')).toEqual(pair);
+    reloaded.setDynamic('agent.cheapModel', ['glm-5.3-flash']);
+    const next = [{ model: 'glm-5.3-flash', provider: 'zai' }];
+    expect(reloaded.get('agent.cheapModel')).toEqual(next);
+    expect(JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf-8')).agent.cheapModel).toEqual(next);
+    reloaded.setDynamic('agent.cheapProvider', 'codex');
+    expect(reloaded.get('agent.cheapModel')).toEqual(next);
+  });
+});
+
+it('binds legacy pool input to the provider in the same runtime transaction regardless of field order', () => {
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+  service.setDynamicTransaction([
+    { key: 'agent.cheapModel', value: ['gpt-6-luna'] },
+    { key: 'agent.cheapProvider', value: 'codex' },
+  ]);
+  expect(service.get('agent.cheapModel')).toEqual([{ model: 'gpt-6-luna', provider: 'codex' }]);
+});
+
+it.sequential('binds legacy pool input before settling a persistent transaction', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(
+      service.setPersistentDynamicTransaction([
+        { key: 'agent.cheapModel', value: ['gpt-6-luna'] },
+        { key: 'agent.cheapProvider', value: 'codex' },
+      ]).status,
+    ).toBe('saved');
+    const pair = [{ model: 'gpt-6-luna', provider: 'codex' }];
+    expect(service.get('agent.cheapModel')).toEqual(pair);
+    expect(new SettingsService({ settingsDir, disableLogging: true }).get('agent.cheapModel')).toEqual(pair);
+  });
+});
+
 it.sequential('migrates the former persisted request-deadline default to disabled', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
@@ -655,10 +715,14 @@ it('migrates legacy ancillary settings into tier settings without overwriting ne
   }).toEqual({
     // Tier model settings are pools; a legacy string value normalizes to a
     // single-entry pool.
-    smart: [['new-smart'], 'legacy-smart-provider', 'high'],
-    balanced: [['legacy-worker'], 'legacy-balanced-provider', 'medium'],
-    cheap: [['legacy-efficient'], 'legacy-cheap-provider', 'low'],
-    chore: [['legacy-chore'], 'legacy-chore-provider'],
+    smart: [[{ model: 'new-smart', provider: 'legacy-smart-provider' }], 'legacy-smart-provider', 'high'],
+    balanced: [
+      [{ model: 'legacy-worker', provider: 'legacy-balanced-provider' }],
+      'legacy-balanced-provider',
+      'medium',
+    ],
+    cheap: [[{ model: 'legacy-efficient', provider: 'legacy-cheap-provider' }], 'legacy-cheap-provider', 'low'],
+    chore: [[{ model: 'legacy-chore', provider: 'legacy-chore-provider' }], 'legacy-chore-provider'],
   });
 });
 
@@ -676,7 +740,7 @@ it.sequential('startup persists migrated ancillary tier settings', async () => {
     new SettingsService({ settingsDir, disableLogging: true });
 
     const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
-    expect(persisted.agent.balancedModel).toEqual(['legacy-worker']);
+    expect(persisted.agent.balancedModel).toEqual([{ model: 'legacy-worker', provider: 'openai' }]);
     expect(persisted.agent.balancedReasoningEffort).toBe('high');
   });
 });

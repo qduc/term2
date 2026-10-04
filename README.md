@@ -5,6 +5,8 @@
 
 **An AI assistant that works in your terminal, with your files and tools.**
 
+![term2 tracing, fixing, and testing a real bug from its own history](docs/demo/demo.gif)
+
 Explaining a codebase to a chat window, copying commands back and forth, and rebuilding context after a break all get in the way of the work. term2 can read a project, edit files, and run commands in a local or SSH workspace. You can inspect the proposed work, choose your model provider, and resume a saved conversation.
 
 Use it to:

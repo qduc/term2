@@ -21,7 +21,7 @@ it('settings completion config exposes stable category ids', () => {
 });
 
 it('getSettingCategory maps known keys to expected categories', () => {
-  expect(getSettingCategory('agent.model').id).toBe('models');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_MODEL_SELECTION).id).toBe('models');
   expect(getSettingCategory('agent.smartModel').id).toBe('models');
   expect(getSettingCategory('agent.balancedModel').id).toBe('models');
   expect(getSettingCategory('agent.cheapModel').id).toBe('models');
@@ -50,7 +50,12 @@ it('getSettingCategory maps known keys to expected categories', () => {
 
 it('filterSettingsByCategory keeps only entries from the requested category', () => {
   const result = filterSettingsByCategory(
-    [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }, { key: 'memory.enabled' }],
+    [
+      { key: SETTING_KEYS.AGENT_MODEL_SELECTION },
+      { key: 'shell.timeout' },
+      { key: 'webSearch.provider' },
+      { key: 'memory.enabled' },
+    ],
     'tools',
   );
 
@@ -91,7 +96,7 @@ it('filterSettingsByCategory returns memory entries for the memory category', ()
       { key: 'memory.contextBudgetChars' },
       { key: 'memory.searchDefaultLimit' },
       { key: 'memory.searchMaxLimit' },
-      { key: 'agent.model' },
+      { key: SETTING_KEYS.AGENT_MODEL_SELECTION },
     ],
     'memory',
   );

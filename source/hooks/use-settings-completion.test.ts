@@ -12,7 +12,7 @@ import { SETTING_DESCRIPTIONS } from './settings-completion-config.js';
 
 // Mock setting keys for testing (matching actual SETTING_KEYS structure)
 const MOCK_SETTING_KEYS = {
-  AGENT_MODEL: 'agent.model',
+  AGENT_MODEL_SELECTION: 'agent.modelSelection',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
   AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
@@ -41,7 +41,7 @@ const MOCK_SETTING_KEYS = {
 } as const;
 
 const MOCK_DESCRIPTIONS: Record<string, string> = {
-  'agent.model': 'The main chat model (e.g. gpt-5.1, claude-sonnet-5)',
+  'agent.modelSelection': 'The main chat model (e.g. gpt-5.1, claude-sonnet-5)',
   'agent.reasoningEffort': 'Reasoning effort level (default, low, medium, high)',
   'agent.provider': 'AI provider (openai, openrouter)',
   'agent.maxTurns': 'Maximum conversation turns',
@@ -167,7 +167,7 @@ it('buildSettingsList - creates list from keys and descriptions', () => {
   const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
   expect(result.length).toBe(expectedCount);
   expect(result.map(({ key, description }) => ({ key, description }))).toEqual([
-    { key: 'agent.model', description: MOCK_DESCRIPTIONS['agent.model'] },
+    { key: 'agent.modelSelection', description: MOCK_DESCRIPTIONS['agent.modelSelection'] },
     { key: 'agent.reasoningEffort', description: MOCK_DESCRIPTIONS['agent.reasoningEffort'] },
     { key: 'shell.maxOutputChars', description: MOCK_DESCRIPTIONS['shell.maxOutputChars'] },
     { key: 'shell.maxOutputLines', description: MOCK_DESCRIPTIONS['shell.maxOutputLines'] },
@@ -195,7 +195,7 @@ it('buildSettingsList - excludes sensitive settings by default', () => {
   expect(keys.has('app.shellPath')).toBe(false);
 
   // Should include non-sensitive settings
-  expect(keys.has('agent.model')).toBe(true);
+  expect(keys.has('agent.modelSelection')).toBe(true);
   expect(keys.has('shell.timeout')).toBe(true);
 });
 
@@ -231,7 +231,7 @@ it('buildSettingsList - includes all non-sensitive setting keys', () => {
 
   // Check specific non-sensitive keys that should be included
   const nonSensitiveKeys = [
-    'agent.model',
+    'agent.modelSelection',
     'agent.reasoningEffort',
     'agent.maxTurns',
     'agent.maxParallelToolCalls',
@@ -255,7 +255,7 @@ it('buildSettingsList - maps descriptions correctly', () => {
 it('buildSettingsList - includes current values when provided', () => {
   const mockGetCurrentValue = (key: string): string | number | boolean => {
     const values: Record<string, string | number | boolean> = {
-      'agent.model': 'gpt-4o',
+      'agent.modelSelection': 'gpt-4o',
       'shell.timeout': 120000,
       'logging.logLevel': 'info',
     };
@@ -264,7 +264,7 @@ it('buildSettingsList - includes current values when provided', () => {
 
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, true, mockGetCurrentValue);
 
-  const agentModel = result.find((item) => item.key === 'agent.model');
+  const agentModel = result.find((item) => item.key === 'agent.modelSelection');
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
   const logLevel = result.find((item) => item.key === 'logging.logLevel');
 
@@ -275,7 +275,7 @@ it('buildSettingsList - includes current values when provided', () => {
 
 it('buildSettingsList - handles missing current values', () => {
   const mockGetCurrentValue = (key: string): string | number | boolean | undefined => {
-    if (key === 'agent.model') {
+    if (key === 'agent.modelSelection') {
       return 'gpt-4o';
     }
     return undefined;
@@ -283,7 +283,7 @@ it('buildSettingsList - handles missing current values', () => {
 
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, true, mockGetCurrentValue);
 
-  const agentModel = result.find((item) => item.key === 'agent.model');
+  const agentModel = result.find((item) => item.key === 'agent.modelSelection');
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
 
   expect(agentModel?.currentValue).toBe('gpt-4o');
@@ -292,12 +292,12 @@ it('buildSettingsList - handles missing current values', () => {
 
 it('buildSettingsList - handles missing descriptions with empty string', () => {
   const incompleteDescriptions = {
-    'agent.model': 'Model description',
+    'agent.modelSelection': 'Model description',
   };
 
   const result = buildSettingsList(MOCK_SETTING_KEYS, incompleteDescriptions);
 
-  const agentModel = result.find((item) => item.key === 'agent.model');
+  const agentModel = result.find((item) => item.key === 'agent.modelSelection');
   const shellTimeout = result.find((item) => item.key === 'shell.timeout');
 
   expect(agentModel?.description).toBe('Model description');
@@ -340,12 +340,12 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
   const categoryIds = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
 
   // Check that the returned category is always a valid category in SETTINGS_CATEGORIES
-  expect(categoryIds.has(getSettingCategory('agent.model').id)).toBe(true);
+  expect(categoryIds.has(getSettingCategory('agent.modelSelection').id)).toBe(true);
   expect(categoryIds.has(getSettingCategory('shell.timeout').id)).toBe(true);
   expect(categoryIds.has(getSettingCategory('app.planMode').id)).toBe(true);
 
   // Verify specific expected mappings for key settings
-  expect(getSettingCategory('agent.model').id).toBe('models');
+  expect(getSettingCategory('agent.modelSelection').id).toBe('models');
   expect(getSettingCategory('agent.smartModel').id).toBe('models');
   expect(getSettingCategory('shell.autoApproveMode').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
@@ -360,7 +360,7 @@ it('getSettingCategory - groups settings by task-oriented menu tabs', () => {
 });
 
 it('filterSettingsByCategory - limits visible settings to the active task tab', () => {
-  const settings = [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }];
+  const settings = [{ key: 'agent.modelSelection' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }];
 
   const result = filterSettingsByCategory(settings, 'tools');
 
@@ -385,9 +385,9 @@ it('filterSettingsByQuery - whitespace-only query returns limited settings', () 
 it('filterSettingsByQuery - exact key match returns result', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
-  const result = filterSettingsByQuery(settings, 'agent.model', 10);
+  const result = filterSettingsByQuery(settings, 'agent.modelSelection', 10);
   expect(result.length > 0).toBe(true);
-  expect(result.some((item) => item.key === 'agent.model')).toBe(true);
+  expect(result.some((item) => item.key === 'agent.modelSelection')).toBe(true);
 });
 
 it('filterSettingsByQuery - partial key match returns results', () => {
@@ -411,7 +411,7 @@ it('filterSettingsByQuery - search by description returns results', () => {
 
   const cases = [
     { query: 'timeout', expectedKey: 'shell.timeout' },
-    { query: 'model', expectedKey: 'agent.model' },
+    { query: 'model', expectedKey: 'agent.modelSelection' },
     { query: 'logging', expectedKey: 'logging.logLevel' },
   ];
 
@@ -535,10 +535,10 @@ it('clampIndex - clamps negative index to first item', () => {
 it('Integration - buildSettingsList and filterSettingsByQuery work together', () => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
-  // Search for "model" should find agent.model
+  // Search for "model" should find agent.modelSelection
   const result = filterSettingsByQuery(settings, 'model', 10);
   expect(result.map(({ key, description }) => ({ key, description }))).toEqual([
-    { key: 'agent.model', description: MOCK_DESCRIPTIONS['agent.model'] },
+    { key: 'agent.modelSelection', description: MOCK_DESCRIPTIONS['agent.modelSelection'] },
   ]);
 });
 
@@ -549,6 +549,6 @@ it('Integration - clampIndex with filtered results', () => {
   const filtered = filterSettingsByQuery(settings, 'agent', 3);
 
   // Clamp selection index to filtered results
-  expect(filtered.map((item) => item.key)).toEqual(['agent.model', 'agent.maxTurns', 'agent.retryAttempts']);
+  expect(filtered.map((item) => item.key)).toEqual(['agent.modelSelection', 'agent.maxTurns', 'agent.retryAttempts']);
   expect([clampIndex(0, filtered.length), clampIndex(10, filtered.length)]).toEqual([0, 2]);
 });

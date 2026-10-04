@@ -1,3 +1,10 @@
+## [0.31.1] - 2026-10-04
+
+### Bug Fixes
+- Model selections now retain their provider binding across settings, model menus, sessions, and subagent tier pools, preventing ambiguous model names from selecting the wrong provider.
+- Existing persisted model selections are migrated before strict settings validation so older settings remain usable on startup.
+- Failed `run_code` scripts now expose results from nested tools that already completed, allowing recovery without repeating their effects.
+
 ## [0.31.0] - 2026-10-03
 
 ### Features

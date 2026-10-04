@@ -81,14 +81,18 @@ export function migrateLegacyAncillarySettings(
     if (getOwnValue(rawConfig, migration.target).found) continue;
 
     const legacyValue = migration.legacy
-      .map((path) => getOwnValue(rawConfig, path))
+      .map((path) => ({ ...getOwnValue(rawConfig, path), path }))
       .find((candidate) => candidate.found && candidate.value !== undefined && candidate.value !== null);
     if (!legacyValue) continue;
 
-    const value =
-      TIER_MODEL_TARGETS.has(migration.target) && !Array.isArray(legacyValue.value)
-        ? [legacyValue.value]
-        : legacyValue.value;
+    // Scalar model inputs have already been bound to their own provider by
+    // settings parsing. Do not borrow an unrelated role's provider while
+    // migrating the winning legacy model into a shared tier.
+    const parsedLegacy = getOwnValue(config, legacyValue.path);
+    const legacyModel =
+      TIER_MODEL_TARGETS.has(migration.target) && parsedLegacy.found ? parsedLegacy.value : legacyValue.value;
+
+    const value = TIER_MODEL_TARGETS.has(migration.target) && !Array.isArray(legacyModel) ? [legacyModel] : legacyModel;
     setValue(migratedConfig, migration.target, value);
     migrated = true;
   }

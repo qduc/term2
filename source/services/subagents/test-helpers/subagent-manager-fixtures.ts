@@ -10,6 +10,8 @@ import { ExecutionContext } from '../../execution-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../service-interfaces.js';
 import type { ISubagentClient, ISubagentClientFactory } from '../subagent-client-types.js';
 import { SubagentManager as RealSubagentManager } from '../subagent-manager.js';
+import { AgentSettingsSchema } from '../../settings/settings-schema.js';
+import { LEGACY_BOUND_MODEL_KEYS } from '../../settings/model-selection.js';
 
 const ROLE_MENTOR = 'mentor';
 const ROLE_EXPLORER = 'explorer';
@@ -63,6 +65,15 @@ export function createMockLogger(): ILoggingService {
 
 export function createMockSettings(values: Record<string, unknown> = {}): ISettingsService {
   const store: Record<string, unknown> = { ...values };
+  const agent = Object.fromEntries(
+    Object.entries(values)
+      .filter(([key]) => key.startsWith('agent.'))
+      .map(([key, value]) => [key.slice(6), value]),
+  );
+  const parsed = AgentSettingsSchema.parse(agent);
+  for (const key of LEGACY_BOUND_MODEL_KEYS) {
+    if (Object.hasOwn(agent, key)) store[`agent.${key}`] = parsed[key];
+  }
 
   const getNested = (key: string): unknown => {
     const keys = key.split('.');

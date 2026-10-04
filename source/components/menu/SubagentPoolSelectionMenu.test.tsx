@@ -47,7 +47,7 @@ it('shows entry metadata for each pool entry', () => {
     },
     {
       kind: 'entry',
-      entry: { model: 'sonnet', provider: undefined, reasoningEffort: undefined },
+      entry: { model: 'sonnet', provider: 'anthropic', reasoningEffort: undefined },
       index: 1,
       label: 'sonnet',
     },
@@ -58,7 +58,7 @@ it('shows entry metadata for each pool entry', () => {
   expect(frame).toContain('Provider: openai');
   expect(frame).toContain('Reasoning: High');
   expect(frame).toContain('2. sonnet');
-  expect(frame).toContain('Provider: Inherit mentor provider');
+  expect(frame).toContain('Provider: anthropic');
   expect(frame).toContain('Reasoning: Inherit mentor reasoning');
   unmount();
 });

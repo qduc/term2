@@ -44,6 +44,7 @@ import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
+import { ModelSelectionSchema, type ModelSelection } from '../services/settings/model-selection.js';
 import type { AgentSpec } from '../services/agent-runtime/types.js';
 import type { NestedSubagentResult, SubagentRunHandle } from '../services/subagents/types.js';
 import type { ResolvedSubagentLaunch } from './subagent-bridge.js';
@@ -130,6 +131,7 @@ export interface AgentFactoryDeps {
 export interface AgentBuildResult {
   agent: ApplicationAgent;
   resolvedModel: string;
+  selection: ModelSelection;
 }
 
 const READ_ONLY_FILE_MUTATING_TOOLS = new Set(['apply_patch', 'create_file', 'search_replace']);
@@ -493,16 +495,25 @@ function buildModelSettings({
 export function buildAgent(
   {
     model,
+    selection,
     reasoningEffort,
     temperature,
   }: {
     model?: string;
+    selection?: ModelSelection;
     reasoningEffort?: ReasoningEffortSetting | null;
     temperature?: number;
   },
   deps: AgentFactoryDeps,
 ): AgentBuildResult {
-  const resolvedModel = model?.trim() || deps.settings.get('agent.model');
+  const resolvedSelection = ModelSelectionSchema.parse(
+    selection ?? {
+      model: model?.trim() || deps.settings.get('agent.model'),
+      provider: deps.providerId,
+    },
+  );
+  deps = { ...deps, providerId: resolvedSelection.provider };
+  const resolvedModel = resolvedSelection.model;
   const resolvedTemperature = temperature ?? deps.settings.get('agent.temperature');
   const {
     name,
@@ -605,5 +616,5 @@ export function buildAgent(
     };
   }
 
-  return { agent, resolvedModel };
+  return { agent, resolvedModel, selection: resolvedSelection };
 }

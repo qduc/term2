@@ -6,6 +6,33 @@ import type { DeepPartial } from './settings-env.js';
 
 it('flattenSettings: flattens nested objects into dot notation', () => {
   expect(flattenSettings({ a: { b: 1 }, c: 2 })).toEqual({ 'a.b': 1, c: 2 });
+  expect(flattenSettings({ agent: { modelSelection: { model: 'chosen', provider: 'zai' } } })).toEqual({
+    'agent.modelSelection': { model: 'chosen', provider: 'zai' },
+  });
+});
+
+it('merges legacy higher-priority input into the prior bound main selection', () => {
+  const merged = mergeSettings(
+    DEFAULT_SETTINGS,
+    { agent: { modelSelection: { model: 'file-model', provider: 'zai' } } },
+    { agent: { model: 'env-model' } },
+    { agent: { provider: 'codex' } },
+    { disableLogging: true },
+  );
+  expect(merged.agent.modelSelection).toEqual({ model: 'env-model', provider: 'codex' });
+  expect(merged.agent.model).toBe('env-model');
+  expect(merged.agent.provider).toBe('codex');
+});
+
+it('does not complete a partial explicit selection from a lower-priority layer', () => {
+  const merged = mergeSettings(
+    DEFAULT_SETTINGS,
+    {},
+    {},
+    { agent: { modelSelection: { model: 'incomplete' } } },
+    { disableLogging: true },
+  );
+  expect(merged).toBe(DEFAULT_SETTINGS);
 });
 
 it('mergeSettings: cli > env > config > defaults precedence', () => {

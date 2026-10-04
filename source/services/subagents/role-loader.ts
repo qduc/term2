@@ -12,6 +12,7 @@ import type { SkillsService } from '../skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 import { getTierModelPoolEntries, resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { getAncillaryTierForRole } from './subagent-pool-config.js';
+import { ModelSelectionSchema } from '../settings/model-selection.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -101,17 +102,17 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
 
   const tier = getAncillaryTierForRole(role);
   const tierModel = resolveAncillaryModelTier(tier, settings);
-  const legacyModel = settings.getDynamic(`${subagentPrefix}Model`) as string | undefined;
-  const legacyProvider = settings.getDynamic(`${subagentPrefix}Provider`) as string | undefined;
+  const legacyValue = settings.getDynamic(`${subagentPrefix}Model`);
+  const legacyModel = legacyValue === undefined ? undefined : ModelSelectionSchema.parse(legacyValue);
   const configuredLegacyReasoningEffort = settings.getDynamic(`${subagentPrefix}ReasoningEffort`) as string | undefined;
   const legacyReasoningEffort =
     role === 'mentor' && configuredLegacyReasoningEffort === 'default' ? undefined : configuredLegacyReasoningEffort;
   const firstPoolEntry = getTierModelPoolEntries(tier, settings)[0];
-  const inheritedModel =
-    firstPoolEntry ??
-    (legacyModel ? { model: legacyModel, provider: legacyProvider ?? settings.get('agent.provider') } : tierModel);
-  const model = isInherited(frontmatter.model) ? inheritedModel.model : frontmatter.model;
-  const provider = isInherited(frontmatter.provider) ? inheritedModel.provider : frontmatter.provider;
+  const inheritedModel = firstPoolEntry ?? legacyModel ?? tierModel;
+  const selection = ModelSelectionSchema.parse({
+    model: isInherited(frontmatter.model) ? inheritedModel.model : frontmatter.model,
+    provider: isInherited(frontmatter.provider) ? inheritedModel.provider : frontmatter.provider,
+  });
 
   return {
     role,
@@ -122,8 +123,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
     canSearchWeb: frontmatter.canSearchWeb ?? false,
     canRunShell: frontmatter.canRunShell ?? false,
     maxTurns: frontmatter.maxTurns ?? ROLE_MAX_TURNS_DEFAULT,
-    model,
-    provider,
+    ...selection,
     reasoningEffort: isInherited(frontmatter.reasoningEffort)
       ? (settings.getDynamic(`agent.${tier}ReasoningEffort`) as string | undefined) ??
         legacyReasoningEffort ??

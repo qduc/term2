@@ -25,6 +25,7 @@ import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-cod
 import type { McpToolSource } from '../services/mcp/mcp-tool-source.js';
 import { TurnStableMcpToolSource } from '../services/mcp/turn-stable-mcp-tool-source.js';
 import type { DurableGoal } from '../services/logging/conversation-log-events.js';
+import { ModelSelectionSchema, isMainSelectionKey, type ModelSelection } from '../services/settings/model-selection.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -77,10 +78,9 @@ export interface AgentConfigurationDeps {
 
 export class AgentConfiguration implements AgentSource {
   #agent: ApplicationAgent;
-  #model: string;
+  #selection: ModelSelection;
   #reasoningEffort?: ReasoningEffortSetting | null;
   #temperature?: number;
-  #provider: string;
   #isTransientClient: boolean;
   #editor: ReturnType<typeof createEditorImpl>;
   #approvalPolicyRegistry: ToolApprovalPolicyRegistry;
@@ -179,27 +179,33 @@ export class AgentConfiguration implements AgentSource {
     // Initialize config
     this.#reasoningEffort = config.reasoningEffort;
     this.#temperature = config.temperature ?? this.#settings.get('agent.temperature');
-    this.#provider = config.providerOverride ?? this.#settings.get('agent.provider') ?? 'openai';
+    this.#selection = ModelSelectionSchema.parse({
+      model: config.model?.trim() || this.#settings.get('agent.model') || 'gpt-5.1',
+      provider: config.providerOverride ?? this.#settings.get('agent.provider') ?? 'openai',
+    });
 
     if (config.agentOverride) {
       this.#isTransientClient = true;
       this.#agent = config.agentOverride;
-      this.#model = config.model ?? (config.agentOverride as any).model ?? '';
+      this.#selection = ModelSelectionSchema.parse({
+        ...this.#selection,
+        model: config.model ?? config.agentOverride.model ?? this.#selection.model,
+      });
     } else {
       this.#isTransientClient = false;
       const buildResult = buildAgent(
-        { model: config.model, reasoningEffort: config.reasoningEffort },
+        { selection: this.#selection, reasoningEffort: config.reasoningEffort },
         this.#buildFactoryDeps(),
       );
       this.#agent = buildResult.agent;
-      this.#model = buildResult.resolvedModel;
+      this.#selection = buildResult.selection;
     }
   }
 
   // AgentSource implementation
   getAgent(sessionId?: string, promptCacheKey?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
-      const capabilities = getProvider(this.#provider)?.capabilities;
+      const capabilities = getProvider(this.#selection.provider)?.capabilities;
       const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
@@ -231,11 +237,11 @@ export class AgentConfiguration implements AgentSource {
   }
 
   getProvider(): string {
-    return this.#provider;
+    return this.#selection.provider;
   }
 
   getModel(): string {
-    return this.#model;
+    return this.#selection.model;
   }
 
   /**
@@ -249,7 +255,7 @@ export class AgentConfiguration implements AgentSource {
     // wrapped tool behavior (interceptors, approvals, and post-execute
     // gates), and used to discard transient/override agents altogether.
     const agent = this.getAgent(sessionId, promptCacheKey);
-    if (this.#provider !== 'codex' || !agent.modelSettings) return agent;
+    if (this.#selection.provider !== 'codex' || !agent.modelSettings) return agent;
     return {
       ...agent,
       modelSettings: toApplicationCodexSettings(agent.modelSettings),
@@ -266,7 +272,7 @@ export class AgentConfiguration implements AgentSource {
       executionContext: this.#executionContext,
       editor: this.#editor,
       approvalPolicyRegistry,
-      providerId: this.#provider,
+      providerId: this.#selection.provider,
       serviceTierOverrideForNextRequest: this.#serviceTierOverrideForNextRequest,
       createMentor: (...args) => this.#getSubagentBridge()!.createMentor(...args),
       runSubagent: (...args) => this.#getSubagentBridge()!.runSubagent(...args),
@@ -337,14 +343,14 @@ export class AgentConfiguration implements AgentSource {
     const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
     const buildResult = buildAgent(
       {
-        model: this.#model,
+        selection: this.#selection,
         reasoningEffort: this.#reasoningEffort as any,
         temperature: this.#temperature,
       },
       this.#buildFactoryDeps(approvalPolicyRegistry),
     );
     this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
+    this.#selection = buildResult.selection;
     this.#approvalPolicyRegistry = approvalPolicyRegistry;
     if (this.#nestedApprovalOwner) bindRunCodeNestedApprovalOwner(this.#agent.tools, this.#nestedApprovalOwner);
   }
@@ -364,6 +370,7 @@ export class AgentConfiguration implements AgentSource {
       'enable_agent_workflow',
       'app.searchViaShell',
       'agent.model',
+      'agent.modelSelection',
       'agent.provider',
       'agent.transport',
       'agent.retryAttempts',
@@ -419,6 +426,14 @@ export class AgentConfiguration implements AgentSource {
       if (this.#isDisposed) return;
       if (!changedKey) return;
       if (rebuildKeys.includes(changedKey)) {
+        if (isMainSelectionKey(changedKey)) {
+          this.#selection = ModelSelectionSchema.parse(
+            this.#settings.getDynamic('agent.modelSelection') ?? {
+              model: this.#settings.get('agent.model'),
+              provider: this.#settings.get('agent.provider'),
+            },
+          );
+        }
         this.#onConfigChanged?.(changedKey);
         this.rebuildAgent();
       }
@@ -447,7 +462,7 @@ export class AgentConfiguration implements AgentSource {
   // Setters — used by AgentClient before calling rebuildAgent()
 
   setModel(model: string): void {
-    this.#model = model;
+    this.#selection = ModelSelectionSchema.parse({ ...this.#selection, model });
   }
 
   setReasoningEffort(effort?: ReasoningEffortSetting): void {
@@ -459,7 +474,7 @@ export class AgentConfiguration implements AgentSource {
   }
 
   setProvider(provider: string): void {
-    this.#provider = provider;
+    this.#selection = ModelSelectionSchema.parse({ ...this.#selection, provider });
     this.#settings.set('agent.provider', provider);
   }
 

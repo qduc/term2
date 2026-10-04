@@ -15,12 +15,67 @@ import {
   SETTING_KEYS,
 } from './settings-schema.js';
 
+it('binds main legacy input and makes the complete selection authoritative', () => {
+  const agent = AgentSettingsSchema.parse({ model: 'custom-model', provider: 'zai' });
+  expect(agent.modelSelection).toEqual({ model: 'custom-model', provider: 'zai' });
+  const selected = AgentSettingsSchema.parse({
+    model: 'stale-model',
+    provider: 'openai',
+    modelSelection: { model: 'pinned-model', provider: 'codex' },
+  });
+  expect(selected.model).toBe('pinned-model');
+  expect(selected.provider).toBe('codex');
+  expect(() => AgentSettingsSchema.parse({ modelSelection: { model: 'missing-host' } })).toThrow();
+});
+
+it('binds legacy edit-healing input to its configured host without rebinding explicit pairs', () => {
+  const parsed = SettingsSchema.parse({ agent: { provider: 'zai' }, tools: { editHealingModel: 'healer' } });
+  expect(parsed.tools?.editHealingModel).toEqual({ model: 'healer', provider: 'zai' });
+  const reparsed = SettingsSchema.parse({ ...parsed, tools: { ...parsed.tools, editHealingProvider: 'codex' } });
+  expect(reparsed.tools?.editHealingModel).toEqual({ model: 'healer', provider: 'zai' });
+});
+
+it.each([
+  ['mentorModel', 'mentorProvider'],
+  ['subagentExplorerModel', 'subagentExplorerProvider'],
+  ['subagentWorkerModel', 'subagentWorkerProvider'],
+  ['subagentLibrarianModel', 'subagentLibrarianProvider'],
+  ['autoApproveModel', 'autoApproveProvider'],
+  ['efficientModel', 'provider'],
+  ['capableModel', 'provider'],
+])('binds legacy %s once and preserves explicit pairs', (modelKey, providerKey) => {
+  const agent = AgentSettingsSchema.parse({ [modelKey]: 'legacy', [providerKey]: 'zai' });
+  expect((agent as any)[modelKey]).toEqual({ model: 'legacy', provider: 'zai' });
+  const rebound = AgentSettingsSchema.parse({ ...agent, [providerKey]: 'codex' });
+  expect((rebound as any)[modelKey]).toEqual({ model: 'legacy', provider: 'zai' });
+});
+
+it('pins legacy mentor pool models to the mentor provider at parsing', () => {
+  const agent = AgentSettingsSchema.parse({
+    provider: 'openai',
+    mentorProvider: 'codex',
+    mentorPool: [{ model: 'mentor-a' }, { model: 'mentor-b', provider: 'zai' }],
+  });
+  expect(agent.mentorPool).toEqual([
+    { model: 'mentor-a', provider: 'codex' },
+    { model: 'mentor-b', provider: 'zai' },
+  ]);
+  expect(AgentSettingsSchema.parse({ ...agent, mentorProvider: 'anthropic' }).mentorPool).toEqual(agent.mentorPool);
+});
+
+it('pins mentor pool legacy strings to the parent provider and rejects empty bindings', () => {
+  expect(AgentSettingsSchema.parse({ provider: 'zai', mentorPool: ['mentor-a'] }).mentorPool).toEqual([
+    { model: 'mentor-a', provider: 'zai' },
+  ]);
+  expect(() => AgentSettingsSchema.parse({ mentorPool: [{ model: 'mentor-a', provider: '' }] })).toThrow();
+});
+
 it('keeps the structured Contract 04 consumer inventory complete and duplicate-free', () => {
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(150);
-  expect(new Set(exportedKeys).size).toBe(150);
+  expect(exportedKeys).toHaveLength(151);
+  expect(new Set(exportedKeys).size).toBe(151);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -504,8 +559,8 @@ it('SettingsSchema preserves user-configured workflow model tiers', () => {
     agent: { efficientModel: 'gpt-5-mini', capableModel: 'gpt-5.3-codex' },
   });
 
-  expect(parsed.agent?.efficientModel).toBe('gpt-5-mini');
-  expect(parsed.agent?.capableModel).toBe('gpt-5.3-codex');
+  expect(parsed.agent?.efficientModel).toEqual({ model: 'gpt-5-mini', provider: 'openai' });
+  expect(parsed.agent?.capableModel).toEqual({ model: 'gpt-5.3-codex', provider: 'openai' });
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_EFFICIENT_MODEL)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CAPABLE_MODEL)).toBe(true);
   expect(() => SettingsSchema.parse({ agent: { efficientModel: '' } })).toThrow();

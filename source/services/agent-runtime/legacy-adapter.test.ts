@@ -39,8 +39,8 @@ describe('adaptLegacyRole', () => {
       'agent.smartModel': [{ model: 'smart-model', provider: 'openai' }],
       'agent.balancedModel': [{ model: 'balanced-model', provider: 'openai' }],
       'agent.cheapModel': [{ model: 'cheap-model', provider: 'openai' }],
-      'agent.mentorModel': 'legacy-mentor-model',
-      'agent.subagentExplorerModel': 'legacy-explorer-model',
+      'agent.mentorModel': { model: 'legacy-mentor-model', provider: 'openai' },
+      'agent.subagentExplorerModel': { model: 'legacy-explorer-model', provider: 'openai' },
     });
 
     expect(adaptLegacyRole('mentor', configured).model.model).toBe('smart-model');
@@ -49,8 +49,8 @@ describe('adaptLegacyRole', () => {
     expect(adaptLegacyRole('librarian', configured).model.model).toBe('cheap-model');
 
     const legacyOnly = settings({
-      'agent.mentorModel': 'legacy-mentor-model',
-      'agent.subagentExplorerModel': 'legacy-explorer-model',
+      'agent.mentorModel': { model: 'legacy-mentor-model', provider: 'openai' },
+      'agent.subagentExplorerModel': { model: 'legacy-explorer-model', provider: 'openai' },
     });
     expect(adaptLegacyRole('mentor', legacyOnly).model.model).toBe('legacy-mentor-model');
     expect(adaptLegacyRole('explorer', legacyOnly).model.model).toBe('legacy-explorer-model');

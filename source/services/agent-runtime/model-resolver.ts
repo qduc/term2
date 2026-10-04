@@ -1,6 +1,7 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ModelPolicy, ExactModelPolicy } from './types.js';
 import { TierModelPoolEntrySchema, type TierModelPoolSetting } from '../settings/settings-schema.js';
+import { ModelSelectionSchema } from '../settings/model-selection.js';
 
 export type AncillaryModelTier = 'smart' | 'balanced' | 'cheap' | 'chore';
 
@@ -18,7 +19,7 @@ export function resolveModelPolicy(
 ): ExactModelPolicy {
   // 1. Exact policy: pass-through.
   if (typeof policy === 'object' && 'provider' in policy && 'model' in policy) {
-    return { provider: policy.provider, model: policy.model };
+    return ModelSelectionSchema.parse(policy);
   }
 
   // 2. Relative policy: requires parent.
@@ -64,10 +65,13 @@ export function resolveAncillaryModelTier(tier: AncillaryModelTier, settings: IS
   // the pool happens once per subagent spawn in SubagentRolePoolSelector.
   const first = getTierModelPoolEntries(tier, settings)[0];
   return (
-    first ?? {
-      provider: settings.get('agent.provider') ?? 'openai',
-      model: settings.get('agent.model') ?? 'gpt-4o',
-    }
+    first ??
+    ModelSelectionSchema.parse(
+      settings.getDynamic('agent.modelSelection') ?? {
+        provider: settings.get('agent.provider') ?? 'openai',
+        model: settings.get('agent.model') ?? 'gpt-4o',
+      },
+    )
   );
 }
 
@@ -81,17 +85,6 @@ function resolveRelativePolicy(
 
   if (policy.tier === 'same') {
     return parentExact;
-  }
-
-  if (policy.reasoning) {
-    // MVP: all reasoning effort levels resolve to the same configured
-    // reasoning model. Granular per-effort settings can be added later.
-    const reasoningModel =
-      (settings.getDynamic(`agent.reasoning.${policy.reasoning}`) as string | undefined) ??
-      (settings.getDynamic('agent.reasoningModel') as string | undefined);
-    if (reasoningModel) {
-      return { provider: parentExact.provider, model: reasoningModel };
-    }
   }
 
   const tier = policy.tier === 'lower' ? 'cheap' : 'smart';

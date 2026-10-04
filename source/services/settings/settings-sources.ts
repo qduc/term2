@@ -11,6 +11,7 @@ type SourceGetter = (key: string) => SettingSource;
 
 export const SETTINGS_SOURCE_KEYS = {
   agent: {
+    modelSelection: 'agent.modelSelection',
     model: 'agent.model',
     efficientModel: 'agent.efficientModel',
     capableModel: 'agent.capableModel',

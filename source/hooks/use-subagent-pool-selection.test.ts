@@ -12,9 +12,10 @@ import {
 
 it('offers add and save actions below the pool entries', () => {
   const emptyActions = buildSubagentPoolListItems([]).filter((item) => item.kind === 'action');
-  const twoEntryActions = buildSubagentPoolListItems([{ model: 'gpt-5' }, { model: 'sonnet' }]).filter(
-    (item) => item.kind === 'action',
-  );
+  const twoEntryActions = buildSubagentPoolListItems([
+    { model: 'gpt-5', provider: 'openai' },
+    { model: 'sonnet', provider: 'anthropic' },
+  ]).filter((item) => item.kind === 'action');
 
   expect(emptyActions.map((item) => item.action)).toEqual(['add', 'save']);
   expect(twoEntryActions.map((item) => item.action)).toEqual(['add', 'save']);
@@ -34,7 +35,7 @@ it('offers saved pool IDs and the current draft value when they are absent from 
     entries: [
       { model: 'saved-model', provider: 'openai' },
       { model: 'other-provider-model', provider: 'openrouter' },
-      { model: 'inherited-model' },
+      { model: 'inherited-model', provider: 'openai' },
     ],
     provider: 'openai',
     currentModel: 'custom-current-model',
@@ -132,12 +133,16 @@ it('persists every tier pool entry as a provider/model pair', () => {
 });
 
 it('refuses to serialize an unbound tier model', () => {
+  // @ts-expect-error Unbound entries are invalid at runtime as well as in typed callers.
   expect(() => serializeTierPoolEntries([{ model: 'unbound' }])).toThrow();
 });
 
 it('labels a pinned pool entry with its provider', () => {
-  const labels = buildSubagentPoolListItems([{ model: 'deepseek-flash' }, { model: 'gpt-6-luna', provider: 'codex' }])
+  const labels = buildSubagentPoolListItems([
+    { model: 'deepseek-flash', provider: 'DeepSeek' },
+    { model: 'gpt-6-luna', provider: 'codex' },
+  ])
     .filter((item) => item.kind === 'entry')
     .map((item) => item.label);
-  expect(labels).toEqual(['deepseek-flash', 'gpt-6-luna @ codex']);
+  expect(labels).toEqual(['deepseek-flash @ DeepSeek', 'gpt-6-luna @ codex']);
 });

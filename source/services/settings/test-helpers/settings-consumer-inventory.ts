@@ -21,6 +21,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'tools.userInteraction.enabled',
     'tools.codeContext.enabled',
     'agent.model',
+    'agent.modelSelection',
     'agent.efficientModel',
     'agent.capableModel',
     'agent.smartModel',

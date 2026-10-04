@@ -6,6 +6,7 @@ import deepEqual from 'fast-deep-equal';
 import type { ZodTypeAny } from 'zod';
 import type { SettingsData } from './settings-schema.js';
 import { mergeSettings } from './settings-merger.js';
+import { unwrapSchema } from './setting-schema-utils.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -144,8 +145,9 @@ function parsePartialSections(parsed: unknown, schema: ZodTypeAny): Partial<Sett
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
   const record = parsed as Record<string, unknown>;
 
-  if (!('shape' in schema) || !schema.shape || typeof schema.shape !== 'object') return {};
-  const shape = schema.shape as Record<string, ZodTypeAny>;
+  const objectSchema = unwrapSchema(schema);
+  if (!objectSchema?.shape || typeof objectSchema.shape !== 'object') return {};
+  const shape = objectSchema.shape as Record<string, ZodTypeAny>;
 
   const partial: Record<string, unknown> = {};
   for (const [key, sectionSchema] of Object.entries(shape)) {

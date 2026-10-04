@@ -34,10 +34,10 @@ export const SUBAGENT_POOL_REASONING_EFFORTS = [
 export type SubagentPoolReasoningEffort = (typeof SUBAGENT_POOL_REASONING_EFFORTS)[number];
 export type SubagentPoolEntry = {
   model: string;
-  provider?: string;
+  provider: string;
   reasoningEffort?: SubagentPoolReasoningEffort;
 };
-export type SubagentPoolDraft = SubagentPoolEntry & { _isNew?: boolean };
+export type SubagentPoolDraft = Omit<SubagentPoolEntry, 'provider'> & { provider?: string; _isNew?: boolean };
 export type SubagentPoolPhase =
   | 'list'
   | 'edit_fields'
@@ -56,7 +56,7 @@ export type SubagentPoolMenuItem =
 
 const subagentPoolEntrySchema = z.object({
   model: z.string().min(1, 'Model is required'),
-  provider: z.string().min(1, 'Provider cannot be empty').optional(),
+  provider: z.string().min(1, 'Provider cannot be empty'),
   reasoningEffort: z.enum(SUBAGENT_POOL_REASONING_EFFORTS).optional(),
 });
 const MAX_SUBAGENT_POOL_ENTRIES = 8;
@@ -76,8 +76,7 @@ const noOpLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
-// Tier pools always persist provider/model pairs; optional providers belong
-// only to the separate mentor editor's draft format.
+// Both pool types persist provider/model pairs; only drafts may be incomplete.
 const tierPoolSchema = z.preprocess(
   (value) =>
     value === undefined || value === null || value === '' ? undefined : Array.isArray(value) ? value : [value],
@@ -470,7 +469,7 @@ export function useSubagentPoolSelection(
     if (!draft) return;
     const result = subagentPoolEntrySchema.safeParse({
       model: draft.model.trim(),
-      ...(draft.provider === undefined ? {} : { provider: draft.provider.trim() }),
+      provider: resolveBrowseProvider(draft.provider).trim(),
       ...(draft.reasoningEffort === undefined ? {} : { reasoningEffort: draft.reasoningEffort }),
     });
     if (!result.success) {
@@ -493,7 +492,7 @@ export function useSubagentPoolSelection(
     setPhase('list');
     selection.setSelectedIndex(0);
     setInput('');
-  }, [draft, editingIndex, setInput, selection.setSelectedIndex]);
+  }, [draft, editingIndex, resolveBrowseProvider, setInput, selection.setSelectedIndex]);
 
   const selectItem = useCallback(() => {
     const item = activeItems[selection.selectedIndex];

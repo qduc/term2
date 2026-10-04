@@ -18,6 +18,56 @@ const getTestSettingsDir = () => {
 
 const getSettingsFilePath = (settingsDir: string) => path.join(settingsDir, 'settings.json');
 
+it.sequential(
+  'persists canonical main and legacy role selections across reload and unrelated reconciliation',
+  async () => {
+    await withNonTestEnvironment(async () => {
+      const settingsDir = getTestSettingsDir();
+      const service = new SettingsService({ settingsDir, disableLogging: true });
+      expect(
+        service.setPersistentDynamicTransaction([
+          { key: 'agent.model', value: 'main-bound' },
+          { key: 'agent.provider', value: 'zai' },
+          { key: 'agent.mentorModel', value: 'mentor-bound' },
+          { key: 'agent.mentorProvider', value: 'codex' },
+        ]).status,
+      ).toBe('saved');
+      service.setDynamic('agent.mentorProvider', 'anthropic');
+      service.setDynamic('logging.logLevel', 'warn');
+      const reloaded = new SettingsService({ settingsDir, disableLogging: true });
+      expect(reloaded.getDynamic('agent.modelSelection')).toEqual({ model: 'main-bound', provider: 'zai' });
+      expect(reloaded.get('agent.mentorModel')).toEqual({ model: 'mentor-bound', provider: 'codex' });
+      const persisted = JSON.parse(fs.readFileSync(getSettingsFilePath(settingsDir), 'utf8'));
+      expect(persisted.agent.modelSelection).toEqual({ model: 'main-bound', provider: 'zai' });
+      expect(persisted.agent.mentorModel).toEqual({ model: 'mentor-bound', provider: 'codex' });
+    });
+  },
+);
+
+it('stores main selections atomically and projects legacy single and batch writes', () => {
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+  service.setDynamic('agent.modelSelection', { model: 'pinned', provider: 'zai' });
+  expect(service.get('agent.model')).toBe('pinned');
+  expect(service.get('agent.provider')).toBe('zai');
+  service.setDynamic('agent.model', 'replacement');
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'replacement', provider: 'zai' });
+  service.setDynamicTransaction([
+    { key: 'agent.model', value: 'batch' },
+    { key: 'agent.provider', value: 'codex' },
+  ]);
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'batch', provider: 'codex' });
+  expect(() => service.setDynamic('agent.modelSelection', { model: 'incomplete' })).toThrow();
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'batch', provider: 'codex' });
+  service.reset('agent.model');
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'gpt-5.1', provider: 'codex' });
+  service.reset('agent.modelSelection');
+  expect(service.getDynamic('agent.modelSelection')).toEqual({ model: 'gpt-5.1', provider: 'openai' });
+});
+
 // AVA (and other runners) set environment variables that we use to detect a test environment.
 // Some tests need to validate the *non-test* behavior (i.e., persistence to disk).
 // We isolate those by temporarily clearing the test-runner env markers.
@@ -133,6 +183,38 @@ it('binds legacy pool input to the provider in the same runtime transaction rega
     { key: 'agent.cheapProvider', value: 'codex' },
   ]);
   expect(service.get('agent.cheapModel')).toEqual([{ model: 'gpt-6-luna', provider: 'codex' }]);
+});
+
+it('pins mentor pool legacy input against the complete runtime transaction', () => {
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+  service.setDynamicTransaction([
+    { key: 'agent.mentorPool', value: [{ model: 'mentor-a' }] },
+    { key: 'agent.mentorProvider', value: 'codex' },
+  ]);
+  expect(service.get('agent.mentorPool')).toEqual([{ model: 'mentor-a', provider: 'codex' }]);
+  service.setDynamic('agent.mentorProvider', 'zai');
+  expect(service.get('agent.mentorPool')).toEqual([{ model: 'mentor-a', provider: 'codex' }]);
+});
+
+it.sequential('persists mentor pool bindings across batch writes and reload', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(
+      service.setPersistentDynamicTransaction([
+        { key: 'agent.mentorPool', value: [{ model: 'mentor-a' }] },
+        { key: 'agent.mentorProvider', value: 'codex' },
+      ]).status,
+    ).toBe('saved');
+    service.setDynamic('agent.mentorProvider', 'zai');
+    const pair = [{ model: 'mentor-a', provider: 'codex' }];
+    expect(service.get('agent.mentorPool')).toEqual(pair);
+    expect(new SettingsService({ settingsDir, disableLogging: true }).get('agent.mentorPool')).toEqual(pair);
+  });
 });
 
 it.sequential('binds legacy pool input before settling a persistent transaction', async () => {
@@ -721,7 +803,7 @@ it('migrates legacy ancillary settings into tier settings without overwriting ne
       'legacy-balanced-provider',
       'medium',
     ],
-    cheap: [[{ model: 'legacy-efficient', provider: 'legacy-cheap-provider' }], 'legacy-cheap-provider', 'low'],
+    cheap: [[{ model: 'legacy-efficient', provider: 'openai' }], 'legacy-cheap-provider', 'low'],
     chore: [[{ model: 'legacy-chore', provider: 'legacy-chore-provider' }], 'legacy-chore-provider'],
   });
 });

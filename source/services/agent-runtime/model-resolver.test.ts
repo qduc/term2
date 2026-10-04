@@ -263,7 +263,7 @@ describe('resolveModelPolicy', () => {
     expect(resolveModelPolicy({ tier: 'higher' }, s, parent).model).toBe('parent-model');
   });
 
-  it('resolves relative "lower" with reasoning flag from settings', () => {
+  it('ignores undeclared model-only reasoning overrides and inherits the complete parent', () => {
     const s = settings({
       'agent.reasoningModel': 'o1-mini',
       'agent.provider': 'openai',
@@ -271,11 +271,11 @@ describe('resolveModelPolicy', () => {
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'lower', reasoning: 'high' }, s, parent)).toEqual({
       provider: 'openai',
-      model: 'o1-mini',
+      model: 'gpt-4o',
     });
   });
 
-  it('resolves per-effort reasoning model from dedicated setting', () => {
+  it('does not route undeclared per-effort model ids to the parent provider', () => {
     const s = settings({
       'agent.reasoning.low': 'o1-mini',
       'agent.reasoning.high': 'o1-pro',
@@ -284,11 +284,11 @@ describe('resolveModelPolicy', () => {
     const parent: ModelPolicy = { provider: 'openai', model: 'gpt-4o' };
     expect(resolveModelPolicy({ tier: 'lower', reasoning: 'low' }, s, parent)).toEqual({
       provider: 'openai',
-      model: 'o1-mini',
+      model: 'gpt-4o',
     });
     expect(resolveModelPolicy({ tier: 'higher', reasoning: 'high' }, s, parent)).toEqual({
       provider: 'openai',
-      model: 'o1-pro',
+      model: 'gpt-4o',
     });
   });
 

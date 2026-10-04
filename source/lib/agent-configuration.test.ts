@@ -123,6 +123,21 @@ function ensureProviderRegistered() {
 
 // ========== Tests ==========
 
+it.sequential('main settings changes install a complete selection before rebuilding', () => {
+  ensureProviderRegistered();
+  const { deps } = createDeps();
+  const settings = createMockSettingsService({
+    'agent.modelSelection': { model: 'initial', provider: 'mock-provider-for-config' },
+  });
+  const config = new AgentConfiguration({}, { ...deps, settings });
+  config.subscribeToSettings();
+  settings.setDynamic('agent.modelSelection', { model: 'next', provider: 'mock-provider-for-config' });
+  expect(config.getModel()).toBe('next');
+  expect(config.getProvider()).toBe('mock-provider-for-config');
+  expect(config.getAgent().model).toBe('next');
+  config.dispose();
+});
+
 it.sequential('constructor with agentOverride uses the override', () => {
   ensureProviderRegistered();
 

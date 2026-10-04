@@ -17,17 +17,18 @@ import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 import { readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
 import { resolveActiveProfile } from '../profiles/index.js';
+import { SubagentPoolEntrySchema } from '../settings/settings-schema.js';
+import type { ExactModelPolicy } from '../agent-runtime/types.js';
 
 /** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
 const MAX_MENTOR_SAMPLES = 8;
 
 /**
- * One consultation in a mentor fan-out. `model`/`provider` are absent for plain
+ * One consultation in a mentor fan-out. `selection` is absent for plain
  * sampling, where every consultation uses the configured mentor model.
  */
 interface MentorConsultation {
-  model?: string;
-  provider?: string;
+  selection?: ExactModelPolicy;
   reasoningEffort?: string;
 }
 
@@ -155,11 +156,13 @@ export class MentorRunner {
   #resolveConsultations(): MentorConsultation[] {
     const pool = this.#settings.get('agent.mentorPool');
     if (Array.isArray(pool) && pool.length > 0) {
-      return pool.slice(0, MAX_MENTOR_SAMPLES).map((entry: any) => ({
-        model: entry?.model,
-        provider: entry?.provider,
-        reasoningEffort: entry?.reasoningEffort,
-      }));
+      return SubagentPoolEntrySchema.array()
+        .parse(pool)
+        .slice(0, MAX_MENTOR_SAMPLES)
+        .map((entry) => ({
+          selection: { model: entry.model, provider: entry.provider },
+          reasoningEffort: entry.reasoningEffort,
+        }));
     }
     return Array.from({ length: this.#resolveSampleCount() }, () => ({}));
   }
@@ -249,8 +252,9 @@ export class MentorRunner {
     // A pool entry overrides the configured mentor model for this consultation
     // only. An entry may name a model without a provider, in which case it runs
     // on the mentor's usual provider.
-    const mentorModelName = consultation?.model ?? definition.model;
-    const mentorProvider = consultation?.provider ?? definition.provider;
+    const selection = consultation?.selection ?? { model: definition.model, provider: definition.provider };
+    const mentorModelName = selection.model;
+    const mentorProvider = selection.provider;
     const profile = resolveActiveProfile(this.#settings, {
       availableIntegrations: new Map([['builtin:integration/mentor', true]]),
     });

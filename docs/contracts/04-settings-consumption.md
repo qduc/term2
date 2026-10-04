@@ -79,6 +79,30 @@ changes, `/settings` command for user entry).
 
 ## 6. Settlement semantics
 
+### Provider/model binding
+
+`ModelSelectionSchema` requires a nonempty `{provider, model}` pair. The main
+agent's `agent.modelSelection` is authoritative; `agent.model` and
+`agent.provider` are compatibility projections. `mainSelectionForLayer` converts
+legacy fields at each settings layer, while explicit pairs replace the prior
+pair rather than deep-merging a missing member. `SettingsService` translates
+legacy main writes and batches into one pair before publication and persistence.
+`AgentConfiguration` stores one selection and passes it to `buildAgent`.
+
+Tier pools, mentor pools, legacy role overrides, efficient/capable overrides,
+and legacy auto-approval/edit-healing model settings parse to complete pairs.
+Legacy strings bind once to their own configured host; subsequent default-host
+edits do not rebind saved entries. `migrateLegacyAncillarySettings` carries the
+selected legacy model's parsed pair into its tier rather than borrowing another
+role's provider. This prevents independent strings from drifting after parsing.
+
+The model-only `agent.reasoningModel` and `agent.reasoning.<effort>` lookups were
+not declared by the settings schema and are not supported resolution paths;
+relative policies use the bound tier or inherit the complete parent. Reasoning
+effort still controls effort, not model identity. `agent.decisionModel` remains
+an OpenRouter Decisions identifier, not a general provider-model selection;
+`shell-auto-approval-evaluator` sends it to the Decisions endpoint.
+
 - **Success:** a valid runtime change is validated, applied, source-tracked,
   persisted when enabled, and notifies listeners by `SettingsService`.
   Conversation configuration validates the entire runtime change set before

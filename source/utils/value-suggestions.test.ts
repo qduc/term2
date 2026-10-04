@@ -20,7 +20,7 @@ import { OAUTH_ACCOUNT_PROVIDERS } from '../providers/oauth-accounts.js';
  */
 function collectEnumAndBooleanKeys(): string[] {
   const keys: string[] = [];
-  const shape = (SettingsSchema as any)._def?.shape;
+  const shape = unwrapSchema(SettingsSchema)?._def?.shape;
   for (const [section, sectionSchema] of Object.entries(shape ?? {})) {
     const innerShape = unwrapSchema(sectionSchema)?._def?.shape;
     if (!innerShape) continue;

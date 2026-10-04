@@ -7,7 +7,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'term2',
-      description: 'Terminal-based AI assistant and autonomous agent runtime',
+      description: 'An AI assistant that works with files and tools in your terminal or over SSH.',
       logo: { light: './src/assets/logo-light.svg', dark: './src/assets/logo-dark.svg', replacesTitle: true },
       favicon: '/favicon.svg',
       customCss: ['./src/styles/custom.css'],

@@ -42,7 +42,8 @@ starlight-tabs [role='tab'] {
 .hero::before {
   content: '';
   position: absolute;
-  inset: -4rem -50vw;
+  /* Keep the decoration within the hero width without clipping its content. */
+  inset: -4rem 0;
   z-index: -1;
   background:
     radial-gradient(ellipse 50% 60% at 50% 40%, var(--term2-glow), transparent 70%),

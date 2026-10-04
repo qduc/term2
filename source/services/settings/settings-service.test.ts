@@ -18,6 +18,35 @@ const getTestSettingsDir = () => {
 
 const getSettingsFilePath = (settingsDir: string) => path.join(settingsDir, 'settings.json');
 
+it.sequential('starts from legacy selections and durably rewrites even a defaults-complete file', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    new SettingsService({ settingsDir, disableLogging: true });
+    const file = getSettingsFilePath(settingsDir);
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    raw.agent.modelSelection = { model: 'old-main', provider: 'codex' };
+    raw.agent.model = 'obsolete-main';
+    raw.agent.provider = 'codex';
+    raw.agent.smartModel = 'old-smart';
+    raw.agent.smartProvider = 'anthropic';
+    raw.agent.mentorModel = 'old-mentor';
+    raw.agent.mentorProvider = 'google';
+    fs.writeFileSync(file, JSON.stringify(raw));
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(service.get('agent.modelSelection')).toEqual({ model: 'old-main', provider: 'codex' });
+    expect(service.get('agent.smartModel')).toEqual([{ model: 'old-smart', provider: 'anthropic' }]);
+    // An explicit empty pool remains empty rather than resurrecting the retired scalar.
+    expect(service.get('agent.mentorPool')).toEqual([]);
+    const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(persisted.agent).not.toHaveProperty('model');
+    expect(persisted.agent).not.toHaveProperty('mentorModel');
+    expect(new SettingsService({ settingsDir, disableLogging: true }).get('agent.modelSelection')).toEqual({
+      model: 'old-main',
+      provider: 'codex',
+    });
+  });
+});
+
 it.sequential('persists canonical main and mentor selections across reload and unrelated reconciliation', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();

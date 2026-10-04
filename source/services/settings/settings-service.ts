@@ -209,7 +209,14 @@ export class SettingsService {
     // Load settings with precedence: CLI > Env > Config > Default
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
-    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors, errorDetails, recovery } = this.loadFromFile();
+    const {
+      validated,
+      raw: rawFileConfig,
+      hadErrors: fileHadErrors,
+      errorDetails,
+      recovery,
+      migratedSelections,
+    } = this.loadFromFile();
 
     if (configFileExisted && fileHadErrors) {
       if (!recovery?.recovered) {
@@ -368,6 +375,7 @@ export class SettingsService {
         shouldMigrateLegacyProviderFormat ||
         normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
+        migratedSelections ||
         migratedRequestDeadlineDefault ||
         normalizedSandboxAutoApproveConflict) &&
       !fileHadErrors
@@ -1016,6 +1024,7 @@ export class SettingsService {
     hadErrors: boolean;
     errorDetails?: string[];
     recovery?: SettingsFileRecovery;
+    migratedSelections?: boolean;
   } {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,

@@ -7,6 +7,7 @@ import type { ZodTypeAny } from 'zod';
 import type { SettingsData } from './settings-schema.js';
 import { mergeSettings } from './settings-merger.js';
 import { unwrapSchema } from './setting-schema-utils.js';
+import { migratePersistedSelections } from './persisted-selection-migration.js';
 
 type LoggerLike = {
   warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -171,6 +172,7 @@ export function loadSettingsFromFile(opts: {
   hadErrors: boolean;
   errorDetails?: string[];
   recovery?: SettingsFileRecovery;
+  migratedSelections?: boolean;
 } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
@@ -214,8 +216,21 @@ export function loadSettingsFromFile(opts: {
       }
     }
 
-    // Validate and parse with Zod
-    const validated = opts.schema.safeParse(parsed);
+    // Both startup and locked save reloads pass this file-only boundary.
+    // Keep raw bytes/values available for migration detection and diagnosis.
+    let migration: ReturnType<typeof migratePersistedSelections>;
+    try {
+      migration = migratePersistedSelections(parsed);
+    } catch (error: unknown) {
+      return {
+        validated: parsePartialSections(parsed, opts.schema),
+        raw: parsed,
+        hadErrors: true,
+        errorDetails: [...errorDetails, error instanceof Error ? error.message : String(error)],
+        recovery,
+      };
+    }
+    const validated = opts.schema.safeParse(migration.value);
 
     if (!validated.success) {
       const schemaIssues = validated.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
@@ -231,7 +246,7 @@ export function loadSettingsFromFile(opts: {
       // Preserve valid top-level sections; invalid sections fall back to defaults
       // via mergeSettings. The file is left unchanged for the user to fix.
       return {
-        validated: parsePartialSections(parsed, opts.schema),
+        validated: parsePartialSections(migration.value, opts.schema),
         raw: parsed,
         hadErrors: true,
         errorDetails: [...errorDetails, ...schemaIssues],
@@ -247,6 +262,7 @@ export function loadSettingsFromFile(opts: {
       hadErrors: recovery !== undefined,
       errorDetails: recovery ? errorDetails : undefined,
       recovery,
+      migratedSelections: migration.migrated,
     };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);

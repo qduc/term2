@@ -357,3 +357,91 @@ it('AiSdkOpenRouterProvider surfaces OpenRouter cost metadata as costUsd on comp
   expect(completion).toBeDefined();
   expect(completion.costUsd).toBe(0.00012);
 });
+
+let reasoningFixtureModel = 'z-ai/glm-5.3-flash';
+
+const reasoningFixtureResponse = {
+  id: 'mock-1',
+  model: reasoningFixtureModel,
+  created: 0,
+  choices: [
+    {
+      index: 0,
+      message: { role: 'assistant', content: 'ok' },
+      finish_reason: 'stop',
+    },
+  ],
+  usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+};
+
+function createRealSdkOpenRouterProvider(capturedBodies: any[], modelName: string = 'z-ai/glm-5.3-flash') {
+  reasoningFixtureModel = modelName;
+  return new AiSdkOpenRouterProvider({
+    defaultModel: modelName,
+    resolveConfig: () => ({
+      apiKey: 'sk-fake',
+      baseURL: 'https://openrouter.test/api/v1',
+      fetch: (async (_input: unknown, init?: { body?: string }) => {
+        capturedBodies.push(JSON.parse(init?.body ?? '{}'));
+        return new Response(JSON.stringify(reasoningFixtureResponse), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }) as typeof fetch,
+    }),
+  });
+}
+
+async function generateWithReasoning(
+  request: Record<string, unknown>,
+  modelName: string = 'z-ai/glm-5.3-flash',
+): Promise<any> {
+  const capturedBodies: any[] = [];
+  const provider = createRealSdkOpenRouterProvider(capturedBodies, modelName);
+  const model = provider.getStreamedModel(modelName);
+  const response = await model.getResponse!({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    tools: [],
+    maxTokens: 100,
+    ...request,
+  } as any);
+  expect(capturedBodies.length).toBe(1);
+  expect(capturedBodies[0]).toMatchObject({
+    model: modelName,
+    max_tokens: 100,
+  });
+  return capturedBodies[0];
+}
+
+it.each([
+  ['low', { effort: 'low' }],
+  ['high', { effort: 'high' }],
+])('AiSdkOpenRouterProvider forwards native reasoning effort %s to OpenRouter', async (_name, reasoning) => {
+  const body = await generateWithReasoning({ reasoning });
+  expect(body.reasoning).toEqual(reasoning);
+});
+
+it('AiSdkOpenRouterProvider forwards native reasoning effort none on an optional-reasoning model to OpenRouter', async () => {
+  const body = await generateWithReasoning({ reasoning: { effort: 'none' } }, 'openai/gpt-5.1');
+  expect(body.reasoning).toEqual({ effort: 'none' });
+});
+
+it('AiSdkOpenRouterProvider omits the reasoning control for native default effort', async () => {
+  const body = await generateWithReasoning({ reasoning: { effort: 'default' } });
+  expect(body.reasoning).toBeUndefined();
+});
+
+it('AiSdkOpenRouterProvider gives explicit nested SDK providerOptions.openrouter.reasoning precedence over native reasoning', async () => {
+  const body = await generateWithReasoning({
+    reasoning: { effort: 'low' },
+    providerOptions: { providerOptions: { openrouter: { reasoning: { effort: 'high' } } } },
+  });
+  expect(body.reasoning).toEqual({ effort: 'high' });
+});
+
+it('AiSdkOpenRouterProvider gives explicit top-level legacy providerOptions.reasoning precedence over native reasoning', async () => {
+  const body = await generateWithReasoning({
+    reasoning: { effort: 'low' },
+    providerOptions: { reasoning: { effort: 'high' } },
+  });
+  expect(body.reasoning).toEqual({ effort: 'high' });
+});

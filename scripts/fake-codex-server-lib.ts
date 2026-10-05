@@ -4,6 +4,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 export type FakeCodexScenario =
   | 'success'
   | 'close-before-first-frame'
+  | 'close-chained-before-first-frame'
   | 'stall-before-first-frame'
   | 'stall-mid-stream'
   | 'close-mid-stream'
@@ -40,7 +41,10 @@ export async function startFakeCodexServer(options: {
     socket.on('message', (raw) => {
       const request = JSON.parse(raw.toString()) as Record<string, unknown>;
       receivedRequests.push(request);
-      if (options.scenario === 'close-before-first-frame') {
+      if (
+        options.scenario === 'close-before-first-frame' ||
+        (options.scenario === 'close-chained-before-first-frame' && request.previous_response_id)
+      ) {
         socket.terminate();
         return;
       }
@@ -52,14 +56,19 @@ export async function startFakeCodexServer(options: {
         });
         return;
       }
-      if (options.scenario === 'previous-response-not-found' && receivedRequests.length === 1) {
+      if (options.scenario === 'previous-response-not-found' && request.previous_response_id) {
         send(socket, {
           type: 'error',
           error: { code: 'previous_response_not_found', message: 'Injected stale response id' },
         });
         return;
       }
-      sendResponse(socket, options.scenario === 'success' || options.scenario === 'previous-response-not-found');
+      sendResponse(
+        socket,
+        options.scenario === 'success' ||
+          options.scenario === 'previous-response-not-found' ||
+          options.scenario === 'close-chained-before-first-frame',
+      );
       if (options.scenario === 'close-mid-stream') socket.terminate();
     });
   });

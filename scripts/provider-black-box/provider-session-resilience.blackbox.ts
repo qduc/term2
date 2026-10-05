@@ -575,7 +575,7 @@ describe('Codex WebSocket corrupt-history recovery', () => {
   ] as const;
 
   for (const { model, label } of testCases) {
-    it(`codex-websocket.orphan-chain-recovery (${label}) sends a paired full-history request after a stale chain 400`, async () => {
+    it(`codex-websocket.orphan-chain-recovery (${label}) sends paired full history after a stale resume chain`, async () => {
       const route = { ...baseRoute, model };
       const server = await startResilienceWebSocketServer({
         family: 'codex-responses',
@@ -992,6 +992,9 @@ async function startResilienceWebSocketServer(options: {
       }
       for (const frame of frames) await sendWs(socket, frame);
       if (options.scenario === 'abnormal-close') socket.terminate();
+      // The recovery scenario verifies a subsequent chained turn on this
+      // same physical lease; replacement-socket recovery has separate coverage.
+      else if (options.scenario === 'orphan-chain-recovery') handled = false;
       else socket.close(1000, 'fixture complete');
     });
     socket.on('close', () => clients.delete(socket));

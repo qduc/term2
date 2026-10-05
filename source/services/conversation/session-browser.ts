@@ -2,6 +2,7 @@ import {
   browseConversationsForProject,
   getConversationSourceVersionReadOnly,
   getConversationsDirectoryVersionReadOnly,
+  getConversationsDir,
   isConversationLocked,
   loadConversationForProjectReadOnly,
   loadConversationUnscopedForIndex,
@@ -18,6 +19,8 @@ import {
 import { matchCenteredSnippet } from '../../utils/output/text-snippet.js';
 import { createHash } from 'node:crypto';
 import { SessionIndexService } from './session-index/session-index-service.js';
+import { SessionIndexWorkerClient } from './session-index/session-index-worker-client.js';
+import type { CanonicalBrowseRequest } from './session-index/session-index-worker.js';
 import { SNIPPET_CHARS, scoreText, termsFor } from './session-search-helpers.js';
 // Matches the default tool-result byte cap (output trim maxCharacters); a larger
 // budget would only produce a bounded-failure envelope for non-scripted calls.
@@ -95,6 +98,8 @@ export type SessionReadInput = {
 export interface SessionBrowserOptions {
   backend?: 'canonical' | 'indexed';
   indexService?: SessionIndexService;
+  /** Separate opaque handles for the canonical fallback worker. */
+  cursorPrefix?: 'c' | 'f';
 }
 
 export class SessionBrowser {
@@ -105,14 +110,21 @@ export class SessionBrowser {
   readonly #backend: 'canonical' | 'indexed';
   readonly #indexService?: SessionIndexService;
   #lazyIndexService: SessionIndexService | null = null;
+  #canonicalWorker: SessionIndexWorkerClient | null = null;
+  readonly #cursorPrefix: 'c' | 'f';
 
   constructor(private readonly getContext: () => SessionBrowserContext, options?: SessionBrowserOptions) {
     this.#backend =
       options?.backend ?? (process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'canonical' ? 'canonical' : 'indexed');
     this.#indexService = options?.indexService;
+    this.#cursorPrefix = options?.cursorPrefix ?? 'c';
   }
 
   async close(): Promise<void> {
+    if (this.#canonicalWorker) {
+      await this.#canonicalWorker.close();
+      this.#canonicalWorker = null;
+    }
     if (this.#indexService) {
       await this.#indexService.close();
     }
@@ -128,6 +140,11 @@ export class SessionBrowser {
       this.#lazyIndexService = new SessionIndexService();
     }
     return this.#lazyIndexService;
+  }
+
+  async #browseCanonicalInWorker(request: CanonicalBrowseRequest): Promise<unknown> {
+    this.#canonicalWorker ??= new SessionIndexWorkerClient();
+    return this.#canonicalWorker.browseCanonical(getConversationsDir(), this.getContext(), request);
   }
 
   list(input: SessionListInput): unknown | Promise<unknown> {
@@ -203,7 +220,7 @@ export class SessionBrowser {
         input.maxChars,
       );
     }
-    return this.#listCanonical(input);
+    return this.#browseCanonicalInWorker({ operation: 'list', input });
   }
 
   search(input: SessionSearchInput): unknown | Promise<unknown> {
@@ -277,7 +294,7 @@ export class SessionBrowser {
         input.maxChars,
       );
     }
-    return this.#searchCanonical(input);
+    return this.#browseCanonicalInWorker({ operation: 'search', input });
   }
 
   #pageSearchResult(
@@ -443,6 +460,9 @@ export class SessionBrowser {
   }
 
   async #readIndexed(input: SessionReadInput): Promise<unknown> {
+    if (input.cursor?.startsWith('f')) {
+      return this.#browseCanonicalInWorker({ operation: 'read', input });
+    }
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
     const anchorError = readAnchorError(input, budget);
@@ -464,7 +484,7 @@ export class SessionBrowser {
     const service = this.#getIndexService();
     const resolution = await service.resolveReference(input.id, context);
     if (!resolution) {
-      return this.#readCanonical(input);
+      return this.#browseCanonicalInWorker({ operation: 'read', input });
     }
 
     if (resolution.kind === 'ambiguous') {
@@ -496,7 +516,7 @@ export class SessionBrowser {
     const resolvedId = resolution.id;
     const sessionResult = await service.readSession(resolvedId, context);
     if (!sessionResult) {
-      return this.#readCanonical(input);
+      return this.#browseCanonicalInWorker({ operation: 'read', input });
     }
 
     if (sessionResult.kind === 'not_found') {
@@ -688,7 +708,7 @@ export class SessionBrowser {
   }
 
   #snapshotForContinuation(cursorHandle: string, inputId: string, context: SessionBrowserContext) {
-    if (!/^c[0-9a-z]+$/.test(cursorHandle)) return null;
+    if (!/^[cf][0-9a-z]+$/.test(cursorHandle)) return null;
     const cursor = this.#cursorStates.get(cursorHandle);
     const snapshot = this.#readSnapshot;
     if (!cursor || !snapshot || cursor.sessionId !== snapshot.conversation.id) return null;
@@ -715,7 +735,7 @@ export class SessionBrowser {
     const stateKey = JSON.stringify(state);
     const existing = this.#cursorHandles.get(stateKey);
     if (existing) return existing;
-    const handle = `c${this.#nextCursorId.toString(36)}`;
+    const handle = `${this.#cursorPrefix}${this.#nextCursorId.toString(36)}`;
     this.#nextCursorId++;
     this.#cursorStates.set(handle, state);
     this.#cursorHandles.set(stateKey, handle);
@@ -723,7 +743,7 @@ export class SessionBrowser {
   }
 
   #decodeCursor(cursor: string, id: string): CursorState | null {
-    if (!/^c[0-9a-z]+$/.test(cursor)) return null;
+    if (!/^[cf][0-9a-z]+$/.test(cursor)) return null;
     const state = this.#cursorStates.get(cursor);
     return state?.sessionId === id ? state : null;
   }

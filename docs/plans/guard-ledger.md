@@ -40,6 +40,35 @@ dispatch. Shell cancellation was treated as worker exit without PID/group proof.
 The new admission and lifecycle tests exercise those public boundaries; source
 history, completed tool effects and uncertain external outcomes remain retained.
 
+## Codex socket-affinity admission (2026-10-05)
+
+Harm prevented: sending a Codex `store:false` anchor to a replacement physical
+WebSocket, or recovering by dropping the anchor from an incomplete delta.
+Scope: Codex WebSocket streaming and transport acquisition callback. Class:
+admission guard. Enforcement: `CodexResponsesWSModel.#onConnectionAcquired` and
+`CodexResponsesTransport.fetchResponse`, before stream setup/frame dispatch.
+Recovery: existing provider complete-history fallback or application bounded
+chain recovery for caller-supplied deltas and tool continuations.
+
+Signal: acquired lease `connectionId`/`reused`, compared with the connection
+remembered for the logical history key. This is direct transport evidence,
+not age, repetition, output size, or timeout. Legitimate socket replacement is
+expected; only the stale anchor is rejected. Retained sockets keep chaining.
+Completed tool pairs remain in durable history. The rejected request is unsent;
+the acquired lease remains reusable for self-contained recovery.
+
+No new setting/default/clamping/migration; existing retry configuration remains
+authoritative, including zero retries. Diagnostics retain logical history key,
+physical connection ID and reuse state; rejection has `previous_response_not_found`
+code. State reset clears the logical connection binding. Rollback is confined to
+acquisition admission and lease release; no socket-age policy change.
+
+Disposition: 49 recorded cross-connection invalid anchors repaired by predispatch
+admission. [Repair evidence](../research/session-search-and-codex-reconnect-repair.md)
+contains full-history, caller-delta, retained-socket and completed-tool workflows.
+The session-worker deadline is unchanged and does not cancel running CPU work;
+the UI-thread fallback defect is repaired through worker ownership.
+
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
 `87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with

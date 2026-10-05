@@ -230,11 +230,19 @@ export class CodexResponsesTransport {
             : request.codex?.promptCacheKey;
         const acquisition = this.#sessions.acquireWithMetadata(headers, { affinityKey });
         const socket = acquisition.socket;
-        requestContext?.onConnectionAcquired?.({
-          connectionId: acquisition.connectionId,
-          reused: acquisition.reused,
-          ...(affinityKey ? { affinityKey } : {}),
-        });
+        recordWebSocketDispatch(request, 'unsent');
+        try {
+          requestContext?.onConnectionAcquired?.({
+            connectionId: acquisition.connectionId,
+            reused: acquisition.reused,
+            ...(affinityKey ? { affinityKey } : {}),
+          });
+        } catch (error) {
+          // Admission failed before stream listeners or response.create were
+          // installed. Release the lease for the self-contained recovery.
+          this.#sessions.release(socket, { keepAlive: true });
+          throw error;
+        }
 
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
@@ -243,7 +251,6 @@ export class CodexResponsesTransport {
         // connecting or closing socket only queues, which proves nothing —
         // record what the socket actually was, and `unknown` when it cannot be
         // observed at all.
-        recordWebSocketDispatch(request, 'unsent');
         const dispatchRequestEvent = () => {
           const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
@@ -1215,6 +1222,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #lastRejectedChainFingerprint?: string;
   #lastLogicalRequestByKey = new Map<string, { input: unknown[]; output: unknown[]; responseId: string }>();
   #transportDiagnosticsByRequest = new WeakMap<object, ProviderTransportDiagnostics>();
+  #connectionByHistoryKey = new Map<string, string>();
 
   private readonly providerTraffic: IProviderTraffic;
   private readonly diagnosticLogger?: DiagnosticLogger;
@@ -1273,6 +1281,29 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   #transportDiagnostics(request: StreamedModelTurnRequest): ProviderTransportDiagnostics | undefined {
     return this.#transportDiagnosticsByRequest.get(request as object);
+  }
+
+  #onConnectionAcquired(
+    request: StreamedModelTurnRequest,
+    requestData: Record<string, unknown>,
+    diagnostics: ProviderTransportDiagnostics,
+    details: { connectionId: string; reused: boolean },
+  ): void {
+    this.#transportDiagnosticsByRequest.set(request, { ...diagnostics, ...details });
+    const key = this.#getCodexServerHistoryKey();
+    const previousConnection = key ? this.#connectionByHistoryKey.get(key) : undefined;
+    if (
+      requestData.previous_response_id &&
+      (!details.reused || (previousConnection && previousConnection !== details.connectionId))
+    ) {
+      // Codex's store:false anchors live on the physical socket. Never send
+      // a stale anchor (or drop it from a caller delta). The existing chain
+      // recovery owner supplies a complete transcript before replaying.
+      throw Object.assign(new Error('Previous response belongs to a different WebSocket connection.'), {
+        code: 'previous_response_not_found',
+      });
+    }
+    if (key) this.#connectionByHistoryKey.set(key, details.connectionId);
   }
 
   override async compactHistory(request: {
@@ -1704,6 +1735,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.codexPreviousResponseIds.delete(key);
     this.codexTurnIdsBySession.delete(key);
     this.#lastLogicalRequestByKey.delete(key);
+    this.#connectionByHistoryKey.delete(key);
     if (responseId) {
       this.codexConsumedToolResultCallIdsByResponseId.delete(responseId);
       this.codexFunctionCallIdsByResponseId.delete(responseId);
@@ -1719,6 +1751,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.codexTurnIdsBySession.clear();
     this.chainedWireState.clear();
     this.#lastLogicalRequestByKey.clear();
+    this.#connectionByHistoryKey.clear();
     this.#lastSentChainFingerprint = undefined;
   }
 
@@ -2117,11 +2150,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             watchdog.wrap(
               await (super.fetchResponse(updatedRequest, true, {
                 onConnectionAcquired: (details) =>
-                  this.#transportDiagnosticsByRequest.set(updatedRequest as object, {
-                    ...transportDiagnostics,
-                    connectionId: details.connectionId,
-                    reused: details.reused,
-                  }),
+                  this.#onConnectionAcquired(updatedRequest, requestData, transportDiagnostics, details),
               }) as unknown as Promise<AsyncIterable<any>>),
             ),
           this.diagnosticLogger,
@@ -2164,11 +2193,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     try {
       const response = (await super.fetchResponse(updatedRequest, stream, {
         onConnectionAcquired: (details) =>
-          this.#transportDiagnosticsByRequest.set(updatedRequest as object, {
-            ...transportDiagnostics,
-            connectionId: details.connectionId,
-            reused: details.reused,
-          }),
+          this.#onConnectionAcquired(updatedRequest, requestData, transportDiagnostics, details),
       })) as unknown as AsyncIterable<any>;
       const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
       return this.#withTrafficLogging(

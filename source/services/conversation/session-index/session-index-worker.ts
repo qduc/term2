@@ -1,6 +1,18 @@
 import { parentPort } from 'node:worker_threads';
 import { SessionIndexDatabase } from './session-index-database.js';
 import { listConversationsInDirectory, type ConversationListEntry } from '../conversation-persistence.js';
+import {
+  SessionBrowser,
+  type SessionBrowserContext,
+  type SessionListInput,
+  type SessionSearchInput,
+  type SessionReadInput,
+} from '../session-browser.js';
+
+export type CanonicalBrowseRequest =
+  | { operation: 'list'; input: SessionListInput }
+  | { operation: 'search'; input: SessionSearchInput }
+  | { operation: 'read'; input: SessionReadInput };
 
 export type WorkerRequestPayload =
   | { type: 'init'; dbPath: string; sourceDirectory: string }
@@ -29,6 +41,7 @@ export type WorkerRequestPayload =
       type: 'search';
       options: { query: string; projectPath: string; sshHost?: string };
     }
+  | ({ type: 'canonical_browse'; conversationsDir: string; context: SessionBrowserContext } & CanonicalBrowseRequest)
   | { type: 'close' };
 
 export type WorkerRequest = { id: number } & WorkerRequestPayload;
@@ -41,12 +54,28 @@ export function runSessionIndexWorker(): void {
   }
 
   let db: SessionIndexDatabase | null = null;
+  let canonicalContext: SessionBrowserContext = { projectPath: '' };
+  const canonicalBrowser = new SessionBrowser(() => canonicalContext, { backend: 'canonical', cursorPrefix: 'f' });
 
   parentPort.on('message', (msg: WorkerRequest) => {
     if (!msg || typeof msg !== 'object' || typeof msg.id !== 'number') return;
 
     try {
       switch (msg.type) {
+        case 'canonical_browse': {
+          // A dedicated fallback client owns this worker. Its environment is
+          // isolated from the UI process; keep browser cursor state here too.
+          process.env['TERM2_CONVERSATIONS_DIR'] = msg.conversationsDir;
+          canonicalContext = msg.context;
+          const result =
+            msg.operation === 'list'
+              ? canonicalBrowser.list(msg.input)
+              : msg.operation === 'search'
+              ? canonicalBrowser.search(msg.input)
+              : canonicalBrowser.read(msg.input);
+          parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
+          break;
+        }
         case 'init': {
           if (db) db.close();
           db = new SessionIndexDatabase(msg.dbPath, msg.sourceDirectory);

@@ -7,11 +7,11 @@ export function matchCenteredSnippet(
   maxChars: number,
 ): { text: string; truncated: boolean } {
   const limit = Number.isFinite(maxChars) ? Math.max(0, Math.floor(maxChars)) : 0;
-  const match = earliestMatch(content, terms);
   if (content.length <= limit) return { text: content, truncated: false };
-  if (!match) return prefixSnippet(content, limit);
   if (limit === 0) return { text: '', truncated: true };
   if (limit === 1) return { text: '…', truncated: true };
+  const match = earliestMatch(content, terms);
+  if (!match) return prefixSnippet(content, limit);
 
   let hasPrefix = true;
   let hasSuffix = true;
@@ -36,60 +36,46 @@ export function matchCenteredSnippet(
 
 function earliestMatch(content: string, terms: string[]): { start: number; end: number } | undefined {
   const lowered = content.toLowerCase();
-  const boundaries = lowerCaseBoundaries(content, lowered);
+  // ASCII lowercasing preserves source offsets and needs no per-character
+  // mapping. Large tool outputs commonly take this path.
+  const ascii = /^[\x00-\x7f]*$/.test(content);
   let best: { start: number; end: number; termOrder: number } | undefined;
   for (let termOrder = 0; termOrder < terms.length; termOrder++) {
     const term = terms[termOrder]!;
     if (!term) continue;
-    let loweredStart = lowered.indexOf(term);
-    while (loweredStart !== -1) {
-      const source = sourceRangeForLoweredMatch(boundaries, loweredStart, loweredStart + term.length);
+    const loweredStart = lowered.indexOf(term);
+    if (loweredStart !== -1) {
+      // Source positions are monotonic: later occurrences of the same term
+      // cannot precede its first match, even when lowercase expands a character.
+      const source = ascii
+        ? { start: loweredStart, end: loweredStart + term.length }
+        : sourceRangeForLoweredMatch(content, loweredStart, loweredStart + term.length);
       if (source && (!best || source.start < best.start || (source.start === best.start && termOrder < best.termOrder)))
         best = { ...source, termOrder };
-      loweredStart = lowered.indexOf(term, loweredStart + 1);
     }
   }
   return best;
 }
 
-function lowerCaseBoundaries(content: string, lowered: string) {
-  const boundaries: Array<{ sourceStart: number; sourceEnd: number; lowerStart: number; lowerEnd: number }> = [];
+function sourceRangeForLoweredMatch(content: string, matchStart: number, matchEnd: number) {
   let sourceStart = 0;
   let lowerStart = 0;
-  while (sourceStart < content.length) {
+  let start: number | undefined;
+  // Default (non-locale) lowercasing preserves code-point order. Map only
+  // through this first match, without allocating a boundary for every character
+  // of a potentially megabyte-long tool result. Contextual final sigma changes
+  // the character, but not its length; İ's expansion consumes two lowered units.
+  while (sourceStart < content.length && lowerStart < matchEnd) {
     const sourceEnd =
       sourceStart +
       (isHighSurrogate(content.charCodeAt(sourceStart)) && isLowSurrogate(content.charCodeAt(sourceStart + 1)) ? 2 : 1);
     const lowerEnd = lowerStart + content.slice(sourceStart, sourceEnd).toLowerCase().length;
-    boundaries.push({ sourceStart, sourceEnd, lowerStart, lowerEnd });
+    if (start === undefined && lowerEnd > matchStart) start = sourceStart;
+    if (lowerEnd >= matchEnd) return start === undefined ? undefined : { start, end: sourceEnd };
     sourceStart = sourceEnd;
     lowerStart = lowerEnd;
   }
-  // Most strings map per code point. Context-sensitive lowercasing is rare,
-  // but prefix lengths keep source positions correct when it does not.
-  if (lowerStart === lowered.length) return boundaries;
-  return boundaries.map((boundary) => ({
-    ...boundary,
-    lowerStart: content.slice(0, boundary.sourceStart).toLowerCase().length,
-    lowerEnd: content.slice(0, boundary.sourceEnd).toLowerCase().length,
-  }));
-}
-
-function sourceRangeForLoweredMatch(
-  boundaries: Array<{ sourceStart: number; sourceEnd: number; lowerStart: number; lowerEnd: number }>,
-  lowerStart: number,
-  lowerEnd: number,
-) {
-  const first = boundaries.find((boundary) => boundary.lowerEnd > lowerStart);
-  let last: (typeof boundaries)[number] | undefined;
-  for (let index = boundaries.length - 1; index >= 0; index--) {
-    const boundary = boundaries[index]!;
-    if (boundary.lowerStart < lowerEnd) {
-      last = boundary;
-      break;
-    }
-  }
-  return first && last ? { start: first.sourceStart, end: last.sourceEnd } : undefined;
+  return undefined;
 }
 
 function safeRange(content: string, start: number, end: number) {

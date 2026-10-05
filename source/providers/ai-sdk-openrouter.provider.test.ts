@@ -358,11 +358,8 @@ it('AiSdkOpenRouterProvider surfaces OpenRouter cost metadata as costUsd on comp
   expect(completion.costUsd).toBe(0.00012);
 });
 
-let reasoningFixtureModel = 'z-ai/glm-5.3-flash';
-
 const reasoningFixtureResponse = {
   id: 'mock-1',
-  model: reasoningFixtureModel,
   created: 0,
   choices: [
     {
@@ -375,7 +372,6 @@ const reasoningFixtureResponse = {
 };
 
 function createRealSdkOpenRouterProvider(capturedBodies: any[], modelName: string = 'z-ai/glm-5.3-flash') {
-  reasoningFixtureModel = modelName;
   return new AiSdkOpenRouterProvider({
     defaultModel: modelName,
     resolveConfig: () => ({
@@ -383,7 +379,7 @@ function createRealSdkOpenRouterProvider(capturedBodies: any[], modelName: strin
       baseURL: 'https://openrouter.test/api/v1',
       fetch: (async (_input: unknown, init?: { body?: string }) => {
         capturedBodies.push(JSON.parse(init?.body ?? '{}'));
-        return new Response(JSON.stringify(reasoningFixtureResponse), {
+        return new Response(JSON.stringify({ ...reasoningFixtureResponse, model: modelName }), {
           headers: { 'content-type': 'application/json' },
         });
       }) as typeof fetch,
@@ -398,7 +394,7 @@ async function generateWithReasoning(
   const capturedBodies: any[] = [];
   const provider = createRealSdkOpenRouterProvider(capturedBodies, modelName);
   const model = provider.getStreamedModel(modelName);
-  const response = await model.getResponse!({
+  await model.getResponse!({
     input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
     tools: [],
     maxTokens: 100,
@@ -445,3 +441,72 @@ it('AiSdkOpenRouterProvider gives explicit top-level legacy providerOptions.reas
   });
   expect(body.reasoning).toEqual({ effort: 'high' });
 });
+
+it('AiSdkOpenRouterProvider gives explicit direct SDK providerOptions.openrouter precedence over native reasoning and preserves other openrouter fields', async () => {
+  const capturedBodies: any[] = [];
+  const provider = createRealSdkOpenRouterProvider(capturedBodies);
+  const model = provider.getStreamedModel('z-ai/glm-5.3-flash');
+  await model.getResponse!({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    tools: [],
+    maxTokens: 100,
+    reasoning: { effort: 'low' },
+    providerOptions: {
+      openrouter: { reasoning: { effort: 'high' }, transforms: ['middle-out'] },
+    },
+  } as any);
+  expect(capturedBodies.length).toBe(1);
+  expect(capturedBodies[0].reasoning).toEqual({ effort: 'high' });
+  expect(capturedBodies[0].transforms).toEqual(['middle-out']);
+});
+
+it.each([
+  ['none', { effort: 'none' }],
+  ['medium', { effort: 'medium' }],
+])(
+  'AiSdkOpenRouterProvider surfaces the provider rejection for unsupported effort %s on a mandatory model',
+  async (_name, reasoning) => {
+    const capturedBodies: any[] = [];
+    const provider = new AiSdkOpenRouterProvider({
+      defaultModel: 'z-ai/glm-5.3-flash',
+      resolveConfig: () => ({
+        apiKey: 'sk-fake',
+        baseURL: 'https://openrouter.test/api/v1',
+        fetch: (async (_input: unknown, init?: { body?: string }) => {
+          const body = JSON.parse(init?.body ?? '{}') as { reasoning?: { effort?: string } };
+          capturedBodies.push(body);
+          if (body.reasoning?.effort === reasoning.effort) {
+            return new Response(
+              JSON.stringify({
+                error: {
+                  message: 'Unsupported reasoning effort for mandatory model; supported: max, high, low',
+                  code: 400,
+                },
+              }),
+              { status: 400, headers: { 'content-type': 'application/json' } },
+            );
+          }
+          return new Response(JSON.stringify({ ...reasoningFixtureResponse, model: 'z-ai/glm-5.3-flash' }), {
+            headers: { 'content-type': 'application/json' },
+          });
+        }) as typeof fetch,
+      }),
+    });
+    const model = provider.getStreamedModel('z-ai/glm-5.3-flash');
+    let error: any;
+    try {
+      await model.getResponse!({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        tools: [],
+        maxTokens: 100,
+        reasoning,
+      } as any);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(String(error.message ?? error)).toContain('supported: max, high, low');
+    expect(capturedBodies.length).toBe(1);
+    expect(capturedBodies[0].reasoning).toEqual(reasoning);
+  },
+);

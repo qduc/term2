@@ -69,10 +69,11 @@ it.sequential('auditConversation: a real log that stops after tool dispatch read
   expect(audit!.outcome).toBe('interrupted_mid_tool');
   expect(audit!.unfinishedToolCalls).toEqual([{ callId: 'call-1', toolName: 'shell' }]);
 
-  // The same log resumed marks that call aborted, so the two agree.
+  // The same log resumed settles that call as unobserved (a crash after
+  // dispatch cannot prove the effect never landed), so the two agree.
   const restored = persistenceModule.loadConversation(id);
-  const aborted = restored!.toolLedger.filter((e) => e.status === 'aborted').map((e) => e.callId);
-  expect(aborted).toEqual(['call-1']);
+  const settled = restored!.toolLedger.filter((e) => e.status === 'unknown').map((e) => e.callId);
+  expect(settled).toEqual(['call-1']);
 });
 
 it.sequential('auditConversation: a real log parked on an approval reads as awaiting approval', () => {

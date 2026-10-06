@@ -27,6 +27,12 @@ import {
 } from './conversation-turn-items.js';
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
 import { projectProviderHistory } from './conversation-state-projector.js';
+import {
+  RESTART_UNOBSERVED_TOOL_RESULT,
+  callIdOf,
+  isToolCallHistoryItem,
+  isToolResultHistoryItem,
+} from '../tool-execution-ledger.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
 import {
@@ -165,6 +171,8 @@ const createEmptyTurnJournal = (ts: string, userTurnIndex: number, turnId?: stri
 });
 
 interface ReplayState {
+  /** Timestamp of the last applied log envelope; used for deterministic settlement. */
+  lastEventTs?: string;
   id: string;
   createdAt: string;
   projectPath?: string;
@@ -1126,6 +1134,68 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
   }
 }
 
+/**
+ * Settle interrupted tool entries so the resumed provider history carries a
+ * call/result pair whose result preserves outcome uncertainty instead of a
+ * silent blind-repeat hazard. Without a result the lone `function_call` is
+ * dropped by dropUnpairedFunctionCalls and the resumed model cannot see the
+ * call happened at all.
+ *
+ * Replay cannot observe the live process, so absence of a `tool_result`
+ * never proves nonexecution: a crash can land after the tool body ran but
+ * before any terminal receipt was persisted. Entries are therefore settled as
+ * `unknown` (ToolExecutionStatus) with RESTART_UNOBSERVED_TOOL_RESULT,
+ * matching the live path's dispatched-but-unobserved semantics (Contract 02,
+ * C2.5). `unknown` also survives the journal rebuild when no
+ * `tool_started` marker exists (legacy logs), so the full reachable class
+ * is covered.
+ *
+ * A `tool_result` journal item or a terminal recorded result is preserved
+ * as-is; only genuinely open entries are settled.
+ */
+const settleInterruptedToolEntries = (state: ReplayState): void => {
+  // Deterministic settlement stamp: the last durable evidence timestamp
+  // (never wall-clock replay time, which would make identical log input
+  // produce different restored state across replays).
+  const settledAt = state.lastEventTs ?? new Date(0).toISOString();
+  for (const entry of state.toolLedger) {
+    if (entry.status !== 'started' && entry.status !== 'approval_required') {
+      continue;
+    }
+    entry.status = 'unknown';
+    entry.failureReason = 'Session ended unexpectedly';
+    entry.completedAt = settledAt;
+    const previousHistoryItems = entry.historyItems ?? [];
+    const hasCallItem = previousHistoryItems.some(
+      (item) => isToolCallHistoryItem(item) && callIdOf(item) === entry.callId,
+    );
+    // A bare tool_started marker (legacy logs) carries no provider item: the
+    // synthetic call must be rebuilt so the settled pair is call-then-output.
+    const withCall = hasCallItem
+      ? previousHistoryItems
+      : [
+          ...previousHistoryItems,
+          {
+            type: 'function_call',
+            callId: entry.callId,
+            name: entry.toolName,
+            arguments: typeof entry.arguments === 'string' ? entry.arguments : JSON.stringify(entry.arguments ?? {}),
+          },
+        ];
+    const alreadyHasResult = withCall.some((item) => isToolResultHistoryItem(item) && callIdOf(item) === entry.callId);
+    entry.historyItems = alreadyHasResult
+      ? withCall
+      : [
+          ...withCall,
+          {
+            type: 'function_call_output',
+            callId: entry.callId,
+            output: RESTART_UNOBSERVED_TOOL_RESULT,
+          },
+        ];
+  }
+};
+
 const journalBackedToolCallIds = (state: ReplayState): Set<string> => {
   const callIds = new Set<string>();
   for (const journal of state.pendingJournals.values()) {
@@ -1219,12 +1289,17 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
           : typeof parsedArgs === 'string'
           ? parsedArgs
           : '';
+      // A journal-backed call with no following tool_result belongs to a turn
+      // that was interrupted: rendering it as "running" after a restart would
+      // falsely imply live work. It settles as unknown (see
+      // settleInterruptedToolEntries) with an unobserved outcome.
       messages.push({
         id: `command-${item.callId}`,
         sender: 'command',
-        status: 'running',
+        status: 'unknown',
         command: command || item.toolName,
-        output: '',
+        output: RESTART_UNOBSERVED_TOOL_RESULT,
+        failureReason: 'Session ended unexpectedly',
         toolName: item.toolName,
         toolArgs: parsedArgs,
         callId: item.callId,
@@ -1236,6 +1311,10 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
       if (existing) {
         existing.status = item.status;
         existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
+        // A recorded terminal result is authoritative: clear the restart
+        // settlement residue ('unknown' status + failureReason) this builder
+        // seeds before the matching tool_result arrives.
+        delete existing.failureReason;
         if (item.status === 'failed') {
           existing.success = false;
         } else if (item.status === 'completed') {
@@ -1295,6 +1374,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     pendingCommandMessages: [],
     backgroundShellJobs: new Map(),
     activeTurnStartIndex: 0,
+    lastEventTs: undefined,
   };
 
   for (const envelope of envelopes) {
@@ -1324,6 +1404,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
       allCostRecords.push(...envelope.event.costRecords);
     }
     applyEvent(state, envelope.event, envelope.ts);
+    state.lastEventTs = envelope.ts;
   }
 
   // Reconstruct transcript / ledger for any turn that did not produce a
@@ -1331,8 +1412,12 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   // and crash-after-partial-text cases called out in the plan.
   applyInterruptedTurnJournals(state);
 
-  // Mid-turn crash handling
+  // Mid-turn crash handling. Settling is class-wide, not journal-gated: the
+  // same blind-repeat hazard applies whether the interrupted call's evidence
+  // came from a provider-backed journal item or from a bare tool_started
+  // marker in a legacy log.
   const journalBackedCallIds = journalBackedToolCallIds(state);
+  settleInterruptedToolEntries(state);
   const legacyInFlightCalls = [...state.inFlightToolCalls.values()].filter(
     (tc) => !journalBackedCallIds.has(tc.callId),
   );

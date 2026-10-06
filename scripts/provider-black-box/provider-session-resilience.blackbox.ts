@@ -336,7 +336,7 @@ describe('application-owned provider restart continuity', () => {
     expect(inputText(chainedBody?.input)).not.toContain('first persisted prompt');
   });
 
-  it('repairs an interrupted tool-bearing conversation without an orphan or stale response id', async () => {
+  it('settles an interrupted approval-pending tool into the resumed history without an orphan or stale response id', async () => {
     const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'interrupted-tool' });
     activeHttpServers.push(server);
     const route = HTTP_ROUTES[0]!.route;
@@ -369,10 +369,15 @@ describe('application-owned provider restart continuity', () => {
     const resumedBody = asRecord(server.requests[1]?.body);
     expect(resumedBody?.previous_response_id).toBeUndefined();
     const resumedInput = inputItems(resumedBody?.input);
-    expect(resumedInput.some((item) => item.type === 'function_call' && callIdOf(item) === TOOL_CALL_ID)).toBe(false);
-    expect(resumedInput.some((item) => item.type === 'function_call_output' && callIdOf(item) === TOOL_CALL_ID)).toBe(
-      false,
-    );
+    // The interrupted call is settled at replay: the resumed provider history
+    // carries the call plus a synthetic unobserved-outcome result, so the
+    // model never silently repeats an operation whose effect it cannot see.
+    expect(resumedInput.some((item) => item.type === 'function_call' && callIdOf(item) === TOOL_CALL_ID)).toBe(true);
+    const settledOutput = resumedInput.find(
+      (item) => item.type === 'function_call_output' && callIdOf(item) === TOOL_CALL_ID,
+    ) as { output?: unknown } | undefined;
+    expect(settledOutput).toBeTruthy();
+    expect(String(settledOutput?.output)).toContain('Outcome unobserved');
     expect(inputText(resumedBody?.input)).toContain('interrupt while tool approval is pending');
     expect(inputText(resumedBody?.input)).not.toContain('resp_stale_interrupted');
     expect(inputText(resumedBody?.input)).toContain('repair interrupted tool history');

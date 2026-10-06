@@ -1,5 +1,12 @@
 # Term2 Guard Ledger and Remediation Plan
 
+Opt-in workflow evolution decision admission is documented in
+[workflow-evolution.md](../workflow-evolution.md), with enforcement in
+`applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the
+incumbent and all evidence when frozen comparison coverage is insufficient or
+uncertain, and rejects observed regressions. Its sample floors do not claim
+statistical confidence; it changes no execution, approval or recovery budget.
+
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
 `87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with

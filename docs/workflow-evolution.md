@@ -34,7 +34,23 @@ history. Repeating the command on that ledger refuses before overwriting work.
 
 This verifies control flow and the deterministic fixture transformation. It is
 not evidence of model-quality improvement, autonomous weight training, or the
-live Reviewer integration. No provider or paid model call runs in this example.
+runtime Reviewer integration. No provider or paid model call runs in this example.
+
+`runtime.integration.test.ts` separately exercises production
+`ApplicationRunLoop`, `activate_skill`, `run_subagent`, the Reviewer role and
+its tool policy, and nested dispatch with scripted provider responses. A
+test-only observer captures actual activation results; the Reviewer calls its
+real `run_explorer` tool with a deterministic artifact-reader substitute at
+the explorer boundary. Its fresh context excludes parent-only text. Retained
+activation, artifact and reviewer evidence is byte-hash checked. A test-only
+local installer pauses at the real host approval gate: a rejected call changes
+nothing; an approved call copies the candidate and records the runtime approval
+receipt. A next activation before rediscovery still returns the cached incumbent
+and is refused as adoption evidence. Existing `SkillsService.discoverSkills`
+then reloads the local fixture, and subsequent real activation supplies the
+accepted identity. This verifies runtime integration, not model improvement or
+live provider/explorer behavior. Neither the observer nor installer is a new
+production tool or background hook; operators still own capture and reload.
 
 ## Use it from Term2
 
@@ -141,10 +157,13 @@ Run the focused unit and filesystem integration checks:
 ```sh
 NODE_ENV=test pnpm exec vitest run source/services/workflow-evolution/experiment.test.ts
 NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/workflow-evolution/ledger.integration.test.ts
+NODE_ENV=test pnpm exec vitest run --config vitest.integration.config.ts source/services/workflow-evolution/runtime.integration.test.ts
 ```
 
 PR correctness review examines this implementation and its contracts. Workflow
 efficacy review examines the independently observed task results under frozen
 criteria. A green code test or a successful PR review cannot substitute for the
 latter. Live model efficacy and live Reviewer operation remain unverified by
-the deterministic slice.
+the deterministic slice. Runtime Reviewer dispatch is tested with mocked
+provider and explorer boundaries as described above; live provider efficacy
+and actual explorer execution remain unverified by that integration check.

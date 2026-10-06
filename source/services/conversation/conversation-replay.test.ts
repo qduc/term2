@@ -463,7 +463,7 @@ it('semantic projection derives parallel complete and partial tool ledger entrie
   if (result.status !== 'projected') return;
   expect(result.state.toolLedger).toMatchObject([
     { callId: 'c1', status: 'completed', output: 'a' },
-    { callId: 'c2', status: 'started' },
+    { callId: 'c2', status: 'unknown' },
   ]);
 });
 
@@ -2166,16 +2166,40 @@ it('replayEvents: handles incomplete in-flight tool call on interruption', () =>
 
   const restored = replayEvents(envelopes);
 
-  // The in-flight tool should be marked as aborted in the toolLedger.
+  // The in-flight tool should be settled in the toolLedger. A crash after
+  // tool_started cannot prove the tool body never ran, so the settlement is
+  // unknown and carries a synthetic result to keep the call/result pair
+  // visible to the provider.
   expect(restored.toolLedger.length).toBe(1);
   expect(restored.toolLedger[0].callId).toBe('call-1');
-  expect(restored.toolLedger[0].status).toBe('aborted');
+  expect(restored.toolLedger[0].status).toBe('unknown');
   expect(restored.toolLedger[0].failureReason).toBe('Session ended unexpectedly');
+  expect(restored.toolLedger[0].historyItems?.some((i: any) => i.type === 'function_call')).toBe(true);
+  const synthetic = restored.toolLedger[0].historyItems?.find((i: any) => i.type === 'function_call_output') as
+    | { output?: unknown }
+    | undefined;
+  expect(synthetic).toBeTruthy();
+  expect(String(synthetic?.output)).toContain('Outcome unobserved');
 
-  // History should have the user message.
-  expect(restored.history.length).toBe(1);
-  expect((restored.history[0] as any).role).toBe('user');
-  expect((restored.history[0] as any).content).toBe('run tool');
+  // History should have the user message plus the projected call/result pair.
+  expect(restored.history.some((h: any) => h.role === 'user' && h.content === 'run tool')).toBe(true);
+  expect(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1')).toBe(true);
+  expect(restored.history.some((h: any) => h.type === 'function_call_output' && h.callId === 'call-1')).toBe(true);
+});
+
+it('replayEvents: interrupted tool settlement is deterministic for identical log input', () => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run tool' } }),
+    env({ type: 'tool_started', turnId: 'turn-1', toolCallId: 'call-1', toolName: 'shell', arguments: {} }),
+  ];
+
+  const first = replayEvents(envelopes);
+  const second = replayEvents(envelopes);
+
+  expect(JSON.stringify(first.toolLedger)).toBe(JSON.stringify(second.toolLedger));
+  expect(JSON.stringify(first.history)).toBe(JSON.stringify(second.history));
+  expect(first.toolLedger[0].completedAt).toBe(second.toolLedger[0].completedAt);
 });
 
 it('replayEvents: assistant_turn maps items to SavedMessage[] in correct order with stable call IDs', () => {
@@ -2893,6 +2917,49 @@ it('replayEvents: assistant_journal_item restores history and ledger on interrup
   expect(commandMsg).toBeTruthy();
   expect(commandMsg?.status).toBe('completed');
   expect(commandMsg?.output).toBe('/repo');
+  // A recorded terminal result is user-facing truth: the replay-time
+  // settlement residue ('Session ended unexpectedly') seeded before the
+  // result arrived must be cleared, not shown alongside a success marker.
+  expect(commandMsg?.failureReason).toBeUndefined();
+});
+
+it('replayEvents: journal tool_result with failed status clears the restart settlement residue and records failure', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run it' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 2,
+      item: {
+        type: 'tool_result',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'failed',
+        output: 'exit 1',
+      },
+    }),
+  ]);
+
+  const commandMsg = restored.messages.find(
+    (m): m is CommandMessage => m.sender === 'command' && m.callId === 'call-1',
+  );
+  expect(commandMsg).toBeTruthy();
+  expect(commandMsg?.status).toBe('failed');
+  expect(commandMsg?.success).toBe(false);
+  expect(commandMsg?.output).toBe('exit 1');
+  expect(commandMsg?.failureReason).toBeUndefined();
 });
 
 it('replayEvents: interrupted journal restores an opaque OpenAI compaction item', () => {
@@ -2985,7 +3052,7 @@ it('replayEvents: interrupted journal projects native tool aliases into history 
   expect(restored.toolLedger[0].historyItems).toEqual([call, result]);
 });
 
-it('replayEvents: journal-backed pending tool call remains started after crash recovery', () => {
+it('replayEvents: journal-backed pending tool call settles as unknown with a verify-before-retry result', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
     env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
@@ -3022,10 +3089,54 @@ it('replayEvents: journal-backed pending tool call remains started after crash r
     turnId: 'turn-1',
     callId: 'call-1',
     toolName: 'shell',
-    status: 'started',
+    status: 'unknown',
+    failureReason: 'Session ended unexpectedly',
   });
-  expect(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1')).toBe(true);
+  // The pair survives into provider history: the resumed model must learn the
+  // operation was interrupted rather than silently losing the lone call.
+  const historyPair = restored.history.filter((h: any) => h.callId === 'call-1');
+  expect(historyPair.some((h: any) => h.type === 'function_call')).toBe(true);
+  const synthetic = historyPair.find((h: any) => h.type === 'function_call_output');
+  expect(synthetic).toBeTruthy();
+  expect(String(synthetic?.output)).toContain('Outcome unobserved');
+  expect(String(synthetic?.output)).toMatch(/[Vv]erify/);
   expect(restored.replayWarnings).toContain('Previous turn was interrupted.');
+});
+
+it('replayEvents: unresolved approval for a journal-backed call settles as unknown without a recorded result', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'delete it' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-approve',
+        toolName: 'shell',
+        arguments: '{"command":"rm -rf /tmp/thing"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-approve',
+          name: 'shell',
+          arguments: '{"command":"rm -rf /tmp/thing"}',
+        },
+      },
+    }),
+    env({
+      type: 'approval_required',
+      turnId: 'turn-1',
+      approval: { callId: 'call-approve', toolName: 'shell', argumentsText: '{"command":"rm -rf /tmp/thing"}' },
+    }),
+  ]);
+
+  const entry = restored.toolLedger.find((e) => e.callId === 'call-approve');
+  expect(entry).toBeTruthy();
+  expect(entry!.status).toBe('unknown');
+  const synthetic = restored.history.find((h: any) => h.type === 'function_call_output' && h.callId === 'call-approve');
+  expect(synthetic).toBeTruthy();
+  expect(String(synthetic?.output)).toMatch(/[Vv]erify/);
 });
 
 it('replayEvents: journal reasoning is preserved when tool_result already populated ledger history', () => {
@@ -3180,9 +3291,11 @@ it('replayEvents: approval_required without final turn restores open tool state'
   const restored = replayEvents(envelopes);
 
   // Approval is still pending -> the in-flight tool call must remain
-  // visible in the recovery state (toolLedger carries the started entry)
-  // instead of being marked aborted.
+  // visible in the recovery state (toolLedger carries the settled entry)
+  // instead of vanishing from provider history. A crash before resolution
+  // cannot prove the tool body never ran, so the status is unknown.
   expect(restored.toolLedger.length > 0).toBe(true);
+  expect(restored.toolLedger[0].status).toBe('unknown');
   expect(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1')).toBe(true);
   expect(restored.previousResponseId).toBe(null);
 });

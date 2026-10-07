@@ -53,8 +53,8 @@ function forwardOpenRouterSettings(options: OpenRouterCallOptions): OpenRouterCa
   const providerData = options.providerOptions;
   if (!providerData || typeof providerData !== 'object') return options;
 
-  const { providerOptions, reasoning: providerReasoning, ...extraBody } = providerData;
-  if (!Object.keys(extraBody).length && !providerReasoning) {
+  const { providerOptions, openrouter: directOpenrouter, reasoning: providerReasoning, ...extraBody } = providerData;
+  if (!Object.keys(extraBody).length && !providerReasoning && !directOpenrouter) {
     return providerOptions ? { ...options, providerOptions } : options;
   }
 
@@ -65,6 +65,7 @@ function forwardOpenRouterSettings(options: OpenRouterCallOptions): OpenRouterCa
       ...(providerOptions ?? {}),
       openrouter: {
         ...extraBody,
+        ...(directOpenrouter ?? {}),
         ...(providerOptions?.openrouter ?? {}),
         ...(providerReasoning || options.reasoning ? { reasoning: providerReasoning ?? options.reasoning } : {}),
       },

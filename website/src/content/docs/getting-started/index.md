@@ -32,4 +32,4 @@ term2 discovers `AGENTS.md` or `CLAUDE.md` in the project and parent directories
 
 ## Release or main?
 
-This site tracks `main`. npm's latest release is **0.30.0**, published September 29, 2026 (checked October 3). Main also includes changes that are not in that release. See [what's new](/term2/getting-started/whats-new/) before relying on newer features.
+This site tracks `main`. Check `term2 --version` for your installation and `npm view @qduc/term2 version` for the latest published release. See [what's new](/term2/getting-started/whats-new/) before relying on newer features.

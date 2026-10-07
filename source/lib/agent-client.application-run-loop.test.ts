@@ -2134,6 +2134,48 @@ it('does not reuse pre-checkpoint input usage to repeatedly summarize a low-grow
   }
 });
 
+it('compacts a full Codex request before model-capacity admission with a high raw trigger', async () => {
+  providers.add('codex');
+  const compactHistory = vi.fn(async () => ({
+    history: [{ type: 'message', role: 'user', content: 'retained request' }],
+  }));
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'capacity fixture',
+      fetchModels: async () => [],
+      createStreamedModel: () => ({
+        compactHistory,
+        async *stream() {
+          yield { type: 'completion' as const, responseId: 'done', output: [] };
+        },
+      }),
+    },
+    { allowOverride: true },
+  );
+  const instance = client(
+    'codex',
+    {
+      selection: { provider: 'codex', model: 'gpt-6.1-sol' },
+      agentOverride: { name: 'capacity', model: 'gpt-6.1-sol', instructions: '', tools: [] },
+    },
+    {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+      'agent.contextCompaction.compactThresholdTokens': 300000,
+    },
+  );
+  try {
+    await (
+      await instance.startStream([{ type: 'message', role: 'user', content: 'x'.repeat(855932) }])
+    ).completed;
+    expect(compactHistory).toHaveBeenCalledOnce();
+  } finally {
+    instance.dispose();
+  }
+});
+
 it('accounts for trusted instructions when triggering automatic Codex native compaction', async () => {
   providers.add('codex');
   const compactHistory = vi.fn(async () => ({

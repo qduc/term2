@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { createRetryFailedTurnSlashCommand } from './retry-failed-turn-command.js';
 
-it('inserts a divider before starting the retry', async () => {
+it('does not insert a divider into the turn being replaced', async () => {
   const retryLastFailedTurn = vi.fn(async () => true);
   const addSystemMessage = vi.fn();
   const addDividerMessage = vi.fn();
@@ -9,10 +9,7 @@ it('inserts a divider before starting the retry', async () => {
   command.action?.();
 
   await vi.waitFor(() => expect(retryLastFailedTurn).toHaveBeenCalled());
-  expect(addDividerMessage).toHaveBeenCalledTimes(1);
-  // The divider is inserted synchronously before the retry launch so it reads
-  // as "new attempt starts here" regardless of how the retry settles.
-  expect(addDividerMessage.mock.invocationCallOrder[0]).toBeLessThan(retryLastFailedTurn.mock.invocationCallOrder[0]);
+  expect(addDividerMessage).not.toHaveBeenCalled();
 });
 
 it('retries the last failed turn and reports success silently', async () => {

@@ -50,6 +50,7 @@ function mockConversationService(): ConversationService {
     undoNUserTurns: vi.fn(),
     peekLastToolOutput: vi.fn(),
     retryLastToolOutput: vi.fn(),
+    retryLastFailedTurn: vi.fn(),
     resetWithNewId: vi.fn(),
     setModel: vi.fn(),
     setReasoningEffort: vi.fn(),
@@ -690,6 +691,41 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.conversationService.abort).not.toHaveBeenCalled();
     expect(cfg.messages.setMessages).not.toHaveBeenCalled();
     expect(cfg.ui.onResetTransient).not.toHaveBeenCalled();
+  });
+
+  it('regeneration clears the old attempt before streaming and preserves earlier turns', async () => {
+    const cfg = makeConfig();
+    const earlier = [createMessage('u1', 'user', 'earlier'), createBotMessage('a1', 'earlier answer')];
+    const prompt = createMessage('u2', 'user', 'latest');
+    cfg.messages.appendMessages([
+      ...earlier,
+      prompt,
+      createMessage('r', 'reasoning', 'old reasoning'),
+      createMessage('tool', 'command', 'old tool'),
+      createBotMessage('a2', 'old answer'),
+      createMessage('err', 'system', 'Retry recovery budget exhausted'),
+    ]);
+    vi.mocked(cfg.conversationService.listUserTurns).mockReturnValue([{ index: 2, text: 'latest', imageCount: 0 }]);
+    vi.mocked(cfg.conversationService.retryLastFailedTurn).mockImplementation(async () => {
+      expect(cfg.messages.getMessages()).toEqual([...earlier, prompt]);
+      return { type: 'response', finalText: 'new answer', commandMessages: [] };
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await expect(orchestrator.retryLastFailedTurn()).resolves.toBe(true);
+    expect(cfg.ui.onResetTransient).toHaveBeenCalled();
+    expect(cfg.conversationService.clearPendingInteraction).toHaveBeenCalled();
+    expect(cfg.messages.getMessages().some((m) => 'text' in m && m.text === 'old answer')).toBe(false);
+  });
+
+  it('regeneration without a user turn leaves UI and active state alone', async () => {
+    const cfg = makeConfig();
+    cfg.messages.appendMessages([createMessage('s', 'system', 'welcome')]);
+    vi.mocked(cfg.conversationService.listUserTurns).mockReturnValue([]);
+    const orchestrator = new ConversationOrchestrator(cfg);
+    await expect(orchestrator.retryLastFailedTurn()).resolves.toBe(false);
+    expect(cfg.conversationService.abort).not.toHaveBeenCalled();
+    expect(cfg.conversationService.retryLastFailedTurn).not.toHaveBeenCalled();
+    expect(cfg.messages.getMessages()).toHaveLength(1);
   });
 
   it('returns false when retryLastToolOutput has nothing to retry', async () => {

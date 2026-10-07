@@ -764,11 +764,6 @@ it('retryLastToolOutput trims trailing assistant text and replays full history',
   expect(startCalls[0].options).toEqual(expect.objectContaining({ previousResponseId: null, sessionId: 'default' }));
 });
 
-// retryLastFailedTurn exists for the case a stream never delivered any
-// output at all (the retry_exhausted UI path only fires when nothing was
-// committed for the failed attempt -- see retry-classifier.ts's
-// hasCommittedOutput guard). Unlike retryLastToolOutput it has nothing to
-// trim: it just re-asks from the canonical, already-committed history.
 it('retryLastFailedTurn resends full history without adding a new user message', async () => {
   const stream = new MockStream([{ type: 'text_delta', text: 'Recovered answer' }]);
   stream.finalOutput = 'Recovered answer';
@@ -803,6 +798,55 @@ it('retryLastFailedTurn resends full history without adding a new user message',
   // Full-history replay, not a second user turn appended to it.
   expect((startCalls[0].input as any[]).map((item) => item.type)).toEqual(['message']);
   expect((startCalls[0].input as any[])[0]).toMatchObject({ content: 'what is 2+2' });
+});
+
+it('regenerates an answered turn without its old tools or answer and preserves the original input', async () => {
+  const stream = new MockStream([{ type: 'text_delta', text: 'New answer' }]);
+  stream.finalOutput = 'New answer';
+  const startStream = vi.fn(async (_input: unknown, _options: unknown) => stream);
+  const service = new ConversationService({
+    agentClient: partialClient({ getProvider: () => 'openai', startStream }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const prefix = [
+    { role: 'user', type: 'message', content: 'earlier question' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'earlier answer' }] },
+  ];
+  const prompt = {
+    role: 'user',
+    type: 'message',
+    content: [
+      { type: 'input_text', text: 'look at this' },
+      { type: 'input_image', image_url: 'data:image/png;base64,aGVsbG8=', detail: 'auto' },
+    ],
+  };
+  service.importState({
+    history: [
+      ...prefix,
+      prompt,
+      { type: 'function_call', callId: 'old-call', name: 'shell', arguments: '{}' },
+      { type: 'function_call_result', callId: 'old-call', name: 'shell', output: 'old result' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'old answer' }] },
+    ],
+    previousResponseId: 'old-response',
+    toolLedger: [],
+  });
+
+  await service.retryLastFailedTurn();
+  expect(startStream.mock.calls[0]?.[0]).toEqual([...prefix, prompt]);
+  expect(startStream.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ previousResponseId: null }));
+  await service.retryLastFailedTurn();
+  expect(startStream.mock.calls[1]?.[0]).toEqual([...prefix, prompt]);
+});
+
+it('does not regenerate when there is no genuine user turn', async () => {
+  const startStream = vi.fn();
+  const service = new ConversationService({
+    agentClient: partialClient({ startStream }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  await expect(service.retryLastFailedTurn()).resolves.toBeNull();
+  expect(startStream).not.toHaveBeenCalled();
 });
 
 it('forwards an opaque rewind target through the session boundary', () => {

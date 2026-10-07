@@ -242,6 +242,8 @@ export interface FinalResponseEvent {
 
 export interface ErrorEvent {
   type: 'error';
+  /** Stable host error identity survives public event/terminal conversion. */
+  code?: string;
   message: string;
   /** Optional final text to preserve when a turn fails after producing an answer. */
   finalText?: string;

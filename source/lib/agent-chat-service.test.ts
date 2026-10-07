@@ -345,3 +345,75 @@ it.sequential('chatJson returns finalOutput when available', async () => {
 
   expect(result).toBe('mock response');
 });
+
+it.sequential(
+  'keeps failed-helper accounting without inventing an unreported charge and accepts a caller cancellation signal',
+  async () => {
+    const providerId = 'failed-helper-cost';
+    registerProvider(
+      {
+        id: providerId,
+        label: 'failed helper',
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          async *stream() {
+            yield {
+              type: 'completion' as const,
+              responseId: 'billed-failure',
+              output: [],
+              usage: { inputTokens: 21, outputTokens: 4 },
+              costUsd: 0.25,
+            };
+            throw new Error('fixture summary failure');
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+    const service = new AgentChatService({
+      agentConfig: new MockAgentConfig(providerId, 'fixture') as any,
+      settings: {
+        ...createMockSettings(providerId),
+        get: (key: string) => (key === 'agent.retryAttempts' ? 0 : undefined),
+      } as any,
+      logger: mockLogger,
+    });
+    try {
+      await expect(
+        service.chatDetailed('summarize', { provider: providerId, instructions: 'test' }),
+      ).rejects.toMatchObject({
+        message: 'fixture summary failure',
+        costRecords: [expect.objectContaining({ outcome: 'failed', unpricedReason: 'missing_usage' })],
+      });
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        service.chatDetailed('cancel', { provider: providerId, instructions: 'test', signal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+    } finally {
+      await service.dispose();
+    }
+  },
+);
+
+it.sequential(
+  'attributes a small-model helper to its selected provider and inherits usable default output',
+  async () => {
+    const service = new AgentChatService({
+      agentConfig: new MockAgentConfig('mock-provider', 'gpt-4') as any,
+      settings: {
+        ...createMockSettings('mock-provider'),
+        get: (key: string) => (key === 'agent.maxOutputTokens' ? 32000 : undefined),
+        getSource: () => 'default',
+      } as any,
+      logger: mockLogger,
+    });
+    const result = await service.chatDetailed('summarize', {
+      provider: 'other-provider',
+      model: 'gpt-4',
+      instructions: 'Retain original instructions.',
+    });
+    expect(lastRunRequest.maxTokens).toBe(2048);
+    expect(result.costRecords?.[0]?.provider).toBe('other-provider');
+  },
+);

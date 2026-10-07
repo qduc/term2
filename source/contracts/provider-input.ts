@@ -15,6 +15,16 @@ export interface ContextSummaryMarker {
   readonly estimatedTokensBefore?: number;
   readonly estimatedTokensAfter?: number;
   readonly rearmAtEstimatedTokens?: number;
+  /** Verbatim user requests retained from the summarized prefix on replay. */
+  readonly protectedUsers?: readonly ProviderInputItem[];
+  /** Host-observed receipts; recorded results do not prove domain success. */
+  readonly toolReceipts?: readonly {
+    callId: string;
+    name: string;
+    argumentsSha256: string;
+    argumentsPreview: string;
+    outputPreview: string;
+  }[];
 }
 
 export interface ProviderInputItem {

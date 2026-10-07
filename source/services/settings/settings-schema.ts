@@ -86,7 +86,7 @@ const AgentSettingsObjectSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'Per-request estimated or last-observed input ceiling; rejects before dispatch and retains work (null disables)',
+      'Per-request estimated or last-observed input cost/latency ceiling; retains work on refusal (null uses known model capacity)',
     ),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
@@ -123,10 +123,10 @@ const AgentSettingsObjectSchema = z.object({
       maxParentExtensions: z.number().int().nonnegative().finite().default(2),
       identicalToolCallThreshold: z.number().int().positive().finite().default(3),
       escalation: z
-        .enum(['warn', 'pause', 'disabled'])
-        .default('warn')
+        .enum(['contain', 'warn', 'pause', 'disabled'])
+        .default('contain')
         .describe(
-          'What a non-soft budget stage does: warn in the status bar, pause the run for a decision, or disabled',
+          'contain pauses at exhaustion; warn is advisory; pause also stops on warning/stall; disabled emits no evidence',
         ),
     })
     .default({
@@ -143,7 +143,7 @@ const AgentSettingsObjectSchema = z.object({
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
-      escalation: 'warn',
+      escalation: 'contain',
     })
     .describe('Per-run staged budget and stall-detection policy'),
   backgroundCheckIn: z
@@ -225,12 +225,12 @@ const AgentSettingsObjectSchema = z.object({
     .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
   contextCompaction: z
     .object({
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().default(true),
       mode: z.enum(['native', 'auto', 'local']).default('auto'),
       compactThreshold: z.number().finite().min(0).max(1).default(0.8),
       compactThresholdTokens: z.number().int().finite().min(1_000).nullable().default(null),
     })
-    .default({ enabled: false, mode: 'auto', compactThreshold: 0.8, compactThresholdTokens: null })
+    .default({ enabled: true, mode: 'auto', compactThreshold: 0.8, compactThresholdTokens: null })
     .describe('Native and application-owned context compaction settings'),
   autoApproveReasoningEffort: z
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
@@ -727,7 +727,7 @@ export interface SettingsWithSources {
       extensionPercent: SettingWithSource<number>;
       maxParentExtensions: SettingWithSource<number>;
       identicalToolCallThreshold: SettingWithSource<number>;
-      escalation: SettingWithSource<'warn' | 'pause' | 'disabled'>;
+      escalation: SettingWithSource<'contain' | 'warn' | 'pause' | 'disabled'>;
     };
     backgroundCheckIn: {
       enabled: SettingWithSource<boolean>;
@@ -1106,7 +1106,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
 ]);
 
 // Some settings with default values are optional to persist
-export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
+// Absence preserves inherited output-allocation provenance on disk.
+export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens']);
 
 // Default settings
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -1145,7 +1146,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
-      escalation: 'warn',
+      escalation: 'contain',
     },
     backgroundCheckIn: {
       enabled: true,
@@ -1175,7 +1176,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorPool: [],
     useFlexServiceTier: false,
     contextCompaction: {
-      enabled: false,
+      enabled: true,
       mode: 'auto',
       compactThreshold: 0.8,
       compactThresholdTokens: null,

@@ -411,7 +411,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await exitInteractive(resumed);
 
     expect(server.requests).toHaveLength(2);
-    expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 217_600 }]);
+    expect(server.requests[0]?.body.context_management).toEqual([{ type: 'compaction', compact_threshold: 191_520 }]);
     const resumedBody = asRecord(server.requests[1]?.body);
     expect(resumedBody?.previous_response_id).toBeUndefined();
     const compactions = inputItems(resumedBody?.input).filter((item) => item.type === 'compaction');

@@ -1,5 +1,9 @@
 # Term2 Guard Ledger and Remediation Plan
 
+Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-runs.md).
+The October 7 change supersedes historical compaction-off/advisory defaults;
+the extra input ceiling remains optional and explicit supervised overrides remain.
+
 ## October 6 supervised-worker token incident (branch-local repair)
 
 Harm prevented: an oversized supervisor handoff, unchecked main-worker request
@@ -3127,3 +3131,50 @@ timeout); provider-black-box 20 files / 178 passed tests and one skipped test
 typecheck passed (5.00s, exit 0, 180s timeout). The merged public reset probe
 also passed. These combined results supplement the scoped historical evidence
 above; the cancellation section records the corrected changed-gate invocation.
+
+
+### Ordinary context admission and critical per-run containment (2026-10-07)
+
+Owner: [ordinary safe runs](ordinary-safe-runs.md), alongside provider-neutral
+compaction and run-budget-stall-escalation. User approved the outcome/default
+change; previous opt-in/default warn dispositions do not govern this new policy.
+
+Missing keys now select enabled auto compaction, `contain` escalation and no extra
+input ceiling. Known model capacity independently bounds prepared input after
+actual selected output and 10% estimation reserve. One shared resolver bounds
+soft compaction below hard admission; explicit smaller ceilings retain precedence.
+Default output allocation adapts to small windows; explicit output selections are
+preserved subject to provider maxima. Unknown capacity is not invented from raw
+triggers. Structured provider overflow pauses without repeating the failed request.
+Supervised 80k/60k overrides, compaction opt-outs and budget choices remain intact.
+These are admission heuristics, not optimal thresholds or prepaid billing.
+
+Local reductions retain genuine user requests, paired recent rounds and host
+receipts, rearm only after measured growth, and refuse non-reducing or oversized
+summary candidates. Native ciphertext stays native; Codex keeps its native
+one/run policy. Source history is retained when safe reduction is unavailable.
+Summary input includes fixed instructions/prior summary; helper guards and abort
+inherit; per-chunk costs reach the owning root before continuing. Dispatched
+failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
+
+Headless logs commit the user request before dispatch; context/budget refusal
+exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
+remain advisory in `contain`; auto-approval cannot grant a new contained budget.
+Collector tests protect error/check-in identity; actual CLI tests protect saved
+history and resumed wire. Per-run grant state does not survive restart; resumed
+work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
+to original journal replay with paired tool evidence. No automatic effect replay.
+
+The revision replaces the earlier universal 96k/72k proposal. Public primary
+sources motivate separating capacity from operating policy; no trace-derived
+dataset is published. Synthetic small/large/unknown model fixtures, scripted
+20-artifact repeated compaction and built-CLI pause/resume supply offline evidence.
+Live semantic quality and aggregate sibling monetary containment remain limits.
+
+Regression evidence: initial 5 ordinary compaction tests and new terminal/rearm
+cases failed before repair. Focused source tests, related/changed, types, full
+unit/integration and provider gates are required; status lives in the PR/plan.
+Rollback: revert default selection independently from safe-cut/accounting/terminal
+metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
+stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
+remain documented in the plan/PR. No merge, release or deployment is performed.

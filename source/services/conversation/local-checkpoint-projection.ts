@@ -5,6 +5,7 @@ import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import { projectModelRequestHistory } from './conversation-state-projector.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
+import { projectConversationMessage } from './conversation-message-projection.js';
 import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
 
 type ProjectionResult =
@@ -174,7 +175,23 @@ export function deriveLocalCheckpointRequestHistory(
   const coveredAssistants = [...covered].filter((key) => byRef.get(key)?.event.type === 'assistant_turn').length;
   if (coveredUsers === 0 || coveredAssistants < coveredUsers) return { status: 'refused' };
 
-  const history: ProviderInputItem[] = [clone(checkpoint.item)];
+  const protectedUsers = checkpoint.item.contextSummary?.protectedUsers;
+  if (protectedUsers) {
+    const sourceUsers = coldPrefixEnvelopes.flatMap((envelope) =>
+      !isTruncatedLogEvent(envelope.event) && envelope.event.type === 'user_message'
+        ? [envelope.event.message.text ?? '']
+        : [],
+    );
+    const retainedUsers = protectedUsers.map((item) => projectConversationMessage(item));
+    if (
+      retainedUsers.length !== sourceUsers.length ||
+      retainedUsers.some(
+        (message, index) => message?.role !== 'user' || message.isSynthetic || message.text !== sourceUsers[index],
+      )
+    )
+      return { status: 'refused' };
+  }
+  const history: ProviderInputItem[] = [clone(checkpoint.item), ...clone(protectedUsers ?? [])];
   let hasPostCheckpointSnapshot = false;
   const correlatedFinalizedTurns = [...journalTurnIds]
     .map((turnId) => finalizedTurnForJournal(turnId))

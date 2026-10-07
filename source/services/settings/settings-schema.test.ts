@@ -113,15 +113,15 @@ it('Codex websocket receive timeouts default to transport-safe values and reject
   }
 });
 
-it('context compaction defaults to disabled with a conservative ratio and rejects invalid ratios', () => {
+it('context compaction defaults to enabled with a conservative ratio and rejects invalid ratios', () => {
   expect(AgentSettingsSchema.parse({}).contextCompaction).toEqual({
-    enabled: false,
+    enabled: true,
     mode: 'auto',
     compactThreshold: 0.8,
     compactThresholdTokens: null,
   });
   expect(DEFAULT_SETTINGS.agent.contextCompaction).toEqual({
-    enabled: false,
+    enabled: true,
     mode: 'auto',
     compactThreshold: 0.8,
     compactThresholdTokens: null,
@@ -179,7 +179,7 @@ it('run-budget policy defaults are runtime-modifiable and reject invalid limits'
     extensionPercent: 50,
     maxParentExtensions: 2,
     identicalToolCallThreshold: 3,
-    escalation: 'warn',
+    escalation: 'contain',
   });
   expect(DEFAULT_SETTINGS.agent.runBudget).toEqual(AgentSettingsSchema.parse({}).runBudget);
 

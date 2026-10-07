@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplicationRunLoop, type ApplicationAgent } from './application-run-loop.js';
-import { enforceRequestInputLimit } from './request-input-limit.js';
+import {
+  enforceRequestInputLimit,
+  isProviderContextOverflow,
+  ProviderContextOverflowError,
+} from './request-input-limit.js';
 import { LocalContextCompactor } from './context-compaction/local-context-compactor.js';
 
 const message = (content: string) => ({ role: 'user' as const, type: 'message' as const, content });
@@ -287,3 +291,286 @@ describe('request input admission', () => {
     expect(requests).toBe(3);
   });
 });
+
+it('uses large model capacity beyond 96k and retains optional smaller ceilings', () => {
+  const input = {
+    history: [message('x'.repeat(500000))],
+    instructions: 'retain this',
+    tools: [],
+    contextWindow: 1000000,
+    maxOutputTokens: 32000,
+  };
+  expect(() => enforceRequestInputLimit({ ...input, limit: null })).not.toThrow();
+  expect(() => enforceRequestInputLimit({ ...input, limit: 96000 })).toThrow(/configured ceiling/);
+  expect(() =>
+    enforceRequestInputLimit({ ...input, contextWindow: 32000, maxOutputTokens: 8000, limit: null }),
+  ).toThrow(/known model capacity/);
+});
+it('retains an impossible explicit output allocation as a typed refusal', () => {
+  expect(() =>
+    enforceRequestInputLimit({
+      history: [message('small task')],
+      instructions: '',
+      tools: [],
+      contextWindow: 8192,
+      maxOutputTokens: 8000,
+    }),
+  ).toThrow(/lower an explicit output allocation/);
+});
+it('uses the current provider/model on each new run instead of retaining large-model capacity', async () => {
+  const dispatch = vi.fn(async function* () {
+    yield { type: 'completion' as const, responseId: 'done', output: [] };
+  });
+  const loop = new ApplicationRunLoop({ resolveModel: () => ({ stream: dispatch }) });
+  await loop.startStream(
+    { ...agent, model: 'gpt-5.6-luna', modelSettings: { maxTokens: 32000 } },
+    [message('x'.repeat(500000))],
+    { providerId: 'openai' },
+  ).completed;
+  await expect(
+    loop.startStream({ ...agent, model: 'gpt-4', modelSettings: { maxTokens: 2048 } }, [message('x'.repeat(500000))], {
+      providerId: 'openai',
+    }).completed,
+  ).rejects.toMatchObject({ code: 'request_input_limit', reason: 'capacity_exceeded', capacity: 8192 });
+  expect(dispatch).toHaveBeenCalledTimes(1);
+});
+it('parks structured overflow from an unknown provider without identical automatic retries', async () => {
+  const dispatch = vi.fn(async function* () {
+    throw Object.assign(new Error('provider capacity rejected'), { code: 'context_length_exceeded' });
+  });
+  const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: dispatch }) }).startStream(
+    { ...agent, modelSettings: { retry: { maxRetries: 2 } } },
+    [message('retained instructions')],
+    { providerId: 'fixture' },
+  );
+  await expect(stream.completed).rejects.toMatchObject({ code: 'provider_context_overflow' });
+  expect(dispatch).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(stream.history)).toContain('retained instructions');
+});
+
+describe('structured provider capacity evidence', () => {
+  it('recognizes nested capacity codes behind numeric SDK status codes', () => {
+    expect(isProviderContextOverflow({ code: 400, error: { code: 'context_length_exceeded' } })).toBe(true);
+    expect(
+      isProviderContextOverflow({ code: 400, responseBody: JSON.stringify({ error: { code: 'input_too_long' } }) }),
+    ).toBe(true);
+    expect(isProviderContextOverflow(new Error('wrapper', { cause: { code: 'max_context_length_exceeded' } }))).toBe(
+      true,
+    );
+    expect(isProviderContextOverflow(new ProviderContextOverflowError(undefined))).toBe(true);
+  });
+  it('does not guess from generic failures or recurse through cyclic causes', () => {
+    expect(isProviderContextOverflow(new Error('context too long'))).toBe(false);
+    expect(isProviderContextOverflow({ code: 500, responseBody: 'invalid json' })).toBe(false);
+    const error: { cause?: unknown } = {};
+    error.cause = error;
+    expect(isProviderContextOverflow(error)).toBe(false);
+  });
+});
+
+it.each(['matched', 'unknown', 'already-settled'] as const)(
+  'requires producing-call evidence for a tool-only continuation: %s',
+  async (kind) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const history = [
+      message('original request'),
+      { type: 'function_call', callId: 'pending', name: 'read', arguments: '{}' },
+      ...(kind === 'already-settled' ? [{ type: 'function_call_result', callId: 'pending', output: 'old' }] : []),
+    ];
+    const result = {
+      type: 'function_call_result',
+      callId: kind === 'unknown' ? 'unobserved' : 'pending',
+      output: 'settled',
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      [result],
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: history,
+      },
+    );
+    if (kind === 'matched') {
+      await stream.completed;
+      expect(streamModel).toHaveBeenCalledTimes(1);
+    } else {
+      await expect(stream.completed).rejects.toMatchObject({
+        code: 'request_input_limit',
+        reason: 'unobservable_chained_context',
+      });
+      expect(streamModel).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it.each(['function_call_result', 'function_call_output', 'custom_tool_call_output'] as const)(
+  'aligns supported tool receipt representation %s',
+  async (type) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const custom = type === 'custom_tool_call_output';
+    const snapshot = [
+      message('original'),
+      {
+        type: custom ? 'custom_tool_call' : 'function_call',
+        call_id: 'call',
+        name: 'read',
+        arguments: '{}',
+        input: 'read',
+      },
+    ];
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      [{ type, call_id: 'call', output: 'ok' }],
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: snapshot,
+      },
+    );
+    await stream.completed;
+    expect(streamModel).toHaveBeenCalledTimes(1);
+  },
+);
+it.each(['duplicate', 'unknown', 'new-round'] as const)(
+  'validates receipt evidence after intervening messages: %s',
+  async (kind) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const snapshot = [message('original'), { type: 'function_call', callId: 'pending', name: 'read', arguments: '{}' }];
+    const delta = [
+      { type: 'function_call_result', callId: 'pending', output: 'ok' },
+      { type: 'message', role: 'assistant', content: 'continuing' },
+      ...(kind === 'new-round' ? [{ type: 'function_call', callId: 'next', name: 'read', arguments: '{}' }] : []),
+      { type: 'function_call_result', callId: kind === 'duplicate' ? 'pending' : 'next', output: 'ok' },
+    ];
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      delta,
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: snapshot,
+      },
+    );
+    if (kind === 'new-round') {
+      await stream.completed;
+      expect(streamModel).toHaveBeenCalledTimes(1);
+    } else {
+      await expect(stream.completed).rejects.toMatchObject({
+        code: 'request_input_limit',
+        reason: 'unobservable_chained_context',
+      });
+      expect(streamModel).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it.each([
+  { observed: 220000, receiptBytes: 10, streamed: false },
+  { observed: 100, receiptBytes: 60000, streamed: true },
+])(
+  'admits small native-replaced context without stale usage/prefix ($observed)',
+  async ({ observed, receiptBytes, streamed }) => {
+    const requests: any[] = [];
+    const effect = vi.fn(() => 'r'.repeat(receiptBytes));
+    const model = {
+      async *stream(request: any) {
+        requests.push(request);
+        if (requests.length === 1 && streamed) {
+          yield {
+            type: 'reasoning_delta' as const,
+            id: 'rs_post_compaction',
+            text: '',
+            providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+          };
+          yield { type: 'tool_call' as const, id: 'read', name: 'read', arguments: '{}' };
+        }
+        yield {
+          type: 'completion' as const,
+          responseId: 'native-' + requests.length,
+          usage: { inputTokens: requests.length === 1 ? observed : 100, outputTokens: 10 },
+          output:
+            requests.length === 1
+              ? [
+                  {
+                    type: 'provider_opaque' as const,
+                    provider: 'openai',
+                    item: { type: 'compaction', encrypted_content: 'native-state' },
+                  },
+                  {
+                    type: 'reasoning' as const,
+                    id: 'rs_post_compaction',
+                    text: '',
+                    providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+                  },
+                  {
+                    type: 'reasoning' as const,
+                    id: 'rs_second',
+                    text: '',
+                    providerMetadata: { openai: { encrypted_content: 'second-encrypted-reasoning' } },
+                  },
+                  { type: 'tool_call' as const, id: 'read', name: 'read', arguments: '{}' },
+                ]
+              : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      {
+        ...agent,
+        model: 'gpt-5.6-luna',
+        modelSettings: { maxTokens: 32000 },
+        tools: [
+          {
+            name: 'read',
+            description: 'read',
+            parameters: {},
+            needsApproval: () => false,
+            execute: effect,
+            formatCommandMessage: () => [],
+          },
+        ],
+      },
+      [message('x'.repeat(800000))],
+      { providerId: 'openai' },
+    );
+    const completed: any = await stream.completed;
+    expect(requests).toHaveLength(2);
+    expect(effect).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(requests[1].input)).not.toContain('x'.repeat(1000));
+    expect(JSON.stringify(requests[1].input)).toContain('native-state');
+    expect(requests[1].input.map((item: any) => item.type)).toEqual([
+      'provider_opaque',
+      'reasoning',
+      'reasoning',
+      'tool_call',
+      'tool_result',
+    ]);
+    expect(requests[1].input[1]).toMatchObject({
+      id: 'rs_post_compaction',
+      providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+    });
+    expect(stream.history.map((item: any) => item.type).slice(0, 6)).toEqual([
+      'message',
+      'compaction',
+      'reasoning',
+      'reasoning',
+      'function_call',
+      'function_call_result',
+    ]);
+    expect(JSON.stringify(requests[1].input)).toContain('r'.repeat(receiptBytes));
+    expect(requests[1].input[2]).toMatchObject({ id: 'rs_second' });
+    expect(completed.usage?.inputTokens).toBe(observed + 100);
+    expect(stream.runCostRecords).toHaveLength(2);
+    expect(JSON.stringify(stream.history)).toContain('x'.repeat(1000));
+  },
+);

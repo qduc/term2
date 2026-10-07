@@ -37,9 +37,13 @@ const clone = <T>(value: T): T => {
   }
 };
 
-const isOpenAICompaction = (item: unknown): boolean => {
+export const isOpenAICompaction = (item: unknown): boolean => {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
   const record = item as Record<string, unknown>;
+  if (record.type === 'provider_opaque' && record.provider === 'openai') {
+    const payload = record.item as Record<string, unknown> | undefined;
+    return payload?.type === 'compaction';
+  }
   const marker = record.providerOpaque;
   return (
     record.type === 'compaction' &&

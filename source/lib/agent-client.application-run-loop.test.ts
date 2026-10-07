@@ -582,6 +582,7 @@ describe('AgentClient application-run-loop execution', () => {
       { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
       {
         'agent.contextCompaction.enabled': true,
+        'agent.maxRequestInputTokens': 64000,
         'agent.contextCompaction.mode': 'auto',
         'agent.contextCompaction.compactThreshold': 0.8,
         'agent.contextCompaction.compactThresholdTokens': 1_000,
@@ -591,8 +592,8 @@ describe('AgentClient application-run-loop execution', () => {
     const checkpointEvents: unknown[] = [];
     instance.setLocalCheckpointSink((input) => checkpointEvents.push(input));
     const input = [
-      { role: 'user' as const, type: 'message' as const, content: `cold-${'x'.repeat(5_000)}` },
-      { role: 'assistant' as const, type: 'message' as const, content: 'cold answer' },
+      { role: 'user' as const, type: 'message' as const, content: 'cold instruction' },
+      { role: 'assistant' as const, type: 'message' as const, content: `cold-${'x'.repeat(5_000)}` },
       { role: 'user' as const, type: 'message' as const, content: 'hot one' },
       { role: 'assistant' as const, type: 'message' as const, content: 'hot answer' },
       { role: 'user' as const, type: 'message' as const, content: 'hot two' },
@@ -620,6 +621,7 @@ describe('AgentClient application-run-loop execution', () => {
       { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
       {
         'agent.contextCompaction.enabled': true,
+        'agent.maxRequestInputTokens': 64000,
         'agent.contextCompaction.mode': 'native',
         'agent.contextCompaction.compactThreshold': 0.8,
         'agent.contextCompaction.compactThresholdTokens': 1_000,
@@ -733,7 +735,7 @@ describe('AgentClient application-run-loop execution', () => {
     );
     const stream = await instance.startStream([
       { role: 'user', type: 'message', content: 'cold' },
-      { role: 'assistant', type: 'message', content: 'cold answer' },
+      { role: 'assistant', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
       { role: 'user', type: 'message', content: 'hot one' },
       { role: 'assistant', type: 'message', content: 'hot answer' },
       { role: 'user', type: 'message', content: `protected-${'x'.repeat(5_000)}` },
@@ -1367,7 +1369,8 @@ describe('AgentClient codex session-history compaction', () => {
               yield {
                 type: 'completion' as const,
                 responseId: `full-history-${ordinaryRequests}`,
-                usage: { inputTokens: 250_000 },
+                // Post-reduction checkpoint is small; stale pre-reduction usage is not a realistic next response.
+                usage: { inputTokens: 5_000 },
                 output:
                   ordinaryRequests === 1
                     ? [{ type: 'tool_call' as const, id: 'call-1', name: 'echo', arguments: '{"value":"done"}' }]
@@ -1408,7 +1411,7 @@ describe('AgentClient codex session-history compaction', () => {
         revision: 3,
         history: [
           { role: 'user', type: 'message', content: 'prior-critical-fact' },
-          { role: 'assistant', type: 'message', content: 'acknowledged' },
+          { role: 'assistant', type: 'message', content: 'acknowledged ' + 'large old source data '.repeat(2000) },
           { role: 'user', type: 'message', content: 'another earlier user turn' },
           { role: 'assistant', type: 'message', content: 'another earlier answer' },
           { role: 'user', type: 'message', content: 'short chained-turn delta' },
@@ -1475,16 +1478,18 @@ describe('AgentClient codex session-history compaction', () => {
       },
     );
     try {
-      await (
-        await instance.startStream('short chained delta', {
-          previousResponseId: 'prior-response',
-          providerHistorySnapshot: {
-            identity: 'mismatched-history',
-            revision: 1,
-            history: [{ role: 'user', type: 'message', content: 'some other user turn' }],
-          },
-        })
-      ).completed;
+      await expect(
+        (
+          await instance.startStream('short chained delta', {
+            previousResponseId: 'prior-response',
+            providerHistorySnapshot: {
+              identity: 'mismatched-history',
+              revision: 1,
+              history: [{ role: 'user', type: 'message', content: 'some other user turn' }],
+            },
+          })
+        ).completed,
+      ).rejects.toMatchObject({ code: 'request_input_limit', reason: 'unobservable_chained_context' });
       expect(compactHistory).not.toHaveBeenCalled();
     } finally {
       instance.dispose();
@@ -1572,8 +1577,8 @@ describe('AgentClient codex session-history compaction', () => {
   });
 
   const coldHistory = [
-    { role: 'user', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
-    { role: 'assistant', type: 'message', content: 'cold answer' },
+    { role: 'user', type: 'message', content: 'cold instruction' },
+    { role: 'assistant', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
     { role: 'user', type: 'message', content: 'hot one' },
     { role: 'assistant', type: 'message', content: 'hot answer' },
     { role: 'user', type: 'message', content: 'hot two' },
@@ -1645,6 +1650,7 @@ describe('AgentClient codex session-history compaction', () => {
       },
       {
         'agent.contextCompaction.enabled': true,
+        'agent.maxRequestInputTokens': 64000,
         'agent.contextCompaction.mode': mode,
         'agent.contextCompaction.compactThresholdTokens': 1_000,
       },
@@ -1938,4 +1944,234 @@ describe('AgentClient codex session-history compaction', () => {
     expect(outcome).toMatchObject({ kind: 'failed', provider: 'codex' });
     instance.dispose();
   });
+});
+
+it('finishes a representative single-user tool task through repeated reductions without repeating effects', async () => {
+  const provider = 'ordinary-repeated-task';
+  providers.add(provider);
+  const effects = new Map<number, number>();
+  let summaries = 0;
+  let normalRequests = 0;
+  const exact = 'ISSUE-739 α-42: create twenty artifacts; do not publish or repeat an existing write.';
+  registerProvider({
+    id: provider,
+    label: 'offline ordinary task',
+    fetchModels: async () => [],
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        const payload = JSON.stringify(request.input);
+        if (request.instructions?.includes('You compact historical conversation data')) {
+          summaries++;
+          yield {
+            type: 'completion' as const,
+            responseId: `summary-${summaries}`,
+            costUsd: 0.01,
+            output: [
+              {
+                type: 'message' as const,
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: 'Deliberately incomplete summary; important instructions and receipts are host protected.',
+                  },
+                ],
+              },
+            ],
+          };
+          return;
+        }
+        normalRequests++;
+        expect(request.instructions).toBe('Trusted system instructions stay current.');
+        expect(payload).toContain(exact);
+        const ids = Array.from(payload.matchAll(/effect-(\d+)/g), (m) => Number(m[1]));
+        const next = ids.length ? Math.max(...ids) + 1 : 0;
+        yield {
+          type: 'completion' as const,
+          responseId: `task-${normalRequests}`,
+          costUsd: 0.01,
+          output:
+            next === 20
+              ? [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'Twenty artifacts complete.' }] }]
+              : [
+                  {
+                    type: 'tool_call' as const,
+                    id: `effect-${next}`,
+                    name: 'write_artifact',
+                    arguments: JSON.stringify({ index: next }),
+                  },
+                ],
+        };
+      },
+    }),
+  });
+  const instance = client(
+    provider,
+    {
+      agentOverride: {
+        name: 'ordinary-task',
+        model: 'fixture',
+        instructions: 'Trusted system instructions stay current.',
+        tools: [
+          {
+            name: 'write_artifact',
+            description: 'writes isolated test artifact',
+            parameters: z.object({ index: z.number() }),
+            needsApproval: () => false,
+            execute: ({ index }: { index: number }) => {
+              effects.set(index, (effects.get(index) ?? 0) + 1);
+              return `observed artifact ${index}: ${'file data '.repeat(1400)}`;
+            },
+          },
+        ],
+      },
+    },
+    {
+      'agent.maxRequestInputTokens': 12000,
+      'agent.maxOutputTokens': 500,
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+    },
+  );
+  const checkpoints: any[] = [];
+  instance.setLocalCheckpointSink((input) => checkpoints.push(input));
+  try {
+    const stream = await instance.startStream(exact);
+    await stream.completed;
+    expect(stream.finalOutput).toBe('Twenty artifacts complete.');
+    expect([...effects.keys()]).toEqual(Array.from({ length: 20 }, (_, n) => n));
+    expect([...effects.values()]).toEqual(Array(20).fill(1));
+    expect(summaries).toBeGreaterThanOrEqual(3);
+    expect(checkpoints.length).toBeGreaterThanOrEqual(3);
+    expect(JSON.stringify(checkpoints.at(-1))).toContain('effect-0');
+    expect(stream.runCostRecords).toHaveLength(normalRequests + summaries);
+  } finally {
+    instance.dispose();
+  }
+});
+
+it('does not reuse pre-checkpoint input usage to repeatedly summarize a low-growth task', async () => {
+  const provider = 'ordinary-no-usage-thrash';
+  providers.add(provider);
+  let normal = 0;
+  let summaries = 0;
+  registerProvider({
+    id: provider,
+    label: 'no usage after checkpoint',
+    fetchModels: async () => [],
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        if (request.instructions?.includes('You compact historical conversation data')) {
+          summaries++;
+          yield {
+            type: 'completion' as const,
+            responseId: `summary-${summaries}`,
+            output: [
+              { type: 'message' as const, content: [{ type: 'text' as const, text: 'retain completed reads' }] },
+            ],
+          };
+          return;
+        }
+        normal++;
+        yield {
+          type: 'completion' as const,
+          responseId: `round-${normal}`,
+          ...(normal === 1 ? { usage: { inputTokens: 10000 } } : {}),
+          output:
+            normal > 10
+              ? [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }]
+              : [
+                  {
+                    type: 'tool_call' as const,
+                    id: `read-${normal}`,
+                    name: 'read',
+                    arguments: JSON.stringify({ index: normal }),
+                  },
+                ],
+        };
+      },
+    }),
+  });
+  const instance = client(
+    provider,
+    {
+      agentOverride: {
+        name: 'no-thrash',
+        model: 'fixture',
+        instructions: 'test',
+        tools: [
+          {
+            name: 'read',
+            description: 'read fixture',
+            parameters: z.object({ index: z.number() }),
+            needsApproval: () => false,
+            execute: ({ index }: { index: number }) => 'data '.repeat(index === 1 ? 2500 : 20),
+          },
+        ],
+      },
+    },
+    {
+      'agent.maxRequestInputTokens': 12000,
+      'agent.maxOutputTokens': 500,
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+    },
+  );
+  try {
+    const stream = await instance.startStream([
+      { type: 'message', role: 'user', content: 'finish the read task' },
+      ...Array.from({ length: 2 }, (_, n) => [
+        { type: 'function_call', callId: `old-${n}`, name: 'read', arguments: '{"index":99}' },
+        { type: 'function_call_result', callId: `old-${n}`, name: 'read', output: 'data '.repeat(2500) },
+      ]).flat(),
+    ]);
+    await stream.completed;
+    expect(stream.finalOutput).toBe('finished');
+    expect(summaries).toBe(1);
+  } finally {
+    instance.dispose();
+  }
+});
+
+it('accounts for trusted instructions when triggering automatic Codex native compaction', async () => {
+  providers.add('codex');
+  const compactHistory = vi.fn(async () => ({
+    history: [{ type: 'message', role: 'user', content: 'native retained request' }],
+  }));
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'native prefix fixture',
+      fetchModels: async () => [],
+      createStreamedModel: () => ({
+        compactHistory,
+        async *stream() {
+          yield {
+            type: 'completion' as const,
+            responseId: 'done',
+            output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+          };
+        },
+      }),
+    },
+    { allowOverride: true },
+  );
+  const instance = client(
+    'codex',
+    { agentOverride: { name: 'native-prefix', model: 'fixture', instructions: 'trusted '.repeat(38000), tools: [] } },
+    {
+      'agent.maxRequestInputTokens': 96000,
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+    },
+  );
+  try {
+    await (
+      await instance.startStream('native retained request')
+    ).completed;
+    expect(compactHistory).toHaveBeenCalledTimes(1);
+  } finally {
+    instance.dispose();
+  }
 });

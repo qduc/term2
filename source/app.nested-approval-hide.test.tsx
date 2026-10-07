@@ -193,7 +193,9 @@ it.sequential(
       }),
     });
 
+    // The scripted task needs one tool turn and one final response.
     const providerClient = new AgentClient({
+      maxTurns: 2,
       selection: { model: 'm4-hide-model', provider: providerId },
       approvalPolicyRegistry,
       deps: { logger, settings, executionContext, sessionContextService },

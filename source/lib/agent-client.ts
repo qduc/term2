@@ -1,3 +1,8 @@
+import {
+  isProviderContextOverflow,
+  ProviderContextOverflowError,
+} from '../services/agent-runtime/request-input-limit.js';
+import { resolveModelContextPolicy, resolveRequestOutput } from '../services/agent-runtime/model-context-policy.js';
 import type { ModelSelection } from '../services/settings/model-selection.js';
 import {
   normalizeApplicationInput,
@@ -24,7 +29,7 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
-import { AgentChatService } from './agent-chat-service.js';
+import { AgentChatService, AgentChatFailure } from './agent-chat-service.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { PostExecutePauseCapability, ToolExecutionLifecyclePort } from '../tools/types.js';
@@ -70,12 +75,13 @@ import {
   LocalContextCompactor,
 } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
+import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
 import { isCodexCompactionIncompatible } from '../providers/codex-compact.js';
 import {
   estimateContext,
-  resolveCompactionThreshold,
+  rearmAtTokens,
   shouldDeferAutomaticCompaction,
 } from '../services/agent-runtime/context-compaction/index.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
@@ -230,6 +236,8 @@ export class AgentClient {
 
   async #compactCodexHistory(input: {
     history: readonly ProviderInputItem[];
+    instructions?: string;
+    tools?: unknown;
     model: string;
     automaticCompactionsThisRun: number;
     lastCompletedInputTokens?: number;
@@ -242,18 +250,27 @@ export class AgentClient {
     | { kind: 'compacted'; history: ProviderInputItem[]; modelInput: ProviderInputItem[] }
   > {
     const catalog = getCatalogModel('codex', input.model);
-    const threshold = resolveCompactionThreshold({
+    const inputCeiling = this.#settings.get('agent.maxRequestInputTokens');
+    const policy = resolveModelContextPolicy({
       contextWindow: catalog?.contextWindow,
-      compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
-      compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
+      inputLimit: inputCeiling,
+      ratio: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
+      rawTrigger: this.#settings.get('agent.contextCompaction.compactThresholdTokens'),
     });
+    const threshold = { available: policy.softTrigger !== undefined, effectiveThreshold: policy.softTrigger ?? 0 };
     const estimate = estimateContext({
       history: input.history,
+      instructions: input.instructions,
+      tools: input.tools,
       contextWindow: catalog?.contextWindow,
-      maxOutputTokens: catalog?.maxTokens,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
     });
     const measuredInputTokens = Math.max(input.lastCompletedInputTokens ?? 0, estimate.renderedInputTokens);
     if (!input.manual) {
+      // Native replacement has no portable growth checkpoint. Preserve its
+      // existing one-successful-replacement-per-run policy; local checkpoints rearm by growth.
+      if (input.automaticCompactionsThisRun >= 1) return { kind: 'unchanged' };
       if (!threshold.available || measuredInputTokens < threshold.effectiveThreshold) {
         this.#logger.debug('Codex native compaction threshold not reached', {
           model: input.model,
@@ -294,6 +311,7 @@ export class AgentClient {
       return { kind: 'compacted', history, modelInput: history };
     } catch (error) {
       if (input.signal?.aborted) throw error;
+      if (isProviderContextOverflow(error)) throw new ProviderContextOverflowError(error);
       const nativeUnavailable = isCodexCompactionIncompatible(error);
       if (nativeUnavailable) this.#unavailableCodexCompaction.add(streamed);
       this.#logger.warn('Codex compact endpoint failed; continuing with uncompacted history', {
@@ -313,12 +331,18 @@ export class AgentClient {
     return {
       compact: async ({
         history,
+        instructions,
+        tools,
+        recordCostRecords,
         automaticCompactionsThisRun,
         lastCompletedInputTokens,
         signal,
         onStarted,
       }: {
         history: readonly ProviderInputItem[];
+        instructions?: string;
+        tools?: unknown;
+        recordCostRecords?: (records: readonly ModelRequestCost[]) => boolean;
         automaticCompactionsThisRun: number;
         lastCompletedInputTokens?: number;
         signal?: AbortSignal;
@@ -336,6 +360,8 @@ export class AgentClient {
         if (provider === 'codex' && mode !== 'local') {
           const native = await this.#compactCodexHistory({
             history,
+            instructions,
+            tools,
             model,
             automaticCompactionsThisRun,
             lastCompletedInputTokens,
@@ -347,23 +373,39 @@ export class AgentClient {
           // Auto was explicitly selected. Keep the existing local safe-cut and
           // opaque-history checks; a rejected native call never discards history.
         }
+        const inputCeiling = this.#settings.get('agent.maxRequestInputTokens');
+        const boundaryEstimate = estimateContext({ history, instructions, tools });
+        // Inline native compaction owns its opaque state. Its trigger is bounded
+        // by admission in auto mode; never replace ciphertext with a guessed summary.
         if (mode === 'native' || (mode === 'auto' && openaiInlineNative)) return { kind: 'unchanged' as const };
 
-        const configuredMaxOutput = this.#settings.get('agent.maxOutputTokens');
+        const configuredMaxOutput = resolveRequestOutput(
+          catalog,
+          this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens,
+        );
         let started = false;
         const compactor = new LocalContextCompactor({
-          generate: async ({ renderedInput, maxOutputTokens }) => {
+          generate: async ({ renderedInput, maxOutputTokens, signal: summarySignal }) => {
             if (!started) {
               started = true;
               onStarted(provider);
             }
-            const result = await this.#chatService.chatDetailed(renderedInput, {
-              provider,
-              model,
-              reasoningEffort,
-              instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
-              maxTokens: maxOutputTokens,
-            });
+            let result;
+            try {
+              result = await this.#chatService.chatDetailed(renderedInput, {
+                provider,
+                model,
+                reasoningEffort,
+                instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+                maxTokens: maxOutputTokens,
+                signal: summarySignal,
+              });
+            } catch (error) {
+              if (error instanceof AgentChatFailure && error.costRecords.length) recordCostRecords?.(error.costRecords);
+              throw error;
+            }
+            if (result.costRecords?.length && recordCostRecords && !recordCostRecords(result.costRecords))
+              throw new Error('Run budget exhausted while reducing context; original history retained.');
             return {
               text: result.text,
               usage: result.usage
@@ -392,14 +434,14 @@ export class AgentClient {
         try {
           outcome = await compactor.compactAtBoundary({
             history,
+            instructions,
+            tools,
+            maxRequestInputTokens: inputCeiling,
             provider,
             model,
             sourceRevision: 0,
             contextWindow: catalog?.contextWindow,
-            maxOutputTokens:
-              configuredMaxOutput === undefined
-                ? catalog?.maxTokens
-                : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
+            maxOutputTokens: configuredMaxOutput,
             compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
             compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
             manual: false,
@@ -411,6 +453,12 @@ export class AgentClient {
             signal,
           });
         } catch (error) {
+          if (signal?.aborted) throw error;
+          if (isProviderContextOverflow(error)) throw new ProviderContextOverflowError(error);
+          this.#blockedCompactionRearmAtEstimatedTokens = rearmAtTokens(
+            boundaryEstimate.renderedInputTokens,
+            inputCeiling ?? catalog?.contextWindow ?? 64_000,
+          );
           this.#logger.warn('Automatic local context compaction failed; continuing with uncompacted history', {
             provider,
             model,
@@ -422,7 +470,12 @@ export class AgentClient {
           outcome.kind === 'blocked' &&
           (outcome.reason === 'single_turn_too_large' || outcome.reason === 'result_still_too_large')
         ) {
-          throw new ContextCompactionHardFitError(outcome.reason);
+          return {
+            kind: 'failed' as const,
+            provider,
+            costRecords: outcome.costRecords,
+            error: new ContextCompactionHardFitError(outcome.reason),
+          };
         }
         if (outcome.kind !== 'compacted') {
           // A blocked outcome leaves context growing, so it must be visible in
@@ -443,11 +496,13 @@ export class AgentClient {
               return {
                 kind: 'unchanged' as const,
                 notice:
-                  'Local compaction cannot shorten this history yet: it preserves the newest two user turns and needs an older completed turn. ' +
+                  'Local compaction cannot shorten this history yet: it needs an older completed turn or settled tool rounds and preserves all user requests. ' +
                   'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe idle boundary; live background work survives rollover, so do not wait for it solely to rotate. Do not repeat completed work or manufacture user turns to force compaction.',
               };
             }
           }
+          if (outcome.kind === 'blocked' && outcome.costRecords?.length)
+            return { kind: 'failed' as const, provider, costRecords: outcome.costRecords };
           return { kind: 'unchanged' as const };
         }
         this.#blockedCompactionRearmAtEstimatedTokens = undefined;
@@ -497,7 +552,7 @@ export class AgentClient {
       instructions: agent.resolveInstructionsForRequest?.() ?? agent.instructions,
       tools: agent.tools,
       contextWindow: catalog?.contextWindow,
-      maxOutputTokens: catalog?.maxTokens,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
     });
     const measuredHardFitTokens =
       estimate.hardFitTokens + Math.max(0, (lastCompletedInputTokens ?? 0) - estimate.renderedInputTokens);

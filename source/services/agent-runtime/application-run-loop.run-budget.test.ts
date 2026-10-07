@@ -38,6 +38,36 @@ const agent: ApplicationAgent = {
   tools: [loopingTool],
 };
 
+it('contains only at exhausted budget while warning and repeated-read evidence remain advisory', async () => {
+  let calls = 0;
+  const model: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      yield {
+        type: 'completion' as const,
+        responseId: `round-${calls}`,
+        costUsd: 0.6,
+        output: [{ type: 'tool_call' as const, id: `read-${calls}`, name: 'read_file', arguments: '{"path":"a"}' }],
+      };
+    },
+  };
+  const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'go', {
+    runBudget: {
+      ...policy,
+      escalation: 'contain',
+      maxUsdMicros: 1_000_000,
+      warningHeadroomUsdMicros: 500_000,
+      turnBackstop: 100,
+    },
+  });
+  await stream.completed;
+  expect(calls).toBe(2);
+  expect(stream.interruptions).toEqual([
+    expect.objectContaining({ type: 'run_budget_interaction', event: expect.objectContaining({ stage: 'critical' }) }),
+  ]);
+  expect(JSON.stringify(stream.history)).toContain('read-2');
+});
+
 it('pauses a main run at critical evidence until a finite extension resumes its same logical run', async () => {
   let calls = 0;
   const evidence: RunBudgetEvent[] = [];

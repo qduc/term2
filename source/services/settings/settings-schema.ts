@@ -84,9 +84,9 @@ const AgentSettingsObjectSchema = z.object({
     .int()
     .min(1_000)
     .nullable()
-    .default(96_000)
+    .default(null)
     .describe(
-      'Per-request estimated or last-observed input ceiling; rejects before dispatch and retains work (null disables)',
+      'Per-request estimated or last-observed input cost/latency ceiling; retains work on refusal (null uses known model capacity)',
     ),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
@@ -1123,7 +1123,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     choreModel: undefined,
     reasoningEffort: 'default',
     maxTurns: 100,
-    maxRequestInputTokens: 96_000,
+    maxRequestInputTokens: null,
     maxOutputTokens: 32_000,
     maxStreamOutputChars: 100_000,
     maxModelRequestDurationMs: 0,

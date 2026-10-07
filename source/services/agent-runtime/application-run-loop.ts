@@ -1,5 +1,12 @@
+import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
+import { resolveRequestOutput } from './model-context-policy.js';
 import { z } from 'zod';
-import { enforceRequestInputLimit, RequestInputLimitError } from './request-input-limit.js';
+import {
+  enforceRequestInputLimit,
+  RequestInputLimitError,
+  ProviderContextOverflowError,
+  isProviderContextOverflow,
+} from './request-input-limit.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
@@ -1026,6 +1033,8 @@ export class ApplicationRunLoop {
         if (options.signal?.aborted) requestSignal.abort();
         else options.signal?.addEventListener('abort', abortRequest, { once: true });
         const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
+        const requestCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
+        const effectiveOutput = resolveRequestOutput(requestCatalog, state.agent.modelSettings?.maxTokens);
         const request: StreamedModelTurnRequest = {
           instructions: criticalWrapUp
             ? `${requestInstructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
@@ -1045,9 +1054,7 @@ export class ApplicationRunLoop {
             ? { temperature: state.agent.modelSettings.temperature as number }
             : {}),
           ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
-          ...(state.agent.modelSettings?.maxTokens !== undefined
-            ? { maxTokens: state.agent.modelSettings.maxTokens }
-            : {}),
+          ...(effectiveOutput !== undefined ? { maxTokens: effectiveOutput } : {}),
           ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
           ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
           ...(state.agent.modelSettings?.providerData
@@ -1172,7 +1179,10 @@ export class ApplicationRunLoop {
             request.previousResponseId && state.compactionHistory
               ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
               : undefined;
+          const contextCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
           enforceRequestInputLimit({
+            contextWindow: contextCatalog?.contextWindow,
+            maxOutputTokens: request.maxTokens,
             limit: state.requestInputLimit
               ? state.requestInputLimit()
               : state.agent.modelSettings?.maxRequestInputTokens,
@@ -1209,8 +1219,20 @@ export class ApplicationRunLoop {
               limit: error.limit,
               estimatedTokens: error.estimatedTokens,
               observedTokens: error.observedTokens,
+              capacity: error.capacity,
+              outputReserve: error.outputReserve,
+              estimationReserve: error.estimationReserve,
             });
             throw error;
+          }
+          if (isProviderContextOverflow(error)) {
+            this.#observeTerminalFailure(error, {
+              requestId: activeRequestId,
+              provider: state.currentProviderId,
+              model: state.agent.model,
+              tier: resolveServiceTier(request),
+            });
+            throw new ProviderContextOverflowError(error);
           }
           const recoverOversizedToolArgument =
             isOversizedToolArgumentTrip(error) &&
@@ -1894,6 +1916,26 @@ function mergeChainedCompactionHistory(
   deltaHistory: readonly ProviderInputItem[],
 ): { kind: 'ready'; history: ProviderInputItem[] } | { kind: 'skipped'; reason: 'user_mismatch' } {
   const firstDeltaItem = deltaHistory[0];
+  const normalizedDelta = normalizeApplicationInput(deltaHistory);
+  if (normalizedDelta[0]?.type === 'tool_result') {
+    // A tool-only continuation needs a complete snapshot with still-open
+    // producing calls. Normalize supported legacy/custom forms for comparison,
+    // retain original provider items, and validate every later call/receipt.
+    const pending = new Map<string, string>();
+    const seenCalls = new Set<string>();
+    for (const item of [...normalizeApplicationInput(sessionHistory), ...normalizedDelta]) {
+      if (item.type === 'tool_call') {
+        if (!item.id || seenCalls.has(item.id)) return { kind: 'skipped', reason: 'user_mismatch' };
+        seenCalls.add(item.id);
+        pending.set(item.id, item.toolType ?? 'function');
+      } else if (item.type === 'tool_result') {
+        if (!item.id || pending.get(item.id) !== (item.toolType ?? 'function'))
+          return { kind: 'skipped', reason: 'user_mismatch' };
+        pending.delete(item.id);
+      }
+    }
+    return { kind: 'ready', history: [...sessionHistory, ...deltaHistory] };
+  }
   if (!firstDeltaItem || firstDeltaItem.type !== 'message' || firstDeltaItem.role !== 'user') {
     return { kind: 'skipped', reason: 'user_mismatch' };
   }

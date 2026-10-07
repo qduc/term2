@@ -395,3 +395,25 @@ it.sequential(
     }
   },
 );
+
+it.sequential(
+  'attributes a small-model helper to its selected provider and inherits usable default output',
+  async () => {
+    const service = new AgentChatService({
+      agentConfig: new MockAgentConfig('mock-provider', 'gpt-4') as any,
+      settings: {
+        ...createMockSettings('mock-provider'),
+        get: (key: string) => (key === 'agent.maxOutputTokens' ? 32000 : undefined),
+        getSource: () => 'default',
+      } as any,
+      logger: mockLogger,
+    });
+    const result = await service.chatDetailed('summarize', {
+      provider: 'other-provider',
+      model: 'gpt-4',
+      instructions: 'Retain original instructions.',
+    });
+    expect(lastRunRequest.maxTokens).toBe(2048);
+    expect(result.costRecords?.[0]?.provider).toBe('other-provider');
+  },
+);

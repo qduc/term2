@@ -11,14 +11,17 @@ import {
 
 let server: FakeProviderHttpServer | undefined;
 let workspace: IsolatedWorkspaceLease | undefined;
-let scenarioOptions: { scenario: 'success' | 'tool-fragments'; protocol: 'chat-completions' };
+let scenarioOptions: { scenario: 'success' | 'tool-fragments' | 'context-overflow'; protocol: 'chat-completions' };
 afterEach(async () => {
   await workspace?.cleanup();
   workspace = undefined;
   await server?.close();
   server = undefined;
 });
-const setup = async (scenario: 'success' | 'tool-fragments', agent: Record<string, unknown> = {}) => {
+const setup = async (
+  scenario: 'success' | 'tool-fragments' | 'context-overflow',
+  agent: Record<string, unknown> = {},
+) => {
   scenarioOptions = { scenario, protocol: 'chat-completions' };
   server = await startFakeProviderHttpServer(scenarioOptions);
   workspace = await createIsolatedWorkspaceLease({
@@ -63,10 +66,38 @@ it('completes ordinary useful work with fresh safety defaults and keeps a resuma
   expect(data).toContain('hello');
 });
 
+it('admits input beyond the old universal ceiling when known capacity permits', async () => {
+  const lease = await setup('success');
+  const result = await lease.runCli({
+    cwd: process.cwd(),
+    args: [...Array(5).fill('x'.repeat(100000)), '--provider', 'fixture-provider', '--model', 'gpt-5.6-luna'],
+    deadlineMs: 15000,
+  });
+  expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+  expect(server!.requests).toHaveLength(1);
+  expect(server!.requests[0]!.body).toMatchObject({ max_tokens: 32000 });
+});
+
+it('pauses before dispatch on a known small model with fresh defaults', async () => {
+  const lease = await setup('success');
+  const result = await lease.runCli({
+    cwd: process.cwd(),
+    args: ['x'.repeat(40000), '--provider', 'fixture-provider', '--model', 'gpt-4', '--json'],
+    deadlineMs: 15000,
+  });
+  expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
+  expect(result.stdout).toContain('context_paused');
+  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(server!.requests).toHaveLength(0);
+});
+
 it.each([undefined, 'warn'] as const)(
-  'refuses excessive input with escalation=%s, zero dispatches and a retained locator',
+  'enforces an explicit smaller input ceiling with escalation=%s and retains a locator',
   async (escalation) => {
-    const lease = await setup('success', escalation ? { runBudget: { escalation } } : {});
+    const lease = await setup('success', {
+      maxRequestInputTokens: 96000,
+      ...(escalation ? { runBudget: { escalation } } : {}),
+    });
     const result = await lease.runCli({
       cwd: process.cwd(),
       args: [...Array(5).fill('x'.repeat(100000)), '--provider', 'fixture-provider', '--model', 'fixture', '--json'],
@@ -115,4 +146,20 @@ it('parks an unattended critical budget without auto-granting and retains comple
   expect(resumedInput).toContain('fixture budget work');
   expect(resumedInput).toContain('call_fake');
   expect(resumedInput).toContain('Unknown tool: fixture');
+});
+
+it('retains unknown-model work after structured provider overflow without retrying', async () => {
+  const lease = await setup('context-overflow', { retryAttempts: 2 });
+  const result = await lease.runCli({
+    cwd: process.cwd(),
+    args: ['retain this request', '--provider', 'fixture-provider', '--model', 'fixture', '--json'],
+    deadlineMs: 15000,
+  });
+  expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
+  expect(result.stdout).toContain('context_paused');
+  expect(result.stdout).toContain('provider_context_overflow');
+  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(server!.requests).toHaveLength(1);
+  const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
+  expect(await readFile(join(lease.paths.conversationsDir, logs[0]!), 'utf8')).toContain('retain this request');
 });

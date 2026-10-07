@@ -150,7 +150,7 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.reasoningEffort')).toBe('default');
   expect(service.get('agent.temperature')).toBe(undefined);
   expect(service.get('agent.maxTurns')).toBe(100);
-  expect(service.get('agent.maxRequestInputTokens')).toBe(96_000);
+  expect(service.get('agent.maxRequestInputTokens')).toBeNull();
   expect(service.get('agent.contextCompaction.enabled')).toBe(true);
   expect(service.get('agent.runBudget.escalation')).toBe('contain');
   expect(service.get('agent.maxOutputTokens')).toBe(32_000);
@@ -1920,7 +1920,7 @@ it.sequential('preserves persisted context and budget opt-outs while filling mis
     delete data.agent.runBudget.escalation;
     fs.writeFileSync(file, JSON.stringify(data));
     const missing = new SettingsService({ settingsDir, disableLogging: true });
-    expect(missing.get('agent.maxRequestInputTokens')).toBe(96000);
+    expect(missing.get('agent.maxRequestInputTokens')).toBeNull();
     expect(missing.get('agent.contextCompaction.enabled')).toBe(true);
     expect(missing.get('agent.runBudget.escalation')).toBe('contain');
     expect(missing.get('agent.runBudget.maxUsdMicros')).toBe(1234567);

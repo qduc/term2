@@ -499,7 +499,8 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
     const message = error instanceof Error ? error.message : String(error);
     const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
-    const recoverable = code === 'request_input_limit' || code === 'context_compaction_hard_fit';
+    const recoverable =
+      code === 'request_input_limit' || code === 'context_compaction_hard_fit' || code === 'provider_context_overflow';
     const recovery =
       recoverable && config.recoverySessionId
         ? `Work is retained. Resume with --resume ${config.recoverySessionId} after reviewing the context limit.`

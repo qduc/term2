@@ -43,14 +43,20 @@ const definition = {
   reasoningEffort: 'default',
 };
 
-const makeRunner = (events: any[], settingsValues: Record<string, unknown> = {}) => {
+const makeRunner = (
+  events: any[],
+  settingsValues: Record<string, unknown> = {},
+  outputSource?: 'default' | 'config',
+) => {
   stream.events = events;
   const received: any[] = [];
   const clients: Array<{ dispose: ReturnType<typeof vi.fn> }> = [];
   const clientOptions: any[] = [];
+  const settings = createMockSettings(settingsValues);
+  if (outputSource) settings.getSource = () => outputSource;
   const runner = new ExecutionSubagentRunner({
     logger: createMockLogger(),
-    settings: createMockSettings(settingsValues),
+    settings,
     sessionContextService: createSessionContextService(),
     createClient: (options) => {
       clientOptions.push(options);
@@ -93,6 +99,23 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
       });
     },
   );
+  it.each([
+    ['default', undefined, 2048],
+    ['config', undefined, 8192],
+    ['default', 6000, 6000],
+  ] as const)('allocates small-model inherited output with source=%s role=%s', async (source, maxTokens, expected) => {
+    const { runner, clientOptions } = makeRunner(
+      [{ type: 'final', finalText: 'Done.' }],
+      { 'agent.maxOutputTokens': 32000 },
+      source,
+    );
+    await runner.run(
+      'small-child',
+      { role: 'explorer', task: 'inspect' },
+      { ...definition, provider: 'openai', model: 'gpt-4', maxTokens },
+    );
+    expect(clientOptions[0].agent.modelSettings.maxTokens).toBe(expected);
+  });
   it('preserves explicitly disabled child request and idle deadlines', async () => {
     const { runner, clientOptions } = makeRunner([{ type: 'final', finalText: 'Done.' }], {
       'agent.maxModelRequestDurationMs': 0,

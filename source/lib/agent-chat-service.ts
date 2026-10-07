@@ -1,3 +1,5 @@
+import { getCatalogModel } from '../providers/model-catalog/catalog.js';
+import { resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { ApplicationRunLoop, type ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import { getProvider } from '../providers/index.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -112,7 +114,7 @@ export class AgentChatService {
     const loop = new ApplicationRunLoop({ resolveModel: () => this.#getModel(providerId, agent.model) });
     this.#activeRunLoops.add(loop);
     try {
-      const stream = loop.startStream(agent, input, options);
+      const stream = loop.startStream(agent, input, { ...options, providerId });
       try {
         await stream.completed;
       } catch (error) {
@@ -189,7 +191,13 @@ export class AgentChatService {
           maxStreamOutputChars: settings.get('agent.maxStreamOutputChars'),
           maxModelRequestDurationMs: settings.get('agent.maxModelRequestDurationMs'),
           maxModelStreamIdleMs: settings.get('agent.maxModelStreamIdleMs'),
-          ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+          maxTokens:
+            options.maxTokens ??
+            resolveOutputAllocation(
+              getCatalogModel(tempProvider, tempModel),
+              settings.get('agent.maxOutputTokens'),
+              settings.getSource?.('agent.maxOutputTokens') === 'default',
+            ),
         };
 
         let effectiveEffort = tempEffort;

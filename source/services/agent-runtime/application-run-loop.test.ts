@@ -975,6 +975,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: 'codex',
           supportsConversationChaining: true,
           previousResponseId: 'resp_previous',
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call', callId: 'call_previous', name: 'read', arguments: '{}' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );
@@ -1022,6 +1027,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: identity.providerId,
           supportsConversationChaining: identity.previousResponseId !== undefined,
           previousResponseId: identity.previousResponseId,
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call', callId: 'call_previous', name: 'read', arguments: '{}' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );
@@ -1057,6 +1067,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: 'codex',
           supportsConversationChaining: true,
           previousResponseId: 'resp_previous',
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call_result', callId: 'call_previous', output: 'tool result' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );

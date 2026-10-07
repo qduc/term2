@@ -1369,7 +1369,8 @@ describe('AgentClient codex session-history compaction', () => {
               yield {
                 type: 'completion' as const,
                 responseId: `full-history-${ordinaryRequests}`,
-                usage: { inputTokens: 250_000 },
+                // Post-reduction checkpoint is small; stale pre-reduction usage is not a realistic next response.
+                usage: { inputTokens: 5_000 },
                 output:
                   ordinaryRequests === 1
                     ? [{ type: 'tool_call' as const, id: 'call-1', name: 'echo', arguments: '{"value":"done"}' }]
@@ -1477,16 +1478,18 @@ describe('AgentClient codex session-history compaction', () => {
       },
     );
     try {
-      await (
-        await instance.startStream('short chained delta', {
-          previousResponseId: 'prior-response',
-          providerHistorySnapshot: {
-            identity: 'mismatched-history',
-            revision: 1,
-            history: [{ role: 'user', type: 'message', content: 'some other user turn' }],
-          },
-        })
-      ).completed;
+      await expect(
+        (
+          await instance.startStream('short chained delta', {
+            previousResponseId: 'prior-response',
+            providerHistorySnapshot: {
+              identity: 'mismatched-history',
+              revision: 1,
+              history: [{ role: 'user', type: 'message', content: 'some other user turn' }],
+            },
+          })
+        ).completed,
+      ).rejects.toMatchObject({ code: 'request_input_limit', reason: 'unobservable_chained_context' });
       expect(compactHistory).not.toHaveBeenCalled();
     } finally {
       instance.dispose();

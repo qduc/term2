@@ -1,9 +1,9 @@
 > 2026-10-07 ordinary-defaults follow-up: [ordinary safe runs](ordinary-safe-runs.md)
-> owns the newly authorized enabled-auto/96k admission/critical containment policy,
+> owns the newly authorized enabled-auto/model-aware admission/critical containment policy,
 > local settled-round cuts, preserved user instructions and accounting/recovery
 > repairs. Historical disabled/warn/once-per-run local dispositions below describe
 > the earlier implementation. Explicit settings remain supported; native Codex
-> retains its one/run policy. See that plan for calibration, evidence and limits.
+> retains its one/run policy. See that plan for policy, evidence and limits.
 
 # Provider-neutral local context compaction
 

@@ -1,3 +1,4 @@
+import { resolveModelContextPolicy } from '../model-context-policy.js';
 import type { ContextSummaryMarker, ProviderInputItem } from '../../../contracts/provider-input.js';
 import { isLocalContextSummary } from '../../../contracts/provider-input.js';
 import type { ModelRequestCost } from '../../cost/model-cost.js';
@@ -12,7 +13,6 @@ import {
   estimateContext,
   planLocalCompaction,
   rearmAtTokens,
-  resolveCompactionThreshold,
   serializeColdPrefix,
   shouldDeferAutomaticCompaction,
   type ContextEstimate,
@@ -247,20 +247,14 @@ export class LocalContextCompactor {
   }
 
   async compactAtBoundary(input: LocalCompactionInput): Promise<LocalCompactionOutcome> {
-    const resolved = resolveCompactionThreshold({
+    const policy = resolveModelContextPolicy({
       contextWindow: input.contextWindow,
-      compactThreshold: input.compactThreshold,
-      compactThresholdTokens:
-        input.compactThresholdTokens ??
-        (input.contextWindow === undefined ? input.maxRequestInputTokens ?? null : null),
+      maxOutputTokens: input.maxOutputTokens,
+      inputLimit: input.maxRequestInputTokens,
+      ratio: input.compactThreshold,
+      rawTrigger: input.compactThresholdTokens,
     });
-    const threshold =
-      resolved.available && input.maxRequestInputTokens != null
-        ? {
-            ...resolved,
-            effectiveThreshold: Math.min(resolved.effectiveThreshold, Math.floor(input.maxRequestInputTokens * 0.75)),
-          }
-        : resolved;
+    const threshold = { available: policy.softTrigger !== undefined, effectiveThreshold: policy.softTrigger ?? 0 };
     if (!threshold.available) {
       if (input.manual) throw new Error('Set agent.contextCompaction.compactThresholdTokens for an uncatalogued model');
       return { kind: 'not_needed', estimate: estimateContext(input) };
@@ -284,10 +278,8 @@ export class LocalContextCompactor {
       if (deferred) return { kind: 'deferred', reason: deferred, estimate };
     }
 
-    // For an uncatalogued model the raw-token threshold is the user's own
-    // statement of the model's scale, so use it directly as the fallback
-    // window; capping it (previously at 64_000) made hard-fit refusal the
-    // only reachable outcome once the trigger fired.
+    // Unknown-model caps/triggers supply a planning scale only. They do not
+    // assert a provider context capacity or reserve an invented output window.
     const usableWindow =
       input.contextWindow ??
       input.maxRequestInputTokens ??
@@ -298,13 +290,7 @@ export class LocalContextCompactor {
       instructions: input.instructions,
       tools: input.tools,
     }).renderedInputTokens;
-    const usableInputTokens =
-      Math.min(
-        input.maxRequestInputTokens ?? Infinity,
-        usableWindow -
-          (input.maxOutputTokens ?? 0) -
-          (input.contextWindow === undefined ? 0 : Math.ceil(usableWindow * 0.1)),
-      ) - fixedTokens;
+    const usableInputTokens = (policy.hardInputLimit ?? usableWindow) - fixedTokens;
     if (usableInputTokens <= 0) {
       const eligibility = planLocalCompaction({ history: input.history, usableInputTokens: Infinity });
       return {
@@ -378,7 +364,9 @@ export class LocalContextCompactor {
         summaryEstimate.renderedInputTokens >
         Math.min(
           input.maxRequestInputTokens ?? Infinity,
-          usableWindow - summaryOutputCap - (input.contextWindow === undefined ? 0 : Math.ceil(usableWindow * 0.1)),
+          input.contextWindow === undefined
+            ? Infinity
+            : usableWindow - summaryOutputCap - Math.ceil(usableWindow * 0.1),
         )
       )
         return {
@@ -415,7 +403,7 @@ export class LocalContextCompactor {
       history: [{ role: 'system', type: 'message', content }, ...plan.hotTail],
     });
     if (
-      postEstimate.hardFitTokens > usableWindow ||
+      (input.contextWindow !== undefined && postEstimate.hardFitTokens > input.contextWindow) ||
       (input.maxRequestInputTokens != null && postEstimate.renderedInputTokens > input.maxRequestInputTokens)
     ) {
       return {

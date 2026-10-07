@@ -1,3 +1,8 @@
+import {
+  isProviderContextOverflow,
+  ProviderContextOverflowError,
+} from '../services/agent-runtime/request-input-limit.js';
+import { resolveModelContextPolicy, resolveRequestOutput } from '../services/agent-runtime/model-context-policy.js';
 import type { ModelSelection } from '../services/settings/model-selection.js';
 import {
   normalizeApplicationInput,
@@ -77,7 +82,6 @@ import { isCodexCompactionIncompatible } from '../providers/codex-compact.js';
 import {
   estimateContext,
   rearmAtTokens,
-  resolveCompactionThreshold,
   shouldDeferAutomaticCompaction,
 } from '../services/agent-runtime/context-compaction/index.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
@@ -246,33 +250,26 @@ export class AgentClient {
     | { kind: 'compacted'; history: ProviderInputItem[]; modelInput: ProviderInputItem[] }
   > {
     const catalog = getCatalogModel('codex', input.model);
-    let threshold = resolveCompactionThreshold({
-      contextWindow: catalog?.contextWindow,
-      compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
-      compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
-    });
     const inputCeiling = this.#settings.get('agent.maxRequestInputTokens');
-    if (!input.manual && this.#settings.get('agent.contextCompaction.mode') === 'auto' && inputCeiling != null) {
-      threshold = {
-        available: true,
-        effectiveThreshold: Math.min(
-          threshold.available ? threshold.effectiveThreshold : Infinity,
-          Math.floor(inputCeiling * 0.75),
-        ),
-        thresholdSource: 'tokens',
-      };
-    }
+    const policy = resolveModelContextPolicy({
+      contextWindow: catalog?.contextWindow,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
+      inputLimit: inputCeiling,
+      ratio: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
+      rawTrigger: this.#settings.get('agent.contextCompaction.compactThresholdTokens'),
+    });
+    const threshold = { available: policy.softTrigger !== undefined, effectiveThreshold: policy.softTrigger ?? 0 };
     const estimate = estimateContext({
       history: input.history,
       instructions: input.instructions,
       tools: input.tools,
       contextWindow: catalog?.contextWindow,
-      maxOutputTokens: catalog?.maxTokens,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
     });
     const measuredInputTokens = Math.max(input.lastCompletedInputTokens ?? 0, estimate.renderedInputTokens);
     if (!input.manual) {
       // Native replacement has no portable growth checkpoint. Preserve its
-      // existing one-attempt-per-run policy; local checkpoints rearm by growth.
+      // existing one-successful-replacement-per-run policy; local checkpoints rearm by growth.
       if (input.automaticCompactionsThisRun >= 1) return { kind: 'unchanged' };
       if (!threshold.available || measuredInputTokens < threshold.effectiveThreshold) {
         this.#logger.debug('Codex native compaction threshold not reached', {
@@ -314,6 +311,7 @@ export class AgentClient {
       return { kind: 'compacted', history, modelInput: history };
     } catch (error) {
       if (input.signal?.aborted) throw error;
+      if (isProviderContextOverflow(error)) throw new ProviderContextOverflowError(error);
       const nativeUnavailable = isCodexCompactionIncompatible(error);
       if (nativeUnavailable) this.#unavailableCodexCompaction.add(streamed);
       this.#logger.warn('Codex compact endpoint failed; continuing with uncompacted history', {
@@ -381,7 +379,10 @@ export class AgentClient {
         // by admission in auto mode; never replace ciphertext with a guessed summary.
         if (mode === 'native' || (mode === 'auto' && openaiInlineNative)) return { kind: 'unchanged' as const };
 
-        const configuredMaxOutput = this.#settings.get('agent.maxOutputTokens');
+        const configuredMaxOutput = resolveRequestOutput(
+          catalog,
+          this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens,
+        );
         let started = false;
         const compactor = new LocalContextCompactor({
           generate: async ({ renderedInput, maxOutputTokens, signal: summarySignal }) => {
@@ -440,10 +441,7 @@ export class AgentClient {
             model,
             sourceRevision: 0,
             contextWindow: catalog?.contextWindow,
-            maxOutputTokens:
-              configuredMaxOutput === undefined
-                ? catalog?.maxTokens
-                : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
+            maxOutputTokens: configuredMaxOutput,
             compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
             compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
             manual: false,
@@ -456,6 +454,7 @@ export class AgentClient {
           });
         } catch (error) {
           if (signal?.aborted) throw error;
+          if (isProviderContextOverflow(error)) throw new ProviderContextOverflowError(error);
           this.#blockedCompactionRearmAtEstimatedTokens = rearmAtTokens(
             boundaryEstimate.renderedInputTokens,
             inputCeiling ?? catalog?.contextWindow ?? 64_000,
@@ -553,7 +552,7 @@ export class AgentClient {
       instructions: agent.resolveInstructionsForRequest?.() ?? agent.instructions,
       tools: agent.tools,
       contextWindow: catalog?.contextWindow,
-      maxOutputTokens: catalog?.maxTokens,
+      maxOutputTokens: resolveRequestOutput(catalog, this.#agentConfig.getApplicationAgent().modelSettings?.maxTokens),
     });
     const measuredHardFitTokens =
       estimate.hardFitTokens + Math.max(0, (lastCompletedInputTokens ?? 0) - estimate.renderedInputTokens);

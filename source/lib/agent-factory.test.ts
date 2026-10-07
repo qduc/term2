@@ -1360,3 +1360,31 @@ it.sequential('auto native compaction is scheduled before the selected request c
   const result = buildAgent({ selection: { model: 'gpt-5.4-nano', provider: 'openai' } }, deps);
   expect(result.agent.modelSettings?.providerData?.contextCompaction).toMatchObject({ thresholdTokens: 72000 });
 });
+
+it('uses capacity-aware default output while retaining explicit small-model output', () => {
+  const { deps } = createDeps({ settingsValues: { 'agent.maxOutputTokens': 32000 } });
+  deps.settings.getSource = () => 'default';
+  expect(buildAgent({ selection: { model: 'gpt-4', provider: 'openai' } }, deps).agent.modelSettings?.maxTokens).toBe(
+    2048,
+  );
+  deps.settings.getSource = () => 'config';
+  expect(buildAgent({ selection: { model: 'gpt-4', provider: 'openai' } }, deps).agent.modelSettings?.maxTokens).toBe(
+    8192,
+  );
+});
+it('native auto uses the same capacity/output headroom when no extra user input cap exists', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+      'agent.maxRequestInputTokens': null,
+      'agent.maxOutputTokens': 32000,
+    },
+  });
+  deps.settings.getSource = () => 'default';
+  expect(
+    buildAgent({ selection: { model: 'gpt-5.6-luna', provider: 'openai' } }, deps).agent.modelSettings?.providerData
+      ?.contextCompaction,
+  ).toMatchObject({ thresholdTokens: 191520 });
+});

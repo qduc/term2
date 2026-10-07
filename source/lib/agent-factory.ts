@@ -1,3 +1,4 @@
+import { resolveModelContextPolicy, resolveOutputAllocation } from '../services/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../tools/system/run-code/run-code.js';
 import path from 'path';
 import { z } from 'zod';
@@ -424,8 +425,11 @@ function buildModelSettings({
   const maxModelRequestDurationMs = deps.settings.get('agent.maxModelRequestDurationMs');
   const maxModelStreamIdleMs = deps.settings.get('agent.maxModelStreamIdleMs');
   if (typeof maxOutputTokens === 'number') {
-    const catalogLimit = getCatalogModel(deps.providerId, resolvedModel)?.maxTokens;
-    modelSettings.maxTokens = catalogLimit === undefined ? maxOutputTokens : Math.min(maxOutputTokens, catalogLimit);
+    modelSettings.maxTokens = resolveOutputAllocation(
+      getCatalogModel(deps.providerId, resolvedModel),
+      maxOutputTokens,
+      deps.settings.getSource?.('agent.maxOutputTokens') === 'default',
+    );
   }
   if (typeof maxStreamOutputChars === 'number') modelSettings.maxStreamOutputChars = maxStreamOutputChars;
   if (typeof maxModelRequestDurationMs === 'number') {
@@ -475,8 +479,14 @@ function buildModelSettings({
     const configuredThreshold = deps.settings.get('agent.contextCompaction.compactThresholdTokens');
     const inputCeiling = deps.settings.get('agent.maxRequestInputTokens');
     const thresholdTokens =
-      contextCompactionMode === 'auto' && inputCeiling != null
-        ? Math.min(configuredThreshold ?? Infinity, Math.floor(inputCeiling * 0.75))
+      contextCompactionMode === 'auto'
+        ? resolveModelContextPolicy({
+            contextWindow: getCatalogModel(deps.providerId, resolvedModel)?.contextWindow,
+            maxOutputTokens: modelSettings.maxTokens,
+            inputLimit: inputCeiling,
+            ratio: deps.settings.get('agent.contextCompaction.compactThreshold'),
+            rawTrigger: configuredThreshold,
+          }).softTrigger
         : configuredThreshold;
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),

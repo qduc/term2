@@ -1,8 +1,8 @@
 # Term2 Guard Ledger and Remediation Plan
 
 Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-runs.md).
-The October 7 change supersedes the ordinary null/off/advisory defaults recorded
-in the historical October 6 incident below; explicit supervised overrides remain.
+The October 7 change supersedes historical compaction-off/advisory defaults;
+the extra input ceiling remains optional and explicit supervised overrides remain.
 
 ## October 6 supervised-worker token incident (branch-local repair)
 
@@ -3139,12 +3139,15 @@ Owner: [ordinary safe runs](ordinary-safe-runs.md), alongside provider-neutral
 compaction and run-budget-stall-escalation. User approved the outcome/default
 change; previous opt-in/default warn dispositions do not govern this new policy.
 
-Missing keys now select 96k estimated/last-observed input, enabled auto compaction,
-and `contain` escalation. Explicit persisted/live null/off/warn/pause/disabled,
-role output limits and custom caps retain precedence. Supervised environment
-keeps its explicit 80k/60k input/trigger profile. Auto triggers clamp by 75% of
-admission (72k fresh), ratio/raw policy and catalog scale. Ordinary input ceiling
-is an admission guard; budgets are post-usage containment, not prepaid billing.
+Missing keys now select enabled auto compaction, `contain` escalation and no extra
+input ceiling. Known model capacity independently bounds prepared input after
+actual selected output and 10% estimation reserve. One shared resolver bounds
+soft compaction below hard admission; explicit smaller ceilings retain precedence.
+Default output allocation adapts to small windows; explicit output selections are
+preserved subject to provider maxima. Unknown capacity is not invented from raw
+triggers. Structured provider overflow pauses without repeating the failed request.
+Supervised 80k/60k overrides, compaction opt-outs and budget choices remain intact.
+These are admission heuristics, not optimal thresholds or prepaid billing.
 
 Local reductions retain genuine user requests, paired recent rounds and host
 receipts, rearm only after measured growth, and refuse non-reducing or oversized
@@ -3162,17 +3165,16 @@ history and resumed wire. Per-run grant state does not survive restart; resumed
 work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
 to original journal replay with paired tool evidence. No automatic effect replay.
 
-Calibration compared 795 provider-reported requests from 16 preserved launches
-against 32k/48k/64k/80k/96k/128k. 96k reduces premature interference in recorded
-coding requests while containing problematic growth. Redacted prompts/tool
-schemas prevent estimator-error calibration. Scripted 20-artifact repeated
-compaction and built-CLI pause/resume supply offline evidence; semantic quality
-and aggregate sibling monetary containment remain limits, not green claims.
+The revision replaces the earlier universal 96k/72k proposal. Public primary
+sources motivate separating capacity from operating policy; no trace-derived
+dataset is published. Synthetic small/large/unknown model fixtures, scripted
+20-artifact repeated compaction and built-CLI pause/resume supply offline evidence.
+Live semantic quality and aggregate sibling monetary containment remain limits.
 
 Regression evidence: initial 5 ordinary compaction tests and new terminal/rearm
 cases failed before repair. Focused source tests, related/changed, types, full
 unit/integration and provider gates are required; status lives in the PR/plan.
 Rollback: revert default selection independently from safe-cut/accounting/terminal
-metadata repairs. No persisted values are guessed or rewritten. Independent final review found
-no remaining material findings; local baseline failures and CI coverage limits
+metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
+stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
 remain documented in the plan/PR. No merge, release or deployment is performed.

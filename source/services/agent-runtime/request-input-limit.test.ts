@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApplicationRunLoop, type ApplicationAgent } from './application-run-loop.js';
-import { enforceRequestInputLimit } from './request-input-limit.js';
+import {
+  enforceRequestInputLimit,
+  isProviderContextOverflow,
+  ProviderContextOverflowError,
+} from './request-input-limit.js';
 import { LocalContextCompactor } from './context-compaction/local-context-compactor.js';
 
 const message = (content: string) => ({ role: 'user' as const, type: 'message' as const, content });
@@ -287,3 +291,185 @@ describe('request input admission', () => {
     expect(requests).toBe(3);
   });
 });
+
+it('uses large model capacity beyond 96k and retains optional smaller ceilings', () => {
+  const input = {
+    history: [message('x'.repeat(500000))],
+    instructions: 'retain this',
+    tools: [],
+    contextWindow: 1000000,
+    maxOutputTokens: 32000,
+  };
+  expect(() => enforceRequestInputLimit({ ...input, limit: null })).not.toThrow();
+  expect(() => enforceRequestInputLimit({ ...input, limit: 96000 })).toThrow(/configured ceiling/);
+  expect(() =>
+    enforceRequestInputLimit({ ...input, contextWindow: 32000, maxOutputTokens: 8000, limit: null }),
+  ).toThrow(/known model capacity/);
+});
+it('retains an impossible explicit output allocation as a typed refusal', () => {
+  expect(() =>
+    enforceRequestInputLimit({
+      history: [message('small task')],
+      instructions: '',
+      tools: [],
+      contextWindow: 8192,
+      maxOutputTokens: 8000,
+    }),
+  ).toThrow(/lower an explicit output allocation/);
+});
+it('uses the current provider/model on each new run instead of retaining large-model capacity', async () => {
+  const dispatch = vi.fn(async function* () {
+    yield { type: 'completion' as const, responseId: 'done', output: [] };
+  });
+  const loop = new ApplicationRunLoop({ resolveModel: () => ({ stream: dispatch }) });
+  await loop.startStream(
+    { ...agent, model: 'gpt-5.6-luna', modelSettings: { maxTokens: 32000 } },
+    [message('x'.repeat(500000))],
+    { providerId: 'openai' },
+  ).completed;
+  await expect(
+    loop.startStream({ ...agent, model: 'gpt-4', modelSettings: { maxTokens: 2048 } }, [message('x'.repeat(500000))], {
+      providerId: 'openai',
+    }).completed,
+  ).rejects.toMatchObject({ code: 'request_input_limit', reason: 'capacity_exceeded', capacity: 8192 });
+  expect(dispatch).toHaveBeenCalledTimes(1);
+});
+it('parks structured overflow from an unknown provider without identical automatic retries', async () => {
+  const dispatch = vi.fn(async function* () {
+    throw Object.assign(new Error('provider capacity rejected'), { code: 'context_length_exceeded' });
+  });
+  const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: dispatch }) }).startStream(
+    { ...agent, modelSettings: { retry: { maxRetries: 2 } } },
+    [message('retained instructions')],
+    { providerId: 'fixture' },
+  );
+  await expect(stream.completed).rejects.toMatchObject({ code: 'provider_context_overflow' });
+  expect(dispatch).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(stream.history)).toContain('retained instructions');
+});
+
+describe('structured provider capacity evidence', () => {
+  it('recognizes nested capacity codes behind numeric SDK status codes', () => {
+    expect(isProviderContextOverflow({ code: 400, error: { code: 'context_length_exceeded' } })).toBe(true);
+    expect(
+      isProviderContextOverflow({ code: 400, responseBody: JSON.stringify({ error: { code: 'input_too_long' } }) }),
+    ).toBe(true);
+    expect(isProviderContextOverflow(new Error('wrapper', { cause: { code: 'max_context_length_exceeded' } }))).toBe(
+      true,
+    );
+    expect(isProviderContextOverflow(new ProviderContextOverflowError(undefined))).toBe(true);
+  });
+  it('does not guess from generic failures or recurse through cyclic causes', () => {
+    expect(isProviderContextOverflow(new Error('context too long'))).toBe(false);
+    expect(isProviderContextOverflow({ code: 500, responseBody: 'invalid json' })).toBe(false);
+    const error: { cause?: unknown } = {};
+    error.cause = error;
+    expect(isProviderContextOverflow(error)).toBe(false);
+  });
+});
+
+it.each(['matched', 'unknown', 'already-settled'] as const)(
+  'requires producing-call evidence for a tool-only continuation: %s',
+  async (kind) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const history = [
+      message('original request'),
+      { type: 'function_call', callId: 'pending', name: 'read', arguments: '{}' },
+      ...(kind === 'already-settled' ? [{ type: 'function_call_result', callId: 'pending', output: 'old' }] : []),
+    ];
+    const result = {
+      type: 'function_call_result',
+      callId: kind === 'unknown' ? 'unobserved' : 'pending',
+      output: 'settled',
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      [result],
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: history,
+      },
+    );
+    if (kind === 'matched') {
+      await stream.completed;
+      expect(streamModel).toHaveBeenCalledTimes(1);
+    } else {
+      await expect(stream.completed).rejects.toMatchObject({
+        code: 'request_input_limit',
+        reason: 'unobservable_chained_context',
+      });
+      expect(streamModel).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it.each(['function_call_result', 'function_call_output', 'custom_tool_call_output'] as const)(
+  'aligns supported tool receipt representation %s',
+  async (type) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const custom = type === 'custom_tool_call_output';
+    const snapshot = [
+      message('original'),
+      {
+        type: custom ? 'custom_tool_call' : 'function_call',
+        call_id: 'call',
+        name: 'read',
+        arguments: '{}',
+        input: 'read',
+      },
+    ];
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      [{ type, call_id: 'call', output: 'ok' }],
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: snapshot,
+      },
+    );
+    await stream.completed;
+    expect(streamModel).toHaveBeenCalledTimes(1);
+  },
+);
+it.each(['duplicate', 'unknown', 'new-round'] as const)(
+  'validates receipt evidence after intervening messages: %s',
+  async (kind) => {
+    const streamModel = vi.fn(async function* () {
+      yield { type: 'completion' as const, responseId: 'next', output: [] };
+    });
+    const snapshot = [message('original'), { type: 'function_call', callId: 'pending', name: 'read', arguments: '{}' }];
+    const delta = [
+      { type: 'function_call_result', callId: 'pending', output: 'ok' },
+      { type: 'message', role: 'assistant', content: 'continuing' },
+      ...(kind === 'new-round' ? [{ type: 'function_call', callId: 'next', name: 'read', arguments: '{}' }] : []),
+      { type: 'function_call_result', callId: kind === 'duplicate' ? 'pending' : 'next', output: 'ok' },
+    ];
+    const stream = new ApplicationRunLoop({ resolveModel: () => ({ stream: streamModel }) }).startStream(
+      { ...agent, model: 'gpt-5.6-luna' },
+      delta,
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'prior',
+        compactionHistory: snapshot,
+      },
+    );
+    if (kind === 'new-round') {
+      await stream.completed;
+      expect(streamModel).toHaveBeenCalledTimes(1);
+    } else {
+      await expect(stream.completed).rejects.toMatchObject({
+        code: 'request_input_limit',
+        reason: 'unobservable_chained_context',
+      });
+      expect(streamModel).not.toHaveBeenCalled();
+    }
+  },
+);

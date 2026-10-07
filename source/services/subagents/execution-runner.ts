@@ -1,3 +1,4 @@
+import { resolveOutputAllocation } from '../agent-runtime/model-context-policy.js';
 import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -222,11 +223,14 @@ export class ExecutionSubagentRunner {
     // retains its existing precedence over the global output default.
     const maxTokens = definition.maxTokens ?? this.#settings.get('agent.maxOutputTokens');
     if (typeof maxTokens === 'number') {
-      const catalogLimit = getCatalogModel(providerId, definition.model)?.maxTokens;
       modelSettings.maxTokens =
-        definition.maxTokens !== undefined || catalogLimit === undefined
+        definition.maxTokens !== undefined
           ? maxTokens
-          : Math.min(maxTokens, catalogLimit);
+          : resolveOutputAllocation(
+              getCatalogModel(providerId, definition.model),
+              maxTokens,
+              this.#settings.getSource?.('agent.maxOutputTokens') === 'default',
+            );
     }
     for (const key of ['maxStreamOutputChars', 'maxModelRequestDurationMs', 'maxModelStreamIdleMs'] as const) {
       const value = this.#settings.get(`agent.${key}`);

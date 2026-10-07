@@ -1,3 +1,4 @@
+import { resolveOutputAllocation } from '../agent-runtime/model-context-policy.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
@@ -1084,6 +1085,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     const catalog = getCatalogModel(provider, model);
     const compactThreshold = settingsService?.get('agent.contextCompaction.compactThreshold') ?? 0.8;
     const configuredMaxOutput = settingsService?.get('agent.maxOutputTokens');
+    const requestOutput = resolveOutputAllocation(
+      catalog,
+      configuredMaxOutput,
+      settingsService?.getSource?.('agent.maxOutputTokens') === 'default',
+    );
     const abortError = (): Error => {
       const error = new Error('Context compaction cancelled.');
       error.name = 'AbortError';
@@ -1101,7 +1107,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       const before = estimateContext({
         history: snapshot.history,
         contextWindow: catalog?.contextWindow,
-        maxOutputTokens: catalog?.maxTokens,
+        maxOutputTokens: requestOutput,
       });
       // Commit point for the codex branch: everything after this (the native
       // call, history replacement) is a started compaction whose outcome must
@@ -1123,7 +1129,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       const after = estimateContext({
         history: remote.history,
         contextWindow: catalog?.contextWindow,
-        maxOutputTokens: catalog?.maxTokens,
+        maxOutputTokens: requestOutput,
       });
       return {
         kind: 'compacted',
@@ -1192,10 +1198,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       model,
       sourceRevision: snapshot.revision,
       contextWindow: catalog?.contextWindow,
-      maxOutputTokens:
-        configuredMaxOutput === undefined
-          ? catalog?.maxTokens
-          : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
+      maxOutputTokens: requestOutput,
       compactThreshold,
       compactThresholdTokens: null,
       maxRequestInputTokens: settingsService?.get('agent.maxRequestInputTokens'),

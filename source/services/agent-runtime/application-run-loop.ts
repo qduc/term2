@@ -1181,8 +1181,11 @@ export class ApplicationRunLoop {
         };
         const dispatch = async (): Promise<void> => {
           state.requestPreparation?.prepare(request);
+          // A response ID can be established after a self-contained request.
+          // It does not make this run's full history a delta needing a snapshot.
+          const needsChainedSnapshot = Boolean(request.previousResponseId && state.usesDeltaHistory);
           const fullContext =
-            request.previousResponseId && state.compactionHistory
+            needsChainedSnapshot && state.compactionHistory
               ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
               : undefined;
           const contextCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
@@ -1195,7 +1198,7 @@ export class ApplicationRunLoop {
             history:
               fullContext?.kind === 'ready'
                 ? fullContext.history
-                : request.previousResponseId
+                : needsChainedSnapshot
                 ? [...(state.compactionHistory ?? []), ...request.input]
                 : request.input,
             instructions: request.instructions ?? '',
@@ -1203,8 +1206,7 @@ export class ApplicationRunLoop {
             lastCompletedInputTokens: state.inputUsageInvalidatedByCompaction
               ? undefined
               : state.lastCompletedInputTokens,
-            chainedContextKnown:
-              !request.previousResponseId || !state.usesDeltaHistory || fullContext?.kind === 'ready',
+            chainedContextKnown: !needsChainedSnapshot || fullContext?.kind === 'ready',
           });
           await consume();
         };

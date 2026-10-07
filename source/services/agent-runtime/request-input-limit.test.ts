@@ -6,11 +6,86 @@ import {
   ProviderContextOverflowError,
 } from './request-input-limit.js';
 import { LocalContextCompactor } from './context-compaction/local-context-compactor.js';
+import type { StreamedModelTurnRequest } from '../../contracts/streamed-model-turn.js';
 
 const message = (content: string) => ({ role: 'user' as const, type: 'message' as const, content });
 const agent: ApplicationAgent = { name: 'fixture', model: 'fixture', instructions: '', tools: [] };
 
 describe('request input admission', () => {
+  it.each([
+    { compacted: false, settledPair: false },
+    { compacted: true, settledPair: false },
+    { compacted: false, settledPair: true },
+    { compacted: true, settledPair: true },
+  ])(
+    'counts self-contained history once after a response establishes chaining ($compacted, $settledPair)',
+    async ({ compacted, settledPair }) => {
+      const history = settledPair
+        ? [
+            message('current request'),
+            { type: 'function_call' as const, callId: 'old-read', name: 'read', arguments: '{}' },
+            { type: 'function_call_result' as const, callId: 'old-read', output: 'x'.repeat(440_000) },
+          ]
+        : [message('x'.repeat(440_000)), message('current request')];
+      const requests: StreamedModelTurnRequest[] = [];
+      const effect = vi.fn(() => 'read completed');
+      let boundaries = 0;
+      const stream = new ApplicationRunLoop({
+        resolveModel: () => ({
+          async *stream(request) {
+            requests.push(request);
+            yield {
+              type: 'completion' as const,
+              responseId: `response-${requests.length}`,
+              usage: { inputTokens: 116_856 },
+              output:
+                requests.length === 1
+                  ? [{ type: 'tool_call' as const, id: 'read-1', name: 'read', arguments: '{}' }]
+                  : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+            };
+          },
+        }),
+      }).startStream(
+        {
+          ...agent,
+          model: 'gpt-6.1-sol',
+          tools: [
+            {
+              name: 'read',
+              description: 'fixture',
+              parameters: {},
+              needsApproval: () => false,
+              execute: effect,
+              formatCommandMessage: () => [],
+            },
+          ],
+        },
+        history,
+        {
+          providerId: 'codex',
+          supportsConversationChaining: true,
+          compactionHistory: history,
+          ...(compacted
+            ? {
+                boundaryCompaction: {
+                  compact: async () =>
+                    ++boundaries === 1
+                      ? { kind: 'compacted' as const, history, modelInput: history }
+                      : { kind: 'unchanged' as const },
+                },
+              }
+            : {}),
+        },
+      );
+      await expect(stream.completed).resolves.toBeDefined();
+      expect(requests).toHaveLength(2);
+      expect(requests[0].previousResponseId).toBeUndefined();
+      expect(requests[1].previousResponseId).toBe('response-1');
+      expect(effect).toHaveBeenCalledOnce();
+      expect(stream.finalOutput).toBe('finished');
+      expect(JSON.stringify(requests[1].input).split('x'.repeat(440_000))).toHaveLength(2);
+    },
+  );
   it('refuses live activation on an unobservable chain despite older observed usage', async () => {
     let limit: number | null = null;
     let requests = 0;

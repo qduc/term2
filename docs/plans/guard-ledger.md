@@ -4,6 +4,82 @@ Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-r
 The October 7 change supersedes historical compaction-off/advisory defaults;
 the extra input ceiling remains optional and explicit supervised overrides remain.
 
+## Full-history admission accounting (2026-10-07)
+
+A full-history Codex run was refused on its second model request with
+`capacity_exceeded`: admission estimated roughly 214k tokens while preceding
+provider usage was roughly 117k. Automatic compaction was enabled, but its
+single-history estimate correctly remained below the soft trigger.
+
+The regression originated in request-admission wiring in `e8bbefb8`.
+`ApplicationRunLoop` established `previousResponseId` after the first completed
+response, then admission used that ID to infer that `state.history` was a delta.
+The run had actually started self-contained (`usesDeltaHistory = false`). The
+snapshot merge could duplicate settled pairs or fail user alignment and prepend
+the complete snapshot again. Neither case represented the actual outbound input.
+
+Guard contract: prevent false capacity/explicit-ceiling refusal of self-contained
+tool continuations, including continuations after local replacement. Class and
+owner remain request admission in `ApplicationRunLoop`; existing retained-work
+recovery belongs to the session. History representation is direct state evidence;
+serialized-byte estimation and preceding provider usage remain capacity proxies.
+Large legitimate full histories may still exceed the real bound, and those
+refusals remain enforced. Admission now requires both a response ID and
+`usesDeltaHistory` before reconstructing a snapshot-backed delta. The same local
+predicate controls merge, fallback accounting and chained-context observability.
+True delta chains still require an aligned full snapshot. No input is truncated,
+no tool is replayed, and no admitted/sibling work is cancelled.
+
+Configuration/defaults/precedence/clamping remain unchanged: model capacity minus
+selected output and 10% estimation reserve, additionally bounded by an explicit
+`agent.maxRequestInputTokens` ceiling; live settings resolution still applies.
+No persisted migration, retry, provider-continuity, output-allocation, or diagnostic
+schema change is introduced. Existing refusal diagnostics retain estimates,
+observed usage, effective limit, reserves, reason, action and retained-work
+recovery without logging content. Rollback is the admission predicate and its
+public-boundary regressions, independently of capacity/compaction policy.
+
+Red proof: `pnpm exec cross-env NODE_ENV=test vitest run
+source/services/agent-runtime/request-input-limit.test.ts -t 'self-contained history once'`
+failed both initial full-history and successful-replacement cases with the exact
+capacity error (estimated 220127, observed 116856, input budget 212800). After
+repair, the focused request-admission and AgentClient suites passed 83 tests.
+Additional rows cover settled-pair snapshot merges as well as user-mismatch
+fallback; the AgentClient test verifies a high raw compaction trigger cannot waive
+the model-aware soft trigger. Final broad verification is recorded below.
+
+Retro: the invalid inference was representable because transport continuity and
+history representation are separate facts. Admission conflated them even though
+boundary compaction already used the correct discriminator. Existing tests
+covered initial self-contained admission and pre-existing delta chains, not the
+transition from a self-contained request to a response-backed tool continuation.
+The shared predicate plus the two-history-shape/replacement matrix protects that
+category without a new state machine or heuristic. Both snapshot-merge call sites
+were audited; boundary compaction already honors `usesDeltaHistory`, and local
+replacement resets it. No settings, persistence, authorization, or external API
+boundary changed (N/A for migration/security failure classes). Existing aggregate
+logs exposed the inflated estimate but did not distinguish accounting duplication;
+the deterministic transition regression now detects it before dispatch. No paid
+call or trace-content publication was needed.
+
+Source repair: `e0bfe62ac470f1d5120efdad271c651afc14c688`.
+Verification (all jobs have finite timeouts; elapsed times are command wall time):
+
+- Focused admission/AgentClient: 83 passed; 5.27s, exit 0.
+- Full unit: 706 files / 10,938 passed, 3 expected failures, 2 skipped;
+  159.50s, exit 0.
+- Integration: 12 passed files / 106 passed tests, 1 skipped file/test;
+  42.51s, exit 0.
+- Provider black-box: 22 files / 193 passed, 1 skipped; 93.07s, exit 0.
+- Final `pnpm test:related ./source/services/agent-runtime/application-run-loop.ts`
+  and `pnpm test:changed`: each 144 files / 2,905 passed, 2 expected failures;
+  76.70s / 66.58s, exit 0.
+- Final `pnpm typecheck`: 4.84s, exit 0, after correcting test-only nullable
+  response-ID typing and a missing fixture formatter; the initial validation
+  attempt failed only those two test declarations.
+- Scoped ESLint and Prettier passed; three pre-existing `require-yield` warnings
+  remain in unchanged generator fixtures. `git diff --check` passed.
+
 ## October 6 supervised-worker token incident (branch-local repair)
 
 Harm prevented: an oversized supervisor handoff, unchecked main-worker request

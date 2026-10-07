@@ -217,6 +217,26 @@ function makeConfig(overrides: Partial<ConversationOrchestratorConfig> = {}): Co
 }
 
 describe('ConversationOrchestrator', () => {
+  it('removes the retry recovery exhaustion notice after a successful retry', async () => {
+    const cfg = makeConfig();
+    const staleError = createMessage(
+      'retry-error',
+      'bot',
+      'Error: Retry recovery budget exhausted\n\nUse /retry-turn to try again.',
+      { status: 'finalized' },
+    );
+    cfg.messages.appendMessages([staleError]);
+    (cfg.conversationService as any).retryLastFailedTurn = vi.fn().mockResolvedValue({
+      type: 'response',
+      finalText: 'Recovered answer',
+      commandMessages: [],
+    });
+
+    await new ConversationOrchestrator(cfg).retryLastFailedTurn();
+
+    expect(cfg.messages.getMessages().some((message) => message.id === 'retry-error')).toBe(false);
+  });
+
   it('sends a user message and applies a response', async () => {
     const cfg = makeConfig();
     // No queue support in this test: the immediate-append path must run.

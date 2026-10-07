@@ -1,12 +1,15 @@
 name: CI
 
-# Run on every push to main: the unit tier (`pnpm test`) and the integration
-# tier (`pnpm test:integration`) in the same job, plus the provider black-box
-# suite (`test:provider-black-box`), which builds dist/ and drives the shipped
-# CLI through PTY-driven scenarios against deterministic loopback fixtures. The
-# process-level e2e tier runs in its own job below.
+# Run the full CI matrix on pull requests targeting main and on pushes to main.
+# Unit and integration tiers use separate jobs so they can run concurrently;
+# provider black-box builds dist/ and drives the shipped CLI through PTY-driven
+# scenarios against deterministic loopback fixtures. Process-level e2e is also
+# a separate job below.
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
 
@@ -54,10 +57,33 @@ jobs:
       - name: Run unit test suite
         run: pnpm test
 
-      # vitest.config.ts excludes the integration tier, so it needs this second
-      # command: without it CI would silently stop running the nine
-      # *.integration.* files. It needs no dist/ — cli.integration.test.ts
-      # compiles the CLI into node_modules/.cache itself.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Keep the search-tool environment consistent with the unit job. Some
+      # integration journeys exercise the same application tools end to end.
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      # vitest.config.ts excludes this tier, so run it explicitly. It needs no
+      # dist/ — cli.integration.test.ts compiles the CLI into node_modules/.cache.
       - name: Run integration test suite
         run: pnpm test:integration
 

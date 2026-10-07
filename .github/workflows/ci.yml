@@ -23,9 +23,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  # The unit tier is split into shards that run concurrently; Vitest's --shard
+  # partitions the spec list deterministically, so the shards are disjoint and
+  # together cover every file. The aggregate `test` job below keeps the
+  # historical check name for branch protection.
+  unit:
+    name: unit (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -54,8 +63,19 @@ jobs:
 
       # The script sets NODE_ENV=test itself via cross-env; do not rely on the
       # ambient value (see AGENTS.md on why production mode breaks Ink tests).
-      - name: Run unit test suite
-        run: pnpm test
+      - name: Run unit test suite (shard ${{ matrix.shard }}/4)
+        run: pnpm test --shard=${{ matrix.shard }}/4
+
+  # Single required check for the whole unit tier: passes only if every shard
+  # passed. `if: always()` so a failed or cancelled shard fails this job
+  # instead of leaving it skipped, which branch protection could read as green.
+  test:
+    needs: unit
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all unit shards to pass
+        run: test "${{ needs.unit.result }}" = "success"
 
   integration:
     runs-on: ubuntu-latest

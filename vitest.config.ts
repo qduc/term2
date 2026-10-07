@@ -29,6 +29,12 @@ export default defineConfig({
     // thread's share is small; one worker per core is the point before
     // contention dominates. `--maxWorkers` on the CLI still overrides this.
     maxWorkers: os.availableParallelism(),
+    // Persist Vite's transform output on disk (node_modules/.vite/vitest), keyed
+    // by file content, so unchanged modules are not re-transformed in every
+    // worker of every run. On the 73-file selection for a medium change,
+    // transform fell 14.5s -> 2.7s and wall 22.4s -> 19.2s; a cold cache costs
+    // about 3% extra once.
+    experimental: { fsModuleCache: true },
     globals: false,
     setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,

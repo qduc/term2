@@ -47,6 +47,13 @@ When impact is uncertain, broaden the selection. Lint and typecheck help catch
 static problems but do not replace behavioral checks. Do not exclude failing
 tests, weaken isolation, or report a speedup from a run that fails.
 
+## Footprint-based selection (prototype)
+
+`pnpm test:impact` selects tests by the source lines each one executed rather
+than by import graph, which fans out through hub modules. It is a prototype
+with known gaps and never replaces the CI gates; see
+[test-impact-map.md](../plans/test-impact-map.md) before relying on it.
+
 ## Measured selection example
 
 On current `main` (`f33995f1`, 2026-10-07), selecting the related tests for

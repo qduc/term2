@@ -239,7 +239,12 @@ describe('deriveLocalCheckpointRequestHistory', () => {
     expect(plan.kind).toBe('planned');
     if (plan.kind !== 'planned') return;
     expect(plan.coldPrefix).toEqual([...turn(1), ...turn(2)]);
-    expect(plan.hotTail).toEqual([...turn(3), { role: 'user', type: 'message', content: 'current' }]);
+    expect(plan.hotTail).toEqual([
+      turn(1)[0],
+      turn(2)[0],
+      ...turn(3),
+      { role: 'user', type: 'message', content: 'current' },
+    ]);
 
     const persisted = [
       envelope(1, 'u1', { type: 'user_message', message: { sender: 'user', text: 'user-1' } }),

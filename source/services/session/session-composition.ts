@@ -1155,6 +1155,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
           reasoningEffort,
           instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
           maxTokens: maxOutputTokens,
+          signal,
         };
         const aborted = new Promise<never>((_, reject) => {
           signal?.addEventListener(
@@ -1197,6 +1198,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
           : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
       compactThreshold,
       compactThresholdTokens: null,
+      maxRequestInputTokens: settingsService?.get('agent.maxRequestInputTokens'),
       manual: true,
       signal: options?.signal,
       onStarted: options?.onStarted,

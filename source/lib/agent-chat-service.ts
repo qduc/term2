@@ -16,6 +16,14 @@ import type { AgentClientChatOptions, AgentClientChatResult } from '../services/
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { normalizeUsage } from '../utils/ai/token-usage.js';
 
+/** A failed dispatched helper still owns its request accounting. */
+export class AgentChatFailure extends Error {
+  constructor(readonly costRecords: readonly ModelRequestCost[], cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = cause instanceof Error ? cause.name : 'AgentChatFailure';
+  }
+}
+
 export interface AgentChatServiceDeps {
   agentConfig: AgentConfiguration;
   settings: ISettingsService;
@@ -105,7 +113,13 @@ export class AgentChatService {
     this.#activeRunLoops.add(loop);
     try {
       const stream = loop.startStream(agent, input, options);
-      await stream.completed;
+      try {
+        await stream.completed;
+      } catch (error) {
+        if (stream.runCostRecords?.length)
+          throw new AgentChatFailure(stream.runCostRecords as ModelRequestCost[], error);
+        throw error;
+      }
       return stream;
     } finally {
       this.#activeRunLoops.delete(loop);
@@ -171,6 +185,10 @@ export class AgentChatService {
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {
           retry: { maxRetries: settings.get('agent.retryAttempts') ?? 2 },
+          maxRequestInputTokens: settings.get('agent.maxRequestInputTokens'),
+          maxStreamOutputChars: settings.get('agent.maxStreamOutputChars'),
+          maxModelRequestDurationMs: settings.get('agent.maxModelRequestDurationMs'),
+          maxModelStreamIdleMs: settings.get('agent.maxModelStreamIdleMs'),
           ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
         };
 
@@ -204,6 +222,7 @@ export class AgentChatService {
 
       const result = await this.#runAgentWithProvider(tempProvider, agentForChat, message, {
         maxTurns: 1, // Chat is usually single turn
+        signal: options.signal,
       });
 
       const usage = normalizeUsage(result.runUsage);

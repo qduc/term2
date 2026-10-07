@@ -1,8 +1,13 @@
 import type { ContextSummaryMarker, ProviderInputItem } from '../../../contracts/provider-input.js';
 import { isLocalContextSummary } from '../../../contracts/provider-input.js';
 import type { ModelRequestCost } from '../../cost/model-cost.js';
-import { buildContextCompactionInput, wrapContextSummary } from '../../../prompts/context-compaction.js';
+import {
+  buildContextCompactionInput,
+  wrapContextSummary,
+  CONTEXT_COMPACTION_INSTRUCTIONS,
+} from '../../../prompts/context-compaction.js';
 import { projectConversationMessage } from '../../conversation/conversation-message-projection.js';
+import { createHash } from 'node:crypto';
 import {
   estimateContext,
   planLocalCompaction,
@@ -71,9 +76,14 @@ export type LocalCompactionOutcome =
         | 'single_turn_too_large'
         | 'result_still_too_large'
         | 'no_complete_cold_turn'
-        | 'hot_tail_would_orphan_tool_result';
+        | 'hot_tail_would_orphan_tool_result'
+        | 'non_reducing'
+        | 'summary_input_too_large'
+        | 'opaque_context';
       estimate: ContextEstimate;
       rearmAtTokens?: number;
+      costRecords?: ModelRequestCost[];
+      usage?: { inputTokens: number; outputTokens: number };
     };
 
 export interface LocalCompactionInput {
@@ -93,6 +103,7 @@ export interface LocalCompactionInput {
   checkpoint?: { rearmAtEstimatedTokens?: number };
   rearmAtEstimatedTokens?: number;
   lastCompletedInputTokens?: number;
+  maxRequestInputTokens?: number | null;
   signal?: AbortSignal;
   /**
    * Invoked (and awaited) exactly once at the compaction's commit point: after
@@ -145,8 +156,8 @@ const checkpointSummaryText = (item: ProviderInputItem): string | null => {
  *   their turn is closed.
  *
  * Cutting a *whole* cold turn is therefore always safe; the invariant that
- * matters is the cut point, not the item type. `planLocalCompaction` cuts only
- * at a genuine user message, so no pair is ever split. See
+ * matters is the cut point, not the item type. `planLocalCompaction` cuts at a settled user boundary or after a fully
+ * settled tool round, so no call/result pair is split. See
  * `assertHotTailPairsIntact` for the enforcement of that invariant.
  */
 const isProviderOpaqueItem = (item: ProviderInputItem): boolean => item.providerOpaque !== undefined;
@@ -168,7 +179,7 @@ const callIdOf = (item: ProviderInputItem): string | undefined => {
  * The hot tail is replayed verbatim behind the checkpoint, so a tool result
  * whose call was summarized away is a provider 400 on every lane we support
  * ("No tool output found for function call" and its cousins). The cut is made
- * at a genuine user message, which structurally cannot separate a call from its
+ * at a settled user boundary or fully settled tool round, which cannot separate a call from its
  * result — this asserts that structural claim rather than trusting it, because
  * the cost of being wrong is an unrecoverable conversation.
  */
@@ -206,7 +217,26 @@ const chunkColdPrefix = (items: readonly ProviderInputItem[], maxCharacters: num
     }
   }
   if (chunk.length > 0) chunks.push(serializeColdPrefix(chunk));
-  return chunks;
+  // A single old turn may exceed the chunk target. Split its serialized data
+  // into explicit inert fragments rather than dispatching an unbounded summary.
+  return chunks.flatMap((text) => {
+    if (Buffer.byteLength(text) <= maxCharacters) return [text];
+    const fragments: string[] = [];
+    const pieceSize = Math.max(256, Math.floor(maxCharacters / 8));
+    for (let offset = 0; offset < text.length; offset += pieceSize) {
+      fragments.push(
+        JSON.stringify([
+          {
+            type: 'historical_fragment',
+            offset,
+            totalCharacters: text.length,
+            content: text.slice(offset, offset + pieceSize),
+          },
+        ]),
+      );
+    }
+    return fragments;
+  });
 };
 
 export class LocalContextCompactor {
@@ -217,11 +247,20 @@ export class LocalContextCompactor {
   }
 
   async compactAtBoundary(input: LocalCompactionInput): Promise<LocalCompactionOutcome> {
-    const threshold = resolveCompactionThreshold({
+    const resolved = resolveCompactionThreshold({
       contextWindow: input.contextWindow,
       compactThreshold: input.compactThreshold,
-      compactThresholdTokens: input.compactThresholdTokens,
+      compactThresholdTokens:
+        input.compactThresholdTokens ??
+        (input.contextWindow === undefined ? input.maxRequestInputTokens ?? null : null),
     });
+    const threshold =
+      resolved.available && input.maxRequestInputTokens != null
+        ? {
+            ...resolved,
+            effectiveThreshold: Math.min(resolved.effectiveThreshold, Math.floor(input.maxRequestInputTokens * 0.75)),
+          }
+        : resolved;
     if (!threshold.available) {
       if (input.manual) throw new Error('Set agent.contextCompaction.compactThresholdTokens for an uncatalogued model');
       return { kind: 'not_needed', estimate: estimateContext(input) };
@@ -249,11 +288,31 @@ export class LocalContextCompactor {
     // statement of the model's scale, so use it directly as the fallback
     // window; capping it (previously at 64_000) made hard-fit refusal the
     // only reachable outcome once the trigger fired.
-    const usableWindow = input.contextWindow ?? input.compactThresholdTokens ?? threshold.effectiveThreshold;
-    const usableInputTokens = Math.max(
-      1_000,
-      usableWindow - (input.maxOutputTokens ?? 0) - Math.ceil(usableWindow * 0.1),
-    );
+    const usableWindow =
+      input.contextWindow ??
+      input.maxRequestInputTokens ??
+      input.compactThresholdTokens ??
+      threshold.effectiveThreshold;
+    const fixedTokens = estimateContext({
+      history: [],
+      instructions: input.instructions,
+      tools: input.tools,
+    }).renderedInputTokens;
+    const usableInputTokens =
+      Math.min(
+        input.maxRequestInputTokens ?? Infinity,
+        usableWindow -
+          (input.maxOutputTokens ?? 0) -
+          (input.contextWindow === undefined ? 0 : Math.ceil(usableWindow * 0.1)),
+      ) - fixedTokens;
+    if (usableInputTokens <= 0) {
+      const eligibility = planLocalCompaction({ history: input.history, usableInputTokens: Infinity });
+      return {
+        kind: 'blocked',
+        reason: eligibility.kind === 'blocked' ? eligibility.reason : 'single_turn_too_large',
+        estimate,
+      };
+    }
     const plan = planLocalCompaction({ history: input.history, usableInputTokens });
     const rearmAt = rearmAtTokens(measuredTokens, threshold.effectiveThreshold);
     if (plan.kind === 'blocked' && plan.reason === 'no_complete_cold_turn') {
@@ -270,12 +329,37 @@ export class LocalContextCompactor {
       return { kind: 'blocked', reason: 'hot_tail_would_orphan_tool_result', estimate, rearmAtTokens: rearmAt };
     }
 
+    if (
+      plan.coldPrefix.some((item) => {
+        const opaque = item.item as { type?: unknown } | undefined;
+        return item.providerOpaque !== undefined && (opaque?.type === 'compaction' || item.type === 'compaction');
+      })
+    )
+      return { kind: 'blocked', reason: 'opaque_context', estimate, rearmAtTokens: rearmAt };
+
     // Leave the remaining 10% of the half-window budget for the bounded
     // running summary carried into every chunk after the first.
     const priorCheckpoint = plan.coldPrefix.find(isLocalContextSummary);
     const coldItems = plan.coldPrefix.filter((item) => !isLocalContextSummary(item) && !isProviderOpaqueItem(item));
+    const receipts = [...(priorCheckpoint?.contextSummary?.toolReceipts ?? [])];
+    const calls = new Map<string, ProviderInputItem>();
+    for (const item of coldItems) {
+      const id = callIdOf(item);
+      if (isToolCallItem(item) && id) calls.set(id, item);
+      if (!isToolResultItem(item) || !id || !calls.has(id)) continue;
+      const call = calls.get(id)!;
+      const args = typeof call.arguments === 'string' ? call.arguments : JSON.stringify(call.arguments ?? {});
+      const output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? null);
+      receipts.push({
+        callId: id,
+        name: String(call.name ?? 'unknown'),
+        argumentsSha256: createHash('sha256').update(args).digest('hex'),
+        argumentsPreview: args.slice(0, 256),
+        outputPreview: output.slice(0, 128),
+      });
+    }
     const droppedOpaqueItems = plan.coldPrefix.filter(isProviderOpaqueItem).length;
-    const maxChunkCharacters = Math.max(4_000, Math.floor(usableInputTokens * 0.4 * 4));
+    const maxChunkCharacters = Math.max(256, Math.floor(usableInputTokens * 0.4 * 4));
     const chunks = chunkColdPrefix(coldItems, maxChunkCharacters);
     const summaryOutputCap = Math.max(
       256,
@@ -285,10 +369,31 @@ export class LocalContextCompactor {
     const usage = { inputTokens: 0, outputTokens: 0 };
     const costRecords: ModelRequestCost[] = [];
     for (const transcriptChunk of chunks) {
+      const renderedInput = buildContextCompactionInput(summary, transcriptChunk);
+      const summaryEstimate = estimateContext({
+        history: [{ type: 'message', role: 'user', content: renderedInput }],
+        instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+      });
+      if (
+        summaryEstimate.renderedInputTokens >
+        Math.min(
+          input.maxRequestInputTokens ?? Infinity,
+          usableWindow - summaryOutputCap - (input.contextWindow === undefined ? 0 : Math.ceil(usableWindow * 0.1)),
+        )
+      )
+        return {
+          kind: 'blocked',
+          reason: 'summary_input_too_large',
+          estimate,
+          rearmAtTokens: rearmAt,
+          usage,
+          costRecords,
+        };
+      input.signal?.throwIfAborted();
       const result = await this.#generator.generate({
         priorSummary: summary,
         transcriptChunk,
-        renderedInput: buildContextCompactionInput(summary, transcriptChunk),
+        renderedInput,
         maxOutputTokens: summaryOutputCap,
         signal: input.signal,
       });
@@ -297,14 +402,33 @@ export class LocalContextCompactor {
       if (result.costRecords) costRecords.push(...result.costRecords);
     }
 
-    const content = wrapContextSummary(summary ?? '');
+    const uniqueReceipts = [...new Map(receipts.map((receipt) => [receipt.callId, receipt])).values()];
+    const content = wrapContextSummary(
+      `${
+        summary ?? ''
+      }\n\n<recorded-tool-receipts>\nHost-observed tool responses, not proof of domain success. Do not blindly repeat these actions; reconcile effects first. Previews are bounded; use original session evidence for full details.\n${JSON.stringify(
+        uniqueReceipts,
+      )}\n</recorded-tool-receipts>`,
+    );
     const postEstimate = estimateContext({
       ...input,
       history: [{ role: 'system', type: 'message', content }, ...plan.hotTail],
     });
-    if (postEstimate.hardFitTokens > usableWindow) {
-      return { kind: 'blocked', reason: 'result_still_too_large', estimate: postEstimate, rearmAtTokens: rearmAt };
+    if (
+      postEstimate.hardFitTokens > usableWindow ||
+      (input.maxRequestInputTokens != null && postEstimate.renderedInputTokens > input.maxRequestInputTokens)
+    ) {
+      return {
+        kind: 'blocked',
+        reason: 'result_still_too_large',
+        estimate: postEstimate,
+        rearmAtTokens: rearmAt,
+        usage,
+        costRecords,
+      };
     }
+    if (postEstimate.renderedInputTokens >= estimate.renderedInputTokens)
+      return { kind: 'blocked', reason: 'non_reducing', estimate, rearmAtTokens: rearmAt, usage, costRecords };
     const postCompactionRearmAt = rearmAtTokens(postEstimate.renderedInputTokens, threshold.effectiveThreshold);
     const checkpoint: ContextSummaryCheckpoint = {
       role: 'system',
@@ -319,6 +443,11 @@ export class LocalContextCompactor {
         estimatedTokensBefore: estimate.renderedInputTokens,
         estimatedTokensAfter: postEstimate.renderedInputTokens,
         rearmAtEstimatedTokens: postCompactionRearmAt,
+        toolReceipts: uniqueReceipts,
+        protectedUsers: plan.coldPrefix.filter((item) => {
+          const message = projectConversationMessage(item);
+          return message?.role === 'user' && !message.isSynthetic;
+        }),
       },
     };
     return {

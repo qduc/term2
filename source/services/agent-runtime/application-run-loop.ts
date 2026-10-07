@@ -119,13 +119,17 @@ export interface ApplicationRequestPreparation {
 export interface ApplicationBoundaryCompaction {
   readonly compact: (input: {
     history: readonly ProviderInputItem[];
+    instructions?: string;
+    tools?: unknown;
+    /** Record paid summary requests before deciding whether another may run. */
+    recordCostRecords?: (records: readonly ModelRequestCost[]) => boolean;
     automaticCompactionsThisRun: number;
     lastCompletedInputTokens?: number;
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
   }) => Promise<
     | { kind: 'unchanged'; notice?: string }
-    | { kind: 'failed'; provider: string }
+    | { kind: 'failed'; provider: string; costRecords?: ModelRequestCost[]; error?: Error }
     | {
         kind: 'compacted';
         history: ProviderInputItem[];
@@ -300,7 +304,7 @@ type RunState = {
   onRunBudgetEvent?: (event: RunBudgetEvent) => void;
   wrapUpOnCriticalRunBudget?: boolean;
   /** Copied from the run-budget policy: 'warn' never pauses the run, 'disabled' emits no events. */
-  runBudgetEscalation?: 'warn' | 'pause' | 'disabled';
+  runBudgetEscalation?: 'contain' | 'warn' | 'pause' | 'disabled';
   criticalWrapUpPending?: boolean;
   criticalWrapUpDispatched?: boolean;
   /** Main-agent evidence that must be resolved before another request or tool dispatch. */
@@ -895,26 +899,40 @@ export class ApplicationRunLoop {
           compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : undefined;
         if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
           const compactionStartedAt = Date.now();
+          let costsRecordedLive = false;
           const compaction = await options.boundaryCompaction.compact({
             history: compactionHistory,
+            instructions: state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions,
+            tools: toModelTools(state.agent.tools),
+            recordCostRecords: (records) => {
+              if (records.length) {
+                costsRecordedLive = true;
+                state.costRecords ??= [];
+                state.costRecords.push(...records);
+                for (const record of records) queue.push({ type: 'cost_update', record });
+                this.#evaluateRunBudget(state, stream, queue);
+              }
+              return !state.pendingRunBudgetInteraction && !state.criticalWrapUpPending;
+            },
             automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
             lastCompletedInputTokens: state.lastCompletedInputTokens,
             signal: options.signal,
             onStarted: (provider) =>
               outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
           });
+          if (compaction.kind !== 'unchanged' && !costsRecordedLive && compaction.costRecords?.length) {
+            state.costRecords ??= [];
+            state.costRecords.push(...compaction.costRecords);
+          }
           if (compaction.kind === 'compacted') {
             state.inputUsageInvalidatedByCompaction = true;
+            state.lastCompletedInputTokens = undefined;
             state.compactedDuringRun = true;
             state.history.splice(0, state.history.length, ...compaction.history);
             state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
             state.responseId = undefined;
             state.responseProviderId = undefined;
             state.usesDeltaHistory = false;
-            if (compaction.costRecords?.length) {
-              state.costRecords ??= [];
-              state.costRecords.push(...compaction.costRecords);
-            }
             state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
             outputPush(stream, queue, {
               type: 'context_compaction_completed',
@@ -929,6 +947,7 @@ export class ApplicationRunLoop {
               strategy: 'local',
               durationMs: Math.max(0, Date.now() - compactionStartedAt),
             });
+            if (compaction.error) throw compaction.error;
           } else if (compaction.notice && compaction.notice !== state.compactionNotice) {
             state.compactionNotice = compaction.notice;
             this.#queuePendingSystemNotice(compaction.notice);
@@ -1646,8 +1665,9 @@ export class ApplicationRunLoop {
     if (
       !state.wrapUpOnCriticalRunBudget &&
       !state.pendingRunBudgetInteraction &&
-      state.runBudgetEscalation !== 'warn' &&
-      this.#requiresHumanBudgetDecision(event)
+      (state.runBudgetEscalation === 'contain'
+        ? event.type === 'budget_stage' && event.stage === 'critical'
+        : state.runBudgetEscalation !== 'warn' && this.#requiresHumanBudgetDecision(event))
     ) {
       state.pendingRunBudgetInteraction = { type: 'run_budget_interaction', event };
       state.runBudgetGrantConsumed = false;

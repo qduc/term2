@@ -75,7 +75,7 @@ it('selects a cold prefix at a user boundary and preserves the two newest turns 
   expect(plan.kind).toBe('planned');
   if (plan.kind !== 'planned') return;
   expect(plan.coldPrefix).toEqual([...turn(1), ...turn(2)]);
-  expect(plan.hotTail).toEqual([...turn(3), ...turn(4)]);
+  expect(plan.hotTail).toEqual([turn(1)[0], turn(2)[0], ...turn(3), ...turn(4)]);
   expect(history).toEqual(original);
   expect(plan.hotTail.filter((item) => item.type === 'function_call_result')).toHaveLength(2);
 });
@@ -105,8 +105,8 @@ it('truncates old tool payloads for summarizer input without mutating source his
   expect(history).toEqual(original);
 });
 
-it('rearms with the larger of 8000 tokens or ten percent of threshold', () => {
-  expect(rearmAtTokens(2_000, 60_000)).toBe(10_000);
+it('rearms with the larger of 1000 tokens or ten percent of threshold', () => {
+  expect(rearmAtTokens(2_000, 60_000)).toBe(8_000);
   expect(rearmAtTokens(2_000, 100_000)).toBe(12_000);
 });
 
@@ -191,7 +191,7 @@ it('defers automatic compaction when blocked rearm is provided without a new use
       renderedInputTokens: 60_000,
       hasCompleteNewUserTurn: false,
     }),
-  ).toBe('hysteresis');
+  ).toBe(null);
   expect(
     shouldDeferAutomaticCompaction({
       automaticCompactionsThisRun: 0,

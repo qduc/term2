@@ -723,3 +723,20 @@ it.sequential('routes the prompt cache key by adapter, so Grok gets the Response
   expect((agent.modelSettings?.providerData as any)?.extraBody?.prompt_cache_key).toBe('session-grok');
   expect(agent.modelSettings?.codex).toBeUndefined();
 });
+
+it.sequential('input ceiling changes rebuild snapshotted native thresholds', () => {
+  ensureProviderRegistered();
+
+  const result = createDeps();
+  const settings = result.settings as ReturnType<typeof createMockSettings>;
+  const config = new AgentConfiguration(
+    { selection: { model: 'gpt-4o', provider: 'mock-provider-for-config' } },
+    result.deps,
+  );
+  const originalAgent = config.getAgent();
+
+  config.subscribeToSettings();
+  settings._triggerChange('agent.maxRequestInputTokens');
+
+  expect(config.getAgent()).not.toBe(originalAgent);
+});

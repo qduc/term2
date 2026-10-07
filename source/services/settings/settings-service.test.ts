@@ -150,6 +150,9 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.reasoningEffort')).toBe('default');
   expect(service.get('agent.temperature')).toBe(undefined);
   expect(service.get('agent.maxTurns')).toBe(100);
+  expect(service.get('agent.maxRequestInputTokens')).toBe(96_000);
+  expect(service.get('agent.contextCompaction.enabled')).toBe(true);
+  expect(service.get('agent.runBudget.escalation')).toBe('contain');
   expect(service.get('agent.maxOutputTokens')).toBe(32_000);
   expect(service.get('agent.maxStreamOutputChars')).toBe(100_000);
   expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
@@ -1894,4 +1897,32 @@ it('does not demote when a persisted always mode has the sandbox explicitly disa
 
   expect(service.get('shell.autoApproveMode')).toBe('always');
   expect(service.get('sandbox.enabled')).toBe(false);
+});
+
+it.sequential('preserves persisted context and budget opt-outs while filling missing safety defaults', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    new SettingsService({ settingsDir, disableLogging: true });
+    const file = getSettingsFilePath(settingsDir);
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.agent.maxRequestInputTokens = null;
+    data.agent.contextCompaction.enabled = false;
+    data.agent.runBudget.escalation = 'warn';
+    data.agent.runBudget.maxUsdMicros = 1234567;
+    fs.writeFileSync(file, JSON.stringify(data));
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(service.get('agent.maxRequestInputTokens')).toBe(null);
+    expect(service.get('agent.contextCompaction.enabled')).toBe(false);
+    expect(service.get('agent.runBudget.escalation')).toBe('warn');
+    expect(service.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
+    delete data.agent.maxRequestInputTokens;
+    delete data.agent.contextCompaction.enabled;
+    delete data.agent.runBudget.escalation;
+    fs.writeFileSync(file, JSON.stringify(data));
+    const missing = new SettingsService({ settingsDir, disableLogging: true });
+    expect(missing.get('agent.maxRequestInputTokens')).toBe(96000);
+    expect(missing.get('agent.contextCompaction.enabled')).toBe(true);
+    expect(missing.get('agent.runBudget.escalation')).toBe('contain');
+    expect(missing.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
+  });
 });

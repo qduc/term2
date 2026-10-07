@@ -1,5 +1,9 @@
 # Term2 Guard Ledger and Remediation Plan
 
+Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-runs.md).
+The October 7 change supersedes the ordinary null/off/advisory defaults recorded
+in the historical October 6 incident below; explicit supervised overrides remain.
+
 ## October 6 supervised-worker token incident (branch-local repair)
 
 Harm prevented: an oversized supervisor handoff, unchecked main-worker request
@@ -3127,3 +3131,48 @@ timeout); provider-black-box 20 files / 178 passed tests and one skipped test
 typecheck passed (5.00s, exit 0, 180s timeout). The merged public reset probe
 also passed. These combined results supplement the scoped historical evidence
 above; the cancellation section records the corrected changed-gate invocation.
+
+
+### Ordinary context admission and critical per-run containment (2026-10-07)
+
+Owner: [ordinary safe runs](ordinary-safe-runs.md), alongside provider-neutral
+compaction and run-budget-stall-escalation. User approved the outcome/default
+change; previous opt-in/default warn dispositions do not govern this new policy.
+
+Missing keys now select 96k estimated/last-observed input, enabled auto compaction,
+and `contain` escalation. Explicit persisted/live null/off/warn/pause/disabled,
+role output limits and custom caps retain precedence. Supervised environment
+keeps its explicit 80k/60k input/trigger profile. Auto triggers clamp by 75% of
+admission (72k fresh), ratio/raw policy and catalog scale. Ordinary input ceiling
+is an admission guard; budgets are post-usage containment, not prepaid billing.
+
+Local reductions retain genuine user requests, paired recent rounds and host
+receipts, rearm only after measured growth, and refuse non-reducing or oversized
+summary candidates. Native ciphertext stays native; Codex keeps its native
+one/run policy. Source history is retained when safe reduction is unavailable.
+Summary input includes fixed instructions/prior summary; helper guards and abort
+inherit; per-chunk costs reach the owning root before continuing. Dispatched
+failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
+
+Headless logs commit the user request before dispatch; context/budget refusal
+exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
+remain advisory in `contain`; auto-approval cannot grant a new contained budget.
+Collector tests protect error/check-in identity; actual CLI tests protect saved
+history and resumed wire. Per-run grant state does not survive restart; resumed
+work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
+to original journal replay with paired tool evidence. No automatic effect replay.
+
+Calibration compared 795 provider-reported requests from 16 preserved launches
+against 32k/48k/64k/80k/96k/128k. 96k reduces premature interference in recorded
+coding requests while containing problematic growth. Redacted prompts/tool
+schemas prevent estimator-error calibration. Scripted 20-artifact repeated
+compaction and built-CLI pause/resume supply offline evidence; semantic quality
+and aggregate sibling monetary containment remain limits, not green claims.
+
+Regression evidence: initial 5 ordinary compaction tests and new terminal/rearm
+cases failed before repair. Focused source tests, related/changed, types, full
+unit/integration and provider gates are required; status lives in the PR/plan.
+Rollback: revert default selection independently from safe-cut/accounting/terminal
+metadata repairs. No persisted values are guessed or rewritten. Independent final review found
+no remaining material findings; local baseline failures and CI coverage limits
+remain documented in the plan/PR. No merge, release or deployment is performed.

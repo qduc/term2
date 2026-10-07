@@ -472,7 +472,12 @@ function buildModelSettings({
     contextCompactionMode !== 'local' &&
     providerCapabilities.supportsContextCompaction === true
   ) {
-    const thresholdTokens = deps.settings.get('agent.contextCompaction.compactThresholdTokens');
+    const configuredThreshold = deps.settings.get('agent.contextCompaction.compactThresholdTokens');
+    const inputCeiling = deps.settings.get('agent.maxRequestInputTokens');
+    const thresholdTokens =
+      contextCompactionMode === 'auto' && inputCeiling != null
+        ? Math.min(configuredThreshold ?? Infinity, Math.floor(inputCeiling * 0.75))
+        : configuredThreshold;
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),
       contextCompaction: {

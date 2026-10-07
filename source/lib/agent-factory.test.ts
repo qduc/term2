@@ -1345,3 +1345,18 @@ it.sequential('preserves nested execution evidence through factory trimming and 
   expect(stream.finalOutput).toBe('done');
   expect(observer.observeTerminalFailure).not.toHaveBeenCalled();
 });
+
+it.sequential('auto native compaction is scheduled before the selected request ceiling', () => {
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+      'agent.contextCompaction.compactThresholdTokens': 120000,
+      'agent.maxRequestInputTokens': 96000,
+    },
+  });
+  const result = buildAgent({ selection: { model: 'gpt-5.4-nano', provider: 'openai' } }, deps);
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toMatchObject({ thresholdTokens: 72000 });
+});

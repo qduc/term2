@@ -226,7 +226,16 @@ describe('ConversationOrchestrator', () => {
       'Error: Retry recovery budget exhausted\n\nUse /retry-turn to try again.',
       { status: 'finalized' },
     );
-    cfg.messages.appendMessages([staleError]);
+    const earlierError = { ...staleError, id: 'earlier-error' };
+    cfg.messages.appendMessages([
+      createMessage('earlier-user', 'user', 'earlier question'),
+      earlierError,
+      createMessage('latest-user', 'user', 'latest question'),
+      staleError,
+    ]);
+    vi.mocked(cfg.conversationService.listUserTurns).mockReturnValue([
+      { index: 2, text: 'latest question', imageCount: 0 },
+    ]);
     (cfg.conversationService as any).retryLastFailedTurn = vi.fn().mockResolvedValue({
       type: 'response',
       finalText: 'Recovered answer',
@@ -236,6 +245,7 @@ describe('ConversationOrchestrator', () => {
     await new ConversationOrchestrator(cfg).retryLastFailedTurn();
 
     expect(cfg.messages.getMessages().some((message) => message.id === 'retry-error')).toBe(false);
+    expect(cfg.messages.getMessages().some((message) => message.id === 'earlier-error')).toBe(true);
   });
 
   it('sends a user message and applies a response', async () => {

@@ -792,7 +792,6 @@ export class ConversationOrchestrator {
         replayFromHistory: true,
       });
       this.#settleTurn(applyConversationEvent, botResponseUpdater, result, streamingState);
-      if (result) this.#clearResolvedRetryRecoveryError();
       return result !== null;
     } catch (error) {
       this.logError('Error in retryLastFailedTurn', error);
@@ -1866,21 +1865,6 @@ export class ConversationOrchestrator {
       text: `Error: ${readableMessage}${recoveryHint}`,
     };
     this.config.messages.appendMessages([botErrorMessage]);
-  }
-
-  /** A recovered retry should not leave its prior budget-exhaustion notice as the visible tail. */
-  #clearResolvedRetryRecoveryError(): void {
-    this.config.messages.setMessages((prev) => {
-      let index = -1;
-      for (let cursor = prev.length - 1; cursor >= 0; cursor--) {
-        const message = prev[cursor]!;
-        if (message.sender === 'bot' && message.text.startsWith('Error: Retry recovery budget exhausted')) {
-          index = cursor;
-          break;
-        }
-      }
-      return index === -1 ? prev : prev.filter((_, messageIndex) => messageIndex !== index);
-    });
   }
 
   private logError(message: string, error: unknown): void {

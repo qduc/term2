@@ -43,6 +43,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.useFlexServiceTier',
   ],
   'Run containment — next request/run': [
+    'agent.maxRequestInputTokens',
     'agent.runBudget.maxUsdMicros',
     'agent.runBudget.maxUnpricedTokens',
     'agent.runBudget.maxActiveTimeMs',

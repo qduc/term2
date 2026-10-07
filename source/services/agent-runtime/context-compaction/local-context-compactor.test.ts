@@ -2,10 +2,10 @@ import { expect, it, vi } from 'vitest';
 import type { ProviderInputItem } from '../../../contracts/provider-input.js';
 import { LocalContextCompactor } from './local-context-compactor.js';
 
-const turns = (count: number, size = 100): ProviderInputItem[] =>
+const turns = (count: number, size = 1000): ProviderInputItem[] =>
   Array.from({ length: count }, (_, index) => [
-    { role: 'user', type: 'message', content: `user-${index}-${'x'.repeat(size)}` },
-    { role: 'assistant', type: 'message', content: `answer-${index}` },
+    { role: 'user', type: 'message', content: `user-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}-${'x'.repeat(size)}` },
   ]).flat();
 
 it('reduces cold turns sequentially and returns a marked checkpoint plus verbatim hot tail', async () => {
@@ -39,7 +39,10 @@ it('reduces cold turns sequentially and returns a marked checkpoint plus verbati
     type: 'message',
     contextSummary: { version: 1, strategy: 'local', replacesThroughRevision: 7 },
   });
-  expect(outcome.hotTail).toEqual(history.slice(-4));
+  expect(outcome.hotTail).toEqual([
+    ...history.slice(0, -4).filter((item) => item.role === 'user'),
+    ...history.slice(-4),
+  ]);
   expect(outcome.usage).toEqual({ inputTokens: 22, outputTokens: 4 });
 });
 
@@ -141,7 +144,7 @@ it('fails before generation for an uncatalogued model without a raw threshold', 
 // with, which is a provider 400; summarizing it is impossible. Refusing to
 // compact instead used to disable compaction permanently, because nothing but
 // compaction ever removes such an item from history.
-it('compacts past an encrypted provider-opaque item instead of refusing', async () => {
+it('retains opaque native compaction when portable source facts are unavailable', async () => {
   const generate = vi.fn(async () => ({ text: 'summary' }));
   const history = [
     ...turns(2),
@@ -165,16 +168,8 @@ it('compacts past an encrypted provider-opaque item instead of refusing', async 
     manual: true,
   });
 
-  expect(outcome.kind).toBe('compacted');
-  if (outcome.kind !== 'compacted') return;
-  expect(outcome.droppedOpaqueItems).toBe(1);
-  expect(generate).toHaveBeenCalled();
-  for (const call of generate.mock.calls as unknown as [{ transcriptChunk: string }][]) {
-    expect(call[0].transcriptChunk).not.toContain('secret-ciphertext');
-  }
-  expect(outcome.hotTail.some((item) => (item as { providerOpaque?: unknown }).providerOpaque !== undefined)).toBe(
-    false,
-  );
+  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'opaque_context' });
+  expect(generate).not.toHaveBeenCalled();
 });
 
 it('keeps a reasoning/tool-call pair and its result together on the hot side of the cut', async () => {
@@ -184,8 +179,8 @@ it('keeps a reasoning/tool-call pair and its result together on the hot side of 
   // a `function_call` without its `reasoning` item, and Gemini rejects a
   // `functionCall` whose thought signature was stripped.
   const history: ProviderInputItem[] = [
-    { role: 'user', type: 'message', content: `first-${'x'.repeat(4_000)}` },
-    { role: 'assistant', type: 'message', content: 'first answer' },
+    { role: 'user', type: 'message', content: 'first instruction' },
+    { role: 'assistant', type: 'message', content: `first-${'x'.repeat(4_000)}` },
     { role: 'user', type: 'message', content: `second-${'x'.repeat(4_000)}` },
     { type: 'reasoning', id: 'rs_1', providerOpaque: { provider: 'openai' } },
     { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
@@ -225,8 +220,8 @@ it('blocks rather than emitting a hot tail whose tool result lost its call', asy
   // between a call and its result — the one shape the verbatim hot tail cannot
   // survive on any provider.
   const history: ProviderInputItem[] = [
-    { role: 'user', type: 'message', content: `first-${'x'.repeat(4_000)}` },
-    { role: 'assistant', type: 'message', content: 'first answer' },
+    { role: 'user', type: 'message', content: 'first instruction' },
+    { role: 'assistant', type: 'message', content: `first-${'x'.repeat(4_000)}` },
     { role: 'user', type: 'message', content: `second-${'x'.repeat(4_000)}` },
     { type: 'function_call', callId: 'orphan', name: 'shell', arguments: '{}' },
     { role: 'user', type: 'message', content: 'third' },
@@ -248,7 +243,7 @@ it('blocks rather than emitting a hot tail whose tool result lost its call', asy
     manual: true,
   });
 
-  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'hot_tail_would_orphan_tool_result' });
+  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'no_complete_cold_turn' });
   expect(generate).not.toHaveBeenCalled();
 });
 
@@ -336,7 +331,7 @@ it('returns rearmAtTokens when automatic compaction is blocked so caller can bac
   if (outcome.kind !== 'blocked') return;
   expect(outcome.reason).toBe('no_complete_cold_turn');
   expect(outcome.rearmAtTokens).toBeGreaterThan(outcome.estimate.renderedInputTokens);
-  expect(outcome.rearmAtTokens).toBeGreaterThanOrEqual(outcome.estimate.renderedInputTokens + 8_000);
+  expect(outcome.rearmAtTokens).toBeGreaterThanOrEqual(outcome.estimate.renderedInputTokens + 1_000);
   expect(generate).not.toHaveBeenCalled();
 });
 

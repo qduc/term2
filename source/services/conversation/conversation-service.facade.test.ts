@@ -653,7 +653,7 @@ it('queues a user message submitted while local compaction is running', async ()
   service.importState({
     history: Array.from({ length: 4 }, (_, index) => [
       { role: 'user', type: 'message', content: `user-${index}` },
-      { role: 'assistant', type: 'message', content: `assistant-${index}` },
+      { role: 'assistant', type: 'message', content: `assistant-${index} ${'detail '.repeat(500)}` },
     ]).flat(),
     previousResponseId: null,
     toolLedger: [],
@@ -689,7 +689,7 @@ it('abort during compaction cancels it and releases the foreground queue', async
   service.importState({
     history: Array.from({ length: 4 }, (_, index) => [
       { role: 'user', type: 'message', content: `user-${index}` },
-      { role: 'assistant', type: 'message', content: `assistant-${index}` },
+      { role: 'assistant', type: 'message', content: `assistant-${index} ${'detail '.repeat(500)}` },
     ]).flat(),
     previousResponseId: null,
     toolLedger: [],
@@ -718,7 +718,7 @@ it('compactContext emits completion events for deterministic local compaction', 
   service.importState({
     history: Array.from({ length: 4 }, (_, index) => [
       { role: 'user', type: 'message', content: `user-${index}` },
-      { role: 'assistant', type: 'message', content: `assistant-${index}` },
+      { role: 'assistant', type: 'message', content: `assistant-${index} ${'detail '.repeat(500)}` },
     ]).flat(),
     previousResponseId: null,
     toolLedger: [],

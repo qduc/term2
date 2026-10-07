@@ -38,17 +38,17 @@ const assistantMessageItem = (text: string) => ({
  * mock returns no items, so a turn it "completes" leaves only the user message
  * in history — which is exactly the shape of a turn that committed nothing.
  */
-const completedTurnClient = (): ConversationAgentClient =>
+const completedTurnClient = (reply = 'assistant reply'): ConversationAgentClient =>
   ({
     chat: async () => '',
     abort: () => {},
     setModelSelection: () => {},
     addToolInterceptor: () => () => {},
     startStream: async () => {
-      const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
-      stream.finalOutput = 'assistant reply';
-      stream.newItems = [assistantMessageItem('assistant reply')];
-      stream.output = [assistantMessageItem('assistant reply')];
+      const stream = createMockStream([{ type: 'final', finalText: reply }]);
+      stream.finalOutput = reply;
+      stream.newItems = [assistantMessageItem(reply)];
+      stream.output = [assistantMessageItem(reply)];
       return stream;
     },
     continueRunStream: async () => createMockStream([]),
@@ -673,7 +673,9 @@ describe('Gateway commands RPC route', () => {
   });
 
   it('refuses retry-turn when the last turn committed output', async () => {
-    const { gateway, token, socketPath, persistence } = setupGateway({ createAgentClient: completedTurnClient });
+    const { gateway, token, socketPath, persistence } = setupGateway({
+      createAgentClient: () => completedTurnClient(),
+    });
     await gateway.start();
     try {
       const created = await rpc(
@@ -1245,7 +1247,10 @@ describe('Gateway commands RPC route', () => {
   });
 
   it('journals compaction lifecycle events for a command issued outside a turn', async () => {
-    const { gateway, token, socketPath, persistence } = setupGateway({ modelId: 'gpt-4-turbo' });
+    const { gateway, token, socketPath, persistence } = setupGateway({
+      modelId: 'gpt-4-turbo',
+      createAgentClient: () => completedTurnClient('completed research detail '.repeat(200)),
+    });
     await gateway.start();
     try {
       const created = await rpc(
@@ -1284,8 +1289,8 @@ describe('Gateway commands RPC route', () => {
       );
       expect(compact.status).toBe(200);
       const compactBody = compact.body as { outcome: string; tokensBefore?: number; tokensAfter?: number };
-      expect(compactBody.outcome).toBe('not_reduced');
-      expect(compactBody.tokensAfter).toBeGreaterThanOrEqual(compactBody.tokensBefore!);
+      expect(compactBody.outcome).toBe('completed');
+      expect(compactBody.tokensAfter).toBeLessThan(compactBody.tokensBefore!);
 
       const events = readFileSync(eventPath, 'utf8')
         .split('\n')

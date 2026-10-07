@@ -19,12 +19,10 @@ export interface RunBudgetPolicy {
   /**
    * What a non-soft stage does.
    *
-   * `warn` reports evidence and lets the run continue; `pause` holds the run at
-   * a request boundary for a human decision. Warning is the default because a
-   * budget that cannot price the request is a rough proxy, and stopping real
-   * work on a proxy is a worse failure than overrunning it.
+   * `contain` keeps warning/stall advisory and parks at exhaustion. `warn`
+   * remains an explicit advisory opt-out; `pause` also parks on warning/stall.
    */
-  readonly escalation: 'warn' | 'pause' | 'disabled';
+  readonly escalation: 'contain' | 'warn' | 'pause' | 'disabled';
 }
 
 interface RunBudgetSettingsReader {
@@ -47,7 +45,7 @@ export function readRunBudgetPolicy(settings: RunBudgetSettingsReader): RunBudge
     extensionPercent: settings.get('agent.runBudget.extensionPercent'),
     maxParentExtensions: settings.get('agent.runBudget.maxParentExtensions'),
     identicalToolCallThreshold: settings.get('agent.runBudget.identicalToolCallThreshold'),
-    escalation: settings.get('agent.runBudget.escalation') ?? 'warn',
+    escalation: settings.get('agent.runBudget.escalation') ?? 'contain',
   };
 }
 

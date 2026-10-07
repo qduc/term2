@@ -313,3 +313,16 @@ it('projectImportedState validates typed inputs by projecting history and ledger
     ProjectionWarningCode.IncompleteToolHistoryDropped,
   ]);
 });
+
+it('projects normalized native wrappers at the same replacement boundary as canonical items', () => {
+  const marker = {
+    type: 'provider_opaque',
+    provider: 'openai',
+    item: { type: 'compaction', encrypted_content: 'native' },
+  };
+  const receipt = { type: 'tool_result', id: 'after', output: 'retained' };
+  expect(projectModelRequestHistory([{ type: 'message', role: 'user', content: 'old' }, marker, receipt])).toEqual([
+    marker,
+    receipt,
+  ]);
+});

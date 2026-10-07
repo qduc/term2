@@ -975,6 +975,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: 'codex',
           supportsConversationChaining: true,
           previousResponseId: 'resp_previous',
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call', callId: 'call_previous', name: 'read', arguments: '{}' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );
@@ -1022,6 +1027,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: identity.providerId,
           supportsConversationChaining: identity.previousResponseId !== undefined,
           previousResponseId: identity.previousResponseId,
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call', callId: 'call_previous', name: 'read', arguments: '{}' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );
@@ -1057,6 +1067,11 @@ describe('ApplicationRunLoop generation guard', () => {
           providerId: 'codex',
           supportsConversationChaining: true,
           previousResponseId: 'resp_previous',
+          // Capacity admission needs the full chain; this fixture tests stream guards.
+          compactionHistory: [
+            { type: 'message', role: 'user', content: 'full history' },
+            { type: 'function_call_result', callId: 'call_previous', output: 'tool result' },
+          ],
           generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
         } as any,
       );
@@ -3885,4 +3900,33 @@ describe('ApplicationRunLoop assistant text parts', () => {
     ]);
     expect(stream.finalOutput).toBe('Hello world.');
   });
+});
+
+it('keeps summary cost telemetry out of committed output before a failed dispatch', async () => {
+  const { streamHasCommittedOutput } = await import('../agent-stream.js');
+  const bill = {
+    requestId: 'summary-telemetry',
+    provider: 'fixture',
+    model: 'fixture',
+    serviceTier: 'standard',
+    outcome: 'completed',
+    usdMicros: 100,
+  } as const;
+  const model: StreamedModelTurn = {
+    async *stream() {
+      throw new Error('fixture pre-output failure');
+    },
+  };
+  const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'task', {
+    boundaryCompaction: {
+      compact: async ({ recordCostRecords }) => {
+        recordCostRecords?.([bill]);
+        return { kind: 'unchanged' };
+      },
+    },
+  });
+  await expect(stream.completed).rejects.toThrow('fixture pre-output failure');
+  expect(stream.runCostRecords).toContainEqual(bill);
+  expect(streamHasCommittedOutput(stream)).toBe(false);
+  expect(stream.output?.some((item: any) => item.type === 'cost_update')).toBe(false);
 });

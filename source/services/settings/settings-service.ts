@@ -118,18 +118,6 @@ function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Arra
   return prefix ? [[prefix, after]] : [];
 }
 
-function migrateFormerRequestDeadlineDefault(
-  config: Partial<SettingsData>,
-  rawConfig: unknown,
-): { config: Partial<SettingsData>; migrated: boolean } {
-  const persistedDeadline = (rawConfig as any)?.agent?.maxModelRequestDurationMs;
-  if (persistedDeadline !== 300_000) return { config, migrated: false };
-
-  const migratedConfig = structuredClone(config) as Record<string, any>;
-  setSettingValue(migratedConfig, 'agent.maxModelRequestDurationMs', 0);
-  return { config: migratedConfig as Partial<SettingsData>, migrated: true };
-}
-
 /**
  * Service for managing application settings.
  * Follows singleton pattern and supports:
@@ -244,13 +232,11 @@ export class SettingsService {
       }
     }
 
-    const { config: ancillarySettingsConfig, migrated: migratedLegacyAncillarySettings } =
-      migrateLegacyAncillarySettings(validated, rawFileConfig);
-    const { config: fileConfig, migrated: migratedRequestDeadlineDefault } = migrateFormerRequestDeadlineDefault(
-      ancillarySettingsConfig,
+    const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
+      validated,
       rawFileConfig,
     );
-    if (migratedLegacyAncillarySettings || migratedRequestDeadlineDefault) {
+    if (migratedLegacyAncillarySettings) {
       this.startupMigrations = changedSettingPaths(validated, fileConfig);
     }
     for (const tier of ['smart', 'balanced', 'cheap', 'chore'] as const) {
@@ -266,6 +252,12 @@ export class SettingsService {
       loggingService: this.loggingService,
     });
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
+    if (!Object.hasOwn((rawFileConfig as any)?.agent ?? {}, 'maxOutputTokens')) {
+      this.sources.set(
+        'agent.maxOutputTokens',
+        trackSettingSources(DEFAULT_SETTINGS, {}, env, cli).get('agent.maxOutputTokens') ?? 'default',
+      );
+    }
 
     // Normalize profile selection so conflicting persisted state is resolved
     // on load, not lazily at first set() call. Legacy files without a
@@ -376,7 +368,6 @@ export class SettingsService {
         normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
         migratedSelections ||
-        migratedRequestDeadlineDefault ||
         normalizedSandboxAutoApproveConflict) &&
       !fileHadErrors
     ) {
@@ -705,11 +696,12 @@ export class SettingsService {
     const canonical = this.canonicalizeProfileChange(key, value);
     if (canonical.key !== key) return this.setDynamic(canonical.key, canonical.value, options);
 
+    const outputIntent = this.outputIntentForChange(key, value);
     this.validateAndApplySetting(key, value);
     value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
-    this.recordRuntimeOverride(key, value, 'cli');
+    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'cli');
 
     // Track source as 'cli' for runtime-set values
     this.sources.set(key, 'cli');
@@ -751,7 +743,7 @@ export class SettingsService {
     // reported as a durable replacement.
     const persist = options?.persist !== false;
     const durableResult: DurableWriteResult = persist
-      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value))
+      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent)
       : { status: 'not-persisted', reason: 'disabled' };
     this.lastDurableWrite = durableResult;
 
@@ -825,6 +817,7 @@ export class SettingsService {
     // caches evicted.
     const previousProviders = key === 'providers' ? this.settings.providers : undefined;
 
+    const outputIntent = this.outputIntentForChange(key, value);
     this.validateAndApplySetting(key, value);
     value = this.getDynamic(key);
     if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
@@ -833,13 +826,13 @@ export class SettingsService {
       this.invalidateChangedProviderModelCaches(previousProviders, value);
     }
 
-    this.recordRuntimeOverride(key, value, 'cli');
+    this.recordRuntimeOverride(key, this.runtimeValueForChange(key, value, outputIntent), 'cli');
 
     this.sources.set(key, 'cli');
 
     const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
 
-    const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
+    const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value), outputIntent);
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
@@ -871,24 +864,30 @@ export class SettingsService {
     const previousProviders = canonicalChanges.some((change) => change.key === 'providers')
       ? this.settings.providers
       : undefined;
-    const durableResult = this.saveToFile((current) => {
-      let next = current;
-      for (const change of canonicalChanges) next = this.applyPersistedSetting(next, change.key, change.value);
-      return next;
-    });
+    const durableResult = this.saveToFile(
+      (current) => {
+        let next = current;
+        for (const change of canonicalChanges) next = this.applyPersistedSetting(next, change.key, change.value);
+        return next;
+      },
+      canonicalChanges.reduce<'preserve' | 'explicit' | 'reset'>(
+        (intent, change) =>
+          this.outputIntentForChange(change.key, change.value) === 'preserve'
+            ? intent
+            : this.outputIntentForChange(change.key, change.value),
+        'preserve',
+      ),
+      () => {
+        // Install only successful batch intents before reconciliation. This
+        // removes superseded leaf overlays without reinstalling a stale snapshot.
+        for (const change of canonicalChanges) this.recordRuntimeOverride(change.key, change.value, 'cli');
+      },
+    );
     this.lastDurableWrite = durableResult;
     if (durableResult.status !== 'saved') return durableResult;
 
-    // saveToFile reconciles before this operation's overlays are recorded;
-    // install the already-validated candidate so a prior overlay cannot make
-    // the successful batch look stale in the next projection.
-    this.settings = candidate;
-    for (const change of canonicalChanges) {
-      this.recordRuntimeOverride(change.key, change.value, 'cli');
-      this.sources.set(change.key, 'cli');
-      this.notifyChange(change.key);
-    }
-    if (previousProviders) this.invalidateChangedProviderModelCaches(previousProviders, candidate.providers);
+    for (const change of canonicalChanges) this.notifyChange(change.key);
+    if (previousProviders) this.invalidateChangedProviderModelCaches(previousProviders, this.settings.providers);
     return durableResult;
   }
 
@@ -949,10 +948,13 @@ export class SettingsService {
       this.runtimeOverrideSources.clear();
     }
 
-    const durableResult = this.saveToFile((current) => {
-      if (!key) return structuredClone(DEFAULT_SETTINGS);
-      return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
-    });
+    const durableResult = this.saveToFile(
+      (current) => {
+        if (!key) return structuredClone(DEFAULT_SETTINGS);
+        return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
+      },
+      !key || key === 'agent.maxOutputTokens' || key === 'agent' ? 'reset' : 'preserve',
+    );
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
@@ -1080,8 +1082,45 @@ export class SettingsService {
     return SettingsSchema.parse(next) as SettingsData;
   }
 
+  private applyRuntimeSetting(current: SettingsData, key: string, value: unknown): SettingsData {
+    const next = this.applyPersistedSetting(current, key, value);
+    // An ancestor overlay that omitted this leaf has no output preference.
+    // Preserve the reconciled CLI/env/peer allocation rather than a Zod default.
+    if (key === 'agent' && !Object.hasOwn((value as object) ?? {}, 'maxOutputTokens')) {
+      next.agent.maxOutputTokens = current.agent.maxOutputTokens;
+    }
+    return next;
+  }
+
+  private outputIntentForChange(key: string, value: unknown): 'preserve' | 'explicit' | 'reset' {
+    if (key === 'agent.maxOutputTokens') return 'explicit';
+    if (key === 'agent') return Object.hasOwn((value as object) ?? {}, 'maxOutputTokens') ? 'explicit' : 'reset';
+    return 'preserve';
+  }
+
+  private runtimeValueForChange(key: string, value: unknown, intent: 'preserve' | 'explicit' | 'reset'): unknown {
+    if (key !== 'agent' || intent !== 'reset') return value;
+    const group = { ...(value as Record<string, unknown>) };
+    delete group.maxOutputTokens;
+    return group;
+  }
+
   private recordRuntimeOverride(key: string, value: unknown, source: SettingSource): void {
     this.resetAllAtRuntime = false;
+    if (key === 'agent') {
+      this.runtimeOverrides.delete('agent.maxOutputTokens');
+      this.runtimeOverrideSources.delete('agent.maxOutputTokens');
+      if (Object.hasOwn((value as object) ?? {}, 'maxOutputTokens')) {
+        this.runtimeOverrideSources.set('agent.maxOutputTokens', source);
+        this.sources.set('agent.maxOutputTokens', source);
+      } else {
+        this.sources.set(
+          'agent.maxOutputTokens',
+          trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get('agent.maxOutputTokens') ??
+            'default',
+        );
+      }
+    }
     this.runtimeOverrides.set(key, cloneSettingValue(value));
     this.runtimeOverrideSources.set(key, source);
     // Sandbox / auto-approve exclusivity, mirroring the app-mode block: the
@@ -1097,7 +1136,7 @@ export class SettingsService {
     }
   }
 
-  private reconcileCommittedSettings(committed: SettingsData): void {
+  private reconcileCommittedSettings(committed: SettingsData, implicitOutputDefault = false): void {
     if (this.resetAllAtRuntime) {
       this.settings = structuredClone(DEFAULT_SETTINGS);
       this.sources.clear();
@@ -1109,10 +1148,16 @@ export class SettingsService {
       loggingService: this.loggingService,
     });
     for (const [key, value] of this.runtimeOverrides) {
-      next = this.applyPersistedSetting(next, key, value);
+      next = this.applyRuntimeSetting(next, key, value);
     }
     this.settings = next;
     this.sources = trackSettingSources(DEFAULT_SETTINGS, committed, this.startupEnv, this.startupCli);
+    if (implicitOutputDefault)
+      this.sources.set(
+        'agent.maxOutputTokens',
+        trackSettingSources(DEFAULT_SETTINGS, {}, this.startupEnv, this.startupCli).get('agent.maxOutputTokens') ??
+          'default',
+      );
     for (const [key, source] of this.runtimeOverrideSources) {
       this.sources.set(key, source);
     }
@@ -1126,10 +1171,15 @@ export class SettingsService {
     return next as SettingsData;
   }
 
-  private saveToFile(mutate?: (current: SettingsData) => SettingsData): DurableWriteResult {
+  private saveToFile(
+    mutate?: (current: SettingsData) => SettingsData,
+    outputIntent: 'preserve' | 'explicit' | 'reset' = 'preserve',
+    onCommitted?: () => void,
+  ): DurableWriteResult {
     if (this.disableFilePersistence) {
       return { status: 'not-persisted', reason: 'disabled' };
     }
+    let implicitOutputDefault = false;
     const committed = saveSettingsToFile({
       settingsDir: this.settingsDir,
       schema: SettingsSchema,
@@ -1137,12 +1187,21 @@ export class SettingsService {
       mutate: (current) => {
         return mutate ? mutate(current) : this.applyStartupChanges(current);
       },
-      stripSensitiveSettings,
+      stripSensitiveSettings: (next, raw) => {
+        const cleaned = stripSensitiveSettings(next);
+        implicitOutputDefault =
+          outputIntent === 'reset' ||
+          (outputIntent === 'preserve' && !Object.hasOwn((raw as any)?.agent ?? {}, 'maxOutputTokens'));
+        if (implicitOutputDefault && cleaned.agent)
+          delete (cleaned.agent as Partial<SettingsData['agent']>).maxOutputTokens;
+        return cleaned;
+      },
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
     if (committed) {
-      this.reconcileCommittedSettings(committed);
+      onCommitted?.();
+      this.reconcileCommittedSettings(committed, implicitOutputDefault);
       return { status: 'saved' };
     }
     return { status: 'not-persisted', reason: 'failed' };

@@ -70,7 +70,10 @@ export type ConversationCompactionFailureReason =
   | 'deferred'
   | 'single_turn_too_large'
   | 'result_still_too_large'
-  | 'hot_tail_would_orphan_tool_result';
+  | 'hot_tail_would_orphan_tool_result'
+  | 'non_reducing'
+  | 'summary_input_too_large'
+  | 'opaque_context';
 
 /**
  * Typed result of a manual context compaction. Consumers that must agree with the

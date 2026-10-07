@@ -1,4 +1,14 @@
-import { it, expect } from 'vitest';
+import { it, expect, beforeAll, afterAll } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { setConversationsDirForTest } from './services/conversation/conversation-persistence.js';
+const retainedSessionsDir = mkdtempSync(join(tmpdir(), 'term2-ordinary-noninteractive-'));
+beforeAll(() => setConversationsDirForTest(retainedSessionsDir));
+afterAll(() => {
+  setConversationsDirForTest(null);
+  rmSync(retainedSessionsDir, { recursive: true, force: true });
+});
 import { Writable } from 'node:stream';
 import { runNonInteractive, runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
 import { MockStream, createMockStream } from './services/test-helpers/mock-stream.js';
@@ -22,6 +32,46 @@ const createStringWritable = () => {
     getOutput: () => output,
   };
 };
+
+it('parks a contained budget with a recoverable diagnostic instead of auto-granting more spend', async () => {
+  const output = createStringWritable();
+  let answered = 0;
+  const session: any = {
+    sendMessage: async () => ({
+      type: 'approval_required',
+      approval: {
+        agentName: 'main',
+        toolName: 'max_turns_exceeded',
+        argumentsText: '',
+        checkIn: 'run_budget',
+        runBudgetEvent: {
+          type: 'budget_stage',
+          stage: 'critical',
+          evidence: { dimension: 'usd', used: 5, limit: 5, headroom: 0 },
+        },
+        rawInterruption: { type: 'run_budget_interaction' },
+      },
+    }),
+    handleApprovalDecision: async () => {
+      answered++;
+      return { type: 'response', finalText: 'should not resume' };
+    },
+    exportState: () => ({
+      history: [{ type: 'function_call_result', callId: 'completed-effect', output: 'retained' }],
+    }),
+  };
+  const code = await runWithSession(session, {
+    prompt: 'go',
+    autoApprove: true,
+    json: true,
+    stdout: output.stream,
+    stderr: output.stream,
+  });
+  expect(code).toBe(2);
+  expect(answered).toBe(0);
+  expect(output.getOutput()).toContain('run_budget_paused');
+  expect(output.getOutput()).toContain('retained');
+});
 
 const createNoopLogger = () => ({
   info() {},
@@ -1417,7 +1467,39 @@ it('returns non-zero and prints the hard-fit diagnostic when local compaction ca
     stderr: stderr.stream,
   });
 
-  expect(exitCode).toBe(1);
+  expect(exitCode).toBe(2);
   expect(stdout.getOutput()).toBe('');
   expect(stderr.getOutput()).toContain('error The protected recent conversation is too large');
+});
+
+it('reports a recoverable budget pause from a background notification turn', async () => {
+  const output = createStringWritable();
+  let calls = 0;
+  const background = createBackgroundWorkHarness({
+    outstanding: [],
+    completions: [{ id: 'child-finished', agentId: 'child-1', status: 'completed', result: 'done' } as any],
+  });
+  const session: any = {
+    sendMessage: async () =>
+      ++calls === 1
+        ? { type: 'response', finalText: 'foreground done' }
+        : { type: 'approval_required', approval: { checkIn: 'run_budget', runBudgetEvent: { stage: 'critical' } } },
+    handleApprovalDecision: async () => {
+      throw new Error('budget must not auto-grant');
+    },
+  };
+  const code = await runWithSession(session, {
+    prompt: 'work',
+    autoApprove: true,
+    json: true,
+    stdout: output.stream,
+    stderr: output.stream,
+    backgroundWork: background.work,
+    recoverySessionId: 'retained-session',
+  });
+  expect(code).toBe(2);
+  expect(calls).toBe(2);
+  expect(output.getOutput()).toContain('run_budget_paused');
+  expect(output.getOutput()).toContain('--resume retained-session');
+  expect(output.getOutput()).not.toContain('Unexpected conversation result');
 });

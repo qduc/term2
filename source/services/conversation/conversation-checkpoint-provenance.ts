@@ -72,7 +72,18 @@ export function resolveCheckpointSourceRefs(input: {
       return message?.role === 'user' && !message.isSynthetic;
     }).length;
 
-  const coldUserTurns = genuineUsers(input.history) - genuineUsers(input.hotTail);
+  // The reducer prepends protected user requests to its verbatim suffix.
+  // Identify the actual cut by suffix identity instead of subtracting user counts.
+  let suffixLength = 0;
+  while (
+    suffixLength < input.history.length &&
+    suffixLength < input.hotTail.length &&
+    itemKey(input.history[input.history.length - 1 - suffixLength]) ===
+      itemKey(input.hotTail[input.hotTail.length - 1 - suffixLength])
+  )
+    suffixLength++;
+  const coldPrefix = input.history.slice(0, input.history.length - suffixLength);
+  const coldUserTurns = genuineUsers(coldPrefix);
   if (coldUserTurns <= 0) return null;
 
   const retracted = new Set<string>();
@@ -114,7 +125,6 @@ export function resolveCheckpointSourceRefs(input: {
 
   // A prior local checkpoint in the replaced prefix carries coverage of the
   // older source turns it summarizes. Preserve those refs transitively.
-  const coldPrefix = input.history.slice(0, Math.max(0, input.history.length - input.hotTail.length));
   for (const item of coldPrefix) {
     if (!isLocalContextSummary(item)) continue;
     const prior = input.envelopes.find(

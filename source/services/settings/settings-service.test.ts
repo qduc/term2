@@ -150,6 +150,9 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.reasoningEffort')).toBe('default');
   expect(service.get('agent.temperature')).toBe(undefined);
   expect(service.get('agent.maxTurns')).toBe(100);
+  expect(service.get('agent.maxRequestInputTokens')).toBeNull();
+  expect(service.get('agent.contextCompaction.enabled')).toBe(true);
+  expect(service.get('agent.runBudget.escalation')).toBe('contain');
   expect(service.get('agent.maxOutputTokens')).toBe(32_000);
   expect(service.get('agent.maxStreamOutputChars')).toBe(100_000);
   expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
@@ -202,7 +205,7 @@ it.sequential.each(['cheapModel', 'mentorPool'])(
   },
 );
 
-it.sequential('migrates the former persisted request-deadline default to disabled', async () => {
+it.sequential('preserves an explicit five-minute deadline instead of guessing its provenance', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     fs.mkdirSync(settingsDir, { recursive: true });
@@ -211,8 +214,8 @@ it.sequential('migrates the former persisted request-deadline default to disable
 
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
-    expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
-    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.maxModelRequestDurationMs).toBe(0);
+    expect(service.get('agent.maxModelRequestDurationMs')).toBe(300_000);
+    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.maxModelRequestDurationMs).toBe(300_000);
   });
 });
 
@@ -1895,3 +1898,163 @@ it('does not demote when a persisted always mode has the sandbox explicitly disa
   expect(service.get('shell.autoApproveMode')).toBe('always');
   expect(service.get('sandbox.enabled')).toBe(false);
 });
+
+it.sequential('preserves persisted context and budget opt-outs while filling missing safety defaults', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    new SettingsService({ settingsDir, disableLogging: true });
+    const file = getSettingsFilePath(settingsDir);
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.agent.maxRequestInputTokens = null;
+    data.agent.contextCompaction.enabled = false;
+    data.agent.runBudget.escalation = 'warn';
+    data.agent.runBudget.maxUsdMicros = 1234567;
+    fs.writeFileSync(file, JSON.stringify(data));
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(service.get('agent.maxRequestInputTokens')).toBe(null);
+    expect(service.get('agent.contextCompaction.enabled')).toBe(false);
+    expect(service.get('agent.runBudget.escalation')).toBe('warn');
+    expect(service.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
+    delete data.agent.maxRequestInputTokens;
+    delete data.agent.contextCompaction.enabled;
+    delete data.agent.runBudget.escalation;
+    fs.writeFileSync(file, JSON.stringify(data));
+    const missing = new SettingsService({ settingsDir, disableLogging: true });
+    expect(missing.get('agent.maxRequestInputTokens')).toBeNull();
+    expect(missing.get('agent.contextCompaction.enabled')).toBe(true);
+    expect(missing.get('agent.runBudget.escalation')).toBe('contain');
+    expect(missing.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
+  });
+});
+
+it.sequential(
+  'retains default output provenance across real startup, reload, missing-key fill and unrelated saves',
+  async () => {
+    await withNonTestEnvironment(async () => {
+      const dir = getTestSettingsDir();
+      const first = new SettingsService({ settingsDir: dir, disableLogging: true });
+      expect(first.getSource('agent.maxOutputTokens')).toBe('default');
+      expect(JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8')).agent).not.toHaveProperty('maxOutputTokens');
+      const stale = new SettingsService({ settingsDir: dir, disableLogging: true });
+      expect(stale.getSource('agent.maxOutputTokens')).toBe('default');
+      first.set('logging.logLevel', 'warn');
+      expect(first.getSource('agent.maxOutputTokens')).toBe('default');
+      stale.set('logging.logLevel', 'info');
+      expect(new SettingsService({ settingsDir: dir, disableLogging: true }).getSource('agent.maxOutputTokens')).toBe(
+        'default',
+      );
+      const raw = JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8'));
+      delete raw.agent.maxStreamOutputChars;
+      fs.writeFileSync(getSettingsFilePath(dir), JSON.stringify(raw));
+      expect(new SettingsService({ settingsDir: dir, disableLogging: true }).getSource('agent.maxOutputTokens')).toBe(
+        'default',
+      );
+    });
+  },
+);
+it.sequential(
+  'preserves explicit output equal to the default through stale writes and restores absence only on reset',
+  async () => {
+    await withNonTestEnvironment(async () => {
+      const dir = getTestSettingsDir();
+      const first = new SettingsService({ settingsDir: dir, disableLogging: true });
+      const stale = new SettingsService({ settingsDir: dir, disableLogging: true });
+      first.set('agent.maxOutputTokens', 32000);
+      stale.set('logging.logLevel', 'warn');
+      const reloaded = new SettingsService({ settingsDir: dir, disableLogging: true });
+      expect(reloaded.getSource('agent.maxOutputTokens')).toBe('config');
+      expect(reloaded.get('agent.maxOutputTokens')).toBe(32000);
+      reloaded.reset('agent.maxOutputTokens');
+      expect(new SettingsService({ settingsDir: dir, disableLogging: true }).getSource('agent.maxOutputTokens')).toBe(
+        'default',
+      );
+      expect(JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8')).agent).not.toHaveProperty('maxOutputTokens');
+    });
+  },
+);
+
+it.sequential('keeps peer output allocation in live state after an unrelated stale persistent batch', async () => {
+  await withNonTestEnvironment(async () => {
+    const dir = getTestSettingsDir();
+    const stale = new SettingsService({ settingsDir: dir, disableLogging: true });
+    const peer = new SettingsService({ settingsDir: dir, disableLogging: true });
+    peer.set('agent.maxOutputTokens', 6000);
+    expect(stale.setPersistentDynamicTransaction([{ key: 'logging.logLevel', value: 'warn' }]).status).toBe('saved');
+    expect(stale.get('agent.maxOutputTokens')).toBe(6000);
+    expect(stale.getSource('agent.maxOutputTokens')).toBe('config');
+    expect(stale.get('logging.logLevel')).toBe('warn');
+    expect(new SettingsService({ settingsDir: dir, disableLogging: true }).get('agent.maxOutputTokens')).toBe(6000);
+  });
+});
+
+it.sequential.each([false, true])('preserves output omission in partial agent writes (batch=%s)', async (batch) => {
+  await withNonTestEnvironment(async () => {
+    const dir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir: dir, disableLogging: true });
+    const agent = { modelSelection: { model: 'gpt-4', provider: 'openai' } };
+    const save = (value: unknown) =>
+      batch
+        ? service.setPersistentDynamicTransaction([{ key: 'agent', value }])
+        : service.setPersistentDynamic('agent', value);
+    expect(save({ ...agent, maxOutputTokens: 32000 }).status).toBe('saved');
+    expect(new SettingsService({ settingsDir: dir, disableLogging: true }).getSource('agent.maxOutputTokens')).toBe(
+      'config',
+    );
+    expect(save(agent).status).toBe('saved');
+    expect(service.getSource('agent.maxOutputTokens')).toBe('default');
+    expect(new SettingsService({ settingsDir: dir, disableLogging: true }).getSource('agent.maxOutputTokens')).toBe(
+      'default',
+    );
+    expect(JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8')).agent).not.toHaveProperty('maxOutputTokens');
+    const peer = new SettingsService({ settingsDir: dir, disableLogging: true });
+    peer.set('agent.maxOutputTokens', 6000);
+    service.set('logging.logLevel', 'warn');
+    expect(service.get('agent.maxOutputTokens')).toBe(6000);
+    expect(service.getSource('agent.maxOutputTokens')).toBe('config');
+    expect(new SettingsService({ settingsDir: dir, disableLogging: true }).get('agent.maxOutputTokens')).toBe(6000);
+  });
+});
+
+it.sequential.each(['cli', 'env'] as const)(
+  'retains %s output precedence after a partial ancestor batch',
+  async (source) => {
+    await withNonTestEnvironment(async () => {
+      const dir = getTestSettingsDir();
+      const selected = source === 'cli' ? 4096 : 5000;
+      const options = { settingsDir: dir, disableLogging: true, [source]: { agent: { maxOutputTokens: selected } } };
+      const service = new SettingsService(options as any);
+      service.set('agent.maxOutputTokens', 6000);
+      expect(
+        service.setPersistentDynamicTransaction([
+          { key: 'agent', value: { modelSelection: { model: 'gpt-4', provider: 'openai' } } },
+        ]).status,
+      ).toBe('saved');
+      expect(service.get('agent.maxOutputTokens')).toBe(selected);
+      expect(service.getSource('agent.maxOutputTokens')).toBe(source);
+      expect(new SettingsService(options as any).get('agent.maxOutputTokens')).toBe(selected);
+      expect(JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8')).agent).not.toHaveProperty('maxOutputTokens');
+    });
+  },
+);
+
+it.sequential.each([false, true])(
+  'uses the last output intent in mixed persistent batches (leafLast=%s)',
+  async (leafLast) => {
+    await withNonTestEnvironment(async () => {
+      const dir = getTestSettingsDir();
+      const options = { settingsDir: dir, disableLogging: true, cli: { agent: { maxOutputTokens: 4096 } } };
+      const service = new SettingsService(options as any);
+      const ancestor = { key: 'agent', value: { modelSelection: { model: 'gpt-4', provider: 'openai' } } };
+      const leaf = { key: 'agent.maxOutputTokens', value: 7000 };
+      expect(service.setPersistentDynamicTransaction(leafLast ? [ancestor, leaf] : [leaf, ancestor]).status).toBe(
+        'saved',
+      );
+      expect(service.get('agent.maxOutputTokens')).toBe(leafLast ? 7000 : 4096);
+      expect(service.getSource('agent.maxOutputTokens')).toBe('cli');
+      const raw = JSON.parse(fs.readFileSync(getSettingsFilePath(dir), 'utf8'));
+      if (leafLast) expect(raw.agent.maxOutputTokens).toBe(7000);
+      else expect(raw.agent).not.toHaveProperty('maxOutputTokens');
+      expect(new SettingsService(options as any).get('agent.maxOutputTokens')).toBe(4096);
+    });
+  },
+);

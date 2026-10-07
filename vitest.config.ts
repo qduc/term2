@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -20,6 +21,14 @@ export default defineConfig({
     // 8342 tests. See docs/plans/slow-test-suite.md.
     exclude: ['**/node_modules/**', '**/*.e2e.*', '**/*.integration.*', 'scripts/provider-black-box/**'],
     environment: 'node',
+    // Vitest defaults to cores - 1 workers to leave a core for its main thread.
+    // Measured on a 4-core machine, full unit suite, 2026-10-07: 3 workers
+    // 196-200s, 4 workers 158s, 6 workers 150s (but summed test time rose
+    // 215s -> 294s from contention, which risks timing-sensitive tests). Much
+    // of the work is import evaluation and timer/IO waiting, so the main
+    // thread's share is small; one worker per core is the point before
+    // contention dominates. `--maxWorkers` on the CLI still overrides this.
+    maxWorkers: os.availableParallelism(),
     globals: false,
     setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,

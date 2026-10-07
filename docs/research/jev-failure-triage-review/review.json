@@ -1,0 +1,1298 @@
+{
+  "review_date": "2026-10-06",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "label_method": "retrospective evidence review after viewing predictions; not independent/blind ground truth",
+  "sources": [
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.10",
+      "sha256": "9f3edb424851d281b414235e329ce0f17c058e93cb1b5f248588e0bd1c281f44",
+      "lines": 807,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.4",
+      "sha256": "358eb7d2e2fb1e45e84fee77c0d26af09f600ffc7efda1f4506a224258d086f2",
+      "lines": 2030,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.5",
+      "sha256": "ac66b14cd4fd526b684b71949f9b2a4b98c90bb3b270bd971372f0d3e3634755",
+      "lines": 1246,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.6",
+      "sha256": "9860fb606acfdf0656bb236badb32982083ccb127fdddc5688b0aeef96fa06a5",
+      "lines": 1210,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.7",
+      "sha256": "7691e1687a23e4fee7eb924c3d19dbc9b5d6273a28580b70b8601a0168e85847",
+      "lines": 1288,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.8",
+      "sha256": "7dfcc2b12f1fa19777fc6eb0f3cb9094469d94d5f64c51874b3e4bcfdb7572c9",
+      "lines": 926,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-30.log.9",
+      "sha256": "e730fd9dafda60603781634f0e3cedb22cf47ed839394f6b94c463ff761088dc",
+      "lines": 860,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-08-31.log.1",
+      "sha256": "24dcf5970a643531a2916bd5921fecdc4d999ea9b48e2878931ddbb8e005d350",
+      "lines": 1551,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-04.log.1",
+      "sha256": "56073e77687cf98421de12b00c55a62c17d812f0abdd328a67e08caeb9dbefd5",
+      "lines": 9382,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-04.log.2",
+      "sha256": "0c565c51a136563d7cfe77e26ea93a87458e3f4e46f1254ac7573dd6f3781ae5",
+      "lines": 11497,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-04.log.3",
+      "sha256": "0cfb11cb2348358b0d5609f818dea0dd9ddb795eb776cafb76fb7becfa619242",
+      "lines": 3475,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-08.log.4",
+      "sha256": "948e6a7d09c7307e848e2ef3bd124fd406234b4dd1e94159a292200a5fed0b6f",
+      "lines": 1957,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-09.log.3",
+      "sha256": "3cffbe49511d62364a788a5ecb9f3f7cfdeb9d9b7d9cff4448386e00bf7c2618",
+      "lines": 1377,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "sha256": "37d69f4c37a1e94efbdbbbab88bbf8b3678be4d946c3824bcf8e803f05b1be15",
+      "lines": 2546,
+      "pilot_events": 22
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-30.log",
+      "sha256": "c1ee61a550a7d504ac0a074e5164ec8acab65c7cc55b175b6920bef51da9e01b",
+      "lines": 280,
+      "pilot_events": 2
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-02.log",
+      "sha256": "57039a0582858bd151a1ba2a7c9822f99fd6bdc12e9074134b89b46f516302a5",
+      "lines": 2,
+      "pilot_events": 0
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-03.log",
+      "sha256": "171ac1e84cb915ceb05954ece02aecd725f989c378aedf1841f42b443eb0e263",
+      "lines": 84,
+      "pilot_events": 2
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "sha256": "aa9325a6d6ae041bb1f0678acea322827f5554e90f5eb66014021dda5c434853",
+      "lines": 1013,
+      "pilot_events": 14
+    },
+    {
+      "path": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-05.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0,
+      "pilot_events": 0
+    }
+  ],
+  "summary": {
+    "cases": 20,
+    "event_counts": {
+      "decision_shadow.started": 20,
+      "decision_shadow.failure_triage": 20
+    },
+    "failure_families": {
+      "invalid_continuity": 14,
+      "websocket_1012": 2,
+      "insufficient_balance": 1,
+      "overload_no_more_retry": 2,
+      "first_frame_timeout": 1
+    },
+    "unique_identified_sessions": 18,
+    "category_evidence_supported": 20,
+    "retry_evidence_supported": 18,
+    "retry_unresolved": 2,
+    "runtime_retry_agreement": 19,
+    "median_latency_ms": 1078.2873229999386,
+    "p95_latency_ms_nearest_rank": 1394.1541419997811,
+    "max_latency_ms": 2262.6953579997644,
+    "cost_usd_micros": 643,
+    "continuity_rebuild_logged": 13,
+    "persisted_available": 18,
+    "root_activity_within_5min_before_next_user": 16
+  },
+  "cases": [
+    {
+      "id": "JFT-01",
+      "timestamp_local": "2026-09-29 10:45:05",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 442,
+      "settlement_line": 447,
+      "failure_line": 441,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "0e841b37-2d0e-4b73-9ab6-124e3c9f159f",
+      "settlement_correlation_id": "41677cb3-1b56-47a6-97ab-e53115e10b02",
+      "pilot_request_id": "req-62",
+      "provider_request_id": "c55b9f59-9a77-4136-b20e-d0488f2617cd",
+      "session_id": "f80abfa5-c19a-4cd1-8a84-8ec845148589",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.7,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1078.124087999924,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 444,
+          "timestamp": "2026-09-29 10:45:05",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 445,
+          "timestamp": "2026-09-29 10:45:05",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 446,
+          "timestamp": "2026-09-29 10:45:05",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/f80abfa5-c19a-4cd1-8a84-8ec845148589.jsonl",
+        "sha256": "7813e58441c047425c6618448519569391e3519c4bb123a647c7d0b8f580351c",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 612,
+          "ts": "2026-09-29T03:45:11.916Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-02",
+      "timestamp_local": "2026-09-29 11:47:52",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 504,
+      "settlement_line": 509,
+      "failure_line": 502,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "a9b126aa-c627-46fc-85c2-6f812a44c9a5",
+      "settlement_correlation_id": "67670429-75a3-4005-b7f3-2059540441c2",
+      "pilot_request_id": "req-33",
+      "provider_request_id": "74c04da8-de84-4720-aaf9-eb109b642003",
+      "session_id": "41dc77bc-21af-4308-8051-0eb57bbad10d",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "failure_message": "WebSocket connection closed before a terminal response event. (code=1012 reason=\"\" unsent=0)",
+      "failure_family": "websocket_1012",
+      "review_category": "TRANSIENT_PROVIDER",
+      "review_same_request_retry": "RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "TRANSIENT_PROVIDER",
+        "predictedRetry": "RETRY",
+        "confidence": 0.8,
+        "comparisonErrorKind": "provider",
+        "comparisonRetryable": true,
+        "latencyMs": 1046.0115569999907,
+        "cost": 33,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 507,
+          "timestamp": "2026-09-29 11:47:52",
+          "eventType": "conversation.chaining_broken",
+          "reason": "connection_interrupted"
+        },
+        {
+          "line": 508,
+          "timestamp": "2026-09-29 11:47:52",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/41dc77bc-21af-4308-8051-0eb57bbad10d.jsonl",
+        "sha256": "04667a39438c0b3f6e5b0dd3361a597f7d5a7ebf977ee935e0b475fc9a8d7cb6",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 131,
+          "ts": "2026-09-29T04:48:15.877Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-03",
+      "timestamp_local": "2026-09-29 13:04:59",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 711,
+      "settlement_line": 716,
+      "failure_line": 710,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "9a7e5bf1-2208-47cd-b0cd-1aeac93ccc91",
+      "settlement_correlation_id": "ea1ae2b0-5ad1-4aad-a570-ecb15dab9c59",
+      "pilot_request_id": "req-51",
+      "provider_request_id": "3fdef31c-0360-470c-aa07-7624fb4cf76b",
+      "session_id": "d277eaa6-559e-4e0d-87f5-c72166b39b87",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.71,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1078.4505579999532,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 713,
+          "timestamp": "2026-09-29 13:04:59",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 714,
+          "timestamp": "2026-09-29 13:04:59",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 715,
+          "timestamp": "2026-09-29 13:04:59",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/d277eaa6-559e-4e0d-87f5-c72166b39b87.jsonl",
+        "sha256": "9ddb44d49ce939d41aa455034758adf88993770edd3f3d45c33783d72d0498ba",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 199,
+          "ts": "2026-09-29T06:05:13.188Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-04",
+      "timestamp_local": "2026-09-29 13:25:11",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 777,
+      "settlement_line": 780,
+      "failure_line": 778,
+      "failure_join": "correlation_and_same_second_agent_failure",
+      "start_correlation_id": "9a5a68ea-971b-4a92-980f-f06665483388",
+      "settlement_correlation_id": null,
+      "pilot_request_id": "req-1",
+      "provider_request_id": null,
+      "session_id": null,
+      "provider": "DeepSeek",
+      "model": "deepseek-flash",
+      "failure_message": "402 Insufficient Balance (request_id: 1831513a-a53f-42a2-b693-c7e9a8e4dfd5)",
+      "failure_family": "insufficient_balance",
+      "review_category": "AUTH_CONFIGURATION",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "AUTH_CONFIGURATION",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.57,
+        "comparisonErrorKind": "provider",
+        "comparisonRetryable": false,
+        "latencyMs": 978.065998,
+        "cost": 33,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [],
+      "persisted": {
+        "available": false
+      }
+    },
+    {
+      "id": "JFT-05",
+      "timestamp_local": "2026-09-29 16:54:43",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1252,
+      "settlement_line": 1257,
+      "failure_line": 1250,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "d0944050-6cf2-4d49-b0c0-d8500307cf4c",
+      "settlement_correlation_id": "581d79fb-ea3e-4723-80ae-c235a8c3095e",
+      "pilot_request_id": "req-145",
+      "provider_request_id": "bdb97ec1-9de0-4125-8cd2-d22e57d80401",
+      "session_id": "b8a5ecec-ac63-42e3-9daa-faf027117f56",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "failure_message": "WebSocket connection closed before a terminal response event. (code=1012 reason=\"\" unsent=0)",
+      "failure_family": "websocket_1012",
+      "review_category": "TRANSIENT_PROVIDER",
+      "review_same_request_retry": "RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "TRANSIENT_PROVIDER",
+        "predictedRetry": "RETRY",
+        "confidence": 0.8,
+        "comparisonErrorKind": "provider",
+        "comparisonRetryable": true,
+        "latencyMs": 2262.6953579997644,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 1255,
+          "timestamp": "2026-09-29 16:54:43",
+          "eventType": "conversation.chaining_broken",
+          "reason": "connection_interrupted"
+        },
+        {
+          "line": 1256,
+          "timestamp": "2026-09-29 16:54:43",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/b8a5ecec-ac63-42e3-9daa-faf027117f56.jsonl",
+        "sha256": "b067c811ae0d03ab9a5a3f04b7b22006ce8436ab30093adfc0acb5211d50ff24",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 715,
+          "ts": "2026-09-29T09:55:07.752Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-06",
+      "timestamp_local": "2026-09-29 17:09:15",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1304,
+      "settlement_line": 1309,
+      "failure_line": 1303,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "15cfa0a2-d586-4ab3-bc00-260786f1b9ef",
+      "settlement_correlation_id": "69bfc2ec-f9e2-448f-80a5-a3b5679d19db",
+      "pilot_request_id": "req-72",
+      "provider_request_id": "d4ab6aee-2d44-4f99-b241-db51b1182da3",
+      "session_id": "46e49835-4712-4542-95cf-4cd05a0a9e0b",
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.66,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1182.9144749999978,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 1306,
+          "timestamp": "2026-09-29 17:09:15",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 1307,
+          "timestamp": "2026-09-29 17:09:15",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 1308,
+          "timestamp": "2026-09-29 17:09:15",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/46e49835-4712-4542-95cf-4cd05a0a9e0b.jsonl",
+        "sha256": "d19f232c8143de5479b0618db5b8cbceeb781e658db42a8c31e1564c6f2bc365",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 848,
+          "ts": "2026-09-29T10:09:26.266Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-07",
+      "timestamp_local": "2026-09-29 18:18:38",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1459,
+      "settlement_line": 1464,
+      "failure_line": 1458,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": null,
+      "settlement_correlation_id": "a448ef0d-bca8-43eb-9e74-9158e2be6e3f",
+      "pilot_request_id": "req-71",
+      "provider_request_id": "b262a94b-3c54-4519-8334-eb88f1103c5a",
+      "session_id": "5199767b-953d-4d27-a1cc-b389853e04d2",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.78,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1119.6330939996988,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 1461,
+          "timestamp": "2026-09-29 18:18:38",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 1462,
+          "timestamp": "2026-09-29 18:18:38",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 1463,
+          "timestamp": "2026-09-29 18:18:38",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/5199767b-953d-4d27-a1cc-b389853e04d2.jsonl",
+        "sha256": "2617cf04f669b2e4f6b87bb9122e6f3394115d08d7c0a8117de950a766b385e6",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 350,
+          "ts": "2026-09-29T11:19:10.186Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-08",
+      "timestamp_local": "2026-09-29 19:02:12",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1630,
+      "settlement_line": 1633,
+      "failure_line": 1629,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "4cc4d4ec-6bd5-4aca-95a5-610a76a7cc86",
+      "settlement_correlation_id": null,
+      "pilot_request_id": "req-1",
+      "provider_request_id": "e00aac16-5ba6-4301-a828-395b01398305",
+      "session_id": "9edd4a70-2fba-41b8-af4f-c572392e1e1a",
+      "provider": "codex",
+      "model": "gpt-5.6-luna",
+      "failure_message": "{\"type\":\"error\",\"error\":{\"type\":\"service_unavailable_error\",\"code\":\"server_is_overloaded\",\"headers\":{\"x-retry-metadata\":\"NO_MORE_RETRY\"},\"message\":\"Our servers are currently overloaded. Please try again later.\",\"param\":null},\"sequence_number\":2}",
+      "failure_family": "overload_no_more_retry",
+      "review_category": "TRANSIENT_PROVIDER",
+      "review_same_request_retry": null,
+      "retry_review_note": "Unresolved: temporary overload conflicts with NO_MORE_RETRY; no empirical unchanged-request outcome.",
+      "prediction": {
+        "predictedCategory": "TRANSIENT_PROVIDER",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.83,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1052.600115000001,
+        "cost": 33,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/9edd4a70-2fba-41b8-af4f-c572392e1e1a.jsonl",
+        "sha256": "7f2edeacc2622b7237943dcda55aca2613eaee2c4c01e1187f45616caea38f88",
+        "window_seconds": 300,
+        "root_activity_before_next_user": null
+      }
+    },
+    {
+      "id": "JFT-09",
+      "timestamp_local": "2026-09-29 20:18:27",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1800,
+      "settlement_line": 1803,
+      "failure_line": 1799,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "f71dcc64-b294-45bc-98db-419e00c97925",
+      "settlement_correlation_id": null,
+      "pilot_request_id": "req-246",
+      "provider_request_id": "10c406a0-3a3a-4dac-93a5-c8baad10526c",
+      "session_id": "2104c7b9-304c-4316-b667-96f8425f6973",
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "failure_message": "WebSocket first frame timeout",
+      "failure_family": "first_frame_timeout",
+      "review_category": "TRANSIENT_PROVIDER",
+      "review_same_request_retry": "RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "TRANSIENT_PROVIDER",
+        "predictedRetry": "RETRY",
+        "confidence": 0.33,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1308.2472249995917,
+        "cost": 31,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/2104c7b9-304c-4316-b667-96f8425f6973.jsonl",
+        "sha256": "7a5e17014711a30c9ec65c41541861ac5275e2c45b73dbe40e3b8794abd06300",
+        "window_seconds": 300,
+        "root_activity_before_next_user": null
+      }
+    },
+    {
+      "id": "JFT-10",
+      "timestamp_local": "2026-09-29 21:11:08",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 1924,
+      "settlement_line": 1929,
+      "failure_line": 1923,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "2cb04088-2557-4825-9b48-b493e4409449",
+      "settlement_correlation_id": "9a305f5b-4846-4546-b76b-71b7e758ec22",
+      "pilot_request_id": "req-328",
+      "provider_request_id": "30d0456c-9e70-46bf-badb-eb98783189dc",
+      "session_id": "0d1a780e-1454-4007-a8d2-3b4dab1ba73a",
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.73,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1023.8297130018473,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 1926,
+          "timestamp": "2026-09-29 21:11:08",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 1927,
+          "timestamp": "2026-09-29 21:11:08",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 1928,
+          "timestamp": "2026-09-29 21:11:08",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/0d1a780e-1454-4007-a8d2-3b4dab1ba73a.jsonl",
+        "sha256": "04be419d7b1b310b033acf888db6f33f440e045030dd0a3870f87529f786451c",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 505,
+          "ts": "2026-09-29T14:11:23.181Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-11",
+      "timestamp_local": "2026-09-29 22:29:43",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-29.log",
+      "start_line": 2363,
+      "settlement_line": 2368,
+      "failure_line": 2362,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "f1d18dba-13a8-4b69-946f-73b7d20ea4a9",
+      "settlement_correlation_id": "29e7a763-d095-430f-915c-a000f3d426c2",
+      "pilot_request_id": "req-494",
+      "provider_request_id": "f5acec5c-6606-41f3-b029-fa3678172b54",
+      "session_id": "be80f4db-220b-4936-b866-ea5312e9c6a4",
+      "provider": "codex",
+      "model": "gpt-6-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.73,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1394.1541419997811,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/be80f4db-220b-4936-b866-ea5312e9c6a4.jsonl",
+        "sha256": "6e55c804618b034928277bd519e22722de1d4f21e8bfdedb822f2082c0d25549",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 1334,
+          "ts": "2026-09-29T15:29:43.134Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-12",
+      "timestamp_local": "2026-09-30 23:15:48",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-09-30.log",
+      "start_line": 260,
+      "settlement_line": 265,
+      "failure_line": 259,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "ecc61476-7c28-4209-af3e-cfd9ec87b51c",
+      "settlement_correlation_id": "3b994bb9-b831-4831-9a58-b50c94202221",
+      "pilot_request_id": "req-149",
+      "provider_request_id": "71d89dbf-aac7-4bb8-b474-3e06fccbcc9e",
+      "session_id": "f6b6a8e6-84d2-492c-a703-f99307c44007",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.77,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1363.7874440001324,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 262,
+          "timestamp": "2026-09-30 23:15:48",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 263,
+          "timestamp": "2026-09-30 23:15:48",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 264,
+          "timestamp": "2026-09-30 23:15:48",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/f6b6a8e6-84d2-492c-a703-f99307c44007.jsonl",
+        "sha256": "1e8535fe1cd8753b7fbaad6cf28857c5f9c0d9adb961bad2aaaef35a831a3732",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 1251,
+          "ts": "2026-09-30T16:15:55.137Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-13",
+      "timestamp_local": "2026-10-03 12:10:13",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-03.log",
+      "start_line": 47,
+      "settlement_line": 52,
+      "failure_line": 46,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "c89a55f3-2e83-493d-bf57-10bc1e7c7c44",
+      "settlement_correlation_id": "622f9c65-6c1e-45bc-8938-895f97ab0b88",
+      "pilot_request_id": "req-159",
+      "provider_request_id": "9918d9ee-07c5-4856-9270-487824fc3a82",
+      "session_id": "a3e15657-af98-4c76-b6b2-b2dc12945b5e",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.71,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1086.5993190002628,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 49,
+          "timestamp": "2026-10-03 12:10:13",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 50,
+          "timestamp": "2026-10-03 12:10:13",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 51,
+          "timestamp": "2026-10-03 12:10:13",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/a3e15657-af98-4c76-b6b2-b2dc12945b5e.jsonl",
+        "sha256": "9828a4981341894f31f166d624244c178238ef57fcb21211013f4e784b392c1a",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 2479,
+          "ts": "2026-10-03T05:10:22.859Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-14",
+      "timestamp_local": "2026-10-04 14:10:33",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 89,
+      "settlement_line": 94,
+      "failure_line": 88,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "2e2932a8-bdca-4f12-939b-e8dba9ff3b93",
+      "settlement_correlation_id": "732c2d3c-ae92-4efb-970e-621fffdd6bad",
+      "pilot_request_id": "req-4",
+      "provider_request_id": "33a0bb24-797e-4633-924f-0acb5a612756",
+      "session_id": "non-interactive-292fd61a-c69a-4d1a-9e24-9fc38156746b",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.74,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1080.2532650000066,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 91,
+          "timestamp": "2026-10-04 14:10:33",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 92,
+          "timestamp": "2026-10-04 14:10:33",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 93,
+          "timestamp": "2026-10-04 14:10:33",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": false
+      }
+    },
+    {
+      "id": "JFT-15",
+      "timestamp_local": "2026-10-04 15:30:54",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 103,
+      "settlement_line": 108,
+      "failure_line": 102,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "4c7085a9-ebee-4ac7-8932-896e991beb67",
+      "settlement_correlation_id": "98611d1c-fc84-4428-baa0-300bc2ce8650",
+      "pilot_request_id": "req-2",
+      "provider_request_id": "296652db-b686-4a1a-8df7-f2d84e06e0ef",
+      "session_id": "fa2c90b9-5dae-4971-a8ba-ac07375dc3e1",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.73,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1030.7891650000092,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 105,
+          "timestamp": "2026-10-04 15:30:54",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 106,
+          "timestamp": "2026-10-04 15:30:54",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 107,
+          "timestamp": "2026-10-04 15:30:54",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/fa2c90b9-5dae-4971-a8ba-ac07375dc3e1.jsonl",
+        "sha256": "5b97031fb1ca2f4e0e5609cb5f3966f82ca8e50ebe53156a5d89dc969f239911",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 201,
+          "ts": "2026-10-04T08:30:59.826Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-16",
+      "timestamp_local": "2026-10-04 16:26:42",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 267,
+      "settlement_line": 272,
+      "failure_line": 266,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "65b0c107-d543-492d-bace-1fe9a348a8d3",
+      "settlement_correlation_id": "ff181909-d2f8-4088-ad55-472422906bd4",
+      "pilot_request_id": "req-253",
+      "provider_request_id": "0a42202c-3ea2-46c1-b8e3-f3c353881891",
+      "session_id": "22f73cfe-56d8-4003-b88e-20656002f353",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.71,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1102.6570190000348,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 269,
+          "timestamp": "2026-10-04 16:26:42",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 270,
+          "timestamp": "2026-10-04 16:26:42",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 271,
+          "timestamp": "2026-10-04 16:26:42",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/22f73cfe-56d8-4003-b88e-20656002f353.jsonl",
+        "sha256": "e49fec0a6706bbaa679f26ea5759a85dd7664d84873271f04c5373cfe7ee29d2",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 2289,
+          "ts": "2026-10-04T09:26:56.527Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-17",
+      "timestamp_local": "2026-10-04 20:29:26",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 832,
+      "settlement_line": 837,
+      "failure_line": 831,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "c89ad845-c21d-45c7-8c28-880e709c4855",
+      "settlement_correlation_id": "da93cce2-4cc4-4a92-abe7-fa6cb9afdcce",
+      "pilot_request_id": "req-14",
+      "provider_request_id": "a31465bd-42e1-497c-a80d-1c93c3ece6be",
+      "session_id": "a1e0a148-b039-49c4-ad1b-53bf7b22804d",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.7,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1015.8024599999771,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 834,
+          "timestamp": "2026-10-04 20:29:26",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 835,
+          "timestamp": "2026-10-04 20:29:26",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 836,
+          "timestamp": "2026-10-04 20:29:26",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/a1e0a148-b039-49c4-ad1b-53bf7b22804d.jsonl",
+        "sha256": "25fa6ac8f9534f6b644e600922d56ad550fb6de5f2d76efe3c1a08c0dbd86fcc",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 206,
+          "ts": "2026-10-04T13:29:36.029Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-18",
+      "timestamp_local": "2026-10-04 21:13:07",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 846,
+      "settlement_line": 851,
+      "failure_line": 845,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "ef0143fa-01c9-4512-8068-bf77698c79a2",
+      "settlement_correlation_id": "dbe599df-dd68-4312-b3a3-298188b1fe29",
+      "pilot_request_id": "req-64",
+      "provider_request_id": "42da0290-98e5-49fd-b6bf-d9a02d566825",
+      "session_id": "fbcfc5de-5e7e-4612-851a-038bfa847df3",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.7,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1031.1236120001413,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 848,
+          "timestamp": "2026-10-04 21:13:07",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 849,
+          "timestamp": "2026-10-04 21:13:07",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 850,
+          "timestamp": "2026-10-04 21:13:07",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/fbcfc5de-5e7e-4612-851a-038bfa847df3.jsonl",
+        "sha256": "864fa117e1308e813fe5b2ac34ef46d92102c2beea09e966b2da5c18768db1c0",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 227,
+          "ts": "2026-10-04T14:13:14.943Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    },
+    {
+      "id": "JFT-19",
+      "timestamp_local": "2026-10-04 21:13:32",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 855,
+      "settlement_line": 858,
+      "failure_line": 854,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "dbe599df-dd68-4312-b3a3-298188b1fe29",
+      "settlement_correlation_id": null,
+      "pilot_request_id": "req-68",
+      "provider_request_id": "108303e6-f27d-46fb-ae73-f5c5af9b8022",
+      "session_id": "fbcfc5de-5e7e-4612-851a-038bfa847df3",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"error\":{\"type\":\"service_unavailable_error\",\"code\":\"server_is_overloaded\",\"headers\":{\"x-retry-metadata\":\"NO_MORE_RETRY\"},\"message\":\"Our servers are currently overloaded. Please try again later.\",\"param\":null},\"sequence_number\":2}",
+      "failure_family": "overload_no_more_retry",
+      "review_category": "TRANSIENT_PROVIDER",
+      "review_same_request_retry": null,
+      "retry_review_note": "Unresolved: temporary overload conflicts with NO_MORE_RETRY; no empirical unchanged-request outcome.",
+      "prediction": {
+        "predictedCategory": "TRANSIENT_PROVIDER",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.81,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 631.839662999846,
+        "cost": 33,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/fbcfc5de-5e7e-4612-851a-038bfa847df3.jsonl",
+        "sha256": "864fa117e1308e813fe5b2ac34ef46d92102c2beea09e966b2da5c18768db1c0",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 301,
+          "ts": "2026-10-04T14:13:32.303Z",
+          "type": "assistant_turn"
+        }
+      }
+    },
+    {
+      "id": "JFT-20",
+      "timestamp_local": "2026-10-04 21:51:22",
+      "source": "/home/qduc/.local/state/term2-nodejs/logs/term2-2026-10-04.log",
+      "start_line": 903,
+      "settlement_line": 908,
+      "failure_line": 902,
+      "failure_join": "correlation_and_same_second_provider_request",
+      "start_correlation_id": "28cead6b-a9b6-4315-baf1-643467d350c0",
+      "settlement_correlation_id": "1b649fe5-6069-4323-92ad-b85c0f35d5cb",
+      "pilot_request_id": "req-6",
+      "provider_request_id": "ef332055-9977-4e14-b317-67490f91f695",
+      "session_id": "cc1f2b10-08c7-4bf9-b5e7-6810f5b52490",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "failure_message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}",
+      "failure_family": "invalid_continuity",
+      "review_category": "INVALID_REQUEST",
+      "review_same_request_retry": "DO_NOT_RETRY",
+      "retry_review_note": "Retrospective evidence-supported label; no blind adjudication or unchanged-request experiment.",
+      "prediction": {
+        "predictedCategory": "INVALID_REQUEST",
+        "predictedRetry": "DO_NOT_RETRY",
+        "confidence": 0.66,
+        "comparisonErrorKind": "unknown",
+        "comparisonRetryable": false,
+        "latencyMs": 1055.7710709999956,
+        "cost": 32,
+        "promptVersion": "failure-triage-v2-runtime-evidence",
+        "requestedModel": "~typesafe/jev-latest",
+        "resolvedModel": "typesafe/jev-1.13-20260917"
+      },
+      "recovery_events": [
+        {
+          "line": 905,
+          "timestamp": "2026-10-04 21:51:22",
+          "eventType": "retry.conversation_state",
+          "errorMessage": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid `previous_response_id`.\"}}"
+        },
+        {
+          "line": 906,
+          "timestamp": "2026-10-04 21:51:22",
+          "eventType": "conversation.chaining_broken",
+          "reason": "provider_state_rejected"
+        },
+        {
+          "line": 907,
+          "timestamp": "2026-10-04 21:51:22",
+          "eventType": "retry.recovery_admission",
+          "admitted": true
+        }
+      ],
+      "persisted": {
+        "available": true,
+        "path": "/home/qduc/.local/share/term2-nodejs/conversations/cc1f2b10-08c7-4bf9-b5e7-6810f5b52490.jsonl",
+        "sha256": "cd7e1c30f0322bcf7e983cd4c633c235ee172855e52ff5b2908ee4ffa04315e3",
+        "window_seconds": 300,
+        "root_activity_before_next_user": {
+          "seq": 1359,
+          "ts": "2026-10-04T14:51:30.051Z",
+          "type": "assistant_journal_item"
+        }
+      }
+    }
+  ]
+}

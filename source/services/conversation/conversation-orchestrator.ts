@@ -20,7 +20,7 @@ import type { StreamingState } from '../../utils/conversation/conversation-utils
 import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 import { insertBeforeStreamingTail } from '../../utils/conversation/message-buffer.js';
 import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
-import { trimTrailingAssistantMessages } from '../../utils/conversation/message-utils.js';
+import { trimTrailingAssistantMessages, findLastUndoableUserMessage } from '../../utils/conversation/message-utils.js';
 import type { RewindTargetId } from './conversation-store.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 import {
@@ -771,8 +771,19 @@ export class ConversationOrchestrator {
     }
   }
 
-  /** Start a fresh, user-authorized retry from canonical transcript state. */
+  /** Replace the latest user turn's attempt, including its tool transcript. */
   async retryLastFailedTurn(): Promise<boolean> {
+    if (!this.config.conversationService.listUserTurns()?.length) return false;
+    this.config.conversationService.abort();
+    this.config.approvedContext.current = null;
+    this.config.conversationService.clearPendingInteraction?.();
+    this.config.ui.onResetTransient();
+    this.config.messages.setMessages((prev) => {
+      const anchor = findLastUndoableUserMessage(prev);
+      return anchor === -1 ? prev : prev.slice(0, anchor + 1);
+    });
+    this.#directlyAppendedMessageIds.clear();
+    this.#displayedBackgroundNotificationMessageIds.clear();
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
       this.#beginTurn('retryLastFailedTurn');
     try {

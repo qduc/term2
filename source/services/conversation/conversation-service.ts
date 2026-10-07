@@ -898,9 +898,11 @@ export class ConversationService {
     });
   }
 
-  /** Retry the latest failed turn from the canonical session transcript. */
+  /** Regenerate the latest user turn; completed tool effects are not undone. */
   retryLastFailedTurn(options?: SendMessageOptions): Promise<ConversationTerminal | null> {
+    if (this.#runtime.state.listUserTurns().length === 0) return Promise.resolve(null);
     this.abort();
+    if (!this.#runtime.state.retryLastUserTurn()) return Promise.resolve(null);
     return this.#adapter.sendMessage('', {
       ...options,
       replayFromHistory: true,

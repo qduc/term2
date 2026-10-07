@@ -59,6 +59,16 @@ export class SessionManager {
     return removed;
   }
 
+  /** Discard the latest attempt, retaining the exact original provider input. */
+  retryLastUserTurn(): boolean {
+    const turn = this.#conversationStore.listUserTurns().at(-1);
+    if (!turn) return false;
+    const original = this.#conversationStore.getHistory()[turn.index]!;
+    this.undoLastUserTurn();
+    this.#conversationStore.addImportedItem(original);
+    return true;
+  }
+
   peekLastToolOutput(): {
     index: number;
     callId?: string;

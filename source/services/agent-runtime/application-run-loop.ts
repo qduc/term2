@@ -45,7 +45,7 @@ import {
   type RunBudgetPolicy,
 } from './run-budget.js';
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
-import { extractAiSdkUpstreamProvider } from '../../providers/ai-sdk-streamed-model.js';
+import { extractAiSdkUpstreamProvider } from '../../providers/ai-sdk-provider-metadata.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
 import {

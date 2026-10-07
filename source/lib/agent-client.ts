@@ -77,7 +77,7 @@ import {
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
-import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
+import { supportsContextCompactionModel } from '../providers/context-compaction-policy.js';
 import { isCodexCompactionIncompatible } from '../providers/codex-compact.js';
 import {
   estimateContext,

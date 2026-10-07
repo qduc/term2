@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
 import { BOUNDARY_REGEX, scoreSubsequence } from '../utils/subsequence-filter.js';
-import { getProvider } from '../providers/index.js';
+import { getProvider } from '../providers/registry.js';
 import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 
@@ -242,7 +242,14 @@ export async function fetchModels(
 
   const startTime = now();
   try {
-    const providerDef = getProvider(provider);
+    // The builtin providers (and the SDKs behind them) are loaded on first miss,
+    // not at import: callers that only read cached models never need them. A
+    // provider that is already registered is still called synchronously.
+    let providerDef = getProvider(provider);
+    if (!providerDef) {
+      await import('../providers/index.js');
+      providerDef = getProvider(provider);
+    }
     if (!providerDef) {
       throw new Error(`Provider '${provider}' is not registered`);
     }

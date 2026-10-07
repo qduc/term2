@@ -81,7 +81,7 @@ import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post
 import type { SessionAccessState } from './session-access-state.js';
 import { extractFinalizationSnapshot } from '../stream-snapshot.js';
 import { lastOpenAICompaction } from './session-stream-processor.js';
-import { contextCompactionFailureCategory } from '../../providers/openai-responses-model.js';
+import { contextCompactionFailureCategory } from '../../providers/context-compaction-policy.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';

@@ -123,7 +123,13 @@ export function registerProvider(
   definition: ProviderDefinition,
   options?: { allowOverride?: boolean; builtin?: boolean },
 ): void {
-  if (options?.builtin) builtinProviders.set(definition.id, definition);
+  if (options?.builtin) {
+    builtinProviders.set(definition.id, definition);
+    // Builtins load on demand, so a runtime provider may already hold this id.
+    // It wins, exactly as it did when builtins always registered first and the
+    // runtime provider then overrode them.
+    if (defaultProviderRegistry.getProvider(definition.id)) return;
+  }
   defaultProviderRegistry.registerProvider(definition, options);
 }
 

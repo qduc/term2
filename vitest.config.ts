@@ -21,14 +21,15 @@ export default defineConfig({
     // 8342 tests. See docs/plans/slow-test-suite.md.
     exclude: ['**/node_modules/**', '**/*.e2e.*', '**/*.integration.*', 'scripts/provider-black-box/**'],
     environment: 'node',
-    // Vitest defaults to cores - 1 workers to leave a core for its main thread.
-    // Measured on a 4-core machine, full unit suite, 2026-10-07: 3 workers
-    // 196-200s, 4 workers 158s, 6 workers 150s (but summed test time rose
-    // 215s -> 294s from contention, which risks timing-sensitive tests). Much
-    // of the work is import evaluation and timer/IO waiting, so the main
-    // thread's share is small; one worker per core is the point before
-    // contention dominates. `--maxWorkers` on the CLI still overrides this.
-    maxWorkers: os.availableParallelism(),
+    // Vitest defaults to cores - 1 workers. The suite is CPU-bound (~89% of 4
+    // cores busy) but each worker also spends time blocked on real timers, I/O
+    // and process teardown, so a modest oversubscription fills those gaps.
+    // Measured on a 4-core machine, full unit suite, 2026-10-07, same code:
+    // 4 workers ~142s, 5 ~135s, 6 ~132s, 8 ~132s, 10 ~132s, all with the same
+    // single pre-existing failure. 1.5x cores gets the whole gain; the cap keeps
+    // large machines from spawning more workers than memory warrants.
+    // `--maxWorkers` on the CLI still overrides this.
+    maxWorkers: Math.min(Math.ceil(os.availableParallelism() * 1.5), os.availableParallelism() + 4),
     // Persist Vite's transform output on disk (node_modules/.vite/vitest), keyed
     // by file content, so unchanged modules are not re-transformed in every
     // worker of every run. On the 73-file selection for a medium change,

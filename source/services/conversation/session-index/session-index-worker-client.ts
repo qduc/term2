@@ -12,7 +12,13 @@ import type {
   ReconcileResult,
 } from './session-index-database.js';
 import type { ConversationListEntry } from '../conversation-persistence.js';
-import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
+import type {
+  CanonicalBrowseRequest,
+  WorkerRequest,
+  WorkerRequestPayload,
+  WorkerResponse,
+} from './session-index-worker.js';
+import type { SessionBrowserContext } from '../session-browser.js';
 
 export interface SessionIndexWorkerClientOptions {
   workerFactory?: (workerFile: string) => Worker;
@@ -30,7 +36,9 @@ function resolveWorkerFile(): string {
 function createDefaultWorker(workerFile: string): Worker {
   const bootstrap = `
 const { parentPort, workerData } = require('node:worker_threads');
-const { createJiti } = require('jiti');
+const { createRequire } = require('node:module');
+// Resolve the loader from the installed app, not the user's project cwd.
+const { createJiti } = createRequire(workerData.workerFile)('jiti');
 const jiti = createJiti(workerData.workerFile);
 const mod = jiti(workerData.workerFile);
 mod.runSessionIndexWorker();
@@ -148,6 +156,14 @@ export class SessionIndexWorkerClient {
 
   async probe(): Promise<ProbeCapabilityResult> {
     return this.#send<ProbeCapabilityResult>({ type: 'probe' });
+  }
+
+  async browseCanonical(
+    conversationsDir: string,
+    context: SessionBrowserContext,
+    request: CanonicalBrowseRequest,
+  ): Promise<unknown> {
+    return this.#send({ type: 'canonical_browse', conversationsDir, context, ...request });
   }
 
   async reconcile(): Promise<ReconcileResult> {

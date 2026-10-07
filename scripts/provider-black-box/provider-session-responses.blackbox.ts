@@ -32,6 +32,7 @@ type Transport = 'http' | 'websocket';
 type FixtureMode =
   | 'multi-turn'
   | 'approval'
+  | 'session-search'
   | 'background-shell'
   | 'native-error'
   | 'incomplete'
@@ -105,7 +106,10 @@ afterEach(async () => {
 
 describe('application-owned Responses lifecycle through the shipped CLI', () => {
   it.each(providerTransportCases)('$provider $transport preserves two-turn response chaining', async (providerCase) => {
-    const server = await startResponsesFixtureServer({ mode: 'multi-turn' });
+    const server = await startResponsesFixtureServer({
+      mode: 'multi-turn',
+      retainWebSocket: providerCase.provider === 'codex',
+    });
     activeServer = server;
     const workspace = await createWorkspace(server, providerCase);
     activeWorkspace = workspace;
@@ -153,6 +157,72 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     }
   });
 
+  it('codex websocket replays full history when the completed response socket is replaced', async () => {
+    const server = await startResponsesFixtureServer({ mode: 'multi-turn' });
+    activeServer = server;
+    const workspace = await createWorkspace(server, { provider: 'codex', transport: 'websocket' }, undefined, 1);
+    activeWorkspace = workspace;
+    const child = await startCli(workspace);
+    activeChild = child;
+    const firstIdle = await child.waitForIdleInput();
+    await writePrompt(child, 'first reconnect turn');
+    await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
+    await writePrompt(child, 'second reconnect turn');
+    await child.waitForVisibleOutput('SECOND-RESPONSE');
+    const requests = normalRequests(server.requests);
+    expect(requests).toHaveLength(2);
+    expect(server.websocketConnectionCount).toBe(2);
+    expect(requests[1]?.body.previous_response_id).toBeUndefined();
+    const input = JSON.stringify(requests[1]?.body.input);
+    expect(input).toContain('first reconnect turn');
+    expect(input).toContain('FIRST-RESPONSE');
+    expect(input).toContain('second reconnect turn');
+  });
+
+  it('codex websocket preserves completed tool pairs when the producing socket is replaced', async () => {
+    const server = await startResponsesFixtureServer({ mode: 'approval' });
+    activeServer = server;
+    const workspace = await createWorkspace(server, { provider: 'codex', transport: 'websocket' }, undefined, 1);
+    activeWorkspace = workspace;
+    const child = await startCli(workspace);
+    activeChild = child;
+    await child.waitForIdleInput();
+    await writePrompt(child, 'run the reconnect approval fixture');
+    await child.waitForVisibleOutput('Allow this action?');
+    await writeApprovalShortcut(child, 'y');
+    await child.waitForVisibleOutput('APPROVED-FINAL');
+
+    const requests = normalRequests(server.requests);
+    expect(requests).toHaveLength(2);
+    expect(server.websocketConnectionCount).toBe(2);
+    const continuation = requests[1]!;
+    expect(continuation.body.previous_response_id).toBeUndefined();
+    const input = continuation.body.input as Array<Record<string, unknown>>;
+    expect(input.filter((item) => item.type === 'function_call' && item.call_id === TOOL_CALL_ID)).toHaveLength(1);
+    const results = toolResultItems(continuation);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.call_id).toBe(TOOL_CALL_ID);
+    expect(toolResultText(continuation)).toContain(workspace.root);
+  });
+
+  it('session_search through run_code completes canonical fallback in the shipped CLI', async () => {
+    const server = await startResponsesFixtureServer({ mode: 'session-search', retainWebSocket: true });
+    activeServer = server;
+    const workspace = await createWorkspace(server, { provider: 'codex', transport: 'websocket' }, 'session-search');
+    activeWorkspace = workspace;
+    const child = await startCli(workspace);
+    activeChild = child;
+    const idle = await child.waitForIdleInput();
+    await writePrompt(child, 'search prior tool output');
+    await waitForIdleAfterResponse(child, idle, 'SECOND-RESPONSE');
+    const requests = normalRequests(server.requests);
+    expect(requests).toHaveLength(2);
+    const result = toolResultText(requests[1]!);
+    expect(result).toContain('session-search-fixture');
+    expect(result).toContain('No healthy model in agent.balancedModel pool');
+    expect(result).not.toContain('timed out');
+  });
+
   it.each(['openai', 'codex'] as const)(
     '%s-websocket.retained-connection keeps two chained turns on one retained connection',
     async (provider) => {
@@ -186,7 +256,10 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
   it.each(providerTransportCases)(
     '$provider $transport resumes an approved tool from its producing response',
     async (providerCase) => {
-      const server = await startResponsesFixtureServer({ mode: 'approval' });
+      const server = await startResponsesFixtureServer({
+        mode: 'approval',
+        retainWebSocket: providerCase.provider === 'codex',
+      });
       activeServer = server;
       const workspace = await createWorkspace(server, providerCase);
       activeWorkspace = workspace;
@@ -207,7 +280,10 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
   );
 
   it.each(providerTransportCases)('$provider $transport resumes a rejected tool exactly once', async (providerCase) => {
-    const server = await startResponsesFixtureServer({ mode: 'approval' });
+    const server = await startResponsesFixtureServer({
+      mode: 'approval',
+      retainWebSocket: providerCase.provider === 'codex',
+    });
     activeServer = server;
     const workspace = await createWorkspace(server, providerCase);
     activeWorkspace = workspace;
@@ -345,6 +421,7 @@ async function createWorkspace(
   server: ResponsesFixtureServer,
   providerCase: ProviderTransportCase,
   mode?: FixtureMode,
+  retryAttempts = 0,
 ): Promise<IsolatedWorkspaceLease> {
   return createIsolatedWorkspaceLease({
     prefix: `term2-provider-session-${providerCase.provider}-${providerCase.transport}-`,
@@ -352,7 +429,36 @@ async function createWorkspace(
       OPENAI_BASE_URL: server.baseUrl,
       CODEX_BASE_URL: server.baseUrl,
     },
-    prepare: async (_root, paths) => {
+    prepare: async (root, paths) => {
+      if (mode === 'session-search') {
+        await mkdir(paths.conversationsDir, { recursive: true });
+        const events = [
+          {
+            type: 'session_init',
+            id: 'session-search-fixture',
+            createdAt: '2026-10-04T00:00:00.000Z',
+            projectPath: root,
+          },
+          { type: 'user_message', message: { id: 'u', sender: 'user', text: 'prior diagnostic' } },
+          {
+            type: 'command_message',
+            message: {
+              id: 'c',
+              sender: 'command',
+              command: 'diagnostic',
+              status: 'completed',
+              output: 'No healthy model in agent.balancedModel pool. '.repeat(1600),
+            },
+          },
+        ];
+        await writeFile(
+          join(paths.conversationsDir, 'session-search-fixture.jsonl'),
+          events.map((event, seq) => JSON.stringify({ v: 1, seq, ts: '2026-10-04T00:00:00.000Z', event })).join('\n') +
+            '\n',
+        );
+        // An unavailable optional index must still allow canonical browsing.
+        await writeFile(join(root, 'session-index.db'), 'unavailable fixture index');
+      }
       await mkdir(paths.logDir, { recursive: true });
       await writeFile(
         join(paths.logDir, 'settings.json'),
@@ -360,7 +466,7 @@ async function createWorkspace(
           agent: {
             modelSelection: { model: MODEL, provider: providerCase.provider },
             transport: providerCase.transport,
-            retryAttempts: 0,
+            retryAttempts,
             ...(mode === 'runaway-output' ? { maxStreamOutputChars: 32 } : {}),
             openai: { apiKey: 'fixture-key' },
             codex: {
@@ -664,9 +770,20 @@ async function serveResponse(
     return;
   }
 
-  if (mode === 'approval' && !hasToolResult) {
+  if ((mode === 'approval' || mode === 'session-search') && !hasToolResult) {
     const responseId = TOOL_RESPONSE_ID;
-    await pushFrames(toolCallFrames(responseId));
+    await pushFrames(
+      mode === 'session-search'
+        ? toolCallFrames(
+            responseId,
+            'run_code',
+            JSON.stringify({
+              description: 'Search prior tool output',
+              code: 'return await tools.session_search({query: "No healthy model in agent.balancedModel pool", kinds: ["tool"], limit: 5, maxChars: 7000});',
+            }),
+          )
+        : toolCallFrames(responseId),
+    );
     served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
     return;
   }
@@ -734,19 +851,19 @@ function messageFrames(text: string): Record<string, unknown>[] {
   ];
 }
 
-function toolCallFrames(responseId: string): Record<string, unknown>[] {
+function toolCallFrames(responseId: string, name = 'shell', argumentsText = TOOL_ARGUMENTS): Record<string, unknown>[] {
   const item = {
     id: TOOL_ITEM_ID,
     type: 'function_call',
     status: 'in_progress',
     arguments: '',
     call_id: TOOL_CALL_ID,
-    name: 'shell',
+    name,
   };
   return [
     createdFrame(responseId),
     { type: 'response.output_item.added', item, output_index: 0 },
-    ...TOOL_ARGUMENTS_PARTS.map((delta) => ({
+    ...(argumentsText === TOOL_ARGUMENTS ? TOOL_ARGUMENTS_PARTS : [argumentsText]).map((delta) => ({
       type: 'response.function_call_arguments.delta',
       item_id: TOOL_ITEM_ID,
       call_id: TOOL_CALL_ID,
@@ -757,15 +874,15 @@ function toolCallFrames(responseId: string): Record<string, unknown>[] {
       type: 'response.function_call_arguments.done',
       item_id: TOOL_ITEM_ID,
       call_id: TOOL_CALL_ID,
-      arguments: TOOL_ARGUMENTS,
+      arguments: argumentsText,
       output_index: 0,
     },
     {
       type: 'response.output_item.done',
-      item: { ...item, status: 'completed', arguments: TOOL_ARGUMENTS },
+      item: { ...item, status: 'completed', arguments: argumentsText },
       output_index: 0,
     },
-    completedFrame(responseId, [{ ...item, status: 'completed', arguments: TOOL_ARGUMENTS }]),
+    completedFrame(responseId, [{ ...item, status: 'completed', arguments: argumentsText }]),
   ];
 }
 

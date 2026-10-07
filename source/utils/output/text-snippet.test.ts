@@ -1,5 +1,22 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { matchCenteredSnippet } from './text-snippet.js';
+
+it('does bounded term lookup on repetitive output instead of enumerating every occurrence', () => {
+  const source = 'No model in pool. '.repeat(4000);
+  const terms = ['no', 'model', 'in', 'pool'];
+  const lookup = vi.spyOn(String.prototype, 'indexOf');
+  let snippet;
+  let probes;
+  try {
+    snippet = matchCenteredSnippet(source, terms, 240);
+    probes = lookup.mock.calls.length;
+  } finally {
+    lookup.mockRestore();
+  }
+  expect(snippet!.text).toContain('No model in pool.');
+  expect(snippet!.text.length).toBeLessThanOrEqual(240);
+  expect(probes).toBeLessThanOrEqual(terms.length);
+});
 
 it('centers on the earliest source match and keeps surrogate pairs intact', () => {
   const source = `${'a'.repeat(200)}😀 needle ${'b'.repeat(200)}`;

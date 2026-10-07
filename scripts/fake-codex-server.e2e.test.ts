@@ -148,10 +148,15 @@ it('writes the streamed-turn request contract to the real fake-Codex WebSocket w
   });
   const controller = new AbortController();
   const model = provider.getStreamedModel('gpt-5.3-codex');
+  let previousResponseId: string | undefined;
+  for await (const event of model.stream(request())) {
+    if (event.type === 'completion') previousResponseId = event.responseId;
+  }
+  expect(previousResponseId).toBeTruthy();
 
   for await (const _event of model.stream({
     instructions: 'PROJECT_CONTEXT_SENTINEL',
-    previousResponseId: 'resp_before',
+    previousResponseId,
     input: [
       {
         type: 'message',
@@ -178,11 +183,11 @@ it('writes the streamed-turn request contract to the real fake-Codex WebSocket w
     // Consume the complete turn.
   }
 
-  expect(server.receivedRequests).toHaveLength(1);
-  expect(server.receivedRequests[0]).toMatchObject({
+  expect(server.receivedRequests).toHaveLength(2);
+  expect(server.receivedRequests[1]).toMatchObject({
     type: 'response.create',
     instructions: 'PROJECT_CONTEXT_SENTINEL',
-    previous_response_id: 'resp_before',
+    previous_response_id: previousResponseId,
     tool_choice: { type: 'function', name: 'lookup' },
     top_p: 0.8,
     frequency_penalty: 0.3,
@@ -204,7 +209,7 @@ it('writes the streamed-turn request contract to the real fake-Codex WebSocket w
       { type: 'function_call_output', call_id: 'call_in', output: [{ type: 'input_text', text: 'result' }] },
     ],
   });
-  expect(server.receivedRequests[0]?.temperature).toBeUndefined();
+  expect(server.receivedRequests[1]?.temperature).toBeUndefined();
 });
 
 it('performs history warmup without generating the user turn twice', async () => {
@@ -373,23 +378,50 @@ it('propagates a caller-supplied stale previous_response_id so the session can r
     }
   };
 
-  await expect(consumeChained()).rejects.toThrow();
-  expect(server.receivedRequests).toHaveLength(1);
-  expect(server.receivedRequests[0]?.previous_response_id).toBe('resp_stale');
+  await expect(consumeChained()).rejects.toMatchObject({ code: 'previous_response_not_found' });
+  expect(server.receivedRequests).toHaveLength(0);
 
   for await (const _event of model.stream(request())) {
     // Session recovery resends the complete logical request without chaining.
   }
 
+  expect(server.receivedRequests).toHaveLength(1);
+  expect(server.receivedRequests[0]?.previous_response_id).toBeUndefined();
+});
+
+it('propagates a server-rejected caller anchor on a retained socket without replaying its delta', async () => {
+  server = await startFakeCodexServer({ scenario: 'previous-response-not-found' });
+  globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
+  const model = createModel(server.baseUrl);
+  let previousResponseId: string | undefined;
+  for await (const event of model.stream(request())) {
+    if (event.type === 'completion') previousResponseId = event.responseId;
+  }
+  expect(previousResponseId).toBeTruthy();
+  await expect(
+    (async () => {
+      for await (const _event of model.stream({ ...request(), previousResponseId })) {
+      }
+    })(),
+  ).rejects.toThrow('Injected stale response id');
   expect(server.receivedRequests).toHaveLength(2);
-  expect(server.receivedRequests[1]?.previous_response_id).toBeUndefined();
+  expect(server.receivedRequests[1]?.previous_response_id).toBe(previousResponseId);
+  for await (const _event of model.stream({ ...request(), disableChaining: true })) {
+  }
+  expect(server.receivedRequests).toHaveLength(3);
+  expect(server.receivedRequests[2]?.previous_response_id).toBeUndefined();
 });
 
 it('does not replay an accepted chained turn as full history', async () => {
-  server = await startFakeCodexServer({ scenario: 'close-before-first-frame' });
+  server = await startFakeCodexServer({ scenario: 'close-chained-before-first-frame' });
   globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
   const model = createModel(server.baseUrl);
-  const chainedRequest = { ...request(), previousResponseId: 'resp_previous' };
+  let previousResponseId: string | undefined;
+  for await (const event of model.stream(request())) {
+    if (event.type === 'completion') previousResponseId = event.responseId;
+  }
+  expect(previousResponseId).toBeTruthy();
+  const chainedRequest = { ...request(), previousResponseId };
 
   const consume = async () => {
     for await (const _event of model.stream(chainedRequest)) {
@@ -398,7 +430,7 @@ it('does not replay an accepted chained turn as full history', async () => {
   };
 
   await expect(consume()).rejects.toThrow('before a terminal response event');
-  expect(server.receivedRequests).toHaveLength(1);
+  expect(server.receivedRequests).toHaveLength(2);
 });
 
 it('surfaces an abnormal close before the first response frame', async () => {

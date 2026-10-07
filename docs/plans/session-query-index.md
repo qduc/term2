@@ -329,6 +329,7 @@ also run the provider black-box gate under its skill. The fixed no-isolate lane 
 not a replacement for the full suite. Report baseline failures and empty selections
 separately from passed gates.
 
-No implementation tests or performance measurements were executed to produce this
-planning document. Future evidence must identify the implementation commit, runtime,
-corpus, machine, commands actually run, and outcomes.
+No implementation tests or performance measurements were executed to produce the
+original planning document. The [October 5 repair evidence](../research/session-search-and-codex-reconnect-repair.md)
+records subsequent repetitive-snippet and canonical-fallback defects, worker
+ownership repair, real CLI workflows, corpus measurements, and limitations.

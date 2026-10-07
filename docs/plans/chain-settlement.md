@@ -1,5 +1,10 @@
 # Chain settlement
 
+The [October 5 reconnect repair](../research/session-search-and-codex-reconnect-repair.md)
+adds Codex physical-socket admission before chained dispatch. Logical continuity
+alone does not prove that a replacement owns a `store:false` response anchor;
+caller deltas recover through complete local history and completed tool pairs.
+
 Status: **implemented and merged** to `main` in `9a91a5b8` (2026-08-11); model-switch chain drop merged in `8fa674f0` (2026-08-30).
 
 ## The defect
@@ -91,4 +96,3 @@ the completed pairs into history (`reconcileAndUpdateHistory()`) before the
 decision, then break the chain and rebuild full history (`retry_fresh` +
 `full_history` + `disableChainingForAttempt`). No tool is re-executed. Premise 1
 (drop the chain) and Premise 3 (self-contained full-history replay) still hold.
-

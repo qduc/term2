@@ -84,6 +84,41 @@ function writeComplexSession(id: string, projectPath: string, rolloverFrom?: str
 }
 
 describe('SessionBrowser Indexed Backend', () => {
+  it('keeps canonical fallback file parsing off the caller thread for list, search, and paged read', async () => {
+    writeComplexSession('session-fallback-worker', '/project');
+    const service = new SessionIndexService({ dbPath, conversationsDir: dir, backend: 'direct' });
+    vi.spyOn(service, 'list').mockResolvedValue(null);
+    vi.spyOn(service, 'search').mockResolvedValue(null);
+    const resolution = vi.spyOn(service, 'resolveReference').mockResolvedValue(null);
+    const browser = new SessionBrowser(() => ({ projectPath: '/project' }), { indexService: service });
+    const read = vi.spyOn(fs, 'readFileSync');
+    try {
+      const list = (await browser.list({})) as any;
+      expect(list.sessions[0].id).toBe('session-fallback-worker');
+      const search = (await browser.search({ query: 'assistant', kinds: ['assistant'], limit: 1 })) as any;
+      expect(search.results).toHaveLength(1);
+      const initial = (await browser.read({ id: 'session-fallback-worker', limit: 1 })) as any;
+      expect(initial.nextCursor).toBeDefined();
+      // Even if the index recovers, a fallback cursor belongs to its worker.
+      resolution.mockResolvedValue({
+        kind: 'resolved',
+        id: 'session-fallback-worker',
+        shortRef: 'session-fallback-worker',
+      });
+      const continuation = (await browser.read({
+        id: 'session-fallback-worker',
+        cursor: initial.nextCursor,
+        limit: 1,
+      })) as any;
+      expect(continuation.error).toBeUndefined();
+      expect(continuation.items[0].index).not.toBe(initial.items[0].index);
+      const logReads = read.mock.calls.filter(([file]) => String(file).endsWith('.jsonl'));
+      expect(logReads).toHaveLength(0);
+    } finally {
+      read.mockRestore();
+      await browser.close();
+    }
+  });
   describe.each(['direct', 'worker'] as const)('acceptance parity across backend (%s)', (backend) => {
     it('achieves exact result parity with canonical browser for list and read', async () => {
       writeSession('session-11111111', '/workspace/project-a', undefined, 'first question');

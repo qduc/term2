@@ -1,5 +1,12 @@
 # Term2 Guard Ledger and Remediation Plan
 
+Opt-in workflow evolution decision admission is documented in
+[workflow-evolution.md](../workflow-evolution.md), with enforcement in
+`applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the
+incumbent and all evidence when frozen comparison coverage is insufficient or
+uncertain, and rejects observed regressions. Its sample floors do not claim
+statistical confidence; it changes no execution, approval or recovery budget.
+
 Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-runs.md).
 The October 7 change supersedes historical compaction-off/advisory defaults;
 the extra input ceiling remains optional and explicit supervised overrides remain.

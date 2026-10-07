@@ -366,3 +366,25 @@ it('collectTerminalResult trusts event.turnItems if provided on final event', as
     ]);
   }
 });
+
+it('preserves budget check-in identity and recoverable error codes across the public terminal boundary', async () => {
+  const approval = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'approval_required',
+        approval: {
+          agentName: 'System',
+          toolName: 'max_turns_exceeded',
+          argumentsText: 'critical',
+          checkIn: 'run_budget',
+        },
+      },
+    ]),
+  );
+  expect(approval).toMatchObject({ approval: { checkIn: 'run_budget' } });
+  await expect(
+    collectTerminalResult(
+      asAsyncIterable([{ type: 'error', message: 'retained work', code: 'request_input_limit' } as any]),
+    ),
+  ).rejects.toMatchObject({ code: 'request_input_limit' });
+});

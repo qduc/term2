@@ -43,15 +43,23 @@ const definition = {
   reasoningEffort: 'default',
 };
 
-const makeRunner = (events: any[]) => {
+const makeRunner = (
+  events: any[],
+  settingsValues: Record<string, unknown> = {},
+  outputSource?: 'default' | 'config',
+) => {
   stream.events = events;
   const received: any[] = [];
   const clients: Array<{ dispose: ReturnType<typeof vi.fn> }> = [];
+  const clientOptions: any[] = [];
+  const settings = createMockSettings(settingsValues);
+  if (outputSource) settings.getSource = () => outputSource;
   const runner = new ExecutionSubagentRunner({
     logger: createMockLogger(),
-    settings: createMockSettings(),
+    settings,
     sessionContextService: createSessionContextService(),
-    createClient: () => {
+    createClient: (options) => {
+      clientOptions.push(options);
       const client = { dispose: vi.fn() };
       clients.push(client);
       return client as any;
@@ -65,7 +73,7 @@ const makeRunner = (events: any[]) => {
     },
     toolOwnership: new ToolOwnershipRegistry(),
   });
-  return { runner, received, clients };
+  return { runner, received, clients, clientOptions };
 };
 
 beforeEach(() => {
@@ -73,6 +81,67 @@ beforeEach(() => {
 });
 
 describe('ExecutionSubagentRunner text-turn peek events', () => {
+  it.each([undefined, 4096, 32000])(
+    'inherits selected generation guards while preserving role output override %s',
+    async (maxTokens) => {
+      const { runner, clientOptions } = makeRunner([{ type: 'final', finalText: 'Done.' }], {
+        'agent.maxOutputTokens': 8192,
+        'agent.maxStreamOutputChars': 100000,
+        'agent.maxModelRequestDurationMs': 300000,
+        'agent.maxModelStreamIdleMs': 120000,
+      });
+      await runner.run('guarded-child', { role: 'explorer', task: 'inspect' }, { ...definition, maxTokens });
+      expect(clientOptions[0].agent.modelSettings).toMatchObject({
+        maxTokens: maxTokens ?? 8192,
+        maxStreamOutputChars: 100000,
+        maxModelRequestDurationMs: 300000,
+        maxModelStreamIdleMs: 120000,
+      });
+    },
+  );
+  it.each([
+    ['default', undefined, 2048],
+    ['config', undefined, 8192],
+    ['default', 6000, 6000],
+  ] as const)('allocates small-model inherited output with source=%s role=%s', async (source, maxTokens, expected) => {
+    const { runner, clientOptions } = makeRunner(
+      [{ type: 'final', finalText: 'Done.' }],
+      { 'agent.maxOutputTokens': 32000 },
+      source,
+    );
+    await runner.run(
+      'small-child',
+      { role: 'explorer', task: 'inspect' },
+      { ...definition, provider: 'openai', model: 'gpt-4', maxTokens },
+    );
+    expect(clientOptions[0].agent.modelSettings.maxTokens).toBe(expected);
+  });
+  it('preserves explicitly disabled child request and idle deadlines', async () => {
+    const { runner, clientOptions } = makeRunner([{ type: 'final', finalText: 'Done.' }], {
+      'agent.maxModelRequestDurationMs': 0,
+      'agent.maxModelStreamIdleMs': 0,
+    });
+    await runner.run('unbounded-child', { role: 'explorer', task: 'inspect' }, definition);
+    expect(clientOptions[0].agent.modelSettings).toMatchObject({
+      maxModelRequestDurationMs: 0,
+      maxModelStreamIdleMs: 0,
+    });
+  });
+  it('clamps an inherited output default to the catalog model limit', async () => {
+    const { runner, clientOptions } = makeRunner([{ type: 'final', finalText: 'Done.' }], {
+      'agent.maxOutputTokens': 8192,
+    });
+    await runner.run(
+      'catalog-child',
+      { role: 'explorer', task: 'inspect' },
+      {
+        ...definition,
+        provider: 'openrouter',
+        model: 'openrouter/auto',
+      },
+    );
+    expect(clientOptions[0].agent.modelSettings.maxTokens).toBe(4096);
+  });
   it('caps streamed text and emits separate turns before a tool and at finalization', async () => {
     const { runner, received } = makeRunner([
       { type: 'text_delta', delta: 'a'.repeat(201) },

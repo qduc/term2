@@ -7,6 +7,46 @@ incumbent and all evidence when frozen comparison coverage is insufficient or
 uncertain, and rejects observed regressions. Its sample floors do not claim
 statistical confidence; it changes no execution, approval or recovery budget.
 
+Current ordinary defaults are documented in [ordinary safe runs](ordinary-safe-runs.md).
+The October 7 change supersedes historical compaction-off/advisory defaults;
+the extra input ceiling remains optional and explicit supervised overrides remain.
+
+## October 6 supervised-worker token incident (branch-local repair)
+
+Harm prevented: an oversized supervisor handoff, unchecked main-worker request
+context, or surviving previous worker silently repeating the October 6 incident.
+Contract and operational adoption: [supervised worker workflow](../../tools/supervised-term2/README.md).
+
+| Owner / class | Signal, effective configuration and action | Recovery / rollback |
+| --- | --- | --- |
+| `tools/supervised-term2/supervisor.mjs`; context admission | Fixed 32,768 UTF-8 handoff bytes; bounded read and rejection before spawn, never truncation. Atomic task lock rejects replacement even when stale. | Original artifacts retained; compact explicit handoff. Verify group exit and reconcile effects before stale-lock recovery. Revert launcher and its task-local adapter together. |
+| Supervisor + `worker-owner.mjs`; owned lifecycle containment | Owned process group; TERM then five-second grace then KILL, release only after proven exit. Child checks Linux PID start identity every 250ms, including zombie state. | Retain lock on unproven exit/owner SIGKILL; no automatic replay. Signals never target unrelated groups. Linux-only; escaped/remote processes excluded. |
+| `ApplicationRunLoop`; configured request admission | `agent.maxRequestInputTokens`: null normally; supervised env 80,000. CLI > env > persisted > defaults; runtime values override startup. Check rendered estimate and latest usage after preparation/compaction. | Typed pre-dispatch rejection retains work, emits no fake cost, and refuses session retry. Explicit compact/handoff/ceiling increase. No security/authority changes. Revert request-limit wiring independently. |
+| `SettingsService`; deadline provenance preservation | An explicit persisted 300,000ms deadline is preserved, as are zero and other customized values. Missing values still use zero default. | No origin guessing or restoration of already-rewritten values. Revert separately from request admission. |
+
+Supervised profile uses local compaction at 60k and an 8,192 output default; ordinary
+compaction-off, 32k output, reasoning, retries, parallelism and staged run-budget
+defaults remain intact. The ceiling is independent of compaction: newest-two-turn
+safe-cut refusal and per-run cap cannot waive it. Byte/4 estimation and prior
+usage are containment proxies, not exact provider tokens or USD guarantees.
+Delta-history chains without a ready full snapshot fail closed even when older
+usage is available. One-shot workers inherit selected output, character, request
+deadline and idle controls; explicit role output overrides retain precedence.
+
+Red proof: new request-limit boundary tests failed on baseline (provider called;
+continued tool loop reached the legacy max-turn backstop). Updated five-minute
+deadline test failed because baseline changed 300,000 to zero. Launcher contract
+tests initially failed because no ownership implementation existed. Final gates
+and exact results are recorded in the branch verification handoff; no live paid
+provider is required. Guard diagnostics expose code/action/limit/estimated and
+observed tokens or ownership IDs, never prompt content or credentials.
+
+Detection gap: normal compaction tests covered safe complete cold turns and
+failure preserving history, but preservation alone let the next large request
+dispatch. Shell cancellation was treated as worker exit without PID/group proof.
+The new admission and lifecycle tests exercise those public boundaries; source
+history, completed tool effects and uncertain external outcomes remain retained.
+
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
 `87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with
@@ -3098,3 +3138,50 @@ timeout); provider-black-box 20 files / 178 passed tests and one skipped test
 typecheck passed (5.00s, exit 0, 180s timeout). The merged public reset probe
 also passed. These combined results supplement the scoped historical evidence
 above; the cancellation section records the corrected changed-gate invocation.
+
+
+### Ordinary context admission and critical per-run containment (2026-10-07)
+
+Owner: [ordinary safe runs](ordinary-safe-runs.md), alongside provider-neutral
+compaction and run-budget-stall-escalation. User approved the outcome/default
+change; previous opt-in/default warn dispositions do not govern this new policy.
+
+Missing keys now select enabled auto compaction, `contain` escalation and no extra
+input ceiling. Known model capacity independently bounds prepared input after
+actual selected output and 10% estimation reserve. One shared resolver bounds
+soft compaction below hard admission; explicit smaller ceilings retain precedence.
+Default output allocation adapts to small windows; explicit output selections are
+preserved subject to provider maxima. Unknown capacity is not invented from raw
+triggers. Structured provider overflow pauses without repeating the failed request.
+Supervised 80k/60k overrides, compaction opt-outs and budget choices remain intact.
+These are admission heuristics, not optimal thresholds or prepaid billing.
+
+Local reductions retain genuine user requests, paired recent rounds and host
+receipts, rearm only after measured growth, and refuse non-reducing or oversized
+summary candidates. Native ciphertext stays native; Codex keeps its native
+one/run policy. Source history is retained when safe reduction is unavailable.
+Summary input includes fixed instructions/prior summary; helper guards and abort
+inherit; per-chunk costs reach the owning root before continuing. Dispatched
+failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
+
+Headless logs commit the user request before dispatch; context/budget refusal
+exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
+remain advisory in `contain`; auto-approval cannot grant a new contained budget.
+Collector tests protect error/check-in identity; actual CLI tests protect saved
+history and resumed wire. Per-run grant state does not survive restart; resumed
+work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
+to original journal replay with paired tool evidence. No automatic effect replay.
+
+The revision replaces the earlier universal 96k/72k proposal. Public primary
+sources motivate separating capacity from operating policy; no trace-derived
+dataset is published. Synthetic small/large/unknown model fixtures, scripted
+20-artifact repeated compaction and built-CLI pause/resume supply offline evidence.
+Live semantic quality and aggregate sibling monetary containment remain limits.
+
+Regression evidence: initial 5 ordinary compaction tests and new terminal/rearm
+cases failed before repair. Focused source tests, related/changed, types, full
+unit/integration and provider gates are required; status lives in the PR/plan.
+Rollback: revert default selection independently from safe-cut/accounting/terminal
+metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
+stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
+remain documented in the plan/PR. No merge, release or deployment is performed.

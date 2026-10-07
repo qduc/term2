@@ -9,6 +9,17 @@ const UNKNOWN_OUTCOME_TOOL_RESULT =
   '(for example due to a stream failure). Do not assume it failed or succeeded. ' +
   'Verify the current state before any retry, and do not re-run non-idempotent operations blindly.';
 
+/**
+ * Synthetic tool result for a call interrupted by a session restart, whose
+ * outcome the restart cannot observe (replay has no dispatch evidence, unlike
+ * the live ledger's `dispatchedAt`). It must not assert whether the effect
+ * landed — only that it is unverified.
+ */
+export const RESTART_UNOBSERVED_TOOL_RESULT =
+  "Outcome unobserved: the session restarted before this operation's result was recorded. " +
+  'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
+  'do not re-run non-idempotent operations blindly.';
+
 export interface SavedToolExecution {
   turnId: string;
   callId: string;
@@ -71,6 +82,10 @@ export const callIdOf = (item: unknown): string | null => {
 
 const isToolCall = (item: unknown): boolean => canonicalToolItem(item)?.type === 'tool_call';
 const isToolResult = (item: unknown): boolean => canonicalToolItem(item)?.type === 'tool_result';
+
+/** Type guards for history items, exported for replay-time settlement. */
+export const isToolCallHistoryItem = isToolCall;
+export const isToolResultHistoryItem = isToolResult;
 
 export const toolNameOf = (item: unknown): string => {
   return canonicalToolItem(item)?.toolName ?? 'unknown';
@@ -222,6 +237,11 @@ export class ToolExecutionLedger {
       existing.toolName = toolCall.toolName;
       existing.arguments = toolCall.arguments;
       existing.status = 'started';
+      // Reopening a settled entry must clear any settlement residue, or a
+      // later crash recovery could inherit a stale failureReason/output.
+      delete existing.output;
+      delete existing.failureReason;
+      delete existing.completedAt;
       if (!existing.historyItems || existing.historyItems.length === 0) {
         existing.historyItems = [...this.#pendingReasoningHistoryItems, providerHistoryItem(item)];
       } else if (this.#pendingReasoningHistoryItems.length > 0 && !hasReasoningHistoryItem(existing.historyItems)) {

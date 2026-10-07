@@ -60,6 +60,12 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   if (env.OPENAI_API_KEY) openai.apiKey = env.OPENAI_API_KEY;
 
   const agent: DeepPartial<SettingsData['agent']> = { openrouter, openai };
+  // Explicit unattended profile; leaves interactive and persisted defaults intact.
+  if (env.TERM2_SUPERVISED === '1') {
+    agent.maxRequestInputTokens = 80_000;
+    agent.maxOutputTokens = 8_192;
+    agent.contextCompaction = { enabled: true, mode: 'local', compactThreshold: 0.8, compactThresholdTokens: 60_000 };
+  }
 
   return {
     agent,

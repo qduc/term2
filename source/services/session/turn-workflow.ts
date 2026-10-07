@@ -1001,6 +1001,9 @@ export class TurnWorkflow {
         yield {
           type: 'error' as const,
           message: describeError(error),
+          ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? { code: error.code }
+            : {}),
           ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
         };
       }

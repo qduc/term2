@@ -121,6 +121,7 @@ export async function collectTerminalResult(
             llmAdvisory: event.approval.llmAdvisory,
             postExecute: event.approval.postExecute,
             runBudgetEvent: event.approval.runBudgetEvent,
+            checkIn: event.approval.checkIn,
           },
           ...(usage ? { usage } : {}),
           ...(costRecords?.length ? { costRecords } : {}),
@@ -166,6 +167,7 @@ export async function collectTerminalResult(
         const err = new Error(parts.join(' '));
         // Preserve the raw event so callers can inspect it without re-parsing the message.
         (err as any).eventKind = event.kind;
+        if (event.code) (err as Error & { code?: string }).code = event.code;
         (err as any).rawEvent = event;
         if (event.stack) {
           const stackLines = event.stack.split('\n');

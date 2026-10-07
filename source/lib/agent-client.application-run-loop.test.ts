@@ -69,6 +69,41 @@ afterEach(() => {
   providers.clear();
 });
 
+it('enforces the global input ceiling for a transient role agent with its own model settings', async () => {
+  const provider = 'transient-input-ceiling';
+  providers.add(provider);
+  const dispatch = vi.fn(async function* () {
+    yield { type: 'completion' as const, responseId: 'unused', output: [] };
+  });
+  registerProvider({
+    id: provider,
+    label: provider,
+    createStreamedModel: () => ({ stream: dispatch }),
+    fetchModels: async () => [],
+  });
+  const instance = client(
+    provider,
+    {
+      selection: { provider, model: 'fixture' },
+      agentOverride: {
+        name: 'role',
+        model: 'fixture',
+        instructions: '',
+        tools: [],
+        modelSettings: { maxTokens: 32000 },
+      },
+    },
+    { 'agent.maxRequestInputTokens': 80000 },
+  );
+  try {
+    const stream = await instance.startStream([{ role: 'user', type: 'message', content: 'x'.repeat(723470) }]);
+    await expect(stream.completed).rejects.toMatchObject({ code: 'request_input_limit' });
+    expect(dispatch).not.toHaveBeenCalled();
+  } finally {
+    instance.dispose();
+  }
+});
+
 describe('AgentClient application-run-loop execution', () => {
   it('keeps instructions byte-identical across turns without selecting memory', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'term2-memory-turn-'));

@@ -1390,6 +1390,7 @@ export class AgentClient {
       const runBudget = this.#runBudgetPolicy();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
+          requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
           ...(boundaryCompaction ? { boundaryCompaction } : {}),
           ...(requestPreparation ? { requestPreparation } : {}),
           ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
@@ -1440,6 +1441,7 @@ export class AgentClient {
     const boundaryCompaction = this.#boundaryCompaction();
     const runBudget = this.#runBudgetPolicy();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
+      requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
       ...(requestPreparation ? { requestPreparation } : {}),
       ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt

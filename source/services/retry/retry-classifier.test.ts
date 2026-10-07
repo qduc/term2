@@ -7,6 +7,7 @@ import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './
 import { DefaultRetryClassifier } from './retry-classifier.js';
 import { RetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
+import { RequestInputLimitError } from '../agent-runtime/request-input-limit.js';
 
 const makeClassifier = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
   new DefaultRetryClassifier(agentClient as any, random);
@@ -24,6 +25,12 @@ const baseContext = (overrides: Partial<ClassificationContext> = {}): Classifica
   stream: null,
   maxTransientRetries: 5,
   ...overrides,
+});
+
+it('does not retry or switch models to evade a configured request input ceiling', () => {
+  expect(makeClassifier().classify(baseContext({ error: new RequestInputLimitError(80000, 195126, 0) }))).toEqual({
+    kind: 'unrecoverable',
+  });
 });
 
 const invalidPreviousResponseError = () =>

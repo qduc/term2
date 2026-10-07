@@ -202,7 +202,7 @@ it.sequential.each(['cheapModel', 'mentorPool'])(
   },
 );
 
-it.sequential('migrates the former persisted request-deadline default to disabled', async () => {
+it.sequential('preserves an explicit five-minute deadline instead of guessing its provenance', async () => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();
     fs.mkdirSync(settingsDir, { recursive: true });
@@ -211,8 +211,8 @@ it.sequential('migrates the former persisted request-deadline default to disable
 
     const service = new SettingsService({ settingsDir, disableLogging: true });
 
-    expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
-    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.maxModelRequestDurationMs).toBe(0);
+    expect(service.get('agent.maxModelRequestDurationMs')).toBe(300_000);
+    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.maxModelRequestDurationMs).toBe(300_000);
   });
 });
 

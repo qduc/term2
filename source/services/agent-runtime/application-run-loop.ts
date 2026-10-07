@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { enforceRequestInputLimit, RequestInputLimitError } from './request-input-limit.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
@@ -81,6 +82,7 @@ export interface AgentModelSettings {
   temperature?: number;
   reasoning?: { effort?: string; summary?: string };
   maxTokens?: number;
+  maxRequestInputTokens?: number | null;
   /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
   maxStreamOutputChars?: number;
   /** Optional total wall-clock ceiling for each provider request; 0 disables it. Opt-in backstop. */
@@ -187,6 +189,8 @@ export interface ApplicationRunLoopOptions {
   ) => { deferCompaction?: boolean } | void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
+  /** Live global ceiling, shared by root and transient/role clients. */
+  readonly requestInputLimit?: () => number | null | undefined;
   /**
    * End the segment once the pending approval's tool result is in history,
    * instead of crossing the request boundary into another model call. The
@@ -263,6 +267,7 @@ export type ApplicationRunLoopDiagnosticOptions = {
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
 type RunState = {
+  inputUsageInvalidatedByCompaction?: boolean;
   agent: ApplicationAgent;
   recoveryBudget?: RetryRecoveryBudget;
   input: StreamedModelTurnInput[];
@@ -321,6 +326,7 @@ type RunState = {
   terminalCause?: RunTerminationCause;
   /** Root-only provider request preparation, retained by continuations. */
   requestPreparation?: ApplicationRequestPreparation;
+  requestInputLimit?: () => number | null | undefined;
   sessionId?: string;
   turnId?: string;
   hookScope?: Term2HookScope;
@@ -586,6 +592,7 @@ export class ApplicationRunLoop {
           ? options.providerId
           : undefined,
       requestPreparation: options.requestPreparation,
+      requestInputLimit: options.requestInputLimit,
       disableChainingForAttempt: options.disableChainingForAttempt === true,
       sessionId: options.sessionId,
       turnId: options.turnId,
@@ -684,6 +691,7 @@ export class ApplicationRunLoop {
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
     if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
+    if (options.requestInputLimit) state.requestInputLimit = options.requestInputLimit;
     if (options.compactionHistory) state.compactionHistory = options.compactionHistory;
     if (options.disableChainingForAttempt === true) {
       state.disableChainingForAttempt = true;
@@ -896,6 +904,7 @@ export class ApplicationRunLoop {
               outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
           });
           if (compaction.kind === 'compacted') {
+            state.inputUsageInvalidatedByCompaction = true;
             state.compactedDuringRun = true;
             state.history.splice(0, state.history.length, ...compaction.history);
             state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
@@ -1140,6 +1149,28 @@ export class ApplicationRunLoop {
         };
         const dispatch = async (): Promise<void> => {
           state.requestPreparation?.prepare(request);
+          const fullContext =
+            request.previousResponseId && state.compactionHistory
+              ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+              : undefined;
+          enforceRequestInputLimit({
+            limit: state.requestInputLimit
+              ? state.requestInputLimit()
+              : state.agent.modelSettings?.maxRequestInputTokens,
+            history:
+              fullContext?.kind === 'ready'
+                ? fullContext.history
+                : request.previousResponseId
+                ? [...(state.compactionHistory ?? []), ...request.input]
+                : request.input,
+            instructions: request.instructions ?? '',
+            tools: request.tools,
+            lastCompletedInputTokens: state.inputUsageInvalidatedByCompaction
+              ? undefined
+              : state.lastCompletedInputTokens,
+            chainedContextKnown:
+              !request.previousResponseId || !state.usesDeltaHistory || fullContext?.kind === 'ready',
+          });
           await consume();
         };
         try {
@@ -1147,6 +1178,21 @@ export class ApplicationRunLoop {
           else await dispatch();
           break;
         } catch (error) {
+          if (error instanceof RequestInputLimitError) {
+            this.#deps.logDiagnostic?.('Request input admission refused', {
+              code: error.code,
+              action: error.action,
+              reason: error.reason,
+              guardClass: 'admission',
+              setting: 'agent.maxRequestInputTokens',
+              executionScope: state.hookScope ?? 'root',
+              recovery: 'retained_work',
+              limit: error.limit,
+              estimatedTokens: error.estimatedTokens,
+              observedTokens: error.observedTokens,
+            });
+            throw error;
+          }
           const recoverOversizedToolArgument =
             isOversizedToolArgumentTrip(error) &&
             (state.oversizedToolArgumentRecoveries ?? 0) < MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES &&
@@ -1307,6 +1353,7 @@ export class ApplicationRunLoop {
         if (normalizedCompletionUsage) {
           if (normalizedCompletionUsage.prompt_tokens !== undefined) {
             state.lastCompletedInputTokens = normalizedCompletionUsage.prompt_tokens;
+            state.inputUsageInvalidatedByCompaction = false;
           }
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {

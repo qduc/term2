@@ -118,18 +118,6 @@ function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Arra
   return prefix ? [[prefix, after]] : [];
 }
 
-function migrateFormerRequestDeadlineDefault(
-  config: Partial<SettingsData>,
-  rawConfig: unknown,
-): { config: Partial<SettingsData>; migrated: boolean } {
-  const persistedDeadline = (rawConfig as any)?.agent?.maxModelRequestDurationMs;
-  if (persistedDeadline !== 300_000) return { config, migrated: false };
-
-  const migratedConfig = structuredClone(config) as Record<string, any>;
-  setSettingValue(migratedConfig, 'agent.maxModelRequestDurationMs', 0);
-  return { config: migratedConfig as Partial<SettingsData>, migrated: true };
-}
-
 /**
  * Service for managing application settings.
  * Follows singleton pattern and supports:
@@ -244,13 +232,11 @@ export class SettingsService {
       }
     }
 
-    const { config: ancillarySettingsConfig, migrated: migratedLegacyAncillarySettings } =
-      migrateLegacyAncillarySettings(validated, rawFileConfig);
-    const { config: fileConfig, migrated: migratedRequestDeadlineDefault } = migrateFormerRequestDeadlineDefault(
-      ancillarySettingsConfig,
+    const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
+      validated,
       rawFileConfig,
     );
-    if (migratedLegacyAncillarySettings || migratedRequestDeadlineDefault) {
+    if (migratedLegacyAncillarySettings) {
       this.startupMigrations = changedSettingPaths(validated, fileConfig);
     }
     for (const tier of ['smart', 'balanced', 'cheap', 'chore'] as const) {
@@ -376,7 +362,6 @@ export class SettingsService {
         normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
         migratedSelections ||
-        migratedRequestDeadlineDefault ||
         normalizedSandboxAutoApproveConflict) &&
       !fileHadErrors
     ) {

@@ -34,6 +34,7 @@ import type { SkillsService } from '../skills/skills-service.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
 import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 
 const MAX_PEEK_TEXT_LENGTH = 200;
 const STREAMING_TOOL_PROGRESS_STEP = 1_024;
@@ -216,9 +217,20 @@ export class ExecutionSubagentRunner {
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
     }
-    // Pass maxTokens from definition to provider model settings
-    if (definition.maxTokens !== undefined) {
-      modelSettings.maxTokens = definition.maxTokens;
+    // One-shot clients use this agent verbatim, bypassing the root factory.
+    // Inherit selected generation controls; an explicit role output override
+    // retains its existing precedence over the global output default.
+    const maxTokens = definition.maxTokens ?? this.#settings.get('agent.maxOutputTokens');
+    if (typeof maxTokens === 'number') {
+      const catalogLimit = getCatalogModel(providerId, definition.model)?.maxTokens;
+      modelSettings.maxTokens =
+        definition.maxTokens !== undefined || catalogLimit === undefined
+          ? maxTokens
+          : Math.min(maxTokens, catalogLimit);
+    }
+    for (const key of ['maxStreamOutputChars', 'maxModelRequestDurationMs', 'maxModelStreamIdleMs'] as const) {
+      const value = this.#settings.get(`agent.${key}`);
+      if (typeof value === 'number') modelSettings[key] = value;
     }
 
     const fullInstructions = buildInstructions(

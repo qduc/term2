@@ -79,6 +79,15 @@ const AgentSettingsObjectSchema = z.object({
   // can use their own defaults when unset.
   temperature: z.number().min(0).max(2).optional(),
   maxTurns: z.number().int().positive().default(100),
+  maxRequestInputTokens: z
+    .number()
+    .int()
+    .min(1_000)
+    .nullable()
+    .default(null)
+    .describe(
+      'Per-request estimated or last-observed input ceiling; rejects before dispatch and retains work (null disables)',
+    ),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
   // Total wall-clock ceiling per provider request. 0 means "no ceiling": the
@@ -696,6 +705,7 @@ export interface SettingsWithSources {
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
+    maxRequestInputTokens: SettingWithSource<number | null>;
     maxOutputTokens: SettingWithSource<number>;
     maxStreamOutputChars: SettingWithSource<number>;
     maxModelRequestDurationMs: SettingWithSource<number>;
@@ -867,6 +877,7 @@ export const SETTING_KEYS = {
   AGENT_MODEL_NICKNAMES: 'agent.modelNicknames',
   AGENT_DISABLED_PROVIDERS: 'agent.disabledProviders',
   AGENT_MAX_TURNS: 'agent.maxTurns',
+  AGENT_MAX_REQUEST_INPUT_TOKENS: 'agent.maxRequestInputTokens',
   AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
   AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
   AGENT_MAX_MODEL_REQUEST_DURATION_MS: 'agent.maxModelRequestDurationMs',
@@ -1005,6 +1016,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MODEL_NICKNAMES,
   SETTING_KEYS.AGENT_DISABLED_PROVIDERS,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
+  SETTING_KEYS.AGENT_MAX_REQUEST_INPUT_TOKENS,
   SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
   SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
   SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
@@ -1111,6 +1123,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     choreModel: undefined,
     reasoningEffort: 'default',
     maxTurns: 100,
+    maxRequestInputTokens: null,
     maxOutputTokens: 32_000,
     maxStreamOutputChars: 100_000,
     maxModelRequestDurationMs: 0,

@@ -1,3 +1,4 @@
+import { RequestInputLimitError } from '../agent-runtime/request-input-limit.js';
 import { decideRetry } from './conversation-retry-policy.js';
 import {
   isMissingServerToolOutputError,
@@ -50,7 +51,7 @@ export class DefaultRetryClassifier {
     // this layer would just re-enter RetryingModel, which claims against the
     // same exhausted budget and throws this same error immediately -- an
     // unproductive bounce between layers instead of a clean stop.
-    if (isRetryRecoveryBudgetExhaustedError(error)) {
+    if (error instanceof RequestInputLimitError || isRetryRecoveryBudgetExhaustedError(error)) {
       return { kind: 'unrecoverable' };
     }
 

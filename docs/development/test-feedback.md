@@ -17,11 +17,19 @@ it does not remove tests from CI or establish that unrelated behavior is safe.
    can make a related run much broader than expected.
 
    ```sh
-   pnpm test:related path/to/changed-source.ts
+   pnpm test:related ./path/to/changed-source.ts
    ```
 
+   Related selection follows static imports. Dynamic loading and behavioral
+   coupling may not appear in that graph, so select extra tests deliberately
+   when those paths are involved. See the repository's [testing skill](../../.agents/skills/testing/SKILL.md)
+   for scope selection and gate details.
+
 3. **Before handoff:** run the changed-file selection and typecheck for a narrow
-   change, along with any directly affected integration or e2e checks.
+   change, along with any directly affected integration or e2e checks. A
+   changed or related command that selects zero tests exits with an error; that
+   is not a passing check. Select an appropriate test explicitly or broaden
+   coverage.
 
    ```sh
    pnpm test:changed
@@ -31,7 +39,9 @@ it does not remove tests from CI or establish that unrelated behavior is safe.
 4. **Completion:** keep the repository-required CI and publish gates intact.
    Current CI runs unit and integration suites, plus separate e2e and provider
    black-box jobs. A local selection never replaces those gates. Track late CI
-   failures until they pass or have a clearly owned, explicit blocker.
+   failures until they pass or have a clearly owned, explicit blocker. The CI
+   workflow is configured for pushes to `main`, not pull request events, so
+   this draft PR has no remote CI checks.
 
 When impact is uncertain, broaden the selection. Lint and typecheck help catch
 static problems but do not replace behavioral checks. Do not exclude failing

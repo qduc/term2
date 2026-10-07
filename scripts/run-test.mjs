@@ -13,8 +13,13 @@ export function normalizeTestArgs(args) {
 
 function main() {
   const result = spawnSync(
-    'pnpm',
-    ['exec', 'vitest', 'run', '--reporter=minimal', ...normalizeTestArgs(process.argv.slice(2))],
+    process.execPath,
+    [
+      path.join(root, 'node_modules', 'vitest', 'vitest.mjs'),
+      'run',
+      '--reporter=minimal',
+      ...normalizeTestArgs(process.argv.slice(2)),
+    ],
     {
       cwd: root,
       env: { ...process.env, NODE_ENV: 'test' },

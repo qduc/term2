@@ -48,11 +48,9 @@ actions, and pick up a saved conversation after a break.
 
 ## Install, connect, explore
 
-Use Node.js 20 or newer (Node 24 recommended). The published 0.30.0 install hook
-requires pnpm 11 on your `PATH`, including for npm installs.
+Use Node.js 20 or newer (Node 24 recommended).
 
 ```bash title="Install"
-npm install --global pnpm@11
 npm install --global @qduc/term2
 term2 --version
 ```
@@ -92,9 +90,9 @@ For longer tasks, explore [subagents](/term2/modes/subagents/),
 
 ## Know which version you're using
 
-npm's latest release is **0.30.0**, published September 29, 2026 (checked October 3).
-This site tracks `main`, which also includes unreleased terminal themes/skins and
-web client fixes. See [what's new](/term2/getting-started/whats-new/).
+Check `term2 --version` for your installation and
+`npm view @qduc/term2 version` for the latest published release. See
+[what's new](/term2/getting-started/whats-new/) for release highlights.
 
 This is the product documentation site. The separate `web-client/` app uses the
 private [`term2 serve` gateway](/term2/remote/web-gateway/); it is a different

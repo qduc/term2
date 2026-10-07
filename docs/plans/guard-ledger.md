@@ -1,5 +1,41 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## October 6 supervised-worker token incident (branch-local repair)
+
+Harm prevented: an oversized supervisor handoff, unchecked main-worker request
+context, or surviving previous worker silently repeating the October 6 incident.
+Contract and operational adoption: [supervised worker workflow](../../tools/supervised-term2/README.md).
+
+| Owner / class | Signal, effective configuration and action | Recovery / rollback |
+| --- | --- | --- |
+| `tools/supervised-term2/supervisor.mjs`; context admission | Fixed 32,768 UTF-8 handoff bytes; bounded read and rejection before spawn, never truncation. Atomic task lock rejects replacement even when stale. | Original artifacts retained; compact explicit handoff. Verify group exit and reconcile effects before stale-lock recovery. Revert launcher and its task-local adapter together. |
+| Supervisor + `worker-owner.mjs`; owned lifecycle containment | Owned process group; TERM then five-second grace then KILL, release only after proven exit. Child checks Linux PID start identity every 250ms, including zombie state. | Retain lock on unproven exit/owner SIGKILL; no automatic replay. Signals never target unrelated groups. Linux-only; escaped/remote processes excluded. |
+| `ApplicationRunLoop`; configured request admission | `agent.maxRequestInputTokens`: null normally; supervised env 80,000. CLI > env > persisted > defaults; runtime values override startup. Check rendered estimate and latest usage after preparation/compaction. | Typed pre-dispatch rejection retains work, emits no fake cost, and refuses session retry. Explicit compact/handoff/ceiling increase. No security/authority changes. Revert request-limit wiring independently. |
+| `SettingsService`; deadline provenance preservation | An explicit persisted 300,000ms deadline is preserved, as are zero and other customized values. Missing values still use zero default. | No origin guessing or restoration of already-rewritten values. Revert separately from request admission. |
+
+Supervised profile uses local compaction at 60k and an 8,192 output default; ordinary
+compaction-off, 32k output, reasoning, retries, parallelism and staged run-budget
+defaults remain intact. The ceiling is independent of compaction: newest-two-turn
+safe-cut refusal and per-run cap cannot waive it. Byte/4 estimation and prior
+usage are containment proxies, not exact provider tokens or USD guarantees.
+Delta-history chains without a ready full snapshot fail closed even when older
+usage is available. One-shot workers inherit selected output, character, request
+deadline and idle controls; explicit role output overrides retain precedence.
+
+Red proof: new request-limit boundary tests failed on baseline (provider called;
+continued tool loop reached the legacy max-turn backstop). Updated five-minute
+deadline test failed because baseline changed 300,000 to zero. Launcher contract
+tests initially failed because no ownership implementation existed. Final gates
+and exact results are recorded in the branch verification handoff; no live paid
+provider is required. Guard diagnostics expose code/action/limit/estimated and
+observed tokens or ownership IDs, never prompt content or credentials.
+
+Detection gap: normal compaction tests covered safe complete cold turns and
+failure preserving history, but preservation alone let the next large request
+dispatch. Shell cancellation was treated as worker exit without PID/group proof.
+The new admission and lifecycle tests exercise those public boundaries; source
+history, completed tool effects and uncertain external outcomes remain retained.
+
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
 `87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with

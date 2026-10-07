@@ -79,7 +79,7 @@ authorized. A revised smallest synthetic live validation proposal follows offlin
 verification only. Rollback can revert default policy independently of retention,
 accounting, journaling, budgets and controlled-ingress repairs.
 
-## Stable-tree verification
+## Previous published-tree verification (0aae2a03)
 
 - Full unit: 10,911 passed, 5 failed (166.90s). Four journal-path failures
   reproduce on unchanged base `e8bbefb8`; the unchanged 100ms candidate deadline
@@ -101,3 +101,67 @@ All 51 changed source/test hashes match the stable tested tree. Scoped lint,
 formatting, commit hooks and published-head inspection are recorded in the PR.
 No paid call or live semantic validation was performed. Earlier provisional
 failures remain in local logs rather than being relabeled as passing evidence.
+
+## Output provenance repair contract
+
+Real settings startup must not turn an untouched default output allocation into
+an explicit preference by serializing a defaults snapshot. For the provenance-
+sensitive output key, absence on disk means default; an explicit property means
+explicit even when its value equals 32,000. Preserve absence during startup,
+missing-key fill and unrelated locked saves, preserve explicit write intent, and
+remove the property on explicit reset. Reconciliation must use the locked raw
+file projection, rather than schema-filled defaults or stale process origin.
+Existing files containing the property remain explicit; their historical intent
+cannot be inferred safely. Required regressions cover real persistence/reload,
+missing-key fills, same-value explicit writes, reset, concurrent stale saves and
+built-CLI small-model tiny-request success. No paid calls. Delivery remains an updated draft PR under the latest instruction.
+
+## Native continuation and locked batch repair
+
+Admission uses the shared native replacement projection for the actual prepared
+request. Completed OpenAI native compaction invalidates only the obsolete input
+usage hint; cumulative billed usage and cost records remain intact. Native
+completion order determines placement of encrypted reasoning around replacement
+boundaries, including reasoning first seen as stream fragments. Tool receipts
+after the boundary stay in the request and tools execute once. Durable history
+retains the original request and ordered native state.
+
+Persistent batches validate before locking and record successful batch intents
+before reconciling the locked committed settings; they cannot replace a peer's unrelated output
+allocation with a stale defaults snapshot. Real persistence tests replace the
+previous source-stub coverage gap, and provider tests run two production-mode
+CLI invocations on the same isolated settings file. The 16k Reka Edge CLI case
+completes with a 4,096-token output allocation. The default CLI prefix can exceed
+the 8k GPT-4 model's 5,324-token input budget even with the corrected 2,048-token
+output allocation; that legitimate prepared-context refusal remains intact.
+Partial ancestor writes preserve omitted-leaf provenance, CLI/env precedence,
+peer allocations and ordered mixed batch intent. Earlier dense files retain
+explicit-property semantics because historical user intent is unknowable.
+
+The defect classes were source provenance being inferred from schema-filled
+values, stale pre-lock snapshots replacing reconciled state, and different
+continuation projections/orderings at admission and dispatch. Regressions now
+exercise these actual boundaries rather than reproducing resolver arithmetic.
+Final-tree verification (post-review source/test hashes frozen):
+
+- Full provider black-box: 190 passed, 1 existing skip, 22 files; exit 0,
+  127.71s including build. Production-mode fresh/reload Reka Edge requests
+  each carry output allocation 4,096 and persist no output-default property.
+- Related: 6,165 passed, 4 failed, 294 files; exit 1, 116.88s.
+- Changed: 6,159 passed, 5 failed, 293 files; exit 1, 114.42s.
+- Full unit: 10,923 passed, 5 failed, 705 files; exit 1, 161.03s.
+  The four unavailable-home journal failures and session-index ordering failure
+  reproduce on unchanged base e8bbefb8. Their source/test files are unchanged.
+  The broad gates remain non-green; no assertions or deadlines were relaxed.
+- Integration: 106 passed, 1 skipped; exit 0, 41.82s.
+- Fake-Codex network: 15 passed; exit 0, 1.60s.
+- Typecheck: exit 0, 6.34s. Scoped lint and formatting passed.
+- Independent review: 368 passed across 8 files, plus production CLI probes,
+  ordered mixed batches, CLI/env/peer precedence and refused-write overlay
+  preservation. No remaining demonstrated material finding.
+
+All 55 changed code/test hashes match the final tested tree. The reported cloud
+connection notification did not terminate the executor: the existing sequencer
+completed all checks, without duplicate launches. Supervisor/Codex authored these
+repairs; no new paid Term2 coding-worker or provider calls, security changes,
+trace-dataset publication, merge, release or deployment.

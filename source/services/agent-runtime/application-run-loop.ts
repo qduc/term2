@@ -1,3 +1,4 @@
+import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
 import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from './model-context-policy.js';
 import { z } from 'zod';
@@ -996,6 +997,7 @@ export class ApplicationRunLoop {
       let activeRequestId = '';
       let activeRequest: StreamedModelTurnRequest | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
+      let deferredNativeReasoning: PendingNativeReasoning[] = [];
       let criticalWrapUp = false;
 
       while (true) {
@@ -1003,6 +1005,7 @@ export class ApplicationRunLoop {
         completion = undefined;
         sawToolCall = false;
         pendingNativeReasoning = undefined;
+        deferredNativeReasoning = [];
         // Stable process-unique request id, allocated immediately before dispatch
         // so a cost record can be settled exactly once (success or failure).
         activeRequestId = this.#nextRequestId();
@@ -1047,7 +1050,7 @@ export class ApplicationRunLoop {
             ? { previousResponseId: state.responseId }
             : {}),
           ...(disableChaining ? { disableChaining: true } : {}),
-          input: state.input,
+          input: projectModelRequestHistory(state.input) as StreamedModelTurnInput[],
           tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
           applicationTools: criticalWrapUp ? [] : state.agent.tools,
           ...(state.agent.modelSettings?.temperature !== undefined
@@ -1162,7 +1165,10 @@ export class ApplicationRunLoop {
               if (event.type === 'tool_call') {
                 toolArgumentRunaway?.observeToolCallCompleted();
                 generationGuard.observeToolCall(event.arguments);
-                pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+                // The authoritative completion may introduce a native
+                // replacement boundary before this call's reasoning.
+                if (pendingNativeReasoning) deferredNativeReasoning.push(pendingNativeReasoning);
+                pendingNativeReasoning = undefined;
                 sawToolCall = true;
                 streamedToolCalls.push(event);
               }
@@ -1354,6 +1360,8 @@ export class ApplicationRunLoop {
         if (criticalWrapUp) {
           return finish(stream, state, queue);
         }
+        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
         await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
         if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
         if (state.toolExecution.pendingApprovals.length > 0) {
@@ -1449,30 +1457,31 @@ export class ApplicationRunLoop {
       // completion rather than as separate stream events. Their reasoning may
       // likewise be terminal-only, so associate it before replaying calls.
       const toolCalls = [...streamedToolCalls];
-      if (!sawToolCall) {
-        for (const item of finalCompletion.output) {
-          if (item.type === 'reasoning') pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, item);
-        }
-        for (const item of finalCompletion.output) {
-          if (item.type !== 'tool_call') continue;
-          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-          sawToolCall = true;
-          toolCalls.push(item);
-        }
+      const hasTerminalReasoning = finalCompletion.output.some(
+        (item) => item.type === 'reasoning' && appendNativeReasoning(undefined, item) !== undefined,
+      );
+      if (hasTerminalReasoning) {
+        // Terminal output supplies native ordering and authoritative metadata.
+        // Streamed fragments have already been displayed, but are not history.
+        pendingNativeReasoning = undefined;
+      } else {
+        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
       }
-      // A native reasoning item belongs to the completed assistant turn even
-      // when no tool call follows it. Commit it before assistant text so both
-      // stateless continuation and persisted canonical history retain the
-      // provider-specific metadata exactly once.
-      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-
-      // Provider-native completion items (notably OpenAI compaction items)
-      // must stay in the live provider history. The session layer later
-      // applies compaction's replacement rule; keeping the item here also
-      // makes it available to an in-flight tool continuation before that
-      // terminal history commit occurs.
       for (const item of finalCompletion.output) {
+        if (item.type === 'reasoning') {
+          // Each terminal native item is independently replayable; encrypted
+          // reasoning cannot be concatenated or overwritten by its sibling.
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+          pendingNativeReasoning = appendNativeReasoning(undefined, item);
+          continue;
+        }
+        if (item.type === 'tool_call') {
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+          if (!sawToolCall) toolCalls.push(item);
+          continue;
+        }
         if (item.type !== 'provider_opaque') continue;
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
         const historyItem: ProviderInputItem = {
           ...item.item,
           providerOpaque: {
@@ -1482,8 +1491,16 @@ export class ApplicationRunLoop {
         };
         state.history.push(historyItem);
         state.input.push(item);
+        if (isOpenAICompaction(item)) {
+          // Completion usage describes the request before native replacement.
+          // Retain billed usage/costs; invalidate only the next admission hint.
+          state.lastCompletedInputTokens = undefined;
+          state.inputUsageInvalidatedByCompaction = true;
+        }
         outputPush(stream, queue, { type: 'item', item });
       }
+      sawToolCall = toolCalls.length > 0;
+      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
 
       const assistantText = finalCompletion.output
         .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')

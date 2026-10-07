@@ -163,3 +163,28 @@ it('retains unknown-model work after structured provider overflow without retryi
   const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   expect(await readFile(join(lease.paths.conversationsDir, logs[0]!), 'utf8')).toContain('retain this request');
 });
+
+it('completes a tiny small-model request with real fresh and reloaded settings', async () => {
+  const lease = await setup('success');
+  for (let i = 0; i < 2; i++) {
+    const result = await lease.runCli({
+      cwd: lease.root,
+      cliPath: join(process.cwd(), 'dist/cli.js'),
+      args: ['tiny ordinary request', '--provider', 'fixture-provider', '--model', 'rekaai/reka-edge'],
+      env: {
+        NODE_ENV: 'production',
+        VITEST: undefined,
+        AVA_PATH: undefined,
+        JEST_WORKER_ID: undefined,
+        TERM2_TEST_MODE: undefined,
+      },
+      deadlineMs: 15000,
+    });
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(server!.requests[i]!.body).toMatchObject({ max_tokens: 4096 });
+    expect(JSON.parse(await readFile(join(lease.paths.logDir, 'settings.json'), 'utf8')).agent).not.toHaveProperty(
+      'maxOutputTokens',
+    );
+  }
+  expect(server!.requests).toHaveLength(2);
+});

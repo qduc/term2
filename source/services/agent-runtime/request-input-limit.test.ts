@@ -473,3 +473,104 @@ it.each(['duplicate', 'unknown', 'new-round'] as const)(
     }
   },
 );
+
+it.each([
+  { observed: 220000, receiptBytes: 10, streamed: false },
+  { observed: 100, receiptBytes: 60000, streamed: true },
+])(
+  'admits small native-replaced context without stale usage/prefix ($observed)',
+  async ({ observed, receiptBytes, streamed }) => {
+    const requests: any[] = [];
+    const effect = vi.fn(() => 'r'.repeat(receiptBytes));
+    const model = {
+      async *stream(request: any) {
+        requests.push(request);
+        if (requests.length === 1 && streamed) {
+          yield {
+            type: 'reasoning_delta' as const,
+            id: 'rs_post_compaction',
+            text: '',
+            providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+          };
+          yield { type: 'tool_call' as const, id: 'read', name: 'read', arguments: '{}' };
+        }
+        yield {
+          type: 'completion' as const,
+          responseId: 'native-' + requests.length,
+          usage: { inputTokens: requests.length === 1 ? observed : 100, outputTokens: 10 },
+          output:
+            requests.length === 1
+              ? [
+                  {
+                    type: 'provider_opaque' as const,
+                    provider: 'openai',
+                    item: { type: 'compaction', encrypted_content: 'native-state' },
+                  },
+                  {
+                    type: 'reasoning' as const,
+                    id: 'rs_post_compaction',
+                    text: '',
+                    providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+                  },
+                  {
+                    type: 'reasoning' as const,
+                    id: 'rs_second',
+                    text: '',
+                    providerMetadata: { openai: { encrypted_content: 'second-encrypted-reasoning' } },
+                  },
+                  { type: 'tool_call' as const, id: 'read', name: 'read', arguments: '{}' },
+                ]
+              : [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      {
+        ...agent,
+        model: 'gpt-5.6-luna',
+        modelSettings: { maxTokens: 32000 },
+        tools: [
+          {
+            name: 'read',
+            description: 'read',
+            parameters: {},
+            needsApproval: () => false,
+            execute: effect,
+            formatCommandMessage: () => [],
+          },
+        ],
+      },
+      [message('x'.repeat(800000))],
+      { providerId: 'openai' },
+    );
+    const completed: any = await stream.completed;
+    expect(requests).toHaveLength(2);
+    expect(effect).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(requests[1].input)).not.toContain('x'.repeat(1000));
+    expect(JSON.stringify(requests[1].input)).toContain('native-state');
+    expect(requests[1].input.map((item: any) => item.type)).toEqual([
+      'provider_opaque',
+      'reasoning',
+      'reasoning',
+      'tool_call',
+      'tool_result',
+    ]);
+    expect(requests[1].input[1]).toMatchObject({
+      id: 'rs_post_compaction',
+      providerMetadata: { openai: { encrypted_content: 'encrypted-reasoning' } },
+    });
+    expect(stream.history.map((item: any) => item.type).slice(0, 6)).toEqual([
+      'message',
+      'compaction',
+      'reasoning',
+      'reasoning',
+      'function_call',
+      'function_call_result',
+    ]);
+    expect(JSON.stringify(requests[1].input)).toContain('r'.repeat(receiptBytes));
+    expect(requests[1].input[2]).toMatchObject({ id: 'rs_second' });
+    expect(completed.usage?.inputTokens).toBe(observed + 100);
+    expect(stream.runCostRecords).toHaveLength(2);
+    expect(JSON.stringify(stream.history)).toContain('x'.repeat(1000));
+  },
+);

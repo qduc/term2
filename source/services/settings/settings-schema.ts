@@ -1106,7 +1106,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
 ]);
 
 // Some settings with default values are optional to persist
-export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
+// Absence preserves inherited output-allocation provenance on disk.
+export const OPTIONAL_DEFAULT_KEYS = new Set<string>(['agent.maxOutputTokens']);
 
 // Default settings
 export const DEFAULT_SETTINGS: SettingsData = {

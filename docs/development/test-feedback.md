@@ -39,9 +39,9 @@ it does not remove tests from CI or establish that unrelated behavior is safe.
 4. **Completion:** keep the repository-required CI and publish gates intact.
    Current CI runs unit and integration suites, plus separate e2e and provider
    black-box jobs. A local selection never replaces those gates. Track late CI
-   failures until they pass or have a clearly owned, explicit blocker. The CI
-   workflow is configured for pushes to `main`, not pull request events, so
-   this draft PR has no remote CI checks.
+   failures until they pass or have a clearly owned, explicit blocker. At
+   baseline `main` revision `f33995f1`, CI was configured for pushes to `main`
+   only; draft PR #22 had no remote CI checks when opened.
 
 When impact is uncertain, broaden the selection. Lint and typecheck help catch
 static problems but do not replace behavioral checks. Do not exclude failing

@@ -8,6 +8,7 @@ import type {
   LanguageModelV3ToolChoice,
   LanguageModelV3ToolResultOutput,
   SharedV3ProviderOptions,
+  JSONValue,
   JSONSchema7,
 } from '@ai-sdk/provider';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
@@ -272,11 +273,21 @@ function reasoningProviderOptions(
     effort && effort !== 'none' && effort !== 'default'
       ? reasoningBudgets[effort as keyof typeof reasoningBudgets]
       : undefined;
-  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
-
   const providerOptions: SharedV3ProviderOptions = {
     ...(request.providerOptions as SharedV3ProviderOptions | undefined),
   };
+  if (provider.startsWith('openrouter')) {
+    const existing = (providerOptions.openrouter as { reasoning?: JSONValue } | undefined)?.reasoning;
+    if (existing || (effort && effort !== 'default')) {
+      providerOptions.openrouter = {
+        ...((providerOptions.openrouter ?? {}) as Record<string, JSONValue>),
+        reasoning: existing ?? { effort },
+      };
+    }
+    return providerOptions;
+  }
+  if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
+
   if (provider.startsWith('anthropic')) {
     providerOptions.anthropic = {
       ...(providerOptions.anthropic ?? {}),

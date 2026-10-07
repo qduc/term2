@@ -5,15 +5,13 @@ description: Install term2 and check the prerequisites for your first session.
 
 ## Prerequisites
 
-- **Node.js 20 or newer.** Node 24 is recommended and used by the documentation build.
-- **pnpm 11 on your `PATH`.** The published 0.30.0 package invokes pnpm in its install hook, even when you install it with npm.
+- **Node.js 20 or newer.** Node 24 is recommended.
 - **An interactive terminal** for model selection, chat, and approval prompts.
 - **Provider access:** an API key, an eligible OAuth account, or a configured local model endpoint. Hosted provider billing and account limits apply.
 
 ## Install and verify
 
 ```bash
-npm install --global pnpm@11
 npm install --global @qduc/term2
 term2 --version
 term2 --help
@@ -21,7 +19,7 @@ term2 --help
 
 You can also install with `pnpm add --global @qduc/term2` if your pnpm global bin directory is configured. If `term2` is not found, check that your package manager's global bin directory is on `PATH`.
 
-As of October 3, 2026, npm's latest release is **0.30.0**. This website tracks `main`; see [what's new](/term2/getting-started/whats-new/) for unreleased changes.
+Check `term2 --version` for your installation and `npm view @qduc/term2 version` for the latest published release. See [what's new](/term2/getting-started/whats-new/) for release highlights.
 
 ## Shell sandbox prerequisites
 

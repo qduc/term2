@@ -357,3 +357,156 @@ it('AiSdkOpenRouterProvider surfaces OpenRouter cost metadata as costUsd on comp
   expect(completion).toBeDefined();
   expect(completion.costUsd).toBe(0.00012);
 });
+
+const reasoningFixtureResponse = {
+  id: 'mock-1',
+  created: 0,
+  choices: [
+    {
+      index: 0,
+      message: { role: 'assistant', content: 'ok' },
+      finish_reason: 'stop',
+    },
+  ],
+  usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+};
+
+function createRealSdkOpenRouterProvider(capturedBodies: any[], modelName: string = 'z-ai/glm-5.3-flash') {
+  return new AiSdkOpenRouterProvider({
+    defaultModel: modelName,
+    resolveConfig: () => ({
+      apiKey: 'sk-fake',
+      baseURL: 'https://openrouter.test/api/v1',
+      fetch: (async (_input: unknown, init?: { body?: string }) => {
+        capturedBodies.push(JSON.parse(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ ...reasoningFixtureResponse, model: modelName }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }) as typeof fetch,
+    }),
+  });
+}
+
+async function generateWithReasoning(
+  request: Record<string, unknown>,
+  modelName: string = 'z-ai/glm-5.3-flash',
+): Promise<any> {
+  const capturedBodies: any[] = [];
+  const provider = createRealSdkOpenRouterProvider(capturedBodies, modelName);
+  const model = provider.getStreamedModel(modelName);
+  await model.getResponse!({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    tools: [],
+    maxTokens: 100,
+    ...request,
+  } as any);
+  expect(capturedBodies.length).toBe(1);
+  expect(capturedBodies[0]).toMatchObject({
+    model: modelName,
+    max_tokens: 100,
+  });
+  return capturedBodies[0];
+}
+
+it.each([
+  ['low', { effort: 'low' }],
+  ['high', { effort: 'high' }],
+])('AiSdkOpenRouterProvider forwards native reasoning effort %s to OpenRouter', async (_name, reasoning) => {
+  const body = await generateWithReasoning({ reasoning });
+  expect(body.reasoning).toEqual(reasoning);
+});
+
+it('AiSdkOpenRouterProvider forwards native reasoning effort none on an optional-reasoning model to OpenRouter', async () => {
+  const body = await generateWithReasoning({ reasoning: { effort: 'none' } }, 'openai/gpt-5.1');
+  expect(body.reasoning).toEqual({ effort: 'none' });
+});
+
+it('AiSdkOpenRouterProvider omits the reasoning control for native default effort', async () => {
+  const body = await generateWithReasoning({ reasoning: { effort: 'default' } });
+  expect(body.reasoning).toBeUndefined();
+});
+
+it('AiSdkOpenRouterProvider gives explicit nested SDK providerOptions.openrouter.reasoning precedence over native reasoning', async () => {
+  const body = await generateWithReasoning({
+    reasoning: { effort: 'low' },
+    providerOptions: { providerOptions: { openrouter: { reasoning: { effort: 'high' } } } },
+  });
+  expect(body.reasoning).toEqual({ effort: 'high' });
+});
+
+it('AiSdkOpenRouterProvider gives explicit top-level legacy providerOptions.reasoning precedence over native reasoning', async () => {
+  const body = await generateWithReasoning({
+    reasoning: { effort: 'low' },
+    providerOptions: { reasoning: { effort: 'high' } },
+  });
+  expect(body.reasoning).toEqual({ effort: 'high' });
+});
+
+it('AiSdkOpenRouterProvider gives explicit direct SDK providerOptions.openrouter precedence over native reasoning and preserves other openrouter fields', async () => {
+  const capturedBodies: any[] = [];
+  const provider = createRealSdkOpenRouterProvider(capturedBodies);
+  const model = provider.getStreamedModel('z-ai/glm-5.3-flash');
+  await model.getResponse!({
+    input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    tools: [],
+    maxTokens: 100,
+    reasoning: { effort: 'low' },
+    providerOptions: {
+      openrouter: { reasoning: { effort: 'high' }, transforms: ['middle-out'] },
+    },
+  } as any);
+  expect(capturedBodies.length).toBe(1);
+  expect(capturedBodies[0].reasoning).toEqual({ effort: 'high' });
+  expect(capturedBodies[0].transforms).toEqual(['middle-out']);
+});
+
+it.each([
+  ['none', { effort: 'none' }],
+  ['medium', { effort: 'medium' }],
+])(
+  'AiSdkOpenRouterProvider surfaces the provider rejection for unsupported effort %s on a mandatory model',
+  async (_name, reasoning) => {
+    const capturedBodies: any[] = [];
+    const provider = new AiSdkOpenRouterProvider({
+      defaultModel: 'z-ai/glm-5.3-flash',
+      resolveConfig: () => ({
+        apiKey: 'sk-fake',
+        baseURL: 'https://openrouter.test/api/v1',
+        fetch: (async (_input: unknown, init?: { body?: string }) => {
+          const body = JSON.parse(init?.body ?? '{}') as { reasoning?: { effort?: string } };
+          capturedBodies.push(body);
+          if (body.reasoning?.effort === reasoning.effort) {
+            return new Response(
+              JSON.stringify({
+                error: {
+                  message: 'Unsupported reasoning effort for mandatory model; supported: max, high, low',
+                  code: 400,
+                },
+              }),
+              { status: 400, headers: { 'content-type': 'application/json' } },
+            );
+          }
+          return new Response(JSON.stringify({ ...reasoningFixtureResponse, model: 'z-ai/glm-5.3-flash' }), {
+            headers: { 'content-type': 'application/json' },
+          });
+        }) as typeof fetch,
+      }),
+    });
+    const model = provider.getStreamedModel('z-ai/glm-5.3-flash');
+    let error: any;
+    try {
+      await model.getResponse!({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+        tools: [],
+        maxTokens: 100,
+        reasoning,
+      } as any);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(String(error.message ?? error)).toContain('supported: max, high, low');
+    expect(capturedBodies.length).toBe(1);
+    expect(capturedBodies[0].reasoning).toEqual(reasoning);
+  },
+);

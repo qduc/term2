@@ -205,6 +205,7 @@ describe('provider boundary contracts through the registry', () => {
     });
     const initial = {
       ...fixtureRequest,
+      reasoning: { effort: 'default' },
       input: [
         {
           type: 'message',

@@ -66,7 +66,13 @@ export interface ContextEstimate {
   hardFitTokens: number;
 }
 
-const INTERNAL_BOOKKEEPING_KEYS = new Set(['providerItem', 'providerMetadata', 'providerData', 'rawItem']);
+const INTERNAL_BOOKKEEPING_KEYS = new Set([
+  'providerItem',
+  'providerMetadata',
+  'providerData',
+  'rawItem',
+  'contextSummary',
+]);
 
 const compactionReplacer = (key: string, value: unknown) => {
   if (INTERNAL_BOOKKEEPING_KEYS.has(key)) {
@@ -151,18 +157,61 @@ export function planLocalCompaction(input: {
 }): LocalCompactionPlan {
   const history = projectModelRequestHistory(input.history);
   const turns = turnRanges(history);
-  if (turns.length < 3) return { kind: 'blocked', reason: 'no_complete_cold_turn' };
-
-  const hotTailBudgetTokens = Math.min(32_000, Math.max(8_000, Math.floor(input.usableInputTokens * 0.25)));
-  const hotStartTurn = turns.length - 2;
-  const hotTokens = Math.ceil(serializedBytes(filterHistoryForEstimate(history.slice(turns[hotStartTurn]!.start))) / 4);
-  if (hotTokens > input.usableInputTokens) return { kind: 'blocked', reason: 'single_turn_too_large' };
-  const cut = turns[hotStartTurn]!.start;
-  if (cut <= 0) return { kind: 'blocked', reason: 'no_complete_cold_turn' };
+  const hotTailBudgetTokens = Math.min(32_000, Math.max(1_000, Math.floor(input.usableInputTokens * 0.25)));
+  const pending = new Set<string>();
+  const seen = new Set<string>();
+  const userBoundaries = new Set<number>();
+  const roundBoundaries: number[] = [];
+  for (let index = 0; index < history.length; index++) {
+    const item = history[index]!;
+    const message = projectConversationMessage(item);
+    if (message?.role === 'user' && !message.isSynthetic && !pending.size) userBoundaries.add(index);
+    const id = item.callId ?? item.call_id ?? item.tool_call_id ?? item.toolCallId ?? item.id;
+    if (item.type === 'function_call' || item.type === 'tool_call') {
+      if (typeof id !== 'string' || seen.has(id)) return { kind: 'blocked', reason: 'no_complete_cold_turn' };
+      seen.add(id);
+      pending.add(id);
+    } else if (item.type === 'function_call_result' || item.type === 'tool_result') {
+      if (typeof id !== 'string' || !pending.delete(id)) return { kind: 'blocked', reason: 'no_complete_cold_turn' };
+      if (!pending.size) roundBoundaries.push(index + 1);
+    }
+  }
+  const protectedUsersBefore = (cut: number) =>
+    history.slice(0, cut).filter((item) => {
+      const message = projectConversationMessage(item);
+      return message?.role === 'user' && !message.isSynthetic;
+    });
+  const tailAt = (cut: number) => [...protectedUsersBefore(cut), ...history.slice(cut)];
+  const tailTokensAt = (cut: number) => Math.ceil(serializedBytes(filterHistoryForEstimate(tailAt(cut))) / 4);
+  // Prefer whole user turns. A long current task can instead reduce settled
+  // tool rounds, retaining all requests and at least the newest complete round.
+  const preferred = turns.length >= 3 ? turns[turns.length - 2]!.start : 0;
+  let cut =
+    preferred > 0 && userBoundaries.has(preferred) && tailTokensAt(preferred) <= input.usableInputTokens
+      ? preferred
+      : 0;
+  if (!cut) {
+    for (const budget of [Math.min(hotTailBudgetTokens, input.usableInputTokens), input.usableInputTokens]) {
+      for (const boundary of roundBoundaries.slice(0, -1)) {
+        if (tailTokensAt(boundary) <= budget) {
+          cut = boundary;
+          break;
+        }
+      }
+      if (cut) break;
+    }
+  }
+  if (cut <= 0)
+    return {
+      kind: 'blocked',
+      reason: preferred > 0 && userBoundaries.has(preferred) ? 'single_turn_too_large' : 'no_complete_cold_turn',
+    };
+  const coldPrefix = structuredClone(history.slice(0, cut));
+  const hotTail = structuredClone(tailAt(cut));
   return {
     kind: 'planned',
-    coldPrefix: structuredClone(history.slice(0, cut)),
-    hotTail: structuredClone(history.slice(cut)),
+    coldPrefix,
+    hotTail,
     hotTailBudgetTokens,
   };
 }
@@ -200,7 +249,7 @@ export function serializeColdPrefix(
 }
 
 export const rearmAtTokens = (postCompactionEstimatedTokens: number, effectiveThreshold: number): number =>
-  postCompactionEstimatedTokens + Math.max(8_000, Math.ceil(effectiveThreshold * 0.1));
+  postCompactionEstimatedTokens + Math.max(1_000, Math.ceil(effectiveThreshold * 0.1));
 
 export function shouldDeferAutomaticCompaction(input: {
   automaticCompactionsThisRun: number;
@@ -209,9 +258,7 @@ export function shouldDeferAutomaticCompaction(input: {
   renderedInputTokens: number;
   hasCompleteNewUserTurn: boolean;
 }): 'per_run_cap' | 'hysteresis' | null {
-  if (input.automaticCompactionsThisRun >= 1) return 'per_run_cap';
   const rearmAt = input.rearmAtEstimatedTokens ?? input.checkpoint?.rearmAtEstimatedTokens;
-  if (rearmAt !== undefined && (!input.hasCompleteNewUserTurn || input.renderedInputTokens < rearmAt))
-    return 'hysteresis';
+  if (rearmAt !== undefined && input.renderedInputTokens < rearmAt) return 'hysteresis';
   return null;
 }

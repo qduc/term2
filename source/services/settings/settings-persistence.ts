@@ -300,7 +300,8 @@ export function saveSettingsToFile(opts: {
   schema: ZodTypeAny;
   defaults: SettingsData;
   mutate: SettingsMutation;
-  stripSensitiveSettings: (settings: SettingsData) => Partial<SettingsData>;
+  /** Raw configuration is read under the same lock as serialization. */
+  stripSensitiveSettings: (settings: SettingsData, raw?: unknown) => Partial<SettingsData>;
   disableLogging?: boolean;
   loggingService?: LoggerLike;
   lockOptions?: LockOptions;
@@ -346,7 +347,7 @@ export function saveSettingsToFile(opts: {
             .join('; ')}`,
         );
       }
-      const settingsToSave = opts.stripSensitiveSettings(next);
+      const settingsToSave = opts.stripSensitiveSettings(next, loaded.raw);
       const newContent = JSON.stringify(settingsToSave, null, 2);
 
       // Only write if file doesn't exist or content has changed. Compare parsed

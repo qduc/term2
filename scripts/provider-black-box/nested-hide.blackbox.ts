@@ -142,7 +142,9 @@ describe('P1 nested hide result chain', () => {
       }),
     });
 
+    // One tool turn plus its final response requires two model turns.
     const providerClient = new AgentClient({
+      maxTurns: 2,
       model: 'm4-hide-model',
       providerOverride: providerId,
       approvalPolicyRegistry,

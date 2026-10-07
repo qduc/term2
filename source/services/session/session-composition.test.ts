@@ -142,7 +142,7 @@ it('manual local compaction commits checkpoint plus hot tail and retains genuine
   });
   const history = Array.from({ length: 4 }, (_, index) => [
     { role: 'user', type: 'message', content: `user-${index}` },
-    { role: 'assistant', type: 'message', content: `answer-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}-` + 'x'.repeat(1500) },
   ]).flat();
   runtime.stateFacade.importState({ history, previousResponseId: 'resp-old' });
 
@@ -175,7 +175,7 @@ it('journals exact summarized source events and replays the checkpoint with the 
     });
     const history = Array.from({ length: 4 }, (_, index) => [
       { role: 'user' as const, type: 'message' as const, content: `user-${index}` },
-      { role: 'assistant' as const, type: 'message' as const, content: `answer-${index}` },
+      { role: 'assistant' as const, type: 'message' as const, content: `answer-${index}-` + 'x'.repeat(1500) },
     ]).flat();
     runtime.stateFacade.importState({ history, previousResponseId: null });
     history.forEach((item, index) => {
@@ -219,7 +219,11 @@ it('journals exact summarized source events and replays the checkpoint with the 
       checkpointEvents[0]!.event as Extract<(typeof after)[number]['event'], { type: 'context_checkpoint_created' }>
     ).item;
     expect(afterReplay.messages).toEqual(beforeReplay.messages);
-    expect(afterReplay.history).toEqual([checkpointItem, ...beforeReplay.history.slice(-4)]);
+    expect(afterReplay.history).toEqual([
+      checkpointItem,
+      ...beforeReplay.history.slice(0, -4).filter((item) => item.role === 'user'),
+      ...beforeReplay.history.slice(-4),
+    ]);
     runtime.dispose();
   } finally {
     await writer.close();
@@ -228,11 +232,10 @@ it('journals exact summarized source events and replays the checkpoint with the 
   }
 });
 
-it('manual local compaction reports model-request input tokens before and after', async () => {
-  const chat = vi.fn(async () => '## Summary\nCold answers were summarized.');
+it('manual local compaction refuses a growing summary and leaves original history intact', async () => {
   const runtime = createConversationSession({
-    sessionId: 'manual-compact-tokens',
-    agentClient: makeMockClient({ chat }),
+    sessionId: 'manual-nonreducing',
+    agentClient: makeMockClient({ chat: async () => 'a growing summary'.repeat(1000) }),
     deps: { logger: makeLogger(), sessionContextService },
   });
   const history = Array.from({ length: 4 }, (_, index) => [
@@ -240,29 +243,10 @@ it('manual local compaction reports model-request input tokens before and after'
     { role: 'assistant', type: 'message', content: `answer-${index}` },
   ]).flat();
   runtime.stateFacade.importState({ history, previousResponseId: null });
-
   const outcome = await runtime.compactContext();
-
-  expect(outcome.kind).toBe('compacted');
-  if (outcome.kind !== 'compacted') return;
-  const stored = runtime.conversationStore.getHistory();
-  expect(stored.some((item) => item.contextSummary)).toBe(true);
-  expect(outcome.checkpoint.contextSummary.estimatedTokensBefore).toBe(
-    estimateContext({ history }).renderedInputTokens,
-  );
-  // The local checkpoint marker is app-side bookkeeping, so both numbers
-  // measure the model input itself: the history before the compaction, and the
-  // checkpoint content plus hot tail after it.
-  expect(outcome.checkpoint.contextSummary.estimatedTokensAfter).toBe(
-    estimateContext({
-      history: [{ role: 'system', type: 'message', content: outcome.checkpoint.content }, ...outcome.hotTail],
-    }).renderedInputTokens,
-  );
-  // This summary is longer than the cold turn it replaced, which is the shape
-  // the command route must report as `not_reduced` rather than `completed`.
-  expect(outcome.checkpoint.contextSummary.estimatedTokensAfter).toBeGreaterThan(
-    outcome.checkpoint.contextSummary.estimatedTokensBefore!,
-  );
+  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'non_reducing' });
+  expect(runtime.conversationStore.getHistory()).toEqual(history);
+  runtime.dispose();
 });
 
 it('manual local compaction discards a stale summary without overwriting newer history', async () => {
@@ -275,7 +259,7 @@ it('manual local compaction discards a stale summary without overwriting newer h
   });
   const history = Array.from({ length: 4 }, (_, index) => [
     { role: 'user', type: 'message', content: `user-${index}` },
-    { role: 'assistant', type: 'message', content: `answer-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}-` + 'x'.repeat(1500) },
   ]).flat();
   runtime.stateFacade.importState({ history, previousResponseId: null });
 

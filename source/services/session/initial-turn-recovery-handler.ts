@@ -148,6 +148,9 @@ export class InitialTurnRecoveryHandler {
         yield {
           type: 'error',
           message: describeError(error),
+          ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? { code: error.code }
+            : {}),
           ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
           ...(droppedUserMessage ? { droppedUserMessage } : {}),
         };
@@ -286,6 +289,9 @@ export class InitialTurnRecoveryHandler {
       yield {
         type: 'error',
         message: describeError(error),
+        ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+          ? { code: error.code }
+          : {}),
         ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
       };
       this.#logFailure(error);

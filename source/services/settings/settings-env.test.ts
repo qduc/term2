@@ -1,5 +1,25 @@
 import { it, expect } from 'vitest';
 import { buildEnvOverrides, isTestEnvironment, parseBooleanEnv } from './settings-env.js';
+import { SettingsService } from './settings-service.js';
+
+it('supervised profile overrides permissive persisted settings without rewriting defaults', () => {
+  const previous = process.env.TERM2_SUPERVISED;
+  process.env.TERM2_SUPERVISED = '1';
+  try {
+    const env = buildEnvOverrides();
+    const service = new SettingsService({ env, disableFilePersistence: true, disableLogging: true });
+    expect(service.get('agent.maxRequestInputTokens')).toBe(80_000);
+    expect(service.getSource('agent.maxRequestInputTokens')).toBe('env');
+    expect(service.get('agent.contextCompaction.enabled')).toBe(true);
+    expect(service.get('agent.contextCompaction.compactThresholdTokens')).toBe(60_000);
+    expect(service.get('agent.maxOutputTokens')).toBe(8_192);
+    service.setDynamic('agent.maxRequestInputTokens', 120_000);
+    expect(service.get('agent.maxRequestInputTokens')).toBe(120_000);
+  } finally {
+    if (previous === undefined) delete process.env.TERM2_SUPERVISED;
+    else process.env.TERM2_SUPERVISED = previous;
+  }
+});
 
 it('parseBooleanEnv: supports 1/true/yes (case-insensitive)', () => {
   expect(parseBooleanEnv('1')).toBe(true);

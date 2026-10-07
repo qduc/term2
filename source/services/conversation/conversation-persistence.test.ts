@@ -177,6 +177,63 @@ it.sequential('writer + loadConversation: round-trips a basic conversation', () 
   expect(restored!.messages[1].sender).toBe('bot');
 });
 
+it.sequential(
+  'replay: restart with a journal-backed in-flight tool settles it as aborted and keeps the pair in provider history',
+  () => {
+    // Simulates a crash mid-tool: the previous process wrote the user message,
+    // the provider-backed tool_call journal item, and the tool_started marker,
+    // then died before any tool_result. A restart must resume with the call/result
+    // pair in provider history and an uncertainty-preserving settlement — never
+    // silently drop the lone function_call and repeat the command blindly.
+    const id = persistenceModule.generateId();
+    const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+    writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/x' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } });
+    writer.append({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"rm -rf /tmp/thing"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"rm -rf /tmp/thing"}',
+        },
+      },
+    });
+    writer.append({
+      type: 'tool_started',
+      turnId: 'turn-1',
+      toolCallId: 'call-1',
+      toolName: 'shell',
+      arguments: { command: 'rm -rf /tmp/thing' },
+    });
+    void writer.close();
+
+    const restored = persistenceModule.loadConversation(id);
+    expect(restored).toBeTruthy();
+
+    const entry = restored!.toolLedger.find((e) => e.callId === 'call-1');
+    expect(entry?.status).toBe('unknown');
+    expect(entry?.failureReason).toBe('Session ended unexpectedly');
+    const pair = restored!.history.filter((item: any) => item.callId === 'call-1');
+    expect(pair.some((item: any) => item.type === 'function_call')).toBe(true);
+    const synthetic = pair.find((item: any) => item.type === 'function_call_output');
+    expect(synthetic).toBeTruthy();
+    expect(String(synthetic?.output)).toContain('Outcome unobserved');
+    expect(String(synthetic?.output)).toMatch(/[Vv]erify/);
+
+    // The provider chain is severed: the next request is stateless full-history.
+    expect(restored!.previousResponseId).toBeNull();
+    expect(restored!.replayWarnings).toContain('Previous turn was interrupted.');
+  },
+);
+
 it.sequential('loadConversation: skips malformed known event lines and continues replay', () => {
   const id = persistenceModule.generateId();
   const filePath = path.join(testDir, `${id}.jsonl`);

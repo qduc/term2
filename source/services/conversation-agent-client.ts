@@ -57,6 +57,7 @@ export type AgentClientChatOptions = {
   reasoningEffort?: ReasoningEffortSetting | null;
   instructions?: string;
   maxTokens?: number;
+  signal?: AbortSignal;
 };
 
 export type AgentClientChatResult = {

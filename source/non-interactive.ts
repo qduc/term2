@@ -50,6 +50,8 @@ export interface NonInteractiveBackgroundWork {
 
 export interface NonInteractiveConfig {
   prompt: string;
+  /** Locator for the retained conversation when a bounded run parks. */
+  recoverySessionId?: string;
   initialGoal?: DurableGoal;
   /** Publish the goal to request-time prompt readers only after its event append succeeds. */
   onGoalPersisted?: (goal: DurableGoal) => void;
@@ -345,6 +347,23 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     ): Promise<SendResult | ApprovalResult | null> => {
       let result: SendResult | ApprovalResult = await sendTurn(input, suppressUserMessageDisplay);
       while (result?.type === 'approval_required') {
+        if (
+          result.approval.checkIn === 'run_budget' &&
+          (config.settingsService?.get('agent.runBudget.escalation') ?? 'contain') === 'contain'
+        ) {
+          const diagnostic = {
+            type: 'run_budget_paused',
+            code: 'run_budget_paused',
+            sessionId: config.recoverySessionId,
+            evidence: result.approval.runBudgetEvent,
+            recovery: `Work and completed results are retained. Resume ${
+              config.recoverySessionId ? 'with --resume ' + config.recoverySessionId : 'this session'
+            } interactively to review the budget before continuing; --auto-approve only approves tools.`,
+          };
+          if (config.json) stdout.write(JSON.stringify(diagnostic) + '\n');
+          else stderr.write(diagnostic.recovery + '\n');
+          return result;
+        }
         const decision = await approvalPolicy.decide({
           autoApprove: config.autoApprove,
           approval: result.approval,
@@ -381,6 +400,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
 
     let result = await sendTurnAndResolveApprovals(config.prompt);
     if (result === null) return 1;
+    if (result.type === 'approval_required' && result.approval.checkIn === 'run_budget') return 2;
 
     if (result?.type === 'response') {
       if (backgroundWork) {
@@ -417,6 +437,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
               }
               result = notificationResult.value;
               if (result === null) return 1;
+              if (result.type === 'approval_required' && result.approval.checkIn === 'run_budget') return 2;
               if (result?.type !== 'response') {
                 if (config.json) {
                   stdout.write(JSON.stringify({ type: 'error', error: 'Unexpected conversation result.' }) + '\n');
@@ -477,12 +498,26 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       return reportBackgroundFailure('background_work_interrupted', backgroundWork.getOutstanding());
     }
     const message = error instanceof Error ? error.message : String(error);
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+    const recoverable =
+      code === 'request_input_limit' || code === 'context_compaction_hard_fit' || code === 'provider_context_overflow';
+    const recovery =
+      recoverable && config.recoverySessionId
+        ? `Work is retained. Resume with --resume ${config.recoverySessionId} after reviewing the context limit.`
+        : undefined;
     if (config.json) {
-      stdout.write(JSON.stringify({ type: 'error', error: message }) + '\n');
+      stdout.write(
+        JSON.stringify({
+          type: recoverable ? 'context_paused' : 'error',
+          error: message,
+          code,
+          ...(recoverable ? { sessionId: config.recoverySessionId, recovery } : {}),
+        }) + '\n',
+      );
     } else {
-      stderr.write(`error ${message}\n`);
+      stderr.write(`error ${message}${recovery ? '\n' + recovery : ''}\n`);
     }
-    return 1;
+    return recoverable ? 2 : 1;
   } finally {
     if (backgroundWork) {
       backgroundWork.notifications.setObserver?.(null);
@@ -567,7 +602,7 @@ export async function runNonInteractive(
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
     });
     runtime = createdRuntime.runtime;
-    if (config.initialGoal) {
+    {
       logWriter = createConversationLogWriter({
         sessionId,
         dir: getConversationsDir(),
@@ -580,9 +615,14 @@ export async function runNonInteractive(
         model: config.settingsService.get('agent.modelSelection').model,
         provider: config.settingsService.get('agent.modelSelection').provider,
       });
-      logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
-      config.onGoalPersisted?.(config.initialGoal);
+      if (config.initialGoal) {
+        logWriter.append({ type: 'goal_changed', version: 1, goal: config.initialGoal });
+        config.onGoalPersisted?.(config.initialGoal);
+      }
       createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
+      // Headless turns have no UI message writer. Commit the accepted request
+      // before dispatch so a context/budget pause can actually be resumed.
+      logWriter.append({ type: 'user_message', message: { id: randomUUID(), sender: 'user', text: config.prompt } });
     }
     if (config.settingsService) {
       primeActiveProfileNoticeIfActive(config.settingsService, (text) => {
@@ -602,6 +642,7 @@ export async function runNonInteractive(
     }
     return await runWithSession(createdRuntime.adapter, {
       ...config,
+      recoverySessionId: sessionId,
       agentClient: clientHandle.agentClient,
       sessionContextService,
       abort: () => clientHandle.agentClient.abort(),

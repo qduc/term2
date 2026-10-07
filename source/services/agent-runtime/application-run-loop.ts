@@ -1,4 +1,13 @@
+import { isOpenAICompaction, projectModelRequestHistory } from '../conversation/conversation-state-projector.js';
+import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
+import { resolveRequestOutput } from './model-context-policy.js';
 import { z } from 'zod';
+import {
+  enforceRequestInputLimit,
+  RequestInputLimitError,
+  ProviderContextOverflowError,
+  isProviderContextOverflow,
+} from './request-input-limit.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../../contracts/model-types.js';
 import type { ApplicationRunEvent } from '../../contracts/application-stream.js';
@@ -81,6 +90,7 @@ export interface AgentModelSettings {
   temperature?: number;
   reasoning?: { effort?: string; summary?: string };
   maxTokens?: number;
+  maxRequestInputTokens?: number | null;
   /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
   maxStreamOutputChars?: number;
   /** Optional total wall-clock ceiling for each provider request; 0 disables it. Opt-in backstop. */
@@ -117,13 +127,17 @@ export interface ApplicationRequestPreparation {
 export interface ApplicationBoundaryCompaction {
   readonly compact: (input: {
     history: readonly ProviderInputItem[];
+    instructions?: string;
+    tools?: unknown;
+    /** Record paid summary requests before deciding whether another may run. */
+    recordCostRecords?: (records: readonly ModelRequestCost[]) => boolean;
     automaticCompactionsThisRun: number;
     lastCompletedInputTokens?: number;
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
   }) => Promise<
     | { kind: 'unchanged'; notice?: string }
-    | { kind: 'failed'; provider: string }
+    | { kind: 'failed'; provider: string; costRecords?: ModelRequestCost[]; error?: Error }
     | {
         kind: 'compacted';
         history: ProviderInputItem[];
@@ -187,6 +201,8 @@ export interface ApplicationRunLoopOptions {
   ) => { deferCompaction?: boolean } | void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
+  /** Live global ceiling, shared by root and transient/role clients. */
+  readonly requestInputLimit?: () => number | null | undefined;
   /**
    * End the segment once the pending approval's tool result is in history,
    * instead of crossing the request boundary into another model call. The
@@ -263,6 +279,7 @@ export type ApplicationRunLoopDiagnosticOptions = {
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
 type RunState = {
+  inputUsageInvalidatedByCompaction?: boolean;
   agent: ApplicationAgent;
   recoveryBudget?: RetryRecoveryBudget;
   input: StreamedModelTurnInput[];
@@ -295,7 +312,7 @@ type RunState = {
   onRunBudgetEvent?: (event: RunBudgetEvent) => void;
   wrapUpOnCriticalRunBudget?: boolean;
   /** Copied from the run-budget policy: 'warn' never pauses the run, 'disabled' emits no events. */
-  runBudgetEscalation?: 'warn' | 'pause' | 'disabled';
+  runBudgetEscalation?: 'contain' | 'warn' | 'pause' | 'disabled';
   criticalWrapUpPending?: boolean;
   criticalWrapUpDispatched?: boolean;
   /** Main-agent evidence that must be resolved before another request or tool dispatch. */
@@ -321,6 +338,7 @@ type RunState = {
   terminalCause?: RunTerminationCause;
   /** Root-only provider request preparation, retained by continuations. */
   requestPreparation?: ApplicationRequestPreparation;
+  requestInputLimit?: () => number | null | undefined;
   sessionId?: string;
   turnId?: string;
   hookScope?: Term2HookScope;
@@ -586,6 +604,7 @@ export class ApplicationRunLoop {
           ? options.providerId
           : undefined,
       requestPreparation: options.requestPreparation,
+      requestInputLimit: options.requestInputLimit,
       disableChainingForAttempt: options.disableChainingForAttempt === true,
       sessionId: options.sessionId,
       turnId: options.turnId,
@@ -684,6 +703,7 @@ export class ApplicationRunLoop {
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
     if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
+    if (options.requestInputLimit) state.requestInputLimit = options.requestInputLimit;
     if (options.compactionHistory) state.compactionHistory = options.compactionHistory;
     if (options.disableChainingForAttempt === true) {
       state.disableChainingForAttempt = true;
@@ -887,25 +907,40 @@ export class ApplicationRunLoop {
           compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : undefined;
         if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
           const compactionStartedAt = Date.now();
+          let costsRecordedLive = false;
           const compaction = await options.boundaryCompaction.compact({
             history: compactionHistory,
+            instructions: state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions,
+            tools: toModelTools(state.agent.tools),
+            recordCostRecords: (records) => {
+              if (records.length) {
+                costsRecordedLive = true;
+                state.costRecords ??= [];
+                state.costRecords.push(...records);
+                for (const record of records) queue.push({ type: 'cost_update', record });
+                this.#evaluateRunBudget(state, stream, queue);
+              }
+              return !state.pendingRunBudgetInteraction && !state.criticalWrapUpPending;
+            },
             automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
             lastCompletedInputTokens: state.lastCompletedInputTokens,
             signal: options.signal,
             onStarted: (provider) =>
               outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
           });
+          if (compaction.kind !== 'unchanged' && !costsRecordedLive && compaction.costRecords?.length) {
+            state.costRecords ??= [];
+            state.costRecords.push(...compaction.costRecords);
+          }
           if (compaction.kind === 'compacted') {
+            state.inputUsageInvalidatedByCompaction = true;
+            state.lastCompletedInputTokens = undefined;
             state.compactedDuringRun = true;
             state.history.splice(0, state.history.length, ...compaction.history);
             state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
             state.responseId = undefined;
             state.responseProviderId = undefined;
             state.usesDeltaHistory = false;
-            if (compaction.costRecords?.length) {
-              state.costRecords ??= [];
-              state.costRecords.push(...compaction.costRecords);
-            }
             state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
             outputPush(stream, queue, {
               type: 'context_compaction_completed',
@@ -920,6 +955,7 @@ export class ApplicationRunLoop {
               strategy: 'local',
               durationMs: Math.max(0, Date.now() - compactionStartedAt),
             });
+            if (compaction.error) throw compaction.error;
           } else if (compaction.notice && compaction.notice !== state.compactionNotice) {
             state.compactionNotice = compaction.notice;
             this.#queuePendingSystemNotice(compaction.notice);
@@ -961,6 +997,7 @@ export class ApplicationRunLoop {
       let activeRequestId = '';
       let activeRequest: StreamedModelTurnRequest | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
+      let deferredNativeReasoning: PendingNativeReasoning[] = [];
       let criticalWrapUp = false;
 
       while (true) {
@@ -968,6 +1005,7 @@ export class ApplicationRunLoop {
         completion = undefined;
         sawToolCall = false;
         pendingNativeReasoning = undefined;
+        deferredNativeReasoning = [];
         // Stable process-unique request id, allocated immediately before dispatch
         // so a cost record can be settled exactly once (success or failure).
         activeRequestId = this.#nextRequestId();
@@ -998,6 +1036,8 @@ export class ApplicationRunLoop {
         if (options.signal?.aborted) requestSignal.abort();
         else options.signal?.addEventListener('abort', abortRequest, { once: true });
         const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
+        const requestCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
+        const effectiveOutput = resolveRequestOutput(requestCatalog, state.agent.modelSettings?.maxTokens);
         const request: StreamedModelTurnRequest = {
           instructions: criticalWrapUp
             ? `${requestInstructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
@@ -1010,16 +1050,14 @@ export class ApplicationRunLoop {
             ? { previousResponseId: state.responseId }
             : {}),
           ...(disableChaining ? { disableChaining: true } : {}),
-          input: state.input,
+          input: projectModelRequestHistory(state.input) as StreamedModelTurnInput[],
           tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
           applicationTools: criticalWrapUp ? [] : state.agent.tools,
           ...(state.agent.modelSettings?.temperature !== undefined
             ? { temperature: state.agent.modelSettings.temperature as number }
             : {}),
           ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
-          ...(state.agent.modelSettings?.maxTokens !== undefined
-            ? { maxTokens: state.agent.modelSettings.maxTokens }
-            : {}),
+          ...(effectiveOutput !== undefined ? { maxTokens: effectiveOutput } : {}),
           ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
           ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
           ...(state.agent.modelSettings?.providerData
@@ -1127,7 +1165,10 @@ export class ApplicationRunLoop {
               if (event.type === 'tool_call') {
                 toolArgumentRunaway?.observeToolCallCompleted();
                 generationGuard.observeToolCall(event.arguments);
-                pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+                // The authoritative completion may introduce a native
+                // replacement boundary before this call's reasoning.
+                if (pendingNativeReasoning) deferredNativeReasoning.push(pendingNativeReasoning);
+                pendingNativeReasoning = undefined;
                 sawToolCall = true;
                 streamedToolCalls.push(event);
               }
@@ -1140,6 +1181,31 @@ export class ApplicationRunLoop {
         };
         const dispatch = async (): Promise<void> => {
           state.requestPreparation?.prepare(request);
+          const fullContext =
+            request.previousResponseId && state.compactionHistory
+              ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+              : undefined;
+          const contextCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
+          enforceRequestInputLimit({
+            contextWindow: contextCatalog?.contextWindow,
+            maxOutputTokens: request.maxTokens,
+            limit: state.requestInputLimit
+              ? state.requestInputLimit()
+              : state.agent.modelSettings?.maxRequestInputTokens,
+            history:
+              fullContext?.kind === 'ready'
+                ? fullContext.history
+                : request.previousResponseId
+                ? [...(state.compactionHistory ?? []), ...request.input]
+                : request.input,
+            instructions: request.instructions ?? '',
+            tools: request.tools,
+            lastCompletedInputTokens: state.inputUsageInvalidatedByCompaction
+              ? undefined
+              : state.lastCompletedInputTokens,
+            chainedContextKnown:
+              !request.previousResponseId || !state.usesDeltaHistory || fullContext?.kind === 'ready',
+          });
           await consume();
         };
         try {
@@ -1147,6 +1213,33 @@ export class ApplicationRunLoop {
           else await dispatch();
           break;
         } catch (error) {
+          if (error instanceof RequestInputLimitError) {
+            this.#deps.logDiagnostic?.('Request input admission refused', {
+              code: error.code,
+              action: error.action,
+              reason: error.reason,
+              guardClass: 'admission',
+              setting: 'agent.maxRequestInputTokens',
+              executionScope: state.hookScope ?? 'root',
+              recovery: 'retained_work',
+              limit: error.limit,
+              estimatedTokens: error.estimatedTokens,
+              observedTokens: error.observedTokens,
+              capacity: error.capacity,
+              outputReserve: error.outputReserve,
+              estimationReserve: error.estimationReserve,
+            });
+            throw error;
+          }
+          if (isProviderContextOverflow(error)) {
+            this.#observeTerminalFailure(error, {
+              requestId: activeRequestId,
+              provider: state.currentProviderId,
+              model: state.agent.model,
+              tier: resolveServiceTier(request),
+            });
+            throw new ProviderContextOverflowError(error);
+          }
           const recoverOversizedToolArgument =
             isOversizedToolArgumentTrip(error) &&
             (state.oversizedToolArgumentRecoveries ?? 0) < MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES &&
@@ -1267,6 +1360,8 @@ export class ApplicationRunLoop {
         if (criticalWrapUp) {
           return finish(stream, state, queue);
         }
+        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
         await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
         if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
         if (state.toolExecution.pendingApprovals.length > 0) {
@@ -1307,6 +1402,7 @@ export class ApplicationRunLoop {
         if (normalizedCompletionUsage) {
           if (normalizedCompletionUsage.prompt_tokens !== undefined) {
             state.lastCompletedInputTokens = normalizedCompletionUsage.prompt_tokens;
+            state.inputUsageInvalidatedByCompaction = false;
           }
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {
@@ -1361,30 +1457,31 @@ export class ApplicationRunLoop {
       // completion rather than as separate stream events. Their reasoning may
       // likewise be terminal-only, so associate it before replaying calls.
       const toolCalls = [...streamedToolCalls];
-      if (!sawToolCall) {
-        for (const item of finalCompletion.output) {
-          if (item.type === 'reasoning') pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, item);
-        }
-        for (const item of finalCompletion.output) {
-          if (item.type !== 'tool_call') continue;
-          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-          sawToolCall = true;
-          toolCalls.push(item);
-        }
+      const hasTerminalReasoning = finalCompletion.output.some(
+        (item) => item.type === 'reasoning' && appendNativeReasoning(undefined, item) !== undefined,
+      );
+      if (hasTerminalReasoning) {
+        // Terminal output supplies native ordering and authoritative metadata.
+        // Streamed fragments have already been displayed, but are not history.
+        pendingNativeReasoning = undefined;
+      } else {
+        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
       }
-      // A native reasoning item belongs to the completed assistant turn even
-      // when no tool call follows it. Commit it before assistant text so both
-      // stateless continuation and persisted canonical history retain the
-      // provider-specific metadata exactly once.
-      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-
-      // Provider-native completion items (notably OpenAI compaction items)
-      // must stay in the live provider history. The session layer later
-      // applies compaction's replacement rule; keeping the item here also
-      // makes it available to an in-flight tool continuation before that
-      // terminal history commit occurs.
       for (const item of finalCompletion.output) {
+        if (item.type === 'reasoning') {
+          // Each terminal native item is independently replayable; encrypted
+          // reasoning cannot be concatenated or overwritten by its sibling.
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+          pendingNativeReasoning = appendNativeReasoning(undefined, item);
+          continue;
+        }
+        if (item.type === 'tool_call') {
+          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+          if (!sawToolCall) toolCalls.push(item);
+          continue;
+        }
         if (item.type !== 'provider_opaque') continue;
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
         const historyItem: ProviderInputItem = {
           ...item.item,
           providerOpaque: {
@@ -1394,8 +1491,16 @@ export class ApplicationRunLoop {
         };
         state.history.push(historyItem);
         state.input.push(item);
+        if (isOpenAICompaction(item)) {
+          // Completion usage describes the request before native replacement.
+          // Retain billed usage/costs; invalidate only the next admission hint.
+          state.lastCompletedInputTokens = undefined;
+          state.inputUsageInvalidatedByCompaction = true;
+        }
         outputPush(stream, queue, { type: 'item', item });
       }
+      sawToolCall = toolCalls.length > 0;
+      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
 
       const assistantText = finalCompletion.output
         .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')
@@ -1599,8 +1704,9 @@ export class ApplicationRunLoop {
     if (
       !state.wrapUpOnCriticalRunBudget &&
       !state.pendingRunBudgetInteraction &&
-      state.runBudgetEscalation !== 'warn' &&
-      this.#requiresHumanBudgetDecision(event)
+      (state.runBudgetEscalation === 'contain'
+        ? event.type === 'budget_stage' && event.stage === 'critical'
+        : state.runBudgetEscalation !== 'warn' && this.#requiresHumanBudgetDecision(event))
     ) {
       state.pendingRunBudgetInteraction = { type: 'run_budget_interaction', event };
       state.runBudgetGrantConsumed = false;
@@ -1827,6 +1933,26 @@ function mergeChainedCompactionHistory(
   deltaHistory: readonly ProviderInputItem[],
 ): { kind: 'ready'; history: ProviderInputItem[] } | { kind: 'skipped'; reason: 'user_mismatch' } {
   const firstDeltaItem = deltaHistory[0];
+  const normalizedDelta = normalizeApplicationInput(deltaHistory);
+  if (normalizedDelta[0]?.type === 'tool_result') {
+    // A tool-only continuation needs a complete snapshot with still-open
+    // producing calls. Normalize supported legacy/custom forms for comparison,
+    // retain original provider items, and validate every later call/receipt.
+    const pending = new Map<string, string>();
+    const seenCalls = new Set<string>();
+    for (const item of [...normalizeApplicationInput(sessionHistory), ...normalizedDelta]) {
+      if (item.type === 'tool_call') {
+        if (!item.id || seenCalls.has(item.id)) return { kind: 'skipped', reason: 'user_mismatch' };
+        seenCalls.add(item.id);
+        pending.set(item.id, item.toolType ?? 'function');
+      } else if (item.type === 'tool_result') {
+        if (!item.id || pending.get(item.id) !== (item.toolType ?? 'function'))
+          return { kind: 'skipped', reason: 'user_mismatch' };
+        pending.delete(item.id);
+      }
+    }
+    return { kind: 'ready', history: [...sessionHistory, ...deltaHistory] };
+  }
   if (!firstDeltaItem || firstDeltaItem.type !== 'message' || firstDeltaItem.role !== 'user') {
     return { kind: 'skipped', reason: 'user_mismatch' };
   }

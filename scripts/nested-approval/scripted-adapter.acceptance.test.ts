@@ -132,7 +132,9 @@ describe('scripted nested approval acceptance entry point', () => {
       }),
     });
 
+    // The scripted task needs one tool turn and one final response.
     const providerClient = new AgentClient({
+      maxTurns: 2,
       model: 'm2b-model',
       providerOverride: providerId,
       approvalPolicyRegistry,

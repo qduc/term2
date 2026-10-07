@@ -6,6 +6,7 @@ export type FakeProviderScenario =
   | 'success'
   | 'final-only'
   | 'error'
+  | 'context-overflow'
   | 'early-close'
   | 'incomplete'
   | 'tool-fragments'
@@ -62,6 +63,11 @@ export async function startFakeProviderHttpServer(options: {
     if (scenario === 'error') {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Injected provider failure' } }));
+      return;
+    }
+    if (scenario === 'context-overflow') {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 'context_length_exceeded', message: 'Injected capacity rejection' } }));
       return;
     }
     if (scenario === 'early-close') {

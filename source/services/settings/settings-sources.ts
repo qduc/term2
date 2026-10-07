@@ -22,6 +22,7 @@ export const SETTINGS_SOURCE_KEYS = {
     reasoningEffort: 'agent.reasoningEffort',
     temperature: 'agent.temperature',
     maxTurns: 'agent.maxTurns',
+    maxRequestInputTokens: 'agent.maxRequestInputTokens',
     maxOutputTokens: 'agent.maxOutputTokens',
     maxStreamOutputChars: 'agent.maxStreamOutputChars',
     maxModelRequestDurationMs: 'agent.maxModelRequestDurationMs',

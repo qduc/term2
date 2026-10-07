@@ -145,15 +145,20 @@ it('auditSessionLog: agrees with replayEvents about which calls were left unpaid
   const audit = auditSessionLog(envelopes);
   const restored = replayEvents(envelopes);
 
-  // Replay marks exactly the unpaid calls aborted on recovery; the audit must
-  // name the same set without resuming anything.
-  const abortedByReplay = restored.toolLedger
-    .filter((entry) => entry.status === 'aborted' && entry.failureReason === 'Session ended unexpectedly')
+  // Replay settles exactly the unpaid calls on recovery (status unknown, no
+  // observed result); the audit must name the same set without resuming
+  // anything.
+  const settledByReplay = restored.toolLedger
+    .filter(
+      (entry) =>
+        entry.failureReason === 'Session ended unexpectedly' &&
+        !(entry.historyItems ?? []).some((item: any) => item.type === 'tool_result' && item.callId === entry.callId),
+    )
     .map((entry) => entry.callId)
     .sort();
 
-  expect(abortedByReplay).toEqual(['c2']);
-  expect(audit.unfinishedToolCalls.map((c) => c.callId).sort()).toEqual(abortedByReplay);
+  expect(settledByReplay).toEqual(['c2']);
+  expect(audit.unfinishedToolCalls.map((c) => c.callId).sort()).toEqual(settledByReplay);
 });
 
 it('formatSessionAudit: renders the verdict and the unfinished work', () => {

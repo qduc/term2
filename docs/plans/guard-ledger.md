@@ -2890,6 +2890,15 @@ files, 11028 passed); `pnpm test:integration` (14 files, 112 passed);
 `pnpm test:provider-black-box` (22 files, 193 passed); `pnpm test:e2e` (4 files,
 30 passed).
 
+Follow-up (call-id binding): a check's result is the first same-id result after
+the call's own position inside the window, not the earliest one. Chat providers
+that omit ids number calls `call_${index}`, so `call_0` repeats every response;
+earliest-match paired a check with an earlier `read_file` result (valid checks
+never ended the turn) or with an earlier recorded check (a rejected claim
+authorized the stop). Red proof: reverting to earliest-in-window fails the
+"repeated call ids" run-loop and unit tests; searching the full history also
+fails "ignores a recorded call_0 result from before the latest user message".
+
 Known limitations (deferred): the `[Mode Notice] ` prefix match that separates
 harness notices from user instructions; harness-injected user-role messages
 without that prefix restart the window (and both allowances); hosted

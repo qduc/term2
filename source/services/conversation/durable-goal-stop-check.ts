@@ -182,19 +182,25 @@ const outputText = (output: unknown): string => {
     .join('');
 };
 
-/** True only when the call's paired result is the tool's own success text. */
-const goalCheckWasRecorded = (call: ProviderInputItem, window: readonly ProviderInputItem[]): boolean => {
-  const callId = callIdOf(call);
+/**
+ * True only when the call's own result is the tool's success text.
+ *
+ * Call ids are not unique: providers that omit them get `call_${index}`, so the
+ * first call of every response is `call_0`. A call's result is therefore the
+ * first matching result after the call's own position, never an earlier one,
+ * and the search stays inside the current turn's window.
+ */
+const goalCheckWasRecorded = (window: readonly ProviderInputItem[], callPosition: number): boolean => {
+  const call = window[callPosition];
+  const callId = call ? callIdOf(call) : undefined;
   if (callId === undefined) return false;
-  const result = window.find(
-    (item) =>
-      item !== call &&
-      typeof item.type === 'string' &&
-      TOOL_ITEM_TYPES.has(item.type) &&
-      !TOOL_CALL_TYPES.has(item.type) &&
-      callIdOf(item) === callId,
-  );
-  return result !== undefined && outputText(result.output).trimStart().startsWith(GOAL_CHECK_RECORDED_PREFIX);
+  for (let index = callPosition + 1; index < window.length; index += 1) {
+    const item = window[index]!;
+    if (typeof item.type !== 'string' || !TOOL_ITEM_TYPES.has(item.type) || TOOL_CALL_TYPES.has(item.type)) continue;
+    if (callIdOf(item) !== callId) continue;
+    return outputText(item.output).trimStart().startsWith(GOAL_CHECK_RECORDED_PREFIX);
+  }
+  return false;
 };
 
 const parseArguments = (item: ProviderInputItem): unknown => {
@@ -255,6 +261,7 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
   if (goal?.status !== 'active') return { action: 'stop', reason: 'no_active_goal' };
 
   let latestToolItem: ProviderInputItem | undefined;
+  let latestToolIndex = -1;
   let remindersWithoutWork = 0;
   let remindersThisTurn = 0;
   let sawWork = false;
@@ -272,7 +279,10 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
     }
     if (typeof item.type !== 'string' || !TOOL_ITEM_TYPES.has(item.type)) continue;
     const isGoalCheck = item.name === TOOL_NAME_GOAL_CHECK;
-    if (!latestToolItem && (!isGoalCheck || TOOL_CALL_TYPES.has(item.type))) latestToolItem = item;
+    if (!latestToolItem && (!isGoalCheck || TOOL_CALL_TYPES.has(item.type))) {
+      latestToolItem = item;
+      latestToolIndex = index;
+    }
     if (!isGoalCheck) sawWork = true;
   }
 
@@ -280,7 +290,8 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
   let detail = '';
   if (latestToolItem?.name === TOOL_NAME_GOAL_CHECK) {
     const validation = validateGoalCheck(parseArguments(latestToolItem), goal);
-    if (validation.ok && !goalCheckWasRecorded(latestToolItem, history.slice(windowStart))) {
+    const window = history.slice(windowStart);
+    if (validation.ok && !goalCheckWasRecorded(window, latestToolIndex - windowStart)) {
       reason = 'incomplete_check';
       detail = 'it was not recorded: the call was denied, rejected, or failed';
     } else if (validation.ok) {

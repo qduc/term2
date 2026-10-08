@@ -19,7 +19,7 @@ import {
  */
 
 type Step =
-  | { text?: string; calls?: Array<{ name: string; args: Record<string, unknown> }> }
+  | { text?: string; calls?: Array<{ name: string; args: Record<string, unknown>; id?: string }> }
   | ((request: StreamedModelTurnRequest) => Promise<never> | never);
 
 function scriptedModel(steps: Step[]) {
@@ -39,7 +39,7 @@ function scriptedModel(steps: Step[]) {
           ...(step.text ? [{ type: 'message' as const, content: [{ type: 'text' as const, text: step.text }] }] : []),
           ...(step.calls ?? []).map((call, index) => ({
             type: 'tool_call' as const,
-            id: `call-${requests.length}-${index}`,
+            id: call.id ?? `call-${requests.length}-${index}`,
             name: call.name,
             arguments: JSON.stringify(call.args),
           })),
@@ -289,6 +289,60 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     // The rejected check is followed by reminders instead of an accepted stop.
     expect(scripted.requests).toHaveLength(4);
     expect(JSON.stringify(scripted.requests[2]!.input)).toContain('it was not recorded');
+    expect(resumed.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+  });
+
+  it('repeated call ids: an achieved check after real work ends the turn when every call is call_0', async () => {
+    // OpenAI-compatible chat providers that omit ids get call_${index}, so the
+    // first call of every response is call_0.
+    const t = setup([
+      { calls: [{ ...work, id: 'call_0' }] },
+      { calls: [{ ...goalCheck('achieved'), id: 'call_0' }] },
+      { text: 'Done.' },
+      { calls: [{ ...goalCheck('achieved'), id: 'call_0' }] },
+      { text: 'Done.' },
+      { text: 'never sent' },
+    ]);
+
+    const stream = t.loop.startStream(t.agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await stream.completed;
+
+    expect(t.requests).toHaveLength(3);
+    expect(reminderCount(t.requests)).toBe(0);
+    expect(stream.terminalCause).toBeUndefined();
+    expect(stream.finalOutput).toBe('Done.');
+  });
+
+  it('repeated call ids: an earlier recorded check on call_0 does not authorize a later rejected check on call_0', async () => {
+    const t = setup([]);
+    const base = createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }) as ToolDefinition;
+    // Only an achieved claim needs approval, so the earlier not_achieved check is recorded.
+    const gatedAchieved: ToolDefinition = {
+      ...base,
+      needsApproval: (params: any) => params?.status === 'achieved',
+    };
+    const scripted = scriptedModel([
+      { calls: [{ ...goalCheck('not_achieved', 'tests still red'), id: 'call_0' }] },
+      { calls: [{ ...goalCheck('achieved'), id: 'call_0' }] },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'never sent' },
+    ]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => scripted.model });
+    const agent = { ...t.agent, tools: [readFile, gatedAchieved] };
+
+    const first = loop.startStream(agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await first.completed;
+    expect(scripted.requests).toHaveLength(2);
+    expect(first.interruptions).toHaveLength(1);
+    (first.state as any).reject?.(first.interruptions![0]);
+    const resumed = loop.continueRunStream(first.state!, { onNormalStop: t.onNormalStop });
+    await resumed.completed;
+
+    // The rejected achieved claim is reminded, not accepted on the strength of the earlier result.
+    expect(scripted.requests.length).toBeGreaterThanOrEqual(4);
+    expect(JSON.stringify(scripted.requests[3]!.input)).toContain('it was not recorded');
     expect(resumed.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
   });
 

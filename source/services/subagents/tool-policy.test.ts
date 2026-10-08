@@ -1,3 +1,4 @@
+// leak-scan-allow-file repo-write: dot-prefixed mkdtemp dirs under cwd that the policy's inside-workspace checks need; unique names, removed in finally, and hidden from the directory listings other tests take.
 import { describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';

@@ -1,3 +1,4 @@
+// leak-scan-allow-file repo-write: dot-prefixed, uniquely named dirs/files under the working directory that the run needs to be inside the workspace; removed afterwards and hidden from the directory listings other tests take.
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as os from 'os';

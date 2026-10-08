@@ -1,3 +1,4 @@
+// leak-scan-allow-file handle: the spawn in the mock delegates to the real spawn only when no test installed a stub; the tests that start a real process await its exit.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import EventEmitter from 'node:events';
 import net from 'node:net';

@@ -1,3 +1,4 @@
+// leak-scan-allow-file repo-write: the temp dir is a sibling of the repository (outside it), removed in finally; it exists to test paths outside the leased root.
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';

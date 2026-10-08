@@ -1,3 +1,4 @@
+// leak-scan-allow-file listener: one exit hook that removes this file's temp dirs; harmless to run again for each file in a shared worker.
 import { it, describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';

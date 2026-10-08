@@ -1,3 +1,4 @@
+// leak-scan-allow-file chdir: changes into a private temp dir in beforeEach and restores the original cwd in afterEach.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';

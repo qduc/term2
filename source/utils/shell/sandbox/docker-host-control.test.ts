@@ -1,3 +1,4 @@
+// leak-scan-allow-file repo-write: dot-prefixed, uniquely named dirs/files under the working directory that the run needs to be inside the workspace; removed afterwards and hidden from the directory listings other tests take.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

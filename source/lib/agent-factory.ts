@@ -526,6 +526,7 @@ export function buildAgent(
     name,
     instructions,
     resolveInstructionsForRequest,
+    resolveRequestSnapshot,
     memoryContextEnabled,
     tools: toolDefinitions,
   } = getAgentDefinition(
@@ -608,6 +609,7 @@ export function buildAgent(
     ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
     instructions,
     ...(resolveInstructionsForRequest ? { resolveInstructionsForRequest } : {}),
+    ...(resolveRequestSnapshot ? { resolveRequestSnapshot } : {}),
     memoryContextEnabled,
     tools,
   };

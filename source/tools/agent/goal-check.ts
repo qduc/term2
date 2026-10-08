@@ -1,4 +1,4 @@
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import { getRequestSnapshot, type ToolDefinition, type FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_GOAL_CHECK } from '../tool-names.js';
 import type { DurableGoal } from '../../services/logging/conversation-log-events.js';
 import {
@@ -38,6 +38,15 @@ const RESULT_TEXT: Record<GoalCheckStatus, string> = {
     `deferred. The durable goal stays active and unchanged. Finish the user’s latest ` + 'request and end the turn.',
 };
 
+/**
+ * The session goal is not the one this response was shown (it was set after
+ * the request was built), or no request snapshot names a goal — a caller
+ * outside the root run loop. Not recorded, so the stop seam reminds.
+ */
+export const GOAL_CHANGED_PROBLEM =
+  'the session goal changed after this response began, so this check was for a goal no longer current; ' +
+  'check the current goal (shown in your instructions on the next request)';
+
 export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
@@ -60,9 +69,9 @@ export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index,
 /**
  * The working model's stop self-check for an active durable goal.
  *
- * Execution validates and acknowledges the report, naming the goal it judged;
- * the stop decision is made
- * from the turn history by `decideGoalStop`. The tool holds no state and has no
+ * Execution validates and acknowledges the report, naming the goal it judged —
+ * the goal snapshotted when the producing request was built, refusing when the
+ * session goal has changed since; the stop decision is made from the turn history by `decideGoalStop`. The tool holds no state and has no
  * write path of its own: an achieved check closes the goal only at the stop
  * seam (`createGoalStopPolicy`), once it is known to be the turn's last word.
  */
@@ -74,14 +83,21 @@ export function createGoalCheckToolDefinition(deps: {
     description: GOAL_CHECK_DESCRIPTION,
     parameters: goalCheckParameters,
     needsApproval: () => false,
-    execute: (params) => {
+    execute: (params, _context, details) => {
       const goal = deps.getGoal();
       const validation = validateGoalCheck(params, goal);
       if (!validation.ok || !goal) {
         return `Error: goal_check was not recorded: ${validation.ok ? 'no goal' : validation.problem}.`;
       }
-      // Name the goal judged, so a goal replaced mid-turn is never closed by this check.
-      return formatRecordedGoalCheck(goal.id, RESULT_TEXT[validation.check.status]);
+      // Record the goal the model judged: the one rendered into the request
+      // whose response made this call. Reading the session goal at execution
+      // would credit a goal set while the response streamed or while the call
+      // waited for approval, which the model never saw.
+      const judged = getRequestSnapshot(details)?.goal;
+      if (judged?.id !== goal.id) {
+        return `Error: goal_check was not recorded: ${GOAL_CHANGED_PROBLEM}.`;
+      }
+      return formatRecordedGoalCheck(judged.id, RESULT_TEXT[validation.check.status]);
     },
     formatCommandMessage: formatGoalCheckCommandMessage,
   };

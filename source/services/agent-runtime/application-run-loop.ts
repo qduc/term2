@@ -31,7 +31,12 @@ import type {
 } from '../../contracts/streamed-model-turn.js';
 import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../contracts/streamed-model-turn.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
-import type { AnyToolDefinition, ToolExecutionLifecyclePort, ToolRegistry } from '../../tools/types.js';
+import type {
+  AnyToolDefinition,
+  RequestSnapshot,
+  ToolExecutionLifecyclePort,
+  ToolRegistry,
+} from '../../tools/types.js';
 import { getRunCodeExecutionResult, runCodeExecutionMetadata } from '../../tools/system/run-code/run-code-execution.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { Term2HookScope } from '../hooks/hook-contracts.js';
@@ -109,6 +114,11 @@ export interface ApplicationAgent {
   readonly instructions: string;
   /** Resolve session-dynamic instruction context once at each provider request boundary. */
   readonly resolveInstructionsForRequest?: () => string;
+  /**
+   * Capture the session state rendered into a request, at that same request
+   * boundary. The response's tool calls execute with it (see `RequestSnapshot`).
+   */
+  readonly resolveRequestSnapshot?: () => RequestSnapshot;
   readonly model: string;
   readonly memoryContextEnabled?: boolean;
   modelSettings?: AgentModelSettings;
@@ -314,6 +324,8 @@ type RunState = {
   /** The interruption object the decision answered; binds it to that exact pending call. */
   approvalDecisionInterruption?: unknown;
   approvalMessage?: string;
+  /** Snapshot of the latest provider request built; the calls its response plans keep it. */
+  requestSnapshot?: RequestSnapshot;
   responseId?: string;
   usage?: unknown;
   /** Provider-reported input usage from the latest completed request. */
@@ -1062,6 +1074,9 @@ export class ApplicationRunLoop {
         if (options.signal?.aborted) requestSignal.abort();
         else options.signal?.addEventListener('abort', abortRequest, { once: true });
         const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
+        // Same synchronous step as the instructions above, so the snapshot is
+        // exactly the state the model is shown in this request.
+        state.requestSnapshot = state.agent.resolveRequestSnapshot?.();
         const requestCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
         const effectiveOutput = resolveRequestOutput(requestCatalog, state.agent.modelSettings?.maxTokens);
         const request: StreamedModelTurnRequest = {
@@ -1626,6 +1641,7 @@ export class ApplicationRunLoop {
       sessionId: state.sessionId,
       turnId: state.turnId,
       hookScope: state.hookScope,
+      ...(state.requestSnapshot ? { requestSnapshot: state.requestSnapshot } : {}),
       onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => {
         const callItem: ProviderInputItem = {
           type: event.toolType === 'custom' ? 'custom_tool_call' : 'function_call',

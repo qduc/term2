@@ -164,6 +164,8 @@ it('a transient (subagent/role) client never closes the goal, even with a record
       name: 'role',
       model: 'test-model',
       instructions: '',
+      // Snapshot the goal like the root agent does, so the check is recorded.
+      resolveRequestSnapshot: () => ({ goal: surface.deps.getGoal() }),
       tools: [createGoalCheckToolDefinition({ getGoal: surface.deps.getGoal })],
     },
     deps: { logger, settings: settingsFor(provider), sessionContextService, ...surface.deps },
@@ -194,26 +196,35 @@ describe('a goal replaced mid-turn is never closed by the previous goal’s chec
     arguments: JSON.stringify({ status: 'achieved', evidence: 'shipped', criteriaEvidence: 'vitest: 12 passed' }),
   });
 
-  async function runSwitch(next: DurableGoal, script: (n: number) => any[]) {
+  /**
+   * `switchAt: n` replaces the goal while the n-th response streams (after its
+   * request — and the goal rendered into it — was built). `'pause'` replaces it
+   * while the first response's calls wait at the approval boundary.
+   */
+  async function runSwitch(next: DurableGoal, script: (n: number) => any[], switchAt: number | 'pause' = 2) {
     const surface = goalSurface();
     const { provider, requests } = registerScriptedProvider('goal-switch', (_request, n) => {
-      // The user replaces the goal while the check's result is on its way back.
-      if (n === 2) surface.state.current = next;
+      if (n === switchAt) surface.state.current = next;
       return script(n);
     });
     const instance = new AgentClient({
       deps: { logger, settings: settingsFor(provider), sessionContextService, ...surface.deps },
       toolOwnership: new ToolOwnershipRegistry(),
     } as any);
+    let pausedCalls: string[] = [];
     try {
       const stream = await instance.startStream('ship it');
       await stream.completed;
+      pausedCalls = (stream.interruptions ?? []).map((item: any) => item.name);
+      if (switchAt === 'pause') surface.state.current = next;
       await approveUntilSettled(instance, stream);
     } finally {
       instance.dispose();
     }
-    return { surface, requests };
+    return { surface, requests, pausedCalls };
   }
+
+  const refused = 'goal_check was not recorded: the session goal changed after this response began';
 
   it('repro: an achieved check for G1, then setGoal(G2) before the final text, writes nothing', async () => {
     const { surface } = await runSwitch(replacement, (n) => (n === 1 ? [achievedCall('call-1')] : text('Shipped.')));
@@ -227,6 +238,58 @@ describe('a goal replaced mid-turn is never closed by the previous goal’s chec
     );
     expect(surface.writes).toEqual([]);
     expect(surface.state.current).toBe(replacementWithCriteria);
+  });
+
+  // The goal changes while the response carrying the check is still streaming:
+  // the check executes after the switch but judged the G1 shown in its request.
+  it('R1: an achieved check from a response shown G1 does not close a G2 set while it streamed', async () => {
+    const { surface, requests } = await runSwitch(
+      replacement,
+      (n) => (n === 1 ? [achievedCall('call-1')] : text('Shipped.')),
+      1,
+    );
+    expect(surface.writes).toEqual([]);
+    expect(requests[0]!.instructions).toContain(goal.outcome);
+    expect(requests[0]!.instructions).not.toContain(replacement.outcome);
+    // Refused at execution, so the seam reminds about G2 instead of closing it.
+    expect(JSON.stringify(requests[1]!.input)).toContain(refused);
+    expect(requests[1]!.instructions).toContain(replacement.outcome);
+    expect(JSON.stringify(requests[2]!.input)).toContain('the latest goal_check was incomplete');
+    expect(surface.state.current).toBe(replacement);
+  });
+
+  it('R1b: G1 criteria evidence from a response shown G1 does not close a G2 with its own criteria', async () => {
+    const { surface, requests } = await runSwitch(
+      replacementWithCriteria,
+      (n) => (n === 1 ? [achievedWithCriteria('call-1')] : text('Shipped.')),
+      1,
+    );
+    expect(surface.writes).toEqual([]);
+    expect(JSON.stringify(requests[1]!.input)).toContain(refused);
+    expect(surface.state.current).toBe(replacementWithCriteria);
+  });
+
+  it('a goal replaced while the check waits at the approval boundary is not closed when it resumes', async () => {
+    const { surface, requests, pausedCalls } = await runSwitch(
+      replacement,
+      (n) => (n === 1 ? [achievedCall('call-1')] : text('Shipped.')),
+      'pause',
+    );
+    // The check crossed a pause and resume; its request was shown G1.
+    expect(pausedCalls).toEqual(['goal_check']);
+    expect(surface.writes).toEqual([]);
+    expect(JSON.stringify(requests[1]!.input)).toContain(refused);
+    expect(surface.state.current).toBe(replacement);
+  });
+
+  it('a check from a response shown G2 closes G2 after an R1-style switch', async () => {
+    const { surface, requests } = await runSwitch(
+      replacement,
+      (n) => (n === 1 ? [achievedCall('call-1')] : n === 2 ? [achievedCall('call-2')] : text('Shipped.')),
+      1,
+    );
+    expect(JSON.stringify(requests[1]!.input)).toContain(refused);
+    expect(surface.writes).toEqual([{ ...replacement, status: 'achieved' }]);
   });
 
   it('a check made after the switch still closes G2', async () => {

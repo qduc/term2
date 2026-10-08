@@ -508,7 +508,7 @@ describe('rail skin: status bar', () => {
     }
   });
 
-  it('adds a second line only for an alert or provider quota', () => {
+  it('adds a second line only for an alert, or for quota that does not fit beside the status', () => {
     expect(bar(status()).trimEnd().split('\n')).toHaveLength(1);
 
     const alert = bar(
@@ -519,6 +519,7 @@ describe('rail skin: status bar', () => {
 
     const quota = bar(
       status({
+        columns: 60,
         gauges: {
           ...status().gauges,
           quotaWindows: [
@@ -531,12 +532,21 @@ describe('rail skin: status bar', () => {
     expect(quota.split('\n')).toHaveLength(2);
     expect(quota).toContain('5H ▰▰▱▱▱ 42%→3h');
     expect(quota).toContain('7D ▰▰▰▰▰ 91%');
+
+    // Wide enough, quota shares the status line instead of owning a row.
+    const wide = bar(
+      status({
+        columns: 200,
+        gauges: { ...status().gauges, quotaWindows: [{ label: '5H', percent: 42, resetText: '3h' }] },
+      }),
+    ).trimEnd();
+    expect(wide.split('\n')).toHaveLength(1);
+    expect(wide).toContain('5H ▰▰▱▱▱ 42%→3h');
   });
 
-  it('through the real container: one line, no padding, and the same facts at any width', () => {
+  it('through the real container: quota joins the status line, no padding', () => {
     const lines = sceneText('status', 'mono', 120).trimEnd().split('\n');
     expect(lines[0]).toMatch(/^Sandboxed · \[Q:2\] · Codex\/gpt-5\.6-luna high · ctx ▰+▱* \d+%/);
-    expect(lines[1]).toMatch(/^5H ▰+▱* 42%/);
-    expect(lines).toHaveLength(2);
+    expect(lines.join(' ')).toMatch(/5H ▰+▱* 42%/);
   });
 });

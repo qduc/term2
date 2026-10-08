@@ -171,7 +171,6 @@ export const RailStatusBar: FC<StatusView> = (view) => {
   const theme = useTheme();
   const { columns, alerts, quotaText, gauges } = view;
   const kept = fitItems(buildItems(view), Math.max(1, columns));
-  const hasQuota = gauges.quotaWindows.length > 0 || quotaText !== '';
 
   // Units, not items, are what wraps: an effort stays beside its model. The
   // separator trails its unit, so a wrapped line never begins with a dot.
@@ -180,6 +179,22 @@ export const RailStatusBar: FC<StatusView> = (view) => {
     if (item.glue && units.length > 0) units[units.length - 1].push(item);
     else units.push([item]);
   }
+
+  const quotaNodes =
+    gauges.quotaWindows.length > 0
+      ? gauges.quotaWindows.map((window) => <QuotaGauge key={window.label} window={window} />)
+      : quotaText
+      ? [
+          <Text key="quota" color={theme.textSubtle}>
+            {quotaText}
+          </Text>,
+        ]
+      : [];
+
+  // Quota joins the status line's own flow rather than owning a row, so it
+  // costs a row only when it genuinely does not fit beside the rest.
+  const flowCount = units.length + quotaNodes.length;
+  const dot = <Text color={theme.textSubtle}> ·</Text>;
 
   return (
     <Box flexDirection="column" width="100%">
@@ -192,18 +207,21 @@ export const RailStatusBar: FC<StatusView> = (view) => {
                 <ItemText item={item} />
               </React.Fragment>
             ))}
-            {unitIndex < units.length - 1 && <Text color={theme.textSubtle}> ·</Text>}
+            {unitIndex < flowCount - 1 && dot}
+          </Text>
+        ))}
+        {quotaNodes.map((node, index) => (
+          <Text key={node.key}>
+            {node}
+            {units.length + index < flowCount - 1 && dot}
           </Text>
         ))}
       </Box>
-      {(alerts.length > 0 || hasQuota) && (
+      {alerts.length > 0 && (
         <Box flexWrap="wrap" columnGap={2}>
           {alerts.map((alert) => (
             <Alert key={alert.id} alert={alert} />
           ))}
-          {gauges.quotaWindows.length > 0
-            ? gauges.quotaWindows.map((window) => <QuotaGauge key={window.label} window={window} />)
-            : quotaText && <Text color={theme.textSubtle}>{quotaText}</Text>}
         </Box>
       )}
     </Box>

@@ -569,21 +569,15 @@ const InputBox: FC<Props> = ({
         !escHintVisible &&
         queueSelectionIndex === null &&
         value === '' &&
-        !activePromptLabel && (
-          <Box marginTop={1}>
-            <MenuFooter hints={IDLE_HINTS} />
-          </Box>
-        )}
+        !activePromptLabel && <MenuFooter hints={IDLE_HINTS} />}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
-        <Box marginTop={1}>
-          <MenuFooter
-            hints={
-              (pendingQueuedMessages?.length ?? 0) > 0 && value === ''
-                ? [['↑', 'select queued'], ...TURN_IN_FLIGHT_HINTS]
-                : TURN_IN_FLIGHT_HINTS
-            }
-          />
-        </Box>
+        <MenuFooter
+          hints={
+            (pendingQueuedMessages?.length ?? 0) > 0 && value === ''
+              ? [['↑', 'select queued'], ...TURN_IN_FLIGHT_HINTS]
+              : TURN_IN_FLIGHT_HINTS
+          }
+        />
       )}
     </Box>
   );

@@ -340,19 +340,52 @@ const BottomArea: FC<BottomAreaProps> = ({
     showSurgePrompt,
   ]);
 
+  const hasBlockingPrompt =
+    showHandoffConfirm ||
+    showStandardModeConfirm ||
+    (showModeSwitchConfirm && pendingModeSwitch != null) ||
+    showSurgePrompt ||
+    showLargeUncachedPrompt;
   const hasLiveTasks =
     (listForegroundTaskTransferCandidates?.()?.length ?? (foregroundTransferCandidate ? 1 : 0)) > 0 ||
     (backgroundTaskDetails?.length ?? backgroundSubagentTasks?.length ?? 0) > 0;
   const hasTopContent =
-    (showApprovalPrompt && pendingApproval != null) ||
-    isProcessing ||
-    interruptConfirmVisible ||
-    hasLiveTasks ||
-    showQueuePausedPrompt;
+    (showApprovalPrompt && pendingApproval != null) || interruptConfirmVisible || hasLiveTasks || showQueuePausedPrompt;
 
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
+        {/* Working status sits above the divider so it is not boxed in with the task panel. */}
+        {!hasBlockingPrompt && (
+          <>
+            {isProcessing && toolCallStreamingInfo && (
+              <WorkingIndicator
+                phase="tool_call"
+                elapsedSeconds={workingElapsedSeconds}
+                tokensPerSecond={liveStreamingSpeed?.tps}
+                toolName={toolCallStreamingInfo.toolName}
+                argumentChars={toolCallStreamingInfo.argumentCharCount}
+                dotCount={dotCount}
+              />
+            )}
+            {isProcessing && !toolCallStreamingInfo && (
+              <WorkingIndicator
+                phase={
+                  thinkingStartedAt != null
+                    ? 'thinking'
+                    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+                    ? 'generating'
+                    : 'processing'
+                }
+                elapsedSeconds={thinkingStartedAt != null ? thinkingElapsedSeconds : workingElapsedSeconds}
+                tokensPerSecond={liveStreamingSpeed?.tps}
+                toolName={undefined}
+                argumentChars={undefined}
+                dotCount={dotCount}
+              />
+            )}
+          </>
+        )}
         {/* The one structural split on screen: printed history above, live controls below. */}
         <LiveDivider />
         {firstRunSetup?.active && firstRunSetup.phase && (
@@ -409,34 +442,8 @@ const BottomArea: FC<BottomAreaProps> = ({
                 />
               </Box>
             )}
-            {isProcessing && toolCallStreamingInfo && (
-              <WorkingIndicator
-                phase="tool_call"
-                elapsedSeconds={workingElapsedSeconds}
-                tokensPerSecond={liveStreamingSpeed?.tps}
-                toolName={toolCallStreamingInfo.toolName}
-                argumentChars={toolCallStreamingInfo.argumentCharCount}
-                dotCount={dotCount}
-              />
-            )}
             {activeShellCommand && (
               <ShellActivity command={truncateTerminalText(activeShellCommand, Math.max(1, terminalColumns - 24))} />
-            )}
-            {isProcessing && !toolCallStreamingInfo && (
-              <WorkingIndicator
-                phase={
-                  thinkingStartedAt != null
-                    ? 'thinking'
-                    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                    ? 'generating'
-                    : 'processing'
-                }
-                elapsedSeconds={thinkingStartedAt != null ? thinkingElapsedSeconds : workingElapsedSeconds}
-                tokensPerSecond={liveStreamingSpeed?.tps}
-                toolName={undefined}
-                argumentChars={undefined}
-                dotCount={dotCount}
-              />
             )}
             {interruptConfirmVisible && <Text color={theme.warning}>Press Esc again to interrupt</Text>}
             <BackgroundTasksPanel

@@ -4,6 +4,7 @@ import CommandMessage from './CommandMessage.js';
 import CommandGroupSummary from './CommandGroupSummary.js';
 import ChatMessage from './ChatMessage.js';
 import Banner from '../layout/Banner.js';
+import SessionBoundary from './SessionBoundary.js';
 import SubagentActivityMessage from './SubagentActivityMessage.js';
 import { groupCommandRuns, type CommandGroupMessage } from './command-grouping.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -18,6 +19,8 @@ import {
 type Props<T extends MessageLike = Message> = {
   messages: T[];
   bannerItems?: string[];
+  /** Mark the banner as the start of a fresh session after a reset. */
+  bannerStartsNewSession?: boolean;
   settingsService?: SettingsService;
   restoredStaticMessageIds?: readonly string[];
   /** The turn is held at an approval or check-in prompt, so no tool is executing. */
@@ -247,6 +250,7 @@ export const shouldCommitMessageToStatic = ({
 const MessageList = <T extends MessageLike = Message>({
   messages,
   bannerItems = [],
+  bannerStartsNewSession = false,
   settingsService,
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   turnPaused = false,
@@ -539,7 +543,12 @@ const MessageList = <T extends MessageLike = Message>({
 
   const renderStaticItem = (item: StaticItem, idx: number) => {
     if (item.kind === 'banner') {
-      return <Box key={item.id}>{settingsService && <Banner settingsService={settingsService} />}</Box>;
+      return (
+        <Box key={item.id} flexDirection="column">
+          {bannerStartsNewSession && <SessionBoundary width={contentWidth} />}
+          {settingsService && <Banner settingsService={settingsService} />}
+        </Box>
+      );
     }
 
     // The trailing blank line is rendered outside <Static> (see below). It must

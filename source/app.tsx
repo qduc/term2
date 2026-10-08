@@ -206,6 +206,7 @@ const App: FC<AppProps> = ({
       : mode !== 'text';
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
+  const [bannerStartsNewSession, setBannerStartsNewSession] = useState(false);
   const [activeRestoredStaticMessageIds, setActiveRestoredStaticMessageIds] = useState(restoredStaticMessageIds);
   const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'concise';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
@@ -433,6 +434,7 @@ const App: FC<AppProps> = ({
     await clearConversation();
     if (goal && !isRollover) appendGoal?.(goal);
     setStartupBannerIds(['startup-banner-0']);
+    setBannerStartsNewSession(true);
     setActiveRestoredStaticMessageIds([]);
     setMessageListEpoch((epoch) => epoch + 1);
   }, [appendGoal, clearConversation, goal, onPrintUsage]);
@@ -490,6 +492,7 @@ const App: FC<AppProps> = ({
       resetConversationPresentation();
       onSessionIdChange?.(plannedSuccessorId, successorCreatedAt);
       setStartupBannerIds(['startup-banner-0']);
+      setBannerStartsNewSession(true);
       setActiveRestoredStaticMessageIds([]);
       setMessageListEpoch((epoch) => epoch + 1);
     }
@@ -1458,6 +1461,7 @@ const App: FC<AppProps> = ({
             key={messageListEpoch}
             messages={messages}
             bannerItems={startupBannerIds}
+            bannerStartsNewSession={bannerStartsNewSession}
             settingsService={settingsService}
             restoredStaticMessageIds={activeRestoredStaticMessageIds}
             turnPaused={effectiveWaitingForApproval}

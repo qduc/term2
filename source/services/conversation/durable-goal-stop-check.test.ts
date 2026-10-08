@@ -33,6 +33,12 @@ const call = (name: string, args: unknown, output: unknown = 'ok'): ProviderInpu
 const check = (args: Record<string, unknown>, output = `${GOAL_CHECK_RECORDED_PREFIX} ${String(args.status)}.`) =>
   call('goal_check', args, output);
 const work = () => call('read_file', { path: 'a.ts' });
+/** Providers without native ids number calls per response, so every response's first call is call_0. */
+const pairWithId = (callId: string, name: string, args: unknown, output: unknown): ProviderInputItem[] => [
+  { type: 'function_call', callId, name, arguments: JSON.stringify(args) },
+  { type: 'function_call_result', callId, name, output },
+];
+const recorded = (status: string) => `${GOAL_CHECK_RECORDED_PREFIX} ${status}.`;
 const reminder = (): ProviderInputItem => user(`[Mode Notice] ${GOAL_STOP_REMINDER_PREFIX} (1 of 2): check.`);
 
 describe('validateGoalCheck', () => {
@@ -223,6 +229,57 @@ describe('decideGoalStop', () => {
       reason: 'incomplete_check',
     });
   });
+});
+
+describe('decideGoalStop with repeated provider call ids', () => {
+  const achieved = { status: 'achieved', evidence: 'tests pass' };
+
+  it('binds a check to its own result when an earlier tool call reused call_0', () => {
+    const history = [
+      user('ship it'),
+      ...pairWithId('call_0', 'read_file', { path: 'a.ts' }, 'file contents'),
+      ...pairWithId('call_0', 'goal_check', achieved, recorded('achieved')),
+      assistant('Done.'),
+    ];
+    expect(decideGoalStop(goal, history)).toEqual({ action: 'stop', reason: 'achieved' });
+  });
+
+  it('does not let an earlier recorded check on call_0 authorize a later rejected check on call_0', () => {
+    const history = [
+      user('ship it'),
+      ...pairWithId(
+        'call_0',
+        'goal_check',
+        { status: 'not_achieved', evidence: 'tests red' },
+        recorded('not achieved'),
+      ),
+      ...work(),
+      ...pairWithId('call_0', 'goal_check', achieved, 'Tool execution was not approved.'),
+      assistant('Done.'),
+    ];
+    const decision = decideGoalStop(goal, history);
+    expect(decision).toMatchObject({ action: 'continue', reason: 'incomplete_check' });
+    expect(decision.action === 'continue' && decision.reminder).toContain('was not recorded');
+  });
+
+  it.each([
+    ['a rejected result', [{ type: 'function_call_result', callId: 'call_0', name: 'goal_check', output: 'rejected' }]],
+    ['no result', []],
+  ])(
+    'ignores a recorded call_0 result from before the latest user message when the current check has %s',
+    (_case, currentResult) => {
+      const history = [
+        user('first instruction'),
+        ...pairWithId('call_0', 'goal_check', achieved, recorded('achieved')),
+        assistant('Done.'),
+        user('second instruction'),
+        { type: 'function_call', callId: 'call_0', name: 'goal_check', arguments: JSON.stringify(achieved) },
+        ...(currentResult as ProviderInputItem[]),
+        assistant('Done again.'),
+      ];
+      expect(decideGoalStop(goal, history)).toMatchObject({ action: 'continue', reason: 'incomplete_check' });
+    },
+  );
 });
 
 describe('createGoalStopPolicy', () => {

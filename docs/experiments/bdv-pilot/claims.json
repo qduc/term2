@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "id": "approval-call-binding",
+      "statement": "An approval for one shell tool call cannot authorize a later call that reuses the same provider call id, and adapter-generated ids for missing or empty provider ids remain distinct.",
+      "authority": "Frozen pilot contract derived from the existing user-facing approval policy and the expected safe side effects; this runner cannot alter the expected outcomes.",
+      "probe": "approval-reuse-integration",
+      "acceptance": {
+        "passedFiles": 1,
+        "passedTests": 4,
+        "mustAssert": [
+          "the first GREEN unsandboxed command runs and writes exactly 'approved\\n'",
+          "the subsequent RED rm command is refused and its victim file remains exactly 'must survive\\n'",
+          "the CLI reports two distinct approval decisions and the RED refusal reason",
+          "all four provider-id, repeated-id, omitted-id, and empty-id scenarios pass",
+          "the provider receives both calls and paired tool results"
+        ]
+      }
+    }
+  ]
+}

@@ -57,6 +57,7 @@
     "test:integration": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts",
     "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
     "test:provider-black-box": "cross-env NODE_ENV=test node scripts/run-provider-black-box.mjs",
+    "bdv": "node scripts/bdv/run.mjs",
     "provider:record": "tsx scripts/provider-record.ts",
     "provider:fixture:prepare": "tsx scripts/provider-fixture-prepare.ts",
     "provider:fixture:scan": "cross-env NODE_ENV=test vitest run --reporter=minimal scripts/provider-black-box/fixture-security.test.ts",

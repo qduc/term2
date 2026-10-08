@@ -4,6 +4,12 @@
 > repairs. Historical disabled/warn/once-per-run local dispositions below describe
 > the earlier implementation. Explicit settings remain supported; native Codex
 > retains its one/run policy. See that plan for policy, evidence and limits.
+>
+> 2026-10-08 amendment: the run-budget default is `warn` again (Duc's decision
+> before 0.32.0). `contain` — pause only at budget exhaustion — is opt-in through
+> `agent.runBudget.escalation`. Default auto compaction is unchanged.
+> Non-interactive mode parks every run-budget check-in (exit 2, `--resume`
+> locator) whatever escalation raised it; `--auto-approve` never grants budget.
 
 # Provider-neutral local context compaction
 

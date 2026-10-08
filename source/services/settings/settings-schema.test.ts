@@ -179,7 +179,7 @@ it('run-budget policy defaults are runtime-modifiable and reject invalid limits'
     extensionPercent: 50,
     maxParentExtensions: 2,
     identicalToolCallThreshold: 3,
-    escalation: 'contain',
+    escalation: 'warn',
   });
   expect(DEFAULT_SETTINGS.agent.runBudget).toEqual(AgentSettingsSchema.parse({}).runBudget);
 

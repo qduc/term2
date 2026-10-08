@@ -45,7 +45,7 @@ export function readRunBudgetPolicy(settings: RunBudgetSettingsReader): RunBudge
     extensionPercent: settings.get('agent.runBudget.extensionPercent'),
     maxParentExtensions: settings.get('agent.runBudget.maxParentExtensions'),
     identicalToolCallThreshold: settings.get('agent.runBudget.identicalToolCallThreshold'),
-    escalation: settings.get('agent.runBudget.escalation') ?? 'contain',
+    escalation: settings.get('agent.runBudget.escalation') ?? 'warn',
   };
 }
 

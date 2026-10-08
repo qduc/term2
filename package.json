@@ -65,6 +65,7 @@
     "test:lane": "node scripts/run-deterministic-lane.mjs",
     "test:lane:seed": "node scripts/run-deterministic-lane.mjs",
     "test:verbose": "cross-env NODE_ENV=test vitest run",
+    "test:hybrid": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.hybrid.config.ts",
     "test:impact": "node scripts/test-impact/run.mjs",
     "test:impact:record": "node scripts/test-impact/record.mjs",
     "test:related": "cross-env NODE_ENV=test vitest related --run --reporter=minimal --passWithNoTests=false",

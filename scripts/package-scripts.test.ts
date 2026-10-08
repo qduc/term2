@@ -12,6 +12,7 @@ const testRunnerScripts = [
   'test:verbose',
   'test:changed',
   'test:related',
+  'test:hybrid',
   'test:vitest:watch',
   'test:vitest:coverage',
 ] as const;

@@ -1,3 +1,36 @@
+## [0.32.0] - 2026-10-08
+
+### Features
+- Active session goals now have a stop check. While a durable goal is active, the agent reports its progress through a new `goal_check` tool (`achieved`, `blocked`, `not_achieved`, or `deferred`) before a turn can end. If it tries to stop without a valid check, term2 reminds it and the same turn continues. Expect at least one extra model request on turns with an active goal, plus one per reminder. Reminders are capped: two in a row without new work, or six per user message. At the cap the turn ends, the goal stays active, and term2 shows "Goal stop check unresolved…" (non-interactive mode prints it on stderr).
+- A valid `achieved` goal check that ends a turn now closes the durable goal on its own, just like `/goal achieved`. The goal is saved as achieved and its status line is shown (on stderr in non-interactive mode). `blocked`, `deferred`, and `not_achieved` checks never change the goal, and subagents and `run_code` scripts cannot close it. A check counts only for the goal the agent was shown: if you replace the goal with `/goal set` (from the prompt or the control socket) while a turn is running, the earlier check is not recorded or does not count, and the agent is asked to check the new goal instead.
+- Before each model request, term2 now checks the estimated input against the model's known context window, leaving room for the output allocation and a 10% estimation reserve. A request that cannot fit is paused with your conversation and completed work kept, instead of being sent and failing at the provider. The new `agent.maxRequestInputTokens` setting adds an optional lower ceiling (default: none beyond the model's capacity).
+- Setting `TERM2_SUPERVISED=1` selects an unattended-run profile: an 80,000-token request input ceiling, an 8,192-token output allocation, and local context compaction at 60,000 tokens. It does not change interactive or saved settings.
+
+### Bug Fixes
+- A one-time tool approval or rejection now applies only to the call you answered. Previously, a later call that reused the same call ID could inherit the decision with different arguments, for example on OpenAI-compatible providers that number calls `call_0`, `call_1`, … in every response. Such calls now prompt again. Tool calls without an ID get one unique to their response. With several pending calls that share an ID, a decision settles exactly the call it was made for. Subagents and `run_code` child agents inherit only your "always" decisions, and a blanket rejection always uses its own message.
+- OpenRouter requests now forward the selected reasoning effort and keep explicitly configured OpenRouter options.
+- Session search no longer stalls on very common search terms. When the session index is unavailable, browsing and search run off the UI thread.
+- Codex WebSocket sessions no longer send a chained request over a replacement connection that cannot resolve the previous response; they recover from full history instead. A WebSocket closed with code 1000 before the response finished is now retried.
+- `/retry-tool` rewinds to the correct position in the conversation.
+- After a crash or forced exit during a tool call, resuming the session marks that call's outcome as unobserved and tells the agent to verify the current state before retrying, instead of dropping the call from the resumed conversation, where the agent could blindly repeat it.
+- `/goal set`, `/goal achieved`, and `/goal abandon` now confirm the goal that was just written, not the previous one.
+- An explicitly saved model request deadline (`agent.maxModelRequestDurationMs`) is no longer reset to the default at startup.
+- Context estimates no longer count history twice after a self-contained request, which could trigger compaction or a context pause too early.
+
+### Improvements
+- Context compaction is now enabled by default (`agent.contextCompaction.enabled`, auto mode at 80% of the context window). Local compaction keeps your own messages, recent paired tool rounds, and tool receipts, and runs again only after the conversation has grown. If you had explicitly turned compaction off, that setting is kept.
+- The run budget's default escalation is now `contain`: when a run exhausts its budget, it pauses for your decision instead of only showing a status-bar warning. Warnings and stall evidence stay advisory. In non-interactive mode, a budget or context pause exits with code 2 and prints the `--resume <session>` command to continue. `--auto-approve` does not grant more budget. Explicit `warn`, `pause`, or `disabled` settings are kept.
+- When no output limit is set explicitly, the default output allocation is capped at a quarter of a known model's context window, so small models keep room for input. Untouched default output settings are no longer written into your settings file at startup.
+- One-shot subagents now inherit the selected output limit, stream output limit, request deadline, and stream idle timeout; a role's own output limit still takes precedence.
+- `/retry-turn` now regenerates the entire latest user turn from its original prompt.
+- `/clear` now marks the start of the new conversation with a labelled divider. The working indicator renders above the live divider, the bottom area is more compact, and the rail skin shows quota in its status line.
+
+### Internal/Chores
+- Test fixtures no longer write into the repository tree: settings and skills fixtures use temporary directories, and the sandbox network-approval test no longer writes `.term2/sandbox-network-hosts.json` into the checkout.
+- CI now runs the full check suite on pull requests, and focused test runs start faster.
+- Added an opt-in workflow-evolution experiment ledger, run from a checkout (`docs/workflow-evolution.md`) and not exposed through the `term2` command, and a supervised-worker launcher under `tools/supervised-term2`, which is not part of the published package.
+- README and website refresh, including a demo recording.
+
 ## [0.31.1] - 2026-10-04
 
 ### Bug Fixes

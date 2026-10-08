@@ -29,6 +29,7 @@ const UNDICI_RETRYABLE_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEAD
 // WebSocket close codes that indicate temporary conditions worth retrying.
 // Keep all retryable codes in one place.
 const RETRYABLE_WEBSOCKET_CLOSE_CODES = new Set([
+  '1000', // Normal Closure before a terminal response event — the stream was cut short
   '1001', // Going Away — server shutdown, may come back
   '1006', // Abnormal Close — network drop, no close frame
   '1011', // Internal Error — server hit unexpected condition

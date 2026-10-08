@@ -33,6 +33,13 @@ export interface SavedToolExecution {
   dispatchedAt?: string;
   completedAt?: string;
   historyItems?: unknown[];
+  /**
+   * User messages in the transcript when the call was recorded. `turnId` counts
+   * run attempts and drifts from the user-message count (replays add attempts;
+   * import() rewinds the counter past tool-less turns), so history placement
+   * uses this instead.
+   */
+  userTurnCount?: number;
 }
 
 export interface ToolLedgerReconcileResult {
@@ -121,11 +128,19 @@ const isUserMessage = (item: unknown): boolean => {
   return raw?.role === 'user' && raw?.type === 'message';
 };
 
-const insertionIndexForEntry = (history: unknown[], entry: SavedToolExecution): number => {
+const insertionIndexForEntry = (history: unknown[], entry: SavedToolExecution, latestTurnNumber = 0): number => {
   const turnNumber = turnNumberOf(entry.turnId);
   if (!turnNumber || turnNumber < 1) {
     return history.length;
   }
+  // `turn-N` counts run attempts, not user messages, so it drifts from the
+  // user-message count (retries, tool-less turns). The latest turn is always
+  // the live one and belongs after the last user message; counting user
+  // messages would land it before the request it answers.
+  if (turnNumber >= latestTurnNumber) {
+    return history.length;
+  }
+  const anchor = entry.userTurnCount ?? turnNumber;
 
   let seenUserTurns = 0;
   for (let index = 0; index < history.length; index++) {
@@ -134,7 +149,7 @@ const insertionIndexForEntry = (history: unknown[], entry: SavedToolExecution): 
     }
 
     seenUserTurns++;
-    if (seenUserTurns === turnNumber + 1) {
+    if (seenUserTurns === anchor + 1) {
       return index;
     }
   }
@@ -188,6 +203,17 @@ export class ToolExecutionLedger {
   #turnCounter = 0;
   #currentTurnId = 'turn-0';
   #pendingReasoningHistoryItems: unknown[] = [];
+  #userTurnCountSource: (() => number) | undefined;
+
+  /** Lets new entries record where in the transcript they were made. */
+  setUserTurnCountSource(source: (() => number) | undefined): void {
+    this.#userTurnCountSource = source;
+  }
+
+  #stampUserTurnCount(): { userTurnCount?: number } {
+    const count = this.#userTurnCountSource?.();
+    return count === undefined ? {} : { userTurnCount: count };
+  }
 
   beginTurn(): string {
     this.#turnCounter++;
@@ -253,6 +279,7 @@ export class ToolExecutionLedger {
 
     this.#entries.push({
       turnId: this.#currentTurnId,
+      ...this.#stampUserTurnCount(),
       callId,
       toolName: toolCall.toolName,
       arguments: toolCall.arguments,
@@ -274,6 +301,7 @@ export class ToolExecutionLedger {
     if (!entry) {
       entry = {
         turnId: this.#currentTurnId,
+        ...this.#stampUserTurnCount(),
         callId,
         toolName: toolResult.toolName,
         status: 'started',
@@ -513,6 +541,7 @@ export function reconcileHistoryWithToolLedger(
   const entries = Array.isArray(ledger) ? ledger : [];
   let addedCompletedPairs = 0;
   let droppedIncompleteCalls = 0;
+  const latestTurnNumber = entries.reduce((max, entry) => Math.max(max, turnNumberOf(entry.turnId) ?? 0), 0);
 
   for (const entry of entries) {
     if (hasRecoverableCallPair(entry)) {
@@ -527,7 +556,7 @@ export function reconcileHistoryWithToolLedger(
       // reject with 400 ("tool must be a response to a preceding message with
       // tool_calls").
       next = next.filter((item) => callIdOf(item) !== entry.callId);
-      next.splice(insertionIndexForEntry(next, entry), 0, ...clone(entry.historyItems!));
+      next.splice(insertionIndexForEntry(next, entry, latestTurnNumber), 0, ...clone(entry.historyItems!));
       // Count completed, aborted, and unknown pairs as injected so the warning
       // fires and replaceHistory is called. Without this, synthetic pairs for
       // interrupted calls would not trigger a history replacement, leaving

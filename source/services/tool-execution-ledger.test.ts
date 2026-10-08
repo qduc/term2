@@ -196,6 +196,66 @@ it('reconcileHistoryWithToolLedger appends completed pairs once and drops incomp
   expect(second.history.length).toBe(first.history.length);
 });
 
+it('reconcileHistoryWithToolLedger places the latest turn after the last user message even when turn ids drift', () => {
+  const user = (content: string) => ({ role: 'user', type: 'message', content });
+  const pair = (turnId: string, callId: string): SavedToolExecution => ({
+    turnId,
+    callId,
+    toolName: 'read_file',
+    arguments: '{}',
+    status: 'completed',
+    startedAt: '2026-05-26T00:00:00.000Z',
+    completedAt: '2026-05-26T00:00:01.000Z',
+    historyItems: [
+      { type: 'function_call', id: `fc_${callId}`, callId, name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: `fcr_${callId}`, callId, output: 'contents' },
+    ],
+  });
+  // Three user messages but the live turn is only turn-2 (turn ids count run
+  // attempts, not user messages); its pair must not land before message 3.
+  const history = [user('one'), user('two'), user('three')];
+  const result = reconcileHistoryWithToolLedger(history, [pair('turn-1', 'old'), pair('turn-2', 'live')]);
+  expect(result.history.map((item: any) => item.callId ?? item.content)).toEqual([
+    'one',
+    'old',
+    'old',
+    'two',
+    'three',
+    'live',
+    'live',
+  ]);
+});
+
+it('reconcileHistoryWithToolLedger places older turns by recorded user-message count, not turn id', () => {
+  const user = (content: string) => ({ role: 'user', type: 'message', content });
+  const pair = (turnId: string, callId: string, userTurnCount?: number): SavedToolExecution => ({
+    turnId,
+    callId,
+    toolName: 'read_file',
+    arguments: '{}',
+    status: 'completed',
+    startedAt: '2026-05-26T00:00:00.000Z',
+    completedAt: '2026-05-26T00:00:01.000Z',
+    ...(userTurnCount !== undefined ? { userTurnCount } : {}),
+    historyItems: [
+      { type: 'function_call', id: `fc_${callId}`, callId, name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: `fcr_${callId}`, callId, output: 'contents' },
+    ],
+  });
+  // 'mid' was made after message 2 although its drifted id says turn-1.
+  const history = [user('one'), user('two'), user('three')];
+  const result = reconcileHistoryWithToolLedger(history, [pair('turn-1', 'mid', 2), pair('turn-9', 'live', 3)]);
+  expect(result.history.map((item: any) => item.callId ?? item.content)).toEqual([
+    'one',
+    'two',
+    'mid',
+    'mid',
+    'three',
+    'live',
+    'live',
+  ]);
+});
+
 it('reconcileHistoryWithToolLedger restores reasoning items stored with recovered call pairs', () => {
   const history = [{ role: 'user', type: 'message', content: 'continue' }];
   const ledger: SavedToolExecution[] = [

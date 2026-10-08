@@ -21,7 +21,13 @@ export class SessionToolTracker {
   private emittedToolStartedCallIds = new Set<string>();
   private emittedSubagentToolStartedIds = new Set<string>();
 
-  constructor(private conversationStore: ConversationStore) {}
+  constructor(private conversationStore: ConversationStore) {
+    this.#attachUserTurnCount();
+  }
+
+  #attachUserTurnCount(): void {
+    this.toolLedger.setUserTurnCountSource(() => this.conversationStore.listUserTurns().length);
+  }
 
   /**
    * Get the underlying ledger for direct access when needed.
@@ -228,6 +234,9 @@ export class SessionToolTracker {
         .filter(Boolean),
     );
     const filteredEntries = this.toolLedger.export().filter((entry) => {
+      if (entry.userTurnCount !== undefined) {
+        return entry.userTurnCount <= userTurnCount;
+      }
       const match = /^turn-(\d+)$/.exec(entry.turnId);
       if (match) {
         return Number.parseInt(match[1], 10) <= userTurnCount;
@@ -318,5 +327,6 @@ export class SessionToolTracker {
    */
   reset(): void {
     this.toolLedger = new ToolExecutionLedger();
+    this.#attachUserTurnCount();
   }
 }

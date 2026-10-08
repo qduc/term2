@@ -562,6 +562,8 @@ it('recoverable incomplete stream closes are gated on the websocket close code',
 
   // Abnormal close — a network drop with no close frame.
   expect(isRecoverableIncompleteStreamClose(closeWith('code=1006 reason="" unsent=0'))).toBe(true);
+  // Normal closure before any terminal event is a cut-short stream, not a refusal.
+  expect(isRecoverableIncompleteStreamClose(closeWith('code=1000 reason="" unsent=0'))).toBe(true);
   // Policy violation — the server closed us on purpose, so retrying repeats it.
   expect(isRecoverableIncompleteStreamClose(closeWith('code=1008 reason="policy" unsent=0'))).toBe(false);
   // No code at all: an HTTP/SSE body that simply stopped carries no evidence

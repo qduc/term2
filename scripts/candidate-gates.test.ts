@@ -651,7 +651,11 @@ it('default runner enforces a deadline and carries output truncation metadata', 
     args: ['-e', 'setInterval(() => process.stdout.write("x".repeat(20)), 1);'],
     cwd: '/tmp',
     env: {},
-    timeoutMs: 100,
+    // The deadline has to outlast the child's own startup plus any pause in this process's
+    // event loop (a major GC in a long-lived shared worker is enough), or no output arrives
+    // before it fires and nothing is truncated. The child never exits, so the run always
+    // ends at the deadline.
+    timeoutMs: 1000,
     maxOutputBytes: 10,
   });
   expect(result.timedOut).toBe(true);

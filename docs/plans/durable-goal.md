@@ -45,18 +45,30 @@ model has called `goal_check` by itself after its last work, reporting one of:
 
 `decideGoalStop` (`services/conversation/durable-goal-stop-check.ts`) owns the
 decision, reading only the current turn's history: a check counts only when it is
-the latest tool activity after the latest user message, so a check made before
-newer work, a newer steer, or alongside unseen results does not authorize a stop.
-A missing or incomplete check queues a reminder through the run loop's existing
+the latest tool activity after the latest user message and its result is the
+tool's own success text (`Self-check recorded:`), so a check made before newer
+work, a newer steer, or alongside unseen results does not authorize a stop, and
+neither does a check that was denied, rejected, or failed. A missing or
+incomplete check queues a reminder through the run loop's existing
 request-boundary notice lane and the same run continues. `ApplicationRunLoop`
-consults the policy only at its normal-stop seam, so cancellation/Ctrl+C, errors,
-approval and budget pauses, and critical wrap-up never reach it; every
-continuation is an ordinary turn for the run budget and `maxTurns`.
+consults the policy only at its normal-stop seam, so cancellation/Ctrl+C
+(including a response that completes after the abort), errors, approval and
+budget pauses, and a latched critical wrap-up never reach it.
 
-Loop guard: two consecutive reminders without intervening tool work; the third
-idle stop ends the turn with `terminalCause: 'goal_check_unresolved'`, a system
-notice in the TUI, and a stderr line in non-interactive mode. Justification and
-the guard contract are in the guard ledger's "Active-goal stop check" entry.
+Loop guard: the guard bounds its own continuations; it does not rely on the run
+budget, which may be set to `warn` or `disabled`, or on `maxTurns`, which the
+root run budget supersedes. Two bounds, whichever comes first:
+
+- two consecutive reminders without intervening tool work (the third idle stop
+  returns control), and
+- six reminders in total per user instruction, which tool work does **not**
+  reset (the seventh attempted stop returns control). A model that alternates a
+  tool call with a text-only stop therefore ends after 14 requests.
+
+Either bound ends the turn with `terminalCause: 'goal_check_unresolved'`, a
+system notice in the TUI, and a stderr line in non-interactive mode. A new user
+message starts a fresh allowance. Justification and the guard contract are in
+the guard ledger's "Active-goal stop check" entry.
 
 Scope: only root clients wire the policy (transient/subagent clients never do),
 and it is inert when the agent lacks `goal_check`. The tool is excluded from

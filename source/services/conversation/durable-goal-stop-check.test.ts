@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
 import {
+  GOAL_CHECK_RECORDED_PREFIX,
   GOAL_CHECK_UNRESOLVED_CAUSE,
   GOAL_STOP_REMINDER_PREFIX,
+  MAX_GOAL_STOP_REMINDERS_PER_TURN,
   MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK,
   createGoalStopPolicy,
   decideGoalStop,
@@ -20,14 +22,16 @@ const assistant = (text: string): ProviderInputItem => ({
   content: [{ type: 'output_text', text }],
 });
 let nextId = 0;
-const call = (name: string, args: unknown): ProviderInputItem[] => {
+const call = (name: string, args: unknown, output: unknown = 'ok'): ProviderInputItem[] => {
   const callId = `call-${++nextId}`;
   return [
     { type: 'function_call', callId, name, arguments: JSON.stringify(args) },
-    { type: 'function_call_result', callId, name, output: 'ok' },
+    { type: 'function_call_result', callId, name, output },
   ];
 };
-const check = (args: Record<string, unknown>) => call('goal_check', args);
+/** A goal_check whose result is the tool's own success text, as the real tool records it. */
+const check = (args: Record<string, unknown>, output = `${GOAL_CHECK_RECORDED_PREFIX} ${String(args.status)}.`) =>
+  call('goal_check', args, output);
 const work = () => call('read_file', { path: 'a.ts' });
 const reminder = (): ProviderInputItem => user(`[Mode Notice] ${GOAL_STOP_REMINDER_PREFIX} (1 of 2): check.`);
 
@@ -141,7 +145,9 @@ describe('decideGoalStop', () => {
       action: 'stop',
       reason: 'unresolved',
       terminalCause: GOAL_CHECK_UNRESOLVED_CAUSE,
+      limitReached: 'without_work',
       remindersWithoutWork: 2,
+      remindersThisTurn: 2,
       lastProblem: 'missing_check',
     });
     // threshold + 1 stays stopped (an idle not_achieved check is not work)
@@ -158,7 +164,64 @@ describe('decideGoalStop', () => {
     // Real work after the reminders resets the idle count.
     expect(
       decideGoalStop(goal, [...base, reminder(), assistant('x'), reminder(), ...work(), assistant('done')]),
-    ).toMatchObject({ action: 'continue', remindersWithoutWork: 0 });
+    ).toMatchObject({ action: 'continue', remindersWithoutWork: 0, remindersThisTurn: 2 });
+  });
+
+  it('caps total reminders per user instruction even when work separates every stop', () => {
+    expect(MAX_GOAL_STOP_REMINDERS_PER_TURN).toBe(6);
+    const alternating = (reminders: number) => [
+      user('go'),
+      ...Array.from({ length: reminders }, () => [...work(), assistant('done'), reminder()]).flat(),
+      ...work(),
+      assistant('done'),
+    ];
+    // threshold - 1: the sixth reminder is still sent.
+    expect(decideGoalStop(goal, alternating(5))).toMatchObject({
+      action: 'continue',
+      remindersWithoutWork: 0,
+      remindersThisTurn: 5,
+    });
+    expect((decideGoalStop(goal, alternating(5)) as { reminder: string }).reminder).toContain('6 of 6 this turn');
+    // threshold: work reset the idle count every time, the per-turn cap still returns control.
+    expect(decideGoalStop(goal, alternating(6))).toEqual({
+      action: 'stop',
+      reason: 'unresolved',
+      terminalCause: GOAL_CHECK_UNRESOLVED_CAUSE,
+      limitReached: 'per_turn',
+      remindersWithoutWork: 0,
+      remindersThisTurn: 6,
+      lastProblem: 'missing_check',
+    });
+    // A new user instruction starts a fresh allowance.
+    expect(decideGoalStop(goal, [...alternating(6).slice(0, -1), user('keep going'), assistant('ok')])).toMatchObject({
+      action: 'continue',
+      remindersThisTurn: 0,
+    });
+  });
+
+  it.each([
+    ['denied by the user', 'Tool execution was not approved.'],
+    ['rejected with a custom message', 'Self-check skipped: the user rejected this call.'],
+    ['failed during execution', 'Error: goal source unavailable'],
+    ['returned as content parts without the success text', [{ type: 'input_text', text: 'rejected' }]],
+  ])('does not count a valid-looking check that was %s', (_case, output) => {
+    const history = [user('go'), ...work(), ...check({ status: 'achieved', evidence: 'done' }, output as never)];
+    const decision = decideGoalStop(goal, [...history, assistant('done')]);
+    expect(decision).toMatchObject({ action: 'continue', reason: 'incomplete_check' });
+    expect(decision.action === 'continue' && decision.reminder).toContain('was not recorded');
+  });
+
+  it('counts a recorded check whose result arrives as content parts or without a result', () => {
+    const parts = [{ type: 'input_text', text: `${GOAL_CHECK_RECORDED_PREFIX} blocked. Control returns.` }];
+    expect(
+      decideGoalStop(goal, [user('go'), ...check({ status: 'blocked', evidence: 'need token' }, parts as never)]),
+    ).toEqual({ action: 'stop', reason: 'blocked' });
+    // A call with no recorded result at all never authorizes the stop.
+    const [lonelyCall] = check({ status: 'achieved', evidence: 'done' });
+    expect(decideGoalStop(goal, [user('go'), lonelyCall!, assistant('done')])).toMatchObject({
+      action: 'continue',
+      reason: 'incomplete_check',
+    });
   });
 });
 
@@ -183,7 +246,9 @@ describe('createGoalStopPolicy', () => {
         guardClass: 'runaway',
         reason: 'missing_check',
         limit: 2,
+        turnLimit: 6,
         remindersWithoutWork: 0,
+        remindersThisTurn: 0,
       },
     });
     expect(JSON.stringify(decision.diagnostics)).not.toContain('secret');

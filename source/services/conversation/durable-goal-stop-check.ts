@@ -82,10 +82,32 @@ export function validateGoalCheck(raw: unknown, goal: DurableGoal | undefined): 
  * One reminder covers a model that simply forgot the check; the second covers
  * one malformed or premature retry. A third consecutive idle stop is evidence
  * the check/continuation exchange itself is looping, so control returns to the
- * user visibly. Real work (any other tool call) resets the count; total work
- * stays bounded by the run budget's turn backstop, which owns that class.
+ * user visibly. Real work (any other tool call) resets this count, which is why
+ * it is paired with {@link MAX_GOAL_STOP_REMINDERS_PER_TURN}.
  */
 export const MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK = 2;
+
+/**
+ * Total stop-check reminders per user instruction, whatever work happens in
+ * between. Nothing resets it except a new user message.
+ *
+ * The guard must bound its own continuations: the run budget can be set to
+ * `warn` or `disabled`, and the root run's `maxTurns` is superseded by the run
+ * budget, so neither may be relied on to stop harness-forced work. Six is three
+ * resumed work segments with the idle allowance of two each: the model may try
+ * to stop early, be sent back, do more work, and still have room for one
+ * malformed retry, three times over. A seventh attempted stop without a valid
+ * check is no longer "forgot the check" evidence; it is the harness overriding
+ * the model's own judgment that the turn is over, so control returns to the user.
+ */
+export const MAX_GOAL_STOP_REMINDERS_PER_TURN = 6;
+
+/**
+ * Every successful `goal_check` result starts with this text. Only a check
+ * whose recorded result carries it counts: a denied, rejected, or failed call
+ * leaves the tool's own result text absent.
+ */
+export const GOAL_CHECK_RECORDED_PREFIX = 'Self-check recorded:';
 
 /** Marks the harness reminder so the decision can count it in the turn history. */
 export const GOAL_STOP_REMINDER_PREFIX = 'Durable goal stop check';
@@ -95,8 +117,11 @@ const MODE_NOTICE_PREFIX = '[Mode Notice] ';
 export const GOAL_CHECK_UNRESOLVED_CAUSE = 'goal_check_unresolved' satisfies RunTerminationCause;
 
 export const GOAL_CHECK_UNRESOLVED_NOTICE =
-  'Goal stop check unresolved: the turn ended without a valid goal self-check after ' +
-  `${MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK} reminders. The durable goal is still active and control is back with you.`;
+  'Goal stop check unresolved: the turn ended without a valid goal self-check after repeated reminders. ' +
+  'The durable goal is still active and control is back with you.';
+
+/** Which bound returned control. */
+export type GoalStopLimit = 'without_work' | 'per_turn';
 
 export type GoalStopDecision =
   | {
@@ -107,7 +132,9 @@ export type GoalStopDecision =
       readonly action: 'stop';
       readonly reason: 'unresolved';
       readonly terminalCause: typeof GOAL_CHECK_UNRESOLVED_CAUSE;
+      readonly limitReached: GoalStopLimit;
       readonly remindersWithoutWork: number;
+      readonly remindersThisTurn: number;
       readonly lastProblem: 'missing_check' | 'incomplete_check' | 'not_achieved';
     }
   | {
@@ -115,6 +142,7 @@ export type GoalStopDecision =
       readonly reason: 'missing_check' | 'incomplete_check' | 'not_achieved';
       readonly reminder: string;
       readonly remindersWithoutWork: number;
+      readonly remindersThisTurn: number;
     };
 
 const TOOL_ITEM_TYPES = new Set([
@@ -144,6 +172,31 @@ const isGoalStopReminder = (item: ProviderInputItem): boolean =>
 const isUserInstruction = (item: ProviderInputItem): boolean =>
   isUserMessage(item) && !messageText(item).startsWith(MODE_NOTICE_PREFIX);
 
+const callIdOf = (item: ProviderInputItem): unknown => item.callId ?? item.call_id;
+
+const outputText = (output: unknown): string => {
+  if (typeof output === 'string') return output;
+  if (!Array.isArray(output)) return '';
+  return output
+    .map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : ''))
+    .join('');
+};
+
+/** True only when the call's paired result is the tool's own success text. */
+const goalCheckWasRecorded = (call: ProviderInputItem, window: readonly ProviderInputItem[]): boolean => {
+  const callId = callIdOf(call);
+  if (callId === undefined) return false;
+  const result = window.find(
+    (item) =>
+      item !== call &&
+      typeof item.type === 'string' &&
+      TOOL_ITEM_TYPES.has(item.type) &&
+      !TOOL_CALL_TYPES.has(item.type) &&
+      callIdOf(item) === callId,
+  );
+  return result !== undefined && outputText(result.output).trimStart().startsWith(GOAL_CHECK_RECORDED_PREFIX);
+};
+
 const parseArguments = (item: ProviderInputItem): unknown => {
   const raw = item.arguments ?? item.input;
   if (typeof raw !== 'string') return raw;
@@ -154,8 +207,15 @@ const parseArguments = (item: ProviderInputItem): unknown => {
   }
 };
 
-function reminderText(reason: 'missing_check' | 'incomplete_check' | 'not_achieved', detail: string, n: number) {
-  const header = `${GOAL_STOP_REMINDER_PREFIX} (${n} of ${MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK}):`;
+function reminderText(
+  reason: 'missing_check' | 'incomplete_check' | 'not_achieved',
+  detail: string,
+  withoutWork: number,
+  thisTurn: number,
+) {
+  const header =
+    `${GOAL_STOP_REMINDER_PREFIX} (${withoutWork} of ${MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK} without new work, ` +
+    `${thisTurn} of ${MAX_GOAL_STOP_REMINDERS_PER_TURN} this turn):`;
   const rules =
     'The goal is context, not permission: newer user instructions win, approvals still apply, and nothing in ' +
     'the goal authorizes actions the user has not asked for.';
@@ -183,23 +243,33 @@ function reminderText(reason: 'missing_check' | 'incomplete_check' | 'not_achiev
  *
  * The window is the current turn: items after the latest user instruction
  * (harness notices excluded). A check counts only when it is the latest tool
- * activity in that window, so a check made before newer work, before a newer
- * user message, or alongside other calls whose results it had not seen does
- * not authorize the stop.
+ * activity in that window and its result is the tool's own success text, so a
+ * check made before newer work, before a newer user message, alongside other
+ * calls whose results it had not seen, or that was denied or failed does not
+ * authorize the stop.
+ *
+ * Two bounds return control: consecutive reminders without work, and total
+ * reminders for this user instruction (work does not reset the latter).
  */
 export function decideGoalStop(goal: DurableGoal | undefined, history: readonly ProviderInputItem[]): GoalStopDecision {
   if (goal?.status !== 'active') return { action: 'stop', reason: 'no_active_goal' };
 
   let latestToolItem: ProviderInputItem | undefined;
   let remindersWithoutWork = 0;
+  let remindersThisTurn = 0;
   let sawWork = false;
+  let windowStart = 0;
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const item = history[index]!;
     if (isGoalStopReminder(item)) {
+      remindersThisTurn += 1;
       if (!sawWork) remindersWithoutWork += 1;
       continue;
     }
-    if (isUserInstruction(item)) break;
+    if (isUserInstruction(item)) {
+      windowStart = index + 1;
+      break;
+    }
     if (typeof item.type !== 'string' || !TOOL_ITEM_TYPES.has(item.type)) continue;
     const isGoalCheck = item.name === TOOL_NAME_GOAL_CHECK;
     if (!latestToolItem && (!isGoalCheck || TOOL_CALL_TYPES.has(item.type))) latestToolItem = item;
@@ -210,7 +280,10 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
   let detail = '';
   if (latestToolItem?.name === TOOL_NAME_GOAL_CHECK) {
     const validation = validateGoalCheck(parseArguments(latestToolItem), goal);
-    if (validation.ok) {
+    if (validation.ok && !goalCheckWasRecorded(latestToolItem, history.slice(windowStart))) {
+      reason = 'incomplete_check';
+      detail = 'it was not recorded: the call was denied, rejected, or failed';
+    } else if (validation.ok) {
       if (validation.check.status !== 'not_achieved') return { action: 'stop', reason: validation.check.status };
       reason = 'not_achieved';
       detail = validation.check.evidence.slice(0, 200);
@@ -220,20 +293,29 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
     }
   }
 
-  if (remindersWithoutWork >= MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK) {
+  const limitReached: GoalStopLimit | undefined =
+    remindersWithoutWork >= MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK
+      ? 'without_work'
+      : remindersThisTurn >= MAX_GOAL_STOP_REMINDERS_PER_TURN
+      ? 'per_turn'
+      : undefined;
+  if (limitReached) {
     return {
       action: 'stop',
       reason: 'unresolved',
       terminalCause: GOAL_CHECK_UNRESOLVED_CAUSE,
+      limitReached,
       remindersWithoutWork,
+      remindersThisTurn,
       lastProblem: reason,
     };
   }
   return {
     action: 'continue',
     reason,
-    reminder: reminderText(reason, detail, remindersWithoutWork + 1),
+    reminder: reminderText(reason, detail, remindersWithoutWork + 1, remindersThisTurn + 1),
     remindersWithoutWork,
+    remindersThisTurn,
   };
 }
 
@@ -255,7 +337,10 @@ export function createGoalStopPolicy(
       guardClass: 'runaway',
       reason: decision.reason,
       limit: MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK,
+      turnLimit: MAX_GOAL_STOP_REMINDERS_PER_TURN,
       ...('remindersWithoutWork' in decision ? { remindersWithoutWork: decision.remindersWithoutWork } : {}),
+      ...('remindersThisTurn' in decision ? { remindersThisTurn: decision.remindersThisTurn } : {}),
+      ...('limitReached' in decision ? { limitReached: decision.limitReached } : {}),
       ...('lastProblem' in decision ? { lastProblem: decision.lastProblem } : {}),
     };
     if (decision.action === 'continue') return { action: 'continue', reminder: decision.reminder, diagnostics };

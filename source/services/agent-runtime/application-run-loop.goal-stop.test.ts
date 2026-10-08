@@ -9,6 +9,7 @@ import { createGoalCheckToolDefinition } from '../../tools/agent/goal-check.js';
 import {
   GOAL_CHECK_UNRESOLVED_CAUSE,
   GOAL_STOP_REMINDER_PREFIX,
+  MAX_GOAL_STOP_REMINDERS_PER_TURN,
   createGoalStopPolicy,
 } from '../conversation/durable-goal-stop-check.js';
 
@@ -48,6 +49,24 @@ function scriptedModel(steps: Step[]) {
   };
   return { model, requests };
 }
+
+const budgetPolicy = (overrides: Partial<RunBudgetPolicy> = {}): RunBudgetPolicy => ({
+  maxUsdMicros: 5_000_000,
+  maxUnpricedTokens: 500_000,
+  maxActiveTimeMs: 3_600_000,
+  warningHeadroomUsdMicros: 1_000_000,
+  warningHeadroomUnpricedTokens: 100_000,
+  warningHeadroomActiveTimeMs: 900_000,
+  softHeadroomUsdMicros: 250_000,
+  softHeadroomUnpricedTokens: 25_000,
+  softHeadroomActiveTimeMs: 300_000,
+  turnBackstop: 2,
+  extensionPercent: 50,
+  maxParentExtensions: 2,
+  escalation: 'contain',
+  identicalToolCallThreshold: 3,
+  ...overrides,
+});
 
 const work = { name: 'read_file', args: { path: 'src/feature.ts' } };
 const goalCheck = (status: string, evidence = `${status} evidence`, extra: Record<string, unknown> = {}) => ({
@@ -126,7 +145,9 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     await stream.completed;
 
     expect(t.requests).toHaveLength(4);
-    expect(JSON.stringify(t.requests[1]!.input)).toContain(`${GOAL_STOP_REMINDER_PREFIX} (1 of 2)`);
+    expect(JSON.stringify(t.requests[1]!.input)).toContain(
+      `${GOAL_STOP_REMINDER_PREFIX} (1 of 2 without new work, 1 of 6 this turn)`,
+    );
     expect(stream.terminalCause).toBeUndefined();
     expect(t.logDiagnostic).toHaveBeenCalledWith(
       'Normal stop policy decided',
@@ -209,6 +230,104 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     expect(stream.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
   });
 
+  it.each(['disabled', 'warn'] as const)(
+    'loop guard: work between stops cannot extend the turn forever with run budget escalation %s',
+    async (escalation) => {
+      // Adversarial pattern: every stop is preceded by real work, so the idle
+      // count resets each time, and goal_check is never called. The run budget
+      // never pauses in these modes and its turn backstop supersedes maxTurns.
+      const steps: Step[] = Array.from({ length: 200 }, (_, index) =>
+        index % 2 === 0 ? { calls: [{ ...work, args: { path: `src/file-${index}.ts` } }] } : { text: 'done for now' },
+      );
+      const t = setup(steps);
+
+      const stream = t.loop.startStream(t.agent, userInput('ship it'), {
+        onNormalStop: t.onNormalStop,
+        runBudget: budgetPolicy({ escalation, turnBackstop: 1_000 }),
+        maxTurns: 1_000,
+      });
+      await stream.completed;
+
+      // (cap + 1) work/stop pairs: six reminders are sent and the seventh stop returns control.
+      expect(MAX_GOAL_STOP_REMINDERS_PER_TURN).toBe(6);
+      expect(t.requests).toHaveLength(14);
+      expect(reminderCount(t.requests)).toBe(6);
+      expect(stream.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+      expect(stream.interruptions ?? []).toEqual([]);
+      expect(t.logDiagnostic).toHaveBeenLastCalledWith(
+        'Normal stop policy decided',
+        expect.objectContaining({ action: 'stop', limitReached: 'per_turn', remindersThisTurn: 6 }),
+        expect.anything(),
+      );
+      expect(t.goalState.current?.status).toBe('active');
+    },
+  );
+
+  it('recorded result: a denied goal_check does not authorize the stop', async () => {
+    const t = setup([]);
+    const gatedCheck: ToolDefinition = {
+      ...(createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }) as ToolDefinition),
+      needsApproval: () => true,
+    };
+    const scripted = scriptedModel([
+      { calls: [goalCheck('achieved')] },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'never sent' },
+    ]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => scripted.model });
+    const agent = { ...t.agent, tools: [readFile, gatedCheck] };
+
+    const first = loop.startStream(agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await first.completed;
+    expect(first.interruptions).toHaveLength(1);
+    (first.state as any).reject?.(first.interruptions![0]);
+    const resumed = loop.continueRunStream(first.state!, { onNormalStop: t.onNormalStop });
+    await resumed.completed;
+
+    // The rejected check is followed by reminders instead of an accepted stop.
+    expect(scripted.requests).toHaveLength(4);
+    expect(JSON.stringify(scripted.requests[2]!.input)).toContain('it was not recorded');
+    expect(resumed.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+  });
+
+  it('recorded result: a goal_check whose execution failed does not authorize the stop', async () => {
+    const t = setup([]);
+    const failingCheck: ToolDefinition = {
+      ...(createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }) as ToolDefinition),
+      execute: () => {
+        throw new Error('goal source unavailable');
+      },
+    };
+    const scripted = scriptedModel([
+      { calls: [goalCheck('achieved')] },
+      { text: 'Done.' },
+      { calls: [goalCheck('blocked', 'The goal source is failing; the user must restart the session.')] },
+      { text: 'never sent' },
+    ]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => scripted.model });
+    let attempts = 0;
+    const flakyCheck: ToolDefinition = {
+      ...failingCheck,
+      execute: (...args: Parameters<ToolDefinition['execute']>) => {
+        attempts += 1;
+        if (attempts === 1) return failingCheck.execute(...args);
+        return createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }).execute(...(args as [any, any]));
+      },
+    };
+    const agent = { ...t.agent, tools: [readFile, flakyCheck] };
+
+    const stream = loop.startStream(agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await stream.completed;
+
+    expect(JSON.stringify(stream.history)).toContain('Error: goal source unavailable');
+    // The failed check earned a reminder; the second, recorded check ends the turn.
+    expect(scripted.requests).toHaveLength(4);
+    expect(JSON.stringify(scripted.requests[2]!.input)).toContain('it was not recorded');
+    expect(stream.terminalCause).toBeUndefined();
+  });
+
   it('blocker: a blocked check returns control after the final reply without a reminder', async () => {
     const t = setup([
       { calls: [work] },
@@ -269,6 +388,66 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     expect(t.requests).toHaveLength(1);
   });
 
+  it('cancellation: a response that completes after Ctrl+C reaches the stop seam without consulting the guard', async () => {
+    const controller = new AbortController();
+    const requests: StreamedModelTurnRequest[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        yield {
+          type: 'completion',
+          responseId: `response-${requests.length}`,
+          output: [{ type: 'message', content: [{ type: 'text', text: 'partial answer' }] }],
+        };
+        // The user presses Ctrl+C after the provider already completed.
+        controller.abort();
+      },
+    };
+    const onNormalStop = vi.fn(createGoalStopPolicy(() => activeGoal()));
+    const t = setup([]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+
+    const stream = loop.startStream(t.agent, userInput('ship it'), { onNormalStop, signal: controller.signal });
+    await stream.completed.catch(() => undefined);
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(onNormalStop).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(1);
+    expect(JSON.stringify(stream.history)).not.toContain(GOAL_STOP_REMINDER_PREFIX);
+  });
+
+  it('budget controls: a pending critical wrap-up ends the run without consulting the guard', async () => {
+    const requests: StreamedModelTurnRequest[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        // This completion's cost crosses the critical stage, latching the
+        // wrap-up after the request was already dispatched with tools.
+        yield {
+          type: 'completion',
+          responseId: `response-${requests.length}`,
+          costUsd: 2,
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    };
+    const onNormalStop = vi.fn(createGoalStopPolicy(() => activeGoal()));
+    const t = setup([]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+
+    const stream = loop.startStream(t.agent, userInput('ship it'), {
+      onNormalStop,
+      runBudget: budgetPolicy({ maxUsdMicros: 1_000_000, warningHeadroomUsdMicros: 500_000, turnBackstop: 100 }),
+      wrapUpOnCriticalRunBudget: true,
+    });
+    await stream.completed;
+
+    expect(onNormalStop).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.tools?.length).toBeGreaterThan(0);
+    expect(stream.terminalCause).toBe('budget_exhausted');
+  });
+
   it.each([
     ['an explicit pause', 'Pause the goal work for now and wait for me.'],
     ['an unrelated question', 'Unrelated: what time zone is Hanoi in?'],
@@ -309,7 +488,9 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
 
     expect(scripted.requests).toHaveLength(4);
     expect(JSON.stringify(scripted.requests[1]!.input)).toContain('pause the goal work');
-    expect(JSON.stringify(scripted.requests[2]!.input)).toContain(`${GOAL_STOP_REMINDER_PREFIX} (1 of 2)`);
+    expect(JSON.stringify(scripted.requests[2]!.input)).toContain(
+      `${GOAL_STOP_REMINDER_PREFIX} (1 of 2 without new work, 1 of 6 this turn)`,
+    );
     expect(stream.terminalCause).toBeUndefined();
   });
 
@@ -345,22 +526,7 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
   });
 
   it('budget controls: a staged run budget pauses for the human before the reminder request is sent', async () => {
-    const policy: RunBudgetPolicy = {
-      maxUsdMicros: 5_000_000,
-      maxUnpricedTokens: 500_000,
-      maxActiveTimeMs: 3_600_000,
-      warningHeadroomUsdMicros: 1_000_000,
-      warningHeadroomUnpricedTokens: 100_000,
-      warningHeadroomActiveTimeMs: 900_000,
-      softHeadroomUsdMicros: 250_000,
-      softHeadroomUnpricedTokens: 25_000,
-      softHeadroomActiveTimeMs: 300_000,
-      turnBackstop: 2,
-      extensionPercent: 50,
-      maxParentExtensions: 2,
-      escalation: 'contain',
-      identicalToolCallThreshold: 3,
-    };
+    const policy = budgetPolicy();
     const t = setup([{ calls: [work] }, { text: 'done' }, { text: 'never sent' }]);
 
     const stream = t.loop.startStream(t.agent, userInput('ship it'), {

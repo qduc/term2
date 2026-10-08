@@ -2,6 +2,7 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_GOAL_CHECK } from '../tool-names.js';
 import type { DurableGoal } from '../../services/logging/conversation-log-events.js';
 import {
+  GOAL_CHECK_RECORDED_PREFIX,
   goalCheckParameters,
   validateGoalCheck,
   type GoalCheckStatus,
@@ -23,16 +24,16 @@ const GOAL_CHECK_DESCRIPTION =
 
 const RESULT_TEXT: Record<GoalCheckStatus, string> = {
   achieved:
-    'Self-check recorded: achieved. The durable goal stays active until the user confirms with /goal achieved. ' +
+    `${GOAL_CHECK_RECORDED_PREFIX} achieved. The durable goal stays active until the user confirms with /goal achieved. ` +
     'End the turn now with a short summary of the evidence.',
   blocked:
-    'Self-check recorded: blocked. Control returns to the user. End the turn now and state plainly what is ' +
+    `${GOAL_CHECK_RECORDED_PREFIX} blocked. Control returns to the user. End the turn now and state plainly what is ` +
     'blocking and what input or capability is needed.',
   not_achieved:
-    'Self-check recorded: not achieved. Continue working toward the outcome now, within the user instructions ' +
+    `${GOAL_CHECK_RECORDED_PREFIX} not achieved. Continue working toward the outcome now, within the user instructions ` +
     'and approvals, and call goal_check again before ending the turn.',
   deferred:
-    'Self-check recorded: deferred. The durable goal stays active and unchanged. Finish the user’s latest ' +
+    `${GOAL_CHECK_RECORDED_PREFIX} deferred. The durable goal stays active and unchanged. Finish the user’s latest ` +
     'request and end the turn.',
 };
 

@@ -542,6 +542,37 @@ describe('App orchestration', () => {
     },
   );
 
+  it.sequential('reports a failed goal_check close and rethrows so the stop seam records it', async () => {
+    const services = createServices();
+    const goalA = { id: 'goal-a', outcome: 'Goal A', status: 'active' as const };
+    const appendGoal = vi.fn(() => {
+      throw new Error('disk full');
+    });
+    const slot: GoalAchievedSlot = {};
+    await renderInAct(
+      <App
+        {...services}
+        sessionId="session-a"
+        initialGoal={goalA}
+        appendGoal={appendGoal}
+        goalAchievedSlot={slot}
+        terminalTitleBase="term2"
+        generateId={() => 'session-next'}
+      />,
+    );
+    let thrown: unknown;
+    await act(async () => {
+      try {
+        slot.handler!({ ...goalA, status: 'achieved' });
+      } catch (error) {
+        thrown = error;
+      }
+    });
+    expect(thrown).toBeInstanceOf(Error);
+    expect(mocks.addSystemMessage).toHaveBeenCalledWith('Goal update failed: disk full');
+    expect(mocks.getGoal?.()).toEqual(goalA);
+  });
+
   it.sequential('clears the live goal after successfully resuming a goal-less session', async () => {
     const services = createServices();
     mocks.loadConversationForProject.mockReturnValue({

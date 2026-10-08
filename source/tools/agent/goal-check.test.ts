@@ -22,6 +22,15 @@ describe('goal_check tool', () => {
     current = undefined;
   });
 
+  it('names the goal it judged in the recorded result, read at execution time', async () => {
+    let current: DurableGoal = goal;
+    const tool = createGoalCheckToolDefinition({ getGoal: () => current });
+    const args = { status: 'blocked', evidence: 'needs token' } as const;
+    expect(await tool.execute(args, undefined, undefined)).toMatch(/^Self-check recorded: \[goal g\] blocked\./);
+    current = { ...goal, id: 'g2' };
+    expect(await tool.execute(args, undefined, undefined)).toMatch(/^Self-check recorded: \[goal g2\] blocked\./);
+  });
+
   it('tells the model that achieved closes the goal, so it must verify against the criteria first', () => {
     const tool = createGoalCheckToolDefinition({ getGoal: () => goal });
     expect(tool.description).toContain('Reporting achieved closes the goal');
@@ -55,7 +64,7 @@ describe('goal_check tool', () => {
         type: 'function_call_result',
         callId: 'c1',
         arguments: JSON.stringify({ status: 'blocked', evidence: 'Needs the npm token' }),
-        output: 'Self-check recorded: blocked. Control returns to the user.',
+        output: 'Self-check recorded: [goal g1] blocked. Control returns to the user.',
       } as any,
       0,
       new Map(),

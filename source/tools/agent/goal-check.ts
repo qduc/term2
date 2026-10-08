@@ -2,7 +2,7 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_GOAL_CHECK } from '../tool-names.js';
 import type { DurableGoal } from '../../services/logging/conversation-log-events.js';
 import {
-  GOAL_CHECK_RECORDED_PREFIX,
+  formatRecordedGoalCheck,
   goalCheckParameters,
   validateGoalCheck,
   type GoalCheckStatus,
@@ -26,17 +26,16 @@ const GOAL_CHECK_DESCRIPTION =
 
 const RESULT_TEXT: Record<GoalCheckStatus, string> = {
   achieved:
-    `${GOAL_CHECK_RECORDED_PREFIX} achieved. The durable goal is marked achieved when you end the turn now; ` +
+    `achieved. The durable goal is marked achieved when you end the turn now; ` +
     'more tool work first means checking again. End the turn now with a short summary of the evidence.',
   blocked:
-    `${GOAL_CHECK_RECORDED_PREFIX} blocked. Control returns to the user. End the turn now and state plainly what is ` +
+    `blocked. Control returns to the user. End the turn now and state plainly what is ` +
     'blocking and what input or capability is needed.',
   not_achieved:
-    `${GOAL_CHECK_RECORDED_PREFIX} not achieved. Continue working toward the outcome now, within the user instructions ` +
+    `not achieved. Continue working toward the outcome now, within the user instructions ` +
     'and approvals, and call goal_check again before ending the turn.',
   deferred:
-    `${GOAL_CHECK_RECORDED_PREFIX} deferred. The durable goal stays active and unchanged. Finish the user’s latest ` +
-    'request and end the turn.',
+    `deferred. The durable goal stays active and unchanged. Finish the user’s latest ` + 'request and end the turn.',
 };
 
 export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
@@ -61,7 +60,8 @@ export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index,
 /**
  * The working model's stop self-check for an active durable goal.
  *
- * Execution validates and acknowledges the report; the stop decision is made
+ * Execution validates and acknowledges the report, naming the goal it judged;
+ * the stop decision is made
  * from the turn history by `decideGoalStop`. The tool holds no state and has no
  * write path of its own: an achieved check closes the goal only at the stop
  * seam (`createGoalStopPolicy`), once it is known to be the turn's last word.
@@ -75,9 +75,13 @@ export function createGoalCheckToolDefinition(deps: {
     parameters: goalCheckParameters,
     needsApproval: () => false,
     execute: (params) => {
-      const validation = validateGoalCheck(params, deps.getGoal());
-      if (!validation.ok) return `Error: goal_check was not recorded: ${validation.problem}.`;
-      return RESULT_TEXT[validation.check.status];
+      const goal = deps.getGoal();
+      const validation = validateGoalCheck(params, goal);
+      if (!validation.ok || !goal) {
+        return `Error: goal_check was not recorded: ${validation.ok ? 'no goal' : validation.problem}.`;
+      }
+      // Name the goal judged, so a goal replaced mid-turn is never closed by this check.
+      return formatRecordedGoalCheck(goal.id, RESULT_TEXT[validation.check.status]);
     },
     formatCommandMessage: formatGoalCheckCommandMessage,
   };

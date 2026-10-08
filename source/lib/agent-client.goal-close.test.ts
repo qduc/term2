@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
@@ -173,10 +173,68 @@ it('a transient (subagent/role) client never closes the goal, even with a record
     const stream = await instance.startStream('do the delegated task');
     await stream.completed;
     expect(requests).toHaveLength(2);
-    expect(JSON.stringify(requests[1]!.input)).toContain('Self-check recorded: achieved');
+    expect(JSON.stringify(requests[1]!.input)).toContain(`Self-check recorded: [goal ${goal.id}] achieved`);
     expect(surface.writes).toEqual([]);
     expect(surface.state.current).toBe(goal);
   } finally {
     instance.dispose();
   }
+});
+
+/**
+ * A goal set mid-turn (`/goal set` from the prompt or the control socket) adds
+ * no history, so the turn's earlier check is still its latest tool activity.
+ * That check judged the previous goal and must not close the new one.
+ */
+describe('a goal replaced mid-turn is never closed by the previous goal’s check', () => {
+  const replacement: DurableGoal = { id: 'g2', outcome: 'Write the migration guide', status: 'active' };
+  const replacementWithCriteria: DurableGoal = { ...replacement, successCriteria: 'Guide reviewed' };
+  const achievedWithCriteria = (id: string) => ({
+    ...achievedCall(id),
+    arguments: JSON.stringify({ status: 'achieved', evidence: 'shipped', criteriaEvidence: 'vitest: 12 passed' }),
+  });
+
+  async function runSwitch(next: DurableGoal, script: (n: number) => any[]) {
+    const surface = goalSurface();
+    const { provider, requests } = registerScriptedProvider('goal-switch', (_request, n) => {
+      // The user replaces the goal while the check's result is on its way back.
+      if (n === 2) surface.state.current = next;
+      return script(n);
+    });
+    const instance = new AgentClient({
+      deps: { logger, settings: settingsFor(provider), sessionContextService, ...surface.deps },
+      toolOwnership: new ToolOwnershipRegistry(),
+    } as any);
+    try {
+      const stream = await instance.startStream('ship it');
+      await stream.completed;
+      await approveUntilSettled(instance, stream);
+    } finally {
+      instance.dispose();
+    }
+    return { surface, requests };
+  }
+
+  it('repro: an achieved check for G1, then setGoal(G2) before the final text, writes nothing', async () => {
+    const { surface } = await runSwitch(replacement, (n) => (n === 1 ? [achievedCall('call-1')] : text('Shipped.')));
+    expect(surface.writes).toEqual([]);
+    expect(surface.state.current).toBe(replacement);
+  });
+
+  it('P1b: G1 criteria evidence does not close a G2 that has its own criteria', async () => {
+    const { surface } = await runSwitch(replacementWithCriteria, (n) =>
+      n === 1 ? [achievedWithCriteria('call-1')] : text('Shipped.'),
+    );
+    expect(surface.writes).toEqual([]);
+    expect(surface.state.current).toBe(replacementWithCriteria);
+  });
+
+  it('a check made after the switch still closes G2', async () => {
+    const { surface, requests } = await runSwitch(replacement, (n) =>
+      n === 1 ? [achievedCall('call-1')] : n === 3 ? [achievedCall('call-3')] : text('Shipped.'),
+    );
+    // The stale check earns a reminder instead of a close; the fresh one closes G2.
+    expect(JSON.stringify(requests[2]!.input)).toContain('it was made for a different goal');
+    expect(surface.writes).toEqual([{ ...replacement, status: 'achieved' }]);
+  });
 });

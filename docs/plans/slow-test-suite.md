@@ -1,4 +1,4 @@
-Status: plan. Tier split merged to main (`33e5e6f2`, 2026-09-10); the <30s target is measured as host-bound on the 4-vCPU workstation — see "Tier split and 4-vCPU measurements (2026-09-10)".
+Status: suspended 2026-10-08. The unit tier was removed for the [evidence-driven development experiment](../experiments/evidence-driven-development/README.md) (tag `unit-suite-baseline`); the history below applies only if it is restored. Tier split merged to main (`33e5e6f2`, 2026-09-10); the <30s target is measured as host-bound on the 4-vCPU workstation — see "Tier split and 4-vCPU measurements (2026-09-10)".
 
 ## Resume here
 

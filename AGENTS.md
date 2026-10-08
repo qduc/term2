@@ -17,17 +17,16 @@ Application code lives under `source/`. The non-obvious entry points:
 
 Everything else is discoverable by reading the tree. Skills carry the depth — activate the matching skill before touching these areas.
 
-# Test execution policy
+# Verification policy: evidence-driven development experiment
 
-- **Fast feedback:** focused tests during development; `pnpm test:related` after a coherent source change; `pnpm test:changed` plus `pnpm typecheck` for a narrow handoff. Completion/commit alone does not trigger the full suite. Do not claim completion with required gates unrun.
-- **Choose the smallest useful check:** use an explicit test-file path while editing, then run related tests for the changed implementation. Related selection can fan out substantially; see the measured example and escalation ladder in [test-feedback.md](docs/development/test-feedback.md). If dependency impact is uncertain, broaden selection rather than guessing.
-- **Keep regression protection:** focused, related, and changed-file checks are development feedback, not substitutes for required CI. CI's unit and integration suites, plus its separate e2e and provider black-box jobs, remain required through completion. Follow up any late CI failure to a passing gate or a clearly owned blocker.
-- **Tier boundaries:** `pnpm test` is unit-only; integration, e2e, and provider black-box tests have separate `pnpm test:integration`, `pnpm test:e2e`, and `pnpm test:provider-black-box` commands. The full-suite CI/publish gate means unit **and** integration. Read [slow-test-suite.md](docs/plans/slow-test-suite.md) before changing tier membership.
-- **Justify full-suite launches:** before `pnpm test`, name the broad-change trigger and why focused/related/changed tests are insufficient. Triggers include broadly imported behavior, architectural/cross-module contracts, or package/TypeScript/Vitest/build configuration; otherwise use narrow gates.
-- **After a non-trivial fix:** ask what allowed the defect class and why tests missed it. See `## After a bug fix` in the `testing` skill.
-- **Lane is not full-suite validation:** `pnpm test:lane` runs only `.github/vitest.lane.safe.txt` without isolation. Admit files only after shuffled seeded runs (`pnpm test:lane:seed <seed>`); files that ever failed non-isolated stay excluded. Isolated full-suite tests remain the broad-change/CI/release authority.
-- **Keep `NODE_ENV=test`:** test scripts pin it via `cross-env`; set it when invoking Vitest directly. React's production build lacks `act`.
-- **Long validations:** use explicit finite `timeout_ms` sized to the job and background completion notifications, not polling. Record elapsed time and terminal result separately from pass/fail. Diagnose timeouts/hangs rather than blindly rerunning; verify partial effects before replaying mutations. A narrowed rerun does not close a full-suite gate.
+This repository is running an [evidence-driven development experiment](docs/experiments/evidence-driven-development/README.md). Its rules override the global `tdd` skill and any doc that asks for unit tests.
+
+- **Do not commit permanent unit tests.** CI and the pre-commit hook reject them (`scripts/check-no-unit-tests.mjs`). Temporary tests and scripts are allowed while you work; keep them untracked and delete them when done. The removed suite is at tag `unit-suite-baseline`.
+- **Verify every change in proportion to its risk, using methods you choose.** Follow the `verification` skill: state the claims and risks, gather observable evidence, and report what remains uncertain. Reading the code is not evidence for a behavioral change. If you cannot verify a claim with confidence, report the uncertainty rather than claiming success.
+- **High-risk changes need an independent verifier,** a separate agent that did not implement the change. The `verification` skill defines high risk.
+- **Integration, e2e, provider black-box tests and the static repository guards stay.** Tier commands and standards are in the `testing` skill. Do not disguise a unit test as an integration or e2e test.
+- **Record each completed task** in `docs/experiments/evidence-driven-development/tasks.jsonl`, and each defect found after completion in `defects.jsonl`. Do not weaken verification to improve the numbers.
+- **Docs that cite unit test files as evidence** point to the tag, not the current tree.
 
 # Plans and area-specific context
 
@@ -45,7 +44,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Session retrieval UX:** [Observed usage](docs/research/session-retrieval-observed-usage.md), [seek/tail cell](docs/research/session-retrieval-seek-cell.md), [paired protocol](docs/research/session-retrieval-paired-protocol.md), and [cursor format](docs/plans/memory-progressive-disclosure.md)
 - **Modes:** [Profile architecture](docs/profiles/README.md)
 - **Model/effort step-down:** [Benchmark](docs/plans/model-effort-step-down-benchmark.md) and [cache economics](docs/research/model-effort-step-down-cache-economics.md)
-- **Audited tests:** [Test suite audit](docs/plans/test-suite-audit.md) and `docs/test-audit/graph.yaml` — read the graph's primary decisions before editing audited files
+- **Audited tests:** [Test suite audit](docs/plans/test-suite-audit.md) and `docs/test-audit/graph.yaml` — historical; most audited files were removed with the unit suite (tag `unit-suite-baseline`)
 - **Service contracts:** [Boundary completion](docs/plans/service-boundary-contract-completion.md) and [contracts](docs/contracts/)
 - **UI/business ownership:** [Separation map](docs/plans/ui-business-layer-separation/MAP.md)
 - **OAuth:** [Provider independence](docs/plans/provider-oauth-independence.md)

@@ -1,80 +1,73 @@
 ---
 name: testing
-description: How to test in this repo — the TDD requirement, which test command matches the scope of a change, the standards a unit test here is held to, and the follow-up expected after a bug fix. Use before writing or changing any test, after making code changes to decide what to run, and after fixing any non-trivial bug.
+description: Which test tiers exist in this repo during the evidence-driven development experiment, the commands that run them, the rule against committing unit tests, and the standards an integration or e2e test is held to. Use before writing or changing any test and after making code changes to decide what to run. For how to prove a change works, use the `verification` skill.
 ---
 
 # Testing
 
-This project follows TDD. Write tests first, then the minimum code to pass them.
+This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
+There is no permanent unit test suite, and no test-first requirement; the global `tdd`
+skill does not apply here. Prove changes with the `verification` skill.
 
-After making code changes, run tests appropriate to the scope and report the results.
-
-## Commands
+## Tiers and commands
 
 ```bash
-pnpm test                          # Run all tests
-pnpm test path/to/my-file.test.ts  # Run tests in a specific file
-pnpm test:related ./source/foo.ts  # Run statically related tests for source files
-pnpm test:changed                  # Run tests affected by the current Git diff
-pnpm typecheck                     # Type-check TypeScript without emitting files
-pnpm exec prettier --write <files> # Fix formatting in files you changed
+pnpm typecheck                     # every .ts/.tsx change
+pnpm lint                          # eslint + prettier check
+pnpm test                          # the static repository guards (+ any uncommitted temporary tests)
+pnpm test path/to/tmp.test.ts      # run one temporary test
+pnpm test:integration              # cross-module and child-process journeys
+pnpm test:e2e                      # process-level: terminal UI smoke, build/rollback, fake-codex network
+pnpm test:provider-black-box       # built CLI against loopback provider fixtures (see `provider-testing`)
+pnpm check:no-unit-tests           # what CI and the pre-commit hook run
 ```
 
-`test:related` and `test:changed` fail when they select no tests. Pass related
-paths directly to pnpm and begin every repository-relative source path with
-`./`; do not insert `--` before the path.
+Keep `NODE_ENV=test` when invoking Vitest directly; the scripts set it. React's
+production build lacks `act`.
 
-## Choosing scope
+## Rules
 
-- **Small, localized changes** — run focused tests for the affected area.
-- **Tight feedback after a coherent source change** — run the focused test,
-  then `pnpm test:related ./source/...` for every changed production source
-  file. This follows static imports only; dynamic loading and behavioral
-  coupling still need an intentionally selected test.
-- **Before handoff** — run `pnpm test:changed`. A no-tests failure means the
-  diff needs an intentionally selected broader test; it is not a green gate.
-- **Broad or architectural changes, shared utilities, anything that may affect multiple areas** — run the full suite.
-- **Project-wide inputs** — changes to `package.json`, `pnpm-lock.yaml`,
-  `tsconfig*.json`, Vitest configuration, or `scripts/` require the full suite.
-- **No relevant focused test exists** — run the smallest applicable broader command, and say why.
-- **Any `.ts` or `.tsx` change** — run `pnpm typecheck`; Vitest transpiles TypeScript without proving it type-checks.
-- **Provider, bridge, run-loop, registry, or non-interactive changes** — these additionally require the provider black-box suite; use the `provider-testing` skill.
+- **Never commit a unit test.** A `*.test.ts(x)` or `*.spec.ts(x)` under `source/`,
+  `scripts/` or `docs/` that the default Vitest config would pick up is rejected unless
+  it is one of the guards listed in `scripts/check-no-unit-tests.mjs`. Adding a guard
+  needs the user's approval.
+- **Temporary tests are fine.** Write them next to the code so the default config finds
+  them, run them, then delete them before committing. Don't `git add -A` with one in the
+  tree.
+- **The other tiers stay and run in CI.** Change them when behavior changes. Add to them
+  only when the check crosses a real boundary (child process, filesystem, network
+  fixture, persisted session, built CLI) and is worth paying for on every CI run. Never
+  dress a unit test up as an integration or e2e test.
+- **Deleted tests are at tag `unit-suite-baseline`.** Run one temporarily against your
+  change if it helps (`git show unit-suite-baseline:<path> > <path>`), then delete it.
 
-The full suite is an escalation gate, not a routine completion gate. A finished
-change, commit, or handoff does not by itself require `pnpm test`. Before
-launching it, name the concrete broad-change trigger and why the focused,
-related, and changed-test gates are insufficient. When no trigger above applies,
-stop after the scope-appropriate narrower gates.
+## Choosing what to run
 
-Never claim a test, build, or check passed unless you actually ran it and it succeeded.
+- Every TypeScript change: `pnpm typecheck`.
+- Provider, bridge, run loop, registry, or non-interactive changes: the provider
+  black-box suite.
+- Changes the integration or e2e tiers exercise: that tier.
+- Package, TypeScript, Vitest, or build configuration: all tiers.
+- Everything else: the evidence the `verification` skill asks for. Running tiers that don't
+  touch your change is not evidence.
 
-## Standards
+CI runs every tier. Follow any late CI failure through to a passing run or a blocker someone clearly owns.
+Never claim a test, build, or check passed unless you ran it and it succeeded. For long runs, set an
+explicit finite timeout and wait for the completion notification rather than polling.
 
-Tests are colocated with production files and are usually the fastest way to discover an intended contract.
+## Standards for integration and e2e tests
 
-- Test observable behavior through public interfaces, not implementation details. A refactor shouldn't break tests.
-- One behavior per test; name the test after the rule being verified.
-- Assert structured values (codes, statuses, types) over raw strings or broad snapshots — unless the text or full output *is* the contract.
-- Keep tests deterministic and independent: no real time, randomness, network, DB, or filesystem. Runnable in any order.
-- Mock only at boundaries.
-- Don't duplicate production logic in expected values.
-- Cover edge cases, boundaries, and invalid input.
-- Add a regression test for every bug fixed.
-- Maintain tests like production code: refactor or delete them when they stop providing value.
-
-## After a bug fix
-
-A regression test is the floor, not the finish line. After any non-trivial bug fix:
-
-1. Ask why the bug was possible and whether design, types, or APIs can make the defect class unrepresentable.
-2. Search sibling implementations and similar boundaries for the same failure pattern.
-3. Identify why tests, review, or observability did not catch it earlier. Treat a shipped defect as both a code defect and a detection-gap defect.
-4. Prefer an automated class-wide guard—such as a contract test, lint rule, exhaustive type check, or CI validation—when proportional.
-
-Prioritize behavioral contracts at risky boundaries, error paths, and edge conditions over coverage percentages. High line coverage with weak assertions is not evidence of correctness. If meaningful testing requires mocking half the system, treat that as an architecture signal rather than merely a testing inconvenience.
-
-Keep analysis blameless: ask what allowed the defect, not who introduced it. Use proportional judgment—a typo-grade issue does not require a full retrospective, but surprising, severe, or long-lived bugs require the broader audit. Fix the bug factory, not only the observed instance.
+- Exercise observable behavior through public entry points: the CLI, a service facade,
+  or a protocol boundary.
+- Assert structured values (codes, statuses, persisted records) over raw strings or
+  broad snapshots, unless the text is the contract.
+- Deterministic and independent: no real provider network, no shared fixed temp paths,
+  no writes into the repository tree, runnable in any order.
+- Mock only at external boundaries (provider fixtures, the network guard).
 
 ## Prompt and instruction changes
 
-Prompt text under `source/prompts/` is product behavior, not documentation. When trimming a prompt, keep a test asserting that its non-obvious content survives — see `source/prompts/search-via-shell.test.ts`, which pins the two shell gotchas so a future cleanup can't silently drop them.
+Prompt text under `source/prompts/` is product behavior. When trimming a prompt, show
+that its non-obvious content survives. For example, run the assembled prompt for the
+affected model and confirm the text is present, or run a non-interactive turn that
+depends on it.

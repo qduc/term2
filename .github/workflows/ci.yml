@@ -52,9 +52,15 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
+      # Evidence-driven development experiment: no permanent unit tests may be
+      # committed. See docs/experiments/evidence-driven-development/README.md.
+      - name: Reject committed unit tests
+        run: pnpm check:no-unit-tests
+
+      # The default tier now holds only the static repository guards.
       # The script sets NODE_ENV=test itself via cross-env; do not rely on the
       # ambient value (see AGENTS.md on why production mode breaks Ink tests).
-      - name: Run unit test suite
+      - name: Run repository guard tests
         run: pnpm test
 
   integration:

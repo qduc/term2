@@ -144,9 +144,12 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
    `settings-completion-config.ts`.
 6. Assign the key to a category in `CATEGORY_KEYS`.
 7. Add optional touchpoints as needed (hidden, common, side-effect handler,
-   summary entry, tests).
-8. Run focused tests:
-   `pnpm test source/hooks/settings-completion-logic.test.ts source/components/menu/SettingsSelectionMenu.test.tsx source/utils/settings-command.test.ts source/services/settings/settings-schema.test.ts`.
+   summary entry).
+8. Verify (see the `verification` skill): open `/settings` in a built term2 and confirm
+   the setting appears in its category with its description, and that changing it
+   persists and, if runtime-modifiable, takes effect. The removed settings tests at tag
+   `unit-suite-baseline` (`settings-schema.test.ts`, `settings-completion-logic.test.ts`)
+   can be restored temporarily as a cross-check.
 9. Run `pnpm typecheck` to confirm `SettingsWithSources` is complete.
 
 ## Common mistake

@@ -1,5 +1,9 @@
 # Development test feedback
 
+> **Suspended (2026-10-08).** The unit suite this ladder selects from was removed for the
+> [evidence-driven development experiment](../experiments/evidence-driven-development/README.md),
+> along with `test:related` and `test:changed`. Use the `verification` skill instead.
+
 Use the smallest check that answers the current question, then widen coverage as
 the change becomes coherent. Test selection is a way to shorten the edit loop;
 it does not remove tests from CI or establish that unrelated behavior is safe.

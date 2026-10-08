@@ -25,6 +25,11 @@ export interface ApprovalItem {
  * - a blanket approval outranks a blanket rejection (enforced by
  *   `replayApprovals` ordering, which replays rejections first).
  *
+ * The run loop consults only blanket decisions when it plans a new call
+ * ({@link ApprovalLedger.blanketDecision}). Per-call entries record which call
+ * a decision was made for; they never authorize a later call, because call ids
+ * repeat across responses and runs.
+ *
  * It does NOT carry the run's user context — that lives on
  * {@link ToolInvocationContext.context}. Splitting the two is the point: the
  * old RunContext conflated a ledger with a context bag.
@@ -57,6 +62,19 @@ export class ApprovalLedger {
     if (record.rejected === true) return false;
     if (Array.isArray(record.approved) && record.approved.includes(input.callId)) return true;
     if (Array.isArray(record.rejected) && record.rejected.includes(input.callId)) return false;
+    return undefined;
+  }
+
+  /**
+   * The tool's blanket decision, ignoring per-call entries. Call ids are not
+   * unique across responses (the chat adapter's `call_${index}` fallback, or a
+   * provider that repeats its own ids), so a per-call entry cannot identify a
+   * new call: it only records the call it was made for.
+   */
+  blanketDecision(toolName: string): boolean | undefined {
+    const record = this.#approvals[toolName];
+    if (record?.approved === true) return true;
+    if (record?.rejected === true) return false;
     return undefined;
   }
 

@@ -756,8 +756,9 @@ export class NestedSubagentRunner {
     }
 
     const nestedLedger = new ApprovalLedger();
-    // The subagent runs in its own ledger, but decisions the user already made in the
-    // parent have to be carried across or the same tool call prompts twice.
+    // The subagent runs in its own ledger. The parent's blanket ("always") decisions
+    // carry across; per-call decisions name the parent's calls and never authorize a
+    // child call, even one whose provider-generated id happens to match.
     let abortListener: (() => void) | undefined;
     let transferredToBackground = false;
     try {

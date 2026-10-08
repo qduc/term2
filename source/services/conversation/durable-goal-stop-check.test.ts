@@ -262,6 +262,24 @@ describe('decideGoalStop with repeated provider call ids', () => {
     expect(decision.action === 'continue' && decision.reminder).toContain('was not recorded');
   });
 
+  it('binds the latest of two checks in one response to its own result by call id', () => {
+    // Both calls precede both results. Only the id tells the results apart.
+    const history = [
+      user('ship it'),
+      { type: 'function_call', callId: 'check-a', name: 'goal_check', arguments: JSON.stringify(achieved) },
+      { type: 'function_call', callId: 'check-b', name: 'goal_check', arguments: JSON.stringify(achieved) },
+      { type: 'function_call_result', callId: 'check-a', name: 'goal_check', output: recorded('achieved') },
+      {
+        type: 'function_call_result',
+        callId: 'check-b',
+        name: 'goal_check',
+        output: 'Tool execution was not approved.',
+      },
+      assistant('Done.'),
+    ];
+    expect(decideGoalStop(goal, history)).toMatchObject({ action: 'continue', reason: 'incomplete_check' });
+  });
+
   it.each([
     ['a rejected result', [{ type: 'function_call_result', callId: 'call_0', name: 'goal_check', output: 'rejected' }]],
     ['no result', []],

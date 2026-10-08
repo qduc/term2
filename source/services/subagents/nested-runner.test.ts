@@ -637,6 +637,34 @@ describe('NestedSubagentRunner end to end', () => {
     expect(result.finalText).toBe('Summary: updated notes.');
   });
 
+  it('does not let a per-call parent approval pre-approve a nested call that shares its id', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({ needsApproval: true });
+    const parent = parentToolContext();
+    // The parent approved one of its own calls. The child's provider numbers its
+    // calls independently, so the matching id names a different call.
+    parent.approvals.approveTool({ toolName: 'fake_tool', callId: 'nested-call-1' });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parent, {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.status).toBe('interrupted');
+    expect(getFakeToolCalls()).toBe(0);
+  });
+
+  it('carries a blanket parent approval into the nested run through replayApprovals', async () => {
+    const { runner, getFakeToolCalls } = buildNestedRunner({ needsApproval: true });
+    const parent = parentToolContext();
+    parent.approvals.approveTool({ toolName: 'fake_tool', callId: 'any' }, { alwaysApprove: true });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parent, {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(getFakeToolCalls()).toBe(1);
+  });
+
   it('passes the settings-backed policy to direct nested runs and activates critical tool-free wrap-up', async () => {
     const { runner, requests } = buildNestedRunner({ turnBackstop: 0 });
 

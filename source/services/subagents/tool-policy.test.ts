@@ -1235,9 +1235,11 @@ describe('diffStat capture (plan D3)', () => {
   it('records a line delta for a new file via create_file', async () => {
     const diffDeltas = new Map<string, { added: number; deleted: number }>();
     const filesChanged: string[] = [];
-    // Use a tmp path that doesn't exist yet.
+    // Use a path that doesn't exist yet, in a private directory: a file created
+    // in the repository root is visible to every other test listing it.
+    const tmpCwd = fs.mkdtempSync(path.join('/tmp', 'tool-policy-diffstat-'));
     const tmpPath = 'tmp-test-diffstat-new.ts';
-    const fullPath = path.resolve(cwd, tmpPath);
+    const fullPath = path.resolve(tmpCwd, tmpPath);
     try {
       // Ensure it doesn't exist
       if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
@@ -1254,7 +1256,7 @@ describe('diffStat capture (plan D3)', () => {
       };
       const wrapped2 = policy.wrapWriteTool(
         mockTool,
-        cwd,
+        tmpCwd,
         filesChanged,
         (params: any) => [params?.path ?? tmpPath],
         false,
@@ -1268,7 +1270,7 @@ describe('diffStat capture (plan D3)', () => {
       expect(delta!.added).toBe(4);
       expect(delta!.deleted).toBe(0);
     } finally {
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      fs.rmSync(tmpCwd, { recursive: true, force: true });
     }
   });
 });

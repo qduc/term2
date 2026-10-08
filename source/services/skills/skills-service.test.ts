@@ -22,7 +22,9 @@ function createMockLogger() {
   return { logger, warnings, errors, debugLogs };
 }
 
-const TEMP_TEST_DIR = path.join(process.cwd(), 'temp-skills-test');
+// Per-process directory under the OS temp dir. It used to live in the repository
+// root, where tests that list the working directory could see it appear and vanish.
+const TEMP_TEST_DIR = path.join(os.tmpdir(), `term2-temp-skills-test-${process.pid}`);
 const mockHome = path.join(TEMP_TEST_DIR, 'mock-home');
 const mockProject = path.join(TEMP_TEST_DIR, 'mock-project');
 

@@ -172,10 +172,17 @@ describe('ApplicationRunLoop tool invocation context', () => {
     expect((calls[0].context as any).context).toBe(userContext);
   });
 
-  it('honors parent approvals replayed into a seeded nested run (F5 pin)', async () => {
+  it.each([
+    ['a blanket parent approval', true],
+    ['a per-call parent approval of a different call that shares the id', false],
+  ])('replays parent approvals into a seeded nested run (F5 pin): %s', async (_case, blanket) => {
     const executed: string[] = [];
     const parentLedger = new ApprovalLedger();
-    parentLedger.approveTool({ toolName: 'shell', callId: 'call-1' });
+    // A blanket ("always allow") decision belongs to the tool and carries into
+    // the child. A per-call decision belongs to the parent's call: the child's
+    // provider numbers its own calls, so a matching id is a different call and
+    // must prompt again.
+    parentLedger.approveTool({ toolName: 'shell', callId: 'call-1' }, { alwaysApprove: blanket });
 
     // runAsTool replays the parent's snapshot into the nested run's ledger,
     // which it passes to the nested loop via the options seed.
@@ -224,9 +231,13 @@ describe('ApplicationRunLoop tool invocation context', () => {
     );
     await stream.completed;
 
-    // The parent already approved this exact call: no interruption, no re-prompt.
-    expect(stream.interruptions).toHaveLength(0);
-    expect(executed).toEqual(['call-1']);
+    if (blanket) {
+      expect(stream.interruptions).toHaveLength(0);
+      expect(executed).toEqual(['call-1']);
+    } else {
+      expect(stream.interruptions).toHaveLength(1);
+      expect(executed).toEqual([]);
+    }
   });
 
   it('records an approved decision and executes the same call without re-prompting (F5 mechanism at the loop)', async () => {

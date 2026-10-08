@@ -110,7 +110,10 @@ export class ToolCallExecution {
         continue;
       }
       context.onToolStall({ name: event.name, argumentsText: event.arguments, effect: definition.effect });
-      const alreadyDecided = context.approvals.isToolApproved({ toolName: event.name, callId: event.id });
+      // Only blanket decisions apply to a newly planned call. A per-call
+      // approval or rejection is bound to its plan entry (resolveApproval) and
+      // must never authorize a later call that reuses the same id.
+      const alreadyDecided = context.approvals.blanketDecision(event.name);
       if (alreadyDecided === false) {
         entry.output =
           context.approvals.getRejectionMessage(event.name, event.id) ?? 'Tool execution was not approved.';

@@ -1454,3 +1454,55 @@ it('reports costUsd from terminal chunk usage.cost', async () => {
   const completion = events.find((event) => event.type === 'completion');
   expect(completion.costUsd).toBe(0.000789);
 });
+
+it('stream() gives id-less and empty-id tool calls ids unique to the response, consistent across events and output', async () => {
+  const response = (id?: string) => [
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                ...(id === undefined ? {} : { id }),
+                function: { name: 'shell', arguments: '{"command":"ls"}' },
+              },
+              {
+                index: 1,
+                ...(id === undefined ? {} : { id }),
+                function: { name: 'shell', arguments: '{"command":"pwd"}' },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ];
+  const ids: string[][] = [];
+  for (const id of [undefined, '', undefined]) {
+    const events: any[] = await collect(modelFor(response(id)).stream(testRequest as any));
+    const streamed = events.filter((event) => event.type === 'tool_call').map((event) => event.id);
+    const completion = events.find((event) => event.type === 'completion');
+    const output = completion.output.filter((item: any) => item.type === 'tool_call').map((item: any) => item.id);
+    expect(streamed).toEqual(output);
+    expect(streamed.every((value: string) => /^call_[0-9a-f]{16}_\d+$/.test(value))).toBe(true);
+    ids.push(streamed);
+  }
+  const all = ids.flat();
+  expect(new Set(all).size).toBe(all.length);
+});
+
+it('stream() keeps provider-supplied tool call ids', async () => {
+  const events: any[] = await collect(
+    modelFor([
+      {
+        choices: [
+          { delta: { tool_calls: [{ index: 0, id: 'call_abc', function: { name: 'shell', arguments: '{}' } }] } },
+        ],
+      },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    ]).stream(testRequest as any),
+  );
+  expect(events.filter((event) => event.type === 'tool_call').map((event) => event.id)).toEqual(['call_abc']);
+});

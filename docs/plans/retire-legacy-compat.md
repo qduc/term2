@@ -302,7 +302,13 @@ Two decisions taken while landing (recorded so they are not re-derived):
 
 *Verify:* the F5 pin — a tool approved in the parent does not prompt again inside a nested
 subagent (loop-level: a seeded nested run whose `shell` callId matches a replayed parent
-approval raises no interruption and executes). `approval-replay.test.ts` must keep passing
+approval raises no interruption and executes).
+
+Update (2026-10-08): only blanket parent decisions carry into a nested run. Call ids
+repeat (the chat adapter's `call_${index}` fallback makes every response's first call
+`call_0`), so matching a per-call decision by id let an approval authorize a different
+call. The loop now plans new calls against blanket decisions only; a per-call approval
+is bound to its plan entry. The F5 pin covers both cases. `approval-replay.test.ts` must keep passing
 unchanged; if it needs editing, the ledger's semantics drifted.
 
 ### Slice 6 — `tool()` / `Tool` → `ToolDefinition`, and `createSubagentTool()`

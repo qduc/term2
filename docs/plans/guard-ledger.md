@@ -2821,6 +2821,17 @@ error (policy never consulted), explicit pause and unrelated question
 (deferred), steer after a check, approval pause, legacy maxTurns and staged run
 budget, no goal / terminal goal / no tool, transient client.
 
+End-to-end proof: the positional `--goal` launch in `source/cli.integration.test.ts`
+drives a text-only mock provider through the built CLI and now asserts three
+requests (initial plus two reminders), the reminder text in the second request,
+the unresolved notice on stderr, and a single `goal_changed` event still
+`active`.
+
+Disposition: **implemented in `71020cd1`** (branch `goal-stop-guard`). Gates on
+Node 24: `pnpm test`, `pnpm test:integration`, `pnpm test:e2e`,
+`pnpm test:provider-black-box`, `pnpm typecheck`; the better-sqlite3 suites were
+run on the Node ABI their native module was built for.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

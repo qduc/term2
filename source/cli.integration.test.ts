@@ -84,7 +84,11 @@ let testDir = '';
  * `model` field is recorded so tests can assert which model id actually
  * reached the wire.
  */
-async function startModelMock(modelIds: string[]): Promise<{
+async function startModelMock(
+  modelIds: string[],
+  /** SSE data payloads for the n-th chat request (1-based); defaults to a plain "ok" reply. */
+  script?: (n: number) => unknown[],
+): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
   capturedModels: () => string[];
@@ -112,6 +116,11 @@ async function startModelMock(modelIds: string[]): Promise<{
         requestedModels.push('<unparseable>');
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const scripted = script?.(requestedBodies.length);
+      if (scripted) {
+        res.end([...scripted.map((data) => `data: ${JSON.stringify(data)}\n`), 'data: [DONE]', ''].join('\n'));
+        return;
+      }
       res.end(
         [
           'data: {"id":"chatcmpl-mock","choices":[{"delta":{"role":"assistant","content":"ok"}}]}',
@@ -228,16 +237,21 @@ it('positional launch durably records its goal before the first provider request
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
   try {
-    const { status } = await spawnCli(
+    const { status, stderr } = await spawnCli(
       [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
       createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
     );
     expect(status).toBe(0);
-    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+    // The text-only mock never calls goal_check, so the active-goal stop check
+    // reminds twice and then returns control with a visible notice.
+    expect(mock.capturedModels()).toEqual(['mock-alpha', 'mock-alpha', 'mock-alpha']);
     const sentRequest = JSON.stringify(mock.capturedRequests()[0]);
     expect(sentRequest).toContain('Noninteractive outcome');
     expect(sentRequest).toContain('Provider returns');
     expect(sentRequest).toContain('not user approval, authorization, permission, a plan');
+    expect(sentRequest).toContain('goal_check');
+    expect(JSON.stringify(mock.capturedRequests()[1])).toContain('Durable goal stop check');
+    expect(stderr).toContain('Goal stop check unresolved');
     const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
     expect(logPath).toBeDefined();
     const events = fs
@@ -252,6 +266,81 @@ it('positional launch durably records its goal before the first provider request
     expect(events[goalIndex].goal).toMatchObject({
       outcome: 'Noninteractive outcome',
       successCriteria: 'Provider returns',
+    });
+    // The unresolved stop check never rewrites durable goal status.
+    expect(events.filter((event) => event.type === 'goal_changed')).toHaveLength(1);
+    expect(events[goalIndex].goal.status).toBe('active');
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('positional launch closes the goal after a recorded achieved goal_check and reports it', async () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const check = {
+    status: 'achieved',
+    evidence: 'Provider returned the reply',
+    criteriaEvidence: 'Provider returns: request 1 completed',
+  };
+  const mock = await startModelMock(['mock-alpha'], (n) =>
+    n === 1
+      ? [
+          {
+            id: 'chatcmpl-check',
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_check',
+                      type: 'function',
+                      function: { name: 'goal_check', arguments: JSON.stringify(check) },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          { id: 'chatcmpl-check', choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ]
+      : [
+          { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'Shipped.' } }] },
+          { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        ],
+  );
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+  try {
+    const { status, stdout, stderr } = await spawnCli(
+      [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
+      createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
+    );
+    expect(status, stderr).toBe(0);
+    // One request for the check, one for the final reply: no reminder.
+    expect(mock.capturedModels()).toEqual(['mock-alpha', 'mock-alpha']);
+    expect(JSON.stringify(mock.capturedRequests()[1])).not.toContain('Durable goal stop check');
+    expect(stdout).toContain('Shipped.');
+    expect(stderr).toContain(
+      "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nMarked achieved by the model's goal_check.",
+    );
+    const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
+    const events = fs
+      .readFileSync(path.join(testDir, logPath!), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).event);
+    const goals = events.filter((event) => event.type === 'goal_changed');
+    expect(goals).toHaveLength(2);
+    expect(goals[0].goal.status).toBe('active');
+    expect(goals[0].source).toBeUndefined();
+    expect(goals[1]).toMatchObject({
+      version: 1,
+      source: 'goal_check',
+      goal: { id: goals[0].goal.id, outcome: 'Noninteractive outcome', status: 'achieved' },
     });
   } finally {
     await mock.close();

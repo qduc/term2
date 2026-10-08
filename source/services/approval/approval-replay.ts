@@ -4,33 +4,27 @@ type ApprovalContext = {
 };
 
 /**
- * One entry of `RunContext.toJSON().approvals`.
+ * One entry of `ApprovalLedger.snapshot()`, keyed by tool name:
  *
- * The upstream runtime does not export this shape, so we restate it here.
- * export the type, so we restate it. The semantics, verified against
- * `runContext.js#isToolApproved`, are:
- *
- * - the record is keyed by **tool name**, not by call id;
  * - `approved: true` / `rejected: true` are *blanket* decisions covering every call of that
  *   tool, including calls the user has never seen;
- * - `approved: string[]` / `rejected: string[]` are decisions scoped to exactly those call
- *   ids, and any other call id still prompts;
+ * - `approved: string[]` / `rejected: string[]` record which calls a one-time decision was
+ *   made for. They authorize nothing: call ids repeat across responses and runs;
  * - `false` carries no decision at all — it is what a blanket decision on the other side
  *   leaves behind;
- * - a blanket approval outranks a blanket rejection.
+ * - a blanket approval outranks a blanket rejection;
+ * - `stickyRejectMessage` is the blanket rejection's message.
  */
 export type ApprovalRecord = {
   approved: boolean | string[];
   rejected: boolean | string[];
-  messages?: Record<string, string>;
   stickyRejectMessage?: string;
 };
 
 /**
  * Call id attached to a replayed blanket decision. A blanket decision belongs to the tool
  * rather than to any one call, but `approveTool`/`rejectTool` only accept a call. This
- * sentinel keeps the synthetic call from colliding with a real one, so a blanket rejection's
- * message is always served from `stickyRejectMessage` as it was in the source context.
+ * sentinel keeps the synthetic call from colliding with a real one.
  */
 const BLANKET_DECISION_CALL_ID = '__approval_replay_blanket_decision__';
 
@@ -40,29 +34,24 @@ function buildApprovalItem(toolName: string, callId: string, agent: unknown): un
     agent,
     toolName,
     // Top-level callId so typed ledgers (ApprovalLedger) can consume the item
-    // without probing rawItem; RunContext reads rawItem.callId first and sees
-    // the same value.
+    // without probing rawItem.
     callId,
   };
 }
 
 /**
- * Seeds `target` with approval decisions already taken elsewhere — in practice, replaying a
- * parent run's approvals into a freshly created nested subagent context so that a tool the
- * user already approved does not prompt a second time inside the subagent.
+ * Seeds `target` with the blanket decisions already taken elsewhere — in practice, replaying a
+ * parent run's "always allow" / "always reject" decisions into a freshly created nested
+ * subagent ledger so that a tool the user approved for every call does not prompt a second
+ * time inside the subagent.
  *
- * Uses only the public `approveTool` / `rejectTool` surface. `approvals` is the plain
- * `toJSON().approvals` record of the source context.
+ * One-time (per-call) decisions are deliberately NOT replayed. They belong to the parent's
+ * call; the nested run's provider numbers its own calls, so a matching id there is a
+ * different call that must be presented to the user again.
  *
- * Rejections are replayed before approvals. `approveTool(…, { alwaysApprove: true })` clears
- * the record's rejected list and `rejectTool(…, { alwaysReject: true })` clears its approved
- * list, so ordering decides which survives a record holding both. Rejections-first lands on
- * the same answer `isToolApproved` would have given for the original record, in which a
- * blanket approval outranks everything.
- *
- * Known fidelity limit: a record that is blanket-rejected *and* carries per-call rejection
- * messages keeps only `stickyRejectMessage`. The public API cannot express both, and the
- * difference is confined to message text — every such call is rejected either way.
+ * Uses only the public `approveTool` / `rejectTool` surface. A record holding both blanket
+ * decisions replays both, and the target resolves it as the source did: a blanket approval
+ * outranks a blanket rejection.
  */
 export function replayApprovals(
   target: ApprovalContext,
@@ -79,22 +68,12 @@ export function replayApprovals(
         alwaysReject: true,
         message: record.stickyRejectMessage,
       });
-    } else if (Array.isArray(record.rejected)) {
-      for (const callId of record.rejected) {
-        target.rejectTool(buildApprovalItem(toolName, callId, agent), {
-          message: record.messages?.[callId],
-        });
-      }
     }
 
     if (record.approved === true) {
       target.approveTool(buildApprovalItem(toolName, BLANKET_DECISION_CALL_ID, agent), {
         alwaysApprove: true,
       });
-    } else if (Array.isArray(record.approved)) {
-      for (const callId of record.approved) {
-        target.approveTool(buildApprovalItem(toolName, callId, agent));
-      }
     }
   }
 }

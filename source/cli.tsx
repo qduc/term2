@@ -75,7 +75,7 @@ import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.j
 import { AutomaticMemoryCanary } from './services/memory/automatic-memory-canary.js';
 import { ControlSocketServer, isControlSocketName } from './services/control-socket/control-socket.js';
 import { runControlCommand } from './services/control-socket/control-command.js';
-import { createDurableGoal } from './services/conversation/durable-goal.js';
+import { createDurableGoal, type GoalAchievedSlot } from './services/conversation/durable-goal.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
 
 const controlArgv: string[] = [];
@@ -1043,6 +1043,10 @@ await hookService.initialize();
 // Shared by the owned root client and the interactive goal command callback.
 // Mutations become visible to later provider requests only after the event append succeeds.
 const currentGoalState: { current: DurableGoal | undefined } = { current: resumedConversation?.goal };
+// A recorded achieved goal_check closes the goal at the root stop seam. The
+// active surface (App or runNonInteractive) installs the handler and persists
+// the goal through its own goal-write path.
+const goalAchievedSlot: GoalAchievedSlot = {};
 
 // A prior goal proposal (approved or rejected) leaves a propose_goal function
 // call in the transcript; replaying it seeds the once-per-session proposal guard.
@@ -1077,6 +1081,10 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         logger: logger,
         settings: settings,
         getGoal: () => currentGoalState.current,
+        onGoalAchieved: (goal: DurableGoal) => {
+          if (!goalAchievedSlot.handler) throw new Error('No session surface is installed to persist the goal.');
+          goalAchievedSlot.handler(goal);
+        },
         // Interactive sessions only: propose_goal needs an answerable user, so
         // non-interactive callers (allowAskUser=false) never register the tool.
         ...(allowAskUser
@@ -1133,6 +1141,7 @@ if (hasPositionalPrompt) {
     onGoalPersisted: (goal) => {
       currentGoalState.current = goal;
     },
+    goalAchievedSlot,
   });
   process.exit(exitCode);
 }
@@ -1415,10 +1424,11 @@ const { waitUntilExit } = render(
             sessionId={effectiveSessionId}
             initialMessages={initialMessages}
             initialGoal={launchGoal ?? resumedConversation?.goal}
-            appendGoal={(goal) => {
-              logWriter.append({ type: 'goal_changed', version: 1, goal });
+            appendGoal={(goal, source) => {
+              logWriter.append({ type: 'goal_changed', version: 1, goal, ...(source ? { source } : {}) });
               currentGoalState.current = goal;
             }}
+            goalAchievedSlot={goalAchievedSlot}
             onGoalRestore={(goal) => {
               currentGoalState.current = goal;
             }}

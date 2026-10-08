@@ -34,7 +34,7 @@ import {
 } from './tools/agent/configure-task-check-in.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
-import type { AnyToolDefinition, ToolRegistry } from './tools/types.js';
+import type { AnyToolDefinition, RequestSnapshot, ToolRegistry } from './tools/types.js';
 import type {
   NestedSubagentResult,
   SubagentResult,
@@ -62,6 +62,7 @@ import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 import { createProposeGoalToolDefinition } from './tools/agent/propose-goal.js';
+import { createGoalCheckToolDefinition } from './tools/agent/goal-check.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
@@ -165,6 +166,7 @@ export interface AgentDefinition {
   name: string;
   instructions: string;
   resolveInstructionsForRequest?: () => string;
+  resolveRequestSnapshot?: () => RequestSnapshot;
   tools: ToolRegistry;
   model: string;
   /** Enable pinned global memory context only for profiles exposing root memory context. */
@@ -547,6 +549,10 @@ export const getAgentDefinition = (
     );
   }
 
+  // The stop self-check is root-only (only the root receives `getGoal`) and is
+  // available in every mode: the stop guard requires it whenever a goal is active.
+  if (deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
+
   if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
     if (askUserTool.name !== TOOL_NAME_ASK_USER) {
@@ -769,7 +775,12 @@ export const getAgentDefinition = (
     memoryContextEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     instructions,
     ...(deps.getGoal
-      ? { resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}` }
+      ? {
+          resolveInstructionsForRequest: () => `${instructions}${renderDurableGoalContext(deps.getGoal?.())}`,
+          // Read at the same request boundary as the rendered goal above, so
+          // goal_check records the goal the model judged, not a later one.
+          resolveRequestSnapshot: () => ({ goal: deps.getGoal?.() }),
+        }
       : {}),
     tools,
     model: resolvedModel,

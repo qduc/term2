@@ -34,7 +34,7 @@ import {
 } from './run-code-agent-capability.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
-import { TOOL_NAME_APPLY_PATCH } from '../../tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_GOAL_CHECK } from '../../tool-names.js';
 import { saveOutputArtifact } from '../../../utils/shell/shell-output.js';
 import { getRunCodeExecutionResult } from './run-code-execution.js';
 import type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
@@ -68,6 +68,8 @@ export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   TOOL_NAME_RUN_CODE,
   'ask_mentor',
   'session_rollover',
+  // The goal stop check must be a direct, top-level call so the stop guard sees it in history.
+  TOOL_NAME_GOAL_CHECK,
   'shell',
   'bash',
   'enter_worktree',

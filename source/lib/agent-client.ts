@@ -43,6 +43,7 @@ import type { ProviderInput, ProviderInputItem } from '../contracts/provider-inp
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 import { getProvider, type ProviderRegistry } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { createGoalStopPolicy } from '../services/conversation/durable-goal-stop-check.js';
 import { randomUUID } from 'node:crypto';
 import { fetchModels } from '../services/model-service.js';
 import {
@@ -153,6 +154,7 @@ export class AgentClient {
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #onGoalAchieved?: (goal: DurableGoal) => void;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #providerRegistry?: ProviderRegistry;
@@ -705,6 +707,12 @@ export class AgentClient {
       logger: ILoggingService;
       settings: ISettingsService;
       getGoal?: () => DurableGoal | undefined;
+      /**
+       * Persist a goal that a recorded achieved `goal_check` closed at the stop
+       * seam. Root clients only: transient clients have no goal source, so no
+       * stop policy and no write.
+       */
+      onGoalAchieved?: (goal: DurableGoal) => void;
       /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
       proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
       executionContext?: ExecutionContext;
@@ -747,6 +755,7 @@ export class AgentClient {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
+    this.#onGoalAchieved = deps.onGoalAchieved;
     this.#sessionContextService = deps.sessionContextService;
     this.#providerRegistry = deps.providerRegistry;
     this.#toolLifecycle = toolLifecycle;
@@ -1044,6 +1053,12 @@ export class AgentClient {
   #runBudgetPolicy(): RunBudgetPolicy {
     const policy = readRunBudgetPolicy(this.#settings);
     return { ...policy, turnBackstop: Math.min(policy.turnBackstop, this.#maxTurns) };
+  }
+
+  /** Root-only active-goal stop check; transient clients never receive one. */
+  #goalStopCheck(): ReturnType<typeof createGoalStopPolicy> | undefined {
+    const getGoal = this.#agentConfig.goalSource;
+    return getGoal ? createGoalStopPolicy(getGoal, this.#onGoalAchieved) : undefined;
   }
 
   /** Grant one finite extension to the active run-budget envelope. */
@@ -1443,6 +1458,7 @@ export class AgentClient {
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
       const runBudget = this.#runBudgetPolicy();
+      const goalStopCheck = this.#goalStopCheck();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
           requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
@@ -1473,6 +1489,7 @@ export class AgentClient {
             }
             return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
           },
+          ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
         });
       };
       const stream = run();
@@ -1495,6 +1512,7 @@ export class AgentClient {
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();
     const runBudget = this.#runBudgetPolicy();
+    const goalStopCheck = this.#goalStopCheck();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
       requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
@@ -1524,6 +1542,7 @@ export class AgentClient {
         return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
       },
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+      ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;

@@ -3,6 +3,32 @@ import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 import type { DeniedReadMetadata, PostExecuteDecision } from '../contracts/conversation.js';
 import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
 import type { StreamedModelCustomToolFormat } from '../contracts/streamed-model-turn.js';
+import type { DurableGoal } from '../services/logging/conversation-log-events.js';
+
+/**
+ * Session state captured when a model request is built, in the same step that
+ * renders it into the request's instructions. Every tool call in that request's
+ * response executes with this snapshot — even after an approval pause — so a
+ * tool can tell what the model was shown from what the session holds now.
+ */
+export interface RequestSnapshot {
+  /** The durable goal rendered into the request (`undefined`: none was). */
+  readonly goal: DurableGoal | undefined;
+}
+
+/** Per-call execution details the root run loop passes as `execute`'s third argument. */
+export interface ToolCallDetails {
+  readonly toolCall: { readonly callId: string };
+  /** Absent when the caller built no request snapshot (nested runtimes, direct calls). */
+  readonly request?: RequestSnapshot;
+}
+
+/** The request snapshot carried by `details`, if the caller supplied one. */
+export function getRequestSnapshot(details: unknown): RequestSnapshot | undefined {
+  if (!details || typeof details !== 'object' || !('request' in details)) return undefined;
+  const request = (details as { request?: unknown }).request;
+  return request && typeof request === 'object' && 'goal' in request ? (request as RequestSnapshot) : undefined;
+}
 
 /**
  * The one physical tool-execution seam.  It is observational: callbacks do

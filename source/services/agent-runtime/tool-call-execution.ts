@@ -1,6 +1,8 @@
 import type { StreamedModelTurnEvent } from '../../contracts/streamed-model-turn.js';
 import type {
   AnyToolDefinition,
+  RequestSnapshot,
+  ToolCallDetails,
   ToolExecutionLifecycleContext,
   ToolExecutionLifecyclePort,
   ToolRegistry,
@@ -18,6 +20,8 @@ export type ToolPlanEntry = {
   status: 'ready' | 'approval_pending' | 'completed';
   output?: string;
   result?: unknown;
+  /** The snapshot of the request whose response produced this call. */
+  readonly requestSnapshot?: RequestSnapshot;
 };
 
 export type PendingToolApproval = {
@@ -49,6 +53,12 @@ export interface ToolCallExecutionContext {
   readonly sessionId?: string;
   readonly turnId?: string;
   readonly hookScope?: ToolExecutionLifecycleContext['scope'];
+  /**
+   * The latest request's snapshot. Only `plan` reads it: calls are planned
+   * right after the response that produced them, before any later request is
+   * built, and keep it across approval pauses.
+   */
+  readonly requestSnapshot?: RequestSnapshot;
   readonly onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => void;
   readonly onDispatch: (entry: ToolPlanEntry) => void;
   readonly onToolStall: (input: { name: string; argumentsText: string; effect: AnyToolDefinition['effect'] }) => void;
@@ -90,6 +100,7 @@ export class ToolCallExecution {
         definition: context.tools.find((tool) => tool.name === event.name),
         parallelSafe: false,
         status: 'ready',
+        ...(context.requestSnapshot ? { requestSnapshot: context.requestSnapshot } : {}),
       };
     });
     this.#plan = plan;
@@ -110,10 +121,12 @@ export class ToolCallExecution {
         continue;
       }
       context.onToolStall({ name: event.name, argumentsText: event.arguments, effect: definition.effect });
-      const alreadyDecided = context.approvals.isToolApproved({ toolName: event.name, callId: event.id });
+      // Only blanket decisions apply to a newly planned call. A per-call
+      // approval or rejection is bound to its plan entry (resolveApproval) and
+      // must never authorize a later call that reuses the same id.
+      const alreadyDecided = context.approvals.blanketDecision(event.name);
       if (alreadyDecided === false) {
-        entry.output =
-          context.approvals.getRejectionMessage(event.name, event.id) ?? 'Tool execution was not approved.';
+        entry.output = context.approvals.blanketRejectionMessage(event.name) ?? 'Tool execution was not approved.';
         continue;
       }
       if (alreadyDecided !== true && (await definition.needsApproval(entry.params, context.toolContext))) {
@@ -140,13 +153,37 @@ export class ToolCallExecution {
     this.#logEligibility(plan);
   }
 
+  /**
+   * Settle exactly the pending call the decision was made for. The interruption
+   * object the caller answered identifies it: call ids are not unique (a
+   * provider may give several calls in one response the same id, and a later
+   * response may reuse an earlier one's id), so an interruption that names a
+   * call but is not one of the pending interruption objects — a copy, or a
+   * stale one from an earlier pause — fails closed instead of being matched by
+   * id. Every in-process caller answers with the object it was handed. Only a
+   * bare call id with no interruption object may select by id, and only when
+   * that id is unique among the pending calls.
+   */
   resolveApproval(
-    callId: string | undefined,
+    target: { callId: string | undefined; interruption?: unknown },
     decision: 'approved' | 'rejected',
     message: string | undefined,
     approvals: ApprovalLedger,
   ): void {
-    const selectedIndex = callId ? this.#pendingApprovals.findIndex((pending) => pending.callId === callId) : -1;
+    const { callId, interruption } = target;
+    let selectedIndex = -1;
+    if (interruption !== undefined) {
+      selectedIndex = this.#pendingApprovals.findIndex((pending) => pending.interruption === interruption);
+      if (selectedIndex < 0 && callId)
+        throw new Error(
+          `Approval decision references an interruption that is not pending in this run (stale or copied): ${callId}`,
+        );
+    } else if (callId) {
+      const matches = this.#pendingApprovals.filter((pending) => pending.callId === callId);
+      if (matches.length > 1)
+        throw new Error(`Approval decision call id is ambiguous among pending tool calls: ${callId}`);
+      selectedIndex = matches.length === 1 ? this.#pendingApprovals.indexOf(matches[0]!) : -1;
+    }
     if (callId && selectedIndex < 0)
       throw new Error(`Approval decision references unknown pending tool call: ${callId}`);
     const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;
@@ -263,7 +300,11 @@ export class ToolCallExecution {
     this.#deps.getOnToolDispatch?.()?.(callId);
     await this.#notify(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {
-      const result = await definition.execute(entry.params, context.toolContext, { toolCall: { callId } });
+      const details: ToolCallDetails = {
+        toolCall: { callId },
+        ...(entry.requestSnapshot ? { request: entry.requestSnapshot } : {}),
+      };
+      const result = await definition.execute(entry.params, context.toolContext, details);
       await this.#notify(() => this.#deps.toolLifecycle?.after(lifecycleContext, result, Date.now() - startedAt));
       return result;
     } catch (error) {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
 import { OpenAICompatibleError } from './common/provider-errors.js';
 import { acceptsProviderOpaqueTag } from './provider-opaque-compatibility.js';
@@ -210,8 +211,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       text += flushedWhitespace;
       yield { type: 'text_delta', text: flushedWhitespace };
     }
-    for (const [index, call] of calls)
-      yield { type: 'tool_call', id: call.id ?? `call_${index}`, name: call.name, arguments: call.arguments };
+    // Providers may omit tool call ids (or send ""). The fallback must be unique
+    // per response: a positional `call_${index}` repeats in every response, and
+    // anything keyed by call id (result pairing, approvals) then confuses calls.
+    const fallbackIdPrefix = `call_${randomUUID().replace(/-/g, '').slice(0, 16)}_`;
+    for (const [index, call] of calls) if (!call.id) call.id = `${fallbackIdPrefix}${index}`;
+    for (const [, call] of calls) yield { type: 'tool_call', id: call.id!, name: call.name, arguments: call.arguments };
 
     const output: any[] = [];
     if (reasoning) {
@@ -235,9 +240,9 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     }
     if (calls.size) {
       output.push(
-        ...[...calls].map(([index, call]) => ({
+        ...[...calls].map(([, call]) => ({
           type: 'tool_call' as const,
-          id: call.id ?? `call_${index}`,
+          id: call.id!,
           name: call.name,
           arguments: call.arguments,
         })),

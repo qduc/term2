@@ -27,6 +27,11 @@ import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
 import { getConversationsDir } from './services/conversation/conversation-persistence.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
+import { formatGoalClosedByCheck, type GoalAchievedSlot } from './services/conversation/durable-goal.js';
+import {
+  GOAL_CHECK_UNRESOLVED_CAUSE,
+  GOAL_CHECK_UNRESOLVED_NOTICE,
+} from './services/conversation/durable-goal-stop-check.js';
 
 const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
@@ -55,6 +60,8 @@ export interface NonInteractiveConfig {
   initialGoal?: DurableGoal;
   /** Publish the goal to request-time prompt readers only after its event append succeeds. */
   onGoalPersisted?: (goal: DurableGoal) => void;
+  /** Receives goals closed by a recorded achieved goal_check; this run persists and reports them. */
+  goalAchievedSlot?: GoalAchievedSlot;
   autoApprove: boolean;
   quiet?: boolean;
   showReasoning?: boolean;
@@ -257,6 +264,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       if (event.finalText && event.finalText.length > streamedTextLength) {
         stdout.write(event.finalText.slice(streamedTextLength));
       }
+      if (event.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE) stderr.write(`${GOAL_CHECK_UNRESOLVED_NOTICE}\n`);
       return;
     }
 
@@ -347,10 +355,9 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     ): Promise<SendResult | ApprovalResult | null> => {
       let result: SendResult | ApprovalResult = await sendTurn(input, suppressUserMessageDisplay);
       while (result?.type === 'approval_required') {
-        if (
-          result.approval.checkIn === 'run_budget' &&
-          (config.settingsService?.get('agent.runBudget.escalation') ?? 'contain') === 'contain'
-        ) {
+        // Every run-budget check-in parks, whatever escalation raised it
+        // ('pause' or 'contain'): --auto-approve approves tools, never budget.
+        if (result.approval.checkIn === 'run_budget') {
           const diagnostic = {
             type: 'run_budget_paused',
             code: 'run_budget_paused',
@@ -620,6 +627,20 @@ export async function runNonInteractive(
         config.onGoalPersisted?.(config.initialGoal);
       }
       createdRuntime.runtime.logs.setLogSink((event) => logWriter!.append(event));
+      if (config.goalAchievedSlot) {
+        // Same write as the launch goal above: append, then publish to prompt readers.
+        const goalStderr = config.stderr ?? process.stderr;
+        config.goalAchievedSlot.handler = (goal) => {
+          try {
+            logWriter!.append({ type: 'goal_changed', version: 1, goal, source: 'goal_check' });
+          } catch (error) {
+            goalStderr.write(`Goal update failed: ${error instanceof Error ? error.message : String(error)}\n`);
+            throw error;
+          }
+          config.onGoalPersisted?.(goal);
+          goalStderr.write(`${formatGoalClosedByCheck(goal)}\n`);
+        };
+      }
       // Headless turns have no UI message writer. Commit the accepted request
       // before dispatch so a context/budget pause can actually be resumed.
       logWriter.append({ type: 'user_message', message: { id: randomUUID(), sender: 'user', text: config.prompt } });
@@ -684,6 +705,7 @@ export async function runNonInteractive(
       );
     }
     await runtime?.shutdown();
+    if (config.goalAchievedSlot) config.goalAchievedSlot.handler = undefined;
     runtime?.logs.setLogSink(null);
     await logWriter?.close();
     clientHandle.dispose();

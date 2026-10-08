@@ -2749,6 +2749,191 @@ passed (5.00s, exit 0, 180s timeout). Two preceding changed-test invocations
 failed before running tests; the corrected explicit-baseline invocation is the
 final changed gate. Merged public classifier and reset probes also passed.
 
+### Active-goal stop check (2026-10-08)
+
+The durable goal was prompt context only; a root turn could end while the goal
+was plainly unfinished. The stop check makes the working model report before a
+normal stop. Design and authority rules live in
+[durable goal](durable-goal.md#active-goal-stop-check).
+
+```text
+Harm prevented: a root turn ending silently while the active durable goal is
+  unachieved, and the opposite runaway: harness-forced continuation that never
+  returns control (an endless reminder/continuation exchange).
+Scope and execution paths: root AgentClient runs (interactive and
+  non-interactive, including approval resumes through continueRunStream) whose
+  agent has the goal_check tool and whose session goal is active.
+  Transient/subagent clients, mentor/nested runners, gateway sessions without a
+  goal source, and sessions without an active goal are untouched.
+Guard class: runaway detector over the stop/continue exchange (secondary:
+  advisory continuation; never abort/kill).
+Enforcement owner: decideGoalStop / createGoalStopPolicy in
+  services/conversation/durable-goal-stop-check.ts, consulted by
+  ApplicationRunLoop only at its normal-stop seam (completed response, no tool
+  call, no pending approval, signal not aborted, no critical wrap-up latched).
+Recovery owner: the model, through the run loop's existing request boundary
+  (reminder admitted like any harness notice); then the user, when control
+  returns.
+Measured signal and observation boundary: the current turn's history (items
+  after the latest genuine user message; harness [Mode Notice] items excluded):
+  whether the latest tool activity is a goal_check with valid arguments whose
+  paired result starts with the tool's own success text ("Self-check
+  recorded:"); how many stop-check reminders were issued since the last
+  non-goal_check tool activity; and how many were issued in the window in total.
+Direct evidence or proxy: direct evidence that the model did not report (or
+  reported not_achieved and then stopped anyway); the report's truth is a
+  self-judgment proxy, never proof.
+Legitimate work that can produce the same signal: a model that forgot the
+  check once, or retried a malformed check; a model sent back to work that does
+  more work and tries to stop early again; an unrelated question or user pause
+  (answered with status deferred, which stops immediately).
+Configuration sources and precedence: none; constants
+  MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK = 2 and
+  MAX_GOAL_STOP_REMINDERS_PER_TURN = 6. Not derived from the run budget or
+  maxTurns: escalation 'warn' and 'disabled' never pause, and the root run
+  budget's turn backstop supersedes maxTurns, so neither bounds this guard.
+Effective default and clamping: two consecutive reminders without intervening
+  work (third idle stop returns control); six reminders per user instruction
+  regardless of work (seventh attempted stop returns control). Tool work resets
+  only the first count; only a new user instruction resets the second.
+Action and why the signal justifies it: request a check / continue the same run
+  (advisory ladder step "request confirmation"); at either limit, stop with typed
+  terminalCause goal_check_unresolved and a visible notice. See calibration.
+Partial-work settlement: unchanged; history, tool results and costs are kept.
+Retry, fallback, and provider-continuity semantics: no replay; the reminder is
+  an ordinary admitted user-role notice, so chaining/compaction are unchanged.
+Observability fields: debug diagnostic run_loop.normal_stop_policy with action,
+  guard, guardClass, reason, limit, turnLimit, remindersWithoutWork,
+  remindersThisTurn, limitReached (without_work | per_turn), lastProblem,
+  turnCount; no prompt or evidence text.
+Persisted-setting migration, if any: none. (T8 updates this: a recorded achieved
+  check that ends the turn now writes `goal_changed` with `source: 'goal_check'`
+  through the session surface. See the T8 note below.)
+Rollback boundary: the onNormalStop wiring in AgentClient (one helper, used by
+  startStream and continueRunStream) or the seam in ApplicationRunLoop; the
+  goal_check tool is inert without them.
+Ledger row: Active-goal stop check.
+```
+
+Calibration. Idle limit (2): one reminder for a forgotten check plus one retry
+of a malformed or premature check; a third consecutive idle stop shows the
+exchange itself loops. Per-turn limit (6): the first release let any tool call
+reset the only count and named the run budget as the owner of total work. That
+was wrong on two counts. Guard-design forbids "progress disables the limit"
+("productive turns do not silently waive an explicit budget"), and the run
+budget cannot own these continuations: under escalation 'warn' or 'disabled' it
+never pauses, and the root's backstop supersedes maxTurns. Adversarial review
+reproduced it: a model alternating read_file with a text-only stop ran 150
+requests (75 reminders) to a budget pause under 'contain' and was still running
+at 401 requests under 'warn' and 'disabled'. The guard now bounds its own
+forced continuations. Six is three resumed work segments with the idle allowance
+of two each: sent back, more work, early stop, one malformed retry, three times
+over. Past that, another reminder no longer corrects a forgotten check; it
+overrides the model's repeated judgment that the turn is over, which is the
+user's call. The false-positive cost of the cap is small and visible: the turn
+returns with the goal still active and the user can say "continue", which starts
+a fresh allowance. Evasive true positive just below the threshold: a model that
+stops five times with work in between costs at most five extra continuations
+per user instruction, each of which is ordinary model-chosen work. The action at
+both limits is unchanged (return control with a typed cause), so no step up the
+ladder was taken.
+
+Recorded result. A goal_check counts only when its result is the tool's own
+success text. Arguments alone are not enough: a check that was denied, rejected
+with a custom message, or threw during execution leaves no success text and is
+treated as an incomplete check (reminder, counted toward both limits).
+
+Goal binding (2026-10-08). The check judges the goal rendered into the request
+whose response made it: the run loop snapshots the goal at request build and the
+call keeps that snapshot through approval pauses. `goal_check` refuses to record
+when the session goal's id differs from the snapshot's at execution, and the
+recorded result names the snapshot's goal id; the check counts only when that id
+is the session goal at the stop seam. A goal replaced mid-turn — while the
+response streams, while the call waits for approval, or after it executed — turns
+the old check into an incomplete check (reminder, counted toward both limits).
+This narrows what counts as a valid check. It adds no new guard, limit, or
+termination path.
+
+Seam exclusions. The policy is not consulted when the signal is already aborted
+(including a response that completes after Ctrl+C) or when a critical run-budget
+wrap-up has latched during the request, so neither cancellation nor budget
+containment is ever converted into another goal reminder.
+
+Red proof (first release): with the run-loop seam reverted, `NODE_ENV=test pnpm
+exec vitest run source/services/agent-runtime/application-run-loop.goal-stop.test.ts`
+failed 10 of 17 (every continuation, limit, steer, approval and budget case);
+the 7 stop-permitted cases passed on both.
+
+Red proof (review follow-up), each a temporary mutation against the named test:
+
+- per-turn cap disabled (`: false && remindersThisTurn >= MAX_GOAL_STOP_REMINDERS_PER_TURN`):
+  "loop guard: work between stops cannot extend the turn forever with run budget
+  escalation disabled" and "... warn", plus the unit "caps total reminders per
+  user instruction even when work separates every stop", failed.
+- recorded-result check disabled (`validation.ok && false && !goalCheckWasRecorded(...)`):
+  "recorded result: a denied goal_check does not authorize the stop", "recorded
+  result: a goal_check whose execution failed does not authorize the stop", and
+  the four unit "does not count a valid-looking check that was ..." cases failed.
+- `!options.signal?.aborted` removed from the seam: "cancellation: a response that
+  completes after Ctrl+C reaches the stop seam without consulting the guard" failed.
+- `!state.criticalWrapUpPending` removed from the seam: "budget controls: a
+  pending critical wrap-up ends the run without consulting the guard" failed.
+- `onNormalStop` removed from `AgentClient.continueRunStream`: "the root client
+  keeps the stop guard across an approval resume" (agent-client.goal-stop.test.ts)
+  failed.
+
+Test matrix: completion, continuation (missing and not_achieved), incomplete
+achievement claim, denied and failed checks, idle limit at threshold-1 /
+threshold / threshold+1 and reset by work, per-turn limit at threshold-1 /
+threshold and reset by a new user instruction, alternating work/stop under run
+budget escalation 'disabled' and 'warn' (exactly 14 requests), blocker,
+cancellation before and after completion and provider error (policy never
+consulted), explicit pause and unrelated question (deferred), steer after a
+check, approval pause and AgentClient approval resume, critical wrap-up, legacy
+maxTurns and staged run budget, no goal / terminal goal / no tool, transient
+client. End-to-end: the positional `--goal` launch in
+`source/cli.integration.test.ts` drives a text-only mock through the built CLI
+(three requests, reminder text, stderr notice, single `goal_changed` still
+`active`).
+
+Disposition: **implemented in `71020cd1`, merged in `49168da1`; review
+follow-up (per-turn cap, recorded-result check, seam and resume tests) in
+`1d9f5c94`.** Verification on Node 24.21.0: `pnpm typecheck`; `pnpm test` (711
+files, 11028 passed); `pnpm test:integration` (14 files, 112 passed);
+`pnpm test:provider-black-box` (22 files, 193 passed); `pnpm test:e2e` (4 files,
+30 passed).
+
+Follow-up (call-id binding): a check's result is the first same-id result after
+the call's own position inside the window, not the earliest one. Chat providers
+that omit ids number calls `call_${index}`, so `call_0` repeats every response;
+earliest-match paired a check with an earlier `read_file` result (valid checks
+never ended the turn) or with an earlier recorded check (a rejected claim
+authorized the stop). Red proof: reverting to earliest-in-window fails the
+"repeated call ids" run-loop and unit tests; searching the full history also
+fails "ignores a recorded call_0 result from before the latest user message".
+
+Known limitations (deferred): the `[Mode Notice] ` prefix match that separates
+harness notices from user instructions; harness-injected user-role messages
+without that prefix restart the window (and both allowances); hosted
+(provider-executed) tool activity is invisible to the history scan; ACP maps
+`goal_check_unresolved` to an ordinary `end_turn`; non-interactive mode exits 0
+on an unresolved check.
+
+Update (2026-10-08, T8 — not a new guard): a recorded, valid `achieved` check
+that ends a root turn now closes the durable goal. The write lives in
+`createGoalStopPolicy` at the normal-stop seam (same owner as this guard): only
+there is the check known to be the turn's last tool activity with its own
+recorded result, so denied / failed / unrecorded / incomplete / superseded
+checks and every status other than achieved write nothing. The session surface
+(TUI or non-interactive) installs the handler and appends `goal_changed` with
+`source: 'goal_check'` through the same path as `/goal achieved`. Transient /
+subagent clients never receive the policy; `run_code` cannot call `goal_check`.
+The write is idempotent: after it flips the goal out of `active`, later seam
+evaluations (another turn, an approval resume) see no active goal. Prompt and
+tool text tell the model to verify against the criteria before claiming
+achieved. This is an authority/correctness change to the existing guard, not a
+new guard row.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**
@@ -3252,7 +3437,8 @@ compaction and run-budget-stall-escalation. User approved the outcome/default
 change; previous opt-in/default warn dispositions do not govern this new policy.
 
 Missing keys now select enabled auto compaction, `contain` escalation and no extra
-input ceiling. Known model capacity independently bounds prepared input after
+input ceiling. (Amended 2026-10-08: a missing escalation selects `warn` again;
+`contain` is opt-in. See "Run-budget default reverted to warn" below.) Known model capacity independently bounds prepared input after
 actual selected output and 10% estimation reserve. One shared resolver bounds
 soft compaction below hard admission; explicit smaller ceilings retain precedence.
 Default output allocation adapts to small windows; explicit output selections are
@@ -3271,7 +3457,8 @@ failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
 
 Headless logs commit the user request before dispatch; context/budget refusal
 exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
-remain advisory in `contain`; auto-approval cannot grant a new contained budget.
+remain advisory in `contain`; auto-approval cannot grant a new contained budget
+(since 2026-10-08, nor any run-budget extension under any escalation).
 Collector tests protect error/check-in identity; actual CLI tests protect saved
 history and resumed wire. Per-run grant state does not survive restart; resumed
 work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
@@ -3290,3 +3477,23 @@ Rollback: revert default selection independently from safe-cut/accounting/termin
 metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
 stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
 remain documented in the plan/PR. No merge, release or deployment is performed.
+
+### Run-budget default reverted to warn; --auto-approve never grants budget (2026-10-08)
+
+Decision (Duc, before 0.32.0): `agent.runBudget.escalation` defaults to advisory
+`warn` again — schema, `DEFAULT_SETTINGS`, and the `readRunBudgetPolicy`
+fallback. `contain` (pause only at budget exhaustion) stays available as an
+explicit opt-in, as do `pause` and `disabled`. Explicit persisted values keep
+precedence. `TERM2_SUPERVISED=1` sets no escalation, so supervised runs use the
+default too. Context admission and default auto compaction are unchanged.
+
+Harm prevented (S1): with explicit `pause` plus `--auto-approve`,
+`NonInteractiveApprovalPolicy` answered the `max_turns_exceeded` check-in `y`,
+and `state.approve` charged a parent-class extension — up to
+`maxParentExtensions` unattended grants. Enforcement: `runWithSession` parks
+every `run_budget` check-in (exit 2, `run_budget_paused`, `--resume` locator)
+whatever escalation raised it, and the policy refuses any check-in as defense in
+depth. Scope: non-interactive mode only; the interactive prompt and the
+continuation applier are unchanged. Red proof: the `pause` case of
+`runNonInteractive --auto-approve never grants a run-budget extension` failed on
+the unchanged code (exit 0 after two auto-granted extensions).

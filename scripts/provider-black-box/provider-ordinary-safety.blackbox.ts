@@ -115,8 +115,9 @@ it.each([undefined, 'warn'] as const)(
   },
 );
 
-it('parks an unattended critical budget without auto-granting and retains completed tool evidence', async () => {
-  const lease = await setup('tool-fragments', { runBudget: { turnBackstop: 1 } });
+it('parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence', async () => {
+  // `contain` is opt-in; the default escalation (`warn`) never pauses.
+  const lease = await setup('tool-fragments', { runBudget: { turnBackstop: 1, escalation: 'contain' } });
   const result = await lease.runCli({
     cwd: process.cwd(),
     args: ['fixture budget work', '--provider', 'fixture-provider', '--model', 'fixture', '--json', '--auto-approve'],

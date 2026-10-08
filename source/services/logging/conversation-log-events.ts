@@ -89,6 +89,13 @@ export interface GoalChangedEvent {
   type: 'goal_changed';
   version: 1;
   goal: DurableGoal;
+  /**
+   * Who wrote this change. Absent for user and launcher writes (`/goal`,
+   * `--goal`, an approved `propose_goal`) and for every event written before
+   * this field existed; `goal_check` when a recorded achieved self-check closed
+   * the goal. Replay reads only `goal`, so the field is audit provenance.
+   */
+  source?: 'goal_check';
 }
 
 export interface EventReference {

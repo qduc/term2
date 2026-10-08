@@ -134,6 +134,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'agent.runBudget.maxParentExtensions': [{ value: '1' }, { value: '2', description: 'default' }, { value: '3' }],
   'agent.runBudget.escalation': [
     { value: 'warn', description: 'status-bar warning only (default)' },
+    { value: 'contain', description: 'pause only when the budget is exhausted' },
     { value: 'pause', description: 'hold the run for a human decision' },
     { value: 'disabled', description: 'disable budget warnings and pauses' },
   ],

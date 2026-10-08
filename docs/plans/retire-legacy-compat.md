@@ -193,7 +193,8 @@ resumes with the same bookkeeping object.
 
 ### 3. `ApprovalLedger` — typed replacement for `RunContext`'s approval half
 
-Same four operations (`approveTool`, `rejectTool`, `isToolApproved`, `getRejectionMessage`) and
+Same four operations (`approveTool`, `rejectTool`, `isToolApproved`, `getRejectionMessage`; see the
+Slice 5 updates for how these later narrowed) and
 the same semantics — which are **not** incidental: they are documented in the parent plan
 (§ *`ApprovalRecord` semantics, established by reading the SDK source*) and pinned by
 `approval-replay.test.ts`. Preserve them exactly; the fidelity limit recorded there still applies.
@@ -302,8 +303,24 @@ Two decisions taken while landing (recorded so they are not re-derived):
 
 *Verify:* the F5 pin — a tool approved in the parent does not prompt again inside a nested
 subagent (loop-level: a seeded nested run whose `shell` callId matches a replayed parent
-approval raises no interruption and executes). `approval-replay.test.ts` must keep passing
-unchanged; if it needs editing, the ledger's semantics drifted.
+approval raises no interruption and executes).
+
+Update (2026-10-08): only blanket parent decisions carry into a nested run. Call ids
+repeat (the chat adapter's `call_${index}` fallback makes every response's first call
+`call_0`), so matching a per-call decision by id let an approval authorize a different
+call. The loop now plans new calls against blanket decisions only; a per-call approval
+is bound to its plan entry. The F5 pin covers both cases.
+
+Update (2026-10-08, approval hygiene): the ledger's semantics were narrowed on purpose and
+`approval-replay.test.ts` was rewritten to pin them. `replayApprovals` copies only blanket
+decisions (a per-call entry no longer reaches the nested ledger at all); a one-time rejection
+message lives on its plan entry, not in the ledger, so `getRejectionMessage(toolName, callId)`
+became `blanketRejectionMessage(toolName)`; recording a one-time decision no longer erases a
+blanket one; and `isToolApproved` was removed — its only production caller was a
+`ToolApprovalBatchCoordinator` probe of `currentState._context`, which a `ContinuationHandle`
+never carries. The approval a user gives binds to the exact interruption they answered
+(`resolveApproval` matches the interruption object first, the call id only as a fallback),
+because a provider may give several calls in one response the same id.
 
 ### Slice 6 — `tool()` / `Tool` → `ToolDefinition`, and `createSubagentTool()`
 

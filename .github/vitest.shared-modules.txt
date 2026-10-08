@@ -12,6 +12,13 @@
 # registry, menus, pricing, approval coordinator) and were removed, then the
 # remaining 474 passed 16 consecutive runs (seeds 11..16193, workers 3-8).
 #
+# Growth attempt 2026-10-08 (scripts/test-impact/verify-shared.mjs grow): of 178
+# further candidates, 19 passed 10 clean rounds in batches, but the 493-file union
+# then failed non-interactive.test.ts at round 6 of 12 while this 474-file set
+# passed 12/12. A leak that only shows in some orderings means 10 rounds is too
+# few for a large pool; the gain was ~19 files, so none were admitted. Excluded
+# in that run: Banner, SettingsMenuSession, menu-bindings-parity (and 3 others).
+#
 # Files not listed here are never run unisolated, including new files.
 scripts/build-output.test.ts
 scripts/candidate-gates.test.ts

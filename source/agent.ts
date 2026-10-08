@@ -62,6 +62,7 @@ import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 import { createProposeGoalToolDefinition } from './tools/agent/propose-goal.js';
+import { createGoalCheckToolDefinition } from './tools/agent/goal-check.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
@@ -546,6 +547,10 @@ export const getAgentDefinition = (
       }),
     );
   }
+
+  // The stop self-check is root-only (only the root receives `getGoal`) and is
+  // available in every mode: the stop guard requires it whenever a goal is active.
+  if (deps.getGoal) tools.push(createGoalCheckToolDefinition({ getGoal: deps.getGoal }));
 
   if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);

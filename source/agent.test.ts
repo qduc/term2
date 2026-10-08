@@ -8,6 +8,7 @@ import { BackgroundShellRegistry } from './services/shell/background-shell-regis
 import { SessionBrowser } from './services/conversation/session-browser.js';
 import { builtinProfileRegistry, type ProfileDefinition } from './services/profiles/index.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
+import { RUN_CODE_PROHIBITED_TOOLS } from './tools/system/run-code/run-code-runtime.js';
 
 // search-via-shell probes `rg` availability with spawnSync while assembling
 // the prompt. Tests below pin that probe instead of inheriting whichever
@@ -698,6 +699,19 @@ it('getAgentDefinition includes propose_goal when the interactive proposal callb
 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('propose_goal')).toBe(true);
+});
+
+it('getAgentDefinition registers goal_check only for a goal-aware (root) definition', () => {
+  const build = (getGoal?: () => DurableGoal | undefined) =>
+    getAgentDefinition({
+      settingsService: createMockSettingsService({ 'agent.modelSelection': { model: 'gpt-4o', provider: 'openai' } }),
+      loggingService: mockLogger,
+      ...(getGoal ? { getGoal } : {}),
+    }).tools.map((tool) => tool.name);
+  expect(build(() => undefined)).toContain('goal_check');
+  expect(build()).not.toContain('goal_check');
+  // A direct tool in code mode: the stop guard reads it from top-level history.
+  expect(RUN_CODE_PROHIBITED_TOOLS.has('goal_check')).toBe(true);
 });
 
 it('getAgentDefinition omits propose_goal when the proposal callbacks are absent', () => {

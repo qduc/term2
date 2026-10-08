@@ -68,6 +68,8 @@ export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   TOOL_NAME_RUN_CODE,
   'ask_mentor',
   'session_rollover',
+  // The goal stop check must be a direct, top-level call so the stop guard sees it in history.
+  'goal_check',
   'shell',
   'bash',
   'enter_worktree',

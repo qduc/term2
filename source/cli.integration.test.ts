@@ -228,16 +228,21 @@ it('positional launch durably records its goal before the first provider request
     providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
   });
   try {
-    const { status } = await spawnCli(
+    const { status, stderr } = await spawnCli(
       [cliPath(), '--goal', 'Noninteractive outcome', '--goal-criteria', 'Provider returns', 'hello'],
       createTestChildEnv({ HOME: tempHome, TERM2_CONVERSATIONS_DIR: testDir, DISABLE_LOGGING: '1' }),
     );
     expect(status).toBe(0);
-    expect(mock.capturedModels()).toEqual(['mock-alpha']);
+    // The text-only mock never calls goal_check, so the active-goal stop check
+    // reminds twice and then returns control with a visible notice.
+    expect(mock.capturedModels()).toEqual(['mock-alpha', 'mock-alpha', 'mock-alpha']);
     const sentRequest = JSON.stringify(mock.capturedRequests()[0]);
     expect(sentRequest).toContain('Noninteractive outcome');
     expect(sentRequest).toContain('Provider returns');
     expect(sentRequest).toContain('not user approval, authorization, permission, a plan');
+    expect(sentRequest).toContain('goal_check');
+    expect(JSON.stringify(mock.capturedRequests()[1])).toContain('Durable goal stop check');
+    expect(stderr).toContain('Goal stop check unresolved');
     const logPath = fs.readdirSync(testDir).find((file) => file.endsWith('.jsonl'));
     expect(logPath).toBeDefined();
     const events = fs
@@ -253,6 +258,9 @@ it('positional launch durably records its goal before the first provider request
       outcome: 'Noninteractive outcome',
       successCriteria: 'Provider returns',
     });
+    // The unresolved stop check never rewrites durable goal status.
+    expect(events.filter((event) => event.type === 'goal_changed')).toHaveLength(1);
+    expect(events[goalIndex].goal.status).toBe('active');
   } finally {
     await mock.close();
     fs.rmSync(tempHome, { recursive: true, force: true });

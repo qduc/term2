@@ -168,3 +168,18 @@ it('every context compaction event reaches the transcript', () => {
     expect(result.length, `${event.type} produced no message`).toBe(1);
   }
 });
+
+it('final: an unresolved goal stop check returns control with a visible system notice', () => {
+  const deps = createMockDeps();
+  const handler = createConversationEventHandler(deps, createStreamingState());
+  handler({ type: 'final', finalText: 'done', terminalCause: 'goal_check_unresolved' } as ConversationEvent);
+  // The notice follows the model's final text so the user sees why control returned.
+  expect(deps.calls.appendedMessages.flat()).toEqual([
+    expect.objectContaining({ sender: 'bot', text: 'done' }),
+    expect.objectContaining({ sender: 'system', text: expect.stringContaining('Goal stop check unresolved') }),
+  ]);
+
+  const ordinary = createMockDeps();
+  createConversationEventHandler(ordinary, createStreamingState())({ type: 'final', finalText: 'done' });
+  expect(ordinary.calls.appendedMessages.flat().filter((message) => message.sender === 'system')).toEqual([]);
+});

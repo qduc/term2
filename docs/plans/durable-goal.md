@@ -20,6 +20,48 @@ to the desired outcome and how success is recognized. Do not put a plan, schedul
 execution status, or child-run topology in it. Persistence is plain session-log
 events; there is no goal-specific database or autonomous retry behavior.
 
+Update (2026-10-08): an active goal now gates the root turn's normal stop through
+a working-model self-check (`goal_check`); see
+[Active-goal stop check](#active-goal-stop-check). It continues the current turn
+only; it never starts a turn and never writes goal status.
+
+## Active-goal stop check
+
+While the goal is `active`, a root turn may not end normally until the working
+model has called `goal_check` by itself after its last work, reporting one of:
+
+- `achieved` — evidence against the outcome, plus `criteriaEvidence` when the goal
+  has success criteria. The turn ends. **Durable status is not changed**: the model
+  judging its own work is not proof, so the record stays `active` until the user
+  runs `/goal achieved` (option 6(c) remains unimplemented by design).
+- `blocked` — the concrete user input or unavailable capability needed. The turn
+  ends and control returns; the report is visible as the `goal_check` row and the
+  model's final reply.
+- `not_achieved` — what remains. The tool result tells the model to keep working,
+  so the ordinary tool loop continues; stopping right after it is re-prompted.
+- `deferred` — the latest user message asked for something else, asked to pause,
+  or superseded the goal. The turn ends and the goal stays active. This is how
+  unrelated questions and user pauses avoid being forced into goal work.
+
+`decideGoalStop` (`services/conversation/durable-goal-stop-check.ts`) owns the
+decision, reading only the current turn's history: a check counts only when it is
+the latest tool activity after the latest user message, so a check made before
+newer work, a newer steer, or alongside unseen results does not authorize a stop.
+A missing or incomplete check queues a reminder through the run loop's existing
+request-boundary notice lane and the same run continues. `ApplicationRunLoop`
+consults the policy only at its normal-stop seam, so cancellation/Ctrl+C, errors,
+approval and budget pauses, and critical wrap-up never reach it; every
+continuation is an ordinary turn for the run budget and `maxTurns`.
+
+Loop guard: two consecutive reminders without intervening tool work; the third
+idle stop ends the turn with `terminalCause: 'goal_check_unresolved'`, a system
+notice in the TUI, and a stderr line in non-interactive mode. Justification and
+the guard contract are in the guard ledger's "Active-goal stop check" entry.
+
+Scope: only root clients wire the policy (transient/subagent clients never do),
+and it is inert when the agent lacks `goal_check`. The tool is excluded from
+`run_code` so the call is always top-level history the policy can read.
+
 ## Gap measurement
 
 What exists today:
@@ -134,7 +176,8 @@ unless code evidence shows a replay path that bypasses the event stream.
 
 - **Turns and resume:** the same active or terminal goal remains attached to the
   session across turns and process restarts. It does not imply automatic
-  continuation after an assistant turn settles.
+  continuation after an assistant turn settles; the active-goal stop check acts
+  only before the current turn settles.
 - **Fork:** a fork copies the log and therefore starts with the source's goal state
   as of the fork point. Subsequent goal events in either session are independent;
   changing one must not mutate the other.

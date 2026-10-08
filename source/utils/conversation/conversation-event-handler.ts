@@ -303,7 +303,9 @@ export function createConversationEventHandler(
         const command = formatToolCommand(toolName, args);
 
         const pendingMessage: CommandMessage = {
-          id: toolCallId ?? createMessageId(),
+          // One row per execution. A provider can reuse a call id in a later turn, and MessageList
+          // never re-prints an id it already committed. Lookups use callId, which stays the provider's.
+          id: createMessageId(),
           sender: 'command',
           status: 'pending',
           command,

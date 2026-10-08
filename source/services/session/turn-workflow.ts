@@ -1225,9 +1225,7 @@ export class TurnWorkflow {
       yield event;
     }
 
-    // acc started from allEmittedIds and only drops an id when that id starts a new execution, so the
-    // union would bring the dropped id back.
-    const mergedEmittedIds = new Set(acc.emittedCommandIds);
+    const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
 
     const streamMessages = extractCommandMessages(selectAgentStreamItems(stream), this.#toolCallMarkers);
     const filteredMessages = streamMessages.filter((msg) => !state.previouslyEmittedIds.has(msg.id));

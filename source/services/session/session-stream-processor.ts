@@ -324,11 +324,13 @@ export class SessionStreamProcessor {
         const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
         if (filtered) {
           // An admitted tool_started is a new execution. If the provider reused the id of an earlier,
-          // settled call, that call's command messages must not hide this execution's result.
+          // settled call, that call's command messages must not hide this execution's result, and
+          // that call's rejection must not mark it.
           if (filtered.type === 'tool_started') {
             for (const id of this.deps.toolTracker.takeCommandMessageIdsOfEarlierExecution(filtered.toolCallId)) {
               acc.emittedCommandIds.delete(id);
             }
+            this.#toolCallMarkers.forgetApprovalRejection(filtered.toolCallId);
           }
           if (filtered.type === 'command_message') this.deps.toolTracker.noteCommandMessageEmitted(filtered.message);
           yield filtered;

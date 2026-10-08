@@ -30,6 +30,11 @@ export class ToolCallMarkerStore {
     this.#approvalRejectionCallIds.clear();
   }
 
+  /** A new execution reused this call id: an earlier rejection must not mark its result. */
+  forgetApprovalRejection(callId: string): void {
+    this.#approvalRejectionCallIds.delete(callId);
+  }
+
   isApprovalRejectionForItem(item: ToolResultItem | null | undefined): boolean {
     const callId = getCallIdFromItem(item);
     return callId ? this.#approvalRejectionCallIds.has(callId) : false;

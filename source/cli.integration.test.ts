@@ -1162,7 +1162,11 @@ function shellCallFrames(response: string, callId: ToolCallId, args: Record<stri
   ];
 }
 
-type SavedEvent = { type: string; arguments?: { command?: unknown }; message?: { command?: unknown } };
+type SavedEvent = {
+  type: string;
+  arguments?: { command?: unknown };
+  message?: { command?: unknown; isApprovalRejection?: boolean; success?: boolean };
+};
 type ScriptedShellCall = { callId: ToolCallId; args: (workspace: string) => Record<string, unknown> };
 
 /**
@@ -1254,6 +1258,18 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
       /** Commands of the saved command_message events (each execution's output record), in order. */
       savedCommandOutputs: savedEvents.flatMap((event) =>
         event.type === 'command_message' ? [String(event.message?.command)] : [],
+      ),
+      /** The saved command_message records: what ran, and whether it is recorded as refused. */
+      savedCommandRecords: savedEvents.flatMap((event) =>
+        event.type === 'command_message'
+          ? [
+              {
+                command: String(event.message?.command),
+                isApprovalRejection: event.message?.isApprovalRejection === true,
+                success: event.message?.success,
+              },
+            ]
+          : [],
       ),
       /** The `[tool] shell: <command>` lines the user saw, in order. */
       toolLines: stderr.split('\n').filter((line) => line.startsWith('[tool] shell')),
@@ -1402,4 +1418,31 @@ it('one approved shell execution prints exactly one [tool] line', { timeout: 90_
   expect(run.toolLines, report).toEqual([`[tool] shell: ${run.commands[0]}`]);
   expect(run.savedToolStarts).toEqual(run.commands);
   expect(run.savedCommandOutputs).toEqual(run.commands);
+});
+
+// A refused call's id can come back on a call that does run. The later execution must be shown and
+// saved as what it was: it ran, so it is not an approval rejection.
+it('a call that reuses a refused call id runs and is saved as run, not as refused', { timeout: 90_000 }, async () => {
+  const id: ToolCallId = { kind: 'provider', id: 'call_0' };
+  const run = await runShellCallsScenario(
+    [
+      // RED: the auto-approval policy refuses it.
+      { callId: id, args: (w) => ({ command: `rm ${path.join(w, 'victim.txt')}` }) },
+      // Same id, GREEN and no approval needed: it runs.
+      { callId: id, args: (w) => ({ command: `echo two > ${path.join(w, 'two.txt')}` }) },
+    ],
+    { 'victim.txt': 'must survive\n' },
+  );
+  const [refusedCommand, ranCommand] = run.commands as [string, string];
+  const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
+  expect(run.status, report).toBe(0);
+  expect(run.files, report).toEqual({ 'two.txt': 'two\n', 'victim.txt': 'must survive\n' });
+  expect(run.toolLines, report).toEqual([`[tool] shell: ${refusedCommand}`, `[tool] shell: ${ranCommand}`]);
+  // Only the first call was refused.
+  expect(run.stderr.match(/Approval Rejected:/g), report).toHaveLength(1);
+  expect(run.stderr, report).toContain(`cannot be executed automatically: ${refusedCommand}`);
+  expect(run.savedCommandRecords).toEqual([
+    { command: refusedCommand, isApprovalRejection: true, success: expect.anything() },
+    { command: ranCommand, isApprovalRejection: false, success: true },
+  ]);
 });

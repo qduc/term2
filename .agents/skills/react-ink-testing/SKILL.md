@@ -13,6 +13,10 @@ description: >
 
 # React Ink Unit Testing
 
+> **During the evidence-driven development experiment, Ink tests here are temporary.**
+> Write them to verify a change, then delete them; never commit them (see the
+> `testing` and `verification` skills).
+>
 > **In this repo, use Vitest and `renderInAct`.** This guide is a general Ink
 > testing reference and its setup sections assume Jest; term2 has no Jest at all.
 > `ink` (v7), `vitest`, and `ink-testing-library` are already installed, tests run

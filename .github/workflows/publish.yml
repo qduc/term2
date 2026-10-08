@@ -53,6 +53,8 @@ jobs:
       - name: Build package
         run: pnpm run build
 
+      # The default tier holds only the static repository guards during the
+      # evidence-driven development experiment.
       - name: Run tests
         run: pnpm test
 

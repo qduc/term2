@@ -54,6 +54,14 @@ than by import graph, which fans out through hub modules. It is a prototype
 with known gaps and never replaces the CI gates; see
 [test-impact-map.md](../plans/test-impact-map.md) before relying on it.
 
+## Faster whole-suite runs (opt-in)
+
+`pnpm test` runs every file in its own process and is the CI authority. Two opt-in runs share
+workers between files and finish in roughly half the time: `pnpm test:hybrid` (a verified subset
+shares) and `pnpm test:shared` (all files share, with a per-file reset). They run the same tests.
+Read [shared-worker-runs.md](../plans/shared-worker-runs.md) for what they reset, what they cannot
+catch, and how to debug a failure that depends on file order.
+
 ## Measured selection example
 
 On current `main` (`f33995f1`, 2026-10-07), selecting the related tests for

@@ -1,5 +1,5 @@
 import type { DurableGoal, GoalStatus } from '../services/logging/conversation-log-events.js';
-import { createDurableGoal } from '../services/conversation/durable-goal.js';
+import { createDurableGoal, formatGoalStatus } from '../services/conversation/durable-goal.js';
 import type { SlashCommand } from '../slash-commands.js';
 
 export function createGoalSlashCommand(options: {
@@ -12,11 +12,7 @@ export function createGoalSlashCommand(options: {
       options.addSystemMessage('No durable goal is set. Use /goal set <outcome> [--criteria <text>].');
       return;
     }
-    options.addSystemMessage(
-      `Goal (${goal.status}): ${goal.outcome}${
-        goal.successCriteria ? `\nSuccess criteria: ${goal.successCriteria}` : ''
-      }`,
-    );
+    options.addSystemMessage(formatGoalStatus(goal));
   };
   return {
     name: 'goal',

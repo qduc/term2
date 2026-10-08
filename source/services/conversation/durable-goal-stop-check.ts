@@ -17,9 +17,13 @@ import { MAX_GOAL_FIELD_LENGTH } from './durable-goal.js';
  * normal-stop seam, and the turn continues through the loop's existing
  * request boundary when the decision is `continue`.
  *
- * Authority: a self-check never changes durable goal status. Only the user
- * (`/goal achieved`, `/goal abandon`, `/goal set`) or the launcher does. The
- * same model judging its own work is evidence for the user, not proof.
+ * Authority: a recorded, valid `achieved` check that ends the turn closes the
+ * goal. `createGoalStopPolicy` hands the achieved goal to the session surface,
+ * which persists it through the same `goal_changed` path as `/goal achieved`
+ * (marked `source: 'goal_check'`). Nothing else the model reports changes
+ * status: blocked, deferred, and not_achieved leave the goal active, and so does
+ * any check that was denied, failed, unrecorded, or superseded by later work.
+ * The user still sets, replaces, abandons, and reopens goals.
  */
 
 export const GOAL_CHECK_STATUSES = ['achieved', 'blocked', 'not_achieved', 'deferred'] as const;
@@ -29,7 +33,7 @@ export const goalCheckParameters = z.object({
   status: z
     .enum(GOAL_CHECK_STATUSES)
     .describe(
-      'achieved: the outcome holds now. blocked: progress needs user input or a capability you do not have. ' +
+      'achieved: the outcome holds now, verified against concrete evidence; this marks the goal achieved. blocked: progress needs user input or a capability you do not have. ' +
         'not_achieved: more work is needed and you can do it. deferred: the latest user message asked for ' +
         'something else, asked you to pause, or superseded the goal.',
     ),
@@ -237,8 +241,8 @@ function reminderText(
       ? 'the session goal is active and this turn tried to end without a goal_check made after the latest work'
       : `the latest goal_check was incomplete (${detail})`;
   return (
-    `${header} ${problem}. Before ending the turn, call goal_check by itself: achieved (with evidence against ` +
-    'the outcome and any success criteria), blocked (the concrete user input or unavailable capability needed), ' +
+    `${header} ${problem}. Before ending the turn, call goal_check by itself: achieved (only after verifying ` +
+    'the outcome and any success criteria against concrete evidence; this closes the goal), blocked (the concrete user input or unavailable capability needed), ' +
     'not_achieved (then keep working), or deferred (the latest user message asked for something else or asked ' +
     `you to pause). ${rules}`
   );
@@ -335,14 +339,34 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
  *
  * Inert unless the agent can actually call `goal_check`: a profile or client
  * without the tool must never be asked for a check it cannot make.
+ *
+ * The achieved write lives here, not in the tool's execution: only at the stop
+ * seam is the check known to be the turn's final tool activity with its own
+ * recorded result, so a check followed by more work, made alongside unseen
+ * results, or denied/failed never closes the goal. The seam runs once per run
+ * end and the write flips the goal out of `active`, so any later evaluation
+ * (another turn, an approval resume) sees no active goal and cannot write again.
+ * Only root clients get this policy, and `run_code` cannot call `goal_check`.
  */
 export function createGoalStopPolicy(
   getGoal: () => DurableGoal | undefined,
+  onGoalAchieved?: (goal: DurableGoal) => void,
 ): (history: readonly ProviderInputItem[], agent: Pick<ApplicationAgent, 'tools'>) => NormalStopDecision {
   return (history, agent) => {
     if (!agent.tools.some((tool) => tool.name === TOOL_NAME_GOAL_CHECK)) return { action: 'stop' };
-    const decision = decideGoalStop(getGoal(), history);
+    const goal = getGoal();
+    const decision = decideGoalStop(goal, history);
     if (decision.reason === 'no_active_goal') return { action: 'stop' };
+    let goalMarkedAchieved: boolean | undefined;
+    if (decision.reason === 'achieved' && goal?.status === 'active' && onGoalAchieved) {
+      try {
+        onGoalAchieved({ ...goal, status: 'achieved' });
+        goalMarkedAchieved = true;
+      } catch {
+        // The surface reports its own persistence failure; the turn still stops.
+        goalMarkedAchieved = false;
+      }
+    }
     const diagnostics = {
       guard: 'goal_stop_check',
       guardClass: 'runaway',
@@ -353,6 +377,7 @@ export function createGoalStopPolicy(
       ...('remindersThisTurn' in decision ? { remindersThisTurn: decision.remindersThisTurn } : {}),
       ...('limitReached' in decision ? { limitReached: decision.limitReached } : {}),
       ...('lastProblem' in decision ? { lastProblem: decision.lastProblem } : {}),
+      ...(goalMarkedAchieved !== undefined ? { goalMarkedAchieved } : {}),
     };
     if (decision.action === 'continue') return { action: 'continue', reminder: decision.reminder, diagnostics };
     if (decision.reason === 'unresolved') {

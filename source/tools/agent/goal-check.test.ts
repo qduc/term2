@@ -5,7 +5,7 @@ import { createGoalCheckToolDefinition, formatGoalCheckCommandMessage } from './
 const goal: DurableGoal = { id: 'g', outcome: 'Ship the feature', successCriteria: 'Tests pass', status: 'active' };
 
 describe('goal_check tool', () => {
-  it('never asks for approval and has no write path to the durable goal', async () => {
+  it('never asks for approval and has no write path of its own to the durable goal', async () => {
     let current: DurableGoal | undefined = goal;
     const tool = createGoalCheckToolDefinition({ getGoal: () => current });
     expect(tool.needsApproval({ status: 'achieved', evidence: 'x' }, undefined)).toBe(false);
@@ -15,10 +15,18 @@ describe('goal_check tool', () => {
       undefined,
       undefined,
     );
-    expect(result).toContain('stays active until the user confirms with /goal achieved');
+    // The stop seam closes the goal; executing the check writes nothing.
+    expect(result).toContain('The durable goal is marked achieved when you end the turn now');
     expect(current).toBe(goal);
     expect(current.status).toBe('active');
     current = undefined;
+  });
+
+  it('tells the model that achieved closes the goal, so it must verify against the criteria first', () => {
+    const tool = createGoalCheckToolDefinition({ getGoal: () => goal });
+    expect(tool.description).toContain('Reporting achieved closes the goal');
+    expect(tool.description).toContain('verify the outcome and every success criterion against concrete evidence');
+    expect(tool.description).not.toContain('only the user can');
   });
 
   it.each([

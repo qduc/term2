@@ -23,7 +23,14 @@ events; there is no goal-specific database or autonomous retry behavior.
 Update (2026-10-08): an active goal now gates the root turn's normal stop through
 a working-model self-check (`goal_check`); see
 [Active-goal stop check](#active-goal-stop-check). It continues the current turn
-only; it never starts a turn and never writes goal status.
+only; it never starts a turn.
+
+Update (2026-10-08, T8): a recorded, valid `achieved` check that ends the turn
+now closes the goal. The stop seam hands the achieved goal to the session
+surface, which appends the same `goal_changed` event as `/goal achieved`
+(with `source: 'goal_check'`). The prompt tells the model to verify against the
+criteria before claiming it. Option 6(c) below is superseded: the claim itself
+closes, rather than proposing for approval.
 
 ## Active-goal stop check
 
@@ -31,9 +38,13 @@ While the goal is `active`, a root turn may not end normally until the working
 model has called `goal_check` by itself after its last work, reporting one of:
 
 - `achieved` — evidence against the outcome, plus `criteriaEvidence` when the goal
-  has success criteria. The turn ends. **Durable status is not changed**: the model
-  judging its own work is not proof, so the record stays `active` until the user
-  runs `/goal achieved` (option 6(c) remains unimplemented by design).
+  has success criteria. The turn ends, and the durable goal is marked `achieved`
+  through the same `goal_changed` path as `/goal achieved` (`source: 'goal_check'`).
+  The write lives at the stop seam (`createGoalStopPolicy`), not in the tool: only
+  there is the check known to be the turn's last tool activity with its own recorded
+  result. Denied, failed, unrecorded, incomplete (missing criteria evidence), and
+  superseded checks write nothing. The TUI and non-interactive mode reuse
+  `formatGoalClosedByCheck` so both surfaces show the same status line.
 - `blocked` — the concrete user input or unavailable capability needed. The turn
   ends and control returns; the report is visible as the `goal_check` row and the
   model's final reply.
@@ -143,27 +154,30 @@ the execution system remains free to change its plan without rewriting the goal.
 
 ### Ownership and state transitions
 
-The user or launcher is the authority for creating and replacing a durable goal;
-the user is the authority for achieving or abandoning it. The interactive user can
-use a `/goal` command family (for example, set/show/achieved/abandon). Both
-interactive and positional non-interactive starts also accept `--goal <text>` and
-optional `--goal-criteria <text>`. These flags are mutually validated and use the
-same bounded schema and `goal_changed` event as `/goal set`. Persist the launch
-goal after the session writer is initialized and before the first model request;
-on resume, an explicit launch goal replaces the restored goal before work begins.
-No flag means no change to a resumed goal. `show` is read-only. Model-originated
-mutation remains an open decision below, not a current authority.
+The user or launcher is the authority for creating and replacing a durable goal,
+and for abandoning it. Achieving it is shared: the user can run `/goal achieved`,
+and a recorded, valid `goal_check` with status `achieved` that ends a root turn
+closes it the same way. The interactive user can use a `/goal` command family
+(for example, set/show/achieved/abandon). Both interactive and positional
+non-interactive starts also accept `--goal <text>` and optional
+`--goal-criteria <text>`. These flags are mutually validated and use the same
+bounded schema and `goal_changed` event as `/goal set`. Persist the launch goal
+after the session writer is initialized and before the first model request; on
+resume, an explicit launch goal replaces the restored goal before work begins.
+No flag means no change to a resumed goal. `show` is read-only.
 
 Allowed lifecycle:
 
 ```text
 absent --user/launcher set--> active --user marks complete--> achieved
+                                  \--recorded achieved check--> achieved
                                   \--user abandons----------> abandoned
 active / achieved / abandoned --user/launcher set--> new active goal
 ```
 
 Terminal statuses remain inspectable. They do not start work or imply that all
-related tasks are complete. No automatic status inference or retry loop is added.
+related tasks are complete. No automatic status inference or retry loop is
+added beyond the recorded achieved check above.
 
 ### Persistence and replay
 
@@ -428,10 +442,13 @@ snapshot to the child-run interface.
    to implementation, at most once per session); the once-guard combines the
    goal-exists check with a proposal marker seeded from replayed transcript
    history. Approval reuses the existing approval surface and appends the same
-   `goal_changed` event as `/goal set`; rejection changes nothing. Option (c)
-   remains unimplemented.
-   Do not add (c) unless users specifically want completion proposals; explicit
-   `/goal achieved` keeps the terminal transition legible and under user control.
+   `goal_changed` event as `/goal set`; rejection changes nothing.
+
+   **Implemented (2026-10-08, T8): a recorded achieved self-check closes the goal.**
+   Unlike (c), there is no second approval: after the model verifies against the
+   criteria and the turn ends on a recorded achieved check, the stop seam writes
+   `goal_changed` with `source: 'goal_check'`. `/goal achieved` remains available
+   for the user; blocked / deferred / not_achieved leave the goal active.
 
 ## Unverified claims / implementation checks
 

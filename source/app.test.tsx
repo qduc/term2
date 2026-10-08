@@ -8,6 +8,7 @@ import reconciler from '../node_modules/ink/build/reconciler.js';
 import App from './app.js';
 import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { renderInAct, rerenderInAct } from './test-helpers/ink-testing.js';
+import type { GoalAchievedSlot } from './services/conversation/durable-goal.js';
 import { MenuControllerImpl } from './components/input/menu-controller.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 
@@ -489,6 +490,57 @@ describe('App orchestration', () => {
       provider: 'openrouter',
     });
   });
+
+  it.sequential(
+    'persists a goal closed by goal_check through the /goal path and shows it after the turn ends',
+    async () => {
+      const services = createServices();
+      const goalA = { id: 'goal-a', outcome: 'Goal A', successCriteria: 'Tests pass', status: 'active' as const };
+      const achieved = { ...goalA, status: 'achieved' as const };
+      const appendGoal = vi.fn();
+      const slot: GoalAchievedSlot = {};
+      const app = () => (
+        <App
+          {...services}
+          sessionId="session-a"
+          initialGoal={goalA}
+          appendGoal={appendGoal}
+          goalAchievedSlot={slot}
+          terminalTitleBase="term2"
+          generateId={() => 'session-next'}
+        />
+      );
+      mocks.conversationState.isProcessing = true;
+      try {
+        const view = await renderInAct(app());
+        expect(slot.handler).toBeDefined();
+
+        await act(async () => {
+          slot.handler!(achieved);
+        });
+
+        // Persisted through the same setGoal/appendGoal path as /goal achieved, marked as the model's write.
+        expect(appendGoal).toHaveBeenCalledWith(achieved, 'goal_check');
+        expect(mocks.getGoal?.()).toEqual(achieved);
+        const notice = 'Goal (achieved): Goal A\nSuccess criteria: Tests pass\nMarked achieved by the model';
+        const shown = () => mocks.addSystemMessage.mock.calls.some(([text]) => String(text).startsWith(notice));
+        expect(shown()).toBe(false);
+
+        mocks.conversationState.isProcessing = false;
+        await rerenderInAct(view, app());
+        expect(shown()).toBe(true);
+
+        // /clear retains the achieved goal, not the stale active one.
+        appendGoal.mockClear();
+        await act(async () => {
+          await mocks.clearConversationCallback?.();
+        });
+        expect(appendGoal).toHaveBeenCalledWith(achieved);
+      } finally {
+        mocks.conversationState.isProcessing = false;
+      }
+    },
+  );
 
   it.sequential('clears the live goal after successfully resuming a goal-less session', async () => {
     const services = createServices();

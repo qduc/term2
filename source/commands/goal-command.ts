@@ -7,8 +7,7 @@ export function createGoalSlashCommand(options: {
   setGoal: (goal: DurableGoal) => void;
   addSystemMessage: (text: string) => void;
 }): SlashCommand {
-  const show = () => {
-    const goal = options.getGoal();
+  const show = (goal = options.getGoal()) => {
     if (!goal) {
       options.addSystemMessage('No durable goal is set. Use /goal set <outcome> [--criteria <text>].');
       return;
@@ -35,16 +34,18 @@ export function createGoalSlashCommand(options: {
           const criteriaIndex = text.indexOf(' --criteria ');
           const outcome = criteriaIndex < 0 ? text : text.slice(0, criteriaIndex);
           const criteria = criteriaIndex < 0 ? undefined : text.slice(criteriaIndex + ' --criteria '.length);
-          options.setGoal(createDurableGoal(outcome, criteria));
-          show();
+          const goal = createDurableGoal(outcome, criteria);
+          options.setGoal(goal);
+          show(goal);
           return true;
         }
         if (action === 'achieved' || action === 'abandon') {
           const current = options.getGoal();
           if (!current) throw new Error('No durable goal is set. Use /goal set <outcome> first.');
           const status: GoalStatus = action === 'achieved' ? 'achieved' : 'abandoned';
-          options.setGoal({ ...current, status });
-          show();
+          const goal = { ...current, status };
+          options.setGoal(goal);
+          show(goal);
           return true;
         }
         throw new Error('Usage: /goal [show|set <outcome> [--criteria <text>]|achieved|abandon]');

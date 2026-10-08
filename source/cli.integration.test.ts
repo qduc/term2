@@ -1143,3 +1143,169 @@ it('CLI bare --model (no value) is a no-op outside a TTY session, not a picker a
     fs.rmSync(tempHome, { recursive: true, force: true });
   }
 });
+
+// Approval reuse guard (approval-call-binding, shipped in 0.32.0). A tool approval answers exactly
+// one call. A later call that reuses the same id, whether the provider repeats an id or the
+// chat-completions adapter has to invent ids because the provider sent none, must be decided again.
+// The built CLI runs a non-interactive `--auto-approve` turn against the chat-completions mock. Its
+// auto-approval policy says yes to an unsandboxed GREEN shell call and no to a RED one, so an
+// approval that leaks to the later call is a real side effect: the RED `rm` deletes a file it was
+// never allowed to touch.
+type ToolCallId = { kind: 'provider'; id: string } | { kind: 'omitted' } | { kind: 'empty' };
+
+function shellCallFrames(response: string, callId: ToolCallId, args: Record<string, unknown>): unknown[] {
+  const idField = callId.kind === 'provider' ? { id: callId.id } : callId.kind === 'empty' ? { id: '' } : {};
+  const call = { index: 0, ...idField, type: 'function', function: { name: 'shell', arguments: JSON.stringify(args) } };
+  return [
+    { id: response, choices: [{ delta: { tool_calls: [call] } }] },
+    { id: response, choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+  ];
+}
+
+async function runApprovalReuseScenario(callId: ToolCallId) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-reuse-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const approvedMarker = path.join(workspace, 'approved.txt');
+  const victim = path.join(workspace, 'victim.txt');
+  fs.writeFileSync(victim, 'must survive\n');
+  const approvedCommand = `echo approved > ${approvedMarker}`;
+  const refusedCommand = `rm ${victim}`;
+
+  const mock = await startModelMock(['mock-alpha'], (n) =>
+    n === 1
+      ? // Needs approval only because it asks to run unsandboxed; the command is GREEN, so the
+        // policy answers yes and it runs.
+        shellCallFrames('chatcmpl-first', callId, { command: approvedCommand, sandbox: 'unsandboxed' })
+      : n === 2
+      ? // The next response: same tool, same id (or again none). RED, so the policy answers no.
+        shellCallFrames('chatcmpl-second', callId, { command: refusedCommand })
+      : [
+          { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'done' } }] },
+          { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
+        ],
+  );
+  const env = createTestChildEnv({
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+  });
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+      // Without the sandbox, approval depends only on the command, so the run is host-independent.
+      sandbox: { enabled: false },
+    }),
+  );
+  try {
+    const child = spawn('node', [cliPath(), '--auto-approve', 'tidy the workspace'], {
+      cwd: workspace,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.stderr.on('data', (chunk) => (stderr += chunk));
+    const status = await new Promise<number | null>((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', resolve);
+    });
+    return {
+      status,
+      stdout,
+      stderr,
+      requests: mock.capturedRequests(),
+      approvedMarker: fs.existsSync(approvedMarker) ? fs.readFileSync(approvedMarker, 'utf8') : null,
+      victim: fs.existsSync(victim) ? fs.readFileSync(victim, 'utf8') : null,
+      approvedCommand,
+      refusedCommand,
+      // The run must not have written project config into the workspace.
+      workspaceEntries: fs.readdirSync(workspace).sort(),
+    };
+  } finally {
+    await mock.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+type WireToolCall = { id: string; function: { name: string; arguments: string } };
+type WireMessage = { role: string; tool_calls?: WireToolCall[]; tool_call_id?: string; content?: unknown };
+
+/** The tool calls and tool results the CLI sent back to the provider in its last request. */
+function lastWireToolExchange(requests: Record<string, unknown>[]) {
+  const messages = requests.at(-1)?.messages as WireMessage[];
+  const calls = messages.flatMap((message) => (message.role === 'assistant' ? message.tool_calls ?? [] : []));
+  const results = messages
+    .filter((message) => message.role === 'tool')
+    .map((message) => ({ id: message.tool_call_id, content: JSON.stringify(message.content) }));
+  return { calls, results };
+}
+
+function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuseScenario>>) {
+  const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
+  expect(run.status, report).toBe(0);
+  // The approved call ran...
+  expect(run.approvedMarker, report).toBe('approved\n');
+  // ...and the later call was decided on its own: refused, so the file it targets is intact.
+  expect(run.victim, report).toBe('must survive\n');
+  // Each call reached the approval policy on its own: two prompts, the second answered no.
+  expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(2);
+  expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
+  expect(run.workspaceEntries).toEqual(['approved.txt', 'victim.txt']);
+  // Three provider turns: first call, second call, final text. The provider received both calls
+  // back with results that match them.
+  expect(run.requests).toHaveLength(3);
+  const { calls, results } = lastWireToolExchange(run.requests);
+  expect(calls.map((call) => JSON.parse(call.function.arguments).command)).toEqual([
+    run.approvedCommand,
+    run.refusedCommand,
+  ]);
+  expect(results.map((result) => result.id)).toEqual(calls.map((call) => call.id));
+  expect(results[1]?.content).toContain('cannot be executed automatically');
+  return { calls, results };
+}
+
+it.each([
+  ['the provider repeats call_0', 'call_0'],
+  ['the provider repeats its own id', 'toolu_repeated'],
+])(
+  'an approved shell call does not approve a later call that reuses its id when %s',
+  { timeout: 90_000 },
+  async (_case, id) => {
+    const run = await runApprovalReuseScenario({ kind: 'provider', id });
+    const { calls } = expectSecondCallRefused(run);
+    expect(calls.map((call) => call.id)).toEqual([id, id]);
+  },
+);
+
+it.each([
+  ['omits tool call ids', { kind: 'omitted' } as const],
+  ['sends empty tool call ids', { kind: 'empty' } as const],
+])(
+  'an approved shell call does not approve a later call when the chat-completions provider %s',
+  { timeout: 90_000 },
+  async (_case, callId) => {
+    const run = await runApprovalReuseScenario(callId);
+    const { calls } = expectSecondCallRefused(run);
+    // The adapter invents ids that are unique per response, never a positional `call_0` again.
+    const [first, second] = calls.map((call) => call.id);
+    expect(first).toMatch(/^call_[0-9a-f]{16}_0$/);
+    expect(second).toMatch(/^call_[0-9a-f]{16}_0$/);
+    expect(second).not.toBe(first);
+  },
+);

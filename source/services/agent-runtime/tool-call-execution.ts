@@ -1,6 +1,8 @@
 import type { StreamedModelTurnEvent } from '../../contracts/streamed-model-turn.js';
 import type {
   AnyToolDefinition,
+  RequestSnapshot,
+  ToolCallDetails,
   ToolExecutionLifecycleContext,
   ToolExecutionLifecyclePort,
   ToolRegistry,
@@ -18,6 +20,8 @@ export type ToolPlanEntry = {
   status: 'ready' | 'approval_pending' | 'completed';
   output?: string;
   result?: unknown;
+  /** The snapshot of the request whose response produced this call. */
+  readonly requestSnapshot?: RequestSnapshot;
 };
 
 export type PendingToolApproval = {
@@ -49,6 +53,12 @@ export interface ToolCallExecutionContext {
   readonly sessionId?: string;
   readonly turnId?: string;
   readonly hookScope?: ToolExecutionLifecycleContext['scope'];
+  /**
+   * The latest request's snapshot. Only `plan` reads it: calls are planned
+   * right after the response that produced them, before any later request is
+   * built, and keep it across approval pauses.
+   */
+  readonly requestSnapshot?: RequestSnapshot;
   readonly onCall: (event: Extract<StreamedModelTurnEvent, { type: 'tool_call' }>) => void;
   readonly onDispatch: (entry: ToolPlanEntry) => void;
   readonly onToolStall: (input: { name: string; argumentsText: string; effect: AnyToolDefinition['effect'] }) => void;
@@ -90,6 +100,7 @@ export class ToolCallExecution {
         definition: context.tools.find((tool) => tool.name === event.name),
         parallelSafe: false,
         status: 'ready',
+        ...(context.requestSnapshot ? { requestSnapshot: context.requestSnapshot } : {}),
       };
     });
     this.#plan = plan;
@@ -144,9 +155,14 @@ export class ToolCallExecution {
 
   /**
    * Settle exactly the pending call the decision was made for. The interruption
-   * object the caller answered identifies it; call ids are not unique (a
-   * provider may give several calls in one response the same id), so the id is
-   * only the fallback for a caller that answers with a copy of the interruption.
+   * object the caller answered identifies it: call ids are not unique (a
+   * provider may give several calls in one response the same id, and a later
+   * response may reuse an earlier one's id), so an interruption that names a
+   * call but is not one of the pending interruption objects — a copy, or a
+   * stale one from an earlier pause — fails closed instead of being matched by
+   * id. Every in-process caller answers with the object it was handed. Only a
+   * bare call id with no interruption object may select by id, and only when
+   * that id is unique among the pending calls.
    */
   resolveApproval(
     target: { callId: string | undefined; interruption?: unknown },
@@ -155,14 +171,19 @@ export class ToolCallExecution {
     approvals: ApprovalLedger,
   ): void {
     const { callId, interruption } = target;
-    const byIdentity =
-      interruption === undefined
-        ? -1
-        : this.#pendingApprovals.findIndex((pending) => pending.interruption === interruption);
-    const selectedIndex =
-      byIdentity >= 0 || !callId
-        ? byIdentity
-        : this.#pendingApprovals.findIndex((pending) => pending.callId === callId);
+    let selectedIndex = -1;
+    if (interruption !== undefined) {
+      selectedIndex = this.#pendingApprovals.findIndex((pending) => pending.interruption === interruption);
+      if (selectedIndex < 0 && callId)
+        throw new Error(
+          `Approval decision references an interruption that is not pending in this run (stale or copied): ${callId}`,
+        );
+    } else if (callId) {
+      const matches = this.#pendingApprovals.filter((pending) => pending.callId === callId);
+      if (matches.length > 1)
+        throw new Error(`Approval decision call id is ambiguous among pending tool calls: ${callId}`);
+      selectedIndex = matches.length === 1 ? this.#pendingApprovals.indexOf(matches[0]!) : -1;
+    }
     if (callId && selectedIndex < 0)
       throw new Error(`Approval decision references unknown pending tool call: ${callId}`);
     const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;
@@ -279,7 +300,11 @@ export class ToolCallExecution {
     this.#deps.getOnToolDispatch?.()?.(callId);
     await this.#notify(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {
-      const result = await definition.execute(entry.params, context.toolContext, { toolCall: { callId } });
+      const details: ToolCallDetails = {
+        toolCall: { callId },
+        ...(entry.requestSnapshot ? { request: entry.requestSnapshot } : {}),
+      };
+      const result = await definition.execute(entry.params, context.toolContext, details);
       await this.#notify(() => this.#deps.toolLifecycle?.after(lifecycleContext, result, Date.now() - startedAt));
       return result;
     } catch (error) {

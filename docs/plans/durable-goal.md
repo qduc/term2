@@ -61,20 +61,40 @@ tool's own success text (`Self-check recorded:`), so a check made before newer
 work, a newer steer, or alongside unseen results does not authorize a stop, and
 neither does a check that was denied, rejected, or failed.
 
-Binding rule (2026-10-08): a check counts only for the goal it judged. The tool
-reads the session goal when it executes and names it in its recorded result
-(`Self-check recorded: [goal <id>] …`, `formatRecordedGoalCheck`); the stop seam
-counts the check only when that id equals the goal it reads at decision time.
-The goal can change mid-turn without adding history (`/goal set` typed while a
-turn runs or sent through the control socket, neither busy-guarded), so without
-this binding a check that judged G1 closed a G2 set before the final response,
-including a G2 with success criteria, whose presence-only `criteriaEvidence` test
-G1's evidence satisfied. A mismatched check is treated as incomplete: the model
-is reminded to check the current goal. The id is a sound identity because only a
-new goal mints one; status changes (`/goal achieved|abandon|reopen`) keep id,
-outcome, and criteria. A recorded result that names no goal (from before this
-rule) matches no goal. The seam check covers every writer of the goal, so `/goal`
-itself was not busy-guarded: viewing or replacing the goal mid-turn stays allowed. A missing or
+Binding rule (2026-10-08): a check counts only for the goal it judged — the
+goal rendered into the model request whose response made the call. When the run
+loop builds a request it snapshots the session goal in the same step that renders
+it into the instructions (`resolveRequestSnapshot` beside
+`resolveInstructionsForRequest`); each tool call planned from that response keeps
+the snapshot, including across approval pauses and resumes, and receives it as
+`details.request` at execution. `goal_check` records only when the snapshot's goal
+id equals the session goal's id at execution, and names that id in its result
+(`Self-check recorded: [goal <id>] …`, `formatRecordedGoalCheck`); otherwise it
+returns `goal_check was not recorded: the session goal changed after this
+response began …`. The stop seam then counts a recorded check only when its id
+equals the goal it reads at decision time. The goal can change mid-turn without
+adding history (`/goal set` typed while a turn runs or sent through the control
+socket, neither busy-guarded), so without this binding a check that judged G1
+closed a G2 set before the final response, including a G2 with success criteria,
+whose presence-only `criteriaEvidence` test G1's evidence satisfied. A refused or
+mismatched check is treated as incomplete: the model is reminded to check the
+current goal, which the next request renders. The id is a sound identity because
+only a new goal mints one; status changes (`/goal achieved|abandon|reopen`) keep
+id, outcome, and criteria. A recorded result that names no goal (from before this
+rule) matches no goal.
+
+What the binding covers: any change of goal identity — by any writer: `/goal`
+from the prompt or the control socket, `--goal`, an accepted `propose_goal` —
+after a request was built and before the turn's stop. A change while that
+request's response streams or while its calls wait for approval is refused at
+execution; a change after the check executed is caught at the seam. That is why
+`/goal` itself is not busy-guarded: viewing or replacing the goal mid-turn stays
+allowed. What it does not cover: a status-only change keeps the id, so it is not a
+different goal here (a goal that is no longer active fails `goal_check`'s own
+validation, and the seam ignores a non-active goal); the snapshot is supplied only
+by the root `ApplicationRunLoop`, and a `goal_check` executed without one is
+refused — `goal_check` is root-only and prohibited inside `run_code`, and
+subagents do not get it, so no other executor records checks. A missing or
 incomplete check queues a reminder through the run loop's existing
 request-boundary notice lane and the same run continues. `ApplicationRunLoop`
 consults the policy only at its normal-stop seam, so cancellation/Ctrl+C

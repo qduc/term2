@@ -2843,11 +2843,16 @@ success text. Arguments alone are not enough: a check that was denied, rejected
 with a custom message, or threw during execution leaves no success text and is
 treated as an incomplete check (reminder, counted toward both limits).
 
-Goal binding (2026-10-08). The recorded result names the goal id the check
-judged, and the check counts only when that id is the session goal at the stop
-seam; a goal replaced mid-turn turns the old check into an incomplete check
-(reminder, counted toward both limits). This narrows what counts as a valid
-check. It adds no new guard, limit, or termination path.
+Goal binding (2026-10-08). The check judges the goal rendered into the request
+whose response made it: the run loop snapshots the goal at request build and the
+call keeps that snapshot through approval pauses. `goal_check` refuses to record
+when the session goal's id differs from the snapshot's at execution, and the
+recorded result names the snapshot's goal id; the check counts only when that id
+is the session goal at the stop seam. A goal replaced mid-turn — while the
+response streams, while the call waits for approval, or after it executed — turns
+the old check into an incomplete check (reminder, counted toward both limits).
+This narrows what counts as a valid check. It adds no new guard, limit, or
+termination path.
 
 Seam exclusions. The policy is not consulted when the signal is already aborted
 (including a response that completes after Ctrl+C) or when a critical run-budget

@@ -307,6 +307,70 @@ describe('approval binds to the exact call instance', () => {
     expect(fourth.finalOutput).toBe('done');
   });
 
+  it('Q1: a copy of one of three interruptions sharing an id settles no call and leaves all three pending', async () => {
+    const t = setup([
+      {
+        calls: [
+          { id: 'toolu_shared', args: { target: 'a' } },
+          { id: 'toolu_shared', args: { target: 'b' } },
+          { id: 'toolu_shared', args: { target: 'c' } },
+        ],
+      },
+      { text: 'done' },
+    ]);
+    const first = t.start();
+    await first.completed;
+    expect(first.interruptions).toHaveLength(3);
+
+    // A structurally equal copy is not the interruption the user answered: it
+    // names a call id three pending calls share, so it must fail closed.
+    (first.state as any).approve(structuredClone(first.interruptions![1]));
+    const copied = t.loop.continueRunStream(first.state!);
+    await expect(copied.completed).rejects.toThrow(/not pending in this run \(stale or copied\): toolu_shared/);
+    expect(t.executed).toEqual([]);
+    expect(resultsFor(copied.history)).toEqual([]);
+
+    // Nothing was settled: the real interruption still decides exactly its own call.
+    (first.state as any).approve(first.interruptions![1]);
+    const second = t.loop.continueRunStream(first.state!);
+    await second.completed;
+    expect(t.executed).toEqual([]);
+    expect(second.interruptions!.map((item: any) => item.arguments)).toEqual([
+      JSON.stringify({ target: 'a' }),
+      JSON.stringify({ target: 'c' }),
+    ]);
+  });
+
+  it('Q2: a stale response-1 interruption reused after response 2 does not settle the response-2 call', async () => {
+    const t = setup([
+      { calls: [{ id: 'call_0', args: { target: 'first' } }] },
+      { calls: [{ id: 'call_0', args: { target: 'second' } }] },
+      { text: 'done' },
+    ]);
+    const first = t.start();
+    await first.completed;
+    const stale = first.interruptions![0];
+    (first.state as any).approve(stale);
+    const second = t.loop.continueRunStream(first.state!);
+    await second.completed;
+    expect(t.executed).toEqual(['first']);
+    expect(second.interruptions).toHaveLength(1);
+
+    // `call_0` is unique among the pending calls, but the decision was made for
+    // response 1's call: answering with it must not authorize `second`.
+    (second.state as any).approve(stale);
+    const replayed = t.loop.continueRunStream(second.state!);
+    await expect(replayed.completed).rejects.toThrow(/not pending in this run \(stale or copied\): call_0/);
+    expect(t.executed).toEqual(['first']);
+
+    (second.state as any).reject(second.interruptions![0], { message: 'Not second.' });
+    const third = t.loop.continueRunStream(second.state!);
+    await third.completed;
+    expect(t.executed).toEqual(['first']);
+    expect(resultsFor(third.history)).toEqual(['ran first', 'Not second.']);
+    expect(third.finalOutput).toBe('done');
+  });
+
   it('a per-call decision carried into a run (parent replay) does not authorize a different call with the same id', async () => {
     const seeded = new ApprovalLedger();
     seeded.approveTool({ toolName: 'danger', callId: 'call_0' });

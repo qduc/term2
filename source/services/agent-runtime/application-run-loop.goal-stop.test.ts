@@ -100,6 +100,8 @@ function setup(steps: Step[], initialGoal: DurableGoal | null = activeGoal(), ex
   const agent: ApplicationAgent = {
     name: 'root',
     instructions: 'test',
+    // As the root agent does: the goal each request was built with.
+    resolveRequestSnapshot: () => ({ goal: getGoal() }),
     model: 'test-model',
     tools: [readFile, createGoalCheckToolDefinition({ getGoal }), ...extraTools],
   };

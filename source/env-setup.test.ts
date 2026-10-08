@@ -2,8 +2,16 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 const originalEnv = { ...process.env };
 
+// Restore in place: assigning `process.env = copy` replaces Node's environment object with a
+// plain object, which stops later assignments reaching the real environment (worker threads
+// read that one) for everything that shares this process afterwards.
+function restoreEnv(saved: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+  Object.assign(process.env, saved);
+}
+
 afterEach(() => {
-  process.env = { ...originalEnv };
+  restoreEnv(originalEnv);
   vi.resetModules();
 });
 

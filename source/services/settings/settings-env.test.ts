@@ -2,6 +2,14 @@ import { it, expect } from 'vitest';
 import { buildEnvOverrides, isTestEnvironment, parseBooleanEnv } from './settings-env.js';
 import { SettingsService } from './settings-service.js';
 
+// Restore in place: assigning `process.env = copy` replaces Node's environment object with a
+// plain object, which stops later assignments reaching the real environment (worker threads
+// read that one) for everything that shares this process afterwards.
+function restoreEnv(saved: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+  Object.assign(process.env, saved);
+}
+
 it('supervised profile overrides permissive persisted settings without rewriting defaults', () => {
   const previous = process.env.TERM2_SUPERVISED;
   process.env.TERM2_SUPERVISED = '1';
@@ -39,7 +47,7 @@ it('buildEnvOverrides: maps TAVILY_API_KEY and WEB_SEARCH_PROVIDER', () => {
     expect(env.webSearch?.provider).toBe('tavily');
     expect(env.webSearch?.tavily?.apiKey).toBe('k');
   } finally {
-    process.env = prev;
+    restoreEnv(prev);
   }
 });
 
@@ -59,7 +67,7 @@ it('buildEnvOverrides: omits unset sibling credentials and URLs', () => {
     expect(env.webSearch?.tavily).toBeUndefined();
     expect(env.webSearch?.exa).toBeUndefined();
   } finally {
-    process.env = prev;
+    restoreEnv(prev);
   }
 });
 

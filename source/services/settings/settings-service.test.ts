@@ -1,12 +1,13 @@
 import { it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { SettingsService } from './settings-service.js';
 import { getProvider, getAllProviders } from '../../providers/index.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');
+// Under the OS temp dir, not the source tree: other tests scan source/ while this one creates
+// and removes directories, and a directory that vanishes between listing and opening fails them.
+const TEST_BASE_DIR = path.join(os.tmpdir(), `term2-settings-service-test-${process.pid}`);
 
 let testCounter = 0;
 

@@ -2806,7 +2806,9 @@ Observability fields: debug diagnostic run_loop.normal_stop_policy with action,
   guard, guardClass, reason, limit, turnLimit, remindersWithoutWork,
   remindersThisTurn, limitReached (without_work | per_turn), lastProblem,
   turnCount; no prompt or evidence text.
-Persisted-setting migration, if any: none. No goal event or status is written.
+Persisted-setting migration, if any: none. (T8 updates this: a recorded achieved
+  check that ends the turn now writes `goal_changed` with `source: 'goal_check'`
+  through the session surface. See the T8 note below.)
 Rollback boundary: the onNormalStop wiring in AgentClient (one helper, used by
   startStream and continueRunStream) or the seam in ApplicationRunLoop; the
   goal_check tool is inert without them.
@@ -2905,6 +2907,21 @@ without that prefix restart the window (and both allowances); hosted
 (provider-executed) tool activity is invisible to the history scan; ACP maps
 `goal_check_unresolved` to an ordinary `end_turn`; non-interactive mode exits 0
 on an unresolved check.
+
+Update (2026-10-08, T8 — not a new guard): a recorded, valid `achieved` check
+that ends a root turn now closes the durable goal. The write lives in
+`createGoalStopPolicy` at the normal-stop seam (same owner as this guard): only
+there is the check known to be the turn's last tool activity with its own
+recorded result, so denied / failed / unrecorded / incomplete / superseded
+checks and every status other than achieved write nothing. The session surface
+(TUI or non-interactive) installs the handler and appends `goal_changed` with
+`source: 'goal_check'` through the same path as `/goal achieved`. Transient /
+subagent clients never receive the policy; `run_code` cannot call `goal_check`.
+The write is idempotent: after it flips the goal out of `active`, later seam
+evaluations (another turn, an approval resume) see no active goal. Prompt and
+tool text tell the model to verify against the criteria before claiming
+achieved. This is an authority/correctness change to the existing guard, not a
+new guard row.
 
 ## Reference: catalogued guards
 

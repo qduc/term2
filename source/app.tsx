@@ -76,6 +76,7 @@ import {
 import { listRecentConversations } from './services/conversation/recent-conversations.js';
 import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
+import { formatGoalClosedByCheck } from './services/conversation/durable-goal.js';
 import type { ControlSocketServer } from './services/control-socket/control-socket.js';
 import type { ControlSessionMetadata } from './services/control-socket/control-session-port.js';
 
@@ -150,7 +151,12 @@ interface AppProps {
   controlStartupNotice?: string;
   controlSessionMetadata?: () => ControlSessionMetadata;
   initialGoal?: import('./services/logging/conversation-log-events.js').DurableGoal;
-  appendGoal?: (goal: import('./services/logging/conversation-log-events.js').DurableGoal) => void;
+  appendGoal?: (
+    goal: import('./services/logging/conversation-log-events.js').DurableGoal,
+    source?: import('./services/conversation/durable-goal.js').GoalChangeSource,
+  ) => void;
+  /** Receives goals closed by a recorded achieved goal_check; App persists them like /goal achieved. */
+  goalAchievedSlot?: import('./services/conversation/durable-goal.js').GoalAchievedSlot;
   onGoalRestore?: (goal?: import('./services/logging/conversation-log-events.js').DurableGoal) => void;
 }
 
@@ -187,11 +193,15 @@ const App: FC<AppProps> = ({
   initialGoal,
   appendGoal,
   onGoalRestore,
+  goalAchievedSlot,
 }) => {
   const [goal, setGoalState] = useState(initialGoal);
   const setGoal = useCallback(
-    (nextGoal: import('./services/logging/conversation-log-events.js').DurableGoal) => {
-      appendGoal?.(nextGoal);
+    (
+      nextGoal: import('./services/logging/conversation-log-events.js').DurableGoal,
+      source?: import('./services/conversation/durable-goal.js').GoalChangeSource,
+    ) => {
+      appendGoal?.(nextGoal, source);
       setGoalState(nextGoal);
     },
     [appendGoal],
@@ -343,6 +353,37 @@ const App: FC<AppProps> = ({
   useEffect(() => {
     if (controlStartupNotice) addSystemMessage(controlStartupNotice);
   }, [controlStartupNotice, addSystemMessage]);
+
+  // A recorded achieved goal_check closes the goal at the root stop seam, while
+  // the turn is still running. Persist it through the /goal achieved path now,
+  // so prompt state and /clear carry the achieved goal, and show the notice once
+  // the turn ends, after the model's final summary.
+  const turnActiveForGoalNoticeRef = useRef(isProcessing);
+  turnActiveForGoalNoticeRef.current = isProcessing;
+  const pendingGoalNoticeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!goalAchievedSlot) return;
+    const handler = (achieved: import('./services/logging/conversation-log-events.js').DurableGoal) => {
+      try {
+        setGoal(achieved, 'goal_check');
+      } catch (error) {
+        addSystemMessage(`Goal update failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+      const notice = formatGoalClosedByCheck(achieved);
+      if (turnActiveForGoalNoticeRef.current) pendingGoalNoticeRef.current = notice;
+      else addSystemMessage(notice);
+    };
+    goalAchievedSlot.handler = handler;
+    return () => {
+      if (goalAchievedSlot.handler === handler) goalAchievedSlot.handler = undefined;
+    };
+  }, [goalAchievedSlot, setGoal, addSystemMessage]);
+  useEffect(() => {
+    if (isProcessing || !pendingGoalNoticeRef.current) return;
+    addSystemMessage(pendingGoalNoticeRef.current);
+    pendingGoalNoticeRef.current = null;
+  }, [isProcessing, addSystemMessage]);
 
   // Keep older test/integration harnesses compatible while the session facade
   // rolls out the adopted-subagent approval channel.

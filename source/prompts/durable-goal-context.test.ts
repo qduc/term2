@@ -39,7 +39,8 @@ describe('renderDurableGoalContext', () => {
     const active = renderDurableGoalContext(goal);
     expect(active).toContain('finish every turn by calling `goal_check` by itself');
     expect(active).toContain('deferred: the latest user message asked for something else');
-    expect(active).toContain('only the user can, with /goal achieved');
+    expect(active).toContain('Reporting achieved closes the goal');
+    expect(active).toContain('verify the outcome and each success criterion against concrete evidence');
     expect(active).toContain('not user approval, authorization, permission, a plan');
     expect(renderDurableGoalContext({ ...goal, status: 'achieved' })).not.toContain('goal_check');
     expect(renderDurableGoalContext({ ...goal, status: 'abandoned' })).not.toContain('goal_check');

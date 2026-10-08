@@ -154,6 +154,7 @@ export class AgentClient {
   #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #onGoalAchieved?: (goal: DurableGoal) => void;
   #sessionContextService: ISessionContextService;
   #requestCapture?: ProviderRequestCapture;
   #providerRegistry?: ProviderRegistry;
@@ -706,6 +707,12 @@ export class AgentClient {
       logger: ILoggingService;
       settings: ISettingsService;
       getGoal?: () => DurableGoal | undefined;
+      /**
+       * Persist a goal that a recorded achieved `goal_check` closed at the stop
+       * seam. Root clients only: transient clients have no goal source, so no
+       * stop policy and no write.
+       */
+      onGoalAchieved?: (goal: DurableGoal) => void;
       /** Interactive-only goal proposal callbacks; absent in non-interactive/gateway sessions. */
       proposeGoal?: { appendGoal: (goal: DurableGoal) => void; hasPriorProposal: () => boolean };
       executionContext?: ExecutionContext;
@@ -748,6 +755,7 @@ export class AgentClient {
     this.#logger = deps.logger;
     this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
+    this.#onGoalAchieved = deps.onGoalAchieved;
     this.#sessionContextService = deps.sessionContextService;
     this.#providerRegistry = deps.providerRegistry;
     this.#toolLifecycle = toolLifecycle;
@@ -1050,7 +1058,7 @@ export class AgentClient {
   /** Root-only active-goal stop check; transient clients never receive one. */
   #goalStopCheck(): ReturnType<typeof createGoalStopPolicy> | undefined {
     const getGoal = this.#agentConfig.goalSource;
-    return getGoal ? createGoalStopPolicy(getGoal) : undefined;
+    return getGoal ? createGoalStopPolicy(getGoal, this.#onGoalAchieved) : undefined;
   }
 
   /** Grant one finite extension to the active run-budget envelope. */

@@ -103,8 +103,13 @@ function setup(steps: Step[], initialGoal: DurableGoal | null = activeGoal(), ex
     model: 'test-model',
     tools: [readFile, createGoalCheckToolDefinition({ getGoal }), ...extraTools],
   };
-  const onNormalStop = createGoalStopPolicy(getGoal);
-  return { ...scripted, loop, agent, goalState, onNormalStop, logDiagnostic };
+  // The surface's write: what /goal achieved does, append then publish.
+  const writes: DurableGoal[] = [];
+  const onNormalStop = createGoalStopPolicy(getGoal, (goal) => {
+    writes.push(goal);
+    goalState.current = goal;
+  });
+  return { ...scripted, loop, agent, goalState, onNormalStop, logDiagnostic, writes };
 }
 
 function activeGoal(overrides: Partial<DurableGoal> = {}): DurableGoal {
@@ -116,9 +121,9 @@ const reminderCount = (requests: StreamedModelTurnRequest[]) =>
 const userInput = (content: string) => [{ type: 'message', role: 'user', content }];
 
 describe('active-goal stop guard through ApplicationRunLoop', () => {
-  it('completion: a valid achieved check ends the turn without changing durable goal status', async () => {
+  it('completion: a valid achieved check ends the turn and marks the goal achieved', async () => {
     const t = setup([{ calls: [work] }, { calls: [goalCheck('achieved')] }, { text: 'Shipped; evidence above.' }]);
-    const goalBefore = t.goalState.current;
+    const goalBefore = t.goalState.current!;
 
     const stream = t.loop.startStream(t.agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
     await stream.completed;
@@ -127,10 +132,8 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     expect(reminderCount(t.requests)).toBe(0);
     expect(stream.terminalCause).toBeUndefined();
     expect(stream.finalOutput).toBe('Shipped; evidence above.');
-    // A self-check never writes goal state: the same active record remains.
-    expect(t.goalState.current).toBe(goalBefore);
-    expect(t.goalState.current?.status).toBe('active');
-    expect(JSON.stringify(stream.history)).toContain('stays active until the user confirms with /goal achieved');
+    expect(t.writes).toEqual([{ ...goalBefore, status: 'achieved' }]);
+    expect(JSON.stringify(stream.history)).toContain('The durable goal is marked achieved when you end the turn now');
   });
 
   it('continuation: a stop without a check is re-prompted and the same run keeps working', async () => {
@@ -191,7 +194,9 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     expect(t.requests).toHaveLength(4);
     expect(JSON.stringify(t.requests[1]!.input)).toContain('Error: goal_check was not recorded');
     expect(JSON.stringify(t.requests[2]!.input)).toContain('the latest goal_check was incomplete');
-    expect(t.goalState.current?.status).toBe('active');
+    // Only the complete check closes the goal; the incomplete one wrote nothing.
+    expect(t.writes).toHaveLength(1);
+    expect(t.goalState.current?.status).toBe('achieved');
   });
 
   it('loop guard: repeated stops without a valid check return control visibly at the limit', async () => {
@@ -607,5 +612,177 @@ describe('active-goal stop guard through ApplicationRunLoop', () => {
     await subagentLike.loop.startStream(withoutTool, userInput('hi'), { onNormalStop: subagentLike.onNormalStop })
       .completed;
     expect(subagentLike.requests).toHaveLength(1);
+  });
+});
+
+describe('goal closure by a recorded achieved goal_check', () => {
+  const criteriaGoal = () => activeGoal({ successCriteria: 'Focused tests pass' });
+  const achievedWithCriteria = goalCheck('achieved', 'shipped', { criteriaEvidence: 'vitest: 12 passed' });
+  const run = async (t: ReturnType<typeof setup>, text = 'ship it') => {
+    const stream = t.loop.startStream(t.agent, userInput(text), { onNormalStop: t.onNormalStop });
+    await stream.completed;
+    return stream;
+  };
+
+  it('writes the achieved goal exactly once, with criteria evidence, and ends the turn', async () => {
+    const t = setup([{ calls: [work] }, { calls: [achievedWithCriteria] }, { text: 'Shipped.' }], criteriaGoal());
+
+    const stream = await run(t);
+
+    expect(t.requests).toHaveLength(3);
+    expect(stream.finalOutput).toBe('Shipped.');
+    expect(t.writes).toEqual([{ ...criteriaGoal(), status: 'achieved' }]);
+    expect(t.logDiagnostic).toHaveBeenCalledWith(
+      'Normal stop policy decided',
+      expect.objectContaining({ reason: 'achieved', goalMarkedAchieved: true }),
+      expect.anything(),
+    );
+  });
+
+  it('no write: an achieved check without the required criteria evidence', async () => {
+    const t = setup(
+      [{ calls: [goalCheck('achieved', 'shipped')] }, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }],
+      criteriaGoal(),
+    );
+
+    const stream = await run(t);
+
+    expect(stream.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+    expect(t.writes).toEqual([]);
+    expect(t.goalState.current?.status).toBe('active');
+  });
+
+  it('no write: a denied achieved check', async () => {
+    const t = setup([]);
+    const gatedCheck: ToolDefinition = {
+      ...(createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }) as ToolDefinition),
+      needsApproval: () => true,
+    };
+    const scripted = scriptedModel([
+      { calls: [goalCheck('achieved')] },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'Done.' },
+    ]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => scripted.model });
+    const agent = { ...t.agent, tools: [readFile, gatedCheck] };
+
+    const first = loop.startStream(agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await first.completed;
+    (first.state as any).reject?.(first.interruptions![0]);
+    const resumed = loop.continueRunStream(first.state!, { onNormalStop: t.onNormalStop });
+    await resumed.completed;
+
+    expect(resumed.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+    expect(t.writes).toEqual([]);
+  });
+
+  it('no write: an achieved check whose execution failed', async () => {
+    const t = setup([]);
+    const failingCheck: ToolDefinition = {
+      ...(createGoalCheckToolDefinition({ getGoal: () => t.goalState.current }) as ToolDefinition),
+      execute: () => {
+        throw new Error('disk full');
+      },
+    };
+    const scripted = scriptedModel([
+      { calls: [goalCheck('achieved')] },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'Done.' },
+    ]);
+    const loop = new ApplicationRunLoop({ resolveModel: () => scripted.model });
+    const agent = { ...t.agent, tools: [readFile, failingCheck] };
+
+    const stream = loop.startStream(agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await stream.completed;
+
+    expect(stream.terminalCause).toBe(GOAL_CHECK_UNRESOLVED_CAUSE);
+    expect(t.writes).toEqual([]);
+  });
+
+  it.each(['blocked', 'deferred'])(
+    'no write: a recorded %s check ends the turn with the goal active',
+    async (status) => {
+      const t = setup([{ calls: [goalCheck(status)] }, { text: 'Over to you.' }]);
+
+      const stream = await run(t);
+
+      expect(t.requests).toHaveLength(2);
+      expect(stream.terminalCause).toBeUndefined();
+      expect(t.writes).toEqual([]);
+      expect(t.goalState.current?.status).toBe('active');
+    },
+  );
+
+  it('no write: a recorded not_achieved check, even when the turn finally returns control', async () => {
+    const t = setup([
+      { calls: [goalCheck('not_achieved')] },
+      { text: 'Stopping.' },
+      { calls: [goalCheck('not_achieved')] },
+      { text: 'Stopping.' },
+      { text: 'Stopping.' },
+    ]);
+
+    await run(t);
+
+    expect(t.writes).toEqual([]);
+    expect(t.goalState.current?.status).toBe('active');
+  });
+
+  it('no write: an achieved check followed by more work before the turn ends', async () => {
+    const t = setup([
+      { calls: [goalCheck('achieved')] },
+      { calls: [work] },
+      { text: 'Done.' },
+      { text: 'Done.' },
+      { text: 'Done.' },
+    ]);
+
+    await run(t);
+
+    expect(t.writes).toEqual([]);
+  });
+
+  it.each([
+    ['already achieved', activeGoal({ status: 'achieved' })],
+    ['abandoned', activeGoal({ status: 'abandoned' })],
+  ])('no write: a goal that is %s', async (_label, goal) => {
+    const t = setup([{ calls: [goalCheck('achieved')] }, { text: 'Done.' }], goal);
+
+    await run(t);
+
+    expect(t.requests).toHaveLength(2);
+    expect(t.writes).toEqual([]);
+    expect(t.goalState.current).toBe(goal);
+  });
+
+  it('idempotent: one write across an approval resume, then nothing on the next turn', async () => {
+    const t = setup(
+      [
+        { calls: [{ name: 'danger', args: {} }] },
+        { calls: [goalCheck('achieved')] },
+        { text: 'Shipped.' },
+        { text: 'Anything else?' },
+      ],
+      activeGoal(),
+      [danger],
+    );
+
+    const first = t.loop.startStream(t.agent, userInput('ship it'), { onNormalStop: t.onNormalStop });
+    await first.completed;
+    expect(first.interruptions).toHaveLength(1);
+    (first.state as any).approve(first.interruptions![0]);
+    const resumed = t.loop.continueRunStream(first.state!, { onNormalStop: t.onNormalStop });
+    await resumed.completed;
+    expect(t.writes).toHaveLength(1);
+
+    const next = t.loop.startStream(t.agent, [...resumed.history, ...userInput('continue')] as never, {
+      onNormalStop: t.onNormalStop,
+    });
+    await next.completed;
+
+    expect(t.requests).toHaveLength(4);
+    expect(t.writes).toEqual([{ ...activeGoal(), status: 'achieved' }]);
   });
 });

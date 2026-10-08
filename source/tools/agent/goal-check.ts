@@ -17,15 +17,17 @@ import {
 
 const GOAL_CHECK_DESCRIPTION =
   'Report your self-check against the active durable session goal. While the goal is active, call this by itself ' +
-  'as the last tool call before ending a turn, after any work and after reading its results. It records your ' +
-  'judgment only: it never marks the goal achieved (only the user can, with /goal achieved), grants no ' +
-  'permission, and does not override newer user instructions. Use deferred when the latest user message asked ' +
-  'for something other than the goal or asked you to pause.';
+  'as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved ' +
+  'closes the goal: when the turn ends right after it, the durable goal is marked achieved. So before claiming ' +
+  'achieved, verify the outcome and every success criterion against concrete evidence from this session ' +
+  '(commands you ran and their results, files you read); if anything is unverified, keep working or report ' +
+  'blocked instead. It grants no permission and does not override newer user instructions. Use deferred when the ' +
+  'latest user message asked for something other than the goal or asked you to pause.';
 
 const RESULT_TEXT: Record<GoalCheckStatus, string> = {
   achieved:
-    `${GOAL_CHECK_RECORDED_PREFIX} achieved. The durable goal stays active until the user confirms with /goal achieved. ` +
-    'End the turn now with a short summary of the evidence.',
+    `${GOAL_CHECK_RECORDED_PREFIX} achieved. The durable goal is marked achieved when you end the turn now; ` +
+    'more tool work first means checking again. End the turn now with a short summary of the evidence.',
   blocked:
     `${GOAL_CHECK_RECORDED_PREFIX} blocked. Control returns to the user. End the turn now and state plainly what is ` +
     'blocking and what input or capability is needed.',
@@ -59,9 +61,10 @@ export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index,
 /**
  * The working model's stop self-check for an active durable goal.
  *
- * Execution validates and acknowledges the report; the stop decision itself
- * is made from the turn history by `decideGoalStop`, so this tool holds no
- * state and has no write path to the goal.
+ * Execution validates and acknowledges the report; the stop decision is made
+ * from the turn history by `decideGoalStop`. The tool holds no state and has no
+ * write path of its own: an achieved check closes the goal only at the stop
+ * seam (`createGoalStopPolicy`), once it is known to be the turn's last word.
  */
 export function createGoalCheckToolDefinition(deps: {
   getGoal: () => DurableGoal | undefined;

@@ -331,3 +331,104 @@ describe('createGoalStopPolicy', () => {
     expect(policy(history, { tools })).toEqual({ action: 'stop' });
   });
 });
+
+describe('createGoalStopPolicy goal closure', () => {
+  const agent = { tools: [{ name: 'goal_check' }] } as never;
+  const achievedArgs = { status: 'achieved', evidence: 'shipped', criteriaEvidence: 'vitest: 12 passed' };
+  function harness(initial: DurableGoal | undefined) {
+    const state = { current: initial };
+    const writes: DurableGoal[] = [];
+    const policy = createGoalStopPolicy(
+      () => state.current,
+      (next) => {
+        writes.push(next);
+        state.current = next;
+      },
+    );
+    return { state, writes, policy };
+  }
+
+  it('writes the goal as achieved for a recorded, valid achieved check that ends the turn', () => {
+    const h = harness(goalWithCriteria);
+    const decision = h.policy([user('ship it'), ...work(), ...check(achievedArgs), assistant('Shipped.')], agent);
+    expect(decision).toMatchObject({ action: 'stop', diagnostics: { reason: 'achieved', goalMarkedAchieved: true } });
+    expect(h.writes).toEqual([{ ...goalWithCriteria, status: 'achieved' }]);
+  });
+
+  it('idempotent: evaluating the same turn again after the write writes nothing more', () => {
+    const h = harness(goalWithCriteria);
+    const history = [user('ship it'), ...check(achievedArgs), assistant('Shipped.')];
+    h.policy(history, agent);
+    expect(h.policy(history, agent)).toEqual({ action: 'stop' });
+    expect(h.writes).toHaveLength(1);
+  });
+
+  it('no write: an achieved check with no recorded result', () => {
+    const h = harness(goal);
+    const history = [
+      user('ship it'),
+      { type: 'function_call', callId: 'lost', name: 'goal_check', arguments: JSON.stringify(achievedArgs) },
+      assistant('Shipped.'),
+    ];
+    expect(h.policy(history, agent)).toMatchObject({ action: 'continue' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it('no write: achieved without required criteria evidence, even with a recorded-looking result', () => {
+    const h = harness(goalWithCriteria);
+    const history = [user('ship it'), ...check({ status: 'achieved', evidence: 'shipped' }), assistant('Shipped.')];
+    expect(h.policy(history, agent)).toMatchObject({ action: 'continue' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it('no write: goal_check activity inside run_code, even after an earlier top-level check', () => {
+    // run_code cannot call goal_check (RUN_CODE_PROHIBITED_TOOLS). Even a script
+    // output that looks recorded is run_code activity, and it supersedes the
+    // earlier top-level check as the turn's last tool activity.
+    const h = harness(goal);
+    const history = [
+      user('ship it'),
+      ...check(achievedArgs),
+      ...call(
+        'run_code',
+        { code: "await tools.goal_check({ status: 'achieved', evidence: 'shipped' })" },
+        recorded('achieved'),
+      ),
+      assistant('Shipped.'),
+    ];
+    expect(h.policy(history, agent)).toMatchObject({ action: 'continue' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it.each([
+    ['already achieved', { ...goal, status: 'achieved' as const }],
+    ['abandoned', { ...goal, status: 'abandoned' as const }],
+    ['absent', undefined],
+  ])('no write: a goal that is %s, even with a recorded achieved check', (_label, current) => {
+    const h = harness(current);
+    const history = [user('ship it'), ...check(achievedArgs), assistant('Shipped.')];
+    expect(h.policy(history, agent)).toEqual({ action: 'stop' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it('no write without a surface handler; the turn still stops', () => {
+    const policy = createGoalStopPolicy(() => goal);
+    expect(policy([user('ship it'), ...check(achievedArgs), assistant('Shipped.')], agent)).toMatchObject({
+      action: 'stop',
+      diagnostics: { reason: 'achieved' },
+    });
+  });
+
+  it('a failing surface write is reported in diagnostics and the turn still stops', () => {
+    const policy = createGoalStopPolicy(
+      () => goal,
+      () => {
+        throw new Error('append failed');
+      },
+    );
+    expect(policy([user('ship it'), ...check(achievedArgs), assistant('Shipped.')], agent)).toMatchObject({
+      action: 'stop',
+      diagnostics: { reason: 'achieved', goalMarkedAchieved: false },
+    });
+  });
+});

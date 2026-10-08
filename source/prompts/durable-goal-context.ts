@@ -35,4 +35,4 @@ While this goal is active, finish every turn by calling \`${TOOL_NAME_GOAL_CHECK
 - blocked: you cannot proceed without user input or a capability you lack; say exactly what is needed.
 - not_achieved: more work is needed that you can do now; keep working instead of ending the turn.
 - deferred: the latest user message asked for something else, asked you to pause, or superseded the goal; answer that instead of forcing it into goal work.
-A self-check never marks the goal achieved; only the user can, with /goal achieved.`;
+Reporting achieved closes the goal: when the turn ends after a recorded achieved check, the goal is marked achieved. Before claiming it, verify the outcome and each success criterion against concrete evidence from this session (commands run and their results, files read); if any part is unverified, keep working or report blocked.`;

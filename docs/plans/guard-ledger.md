@@ -2884,8 +2884,11 @@ client. End-to-end: the positional `--goal` launch in
 `active`).
 
 Disposition: **implemented in `71020cd1`, merged in `49168da1`; review
-follow-up (per-turn cap, recorded-result check, seam and resume tests) on branch
-`goal-stop-hardening`.**
+follow-up (per-turn cap, recorded-result check, seam and resume tests) in
+`1d9f5c94`.** Verification on Node 24.21.0: `pnpm typecheck`; `pnpm test` (711
+files, 11028 passed); `pnpm test:integration` (14 files, 112 passed);
+`pnpm test:provider-black-box` (22 files, 193 passed); `pnpm test:e2e` (4 files,
+30 passed).
 
 Known limitations (deferred): the `[Mode Notice] ` prefix match that separates
 harness notices from user instructions; harness-injected user-role messages

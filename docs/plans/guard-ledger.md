@@ -2749,6 +2749,78 @@ passed (5.00s, exit 0, 180s timeout). Two preceding changed-test invocations
 failed before running tests; the corrected explicit-baseline invocation is the
 final changed gate. Merged public classifier and reset probes also passed.
 
+### Active-goal stop check (2026-10-08)
+
+The durable goal was prompt context only; a root turn could end while the goal
+was plainly unfinished. The stop check makes the working model report before a
+normal stop. Design and authority rules live in
+[durable goal](durable-goal.md#active-goal-stop-check).
+
+```text
+Harm prevented: a root turn ending silently while the active durable goal is
+  unachieved, and the opposite runaway: an endless self-check/continuation
+  exchange that never returns control.
+Scope and execution paths: root AgentClient runs (interactive and
+  non-interactive) whose agent has the goal_check tool and whose session goal is
+  active. Transient/subagent clients, mentor/nested runners, gateway sessions
+  without a goal source, and sessions without an active goal are untouched.
+Guard class: runaway detector over the stop/continue exchange (secondary:
+  advisory continuation; never abort/kill).
+Enforcement owner: decideGoalStop / createGoalStopPolicy in
+  services/conversation/durable-goal-stop-check.ts, consulted by
+  ApplicationRunLoop only at its normal-stop seam (completed response, no tool
+  call, no pending approval, no abort, no critical wrap-up).
+Recovery owner: the model, through the run loop's existing request boundary
+  (reminder admitted like any harness notice); then the user, when control
+  returns.
+Measured signal and observation boundary: the current turn's history (items
+  after the latest genuine user message; harness [Mode Notice] items excluded):
+  whether the latest tool activity is a valid goal_check, and how many stop-check
+  reminders were issued since the last non-goal_check tool activity.
+Direct evidence or proxy: direct evidence that the model did not report (or
+  reported not_achieved and then stopped anyway); the report's truth is a
+  self-judgment proxy, never proof.
+Legitimate work that can produce the same signal: a model that forgot the
+  check once, or retried a malformed check; an unrelated question or user pause
+  (answered with status deferred, which stops immediately).
+Configuration sources and precedence: none; constant
+  MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK = 2. Total work stays bounded by the run
+  budget (turn backstop, time, cost, stall) and legacy maxTurns, which see every
+  guard continuation as an ordinary turn.
+Effective default and clamping: 2 consecutive reminders without intervening
+  work; the third idle stop returns control. Real tool work resets the count.
+Action and why the signal justifies it: request a check / continue the same run
+  (advisory ladder step "request confirmation"); at the limit, stop with typed
+  terminalCause goal_check_unresolved and a visible notice. Two idle reminders
+  is one for omission plus one retry; a third shows the exchange itself loops.
+Partial-work settlement: unchanged; history, tool results and costs are kept.
+Retry, fallback, and provider-continuity semantics: no replay; the reminder is
+  an ordinary admitted user-role notice, so chaining/compaction are unchanged.
+Observability fields: debug diagnostic run_loop.normal_stop_policy with action,
+  guard, guardClass, reason, limit, remindersWithoutWork, lastProblem, turnCount;
+  no prompt or evidence text.
+Persisted-setting migration, if any: none. No goal event or status is written.
+Rollback boundary: the onNormalStop wiring in AgentClient (one helper) or the
+  seam in ApplicationRunLoop; the goal_check tool is inert without them.
+Ledger row: Active-goal stop check.
+```
+
+Adversarial calibration: a model that does trivial work between idle stops
+evades the 2-reminder count; that case is deliberately left to the run budget's
+turn backstop and identical-call stall sensor, which already own total-work
+containment, rather than duplicating them here. A run budget interaction latched
+by the final response is honored before the reminder request is sent.
+
+Red proof: with the run-loop seam reverted, `NODE_ENV=test pnpm exec vitest run
+source/services/agent-runtime/application-run-loop.goal-stop.test.ts`
+failed 10 of 17 (every continuation, limit, steer, approval and budget case);
+the 7 stop-permitted cases passed on both. Test matrix: completion, continuation
+(missing and not_achieved), incomplete achievement claim, limit at threshold-1 /
+threshold / threshold+1 and reset by work, blocker, cancellation and provider
+error (policy never consulted), explicit pause and unrelated question
+(deferred), steer after a check, approval pause, legacy maxTurns and staged run
+budget, no goal / terminal goal / no tool, transient client.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

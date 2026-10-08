@@ -35,6 +35,16 @@ describe('renderDurableGoalContext', () => {
     expect(renderDurableGoalContext(goal)).toBe(renderDurableGoalContext({ ...goal, id: 'different-event-id' }));
   });
 
+  it('carries the stop-check contract only while the goal is active', () => {
+    const active = renderDurableGoalContext(goal);
+    expect(active).toContain('finish every turn by calling `goal_check` by itself');
+    expect(active).toContain('deferred: the latest user message asked for something else');
+    expect(active).toContain('only the user can, with /goal achieved');
+    expect(active).toContain('not user approval, authorization, permission, a plan');
+    expect(renderDurableGoalContext({ ...goal, status: 'achieved' })).not.toContain('goal_check');
+    expect(renderDurableGoalContext({ ...goal, status: 'abandoned' })).not.toContain('goal_check');
+  });
+
   it('accepts the schema bounds and rejects out-of-bound or invalid state', () => {
     expect(() => renderDurableGoalContext({ ...goal, outcome: 'x'.repeat(MAX_GOAL_FIELD_LENGTH) })).not.toThrow();
     expect(() =>

@@ -43,6 +43,7 @@ import type { ProviderInput, ProviderInputItem } from '../contracts/provider-inp
 import type { ProviderRequestCapture } from '../providers/provider-request-capture.js';
 import { getProvider, type ProviderRegistry } from '../providers/index.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
+import { createGoalStopPolicy } from '../services/conversation/durable-goal-stop-check.js';
 import { randomUUID } from 'node:crypto';
 import { fetchModels } from '../services/model-service.js';
 import {
@@ -1046,6 +1047,12 @@ export class AgentClient {
     return { ...policy, turnBackstop: Math.min(policy.turnBackstop, this.#maxTurns) };
   }
 
+  /** Root-only active-goal stop check; transient clients never receive one. */
+  #goalStopCheck(): ReturnType<typeof createGoalStopPolicy> | undefined {
+    const getGoal = this.#agentConfig.goalSource;
+    return getGoal ? createGoalStopPolicy(getGoal) : undefined;
+  }
+
   /** Grant one finite extension to the active run-budget envelope. */
   grantRunBudgetExtension(): { granted: boolean; extensionsGranted: number } {
     return this.#applicationRunLoop.grantRunBudgetExtension();
@@ -1443,6 +1450,7 @@ export class AgentClient {
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
       const runBudget = this.#runBudgetPolicy();
+      const goalStopCheck = this.#goalStopCheck();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
           requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
@@ -1473,6 +1481,7 @@ export class AgentClient {
             }
             return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
           },
+          ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
         });
       };
       const stream = run();
@@ -1495,6 +1504,7 @@ export class AgentClient {
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();
     const runBudget = this.#runBudgetPolicy();
+    const goalStopCheck = this.#goalStopCheck();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
       requestInputLimit: () => this.#settings.get('agent.maxRequestInputTokens'),
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
@@ -1524,6 +1534,7 @@ export class AgentClient {
         return this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens);
       },
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+      ...(goalStopCheck ? { onNormalStop: goalStopCheck } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;

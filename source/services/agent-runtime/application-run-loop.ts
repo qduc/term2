@@ -212,7 +212,28 @@ export interface ApplicationRunLoopOptions {
    * still sees that the question was asked and went unanswered.
    */
   readonly stopAfterApprovalResolution?: boolean;
+  /**
+   * Root-only policy consulted when a completed response would end the run
+   * normally: no tool calls, no pending approval or budget interaction, no
+   * cancellation, error, or containment wrap-up. `continue` queues its reminder
+   * for the next request boundary and keeps the same run going, so budget,
+   * steering, compaction, approval, and cancellation all apply as usual.
+   */
+  readonly onNormalStop?: (history: readonly ProviderInputItem[], agent: ApplicationAgent) => NormalStopDecision;
 }
+
+/** A normal-stop policy's answer; see `ApplicationRunLoopOptions.onNormalStop`. */
+export type NormalStopDecision =
+  | {
+      readonly action: 'stop';
+      readonly terminalCause?: RunTerminationCause;
+      readonly diagnostics?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly action: 'continue';
+      readonly reminder: string;
+      readonly diagnostics?: Readonly<Record<string, unknown>>;
+    };
 
 /**
  * Compatibility error for legacy callers without a staged run budget. The loop
@@ -1552,6 +1573,25 @@ export class ApplicationRunLoop {
         return finish(stream, state, queue);
       }
       if (!sawToolCall) {
+        // The normal stop seam. A stop policy may keep the same run going; the
+        // reminder is admitted at the next request boundary, where pending
+        // budget evidence pauses first and turn accounting applies as usual.
+        const stopDecision =
+          options.onNormalStop && !options.signal?.aborted && !state.criticalWrapUpPending
+            ? options.onNormalStop(state.history, state.agent)
+            : undefined;
+        if (stopDecision) {
+          this.#deps.logDiagnostic?.(
+            'Normal stop policy decided',
+            { action: stopDecision.action, turnCount: state.turnCount, ...stopDecision.diagnostics },
+            { severity: 'debug', eventType: 'run_loop.normal_stop_policy' },
+          );
+        }
+        if (stopDecision?.action === 'continue') {
+          this.#queuePendingSystemNotice(stopDecision.reminder);
+          continue;
+        }
+        if (stopDecision?.terminalCause) state.terminalCause = stopDecision.terminalCause;
         // Evidence discovered when a response has already completed needs no
         // human boundary: there is no later request or tool to block.
         state.pendingRunBudgetInteraction = undefined;

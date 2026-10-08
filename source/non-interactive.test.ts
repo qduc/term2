@@ -190,6 +190,33 @@ it('writes finalText to stdout when no text_delta events were streamed', async (
   expect(stderr.getOutput()).toBe('');
 });
 
+it('reports an unresolved goal stop check on stderr while keeping the answer on stdout', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'final', finalText: 'Partial work.', terminalCause: 'goal_check_unresolved' });
+      return { type: 'response', finalText: 'Partial work.', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      expect(true).toBe(false);
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('Partial work.\n');
+  expect(stderr.getOutput()).toContain('Goal stop check unresolved');
+});
+
 it('uses a persistent event sink when the session supports one', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

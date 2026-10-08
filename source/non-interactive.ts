@@ -27,6 +27,10 @@ import { mcpMemberName } from './tools/system/run-code/mcp-script-surface.js';
 import { createConversationLogWriter } from './services/logging/conversation-log-writer.js';
 import { getConversationsDir } from './services/conversation/conversation-persistence.js';
 import type { DurableGoal } from './services/logging/conversation-log-events.js';
+import {
+  GOAL_CHECK_UNRESOLVED_CAUSE,
+  GOAL_CHECK_UNRESOLVED_NOTICE,
+} from './services/conversation/durable-goal-stop-check.js';
 
 const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
 const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
@@ -257,6 +261,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       if (event.finalText && event.finalText.length > streamedTextLength) {
         stdout.write(event.finalText.slice(streamedTextLength));
       }
+      if (event.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE) stderr.write(`${GOAL_CHECK_UNRESOLVED_NOTICE}\n`);
       return;
     }
 

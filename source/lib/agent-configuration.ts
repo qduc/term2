@@ -458,6 +458,11 @@ export class AgentConfiguration implements AgentSource {
     return this.#isTransientClient;
   }
 
+  /** The latest persisted session goal; transient (subagent/role) clients never carry one. */
+  get goalSource(): (() => DurableGoal | undefined) | undefined {
+    return this.#isTransientClient ? undefined : this.#getGoal;
+  }
+
   get serviceTierOverrideForNextRequest() {
     return this.#serviceTierOverrideForNextRequest;
   }

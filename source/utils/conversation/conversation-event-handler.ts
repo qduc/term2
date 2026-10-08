@@ -5,6 +5,10 @@
 
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';
 import { formatMemoryReceipt } from '../../services/conversation/conversation-events.js';
+import {
+  GOAL_CHECK_UNRESOLVED_CAUSE,
+  GOAL_CHECK_UNRESOLVED_NOTICE,
+} from '../../services/conversation/durable-goal-stop-check.js';
 import type {
   BotMessage,
   CommandMessage,
@@ -739,6 +743,9 @@ export function createConversationEventHandler(
         // the text-only turn path where neither fires before the stream closes.
         flushReasoning();
         flushBotText();
+        if (event.terminalCause === GOAL_CHECK_UNRESOLVED_CAUSE) {
+          appendMessages([{ id: createMessageId(), sender: 'system', text: GOAL_CHECK_UNRESOLVED_NOTICE }]);
+        }
         return;
 
       case 'usage_update':

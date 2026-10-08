@@ -7,64 +7,69 @@ import { replayApprovals } from '../approval/approval-replay.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
 describe('ApprovalLedger', () => {
-  it('keys records by tool name and scopes decisions to call ids', () => {
+  it('keys records by tool name and records one-time decisions per call id', () => {
     const ledger = new ApprovalLedger();
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'call-1' })).toBeUndefined();
+    expect(ledger.snapshot()).toEqual({});
 
     ledger.approveTool({ toolName: 'shell', callId: 'call-1' });
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'call-1' })).toBe(true);
-    // A different call of the same tool is still undecided.
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'call-2' })).toBeUndefined();
-    // A different tool is undecided.
-    expect(ledger.isToolApproved({ toolName: 'read_file', callId: 'call-1' })).toBeUndefined();
+    expect(ledger.snapshot()).toEqual({ shell: { approved: ['call-1'], rejected: [] } });
+    // A one-time decision is a record of that call, never a decision for the tool.
+    expect(ledger.blanketDecision('shell')).toBeUndefined();
+    expect(ledger.blanketDecision('read_file')).toBeUndefined();
   });
 
-  it('supports blanket approval and rejection with SDK precedence', () => {
+  it('supports blanket approval and rejection', () => {
     const ledger = new ApprovalLedger();
     ledger.approveTool({ toolName: 'shell', callId: 'call-1' }, { alwaysApprove: true });
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'any-call' })).toBe(true);
+    expect(ledger.blanketDecision('shell')).toBe(true);
 
     const rejected = new ApprovalLedger();
     rejected.rejectTool({ toolName: 'shell', callId: 'call-1' }, { alwaysReject: true, message: 'nope' });
-    expect(rejected.isToolApproved({ toolName: 'shell', callId: 'any-call' })).toBe(false);
-    expect(rejected.getRejectionMessage('shell', 'any-call')).toBe('nope');
+    expect(rejected.blanketDecision('shell')).toBe(false);
+    expect(rejected.blanketRejectionMessage('shell')).toBe('nope');
   });
 
-  it('keeps per-call rejection messages', () => {
+  it('recording a one-time decision does not erase a blanket decision for the tool', () => {
+    const rejected = new ApprovalLedger();
+    rejected.rejectTool({ toolName: 'shell', callId: 'policy' }, { alwaysReject: true, message: 'off' });
+    rejected.rejectTool({ toolName: 'shell', callId: 'call-1' }, { message: 'not this one' });
+    expect(rejected.blanketDecision('shell')).toBe(false);
+    expect(rejected.blanketRejectionMessage('shell')).toBe('off');
+
+    const approved = new ApprovalLedger();
+    approved.approveTool({ toolName: 'shell', callId: 'policy' }, { alwaysApprove: true });
+    approved.approveTool({ toolName: 'shell', callId: 'call-1' });
+    expect(approved.blanketDecision('shell')).toBe(true);
+  });
+
+  it('keeps no one-time rejection message: it belongs to the settled call, not the tool', () => {
     const ledger = new ApprovalLedger();
     ledger.rejectTool({ toolName: 'shell', callId: 'call-1' }, { message: 'too risky' });
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'call-1' })).toBe(false);
-    expect(ledger.isToolApproved({ toolName: 'shell', callId: 'call-2' })).toBeUndefined();
-    expect(ledger.getRejectionMessage('shell', 'call-1')).toBe('too risky');
-    expect(ledger.getRejectionMessage('shell', 'call-2')).toBeUndefined();
+    expect(ledger.snapshot()).toEqual({ shell: { approved: [], rejected: ['call-1'] } });
+    expect(ledger.blanketDecision('shell')).toBeUndefined();
+    expect(ledger.blanketRejectionMessage('shell')).toBeUndefined();
+
+    // A later blanket rejection without a message does not pick up the one-time one.
+    ledger.rejectTool({ toolName: 'shell', callId: 'call-1' }, { alwaysReject: true });
+    expect(ledger.blanketRejectionMessage('shell')).toBeUndefined();
   });
 
-  it('snapshot replays into a fresh ledger (parent to child)', () => {
+  it('snapshot is a copy that replays its blanket decisions into a fresh ledger (parent to child)', () => {
     const parent = new ApprovalLedger();
-    parent.approveTool({ toolName: 'shell', callId: 'call-1' });
-    parent.rejectTool({ toolName: 'grep', callId: 'call-2' }, { message: 'no' });
+    parent.approveTool({ toolName: 'shell', callId: 'call-1' }, { alwaysApprove: true });
+    parent.rejectTool({ toolName: 'grep', callId: 'call-2' }, { alwaysReject: true, message: 'no' });
+    parent.approveTool({ toolName: 'read_file', callId: 'call-3' });
 
     const child = new ApprovalLedger();
-    const snapshot = parent.snapshot();
-    for (const [toolName, record] of Object.entries(snapshot)) {
-      if (record.rejected === true || (Array.isArray(record.rejected) && record.rejected.length > 0)) {
-        for (const callId of record.rejected === true ? ['__approval_replay_blanket_decision__'] : record.rejected) {
-          child.rejectTool({ toolName, callId }, { message: record.messages?.[callId] });
-        }
-      }
-      if (record.approved === true || (Array.isArray(record.approved) && record.approved.length > 0)) {
-        for (const callId of record.approved === true ? ['__approval_replay_blanket_decision__'] : record.approved) {
-          child.approveTool({ toolName, callId });
-        }
-      }
-    }
+    replayApprovals(child, parent.snapshot(), { name: 'parent-agent' });
 
-    expect(child.isToolApproved({ toolName: 'shell', callId: 'call-1' })).toBe(true);
-    expect(child.isToolApproved({ toolName: 'grep', callId: 'call-2' })).toBe(false);
-    expect(child.getRejectionMessage('grep', 'call-2')).toBe('no');
+    expect(child.blanketDecision('shell')).toBe(true);
+    expect(child.blanketDecision('grep')).toBe(false);
+    expect(child.blanketRejectionMessage('grep')).toBe('no');
+    expect(child.snapshot().read_file).toBeUndefined();
     // snapshot is a copy: mutating the child must not leak into the parent.
-    child.approveTool({ toolName: 'shell', callId: 'call-9' });
-    expect(parent.isToolApproved({ toolName: 'shell', callId: 'call-9' })).toBeUndefined();
+    child.approveTool({ toolName: 'write_file', callId: 'call-9' }, { alwaysApprove: true });
+    expect(parent.blanketDecision('write_file')).toBeUndefined();
   });
 });
 

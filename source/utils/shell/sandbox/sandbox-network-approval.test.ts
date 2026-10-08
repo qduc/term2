@@ -1,4 +1,8 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { publishActiveWorkspaceRoot } from '../../../services/workspace/active-workspace-root.js';
 import {
   registerSandboxNetworkApprovalHandler,
   registerSandboxNetworkApprovalPauseController,
@@ -49,12 +53,20 @@ describe('sandbox-network-approval', () => {
   });
 
   it('supports allow-project decision and saves host to store', async () => {
+    // A project grant persists under the workspace root; point it at a temp workspace so
+    // the test never writes `.term2/sandbox-network-hosts.json` into the real checkout.
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-network-approval-'));
+    publishActiveWorkspaceRoot(workspace);
     const unregister = registerSandboxNetworkApprovalHandler(async () => 'allow-project');
-
-    await expect(requestSandboxNetworkApproval({ host: 'project.com', port: 8080 })).resolves.toBe(true);
-    expect(isHostAllowed('project.com', 8080)).toBe(true);
-
-    unregister();
+    try {
+      await expect(requestSandboxNetworkApproval({ host: 'project.com', port: 8080 })).resolves.toBe(true);
+      expect(isHostAllowed('project.com', 8080)).toBe(true);
+      expect(fs.existsSync(path.join(workspace, '.term2', 'sandbox-network-hosts.json'))).toBe(true);
+    } finally {
+      unregister();
+      publishActiveWorkspaceRoot(undefined);
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   it('clears only the active handler on unregister', async () => {

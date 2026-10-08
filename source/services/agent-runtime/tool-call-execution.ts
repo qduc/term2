@@ -115,8 +115,7 @@ export class ToolCallExecution {
       // must never authorize a later call that reuses the same id.
       const alreadyDecided = context.approvals.blanketDecision(event.name);
       if (alreadyDecided === false) {
-        entry.output =
-          context.approvals.getRejectionMessage(event.name, event.id) ?? 'Tool execution was not approved.';
+        entry.output = context.approvals.blanketRejectionMessage(event.name) ?? 'Tool execution was not approved.';
         continue;
       }
       if (alreadyDecided !== true && (await definition.needsApproval(entry.params, context.toolContext))) {
@@ -143,13 +142,27 @@ export class ToolCallExecution {
     this.#logEligibility(plan);
   }
 
+  /**
+   * Settle exactly the pending call the decision was made for. The interruption
+   * object the caller answered identifies it; call ids are not unique (a
+   * provider may give several calls in one response the same id), so the id is
+   * only the fallback for a caller that answers with a copy of the interruption.
+   */
   resolveApproval(
-    callId: string | undefined,
+    target: { callId: string | undefined; interruption?: unknown },
     decision: 'approved' | 'rejected',
     message: string | undefined,
     approvals: ApprovalLedger,
   ): void {
-    const selectedIndex = callId ? this.#pendingApprovals.findIndex((pending) => pending.callId === callId) : -1;
+    const { callId, interruption } = target;
+    const byIdentity =
+      interruption === undefined
+        ? -1
+        : this.#pendingApprovals.findIndex((pending) => pending.interruption === interruption);
+    const selectedIndex =
+      byIdentity >= 0 || !callId
+        ? byIdentity
+        : this.#pendingApprovals.findIndex((pending) => pending.callId === callId);
     if (callId && selectedIndex < 0)
       throw new Error(`Approval decision references unknown pending tool call: ${callId}`);
     const pendingIndex = selectedIndex >= 0 ? selectedIndex : 0;

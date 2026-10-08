@@ -13,22 +13,20 @@ export interface ApprovalItem {
 
 /**
  * The approval half of the removed SDK's RunContext, as an application-owned
- * typed ledger. Semantics are pinned by `approval-replay.test.ts` and the
- * parent plan's *ApprovalRecord semantics* section — preserve them exactly:
+ * typed ledger:
  *
  * - the record is keyed by tool name, not call id;
  * - `approved: true` / `rejected: true` are blanket decisions covering every
  *   call of that tool;
- * - `approved: string[]` / `rejected: string[]` are per-call decisions;
- * - `false` (from `isToolApproved`) carries no decision at all — it is what a
- *   blanket decision on the other side leaves behind;
- * - a blanket approval outranks a blanket rejection (enforced by
- *   `replayApprovals` ordering, which replays rejections first).
+ * - `approved: string[]` / `rejected: string[]` record which calls a one-time
+ *   decision was made for;
+ * - a blanket approval outranks a blanket rejection ({@link ApprovalLedger.blanketDecision}).
  *
- * The run loop consults only blanket decisions when it plans a new call
- * ({@link ApprovalLedger.blanketDecision}). Per-call entries record which call
- * a decision was made for; they never authorize a later call, because call ids
- * repeat across responses and runs.
+ * Only blanket decisions are ever consulted ({@link ApprovalLedger.blanketDecision}).
+ * A one-time decision belongs to the plan entry it settled — its rejection
+ * message becomes that entry's output — and the per-call entries here are a
+ * record only: call ids repeat across responses and runs, so they can never
+ * authorize, reject, or explain a later call.
  *
  * It does NOT carry the run's user context — that lives on
  * {@link ToolInvocationContext.context}. Splitting the two is the point: the
@@ -39,30 +37,28 @@ export class ApprovalLedger {
 
   approveTool(item: ApprovalItem, options: { alwaysApprove?: boolean } = {}): void {
     const current = this.#approvals[item.toolName] ?? { approved: [], rejected: [] };
-    current.approved = options.alwaysApprove
-      ? true
-      : [...(Array.isArray(current.approved) ? current.approved : []), item.callId];
+    // Recording a one-time decision must not erase a blanket one for the tool.
+    current.approved =
+      options.alwaysApprove || current.approved === true
+        ? true
+        : [...(Array.isArray(current.approved) ? current.approved : []), item.callId];
     this.#approvals[item.toolName] = current;
   }
 
+  /**
+   * `message` is kept only for a blanket rejection, where it explains every
+   * later call. A one-time rejection's message is the settled plan entry's
+   * output, not ledger state.
+   */
   rejectTool(item: ApprovalItem, options: { alwaysReject?: boolean; message?: string } = {}): void {
     const current = this.#approvals[item.toolName] ?? { approved: [], rejected: [] };
-    current.rejected = options.alwaysReject
-      ? true
-      : [...(Array.isArray(current.rejected) ? current.rejected : []), item.callId];
-    if (options.message) current.messages = { ...(current.messages ?? {}), [item.callId]: options.message };
+    // Recording a one-time decision must not erase a blanket one for the tool.
+    current.rejected =
+      options.alwaysReject || current.rejected === true
+        ? true
+        : [...(Array.isArray(current.rejected) ? current.rejected : []), item.callId];
     if (options.alwaysReject && options.message) current.stickyRejectMessage = options.message;
     this.#approvals[item.toolName] = current;
-  }
-
-  isToolApproved(input: { toolName: string; callId: string }): boolean | undefined {
-    const record = this.#approvals[input.toolName];
-    if (!record) return undefined;
-    if (record.approved === true) return true;
-    if (record.rejected === true) return false;
-    if (Array.isArray(record.approved) && record.approved.includes(input.callId)) return true;
-    if (Array.isArray(record.rejected) && record.rejected.includes(input.callId)) return false;
-    return undefined;
   }
 
   /**
@@ -78,9 +74,10 @@ export class ApprovalLedger {
     return undefined;
   }
 
-  getRejectionMessage(toolName: string, callId: string): string | undefined {
+  /** The message a blanket rejection of the tool gives every call it rejects. */
+  blanketRejectionMessage(toolName: string): string | undefined {
     const record = this.#approvals[toolName];
-    return record?.messages?.[callId] ?? record?.stickyRejectMessage;
+    return record?.rejected === true ? record.stickyRejectMessage : undefined;
   }
 
   /**

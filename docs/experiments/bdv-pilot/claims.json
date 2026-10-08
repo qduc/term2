@@ -6,9 +6,14 @@
       "statement": "An approval for one shell tool call cannot authorize a later call that reuses the same provider call id, and adapter-generated ids for missing or empty provider ids remain distinct.",
       "authority": "Frozen pilot contract derived from the existing user-facing approval policy and the expected safe side effects; this runner cannot alter the expected outcomes.",
       "probe": "approval-reuse-integration",
+      "approvedProbeDigest": "05ba6586bc09333bb248e7487f69c4598cc180eb4fccd3d65bb3b2a8922d3328",
       "acceptance": {
-        "passedFiles": 1,
-        "passedTests": 4,
+        "expectedCases": [
+          "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",
+          "an approved shell call does not approve a later call that reuses its id when the provider repeats its own id",
+          "an approved shell call does not approve a later call when the chat-completions provider omits tool call ids",
+          "an approved shell call does not approve a later call when the chat-completions provider sends empty tool call ids"
+        ],
         "mustAssert": [
           "the first GREEN unsandboxed command runs and writes exactly 'approved\\n'",
           "the subsequent RED rm command is refused and its victim file remains exactly 'must survive\\n'",

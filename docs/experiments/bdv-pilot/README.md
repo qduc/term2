@@ -8,11 +8,13 @@ This pilot links a frozen behavior claim to a retained integration probe and a m
 pnpm bdv approval-call-binding
 ```
 
-The runner executes the selected Vitest integration case, compares the reported test and file counts with the fixed acceptance counts in [`claims.json`](claims.json), and appends the command, exit code, elapsed time, commit, SHA-256 digests of the claim/probe/runner, result counts, output digest, and output to [`evidence.jsonl`](evidence.jsonl). A later reviewer can verify the contract and artifacts, inspect the probe assertions, compare their hashes, and rerun the command.
+The runner requires a clean checkout (the evidence ledger itself may already contain earlier runs) and checks that the probe matches the digest frozen in [`claims.json`](claims.json). It then runs Vitest's JSON reporter with a 120-second process timeout and requires each of the four exact scenario names to appear exactly once with `passed` status. Aggregate counts or earlier console text cannot produce a passing verdict.
+
+Before and after the probe, it records the commit and hashes the claim, probe, and runner. It rejects dirty executable inputs and any change to those hashes or `HEAD` during execution. The appended ledger entry includes before/after input hashes, the command, timeout and exit status, exact scenario results, result digest, elapsed time, output digest, and normalized output. This makes the observed result checkable against the committed contract and probe.
 
 ## Independence and limits
 
-Acceptance is a fixed contract that the runner does not generate from the observed output. It expresses the approval rule as externally observable outcomes: only the allowed file is created, the denied target survives, each tool call receives its own decision, and the provider sees paired calls and results. The probe crosses the built CLI, a loopback HTTP provider fixture, and isolated filesystem effects. Hashes expose changes to the contract or probe between recorded runs.
+Acceptance is a fixed contract that the runner does not generate from the observed output. It expresses the approval rule as externally observable outcomes: only the allowed file is created, the denied target survives, each tool call receives its own decision, and the provider sees paired calls and results. The probe crosses the built CLI, a loopback HTTP provider fixture, and isolated filesystem effects. Its approved source digest and exact scenario names bind the runner to the reviewed probe; changes require an explicit contract update.
 
 This is one claim and one probe, not a general probe scheduler. The claim contract and its probe are maintained in the same repository, so hashes establish provenance and change detection, not independent authorship. An independent reviewer has not yet challenged this pilot contract. It does not yet enforce independent contract approval, compare costs across broad test suites, or show that passing the selected scenarios proves all approval paths safe.
 

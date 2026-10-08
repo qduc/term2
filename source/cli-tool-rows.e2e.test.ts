@@ -124,7 +124,7 @@ it('the terminal UI shows a later turn tool call that reuses an earlier call id'
     }),
   );
 
-  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 200 });
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
   let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
 
   // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
@@ -142,11 +142,17 @@ it('the terminal UI shows a later turn tool call that reuses an earlier call id'
   await submit('second turn');
   await session.waitForOutput('second turn done', 60_000);
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  const secondTurnOutput = session.getVisibleOutput().slice(afterFirstTurn);
+
+  // Quit the way a user does, so the app finishes its writes before the test removes its directories.
+  session.write('\x03');
+  await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
+  session.write('\x03');
+  expect((await session.waitForExit(30_000)).exitCode).toBe(0);
 
   // Both calls really ran...
   expect(fs.readFileSync(path.join(workspace, 'one.txt'), 'utf8')).toBe('one\n');
   expect(fs.readFileSync(path.join(workspace, 'two.txt'), 'utf8')).toBe('two\n');
   // ...so the second turn must render the second call's completed row.
-  const secondTurnOutput = session.getVisibleOutput().slice(afterFirstTurn);
   expect(secondTurnOutput, secondTurnOutput).toMatch(/✓ echo two > \S+two\.txt/);
 });

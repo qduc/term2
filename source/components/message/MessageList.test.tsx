@@ -138,6 +138,26 @@ it.sequential('MessageList appends a fresh startup banner after clearing convers
   expect(output.includes('one')).toBe(false);
 });
 
+it.sequential('MessageList marks the banner after a reset as the start of a new conversation', async () => {
+  const settingsService = createMockSettingsService();
+  const fresh = await renderInAct(
+    <MessageList messages={[]} bannerItems={['startup-banner-0']} settingsService={settingsService} />,
+  );
+  expect(fresh.lastFrame() ?? '').not.toContain('New conversation');
+
+  const afterReset = await renderInAct(
+    <MessageList
+      messages={[]}
+      bannerItems={['startup-banner-0']}
+      bannerStartsNewSession
+      settingsService={settingsService}
+    />,
+  );
+  const output = afterReset.lastFrame() ?? '';
+  expect(output).toContain('New conversation');
+  expect(output.indexOf('New conversation')).toBeLessThan(output.indexOf('term²'));
+});
+
 it.sequential('MessageList moves a message from active to static without duplicating it', async () => {
   const renderer = await renderInAct(
     <MessageList

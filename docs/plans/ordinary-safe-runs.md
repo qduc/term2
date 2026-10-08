@@ -38,8 +38,9 @@ retry loop. Provider SDK transport retries remain provider-owned. Per-run budget
 remain an independent backstop, not
 a prepaid monetary cap or a proof of unknown provider fit.
 
-Default auto compaction and critical `contain` budgets stay enabled. Explicit
-compaction-off/advisory/custom settings persist. Closed rounds, verbatim requests,
+Default auto compaction stays enabled. Critical `contain` budgets are opt-in
+(`agent.runBudget.escalation: contain`); since 2026-10-08 the default is advisory
+`warn` again. Explicit compaction-off/advisory/custom settings persist. Closed rounds, verbatim requests,
 host-observed tool receipts, failure costs, cancellation, growth hysteresis,
 non-reducing refusal and source-verified replay remain independently useful.
 Native ciphertext stays native. Codex retains its one-successful-replacement-per-run policy;

@@ -45,6 +45,14 @@ print_usage() {
     echo "By default npm publishing is delegated to the GitHub Actions Trusted"
     echo "Publishing workflow after the tag is pushed. Use --publish-local only"
     echo "for an explicit token-authenticated local publish fallback."
+    echo ""
+    echo "Safety checks (the script refuses and exits non-zero otherwise):"
+    echo "  - you are on main, 'git fetch' of the remote's main succeeds, and HEAD is"
+    echo "    the remote's main or one unpushed release commit directly on top of it"
+    echo "  - the tag goes only on the release commit: HEAD's subject is"
+    echo "    'chore(release): vX.Y.Z' and HEAD's package.json version is X.Y.Z"
+    echo "  - the tag is pushed only after main was pushed and the remote's main is"
+    echo "    confirmed to be HEAD; a failed main push never pushes the tag"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -233,19 +241,87 @@ retry() {
     done
 }
 
+release_remote() {
+    git remote 2>/dev/null | head -1
+}
+
+# Called as `if push_release_refs`, so `set -e` is off inside: every step
+# checks its own status. The tag publishes (publish.yml runs on v* tags), so it
+# is pushed only once the remote's main is confirmed to be this release commit.
 push_release_refs() {
     local version=$1
-    local remote
-    remote=$(git remote 2>/dev/null | head -1)
+    local remote head remote_main
+    remote=$(release_remote)
     if [[ -z "$remote" ]]; then
         echo -e "${RED}No git remote is configured; cannot push release refs.${NC}"
         return 1
     fi
+    head=$(git rev-parse HEAD) || return 1
 
-    # Push only the current branch and this release tag. The old `git push
-    # --tags` form could publish unrelated local tags along with the release.
-    retry 3 2 -- git push "$remote" HEAD
-    retry 3 2 -- git push "$remote" "v$version"
+    # Push only main and this release tag. The old `git push --tags` form could
+    # publish unrelated local tags along with the release.
+    if ! retry 3 2 -- git push "$remote" "HEAD:refs/heads/main"; then
+        echo -e "${RED}Pushing main to $remote failed; not pushing tag v$version.${NC}"
+        return 1
+    fi
+    remote_main=$(git ls-remote "$remote" refs/heads/main | cut -f1)
+    if [[ "$remote_main" != "$head" ]]; then
+        echo -e "${RED}$remote main is ${remote_main:-missing}, not the release commit $head; not pushing tag v$version.${NC}"
+        return 1
+    fi
+    if ! retry 3 2 -- git push "$remote" "refs/tags/v$version"; then
+        echo -e "${RED}Pushing tag v$version to $remote failed.${NC}"
+        return 1
+    fi
+}
+
+# R3: a release is cut from main, level with the remote's main after a fresh
+# fetch. HEAD may also be one unpushed release commit directly on top of it
+# (the script's own commit, or a resume before push).
+assert_release_base() {
+    local remote branch head remote_main parents
+    remote=$(release_remote)
+    if [[ -z "$remote" ]]; then
+        echo -e "${RED}Error: no git remote is configured.${NC}"
+        return 1
+    fi
+    branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+    if [[ "$branch" != "main" ]]; then
+        echo -e "${RED}Error: releases are cut from main; current branch is ${branch:-a detached HEAD}.${NC}"
+        return 1
+    fi
+    if ! git fetch --quiet "$remote" "+refs/heads/main:refs/remotes/$remote/main"; then
+        echo -e "${RED}Error: git fetch of $remote main failed; cannot confirm main is up to date.${NC}"
+        return 1
+    fi
+    remote_main=$(git rev-parse --verify --quiet "refs/remotes/$remote/main") || {
+        echo -e "${RED}Error: $remote has no main branch.${NC}"
+        return 1
+    }
+    head=$(git rev-parse HEAD)
+    [[ "$head" == "$remote_main" ]] && return 0
+    parents=$(git log -1 --format=%P HEAD)
+    if [[ "$parents" == "$remote_main" ]] && git log -1 --format=%s HEAD | grep -q '^chore(release): v'; then
+        return 0
+    fi
+    echo -e "${RED}Error: local main ($head) is not $remote/main ($remote_main) or one release commit on top of it.${NC}"
+    echo -e "${RED}Pull or reconcile main before releasing.${NC}"
+    return 1
+}
+
+# R2: the tag only ever names the release commit for this version.
+assert_release_commit() {
+    local version=$1 subject head_version
+    subject=$(git log -1 --format=%s HEAD)
+    if [[ "$subject" != "chore(release): v$version" ]]; then
+        echo -e "${RED}Error: HEAD is not the release commit for v$version (subject: '$subject').${NC}"
+        return 1
+    fi
+    head_version=$(git show HEAD:package.json | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>process.stdout.write(String(JSON.parse(s).version)))') || return 1
+    if [[ "$head_version" != "$version" ]]; then
+        echo -e "${RED}Error: package.json at HEAD is version $head_version, not $version.${NC}"
+        return 1
+    fi
 }
 
 # Validation stamp: skips a full re-run of the health checks on resume when
@@ -319,6 +395,8 @@ if [[ -n "$DIRTY_FILES" ]]; then
         esac
     done <<< "$DIRTY_FILES"
 fi
+
+assert_release_base || exit 1
 
 CURRENT_VERSION=$(get_package_version)
 echo -e "Current version in package.json: ${YELLOW}$CURRENT_VERSION${NC}"
@@ -609,8 +687,17 @@ fi
 # Tag
 # ---------------------------------------------------------------------------
 
+# Re-check right before tagging: health checks can take minutes and the remote
+# can move meanwhile.
+assert_release_commit "$NEW_VERSION" || exit 1
+assert_release_base || exit 1
+
 TAG_DONE=false
 if tag_exists "$NEW_VERSION"; then
+    if [[ "$(git rev-parse "v$NEW_VERSION^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+        echo -e "${RED}Error: tag v$NEW_VERSION already exists on a different commit than HEAD.${NC}"
+        exit 1
+    fi
     echo -e "${YELLOW}Skipping tag creation (v$NEW_VERSION already exists)${NC}"
     TAG_DONE=true
 else

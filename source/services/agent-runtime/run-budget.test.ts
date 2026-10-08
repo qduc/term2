@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampRunBudgetPolicy, RunBudget } from './run-budget.js';
+import { clampRunBudgetPolicy, readRunBudgetPolicy, RunBudget } from './run-budget.js';
 import type { ModelRequestCost } from '../cost/model-cost.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 
@@ -232,5 +232,15 @@ describe('clampRunBudgetPolicy', () => {
       turnBackstop: 3,
       maxParentExtensions: 1,
     });
+  });
+});
+
+describe('readRunBudgetPolicy', () => {
+  it('defaults an absent escalation to advisory warn and keeps an explicit contain', () => {
+    expect(readRunBudgetPolicy({ get: () => undefined }).escalation).toBe('warn');
+    const explicit = readRunBudgetPolicy({
+      get: (key: string) => (key === 'agent.runBudget.escalation' ? 'contain' : undefined),
+    });
+    expect(explicit.escalation).toBe('contain');
   });
 });

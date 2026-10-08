@@ -345,6 +345,7 @@ it('buildSettingValueSuggestions offers tuned run-budget policy values', () => {
   ]);
   expect(buildSettingValueSuggestions('agent.runBudget.escalation').map((suggestion) => suggestion.value)).toEqual([
     'warn',
+    'contain',
     'pause',
     'disabled',
   ]);

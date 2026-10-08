@@ -123,10 +123,10 @@ const AgentSettingsObjectSchema = z.object({
       maxParentExtensions: z.number().int().nonnegative().finite().default(2),
       identicalToolCallThreshold: z.number().int().positive().finite().default(3),
       escalation: z
-        .enum(['contain', 'warn', 'pause', 'disabled'])
-        .default('contain')
+        .enum(['warn', 'contain', 'pause', 'disabled'])
+        .default('warn')
         .describe(
-          'contain pauses at exhaustion; warn is advisory; pause also stops on warning/stall; disabled emits no evidence',
+          'warn is advisory; contain pauses at exhaustion; pause also stops on warning/stall; disabled emits no evidence',
         ),
     })
     .default({
@@ -143,7 +143,7 @@ const AgentSettingsObjectSchema = z.object({
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
-      escalation: 'contain',
+      escalation: 'warn',
     })
     .describe('Per-run staged budget and stall-detection policy'),
   backgroundCheckIn: z
@@ -1146,7 +1146,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
-      escalation: 'contain',
+      escalation: 'warn',
     },
     backgroundCheckIn: {
       enabled: true,

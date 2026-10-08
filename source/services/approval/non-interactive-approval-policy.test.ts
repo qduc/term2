@@ -83,6 +83,23 @@ it('rejects propose_goal even when non-interactive auto-approval is enabled', as
   expect(decision.answer).toBe('n');
 });
 
+it.each([
+  ['run_budget', { checkIn: 'run_budget' as const }],
+  ['max_turns', { checkIn: 'max_turns' as const }],
+  ['unlabelled', {}],
+])('never auto-approves a %s check-in: --auto-approve grants no budget or turns', async (_kind, extra) => {
+  const decision = await createPolicy().decide({
+    autoApprove: true,
+    approval: { ...createApproval('max_turns_exceeded', 'Run budget exhausted'), ...extra },
+  });
+
+  expect(decision).toEqual({
+    answer: 'n',
+    rejectionReason: 'Run check-ins need an interactive decision; --auto-approve never grants budget or turns',
+    reportRejection: false,
+  });
+});
+
 it('approves non-shell tools when non-interactive auto-approval is enabled', async () => {
   const decision = await createPolicy().decide({
     autoApprove: true,

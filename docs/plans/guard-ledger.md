@@ -3437,7 +3437,8 @@ compaction and run-budget-stall-escalation. User approved the outcome/default
 change; previous opt-in/default warn dispositions do not govern this new policy.
 
 Missing keys now select enabled auto compaction, `contain` escalation and no extra
-input ceiling. Known model capacity independently bounds prepared input after
+input ceiling. (Amended 2026-10-08: a missing escalation selects `warn` again;
+`contain` is opt-in. See "Run-budget default reverted to warn" below.) Known model capacity independently bounds prepared input after
 actual selected output and 10% estimation reserve. One shared resolver bounds
 soft compaction below hard admission; explicit smaller ceilings retain precedence.
 Default output allocation adapts to small windows; explicit output selections are
@@ -3456,7 +3457,8 @@ failed helpers retain unpriced evidence. Telemetry is queue-only bookkeeping.
 
 Headless logs commit the user request before dispatch; context/budget refusal
 exposes typed exit 2/session locator and can be resumed explicitly. Warning/stall
-remain advisory in `contain`; auto-approval cannot grant a new contained budget.
+remain advisory in `contain`; auto-approval cannot grant a new contained budget
+(since 2026-10-08, nor any run-budget extension under any escalation).
 Collector tests protect error/check-in identity; actual CLI tests protect saved
 history and resumed wire. Per-run grant state does not survive restart; resumed
 work gets a new bounded run. Missing whole-turn checkpoint provenance falls back
@@ -3475,3 +3477,23 @@ Rollback: revert default selection independently from safe-cut/accounting/termin
 metadata repairs. No persisted values are guessed or rewritten. Independent final revision review found no remaining material finding; exact
 stable-tree evidence is recorded in the owner plan; local baseline failures and CI coverage limits
 remain documented in the plan/PR. No merge, release or deployment is performed.
+
+### Run-budget default reverted to warn; --auto-approve never grants budget (2026-10-08)
+
+Decision (Duc, before 0.32.0): `agent.runBudget.escalation` defaults to advisory
+`warn` again — schema, `DEFAULT_SETTINGS`, and the `readRunBudgetPolicy`
+fallback. `contain` (pause only at budget exhaustion) stays available as an
+explicit opt-in, as do `pause` and `disabled`. Explicit persisted values keep
+precedence. `TERM2_SUPERVISED=1` sets no escalation, so supervised runs use the
+default too. Context admission and default auto compaction are unchanged.
+
+Harm prevented (S1): with explicit `pause` plus `--auto-approve`,
+`NonInteractiveApprovalPolicy` answered the `max_turns_exceeded` check-in `y`,
+and `state.approve` charged a parent-class extension — up to
+`maxParentExtensions` unattended grants. Enforcement: `runWithSession` parks
+every `run_budget` check-in (exit 2, `run_budget_paused`, `--resume` locator)
+whatever escalation raised it, and the policy refuses any check-in as defense in
+depth. Scope: non-interactive mode only; the interactive prompt and the
+continuation applier are unchanged. Red proof: the `pause` case of
+`runNonInteractive --auto-approve never grants a run-budget extension` failed on
+the unchanged code (exit 0 after two auto-granted extensions).

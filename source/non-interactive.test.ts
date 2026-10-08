@@ -1338,137 +1338,140 @@ it('runNonInteractive() blocks background shell and ask_user execution for calle
   expect(removedInterceptors).toBe(1);
 });
 
-it('runNonInteractive auto-approves only the finite parent run-budget extensions', async () => {
-  const provider = 'non-interactive-run-budget-boundary';
-  const stdout = createStringWritable();
-  const stderr = createStringWritable();
-  const toolOwnership = new ToolOwnershipRegistry();
-  const requests: unknown[] = [];
-  let toolExecutions = 0;
-  const logger: any = createNoopLogger();
-  const values: Record<string, unknown> = {
-    'agent.modelSelection': { model: 'budget-model', provider },
-    'agent.retryAttempts': 0,
-    'agent.reasoningEffort': 'default',
-    'agent.maxParallelToolCalls': 1,
-    'agent.contextCompaction.enabled': false,
-    'agent.runBudget.maxUsdMicros': 1_000_000,
-    'agent.runBudget.maxUnpricedTokens': 1_000_000,
-    'agent.runBudget.maxActiveTimeMs': 1_000_000,
-    'agent.runBudget.warningHeadroomUsdMicros': 0,
-    'agent.runBudget.warningHeadroomUnpricedTokens': 0,
-    'agent.runBudget.warningHeadroomActiveTimeMs': 0,
-    'agent.runBudget.softHeadroomUsdMicros': 0,
-    'agent.runBudget.softHeadroomUnpricedTokens': 0,
-    'agent.runBudget.softHeadroomActiveTimeMs': 0,
-    'agent.runBudget.turnBackstop': 1,
-    'agent.runBudget.escalation': 'pause',
-    'agent.runBudget.extensionPercent': 100,
-    'agent.runBudget.maxParentExtensions': 2,
-    'agent.runBudget.identicalToolCallThreshold': 10,
-  };
-  const settingsService: any = {
-    get(key: string) {
-      return values[key];
-    },
-    getDynamic(key: string) {
-      return values[key];
-    },
-    set(key: string, value: unknown) {
-      values[key] = value;
-    },
-    setDynamic(key: string, value: unknown) {
-      values[key] = value;
-    },
-    setPersistent(key: string, value: unknown) {
-      values[key] = value;
-    },
-    setPersistentDynamic(key: string, value: unknown) {
-      values[key] = value;
-    },
-  };
-  const sessionContextService: any = {
-    runWithContext(_context: unknown, fn: () => unknown) {
-      return fn();
-    },
-    getContext() {
-      return null;
-    },
-  };
-
-  unregisterProvider(provider);
-  registerProvider({
-    id: provider,
-    label: 'Non-interactive run-budget test provider',
-    createStreamedModel: () => ({
-      async *stream(request: unknown) {
-        requests.push(request);
-        const call = requests.length;
-        yield { type: 'tool_call' as const, id: `call-${call}`, name: 'read_file', arguments: '{"path":"test"}' };
-        yield { type: 'completion' as const, responseId: `response-${call}`, output: [] };
+// --auto-approve approves tools, never budget: a run-budget check-in under any
+// escalation that raises one ('pause' at warning/stall/critical, 'contain' at
+// critical) parks with exit 2 and a --resume locator instead of auto-granting.
+it.each(['pause', 'contain'] as const)(
+  'runNonInteractive --auto-approve never grants a run-budget extension under explicit %s escalation',
+  async (escalation) => {
+    const provider = `non-interactive-run-budget-boundary-${escalation}`;
+    const stdout = createStringWritable();
+    const stderr = createStringWritable();
+    const toolOwnership = new ToolOwnershipRegistry();
+    const requests: unknown[] = [];
+    let toolExecutions = 0;
+    const logger: any = createNoopLogger();
+    const values: Record<string, unknown> = {
+      'agent.modelSelection': { model: 'budget-model', provider },
+      'agent.retryAttempts': 0,
+      'agent.reasoningEffort': 'default',
+      'agent.maxParallelToolCalls': 1,
+      'agent.contextCompaction.enabled': false,
+      'agent.runBudget.maxUsdMicros': 1_000_000,
+      'agent.runBudget.maxUnpricedTokens': 1_000_000,
+      'agent.runBudget.maxActiveTimeMs': 1_000_000,
+      'agent.runBudget.warningHeadroomUsdMicros': 0,
+      'agent.runBudget.warningHeadroomUnpricedTokens': 0,
+      'agent.runBudget.warningHeadroomActiveTimeMs': 0,
+      'agent.runBudget.softHeadroomUsdMicros': 0,
+      'agent.runBudget.softHeadroomUnpricedTokens': 0,
+      'agent.runBudget.softHeadroomActiveTimeMs': 0,
+      'agent.runBudget.turnBackstop': 1,
+      'agent.runBudget.escalation': escalation,
+      'agent.runBudget.extensionPercent': 100,
+      'agent.runBudget.maxParentExtensions': 2,
+      'agent.runBudget.identicalToolCallThreshold': 10,
+    };
+    const settingsService: any = {
+      get(key: string) {
+        return values[key];
       },
-    }),
-    fetchModels: async () => [],
-  });
-
-  const agentClient = new AgentClient({
-    maxTurns: 100,
-    agentOverride: {
-      name: 'budget-test',
-      model: 'budget-model',
-      instructions: 'test',
-      tools: [
-        {
-          name: 'read_file',
-          description: 'read',
-          parameters: z.object({ path: z.string() }),
-          needsApproval: () => false,
-          execute: () => {
-            toolExecutions += 1;
-            return 'ok';
-          },
-          formatCommandMessage: () => [],
-        },
-      ],
-    },
-    deps: { logger, settings: settingsService, sessionContextService },
-    toolOwnership,
-  });
-
-  try {
-    const exitCode = await runNonInteractive({
-      prompt: 'continue until the budget stops you',
-      autoApprove: true,
-      stdout: stdout.stream,
-      stderr: stderr.stream,
-      logger,
-      settingsService,
-      sessionContextService,
-      sessionClientFactory: {
-        create() {
-          return {
-            agentClient,
-            continuationProjectionMode: 'legacy',
-            toolOwnership,
-            dispose: () => agentClient.dispose(),
-          };
-        },
+      getDynamic(key: string) {
+        return values[key];
       },
+      set(key: string, value: unknown) {
+        values[key] = value;
+      },
+      setDynamic(key: string, value: unknown) {
+        values[key] = value;
+      },
+      setPersistent(key: string, value: unknown) {
+        values[key] = value;
+      },
+      setPersistentDynamic(key: string, value: unknown) {
+        values[key] = value;
+      },
+    };
+    const sessionContextService: any = {
+      runWithContext(_context: unknown, fn: () => unknown) {
+        return fn();
+      },
+      getContext() {
+        return null;
+      },
+    };
+
+    unregisterProvider(provider);
+    registerProvider({
+      id: provider,
+      label: 'Non-interactive run-budget test provider',
+      createStreamedModel: () => ({
+        async *stream(request: unknown) {
+          requests.push(request);
+          const call = requests.length;
+          yield { type: 'tool_call' as const, id: `call-${call}`, name: 'read_file', arguments: '{"path":"test"}' };
+          yield { type: 'completion' as const, responseId: `response-${call}`, output: [] };
+        },
+      }),
+      fetchModels: async () => [],
     });
 
-    expect(exitCode).toBe(0);
-    expect(toolExecutions).toBe(3);
-    expect(requests).toHaveLength(3);
-    // A tool-only run with no final prose settles silently; the old fabricated
-    // "Done." fallback projected an assistant reply to an internal event. The
-    // bare trailing newline is the standard completed-response layout.
-    expect(stdout.getOutput()).toBe('\n');
-    expect(stderr.getOutput()).toContain('[tool] read_file');
-    expect(stderr.getOutput()).not.toContain('--auto-approve enabled');
-  } finally {
-    unregisterProvider(provider);
-  }
-});
+    const agentClient = new AgentClient({
+      maxTurns: 100,
+      agentOverride: {
+        name: 'budget-test',
+        model: 'budget-model',
+        instructions: 'test',
+        tools: [
+          {
+            name: 'read_file',
+            description: 'read',
+            parameters: z.object({ path: z.string() }),
+            needsApproval: () => false,
+            execute: () => {
+              toolExecutions += 1;
+              return 'ok';
+            },
+            formatCommandMessage: () => [],
+          },
+        ],
+      },
+      deps: { logger, settings: settingsService, sessionContextService },
+      toolOwnership,
+    });
+
+    try {
+      const exitCode = await runNonInteractive({
+        prompt: 'continue until the budget stops you',
+        autoApprove: true,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        logger,
+        settingsService,
+        sessionContextService,
+        sessionClientFactory: {
+          create() {
+            return {
+              agentClient,
+              continuationProjectionMode: 'legacy',
+              toolOwnership,
+              dispose: () => agentClient.dispose(),
+            };
+          },
+        },
+      });
+
+      // Parked at the first check-in: one request, one tool, no parent grant.
+      expect(exitCode).toBe(2);
+      expect(toolExecutions).toBe(1);
+      expect(requests).toHaveLength(1);
+      expect(stderr.getOutput()).toContain('[tool] read_file');
+      expect(stderr.getOutput()).toContain('--auto-approve only approves tools');
+    } finally {
+      unregisterProvider(provider);
+    }
+  },
+);
 
 it('returns non-zero and prints the hard-fit diagnostic when local compaction cannot fit', async () => {
   const stdout = createStringWritable();

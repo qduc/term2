@@ -143,7 +143,8 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.maxTurns')).toBe(100);
   expect(service.get('agent.maxRequestInputTokens')).toBeNull();
   expect(service.get('agent.contextCompaction.enabled')).toBe(true);
-  expect(service.get('agent.runBudget.escalation')).toBe('contain');
+  // A fresh install (no settings file) is advisory: `contain` is opt-in.
+  expect(service.get('agent.runBudget.escalation')).toBe('warn');
   expect(service.get('agent.maxOutputTokens')).toBe(32_000);
   expect(service.get('agent.maxStreamOutputChars')).toBe(100_000);
   expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
@@ -1898,13 +1899,14 @@ it.sequential('preserves persisted context and budget opt-outs while filling mis
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     data.agent.maxRequestInputTokens = null;
     data.agent.contextCompaction.enabled = false;
-    data.agent.runBudget.escalation = 'warn';
+    data.agent.runBudget.escalation = 'contain';
     data.agent.runBudget.maxUsdMicros = 1234567;
     fs.writeFileSync(file, JSON.stringify(data));
     const service = new SettingsService({ settingsDir, disableLogging: true });
     expect(service.get('agent.maxRequestInputTokens')).toBe(null);
     expect(service.get('agent.contextCompaction.enabled')).toBe(false);
-    expect(service.get('agent.runBudget.escalation')).toBe('warn');
+    // An explicit opt-in to `contain` survives a restart.
+    expect(service.get('agent.runBudget.escalation')).toBe('contain');
     expect(service.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
     delete data.agent.maxRequestInputTokens;
     delete data.agent.contextCompaction.enabled;
@@ -1913,7 +1915,7 @@ it.sequential('preserves persisted context and budget opt-outs while filling mis
     const missing = new SettingsService({ settingsDir, disableLogging: true });
     expect(missing.get('agent.maxRequestInputTokens')).toBeNull();
     expect(missing.get('agent.contextCompaction.enabled')).toBe(true);
-    expect(missing.get('agent.runBudget.escalation')).toBe('contain');
+    expect(missing.get('agent.runBudget.escalation')).toBe('warn');
     expect(missing.get('agent.runBudget.maxUsdMicros')).toBe(1234567);
   });
 });

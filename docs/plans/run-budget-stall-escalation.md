@@ -4,6 +4,12 @@
 > repairs. Historical disabled/warn/once-per-run local dispositions below describe
 > the earlier implementation. Explicit settings remain supported; native Codex
 > retains its one/run policy. See that plan for policy, evidence and limits.
+>
+> 2026-10-08 amendment: the run-budget default is `warn` again (Duc's decision
+> before 0.32.0). `contain` — pause only at budget exhaustion — is opt-in through
+> `agent.runBudget.escalation`. Default auto compaction is unchanged.
+> Non-interactive mode parks every run-budget check-in (exit 2, `--resume`
+> locator) whatever escalation raised it; `--auto-approve` never grants budget.
 
 # Run budgets as staged escalation, and stall evidence instead of turn caps
 
@@ -53,9 +59,12 @@ area — it records why several obvious-looking moves were rejected.
 The load-bearing decisions, in the code:
 
 - **Extensions are charged in the run loop**, in `state.approve` for a
-  `run_budget_interaction`, not in the UI. Every unattended path — the
-  continuation applier, non-interactive, `--auto-approve` — is bounded because
-  of this. The interactive prompt takes its grant up front and marks it
+  `run_budget_interaction`, not in the UI. Every unattended path that answers
+  a check-in — the continuation applier — is bounded because of this.
+  Non-interactive mode no longer answers one at all (2026-10-08): it parks every
+  run-budget check-in with exit 2 and a `--resume` locator, and
+  `NonInteractiveApprovalPolicy` refuses check-ins, so `--auto-approve` never
+  grants budget. The interactive prompt takes its grant up front and marks it
   consumed; do not add a second grant site.
 - **Parent grants are capped, human grants are not.** The human is the terminal
   judge, and each of their grants already costs a fresh blocking prompt.

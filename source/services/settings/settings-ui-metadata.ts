@@ -96,7 +96,7 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]:
     'Identical tool calls without an intervening mutation required to report stall evidence',
   [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]:
-    'contain pauses at budget exhaustion; warn is advisory; pause also stops on warning/stall; disabled emits no evidence',
+    'warn is advisory; contain pauses at budget exhaustion; pause also stops on warning/stall; disabled emits no evidence',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED]:
     'Wake the agent periodically to check on a still-running background shell job or subagent while idle',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]:

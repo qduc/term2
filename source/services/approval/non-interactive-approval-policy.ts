@@ -4,6 +4,7 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { classifyCommandDetailed } from '../../utils/shell/command-safety/index.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
+import { CHECK_IN_TOOL_NAME } from '../../contracts/conversation.js';
 import { SafetyStatus } from '../../utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getTierModelPool } from '../agent-runtime/model-resolver.js';
@@ -58,6 +59,16 @@ export class NonInteractiveApprovalPolicy {
     }
 
     const { approval } = input;
+    // A run check-in (exhausted budget, stall, max turns) is not a tool: answering
+    // it 'y' grants the run more budget or turns. Auto-approval stands in for
+    // tool approvals only, so it never answers a check-in.
+    if (approval.checkIn || approval.toolName === CHECK_IN_TOOL_NAME) {
+      return {
+        answer: 'n',
+        rejectionReason: 'Run check-ins need an interactive decision; --auto-approve never grants budget or turns',
+        reportRejection: false,
+      };
+    }
     if (this.deps.isMcpTool?.(approval.toolName) === true) {
       const allowed = this.deps.mcpAllowlist ?? [];
       const member = approval.toolName;

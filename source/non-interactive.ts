@@ -355,10 +355,9 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     ): Promise<SendResult | ApprovalResult | null> => {
       let result: SendResult | ApprovalResult = await sendTurn(input, suppressUserMessageDisplay);
       while (result?.type === 'approval_required') {
-        if (
-          result.approval.checkIn === 'run_budget' &&
-          (config.settingsService?.get('agent.runBudget.escalation') ?? 'contain') === 'contain'
-        ) {
+        // Every run-budget check-in parks, whatever escalation raised it
+        // ('pause' or 'contain'): --auto-approve approves tools, never budget.
+        if (result.approval.checkIn === 'run_budget') {
           const diagnostic = {
             type: 'run_budget_paused',
             code: 'run_budget_paused',

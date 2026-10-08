@@ -23,27 +23,21 @@ term2 settings can be configured via:
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.model` | `string` | `"gpt-5.1"` | ✓ Yes | `OPENROUTER_MODEL` | The main chat model (e.g. gpt-5.1, claude-sonnet-5) |
-| `agent.efficientModel` | `string` | — | ✓ Yes | — | Model for lower-tier workflow agents. Falls back to agent.model when unset. |
-| `agent.capableModel` | `string` | — | ✓ Yes | — | Model for higher-tier workflow agents. Falls back to agent.model when unset. |
-| `agent.smartModel` | `string` | — | ✓ Yes | — | Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
-| `agent.smartProvider` | `string` | — | ✓ Yes | — | Provider for smart-tier helper agents (the hardest side tasks). Falls back to agent.provider when unset. |
+| `agent.modelSelection` | `object` | `{"model":"gpt-5.1","provider":"openai"}` | ✓ Yes | — | Bound provider and model selection for the main agent |
+| `agent.smartModel` | `array` | — | ✓ Yes | — | Models for smart-tier helper agents (the hardest side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset. |
 | `agent.smartReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for smart-tier helper agents (the hardest side tasks). Falls back to agent.reasoningEffort when unset. |
-| `agent.balancedModel` | `string` | — | ✓ Yes | — | Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
-| `agent.balancedProvider` | `string` | — | ✓ Yes | — | Provider for balanced-tier helper agents (everyday side tasks). Falls back to agent.provider when unset. |
+| `agent.balancedModel` | `array` | — | ✓ Yes | — | Models for balanced-tier helper agents (everyday side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset. |
 | `agent.balancedReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for balanced-tier helper agents (everyday side tasks). Falls back to agent.reasoningEffort when unset. |
-| `agent.cheapModel` | `string` | — | ✓ Yes | — | Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.model when unset. |
-| `agent.cheapProvider` | `string` | — | ✓ Yes | — | Provider for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.provider when unset. |
+| `agent.cheapModel` | `array` | — | ✓ Yes | — | Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset. |
 | `agent.cheapReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset. |
-| `agent.choreModel` | `string` | — | ✓ Yes | — | Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.model when unset. |
-| `agent.choreProvider` | `string` | — | ✓ Yes | — | Provider for small background jobs like repairing failed file edits and reviewing shell auto-approvals. Falls back to agent.provider when unset. |
+| `agent.choreModel` | `array` | — | ✓ Yes | — | Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset. |
 | `agent.reasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort (none\|minimal\|low\|medium\|high\|xhigh\|default) |
 | `agent.temperature` | `number` | — | ✓ Yes | — | Model temperature (0-2, controls randomness) |
-| `agent.provider` | `string` | `"openai"` | ✓ Yes | — | Provider to use for the agent |
 | `agent.favoriteModels` | `array` | `[]` | ✓ Yes | — | Ordered list of favorited models as "provider/modelId" strings; matched before any provider catalog loads |
 | `agent.modelNicknames` | `map of string to string` | `{}` | ✓ Yes | — | Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads. Browse them on the model picker Nicknames tab |
 | `agent.disabledProviders` | `array` | `[]` | ✓ Yes | — | Provider ids hidden from model pickers and catalogs; managed and reversible in provider management |
 | `agent.maxTurns` | `number` | `100` | No | — | Maximum conversation turns |
+| `agent.maxRequestInputTokens` | `number` | `null` | ✓ Yes | — | Per-request estimated or last-observed input cost/latency ceiling; retains work on refusal (null uses known model capacity) |
 | `agent.maxOutputTokens` | `number` | `32000` | ✓ Yes | — | Maximum tokens generated by one model request |
 | `agent.maxStreamOutputChars` | `number` | `100000` | ✓ Yes | — | Maximum streamed text or tool-argument characters per model request; reasoning above this is truncated, not aborted |
 | `agent.maxModelRequestDurationMs` | `number` | `0` | ✓ Yes | — | Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop) |
@@ -60,14 +54,10 @@ term2 settings can be configured via:
 | `agent.openrouter.title` | `string` | — | No | `OPENROUTER_TITLE` | OpenRouter X-Title header |
 | `agent.codex.websocketFirstFrameTimeoutMs` | `number` | `90000` | No | — | Codex WebSocket timeout before the first response frame, in milliseconds |
 | `agent.codex.websocketInterFrameTimeoutMs` | `number` | `600000` | No | — | Codex WebSocket timeout between response frames, in milliseconds |
-| `agent.mentorModel` | `string` | — | ✓ Yes | — | Model to use as a mentor |
-| `agent.mentorProvider` | `string` | — | ✓ Yes | — | Provider to use for the mentor model (defaults to agent.provider when unset) |
 | `agent.mentorReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort for the mentor model |
 | `agent.mentorSamples` | `number` | `1` | No | — | Number of independent mentor answers to gather per consultation (1 = single answer) |
 | `agent.mentorPool` | `array` | `[]` | ✓ Yes | — | Models consulted per mentor question, one answer each. When set, overrides agent.mentorSamples |
 | `agent.useFlexServiceTier` | `boolean` | `false` | ✓ Yes | — | Use OpenAI Flex Service Tier to reduce costs (OpenAI only) |
-| `agent.autoApproveModel` | `string` | `"gpt-4o-mini"` | ✓ Yes | — | Faster model to use for auto-approval evaluation |
-| `agent.autoApproveProvider` | `string` | — | ✓ Yes | — | Provider to use for the auto-approval model (defaults to agent.provider when unset) |
 | `agent.autoApproveReasoningEffort` | `none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"low"` | ✓ Yes | — | Reasoning effort for risky shell auto-approval reviews |
 | `agent.decisionModel` | `string` | — | ✓ Yes | — | OpenRouter Decisions model shared by the approval fast path and failure-triage comparisons. For approval, only low/medium-risk, explicit/implied decisions at confidence 0.8 or higher can authorize execution; every other outcome falls back to the chore reviewer. Sends approval context plus failure evidence. Adds API charges |
 
@@ -88,20 +78,14 @@ term2 settings can be configured via:
 | `agent.runBudget.extensionPercent` | `number` | `50` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
 | `agent.runBudget.maxParentExtensions` | `number` | `2` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
 | `agent.runBudget.identicalToolCallThreshold` | `number` | `3` | ✓ Yes | — | Per-run staged budget and stall-detection policy |
-| `agent.runBudget.escalation` | `warn \\| pause \\| disabled` | `"warn"` | ✓ Yes | — | What a non-soft budget stage does: warn in the status bar, pause the run for a decision, or disabled |
+| `agent.runBudget.escalation` | `warn \\| contain \\| pause \\| disabled` | `"warn"` | ✓ Yes | — | warn is advisory; contain pauses at exhaustion; pause also stops on warning/stall; disabled emits no evidence |
 
 ## Subagents & Roles
 
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| `agent.subagentExplorerModel` | `string` | — | ✓ Yes | — | Model override for the explorer subagent. Falls back to agent.model when unset. |
-| `agent.subagentExplorerProvider` | `string` | — | ✓ Yes | — | Provider override for the explorer subagent. Falls back to agent.provider when unset. |
 | `agent.subagentExplorerReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset. |
-| `agent.subagentWorkerModel` | `string` | — | ✓ Yes | — | Model override for the worker subagent. Falls back to agent.model when unset. |
-| `agent.subagentWorkerProvider` | `string` | — | ✓ Yes | — | Provider override for the worker subagent. Falls back to agent.provider when unset. |
 | `agent.subagentWorkerReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset. |
-| `agent.subagentLibrarianModel` | `string` | — | ✓ Yes | — | Model override for the librarian subagent. Falls back to agent.model when unset. |
-| `agent.subagentLibrarianProvider` | `string` | — | ✓ Yes | — | Provider override for the librarian subagent. Falls back to agent.provider when unset. |
 | `agent.subagentLibrarianReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort override for the librarian subagent. Falls back to agent.reasoningEffort when unset. |
 | `subagent.asyncSessionTtlMs` | `number` | `1800000` | ✓ Yes | — | How long completed async subagent sessions are retained in memory before eviction, in milliseconds |
 | `subagent.asyncMessageCap` | `number` | `50` | ✓ Yes | — | Maximum number of user turns to retain in a persisted async subagent session |
@@ -128,7 +112,7 @@ term2 settings can be configured via:
 | `agent.sessionRollover.enabled` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
 | `agent.sessionRollover.milestones` | `array` | `[200000,300000,400000]` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
 | `agent.sessionRollover.autoBrief` | `boolean` | `true` | ✓ Yes | — | Agent advice for handing off a growing session at context milestones |
-| `agent.contextCompaction.enabled` | `boolean` | `false` | ✓ Yes | — | Native and application-owned context compaction settings |
+| `agent.contextCompaction.enabled` | `boolean` | `true` | ✓ Yes | — | Native and application-owned context compaction settings |
 | `agent.contextCompaction.mode` | `native \\| auto \\| local` | `"auto"` | ✓ Yes | — | Native and application-owned context compaction settings |
 | `agent.contextCompaction.compactThreshold` | `number` | `0.8` | ✓ Yes | — | Native and application-owned context compaction settings |
 | `agent.contextCompaction.compactThresholdTokens` | `number` | `null` | ✓ Yes | — | Native and application-owned context compaction settings |
@@ -139,8 +123,6 @@ term2 settings can be configured via:
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `tools.logFileOperations` | `boolean` | `true` | No | `LOG_FILE_OPERATIONS` | Log file operations to disk (true\|false) |
 | `tools.enableEditHealing` | `boolean` | `true` | No | — | Use AI to automatically correct failed search_replace operations |
-| `tools.editHealingModel` | `string` | `"gpt-4o-mini"` | ✓ Yes | — | Model to use for edit healing (fast/cheap) |
-| `tools.editHealingProvider` | `string` | — | ✓ Yes | — | Provider to use for the edit-healing model (defaults to agent.provider when unset) |
 | `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools (read_file, grep, glob) for the main agent (true\|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request. |

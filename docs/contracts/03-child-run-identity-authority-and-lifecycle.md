@@ -69,7 +69,9 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
   child key (`session-1:subagent:call-outer:subagent:call-inner`,
   `subagent-bridge.test.ts:340-370`).
 - Approval authority: parent `ApprovalLedger` snapshot is replayed into a fresh
-  nested ledger (`nested-runner.ts:95-98`, `:623-635`).
+  nested ledger (`nested-runner.ts:95-98`, `:623-635`). Only blanket ("always")
+  decisions replay; a one-time decision belongs to the parent's call and the
+  child's same-id call prompts again.
 - Memory tool-set slicing: subject kind/role maps to the memory tool set
   crossing the boundary — `kind: 'main'` and `role: 'librarian'` receive the
   full write set (`memory_create`, `memory_update`, `memory_delete` included);

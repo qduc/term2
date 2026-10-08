@@ -311,6 +311,8 @@ type RunState = {
   toolExecution: ToolCallExecution;
   approvalDecision?: 'approved' | 'rejected';
   approvalDecisionCallId?: string;
+  /** The interruption object the decision answered; binds it to that exact pending call. */
+  approvalDecisionInterruption?: unknown;
   approvalMessage?: string;
   responseId?: string;
   usage?: unknown;
@@ -658,6 +660,7 @@ export class ApplicationRunLoop {
       }
       state.approvalDecision = 'approved';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
+      state.approvalDecisionInterruption = interruption;
     };
     state.reject = (interruption, approvalOptions) => {
       if (isRunBudgetInteraction(interruption)) {
@@ -666,6 +669,7 @@ export class ApplicationRunLoop {
       }
       state.approvalDecision = 'rejected';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
+      state.approvalDecisionInterruption = interruption;
       state.approvalMessage = approvalOptions?.message;
     };
     return this.#run(state, options);
@@ -868,13 +872,14 @@ export class ApplicationRunLoop {
 
       if (state.toolExecution.pendingApprovals.length > 0 && state.approvalDecision) {
         state.toolExecution.resolveApproval(
-          state.approvalDecisionCallId,
+          { callId: state.approvalDecisionCallId, interruption: state.approvalDecisionInterruption },
           state.approvalDecision,
           state.approvalMessage,
           state.approvals,
         );
         state.approvalDecision = undefined;
         state.approvalDecisionCallId = undefined;
+        state.approvalDecisionInterruption = undefined;
         state.approvalMessage = undefined;
         await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
         stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);

@@ -1,12 +1,14 @@
-import { it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { it, expect, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { SettingsService } from './settings-service.js';
 import { getProvider, getAllProviders } from '../../providers/index.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');
+// Settings fixtures live in a private temp dir, never in the repository tree: a
+// `source/test-settings` directory used to appear in the live project tree that other
+// suites (agent.test.ts) render into prompt instructions while this file ran in parallel.
+const TEST_BASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-test-'));
 
 let testCounter = 0;
 
@@ -123,19 +125,8 @@ async function withNonTestEnvironment(fn: () => Promise<void>) {
   }
 }
 
-// Helper to clean up test settings
-const cleanupSettings = () => {
-  if (fs.existsSync(TEST_BASE_DIR)) {
-    fs.rmSync(TEST_BASE_DIR, { recursive: true, force: true });
-  }
-};
-
-beforeAll(() => {
-  cleanupSettings();
-});
-
 afterAll(() => {
-  cleanupSettings();
+  fs.rmSync(TEST_BASE_DIR, { recursive: true, force: true });
 });
 
 it('SettingsService initializes with defaults', async () => {

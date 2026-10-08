@@ -329,7 +329,7 @@ it('runs actual activation, fresh Reviewer dispatch, host-approved local reload 
       execute: async (_args, context, details) => {
         const callId = (details as { toolCall: { callId: string } }).toolCall.callId;
         const approvals = (context as ToolInvocationContext).approvals;
-        expect(approvals.isToolApproved({ toolName: 'fixture_install_method', callId })).toBe(true);
+        expect(approvals.snapshot().fixture_install_method?.approved).toEqual([callId]);
         const approvalPath = join(root, 'runtime-approval.json');
         await writeFile(approvalPath, JSON.stringify({ callId, approvals: approvals.snapshot() }));
         await appendEvent(ledger, {

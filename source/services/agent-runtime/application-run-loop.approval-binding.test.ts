@@ -237,6 +237,76 @@ describe('approval binds to the exact call instance', () => {
     expect(third.finalOutput).toBe('done');
   });
 
+  it('approving the second interruption first settles that call, not the first pending one', async () => {
+    const t = setup([
+      {
+        calls: [
+          { id: 'call_0', args: { target: 'left' } },
+          { id: 'call_1', args: { target: 'right' } },
+        ],
+      },
+      { text: 'done' },
+    ]);
+
+    const first = t.start();
+    await first.completed;
+    expect(first.interruptions).toHaveLength(2);
+    (first.state as any).approve(first.interruptions![1]);
+    const second = t.loop.continueRunStream(first.state!);
+    await second.completed;
+
+    // `right` is approved but waits behind `left`, which is still the user's to decide.
+    expect(t.executed).toEqual([]);
+    expect(second.interruptions).toHaveLength(1);
+    expect(second.interruptions![0]).toMatchObject({ callId: 'call_0', arguments: JSON.stringify({ target: 'left' }) });
+
+    (second.state as any).reject(second.interruptions![0], { message: 'Not left.' });
+    const third = t.loop.continueRunStream(second.state!);
+    await third.completed;
+    expect(t.executed).toEqual(['right']);
+    expect(resultsFor(third.history)).toEqual(['Not left.', 'ran right']);
+    expect(third.finalOutput).toBe('done');
+  });
+
+  it('three calls sharing one provider id: approving one settles only that call', async () => {
+    const t = setup([
+      {
+        calls: [
+          { id: 'toolu_shared', args: { target: 'a' } },
+          { id: 'toolu_shared', args: { target: 'b' } },
+          { id: 'toolu_shared', args: { target: 'c' } },
+        ],
+      },
+      { text: 'done' },
+    ]);
+
+    const first = t.start();
+    await first.completed;
+    expect(first.interruptions).toHaveLength(3);
+    (first.state as any).approve(first.interruptions![1]);
+    const second = t.loop.continueRunStream(first.state!);
+    await second.completed;
+
+    // The other two calls with the same id are still the user's to decide.
+    expect(t.executed).toEqual([]);
+    expect(second.interruptions!.map((item: any) => item.arguments)).toEqual([
+      JSON.stringify({ target: 'a' }),
+      JSON.stringify({ target: 'c' }),
+    ]);
+
+    (second.state as any).reject(second.interruptions![0], { message: 'Not a.' });
+    const third = t.loop.continueRunStream(second.state!);
+    await third.completed;
+    expect(third.interruptions!.map((item: any) => item.arguments)).toEqual([JSON.stringify({ target: 'c' })]);
+    (third.state as any).reject(third.interruptions![0], { message: 'Not c.' });
+    const fourth = t.loop.continueRunStream(third.state!);
+    await fourth.completed;
+
+    expect(t.executed).toEqual(['b']);
+    expect(resultsFor(fourth.history)).toEqual(['Not a.', 'ran b', 'Not c.']);
+    expect(fourth.finalOutput).toBe('done');
+  });
+
   it('a per-call decision carried into a run (parent replay) does not authorize a different call with the same id', async () => {
     const seeded = new ApprovalLedger();
     seeded.approveTool({ toolName: 'danger', callId: 'call_0' });
@@ -268,6 +338,29 @@ describe('approval binds to the exact call instance', () => {
     expect(resultsFor(rejectedStream.history)).toEqual(['Blocked by policy.']);
   });
 
+  it('a blanket rejection gives its own message, never a stale one-time rejection message for the same id', async () => {
+    const ledger = new ApprovalLedger();
+    const t = setup(
+      [
+        { calls: [{ id: 'call_0', args: { target: 'first' } }] },
+        { calls: [{ id: 'call_0', args: { target: 'second' } }] },
+      ],
+      ledger,
+    );
+    const first = t.start();
+    await first.completed;
+    (first.state as any).reject(first.interruptions![0], { message: 'Not that one.' });
+    // The tool is turned off for every call while the run is paused at the next prompt.
+    ledger.rejectTool({ toolName: 'danger', callId: 'policy' }, { alwaysReject: true });
+    const second = t.loop.continueRunStream(first.state!);
+    await second.completed;
+
+    expect(t.executed).toEqual([]);
+    expect(second.interruptions ?? []).toEqual([]);
+    // The one-time message stays with the call it was given for.
+    expect(resultsFor(second.history)).toEqual(['Not that one.', 'Tool execution was not approved.']);
+  });
+
   it('records the approved call in the ledger for the executing call', async () => {
     const ledger = new ApprovalLedger();
     const t = setup([{ calls: [{ id: 'call_0' }] }, { text: 'done' }], ledger);
@@ -276,6 +369,8 @@ describe('approval binds to the exact call instance', () => {
     (first.state as any).approve(first.interruptions![0]);
     await t.loop.continueRunStream(first.state!).completed;
 
-    expect(ledger.isToolApproved({ toolName: 'danger', callId: 'call_0' })).toBe(true);
+    // A record of the call the decision was made for; it authorizes nothing later.
+    expect(ledger.snapshot()).toEqual({ danger: { approved: ['call_0'], rejected: [] } });
+    expect(ledger.blanketDecision('danger')).toBeUndefined();
   });
 });

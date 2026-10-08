@@ -99,10 +99,6 @@ export class ToolApprovalBatchCoordinator {
     }
 
     const runContext = asRecord(asRecord(input.state.currentState)?._context);
-    const isToolApproved = getMethod<[{ toolName: string; callId: string }], boolean | undefined>(
-      runContext,
-      'isToolApproved',
-    );
 
     for (const interruption of siblings) {
       if (this.deps.isCurrent && !this.deps.isCurrent(input.token)) {
@@ -117,10 +113,6 @@ export class ToolApprovalBatchCoordinator {
 
       const pendingNow = this.deps.approvalFlow.getPending();
       if (pendingNow?.decisionsByCallId?.has(callId)) {
-        continue;
-      }
-      if (isToolApproved?.({ toolName, callId }) !== undefined) {
-        pendingNow?.decisionsByCallId?.set(callId, 'approved');
         continue;
       }
 

@@ -24,12 +24,11 @@ function replayInto(approvals: Record<string, ApprovalRecord>): ApprovalLedger {
 }
 
 /**
- * These first tests are characterization tests: they pin down the SDK contract that
- * `replayApprovals` is built on, so a change to the application approval contract that changes the meaning of
- * `approvals` fails here rather than silently mis-granting approvals across the
- * parent/subagent boundary.
+ * These first tests pin the record shape `replayApprovals` consumes, so a change to the
+ * ledger that changes the meaning of `approvals` fails here rather than silently
+ * mis-granting approvals across the parent/subagent boundary.
  */
-describe('SDK approval-record contract', () => {
+describe('approval-record shape', () => {
   it('keys the approvals record by tool name, not by call id', () => {
     const context = new ApprovalLedger();
 
@@ -54,21 +53,20 @@ describe('SDK approval-record contract', () => {
     expect(context.snapshot()[TOOL].approved).toBe(true);
   });
 
-  it('grants only the listed call ids when approved is an array', () => {
+  it('a per-call approval is not a decision for the tool', () => {
     const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'));
 
-    expect(context.isToolApproved({ toolName: TOOL, callId: 'call_abc' })).toBe(true);
-    expect(context.isToolApproved({ toolName: TOOL, callId: 'call_other' })).toBeUndefined();
+    expect(context.blanketDecision(TOOL)).toBeUndefined();
   });
 
-  it('grants every call id when approved is true', () => {
+  it('a blanket approval decides every call of the tool', () => {
     const context = new ApprovalLedger();
 
     context.approveTool(createApprovalItem(TOOL, 'call_abc'), { alwaysApprove: true });
 
-    expect(context.isToolApproved({ toolName: TOOL, callId: 'never_seen_before' })).toBe(true);
+    expect(context.blanketDecision(TOOL)).toBe(true);
   });
 });
 
@@ -79,50 +77,29 @@ describe('replayApprovals', () => {
     expect(nested.snapshot()).toEqual({});
   });
 
-  it('carries a per-call parent approval into the nested context so it does not re-prompt', () => {
-    const nested = replayInto({ [TOOL]: { approved: ['call_approved'], rejected: [] } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_approved' })).toBe(true);
-  });
-
-  it('does not widen a per-call approval into a blanket approval for the tool', () => {
-    const nested = replayInto({ [TOOL]: { approved: ['call_approved'], rejected: [] } });
-
-    // `undefined` means "ask the user" — an unapproved call must still prompt inside the
-    // subagent. Replaying `string[]` as `alwaysApprove` would silently return `true` here.
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_never_approved' })).toBeUndefined();
-  });
-
-  it('carries a blanket parent approval into the nested context for unseen call ids', () => {
-    const nested = replayInto({ [TOOL]: { approved: true, rejected: [] } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_raised_inside_subagent' })).toBe(true);
-  });
-
-  it('carries a per-call parent rejection into the nested context', () => {
-    const nested = replayInto({ [TOOL]: { approved: [], rejected: ['call_denied'] } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_denied' })).toBe(false);
-  });
-
-  it('does not widen a per-call rejection into a blanket rejection for the tool', () => {
-    const nested = replayInto({ [TOOL]: { approved: [], rejected: ['call_denied'] } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_unrelated' })).toBeUndefined();
-  });
-
-  it('carries a blanket parent rejection into the nested context for unseen call ids', () => {
-    const nested = replayInto({ [TOOL]: { approved: false, rejected: true } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_raised_inside_subagent' })).toBe(false);
-  });
-
-  it('preserves the per-call rejection message', () => {
+  it('does not carry one-time parent approvals or rejections into the nested context', () => {
+    // A one-time decision belongs to the parent's call. The nested run's provider numbers its
+    // own calls, so the same id there is a different call and must be presented again.
     const nested = replayInto({
-      [TOOL]: { approved: [], rejected: ['call_denied'], messages: { call_denied: 'not allowed here' } },
+      [TOOL]: { approved: ['call_approved'], rejected: ['call_denied'] },
+      write_file: { approved: [], rejected: ['call_b'] },
     });
 
-    expect(nested.getRejectionMessage(TOOL, 'call_denied')).toBe('not allowed here');
+    expect(nested.snapshot()).toEqual({});
+    expect(nested.blanketDecision(TOOL)).toBeUndefined();
+    expect(nested.blanketDecision('write_file')).toBeUndefined();
+  });
+
+  it('carries a blanket parent approval into the nested context', () => {
+    const nested = replayInto({ [TOOL]: { approved: true, rejected: [] } });
+
+    expect(nested.blanketDecision(TOOL)).toBe(true);
+  });
+
+  it('carries a blanket parent rejection into the nested context', () => {
+    const nested = replayInto({ [TOOL]: { approved: false, rejected: true } });
+
+    expect(nested.blanketDecision(TOOL)).toBe(false);
   });
 
   it('preserves the sticky rejection message of a blanket rejection', () => {
@@ -130,52 +107,42 @@ describe('replayApprovals', () => {
       [TOOL]: { approved: false, rejected: true, stickyRejectMessage: 'this tool is off limits' },
     });
 
-    expect(nested.getRejectionMessage(TOOL, 'any_call_id')).toBe('this tool is off limits');
+    expect(nested.blanketRejectionMessage(TOOL)).toBe('this tool is off limits');
   });
 
-  it('keeps per-call approvals and rejections of the same tool independent', () => {
-    const nested = replayInto({ [TOOL]: { approved: ['call_yes'], rejected: ['call_no'] } });
-
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_yes' })).toBe(true);
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_no' })).toBe(false);
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_unknown' })).toBeUndefined();
-  });
-
-  it('lets a blanket approval outrank per-call rejections, matching isToolApproved precedence', () => {
+  it('lets a blanket approval outrank per-call rejections', () => {
     const nested = replayInto({ [TOOL]: { approved: true, rejected: ['call_no'] } });
 
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_no' })).toBe(true);
+    expect(nested.blanketDecision(TOOL)).toBe(true);
   });
 
-  it('lets a blanket rejection outrank per-call approvals, matching isToolApproved precedence', () => {
+  it('lets a blanket rejection outrank per-call approvals', () => {
     const nested = replayInto({ [TOOL]: { approved: ['call_yes'], rejected: true } });
 
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_yes' })).toBe(false);
+    expect(nested.blanketDecision(TOOL)).toBe(false);
   });
 
-  it('lets a blanket approval outrank a blanket rejection, matching isToolApproved precedence', () => {
-    // The SDK resolves this record to `true` (runContext.js#isToolApproved logs and prefers
-    // approval), so the replay has to land there too — replaying rejections last would
-    // silently flip the answer.
+  it('lets a blanket approval outrank a blanket rejection', () => {
     const nested = replayInto({ [TOOL]: { approved: true, rejected: true } });
 
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'any_call_id' })).toBe(true);
+    expect(nested.blanketDecision(TOOL)).toBe(true);
   });
 
   it('replays every tool in the record independently', () => {
     const nested = replayInto({
-      shell_command: { approved: ['call_a'], rejected: [] },
-      write_file: { approved: [], rejected: ['call_b'] },
+      shell_command: { approved: true, rejected: [] },
+      write_file: { approved: [], rejected: true },
+      read_file: { approved: ['call_a'], rejected: [] },
     });
 
-    expect(nested.isToolApproved({ toolName: 'shell_command', callId: 'call_a' })).toBe(true);
-    expect(nested.isToolApproved({ toolName: 'write_file', callId: 'call_b' })).toBe(false);
-    expect(nested.isToolApproved({ toolName: 'write_file', callId: 'call_a' })).toBeUndefined();
+    expect(nested.blanketDecision('shell_command')).toBe(true);
+    expect(nested.blanketDecision('write_file')).toBe(false);
+    expect(nested.blanketDecision('read_file')).toBeUndefined();
   });
 
   it('does not mutate the parent approvals it reads from', () => {
     const parent = new ApprovalLedger();
-    parent.approveTool(createApprovalItem(TOOL, 'call_abc'));
+    parent.approveTool(createApprovalItem(TOOL, 'call_abc'), { alwaysApprove: true });
     const before = structuredClone(parent.snapshot());
 
     replayApprovals(new ApprovalLedger(), parent.snapshot(), createAgent());
@@ -183,22 +150,23 @@ describe('replayApprovals', () => {
     expect(parent.snapshot()).toEqual(before);
   });
 
-  it('replays an approval decision made on a real parent context', () => {
+  it('replays a blanket rejection made on a real parent ledger, message included', () => {
     const parent = new ApprovalLedger();
-    parent.approveTool(createApprovalItem(TOOL, 'call_from_parent'));
+    parent.rejectTool(createApprovalItem(TOOL, 'call_from_parent'), { alwaysReject: true, message: 'denied by user' });
 
     const nested = replayInto(parent.snapshot());
 
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_from_parent' })).toBe(true);
+    expect(nested.blanketDecision(TOOL)).toBe(false);
+    expect(nested.blanketRejectionMessage(TOOL)).toBe('denied by user');
   });
 
-  it('replays a rejection decision made on a real parent context', () => {
+  it('does not replay a one-time decision made on a real parent ledger', () => {
     const parent = new ApprovalLedger();
-    parent.rejectTool(createApprovalItem(TOOL, 'call_from_parent'), { message: 'denied by user' });
+    parent.approveTool(createApprovalItem(TOOL, 'call_from_parent'));
+    parent.rejectTool(createApprovalItem('write_file', 'call_from_parent'), { message: 'denied by user' });
 
     const nested = replayInto(parent.snapshot());
 
-    expect(nested.isToolApproved({ toolName: TOOL, callId: 'call_from_parent' })).toBe(false);
-    expect(nested.getRejectionMessage(TOOL, 'call_from_parent')).toBe('denied by user');
+    expect(nested.snapshot()).toEqual({});
   });
 });

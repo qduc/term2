@@ -22,7 +22,10 @@ function createMockLogger() {
   return { logger, warnings, errors, debugLogs };
 }
 
-const TEMP_TEST_DIR = path.join(process.cwd(), 'temp-skills-test');
+// A private temp root, never the repository tree: a visible `temp-skills-test` dir at the
+// repo root would leak into the live project tree other suites render while this one runs.
+const TEMP_PARENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-skills-test-'));
+const TEMP_TEST_DIR = path.join(TEMP_PARENT_DIR, 'root');
 const mockHome = path.join(TEMP_TEST_DIR, 'mock-home');
 const mockProject = path.join(TEMP_TEST_DIR, 'mock-project');
 
@@ -43,6 +46,7 @@ afterAll(() => {
     configurable: true,
     writable: true,
   });
+  fs.rmSync(TEMP_PARENT_DIR, { recursive: true, force: true });
 });
 
 beforeEach(() => {

@@ -59,7 +59,22 @@ decision, reading only the current turn's history: a check counts only when it i
 the latest tool activity after the latest user message and its result is the
 tool's own success text (`Self-check recorded:`), so a check made before newer
 work, a newer steer, or alongside unseen results does not authorize a stop, and
-neither does a check that was denied, rejected, or failed. A missing or
+neither does a check that was denied, rejected, or failed.
+
+Binding rule (2026-10-08): a check counts only for the goal it judged. The tool
+reads the session goal when it executes and names it in its recorded result
+(`Self-check recorded: [goal <id>] …`, `formatRecordedGoalCheck`); the stop seam
+counts the check only when that id equals the goal it reads at decision time.
+The goal can change mid-turn without adding history (`/goal set` typed while a
+turn runs or sent through the control socket, neither busy-guarded), so without
+this binding a check that judged G1 closed a G2 set before the final response,
+including a G2 with success criteria, whose presence-only `criteriaEvidence` test
+G1's evidence satisfied. A mismatched check is treated as incomplete: the model
+is reminded to check the current goal. The id is a sound identity because only a
+new goal mints one; status changes (`/goal achieved|abandon|reopen`) keep id,
+outcome, and criteria. A recorded result that names no goal (from before this
+rule) matches no goal. The seam check covers every writer of the goal, so `/goal`
+itself was not busy-guarded: viewing or replacing the goal mid-turn stays allowed. A missing or
 incomplete check queues a reminder through the run loop's existing
 request-boundary notice lane and the same run continues. `ApplicationRunLoop`
 consults the policy only at its normal-stop seam, so cancellation/Ctrl+C

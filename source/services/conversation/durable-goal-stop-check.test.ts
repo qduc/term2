@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
 import {
-  GOAL_CHECK_RECORDED_PREFIX,
   GOAL_CHECK_UNRESOLVED_CAUSE,
   GOAL_STOP_REMINDER_PREFIX,
   MAX_GOAL_STOP_REMINDERS_PER_TURN,
   MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK,
   createGoalStopPolicy,
   decideGoalStop,
+  formatRecordedGoalCheck,
   validateGoalCheck,
 } from './durable-goal-stop-check.js';
 
@@ -30,7 +30,7 @@ const call = (name: string, args: unknown, output: unknown = 'ok'): ProviderInpu
   ];
 };
 /** A goal_check whose result is the tool's own success text, as the real tool records it. */
-const check = (args: Record<string, unknown>, output = `${GOAL_CHECK_RECORDED_PREFIX} ${String(args.status)}.`) =>
+const check = (args: Record<string, unknown>, output = formatRecordedGoalCheck(goal.id, `${String(args.status)}.`)) =>
   call('goal_check', args, output);
 const work = () => call('read_file', { path: 'a.ts' });
 /** Providers without native ids number calls per response, so every response's first call is call_0. */
@@ -38,7 +38,7 @@ const pairWithId = (callId: string, name: string, args: unknown, output: unknown
   { type: 'function_call', callId, name, arguments: JSON.stringify(args) },
   { type: 'function_call_result', callId, name, output },
 ];
-const recorded = (status: string) => `${GOAL_CHECK_RECORDED_PREFIX} ${status}.`;
+const recorded = (status: string) => formatRecordedGoalCheck(goal.id, `${status}.`);
 const reminder = (): ProviderInputItem => user(`[Mode Notice] ${GOAL_STOP_REMINDER_PREFIX} (1 of 2): check.`);
 
 describe('validateGoalCheck', () => {
@@ -218,7 +218,7 @@ describe('decideGoalStop', () => {
   });
 
   it('counts a recorded check whose result arrives as content parts or without a result', () => {
-    const parts = [{ type: 'input_text', text: `${GOAL_CHECK_RECORDED_PREFIX} blocked. Control returns.` }];
+    const parts = [{ type: 'input_text', text: formatRecordedGoalCheck(goal.id, 'blocked. Control returns.') }];
     expect(
       decideGoalStop(goal, [user('go'), ...check({ status: 'blocked', evidence: 'need token' }, parts as never)]),
     ).toEqual({ action: 'stop', reason: 'blocked' });
@@ -408,6 +408,23 @@ describe('createGoalStopPolicy goal closure', () => {
     const h = harness(current);
     const history = [user('ship it'), ...check(achievedArgs), assistant('Shipped.')];
     expect(h.policy(history, agent)).toEqual({ action: 'stop' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it('no write: a recorded achieved check made for a goal that was replaced since', () => {
+    const h = harness(goal);
+    const history = [user('ship it'), ...check(achievedArgs), assistant('Shipped.')];
+    h.state.current = { ...goalWithCriteria, id: 'g2' };
+    const decision = h.policy(history, agent);
+    expect(decision).toMatchObject({ action: 'continue', diagnostics: { reason: 'incomplete_check' } });
+    expect(decision.action === 'continue' && decision.reminder).toContain('it was made for a different goal');
+    expect(h.writes).toEqual([]);
+  });
+
+  it('no write: a recorded result that names no goal (written before results named their goal)', () => {
+    const h = harness(goal);
+    const legacy = check(achievedArgs, 'Self-check recorded: achieved.');
+    expect(h.policy([user('ship it'), ...legacy, assistant('Shipped.')], agent)).toMatchObject({ action: 'continue' });
     expect(h.writes).toEqual([]);
   });
 

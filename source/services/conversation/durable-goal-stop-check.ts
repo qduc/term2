@@ -113,6 +113,20 @@ export const MAX_GOAL_STOP_REMINDERS_PER_TURN = 6;
  */
 export const GOAL_CHECK_RECORDED_PREFIX = 'Self-check recorded:';
 
+/**
+ * The recorded result names the goal the check judged, read from the session
+ * at execution time. The goal can change while a turn runs (`/goal set` from
+ * the prompt or the control socket mid-turn adds no history), so the stop seam
+ * counts a check only for the goal it was made against: identity is the goal
+ * id, which only a new goal mints (status changes keep id, outcome, and
+ * criteria).
+ */
+export function formatRecordedGoalCheck(goalId: string, text: string): string {
+  return `${GOAL_CHECK_RECORDED_PREFIX} [goal ${goalId}] ${text}`;
+}
+
+const RECORDED_GOAL_ID = /^\[goal ([^\]\s]+)\]/;
+
 /** Marks the harness reminder so the decision can count it in the turn history. */
 export const GOAL_STOP_REMINDER_PREFIX = 'Durable goal stop check';
 /** The run loop admits harness reminders with this prefix (see `#queuePendingSystemNotice`). */
@@ -187,24 +201,29 @@ const outputText = (output: unknown): string => {
 };
 
 /**
- * True only when the call's own result is the tool's success text.
+ * The goal id the call's own result was recorded for, when that result is the
+ * tool's success text; `undefined` when the call was not recorded. A recorded
+ * result without a goal id (written before results named their goal) yields
+ * `''`, which matches no goal.
  *
  * Call ids are not unique: providers that omit them get `call_${index}`, so the
  * first call of every response is `call_0`. A call's result is therefore the
  * first matching result after the call's own position, never an earlier one,
  * and the search stays inside the current turn's window.
  */
-const goalCheckWasRecorded = (window: readonly ProviderInputItem[], callPosition: number): boolean => {
+const recordedGoalCheckGoalId = (window: readonly ProviderInputItem[], callPosition: number): string | undefined => {
   const call = window[callPosition];
   const callId = call ? callIdOf(call) : undefined;
-  if (callId === undefined) return false;
+  if (callId === undefined) return undefined;
   for (let index = callPosition + 1; index < window.length; index += 1) {
     const item = window[index]!;
     if (typeof item.type !== 'string' || !TOOL_ITEM_TYPES.has(item.type) || TOOL_CALL_TYPES.has(item.type)) continue;
     if (callIdOf(item) !== callId) continue;
-    return outputText(item.output).trimStart().startsWith(GOAL_CHECK_RECORDED_PREFIX);
+    const text = outputText(item.output).trimStart();
+    if (!text.startsWith(GOAL_CHECK_RECORDED_PREFIX)) return undefined;
+    return RECORDED_GOAL_ID.exec(text.slice(GOAL_CHECK_RECORDED_PREFIX.length).trimStart())?.[1] ?? '';
   }
-  return false;
+  return undefined;
 };
 
 const parseArguments = (item: ProviderInputItem): unknown => {
@@ -255,8 +274,9 @@ function reminderText(
  * (harness notices excluded). A check counts only when it is the latest tool
  * activity in that window and its result is the tool's own success text, so a
  * check made before newer work, before a newer user message, alongside other
- * calls whose results it had not seen, or that was denied or failed does not
- * authorize the stop.
+ * calls whose results it had not seen, that was denied or failed, or that was
+ * recorded against a different goal than the current one does not authorize
+ * the stop.
  *
  * Two bounds return control: consecutive reminders without work, and total
  * reminders for this user instruction (work does not reset the latter).
@@ -295,9 +315,13 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
   if (latestToolItem?.name === TOOL_NAME_GOAL_CHECK) {
     const validation = validateGoalCheck(parseArguments(latestToolItem), goal);
     const window = history.slice(windowStart);
-    if (validation.ok && !goalCheckWasRecorded(window, latestToolIndex - windowStart)) {
+    const recordedFor = validation.ok ? recordedGoalCheckGoalId(window, latestToolIndex - windowStart) : undefined;
+    if (validation.ok && recordedFor === undefined) {
       reason = 'incomplete_check';
       detail = 'it was not recorded: the call was denied, rejected, or failed';
+    } else if (validation.ok && recordedFor !== goal.id) {
+      reason = 'incomplete_check';
+      detail = 'it was made for a different goal: the session goal changed since, so check the current goal';
     } else if (validation.ok) {
       if (validation.check.status !== 'not_achieved') return { action: 'stop', reason: validation.check.status };
       reason = 'not_achieved';
@@ -347,6 +371,8 @@ export function decideGoalStop(goal: DurableGoal | undefined, history: readonly 
  * end and the write flips the goal out of `active`, so any later evaluation
  * (another turn, an approval resume) sees no active goal and cannot write again.
  * Only root clients get this policy, and `run_code` cannot call `goal_check`.
+ * The check must name the goal read here (`formatRecordedGoalCheck`): a check
+ * recorded for a goal that was replaced mid-turn never closes its successor.
  */
 export function createGoalStopPolicy(
   getGoal: () => DurableGoal | undefined,

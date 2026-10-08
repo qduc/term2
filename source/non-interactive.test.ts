@@ -16,6 +16,7 @@ import { ToolOwnershipRegistry } from './services/approval/tool-ownership-regist
 import { AgentClient } from './lib/agent-client.js';
 import { registerProvider, unregisterProvider } from './providers/registry.js';
 import { z } from 'zod';
+import type { GoalAchievedSlot } from './services/conversation/durable-goal.js';
 import type { BackgroundNotification } from './services/subagents/subagent-notification-store.js';
 
 const createStringWritable = () => {
@@ -1529,4 +1530,62 @@ it('reports a recoverable budget pause from a background notification turn', asy
   expect(output.getOutput()).toContain('run_budget_paused');
   expect(output.getOutput()).toContain('--resume retained-session');
   expect(output.getOutput()).not.toContain('Unexpected conversation result');
+});
+
+it('runNonInteractive() publishes a goal closed by goal_check to the session goal reader', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const logger: any = createNoopLogger();
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.modelSelection') return { model: 'gpt-5.1', provider: 'openai' };
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+  const launchGoal = { id: 'goal-ni', outcome: 'Ship it', status: 'active' as const };
+  const achieved = { ...launchGoal, status: 'achieved' as const };
+  const slot: GoalAchievedSlot = {};
+  const persisted: unknown[] = [];
+
+  const exitCode = await runNonInteractive({
+    prompt: 'ship it',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    logger,
+    settingsService,
+    initialGoal: launchGoal,
+    onGoalPersisted: (goal) => persisted.push(goal),
+    goalAchievedSlot: slot,
+    sessionClientFactory: {
+      create() {
+        const agentClient: any = {
+          chat: async () => '',
+          abort() {},
+          setModelSelection() {},
+          addToolInterceptor: () => () => {},
+          // The root client's stop seam hands a recorded achieved check to the surface.
+          startStream: async () => {
+            slot.handler?.(achieved);
+            return new MockStream([]);
+          },
+          continueRunStream: async () => new MockStream([]),
+        };
+        return {
+          agentClient,
+          continuationProjectionMode: 'legacy',
+          toolOwnership: new ToolOwnershipRegistry(),
+          dispose: () => {},
+        };
+      },
+    },
+  });
+
+  expect(exitCode).toBe(0);
+  // The launch goal, then the model's close: prompt readers see the achieved goal.
+  expect(persisted).toEqual([launchGoal, achieved]);
+  expect(stderr.getOutput()).toContain("Marked achieved by the model's goal_check");
 });

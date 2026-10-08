@@ -2843,6 +2843,12 @@ success text. Arguments alone are not enough: a check that was denied, rejected
 with a custom message, or threw during execution leaves no success text and is
 treated as an incomplete check (reminder, counted toward both limits).
 
+Goal binding (2026-10-08). The recorded result names the goal id the check
+judged, and the check counts only when that id is the session goal at the stop
+seam; a goal replaced mid-turn turns the old check into an incomplete check
+(reminder, counted toward both limits). This narrows what counts as a valid
+check. It adds no new guard, limit, or termination path.
+
 Seam exclusions. The policy is not consulted when the signal is already aborted
 (including a response that completes after Ctrl+C) or when a critical run-budget
 wrap-up has latched during the request, so neither cancellation nor budget

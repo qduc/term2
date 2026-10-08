@@ -1162,26 +1162,26 @@ function shellCallFrames(response: string, callId: ToolCallId, args: Record<stri
   ];
 }
 
-async function runApprovalReuseScenario(callId: ToolCallId) {
+type SavedEvent = { type: string; arguments?: { command?: unknown }; message?: { command?: unknown } };
+type ScriptedShellCall = { callId: ToolCallId; args: (workspace: string) => Record<string, unknown> };
+
+/**
+ * Runs the built CLI non-interactively with `--auto-approve` against the chat-completions mock. The
+ * n-th scripted call is the model's whole n-th response; after the last one the model says "done".
+ * Everything the run can touch lives under one mkdtemp root that is removed afterwards.
+ */
+async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<string, string> = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-reuse-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
-  const approvedMarker = path.join(workspace, 'approved.txt');
-  const victim = path.join(workspace, 'victim.txt');
-  fs.writeFileSync(victim, 'must survive\n');
-  const approvedCommand = `echo approved > ${approvedMarker}`;
-  const refusedCommand = `rm ${victim}`;
+  for (const [name, content] of Object.entries(seed)) fs.writeFileSync(path.join(workspace, name), content);
+  const commands = calls.map((call) => String(call.args(workspace).command));
 
   const mock = await startModelMock(['mock-alpha'], (n) =>
-    n === 1
-      ? // Needs approval only because it asks to run unsandboxed; the command is GREEN, so the
-        // policy answers yes and it runs.
-        shellCallFrames('chatcmpl-first', callId, { command: approvedCommand, sandbox: 'unsandboxed' })
-      : n === 2
-      ? // The next response: same tool, same id (or again none). RED, so the policy answers no.
-        shellCallFrames('chatcmpl-second', callId, { command: refusedCommand })
+    n <= calls.length
+      ? shellCallFrames(`chatcmpl-${n}`, calls[n - 1]!.callId, calls[n - 1]!.args(workspace))
       : [
           { id: 'chatcmpl-done', choices: [{ delta: { role: 'assistant', content: 'done' } }] },
           { id: 'chatcmpl-done', choices: [{ delta: {}, finish_reason: 'stop' }] },
@@ -1225,22 +1225,65 @@ async function runApprovalReuseScenario(callId: ToolCallId) {
       child.on('error', reject);
       child.on('close', resolve);
     });
+    // The session log the CLI saved for this conversation (what resume replays), read back from disk.
+    const conversationsDir = path.join(root, 'conversations');
+    const savedEvents = fs
+      .readdirSync(conversationsDir)
+      .filter((name) => name.endsWith('.jsonl'))
+      .flatMap((name) => fs.readFileSync(path.join(conversationsDir, name), 'utf8').split('\n'))
+      .filter((line) => line.trim())
+      .map((line) => (JSON.parse(line) as { event: SavedEvent }).event);
+    const files = Object.fromEntries(
+      fs
+        .readdirSync(workspace)
+        .sort()
+        .map((name) => [name, fs.readFileSync(path.join(workspace, name), 'utf8')]),
+    );
     return {
       status,
       stdout,
       stderr,
       requests: mock.capturedRequests(),
-      approvedMarker: fs.existsSync(approvedMarker) ? fs.readFileSync(approvedMarker, 'utf8') : null,
-      victim: fs.existsSync(victim) ? fs.readFileSync(victim, 'utf8') : null,
-      approvedCommand,
-      refusedCommand,
-      // The run must not have written project config into the workspace.
-      workspaceEntries: fs.readdirSync(workspace).sort(),
+      commands,
+      // Read before the root is removed. Also proves the run wrote no project config here.
+      files,
+      /** Commands of the saved tool_started events, in order. */
+      savedToolStarts: savedEvents.flatMap((event) =>
+        event.type === 'tool_started' ? [String(event.arguments?.command)] : [],
+      ),
+      /** Commands of the saved command_message events (each execution's output record), in order. */
+      savedCommandOutputs: savedEvents.flatMap((event) =>
+        event.type === 'command_message' ? [String(event.message?.command)] : [],
+      ),
+      /** The `[tool] shell: <command>` lines the user saw, in order. */
+      toolLines: stderr.split('\n').filter((line) => line.startsWith('[tool] shell')),
     };
   } finally {
     await mock.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+async function runApprovalReuseScenario(callId: ToolCallId) {
+  const run = await runShellCallsScenario(
+    [
+      // Needs approval only because it asks to run unsandboxed; the command is GREEN, so the
+      // policy answers yes and it runs.
+      { callId, args: (w) => ({ command: `echo approved > ${path.join(w, 'approved.txt')}`, sandbox: 'unsandboxed' }) },
+      // The next response: same tool, same id (or again none). RED, so the policy answers no.
+      { callId, args: (w) => ({ command: `rm ${path.join(w, 'victim.txt')}` }) },
+    ],
+    { 'victim.txt': 'must survive\n' },
+  );
+  const [approvedCommand, refusedCommand] = run.commands as [string, string];
+  return {
+    ...run,
+    approvedMarker: run.files['approved.txt'] ?? null,
+    victim: run.files['victim.txt'] ?? null,
+    approvedCommand,
+    refusedCommand,
+    workspaceEntries: Object.keys(run.files),
+  };
 }
 
 type WireToolCall = { id: string; function: { name: string; arguments: string } };
@@ -1267,6 +1310,14 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
   expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(2);
   expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
   expect(run.workspaceEntries).toEqual(['approved.txt', 'victim.txt']);
+  // The user saw each call once, the refused one included: one `[tool]` line per call, never more.
+  expect(run.toolLines, report).toEqual([
+    `[tool] shell: ${run.approvedCommand}`,
+    `[tool] shell: ${run.refusedCommand}`,
+  ]);
+  // The saved session log records both calls and both outcomes, once each.
+  expect(run.savedToolStarts).toEqual([run.approvedCommand, run.refusedCommand]);
+  expect(run.savedCommandOutputs).toEqual([run.approvedCommand, run.refusedCommand]);
   // Three provider turns: first call, second call, final text. The provider received both calls
   // back with results that match them.
   expect(run.requests).toHaveLength(3);
@@ -1309,3 +1360,46 @@ it.each([
     expect(second).not.toBe(first);
   },
 );
+
+// Every executed tool call must be visible. A provider that repeats an id (some servers number calls
+// per response, so every first call is `call_0`) must not make the later execution invisible on
+// stderr. The session dedupes tool_started per id because one execution emits it twice: once when the
+// model's call streams in and again from the approval or continuation plan before the tool runs.
+// That duplicate must stay suppressed: one execution, one `[tool]` line.
+it('every executed shell call is shown on stderr when the provider repeats its id', { timeout: 90_000 }, async () => {
+  const id: ToolCallId = { kind: 'provider', id: 'call_0' };
+  const run = await runShellCallsScenario([
+    // Sandbox off and GREEN: both run without an approval prompt.
+    { callId: id, args: (w) => ({ command: `echo one > ${path.join(w, 'one.txt')}` }) },
+    { callId: id, args: (w) => ({ command: `echo two > ${path.join(w, 'two.txt')}` }) },
+  ]);
+  const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
+  expect(run.status, report).toBe(0);
+  // Both calls really ran...
+  expect(run.files, report).toEqual({ 'one.txt': 'one\n', 'two.txt': 'two\n' });
+  expect(run.stderr, report).not.toContain('[approval required]');
+  // ...so the user must see both, once each.
+  expect(run.toolLines, report).toEqual(run.commands.map((command) => `[tool] shell: ${command}`));
+  // The saved session log (what resume replays) records both executions and both outputs, once each.
+  expect(run.savedToolStarts).toEqual(run.commands);
+  expect(run.savedCommandOutputs).toEqual(run.commands);
+  const { calls } = lastWireToolExchange(run.requests);
+  expect(calls.map((call) => call.id)).toEqual(['call_0', 'call_0']);
+});
+
+it('one approved shell execution prints exactly one [tool] line', { timeout: 90_000 }, async () => {
+  const run = await runShellCallsScenario([
+    {
+      callId: { kind: 'provider', id: 'call_0' },
+      // Unsandboxed, so it goes through approval: the plan re-emits tool_started for the same execution.
+      args: (w) => ({ command: `echo one > ${path.join(w, 'one.txt')}`, sandbox: 'unsandboxed' }),
+    },
+  ]);
+  const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
+  expect(run.status, report).toBe(0);
+  expect(run.files, report).toEqual({ 'one.txt': 'one\n' });
+  expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(1);
+  expect(run.toolLines, report).toEqual([`[tool] shell: ${run.commands[0]}`]);
+  expect(run.savedToolStarts).toEqual(run.commands);
+  expect(run.savedCommandOutputs).toEqual(run.commands);
+});

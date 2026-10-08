@@ -20,6 +20,7 @@ export class SessionToolTracker {
   private emittedInvalidToolCallPackets = new Set<string>();
   private emittedToolStartedCallIds = new Set<string>();
   private emittedSubagentToolStartedIds = new Set<string>();
+  private emittedCommandMessageIdsByCallId = new Map<string, string[]>();
 
   constructor(private conversationStore: ConversationStore) {
     this.#attachUserTurnCount();
@@ -145,6 +146,10 @@ export class SessionToolTracker {
    */
   recordFunctionResult(item: unknown): void {
     this.toolLedger.recordFunctionResult(item);
+    // The call is settled. A later tool_started with this id is a new execution (the provider reused
+    // the id), not a re-emit of this one, so it must be shown.
+    const callId = callIdOf(item);
+    if (callId) this.emittedToolStartedCallIds.delete(callId);
   }
 
   /**
@@ -249,7 +254,9 @@ export class SessionToolTracker {
   }
 
   /**
-   * Deduplicate tool_started events.
+   * Deduplicate tool_started events. One execution emits tool_started twice: when the model's call
+   * streams in, and again from the approval/continuation plan before the tool runs. Only the first is
+   * kept. Recording the call's result ends the execution (see recordFunctionResult).
    */
   dedupeToolStarted(event: ConversationEvent): ConversationEvent | null {
     if (event.type === 'subagent_tool_started') {
@@ -268,6 +275,27 @@ export class SessionToolTracker {
     }
     this.emittedToolStartedCallIds.add(event.toolCallId);
     return event;
+  }
+
+  /**
+   * Remember which command message ids a call emitted. Message ids come from the tool's formatter
+   * (`<provider item id or call id>-<n>`), so they cannot be derived from the call id later.
+   */
+  noteCommandMessageEmitted(message: { id: string; callId?: string }): void {
+    if (!message.callId) return;
+    const ids = this.emittedCommandMessageIdsByCallId.get(message.callId) ?? [];
+    ids.push(message.id);
+    this.emittedCommandMessageIdsByCallId.set(message.callId, ids);
+  }
+
+  /**
+   * Command message ids emitted by an earlier execution of this call id, which a new execution that
+   * reuses the id must not be deduped against. Forgets them.
+   */
+  takeCommandMessageIdsOfEarlierExecution(callId: string): string[] {
+    const ids = this.emittedCommandMessageIdsByCallId.get(callId) ?? [];
+    this.emittedCommandMessageIdsByCallId.delete(callId);
+    return ids;
   }
 
   /**
@@ -320,6 +348,7 @@ export class SessionToolTracker {
    */
   clearEmittedToolStarted(): void {
     this.emittedToolStartedCallIds.clear();
+    this.emittedCommandMessageIdsByCallId.clear();
   }
 
   /**

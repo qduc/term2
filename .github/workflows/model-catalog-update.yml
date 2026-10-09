@@ -4,7 +4,7 @@ name: Update model catalog
 # source from the upstream main branch, generates provider data into a
 # throwaway directory, points PI_AI_DATA_DIR at it, and regenerates
 # source/providers/model-catalog/catalog.generated.ts via
-# `pnpm catalog:update`, runs the focused catalog/pricing tests, and opens or
+# `pnpm catalog:update`, runs typechecking and repository guards, and opens or
 # force-updates one predictable automation PR. The job exits cleanly (green
 # no-op) when a run produces no catalog changes.
 on:
@@ -73,13 +73,11 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run focused catalog and pricing tests
+      - name: Validate generated catalog and repository guards
         if: steps.changes.outputs.changed == 'true'
         run: |
-          pnpm test source/providers/model-catalog/catalog.test.ts \
-            source/providers/model-catalog/generate-catalog.test.ts \
-            source/services/cost/pricing.test.ts \
-            source/services/cost/model-cost.test.ts
+          pnpm typecheck
+          pnpm test
 
       - name: Open or update the automation pull request
         if: steps.changes.outputs.changed == 'true'
@@ -96,7 +94,7 @@ jobs:
 
           Regenerates \`source/providers/model-catalog/catalog.generated.ts\` from the
           pi-ai \`main\` at commit \`${PI_AI_REF}\` via its strict data-only
-          model generator and \`pnpm catalog:update\`. Focused catalog/pricing tests ran in the
+          model generator and \`pnpm catalog:update\`. Typechecking and repository guards ran in the
           \`Update model catalog\` workflow."
 
           git config user.name "github-actions[bot]"

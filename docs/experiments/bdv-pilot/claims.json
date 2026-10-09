@@ -6,7 +6,7 @@
       "statement": "An approval for one shell tool call cannot authorize a later call that reuses the same provider call id, and adapter-generated ids for missing or empty provider ids remain distinct.",
       "authority": "Frozen pilot contract derived from the existing user-facing approval policy and the expected safe side effects; this runner cannot alter the expected outcomes.",
       "probe": "approval-reuse-integration",
-      "approvedProbeDigest": "05ba6586bc09333bb248e7487f69c4598cc180eb4fccd3d65bb3b2a8922d3328",
+      "approvedProbeDigest": "c587fc30c0efe640d83a89f2ece92771406673c67102beca40ce84b3db3afb7c",
       "acceptance": {
         "expectedCases": [
           "an approved shell call does not approve a later call that reuses its id when the provider repeats call_0",

@@ -11,6 +11,11 @@ import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
 const require = createRequire(import.meta.url);
 
+function expectedToolLine(command: string): string {
+  const preview = command.length > 80 ? `${command.slice(0, 80)}…` : command;
+  return `[tool] shell: ${preview}`;
+}
+
 // dist/ is a gitignored build artifact, so a fresh worktree has no compiled
 // CLI and these tests would fail until someone runs `pnpm build`. Instead of
 // spawning tsx per test (which pays a ~2s compile per process), compile the
@@ -1327,10 +1332,7 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
   expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
   expect(run.workspaceEntries).toEqual(['approved.txt', 'victim.txt']);
   // The user saw each call once, the refused one included: one `[tool]` line per call, never more.
-  expect(run.toolLines, report).toEqual([
-    `[tool] shell: ${run.approvedCommand}`,
-    `[tool] shell: ${run.refusedCommand}`,
-  ]);
+  expect(run.toolLines, report).toEqual([expectedToolLine(run.approvedCommand), expectedToolLine(run.refusedCommand)]);
   // The saved session log records both calls and both outcomes, once each.
   expect(run.savedToolStarts).toEqual([run.approvedCommand, run.refusedCommand]);
   expect(run.savedCommandOutputs).toEqual([run.approvedCommand, run.refusedCommand]);
@@ -1395,7 +1397,7 @@ it('every executed shell call is shown on stderr when the provider repeats its i
   expect(run.files, report).toEqual({ 'one.txt': 'one\n', 'two.txt': 'two\n' });
   expect(run.stderr, report).not.toContain('[approval required]');
   // ...so the user must see both, once each.
-  expect(run.toolLines, report).toEqual(run.commands.map((command) => `[tool] shell: ${command}`));
+  expect(run.toolLines, report).toEqual(run.commands.map(expectedToolLine));
   // The saved session log (what resume replays) records both executions and both outputs, once each.
   expect(run.savedToolStarts).toEqual(run.commands);
   expect(run.savedCommandOutputs).toEqual(run.commands);
@@ -1415,7 +1417,7 @@ it('one approved shell execution prints exactly one [tool] line', { timeout: 90_
   expect(run.status, report).toBe(0);
   expect(run.files, report).toEqual({ 'one.txt': 'one\n' });
   expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(1);
-  expect(run.toolLines, report).toEqual([`[tool] shell: ${run.commands[0]}`]);
+  expect(run.toolLines, report).toEqual([expectedToolLine(run.commands[0])]);
   expect(run.savedToolStarts).toEqual(run.commands);
   expect(run.savedCommandOutputs).toEqual(run.commands);
 });
@@ -1437,7 +1439,7 @@ it('a call that reuses a refused call id runs and is saved as run, not as refuse
   const report = `exit ${run.status}\nstderr:\n${run.stderr}`;
   expect(run.status, report).toBe(0);
   expect(run.files, report).toEqual({ 'two.txt': 'two\n', 'victim.txt': 'must survive\n' });
-  expect(run.toolLines, report).toEqual([`[tool] shell: ${refusedCommand}`, `[tool] shell: ${ranCommand}`]);
+  expect(run.toolLines, report).toEqual([expectedToolLine(refusedCommand), expectedToolLine(ranCommand)]);
   // Only the first call was refused.
   expect(run.stderr.match(/Approval Rejected:/g), report).toHaveLength(1);
   expect(run.stderr, report).toContain(`cannot be executed automatically: ${refusedCommand}`);

@@ -73,7 +73,7 @@ export const formatBackgroundTaskClock = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`;
 };
 
-const formatPhase = (task: BackgroundTaskControlDetails, now: number, isNarrow: boolean): string => {
+const formatPhase = (task: BackgroundTaskControlDetails, now: number): string => {
   const activity = task.activity;
   if (activity?.phase === 'settled') return formatTerminalStatus(task);
   const base = !activity
@@ -87,7 +87,6 @@ const formatPhase = (task: BackgroundTaskControlDetails, now: number, isNarrow: 
     : activity.phase === 'cancelling'
     ? 'Cancelling'
     : 'Active';
-  if (isNarrow) return base;
   return `${base} · ${formatBackgroundTaskClock(now - task.startedAt)}`;
 };
 
@@ -111,8 +110,8 @@ const formatFirstLine = ({
   const rawPhase = isTerminal(task)
     ? formatTerminalStatus(task)
     : controlTask
-    ? formatPhase(controlTask, now, isNarrow)
-    : formatLiveStatus(task, now, isNarrow);
+    ? formatPhase(controlTask, now)
+    : formatLiveStatus(task, now);
   const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
   const phase = truncate(rawPhase, Math.max(1, columns - fixedColumns - BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS));
   // "• " + badge + " " + identity + " · " + phase. Reserve every
@@ -156,12 +155,12 @@ const isTerminal = (task: PanelTask): boolean =>
   task.status === 'cancelled' ||
   task.status === 'interrupted';
 
-const formatLiveStatus = (task: PanelTask, now: number, isNarrow: boolean): string => {
+const formatLiveStatus = (task: PanelTask, now: number): string => {
   const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;
   if (!isControlTask(task) || !task.activity) {
-    return isNarrow ? 'Running' : `Running · ${formatBackgroundTaskClock(now - startedAt)}`;
+    return `Running · ${formatBackgroundTaskClock(now - startedAt)}`;
   }
-  return formatPhase(task, now, isNarrow);
+  return formatPhase(task, now);
 };
 
 const latestTool = (task: PanelTask): BackgroundSubagentTaskTool | undefined => {

@@ -167,7 +167,7 @@ export class AgentChatService {
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
-        agentConfig.refreshAgent();
+        agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
         // ignore
       }
@@ -271,7 +271,7 @@ export class AgentChatService {
     if (tempProvider === 'codex' && isDefaultSetting) {
       try {
         await fetchModels({ settingsService: settings, loggingService: logger }, 'codex');
-        agentConfig.refreshAgent();
+        agentConfig.refreshAgent({ configurationChanged: false });
       } catch (_err) {
         // ignore
       }

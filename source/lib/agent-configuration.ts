@@ -425,12 +425,12 @@ export class AgentConfiguration implements AgentSource {
   }
 
   /**
-   * Refresh the agent: triggers side effects (via `onConfigChanged`)
-   * then rebuilds the agent with current settings.
+   * Refresh the agent with current settings. Per-turn refreshes do not
+   * invalidate models whose session-scoped transports are still reusable.
    */
-  refreshAgent(): void {
+  refreshAgent(options: { configurationChanged?: boolean } = {}): void {
     if (this.#isTransientClient) return;
-    this.#onConfigChanged?.();
+    if (options.configurationChanged !== false) this.#onConfigChanged?.();
     this.rebuildAgent();
   }
 

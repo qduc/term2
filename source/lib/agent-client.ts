@@ -1312,7 +1312,7 @@ export class AgentClient {
       try {
         await fetchModels({ settingsService: this.#settings, loggingService: this.#logger, signal }, 'codex');
         if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
-        this.#agentConfig.refreshAgent();
+        this.#agentConfig.refreshAgent({ configurationChanged: false });
         agentRefreshed = true;
       } catch {
         // Model discovery is best effort; the provider can still resolve its default.
@@ -1321,7 +1321,7 @@ export class AgentClient {
     if (signal.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
     const isFirstMessage =
       !options.previousResponseId && (!Array.isArray(userInput) || (userInput.length > 0 && userInput.length <= 1));
-    if (isFirstMessage && !agentRefreshed) this.#agentConfig.refreshAgent();
+    if (isFirstMessage && !agentRefreshed) this.#agentConfig.refreshAgent({ configurationChanged: false });
 
     this.#currentCorrelationId = randomUUID();
     this.#logger.setCorrelationId(this.#currentCorrelationId);

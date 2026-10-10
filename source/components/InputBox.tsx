@@ -139,6 +139,7 @@ const InputBox: FC<Props> = ({
   );
   const { stdin } = useStdin();
   const inputValueRef = useRef(value);
+  const turnInFlightRef = useRef(turnInFlight);
   const imagesRef = useRef(images);
   const cursorOffsetRef = useRef(cursorOffset);
   // ink-prompt first emits its empty local image state before synchronizing
@@ -151,6 +152,7 @@ const InputBox: FC<Props> = ({
   const altEnterSuppressUntilRef = useRef(0);
 
   inputValueRef.current = value;
+  turnInFlightRef.current = turnInFlight;
   imagesRef.current = images;
   cursorOffsetRef.current = cursorOffset;
 
@@ -462,16 +464,25 @@ const InputBox: FC<Props> = ({
         onShellModeExit?.();
       }
       const isRecentEscape = Date.now() - stdinBufferTimestampRef.current < 100;
-      if (data === '\x1b\r' || (stdinBufferRef.current === '\x1b' && data === '\r' && isRecentEscape)) {
+      // Alt+Enter queues a message only while a turn runs. Many terminals send
+      // the same `\x1b\r` for Shift+Enter, so when idle leave it to ink-prompt,
+      // which inserts a newline.
+      const altEnterActive = turnInFlightRef.current;
+      if (
+        altEnterActive &&
+        (data === '\x1b\r' || (stdinBufferRef.current === '\x1b' && data === '\r' && isRecentEscape))
+      ) {
         consumedAltEnterRef.current = true;
         altEnterSuppressUntilRef.current = Date.now() + 100;
         handleWrapperSubmit(inputValueRef.current, images, 'follow_up');
       }
       if (data.endsWith('\x1b')) {
-        consumedAltEnterRef.current = true;
+        if (altEnterActive) {
+          consumedAltEnterRef.current = true;
+          altEnterSuppressUntilRef.current = Date.now() + 100;
+        }
         stdinBufferRef.current = '\x1b';
         stdinBufferTimestampRef.current = Date.now();
-        altEnterSuppressUntilRef.current = Date.now() + 100;
       } else {
         stdinBufferRef.current = '';
       }

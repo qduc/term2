@@ -9,7 +9,12 @@ import {
 import { resolveSessionReadFolder } from '../../services/approval/session-read-grant-target.js';
 import { generateDiff } from '../../utils/output/diff.js';
 import { asDisplayArray } from '../../utils/tool-args-display.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import {
+  TOOL_NAME_APPLY_PATCH,
+  TOOL_NAME_ASK_USER,
+  TOOL_NAME_PROPOSE_GOAL,
+  TOOL_NAME_SEARCH_REPLACE,
+} from '../../tools/tool-names.js';
 import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
@@ -127,6 +132,11 @@ type CreateFileArgs = {
   content: string;
 };
 
+type ProposeGoalArgs = {
+  outcome: string;
+  successCriteria?: string;
+};
+
 const operationLabels: Record<string, { label: string; tone: ColorRole }> = {
   create_file: { label: 'CREATE', tone: 'success' },
   update_file: { label: 'UPDATE', tone: 'warning' },
@@ -173,6 +183,24 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
       {args.max_output_length && (
         <Box>
           <Text color={theme.textSubtle}>Max output: {args.max_output_length} chars</Text>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const ProposeGoalPrompt: FC<{ args: ProposeGoalArgs }> = ({ args }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column" marginLeft={2} marginTop={1}>
+      <Text color={theme.textSubtle}>Outcome</Text>
+      <Text bold color={theme.accent}>
+        {args.outcome}
+      </Text>
+      {args.successCriteria && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={theme.textSubtle}>Success criteria</Text>
+          <Text color={theme.textMuted}>{args.successCriteria}</Text>
         </Box>
       )}
     </Box>
@@ -856,6 +884,16 @@ const ApprovalPrompt: FC<Props> = ({
     }
     if (parsedCreateFile) {
       content = <CreateFilePrompt args={parsedCreateFile} />;
+    }
+  } else if (approval.toolName === TOOL_NAME_PROPOSE_GOAL) {
+    let parsedProposeGoal: ProposeGoalArgs | null = null;
+    try {
+      parsedProposeGoal = JSON.parse(approval.argumentsText);
+    } catch {
+      // Fall back to styled raw text if parsing fails
+    }
+    if (parsedProposeGoal) {
+      content = <ProposeGoalPrompt args={parsedProposeGoal} />;
     }
   } else if (isAskUser) {
     const questionText = currentQuestionItem?.question || 'Unknown question';

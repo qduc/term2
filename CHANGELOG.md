@@ -1,3 +1,11 @@
+## [0.32.1] - 2026-10-10
+
+### Bug Fixes
+- Codex sessions keep their WebSocket connection across turns. The routine per-turn agent refresh no longer invalidates reusable session transports; only real configuration changes do.
+- Pressing Shift+Enter in the idle input box inserts a newline again in terminals that send the same sequence as Alt+Enter. Alt+Enter still queues a follow-up message while a turn is running.
+- The approval prompt for `propose_goal` now shows the outcome and success criteria as labelled lines instead of raw serialized arguments.
+- Background task timers stay visible in narrow panels instead of being dropped.
+
 ## [0.32.0] - 2026-10-08
 
 ### Behavior Changes

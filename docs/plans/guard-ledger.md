@@ -269,7 +269,7 @@ Open work, in order:
   merge `f12181e0`); results are recorded below.
 - **Completed:** the four repair dispositions below were approved on
   2026-08-14. This approval changes no runtime or test behavior.
-- **In progress:** the subagent steering mailbox repair is implemented and
+- **Completed:** the subagent steering mailbox repair is implemented and
   verified and merged (`74323696`, merge `fa328291`).
 - **Completed:** tool ownership lifecycle repair is implemented and merged
   (`184db508`, merge `faa737c5`).
@@ -278,11 +278,11 @@ Open work, in order:
   request was aborting the turn as `reasoning_characters` /
   `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
   longer fails the request. See the repair record below.
-- **Completed (this branch, pending merge; `d16bd5e3`):** destructive repetition
+- **Completed and merged (`dd80e755`; repair `d16bd5e3`):** destructive repetition
   inference is removed from both execution owners while the typed
   100,000-character aggregate visible-output cap remains. The InputSurgeGuard
   capability repair remains a separate worktree and rollback boundary.
-- **Completed (branch `retry-recovery-contract`, pending merge to main):** the
+- **Completed and merged (`43f3d978`, from `retry-recovery-contract`):** the
   retry/recovery containment budget (`RetryRecoveryBudget`: 90s / 3 physical
   attempts / 1 automatic replay) and its never-replay-after-committed-output
   precondition. Four confirmed false-positive/settlement defects repaired
@@ -1968,8 +1968,8 @@ Verification: deterministic delayed-worker red/green, typecheck, provider
 black-box 177 passed / 1 skipped; isolated full suite 8,053 passed / 5 known
 failures (nested approval and file-tool workspace boundaries), not green.
 
-Disposition: **repaired on branch `retry-recovery-contract`; seven commits,
-pending merge to main.**
+Disposition: **repaired in seven commits and merged to main in `43f3d978`
+from `retry-recovery-contract`.**
 
 This entry covers a shared retry/recovery containment budget introduced on
 this branch (an application-owned turn/tool-execution harness feature, not a
@@ -3172,7 +3172,8 @@ this interim refusal does not close those semantic gaps.
 
 ## Terminal background subagent approval arbitration release (October 3)
 
-Disposition: repaired on `codex/reliability-approval-release`, pending merge.
+Disposition: repaired in `6cb05911` and merged to main in `6750a988`
+from `codex/reliability-approval-release`.
 A cancelled adopted lease correctly refused stale application and released its
 tool attribution, but its session approval entry remained at the FIFO head.
 Repeated UI answers returned `apply_rejected` and prevented sibling approvals

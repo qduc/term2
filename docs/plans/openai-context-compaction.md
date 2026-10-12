@@ -663,7 +663,7 @@ Gate: `pnpm test` and `pnpm test:provider-black-box` (run-loop change — non-ne
 
 ### Step 2: opaque items survive persistence and replay
 
-**Status: DONE — branch `compaction-persistence`, not yet merged.** Implemented as specced below,
+**Status: DONE — merged to main in `96a9874c`.** Implemented as specced below,
 with the deviations and clarifications recorded under "What Step 2 shipped" in [Resume
 here](#resume-here) above and the [judgment
 call](#step-2-judgment-call-what-counts-as-the-app-log-corrected-after-coordinator-review) about

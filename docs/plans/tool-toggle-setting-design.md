@@ -1,8 +1,10 @@
 # Design: user-facing tool disable setting — Phase 1 (main-agent capability booleans)
 
-**Status: Phase 1 (M1) implemented** on branch `tool-toggle`
-(worktree `.worktrees/tool-toggle`), pending merge to main; gate results are
-recorded in `REPORT-tool-toggle.md` at the worktree root. Revised 2026-09-03
+**Status: Phase 1 (M1) implemented and merged to main (`2838bb55`).**
+Main-agent capability masking lives in `resolveDisabledCapabilities` in
+`source/services/tool-toggles.ts` and `getAgentDefinition` in `source/agent.ts`.
+Historical gate results are in `REPORT-tool-toggle.md` at merge commit
+`2838bb55`; the report is no longer in the current tree. Revised 2026-09-03
 against main `c975002e` after an independent review
 ([tool-toggle-setting-design-review.md](./tool-toggle-setting-design-review.md)).
 Every finding in that review was re-verified against the tree before this
@@ -43,12 +45,12 @@ capability group. Both limits are explicit, acknowledged scope boundaries (see
 splitting bundled groups into per-tool toggles is milestone M2 — the next
 deliverable after Phase 1.
 
-## Current architecture (verified)
+## Architecture at the September 3 design revision
 
-**Profile M1 is implemented and merged.** AGENTS.md line 51 still says
-"Milestone 1 not implemented"; that is stale (`docs/profiles/README.md:3-7`
-future tense is stale too). `getAgentDefinition` resolves and consumes a
-`ResolvedProfile` today.
+**Profile M1 was already implemented at this revision.** The notes below
+describe the design-time registration sites and gaps, not the current tree.
+`getAgentDefinition` still resolves and consumes a `ResolvedProfile`; consult
+`docs/profiles/README.md` for the profile implementation's status.
 
 ### Main-agent tool construction
 

@@ -140,6 +140,11 @@ const HTTP_ROUTES: readonly { family: HttpWireFamily; route: ProviderRoute }[] =
   },
 ] as const;
 
+const INTERRUPTED_TOOL_RECOVERY_CASES = [
+  { label: 'OpenAI Responses', family: 'openai-responses', route: HTTP_ROUTES[0]!.route },
+  { label: 'Codex Responses', family: 'codex-responses', route: HTTP_ROUTES[1]!.route },
+] as const;
+
 const WS_ROUTES: readonly { family: 'openai-responses' | 'codex-responses'; route: ProviderRoute }[] = [
   {
     family: 'openai-responses',
@@ -336,52 +341,54 @@ describe('application-owned provider restart continuity', () => {
     expect(inputText(chainedBody?.input)).not.toContain('first persisted prompt');
   });
 
-  it('settles an interrupted approval-pending tool into the resumed history without an orphan or stale response id', async () => {
-    const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'interrupted-tool' });
-    activeHttpServers.push(server);
-    const route = HTTP_ROUTES[0]!.route;
-    const workspace = await createWorkspace(route, server);
-    activeWorkspaces.push(workspace);
+  it.each(INTERRUPTED_TOOL_RECOVERY_CASES)(
+    'settles an interrupted approval-pending $label tool into resumed history without an orphan or stale response id',
+    async ({ family, route }) => {
+      const server = await startResilienceHttpServer({ family, scenario: 'interrupted-tool' });
+      activeHttpServers.push(server);
+      const workspace = await createWorkspace(route, server);
+      activeWorkspaces.push(workspace);
 
-    const first = await startInteractive(workspace, route);
-    await first.waitForIdleInput();
-    await submitPrompt(first, 'interrupt while tool approval is pending');
-    await first.waitForVisibleOutput('Allow this action?');
-    const conversationId = await waitForConversationId(workspace);
-    await first.terminate({ signal: 'SIGKILL', timeoutMs: DEFAULT_TIMEOUT_MS });
+      const first = await startInteractive(workspace, route);
+      await first.waitForIdleInput();
+      await submitPrompt(first, 'interrupt while tool approval is pending');
+      await first.waitForVisibleOutput('Allow this action?');
+      const conversationId = await waitForConversationId(workspace);
+      await first.terminate({ signal: 'SIGKILL', timeoutMs: DEFAULT_TIMEOUT_MS });
 
-    const persisted = await readConversation(workspace.paths, conversationId);
-    expect(persisted).toContain(TOOL_CALL_ID);
-    expect(persisted).not.toContain('resp_stale_interrupted');
+      const persisted = await readConversation(workspace.paths, conversationId);
+      expect(persisted).toContain(TOOL_CALL_ID);
+      expect(persisted).not.toContain('resp_stale_interrupted');
 
-    // SIGKILL intentionally leaves the application-owned lock behind; use the
-    // documented fork escape hatch to resume the recovered state safely.
-    const resumed = await startInteractive(workspace, route, ['--resume', conversationId, '--fork']);
-    await resumed.waitForVisibleOutput(`Forked conversation ${conversationId} → `);
-    await resumed.waitForVisibleOutput('Resumed conversation: ');
-    const resumedIdle = await resumed.waitForIdleInput();
-    await submitPrompt(resumed, 'repair interrupted tool history');
-    await resumed.waitForVisibleOutput('restart-repaired-answer');
-    await resumed.waitForIdleInput({ after: resumedIdle });
-    await exitInteractive(resumed);
+      // SIGKILL intentionally leaves the application-owned lock behind; use the
+      // documented fork escape hatch to resume the recovered state safely.
+      const resumed = await startInteractive(workspace, route, ['--resume', conversationId, '--fork']);
+      await resumed.waitForVisibleOutput(`Forked conversation ${conversationId} → `);
+      await resumed.waitForVisibleOutput('Resumed conversation: ');
+      const resumedIdle = await resumed.waitForIdleInput();
+      await submitPrompt(resumed, 'repair interrupted tool history');
+      await resumed.waitForVisibleOutput('restart-repaired-answer');
+      await resumed.waitForIdleInput({ after: resumedIdle });
+      await exitInteractive(resumed);
 
-    expect(server.requests).toHaveLength(2);
-    const resumedBody = asRecord(server.requests[1]?.body);
-    expect(resumedBody?.previous_response_id).toBeUndefined();
-    const resumedInput = inputItems(resumedBody?.input);
-    // The interrupted call is settled at replay: the resumed provider history
-    // carries the call plus a synthetic unobserved-outcome result, so the
-    // model never silently repeats an operation whose effect it cannot see.
-    expect(resumedInput.some((item) => item.type === 'function_call' && callIdOf(item) === TOOL_CALL_ID)).toBe(true);
-    const settledOutput = resumedInput.find(
-      (item) => item.type === 'function_call_output' && callIdOf(item) === TOOL_CALL_ID,
-    ) as { output?: unknown } | undefined;
-    expect(settledOutput).toBeTruthy();
-    expect(String(settledOutput?.output)).toContain('Outcome unobserved');
-    expect(inputText(resumedBody?.input)).toContain('interrupt while tool approval is pending');
-    expect(inputText(resumedBody?.input)).not.toContain('resp_stale_interrupted');
-    expect(inputText(resumedBody?.input)).toContain('repair interrupted tool history');
-  });
+      expect(server.requests).toHaveLength(2);
+      const resumedBody = asRecord(server.requests[1]?.body);
+      expect(resumedBody?.previous_response_id).toBeUndefined();
+      const resumedInput = inputItems(resumedBody?.input);
+      // The interrupted call is settled at replay: the resumed provider history
+      // carries the call plus a synthetic unobserved-outcome result, so the
+      // model never silently repeats an operation whose effect it cannot see.
+      expect(resumedInput.some((item) => item.type === 'function_call' && callIdOf(item) === TOOL_CALL_ID)).toBe(true);
+      const settledOutput = resumedInput.find(
+        (item) => item.type === 'function_call_output' && callIdOf(item) === TOOL_CALL_ID,
+      ) as { output?: unknown } | undefined;
+      expect(settledOutput).toBeTruthy();
+      expect(String(settledOutput?.output)).toContain('Outcome unobserved');
+      expect(inputText(resumedBody?.input)).toContain('interrupt while tool approval is pending');
+      expect(inputText(resumedBody?.input)).not.toContain('resp_stale_interrupted');
+      expect(inputText(resumedBody?.input)).toContain('repair interrupted tool history');
+    },
+  );
 });
 
 describe('application-owned context compaction black-box lifecycle', () => {

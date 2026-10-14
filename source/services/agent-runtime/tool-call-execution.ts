@@ -137,7 +137,13 @@ export class ToolCallExecution {
           argumentsText: event.arguments,
           interruption: {
             type: 'tool_approval_item',
-            rawItem: { type: 'function_call', callId: event.id, name: event.name, arguments: event.arguments },
+            rawItem: {
+              type: 'function_call',
+              callId: event.id,
+              name: event.name,
+              arguments: event.arguments,
+              ...(event.providerMetadata ? { providerData: event.providerMetadata } : {}),
+            },
             callId: event.id,
             name: event.name,
             arguments: event.arguments,

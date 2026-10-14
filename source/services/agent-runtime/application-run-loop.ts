@@ -1648,6 +1648,7 @@ export class ApplicationRunLoop {
           callId: event.id,
           name: event.name,
           ...(event.toolType === 'custom' ? { input: event.arguments } : { arguments: event.arguments }),
+          ...(event.providerMetadata ? { providerData: event.providerMetadata } : {}),
         };
         state.history.push(callItem);
         state.input.push({
@@ -1656,6 +1657,7 @@ export class ApplicationRunLoop {
           name: event.name,
           arguments: event.arguments,
           ...(event.toolType ? { toolType: event.toolType } : {}),
+          ...(event.providerMetadata ? { providerMetadata: event.providerMetadata } : {}),
         });
         outputPush(stream, queue, { type: 'item', item: callItem });
       },
@@ -2199,6 +2201,7 @@ function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
         name: String(item.name ?? ''),
         arguments: String(item.type === 'custom_tool_call' ? item.input ?? '' : item.arguments ?? '{}'),
         ...(item.type === 'custom_tool_call' ? { toolType: 'custom' as const } : {}),
+        ...(item.providerData ? { providerMetadata: item.providerData } : {}),
       },
     ];
   }

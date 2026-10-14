@@ -385,6 +385,16 @@ describe('provider boundary contracts through the registry', () => {
     const fixture = await readFixtureEnvelope(
       new URL('./fixtures/google/tool-continuation-v1.json', import.meta.url).pathname,
     );
+    // The old recording predates signature-preserving replay. Keep its response
+    // frames, but expect the returned (redacted) signature on the continuation.
+    const continuationFrame = fixture.turns[1]!.frames.find((frame) => frame.kind === 'http-request');
+    if (!continuationFrame || continuationFrame.kind !== 'http-request') throw new Error('Missing continuation');
+    const continuationBody = continuationFrame.body as {
+      contents: Array<{ parts: Array<{ functionCall?: unknown; thoughtSignature?: string }> }>;
+    };
+    const signedCall = continuationBody.contents.flatMap((message) => message.parts).find((part) => part.functionCall);
+    if (!signedCall) throw new Error('Missing recorded function call');
+    signedCall.thoughtSignature = '[REDACTED]';
     server = await startFakeProviderHttpServer({ fixture });
     const providerCase = { ...providerCases[3]!, model: 'gemini-2.5-flash' };
     const settings = createSettings(providerCase);
@@ -408,13 +418,18 @@ describe('provider boundary contracts through the registry', () => {
     const call =
       (firstEvents.find((event: any) => event.type === 'tool_call') as any) ??
       firstEvents.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'tool_call');
-    expect(call).toMatchObject({ id: expect.any(String), name: fixtureTool.name });
+    expect(call).toMatchObject({
+      id: expect.any(String),
+      name: fixtureTool.name,
+      providerMetadata: { google: { thoughtSignature: '[REDACTED]' } },
+    });
+    expect(firstEvents.at(-1)?.output).toContainEqual(call);
 
     const continuation = {
       ...initial,
       input: [
         ...initial.input,
-        { type: 'tool_call', id: call.id, name: call.name, arguments: call.arguments },
+        call,
         { type: 'tool_result', id: call.id, output: JSON.stringify({ ok: true, value: 1 }) },
         {
           type: 'message',

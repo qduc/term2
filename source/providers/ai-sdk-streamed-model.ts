@@ -20,6 +20,7 @@ import type {
   StreamedModelTurnRequest,
   StreamedModelTurnEvent,
   StreamedModelTurnOutput,
+  StreamedModelProviderOptions,
 } from '../contracts/streamed-model-turn.js';
 
 const MAX_TRIVIAL_WHITESPACE_LENGTH = 4;
@@ -205,7 +206,11 @@ export function createAiSdkStreamedModel(
         if (part.type === 'tool-call') {
           const flushedWhitespace = flushPendingWhitespace();
           if (flushedWhitespace) yield flushedWhitespace;
-          yield* publishToolCall(output, part.toolCallId, { name: part.toolName, arguments: part.input });
+          yield* publishToolCall(output, part.toolCallId, {
+            name: part.toolName,
+            arguments: part.input,
+            ...(part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
+          });
           hasMaterialOutput = true;
           continue;
         }
@@ -361,7 +366,15 @@ function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, st
   if (item.type === 'tool_call')
     return {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolCallId: item.id, toolName: item.name, input: parseJson(item.arguments) }],
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: item.id,
+          toolName: item.name,
+          input: parseJson(item.arguments),
+          ...(item.providerMetadata ? { providerOptions: item.providerMetadata as SharedV3ProviderOptions } : {}),
+        },
+      ],
     };
   if (item.type === 'provider_opaque')
     // Filtered out in `toCallOptions`; reaching here means a new caller bypassed
@@ -470,8 +483,12 @@ function appendUnendedReasoning(
   }
 }
 
-function* publishToolCall(output: StreamedModelTurnOutput[], id: string, call: { name: string; arguments: string }) {
-  const event = { type: 'tool_call' as const, id, name: call.name, arguments: call.arguments };
+function* publishToolCall(
+  output: StreamedModelTurnOutput[],
+  id: string,
+  call: { name: string; arguments: string; providerMetadata?: StreamedModelProviderOptions },
+) {
+  const event = { type: 'tool_call' as const, id, ...call };
   output.push(event);
   yield event;
 }

@@ -490,6 +490,9 @@ function assertGoogleToolHistory(
   const results = blocks.filter((part) => part.functionResponse) as Array<Record<string, unknown>>;
   expect(calls).toHaveLength(expectedPairCount);
   expect(results).toHaveLength(expectedPairCount);
+  expect(calls.map((part) => part.thoughtSignature)).toEqual(
+    [APPROVAL_CALL_ID, REJECTION_CALL_ID].slice(0, expectedPairCount).map((id) => `fixture-signature-${id}`),
+  );
   expect(calls.map((part) => (part.functionCall as Record<string, unknown>).name)).toEqual(
     expectedCallCountNames(expectedPairCount),
   );
@@ -689,7 +692,12 @@ function writeProviderResponse(row: StatelessProviderRow, response: ServerRespon
   }
 
   const parts = isToolRequest
-    ? [{ functionCall: { name: 'shell', args: { command: 'true', sandbox: 'unsandboxed' } } }]
+    ? [
+        {
+          functionCall: { name: 'shell', args: { command: 'true', sandbox: 'unsandboxed' } },
+          thoughtSignature: `fixture-signature-${callId}`,
+        },
+      ]
     : [{ text: responseText(requestNumber) }];
   writeSseFrames(response, [
     {

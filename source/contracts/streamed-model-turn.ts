@@ -167,6 +167,8 @@ export type StreamedModelTurnInput =
       readonly name: string;
       readonly arguments: string;
       readonly toolType?: 'function' | 'custom';
+      /** Provider-native call metadata, including signatures required on replay. */
+      readonly providerMetadata?: StreamedModelProviderOptions;
     }
   | {
       readonly type: 'tool_result';
@@ -239,6 +241,7 @@ export type StreamedModelTurnEvent =
       readonly name: string;
       readonly arguments: string;
       readonly toolType?: 'function' | 'custom';
+      readonly providerMetadata?: StreamedModelProviderOptions;
     }
   | {
       readonly type: 'completion';
@@ -264,7 +267,13 @@ export type StreamedModelTurnOutput =
       readonly text: string;
       readonly providerMetadata?: StreamedModelProviderOptions;
     }
-  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      readonly type: 'tool_call';
+      readonly id: string;
+      readonly name: string;
+      readonly arguments: string;
+      readonly providerMetadata?: StreamedModelProviderOptions;
+    }
   | {
       /** Provider-native output item, carried untouched; see StreamedModelTurnInput. */
       readonly type: 'provider_opaque';

@@ -64,6 +64,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.backgroundCheckIn.intervalMs',
   ],
   'Provider credentials/configuration — security-sensitive, next client/request': [
+    'agent.openrouter.armorEnabled',
     'agent.openrouter.apiKey',
     'agent.openai.apiKey',
     'agent.openrouter.baseUrl',

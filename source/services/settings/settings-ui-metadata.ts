@@ -105,6 +105,8 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
     'Codex WebSocket timeout before the first response frame, in milliseconds',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout between response frames, in milliseconds',
+  [SETTING_KEYS.AGENT_OPENROUTER_ARMOR_ENABLED]:
+    'OpenRouter Armor beta: send conversation and tool calls to a decision model using default safety rules; keeps local approvals (true|false)',
   [SETTING_KEYS.AGENT_OPENROUTER_API_KEY]: 'OpenRouter API key',
   [SETTING_KEYS.AGENT_OPENROUTER_BASE_URL]: 'OpenRouter base URL',
   [SETTING_KEYS.AGENT_OPENROUTER_REFERRER]: 'OpenRouter HTTP Referer header',

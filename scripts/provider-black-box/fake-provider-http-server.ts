@@ -3,6 +3,9 @@ import type { FixtureEnvelopeV1, HttpRequestFrame } from './fixture-envelope.js'
 import { compareRecordedRequest } from './fixture-comparator.js';
 
 export type FakeProviderScenario =
+  | 'armor-blocked'
+  | 'armor-unavailable'
+  | 'armor-forbidden'
   | 'success'
   | 'final-only'
   | 'error'
@@ -60,6 +63,11 @@ export async function startFakeProviderHttpServer(options: {
       return;
     }
     const scenario = options.scenario!;
+    if (scenario === 'armor-forbidden') {
+      res.writeHead(403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Armor is unavailable under this privacy policy', code: 403 } }));
+      return;
+    }
     if (scenario === 'error') {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Injected provider failure' } }));
@@ -193,6 +201,40 @@ export function framesFor(
               },
             },
           ]),
+    ];
+  if (scenario === 'armor-blocked' || scenario === 'armor-unavailable')
+    return [
+      {
+        id: 'chatcmpl_armor',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content:
+                '<openrouter_armor_blocked>Tool call withheld; do not retry the same arguments.</openrouter_armor_blocked>',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      },
+      {
+        id: 'chatcmpl_armor',
+        choices: [],
+        safeguard_results: [
+          {
+            type: 'dangerous_tool_use',
+            status: {
+              type: 'available',
+              tool_uses: {
+                call_blocked:
+                  scenario === 'armor-blocked'
+                    ? { type: 'evaluated', outcome: 'flagged', explanation: '[Fixture rule]' }
+                    : { type: 'unavailable', reason: 'timeout' },
+              },
+            },
+          },
+        ],
+      },
     ];
   if (scenario === 'reasoning')
     return [

@@ -88,6 +88,114 @@ afterEach(async () => {
 });
 
 describe('provider boundary contracts through the registry', () => {
+  it('opts Armor in on each actual OpenRouter request and preserves other plugins and allowed tool calls', async () => {
+    server = await startFakeProviderHttpServer({ scenario: 'tool-fragments' });
+    const providerCase = providerCases.find((entry) => entry.registryId === 'openrouter')!;
+    const baseSettings = createSettings(providerCase);
+    let enabled = false;
+    const settings = {
+      ...baseSettings,
+      get: (key: string) => (key === 'agent.openrouter.armorEnabled' ? enabled : baseSettings.get(key as never)),
+    } as ISettingsService;
+    const model = await getProvider('openrouter')!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const request = requestFor(providerCase);
+    await collect(model.stream(request));
+    expect(server.requests[0]!.url).toBe('/chat/completions');
+    expect((server.requests[0]!.body as any).plugins).toBeUndefined();
+
+    enabled = true;
+    const events = await collect(
+      model.stream({
+        ...request,
+        providerOptions: {
+          ...request.providerOptions,
+          plugins: [{ id: 'response-healing' }, { id: 'armor', enabled: false, mode: 'audit', on_error: 'log' }],
+        },
+      }),
+    );
+    const body = server.requests[1]!.body as any;
+    expect(body.plugins).toEqual([
+      { id: 'response-healing' },
+      { id: 'armor', mode: 'enforce', on_error: 'block', output_mode: 'text', use_cc_style_default_rules: true },
+    ]);
+    assertRequestShape(providerCase, body);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'tool_call', name: 'fixture', arguments: '{"a":1}' }),
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'completion' });
+
+    enabled = false;
+    await collect(model.stream(request));
+    expect((server.requests[2]!.body as any).plugins).toBeUndefined();
+  });
+
+  it.each(['armor-blocked', 'armor-unavailable'] as const)(
+    'renders %s feedback as text, never a tool call, and replays it as assistant text',
+    async (scenario) => {
+      server = await startFakeProviderHttpServer({ scenario });
+      const providerCase = providerCases.find((entry) => entry.registryId === 'openrouter')!;
+      const baseSettings = createSettings(providerCase);
+      const settings = {
+        ...baseSettings,
+        get: (key: string) => (key === 'agent.openrouter.armorEnabled' ? true : baseSettings.get(key as never)),
+      } as ISettingsService;
+      const model = await getProvider('openrouter')!.createStreamedModel!(providerCase.model, {
+        settingsService: settings,
+        loggingService: quietLogging,
+      });
+      const events = await collect(model.stream(requestFor(providerCase)));
+      expect(events.filter((event) => event.type === 'tool_call')).toEqual([]);
+      const completion = events.find((event) => event.type === 'completion');
+      expect(completion).toBeDefined();
+      if (completion?.type !== 'completion') throw new Error('Missing completion');
+      expect(completion.output).toEqual([
+        { type: 'message', content: [{ type: 'text', text: expect.stringContaining('<openrouter_armor_blocked>') }] },
+      ]);
+      const feedback = completion.output[0];
+      if (feedback?.type !== 'message') throw new Error('Missing blocked feedback');
+      await collect(
+        model.stream({
+          ...requestFor(providerCase),
+          input: [...multiTurnFixture, { type: 'message', role: 'assistant', content: feedback.content }],
+        }),
+      );
+      const body = server.requests[1]!.body as any;
+      expect(body.messages.at(-1)).toMatchObject({
+        role: 'assistant',
+        content: expect.stringContaining('<openrouter_armor_blocked>'),
+      });
+      expect(body.messages.at(-1).tool_calls).toBeUndefined();
+      expect(body.plugins[0]).toMatchObject({ id: 'armor', mode: 'enforce', on_error: 'block' });
+    },
+  );
+
+  it('surfaces an Armor privacy-policy 403 without falling back to an unprotected request', async () => {
+    server = await startFakeProviderHttpServer({ scenario: 'armor-forbidden' });
+    const providerCase = providerCases.find((entry) => entry.registryId === 'openrouter')!;
+    const baseSettings = createSettings(providerCase);
+    const settings = {
+      ...baseSettings,
+      get: (key: string) => (key === 'agent.openrouter.armorEnabled' ? true : baseSettings.get(key as never)),
+    } as ISettingsService;
+    const model = await getProvider('openrouter')!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+      retryAttempts: 2,
+    });
+    const events: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const event of model.stream(requestFor(providerCase))) events.push(event);
+      })(),
+    ).rejects.toThrow('Armor is unavailable under this privacy policy');
+    expect(server.requests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect((server.requests[0]!.body as any).plugins[0]).toMatchObject({ id: 'armor', on_error: 'block' });
+  });
+
   it('keeps the built-in registry surface available', () => {
     for (const id of ['openai', 'openrouter']) {
       expect(getProvider(id)?.createStreamedModel, id).toBeTypeOf('function');

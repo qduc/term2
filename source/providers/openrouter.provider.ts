@@ -6,6 +6,7 @@ import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
+import type { ISettingsService } from '../services/service-interfaces.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 function createOpenRouterModel(deps: ProviderDeps, model: string) {
@@ -31,10 +32,38 @@ function createOpenRouterModel(deps: ProviderDeps, model: string) {
           loggingService,
           sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
         },
-        middlewares: [openRouterPreprocessingMiddleware],
+        middlewares: [openRouterPreprocessingMiddleware, createOpenRouterArmorMiddleware(settingsService)],
       }),
     }),
   });
+}
+
+// Apply at the wire boundary, on every request, including continuations/retries.
+// Do not allow per-call provider options to weaken the opted-in policy.
+function createOpenRouterArmorMiddleware(settingsService: ISettingsService): FetchMiddleware {
+  return async (ctx, next) => {
+    if (settingsService.get('agent.openrouter.armorEnabled') !== true) return next(ctx);
+    const url = ctx.url instanceof Request ? ctx.url.url : String(ctx.url);
+    if (!new URL(url).pathname.endsWith('/chat/completions') || typeof ctx.init?.body !== 'string') {
+      throw new Error('OpenRouter Armor requires a JSON Chat Completions request');
+    }
+    const body = JSON.parse(ctx.init.body);
+    if (!Array.isArray(body.messages) || (body.plugins !== undefined && !Array.isArray(body.plugins))) {
+      throw new Error('OpenRouter Armor requires messages and a valid plugins array');
+    }
+    body.plugins = [
+      ...(body.plugins ?? []).filter((plugin: { id?: string } | null) => plugin?.id !== 'armor'),
+      {
+        id: 'armor',
+        mode: 'enforce',
+        on_error: 'block',
+        output_mode: 'text',
+        use_cc_style_default_rules: true,
+      },
+    ];
+    ctx.init = { ...ctx.init, body: JSON.stringify(body) };
+    return next(ctx);
+  };
 }
 
 function sanitizeOpenRouterReasoningDetails(messages: any[]): void {

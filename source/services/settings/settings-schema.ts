@@ -191,6 +191,12 @@ const AgentSettingsObjectSchema = z.object({
       baseUrl: z.string().url().optional(),
       referrer: z.string().optional(),
       title: z.string().optional(),
+      armorEnabled: z
+        .boolean()
+        .default(false)
+        .describe(
+          'OpenRouter Armor beta: sends conversation and tool calls to an additional decision model; keeps local approvals',
+        ),
     })
     .optional(),
   openai: z
@@ -904,6 +910,7 @@ export const SETTING_KEYS = {
   AGENT_SESSION_ROLLOVER_ENABLED: 'agent.sessionRollover.enabled',
   AGENT_SESSION_ROLLOVER_MILESTONES: 'agent.sessionRollover.milestones',
   AGENT_SESSION_ROLLOVER_AUTO_BRIEF: 'agent.sessionRollover.autoBrief',
+  AGENT_OPENROUTER_ARMOR_ENABLED: 'agent.openrouter.armorEnabled',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -998,6 +1005,7 @@ export const SETTING_KEYS = {
 
 // Define which settings are modifiable at runtime
 export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
+  SETTING_KEYS.AGENT_OPENROUTER_ARMOR_ENABLED,
   'agent.modelSelection',
   SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
   SETTING_KEYS.AGENT_OPENAI_API_KEY,
@@ -1161,9 +1169,8 @@ export const DEFAULT_SETTINGS: SettingsData = {
     modelNicknames: {},
     disabledProviders: [],
     openrouter: {
-      // defaults empty; can be provided via env or config
-      // defaults empty; can be provided via env or config
-    } as any,
+      armorEnabled: false,
+    },
     openai: {
       // defaults empty; can be provided via env or config
     } as any,

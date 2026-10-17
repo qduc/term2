@@ -29,6 +29,9 @@ Usage:
 | `--list-models [search]` | — | Boolean / String | `false` | Print available models grouped by provider, filtered by an optional search term. |
 | `--refresh` | — | Boolean | `false` | With `--list-models`, bypass the model catalog cache and re-fetch from provider APIs. |
 | `--resume [id\|ls]` | `-R` | Boolean / String | `false` | Resume the last conversation, a specific ID, or list recent conversations (`ls`). |
+| `--goal <text>` | — | String | — | Set a durable session outcome (up to 2,000 characters). |
+| `--goal-criteria <text>` | — | String | — | Optional success criteria (up to 2,000 characters); requires `--goal`. |
+| `--control-socket[=<name>]` | — | Boolean / String | `false` | Enable a local control socket for the interactive TUI. |
 | `--fork` | — | Boolean | `false` | Fork the resumed conversation into a new session branch (requires `--resume`). |
 | `--help` | `-h` | Boolean | `false` | Show help message and exit. |
 | `--version` | `-v` | Boolean | `false` | Show version number and exit. |

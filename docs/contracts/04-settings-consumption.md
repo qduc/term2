@@ -61,11 +61,14 @@ changes, `/settings` command for user entry).
 - **Service:** `mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli)`
   (`settings-service.ts:157-180`); test `mergeSettings: cli > env > config >
   defaults precedence` (`settings-merger.test.ts:11-20`).
-- **Environment:** only the fields in `buildEnvOverrides()` are env-backed
-  (OpenRouter/OpenAI keys, `OPENROUTER_MODEL`, `LOG_LEVEL`,
-  `DISABLE_LOGGING`, `DEBUG_LOGGING`, `NODE_ENV`, `SHELL/COMSPEC`,
-  `LOG_FILE_OPERATIONS`, `DEBUG_BASH_TOOL`, Tavily/Exa/web-search)
-  (`settings-env.ts:15-67`).
+- **Environment:** startup overrides built by `buildEnvOverrides()` in
+  `settings-env.ts` include OpenRouter/OpenAI credentials and options, logging,
+  `NODE_ENV`, `SHELL/COMSPEC`, file-operation diagnostics, and Tavily, Exa,
+  Firecrawl, SearXNG, and web-search provider selection.
+  `TERM2_SUPERVISED=1` sets an 80,000-token request input ceiling, an 8,192-token
+  output allocation, and local compaction at 60,000 tokens through startup
+  overrides. It applies to interactive processes too and does not change
+  run-budget escalation or persist these values into the settings file.
 - **Role model override:** complete frontmatter pair > bound per-tier pool >
   complete main selection (`loadRoleDefinition`, `resolveAncillaryModelTier`).
   Reasoning independently falls back through tier effort, role effort,

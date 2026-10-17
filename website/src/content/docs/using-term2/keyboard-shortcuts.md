@@ -8,6 +8,7 @@ description: Complete reference of keyboard shortcuts in term2.
 | Shortcut | Context | Action |
 | :--- | :--- | :--- |
 | `Enter` | Composer (idle) | Submit prompt to model. |
+| `Shift + Enter` | Composer (idle) | Insert a newline in terminals that send a supported newline sequence (including the Alt+Enter sequence). |
 | `Enter` | Composer (active turn) | Steer the active turn in real time at the next request boundary. |
 | `Alt + Enter` / `Esc + Enter` | Composer (active turn) | Queue prompt to execute after the current turn completes. |
 | `@` | Composer | Open interactive file / path completion menu. |
@@ -20,7 +21,8 @@ description: Complete reference of keyboard shortcuts in term2.
 | `Shift + Tab` | Global / Composer | Toggle between Standard and Plan operating mode. |
 | `Escape` | Composer | First press shows an Escape hint; a second press clears typed text. With an empty composer during a turn, double Escape interrupts the turn. |
 | `Up` / `Down` | Composer (empty) | Navigate input history (or queued messages if any are pending). |
-| `Ctrl + C` | Global | Emergency exit with session usage summary. |
+| `Ctrl + C` | Global | Clear the draft first, or interrupt the active turn when the draft is empty. Press again within 2 seconds to exit with the usage summary. |
+| `Ctrl + \\` | Global | Exit immediately with the session usage summary. |
 
 ## Approval Prompt Shortcuts
 

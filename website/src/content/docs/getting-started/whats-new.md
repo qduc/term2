@@ -7,6 +7,34 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 0.32.2 - October 17, 2026
+
+- Gemini tool continuations preserve thought signatures during replay, and rate-limit retries honor supported provider delays within the retry policy's bounds.
+- Model filtering prioritizes whole-word matches and resets selection when results change.
+- Working indicators end tool steps when results arrive, show "Waiting for model", and count down retry backoff.
+- `run_code` tool entries include return-shape guidance, with declared return contracts required for scriptable tools.
+
+See the [0.32.2 changelog](https://github.com/qduc/term2/blob/v0.32.2/CHANGELOG.md) for details.
+
+## 0.32.1 - October 10, 2026
+
+- Codex sessions retain reusable WebSocket connections across turns.
+- Shift+Enter inserts a newline again in terminals that send the Alt+Enter sequence while idle.
+- Goal proposals show labelled outcome and success criteria, and background timers remain visible in narrow panels.
+
+See the [0.32.1 changelog](https://github.com/qduc/term2/blob/v0.32.1/CHANGELOG.md) for details.
+
+## 0.32.0 - October 8, 2026
+
+- Durable goals have an agent stop check, and a valid achieved check closes the goal when the turn ends.
+- Requests that cannot fit a known model context window pause before sending. Non-interactive context and budget pauses exit with code 2 and resume guidance.
+- The opt-in `contain` budget escalation pauses at exhaustion; `warn` remains the default. `--auto-approve` never grants more budget.
+- New installs enable local context compaction and use adaptive output allocation. Existing saved settings are retained: enable compaction explicitly and remove a saved `agent.maxOutputTokens` to opt into the adaptive cap.
+- One-time approvals are bound to the answered call, and interrupted tool outcomes are marked unobserved on resume.
+- `/retry-turn` regenerates the latest user turn from its original prompt.
+
+See the [0.32.0 changelog](https://github.com/qduc/term2/blob/v0.32.0/CHANGELOG.md), including upgrade and downgrade compatibility notes.
+
 ## 0.31.1 - October 4, 2026
 
 - Model selections retain their provider binding across settings, model menus, sessions, and subagent tier pools, so ambiguous model names no longer select the wrong provider.
@@ -41,4 +69,4 @@ This documentation site builds from `main`, so it can describe work ahead of the
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 
-For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.31.1, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.31.1...main).
+For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.32.2, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.32.2...main).

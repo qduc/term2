@@ -3,7 +3,7 @@ title: Sessions & Resumption
 description: Resuming, rewinding, forking, and inspecting conversation history.
 ---
 
-term2 persists every session using append-only event streams. This ensures work is never lost across terminal closes, network disconnects, or crashes.
+term2 persists sessions using append-only event streams. Saved conversation history supports resumption after a terminal closes or a process crashes; a tool interrupted before its outcome was recorded must be verified before retrying. Git checkouts and their worktrees share project-scoped session history.
 
 ## Resuming Sessions
 
@@ -54,8 +54,14 @@ term2 provides granular control over conversation history:
 - **Interactive Rewind Picker (`/rewind`)**: Opens a menu detailing previous turns and modified files so you can inspect discards before confirming.
 - **Undo (`/undo`)**: An alias for `/rewind edit`. Discards subsequent turns and places the selected user prompt back into the input composer for editing.
 - **Retry Turn (`/retry`)**: An alias for `/rewind resend`. Discards subsequent turns and immediately re-submits the last prompt to the model.
-- **Retry Failed Turn (`/retry-turn`)**: Retries only the last turn that the provider failed to complete (for example, after a network error or rate limit).
-- **Retry Tool (`/retry-tool`)**: Re-runs the last failed or timed-out tool call without discarding any conversation context.
+- **Regenerate Turn (`/retry-turn`)**: Regenerates the entire latest user turn from its original prompt, replacing the old turn in the transcript.
+- **Retry Tool (`/retry-tool`)**: Retries the last tool call by rewinding conversation history to that call. Check for effects that already occurred before retrying.
+
+## Durable Session Goals
+
+Set an outcome with `--goal` at launch or `/goal set <outcome>` in chat; optional criteria use `--goal-criteria` at launch or `--criteria` with `/goal set`. `/goal` shows the current goal, `/goal achieved` closes it, and `/goal abandon` abandons it. Goals persist across resume and rollover, and `/clear` retains them.
+
+While a goal is active, the agent reports a `goal_check` before ending a turn. A valid `achieved` check that ends the turn closes the goal; blocked, deferred, or incomplete checks keep it active. Reminders are bounded, so an unresolved stop-check notice does not mean the goal was completed.
 
 ## Handoff (`/handoff`)
 

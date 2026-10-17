@@ -15,15 +15,15 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/lite`** | — | Toggle lightweight terminal mode (minimal prompt, session-only context). |
 | **`/mentor`** | — | Toggle collaborative Mentor mode with dual-model consultation. |
 | **`/orchestrator`** | — | Toggle prompt-guided Orchestrator mode (delegates all tool-backed work). |
-| **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `plan`, `lite`, `mentor`, `orchestrator`). |
+| **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `plan`, `lite`, `pair`, `mentor`, `orchestrator`). |
 | **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
 | **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Rewind conversation history with interactive discard inspection. |
 | **`/undo`** | — | Alias for `/rewind edit` (places target turn back in composer for revision). |
 | **`/retry`** | — | Alias for `/rewind resend` (immediately resends the last user turn). |
-| **`/retry-turn`** | — | Retry the last turn that the provider failed to complete (e.g. after network errors). |
-| **`/retry-tool`** | — | Re-execute the last failed or timed-out tool call. |
+| **`/retry-turn`** | — | Regenerate the latest user turn from its original prompt. |
+| **`/retry-tool`** | — | Retry the last tool call by rewinding to it. |
 | **`/copy`** | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
 | **`/usage`** | — | Show token usage and model cost metrics for the current session. |
 | **`/resume`** | `[conversation-id\|ls]` | Resume a saved conversation or browse conversations. |
@@ -32,6 +32,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/mcp`** | — | Show configured MCP servers and their connection state. |
 | **`/skills`** | `[skill-name]` | Activate a skill for the next request. |
 | **`/settings`** | `[key] [value]` | View or modify runtime configuration settings. |
+| **`/goal`** | `[show\|set <outcome> [--criteria <text>]\|achieved\|abandon]` | Inspect or update the durable session goal; `/clear` retains it. |
 | **`/clear`** | — | Clear current conversation history and start a fresh session. |
 | **`/quit`** | — | Exit term2 session cleanly. |
 
@@ -63,11 +64,11 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 ### `/retry-turn`
 - **Usage**: `/retry-turn`
-- Retries the last assistant turn when a provider error, network timeout, or rate limit prevented the response from completing.
+- Regenerates the entire latest user turn from its original prompt, replacing the old turn in the transcript.
 
 ### `/retry-tool`
 - **Usage**: `/retry-tool`
-- Re-executes only the last failed or timed-out tool call without losing conversation context or discarding subsequent messages.
+- Retries the last tool call by rewinding the transcript to it. Verify any effects that may already have occurred before retrying.
 
 ### `/copy [N]`
 - **Usage**: `/copy`, `/copy 2`

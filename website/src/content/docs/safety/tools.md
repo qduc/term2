@@ -7,7 +7,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 
 ## Filesystem Tools
 
-- **`read_file`**: Reads file contents with support for line-number ranges (`offset` and `limit`) and size bounds.
+- **`read_file`**: Reads file contents with support for line-number ranges (`start_line` and `end_line`, inclusive and 1-based) and size bounds.
 - **`apply_patch`**: Applies unified patches to files with preview and self-healing syntax recovery.
 - **`search_replace`**: Performs precise contiguous block replacements within a file.
 - **`create_file`**: Creates a new file in the workspace (or overwrites an existing file if explicitly approved).
@@ -21,7 +21,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **`shell`**: Executes shell commands within the active sandbox policy. Commands that read or write outside approved boundaries prompt for explicit confirmation.
 - **Background Shell Jobs**: Long-running commands can run detached in the background:
   - `get_shell_job`: Check running state, exit codes, and output byte counts.
-  - `monitor_shell_job`: Stream or fetch buffered output logs.
+  - `monitor_shell_job`: Attach an output watch that delivers matching lines as notifications.
   - `cancel_shell_job`: Terminate background jobs gracefully or forcefully.
   - `cancel_shell_monitor`: Stop an output watch.
 
@@ -32,7 +32,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 - **Tool Approvals in Code**: Nested read-only tool calls run automatically, while actions requiring approval prompt the user before continuing.
 - **Script Isolation**: Scripts execute in an isolated environment without access to process globals or host credentials.
 - **JSON Inputs**: Pass structured data separately from the script source with the `inputs` parameter; values are available through the script's `inputs` binding.
-- **Result Contracts**: Scriptable tools expose a declarable return shape through `describe`, so a workflow can inspect the expected result before calling a tool.
+- **Result Contracts**: Every scriptable tool declares its scripted return contract. Compact entries include return-shape guidance, and `tools.describe` exposes the full contract before invocation.
 - **Nested Trace**: Tool calls made by a script are shown in the conversation and remain subject to the active approval policy.
 
 ## User & Advisory Tools
@@ -43,5 +43,5 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 
 ## Web Research
 
-- **`web_search`**: Search the web through the configured Tavily or Exa provider.
+- **`web_search`**: Search the web through the configured Tavily, Exa, Firecrawl, or SearXNG provider.
 - **`web_fetch`**: Fetch and extract content from a URL.

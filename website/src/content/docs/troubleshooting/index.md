@@ -64,7 +64,7 @@ OAuth tokens are stored separately under `envPaths('term2').config` (Linux examp
 
 **Explanation**: Starting term2 in your root home directory exposes your entire user tree (downloads, desktop, documents, hidden configs) to file searches and commands.
 
-**Fix**: Navigate to a specific project directory (`cd ~/projects/my-app && term2`) before launching. If you only need to run administrative commands in your home directory, start with `term2 --lite`.
+**Fix**: Navigate to a specific project directory (`cd ~/projects/my-app && term2`) before launching. For text-only questions without filesystem or shell tools, use `term2 --lite`.
 
 ### 4. Non-Interactive Tool Execution Fails
 
@@ -87,3 +87,11 @@ term2 --auto-approve "Fix the typo in README.md"
   ps aux | grep "term2 serve"
   ```
 - Kill the process holding the `--listen` port or socket path. The server removes a stale Unix socket itself and refuses to unlink a path that is not a socket; inspect or move a conflicting non-socket path instead.
+
+### 6. Context Limit Pauses After Upgrading
+
+Requests are checked against the model catalog's context window before sending, reserving output space and an estimation margin. `agent.maxRequestInputTokens` can lower the input ceiling, not raise the model's capacity.
+
+New installations enable local context compaction in auto mode, but upgrades retain saved settings. If your settings contain `agent.contextCompaction.enabled: false`, enable it to opt in. Earlier releases saved `agent.maxOutputTokens: 32000`; that remains an explicit allocation. Lower it for small-window models, or remove the key from `settings.json` to use the adaptive cap (at most a quarter of a known context window and 32,000 tokens).
+
+Non-interactive context pauses exit with code 2 and a resume hint. Review the limit before resuming; do not blindly repeat a command that may already have changed files.

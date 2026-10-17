@@ -35,7 +35,9 @@ async runTurn(turn):
 Ordinarily, no tool calls means the turn ends. Tool execution may wait for a required
 post-execution decision. If existing completion policy requests another model
 round, `finishTurn` returns `continue` to this loop; it cannot secretly start another loop.
-Errors and Stop exit through the turn owner's cleanup boundary.
+The same runtime loop owns session recovery: a policy callback permits recovery or throws, and the loop prepares the next attempt. Stop exits through its cleanup boundary.
+
+`SessionTurnAdapter` prepares session input, projects events and supplies decisions. An approval answer resolves a promise awaited by the runtime; it does not launch another stream. `TurnCoordinator` owns admission, public status and hooks. `TurnWorkflow` has been removed.
 
 Each feature has a place around this flow:
 
@@ -46,7 +48,7 @@ Each feature has a place around this flow:
 | Prompts, modes, skills and tool availability | Conversation submission preparation and `askModel` request snapshot | Assemble instructions and the request's tool snapshot; execution still checks tool authority. |
 | Context limits and compaction | `prepareRequest` | Build a valid request from accepted history, applying context policy before dispatch. |
 | Streaming and provider protocols | `askModel` | Publish incremental output, retain committed facts, and translate the provider's response into the loop's common form. |
-| Retry | Inside `askModel`, under retry policy | Retry a safe request attempt using the same turn budget; uncertain tool work is never replayed by request retry. |
+| Retry and recovery | Safe request retry inside `askModel`; session recovery in `runTurn` | Existing policies authorize retry using the same turn budget; the runtime owns repetition, and uncertain effects are not blindly replayed. |
 | Approval and ask-user | `executeTools` | Wait at the relevant tool, then continue the same tool plan. |
 | Parallel tools | `executeTools` | Dispatch eligible independent calls together; settle their results in the required order before the next model request. |
 | Background tools and child tasks | `executeTools`, backed by owned executions | Return a job handle when backgrounding is accepted; retain the running job and deliver eligible results as later input. |
@@ -72,6 +74,6 @@ turn, maps current owners, and specifies what must disappear during migration.
 The [v2 experiment](../../experiments/conversation-actor/v2/DESIGN.md) remains
 historical evidence about ownership and cancellation rules. Its event-driven actor
 is not the production central implementation. The
-[implementation evidence](../research/conversation-loop-runtime/WORK.md) records
+[implementation evidence](../research/single-turn-owner/WORK.md) records
 verification and its limits. Source readability can be inspected directly; a
 human comprehension improvement has not been measured.

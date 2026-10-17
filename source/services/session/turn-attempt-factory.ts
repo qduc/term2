@@ -1,6 +1,4 @@
-import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
@@ -16,9 +14,6 @@ import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 export type InitialTurnRunOptions = {
   skipUserMessage?: boolean;
   replayFromHistory?: boolean;
-  resumeState?: ContinuationHandle;
-  resumePreviousResponseId?: string | null;
-  abortedContext?: AbortedApprovalContext | null;
   token?: number;
   retries?: any;
   maxModelRetries?: number;
@@ -59,10 +54,8 @@ export class TurnAttemptFactory {
       }
     }
 
-    const token = this.#resolveToken(options);
-    if (token === null) {
-      return { kind: 'stale' };
-    }
+    const token = options.token ?? this.deps.generationGuard.capture();
+    if (!this.deps.generationGuard.isCurrent(token)) return { kind: 'stale' };
 
     return {
       kind: 'created',
@@ -81,15 +74,6 @@ export class TurnAttemptFactory {
         },
       }),
     };
-  }
-
-  #resolveToken(options: InitialTurnRunOptions): number | null {
-    if (!options.abortedContext) {
-      return options.token ?? this.deps.generationGuard.capture();
-    }
-
-    const token = options.abortedContext.token ?? 0;
-    return this.deps.generationGuard.isCurrent(token) ? token : null;
   }
 
   #normalizeRetryCounts(retries: any): RetryCounts {

@@ -232,6 +232,21 @@ export interface ApplicationRunLoopOptions {
   readonly onNormalStop?: (history: readonly ProviderInputItem[], agent: ApplicationAgent) => NormalStopDecision;
 }
 
+/** Bounded session operations. Only runTurn decides when execution advances. */
+export interface ApplicationTurnSession {
+  prepare(signal: AbortSignal): Promise<
+    | {
+        agent: ApplicationAgent;
+        input: ProviderInput;
+        options: ApplicationRunLoopOptions;
+      }
+    | undefined
+  >;
+  consume(stream: AgentStream): Promise<void>;
+  interrupted(): Promise<ApplicationRunLoopOptions>;
+  recover(error: unknown): Promise<boolean>;
+}
+
 /** A normal-stop policy's answer; see `ApplicationRunLoopOptions.onNormalStop`. */
 export type NormalStopDecision =
   | {
@@ -383,6 +398,9 @@ type RunState = {
 
 type ModelToolCall = Extract<StreamedModelTurnEvent, { type: 'tool_call' }>;
 type RunContext = {
+  session?: ApplicationTurnSession;
+  turnSignal?: AbortSignal;
+  observation?: Promise<void>;
   state: RunState;
   stream: AgentStream & { finalOutput?: string };
   queue: EventQueue;
@@ -460,6 +478,7 @@ export class ApplicationRunLoop {
   readonly #contextCompactionSessionState: ContextCompactionSessionState;
   readonly #turnInputMailbox: TurnInputMailbox;
   #activeAbortController: AbortController | null = null;
+  #activeTurnController: AbortController | null = null;
   #segmentGeneration = 0;
   /** The run whose budget an out-of-band grant applies to, held across a pause. */
   #activeRunBudgetState: RunState | undefined;
@@ -515,6 +534,7 @@ export class ApplicationRunLoop {
   }
 
   abort(): void {
+    this.#activeTurnController?.abort();
     this.abortSegment();
     // An aborted turn will not resume, so nothing may keep waiting on it.
     this.#turnInputMailbox.abortTurn();
@@ -633,12 +653,10 @@ export class ApplicationRunLoop {
    * the tool results of the round that was in flight when they typed.
    */
   startStream(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions = {}): AgentStream {
-    // Without a declared turn scope, a fresh stream is the only evidence this
-    // loop gets that a new turn has begun: anything still waiting belonged to
-    // the previous one and must not leak into work the user did not aim it at.
-    // With one, this call may equally be the same turn restarting after a
-    // retry, which the loop cannot tell apart — so `openTurn`/`closeTurn` own
-    // the decision instead.
+    return this.#run(this.#createState(agent, input, options), options);
+  }
+
+  #createState(agent: ApplicationAgent, input: ProviderInput, options: ApplicationRunLoopOptions): RunState {
     this.#turnInputMailbox.startStream();
     const state: RunState = {
       agent,
@@ -708,7 +726,18 @@ export class ApplicationRunLoop {
       state.approvalDecisionInterruption = interruption;
       state.approvalMessage = approvalOptions?.message;
     };
-    return this.#run(state, options);
+    return state;
+  }
+
+  /** Root turns use the same loop; session operations never dispatch a run. */
+  async runTurn(session: ApplicationTurnSession): Promise<void> {
+    const controller = new AbortController();
+    this.#activeTurnController = controller;
+    try {
+      await this.#runTurn(undefined, session, controller.signal);
+    } finally {
+      if (this.#activeTurnController === controller) this.#activeTurnController = null;
+    }
   }
 
   continueRunStream(handle: ContinuationHandle, options: ApplicationRunLoopOptions = {}): AgentStream {
@@ -717,6 +746,11 @@ export class ApplicationRunLoop {
       throw new Error('Invalid application continuation state');
     }
     if (!state.live?.resume) throw new Error('Application turn is not waiting for continuation');
+    this.#refreshContinuation(state, options);
+    return this.#run(state, options);
+  }
+
+  #refreshContinuation(state: RunState, options: ApplicationRunLoopOptions): void {
     if (!state.runBudget && options.runBudget) {
       state.runBudget = new RunBudget(options.runBudget);
     }
@@ -762,10 +796,9 @@ export class ApplicationRunLoop {
     if (options.sessionId !== undefined) state.sessionId = options.sessionId;
     if (options.turnId !== undefined) state.turnId = options.turnId;
     if (options.hookScope !== undefined) state.hookScope = options.hookScope;
-    return this.#run(state, options);
   }
 
-  #run(state: RunState, options: ApplicationRunLoopOptions): AgentStream {
+  #createView(state: RunState, options: ApplicationRunLoopOptions): RunContext {
     const queue = new EventQueue();
     const segmentGeneration = ++this.#segmentGeneration;
     if (!state.live) this.abortSegment();
@@ -837,29 +870,46 @@ export class ApplicationRunLoop {
       resolveSegment,
       rejectSegment,
     };
+    this.#activeRunBudgetState = state.runBudget ? state : undefined;
+    return current;
+  }
+
+  #run(state: RunState, options: ApplicationRunLoopOptions): AgentStream {
+    const current = this.#createView(state, options);
     if (state.live) {
       const resume = state.live.resume!;
       Object.assign(state.live, current, { resume: undefined });
-      state.runBudget?.resume();
       resume();
     } else {
-      const context: RunContext = current;
-      state.live = context;
-      void this.#runTurn(context).then(
-        (value) => this.#settleSegment(context, value),
-        (error) => this.#settleSegment(context, undefined, error),
+      state.live = current;
+      void this.#runTurn(current).then(
+        (value) => this.#settleSegment(current, value),
+        (error) => this.#settleSegment(current, undefined, error),
       );
     }
-    this.#activeRunBudgetState = state.runBudget ? state : undefined;
-    return stream;
+    return current.stream;
+  }
+
+  #observe(context: RunContext): void {
+    context.observation = context.session!.consume(context.stream);
+    void context.observation.catch(() => undefined);
+  }
+
+  async #completeTurn(context: RunContext): Promise<unknown> {
+    const value = finish(context.stream, context.state, context.queue);
+    if (context.session) {
+      this.#settleSegment(context, value);
+      await context.observation;
+    }
+    return value;
   }
 
   /** Complete an event view; a pause leaves the owning async task alive. */
-  #settleSegment(context: RunContext, value: unknown, error?: unknown): void {
+  #settleSegment(context: RunContext, value: unknown, error?: unknown, waiting = false): void {
     const { state, stream, queue, generation } = context;
     state.runBudget?.pause();
     const cancelled = error instanceof Error && error.name === 'AbortError';
-    const paused = context.resume !== undefined && !cancelled && error === undefined;
+    const paused = (waiting || context.resume !== undefined) && !cancelled && error === undefined;
     if (error !== undefined) {
       stream.cancelled = cancelled;
       queue.close(error);
@@ -884,6 +934,16 @@ export class ApplicationRunLoop {
 
   /** Publish a paused view and suspend here until its owner reconnects or cancels. */
   async #waitForDecision(context: RunContext): Promise<void> {
+    if (context.session) {
+      this.#settleSegment(context, finish(context.stream, context.state, context.queue), undefined, true);
+      await context.observation;
+      const options = await context.session.interrupted();
+      this.#assertLive(context);
+      this.#refreshContinuation(context.state, options);
+      Object.assign(context, this.#createView(context.state, { ...options, signal: context.turnSignal }));
+      this.#observe(context);
+      return;
+    }
     const { state, stream, queue, options } = context;
     await new Promise<void>((resolve, reject) => {
       const signal = options.signal;
@@ -938,16 +998,40 @@ export class ApplicationRunLoop {
   }
 
   /** The single model → tools → model cycle, shared by root and nested turns. */
-  async #runTurn(context: RunContext): Promise<unknown> {
+  async #runTurn(context?: RunContext, session?: ApplicationTurnSession, turnSignal?: AbortSignal): Promise<unknown> {
     while (true) {
-      this.#assertLive(context);
-      if (await this.#prepareRequest(context)) return finish(context.stream, context.state, context.queue);
-      const response = await this.#askModel(context);
-      this.#assertLive(context);
-      const calls = this.#recordResponse(context, response);
-      if (await this.#executeTools(context, response, calls))
-        return finish(context.stream, context.state, context.queue);
-      if (calls.length === 0 && this.#finishTurn(context)) return finish(context.stream, context.state, context.queue);
+      try {
+        turnSignal?.throwIfAborted();
+        if (!context) {
+          const start = await session!.prepare(turnSignal!);
+          turnSignal?.throwIfAborted();
+          if (!start) return;
+          const options = { ...start.options, signal: turnSignal };
+          const state = this.#createState(start.agent, start.input, options);
+          this.#refreshContinuation(state, options);
+          context = this.#createView(state, options);
+          context.session = session;
+          context.turnSignal = turnSignal;
+          state.live = context;
+          this.#observe(context);
+        }
+        this.#assertLive(context);
+        if (await this.#prepareRequest(context)) return await this.#completeTurn(context);
+        const response = await this.#askModel(context);
+        this.#assertLive(context);
+        const calls = this.#recordResponse(context, response);
+        if (await this.#executeTools(context, response, calls)) return await this.#completeTurn(context);
+        if (calls.length === 0 && this.#finishTurn(context)) return await this.#completeTurn(context);
+      } catch (error) {
+        if (!session) throw error;
+        if (context) {
+          this.#settleSegment(context, undefined, error);
+          await context.observation?.catch(() => undefined);
+        }
+        turnSignal?.throwIfAborted();
+        if (!(await session.recover(error))) return;
+        context = undefined;
+      }
     }
   }
 

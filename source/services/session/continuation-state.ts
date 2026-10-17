@@ -46,7 +46,7 @@ export type ContinuationInit =
 
 /**
  * Projection and recovery facts for one live operation. This object does not
- * encode a waiting position: TurnWorkflow retains that position on its async
+ * encode a waiting position: ApplicationRunLoop retains that position on its async
  * stack, including across manual decisions. The handle addresses that task;
  * emitted ids, usage and journal snapshots reconcile its public stream views.
  */

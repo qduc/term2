@@ -1,0 +1,213 @@
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/single-turn-owner
+
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"39.676606339s","expected":39677} 188ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"59.999s","expected":59999} 49ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"60s","expected":60000} 28ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"60.001s"} 14ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"120s"} 9ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"-1s","expected":500} 26ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryDelay":"not-a-duration","expected":500} 24ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"message":"Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.","expected":9593} 16ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > honors bounded Google quota delays through the real SDK: {"retryAfter":"2.5","expected":2500} 19ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > keeps the built-in registry surface available 0ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > pilot Chat Completions provider replays a synthetic chat-completions fixture through the registry 38ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenAI Responses capture replays tool continuation through the built-in registry 43ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenRouter capture replays tool continuation through the built-in registry 200ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenCode Chat Completions capture replays tool continuation through the registry 17ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real OpenCode Anthropic capture replays tool continuation through the registry 46ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > real Google capture replays tool continuation through the registry 12ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' succeeds with one authoritative completion 12ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' succeeds with one authoritative completion 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' succeeds with one authoritative completion 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' succeeds with one authoritative completion 4ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' succeeds with one authoritative completion 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' preserves request roles, tools, reasoning, and provider options 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' preserves request roles, tools, reasoning, and provider options 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' preserves request roles, tools, reasoning, and provider options 5ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' preserves request roles, tools, reasoning, and provider options 6ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' preserves request roles, tools, reasoning, and provider options 21ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenAI Responses HTTP' propagates a provider error instead of fabricating completion 4ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Chat Completions' propagates a provider error instead of fabricating completion 9ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Anthropic' propagates a provider error instead of fabricating completion 19ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'Google' propagates a provider error instead of fabricating completion 3ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > 'OpenRouter' propagates a provider error instead of fabricating completion 4ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > replays OpenAI-compatible native reasoning_content through the registry tool continuation boundary 7ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary 7ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > reassembles Chat Completions tool fragments with the authoritative tool ID 3ms
+ ✓ scripts/provider-black-box/provider-contract.test.ts > provider boundary contracts through the registry > retries an in-band 502 that follows trivial whitespace and succeeds 7ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.native-error does not become empty success 3375ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'http' preserves two-turn response chaining 4040ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.early-close does not become empty success 3442ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'websocket' preserves two-turn response chaining 4149ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Built-in OpenRouter' executes two user turns and approval continuations through its registry route 5842ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openai-http.incomplete does not become empty success 3728ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'http' preserves two-turn response chaining 5190ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.native-error does not become empty success 2945ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime openai' executes two user turns and approval continuations through its registry route 5952ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.early-close does not become empty success 3365ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'websocket' preserves two-turn response chaining 5478ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > codex-http.incomplete does not become empty success 2966ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime openai-compatible' executes two user turns and approval continuations through its registry route 5060ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.native-error does not become empty success 3153ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime llama.cpp' executes two user turns and approval continuations through its registry route 5157ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > codex websocket replays full history when the completed response socket is replaced 6266ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.early-close does not become empty success 2549ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > openrouter-http.incomplete does not become empty success 3188ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime Anthropic' executes two user turns and approval continuations through its registry route 5589ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.native-error does not become empty success 2611ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > codex websocket preserves completed tool pairs when the producing socket is replaced 6503ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.early-close does not become empty success 2691ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'Runtime Google' executes two user turns and approval continuations through its registry route 4167ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-openai-compatible-chat.incomplete does not become empty success 2422ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > session_search through run_code completes canonical fallback in the shipped CLI 5449ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'OpenCode Chat route' executes two user turns and approval continuations through its registry route 4027ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.native-error does not become empty success 2564ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > openai-websocket.retained-connection keeps two chained turns on one retained connection 3739ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.early-close does not become empty success 2680ms
+ ✓ scripts/provider-black-box/provider-session-stateless.blackbox.ts > assembled stateless provider lifecycle black-box > 'OpenCode Anthropic route' executes two user turns and approval continuations through its registry route 4161ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > passes bounded retry settings to isolated root removal 2ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reuses one isolated lease across PTY child launches and relaunches 281ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > waits for composer idle through the harness file, not a prompt glyph 124ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > gives waitForIdleInput the shared PTY ceiling when no timeout is passed 165ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > fails waitForIdleInput fast when the child exits without publishing idle 78ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-anthropic-messages.incomplete does not become empty success 2179ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > writes through the PTY and waits for visible state before exit 73ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > waits for application-owned composer acknowledgement before writing Enter 0ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > isolates HOME and Windows USERPROFILE for child processes 66ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > does not inherit the host CI marker into an interactive PTY child 61ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > awaits termination after a bounded timeout 133ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > codex-websocket.retained-connection keeps two chained turns on one retained connection 4210ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reaps a timed-out one-shot child tree 1032ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.native-error does not become empty success 1812ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reaps a live PTY child when the owning process is signalled without cleanup 648ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > retries concurrent workspace cleanup after a transient owned failure 5ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > rejects new work while cleanup is active and after a failed attempt 67ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > reclaims the root when preparation fails 2ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > preserves persistent acquisition cleanup errors 1ms
+ ✓ scripts/provider-black-box/provider-test-harness.test.ts > provider black-box harness > runs callback cleanup even when the callback fails 1ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.early-close does not become empty success 2646ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'http' resumes an approved tool from its producing response 3335ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider HTTP resilience > runtime-google-generate-content.incomplete does not become empty success 2479ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'websocket' resumes an approved tool from its producing response 3551ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > openai-http.reasoning preserves response-side reasoning and final output 2897ms
+ ✓ scripts/provider-black-box/provider-crash-window.blackbox.ts > crash after tool effect but before the tool result > keeps the executed call in the resumed provider history without repeating the effect 7022ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > codex-http.reasoning preserves response-side reasoning and final output 2525ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes ordinary useful work with fresh safety defaults and keeps a resumable session 2260ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'http' resumes an approved tool from its producing response 4957ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > openrouter-http.reasoning preserves response-side reasoning and final output 2506ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > admits input beyond the old universal ceiling when known capacity permits 2403ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-openai-compatible-chat.reasoning preserves response-side reasoning and final output 1881ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > pauses before dispatch on a known small model with fresh defaults 1985ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-anthropic-messages.reasoning preserves response-side reasoning and final output 2134ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=undefined and retains a locator 2605ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'websocket' resumes an approved tool from its producing response 4146ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'http' resumes a rejected tool exactly once 2962ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider response-side reasoning > runtime-google-generate-content.reasoning preserves response-side reasoning and final output 2254ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > enforces an explicit smaller input ceiling with escalation=warn and retains a locator 2273ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'openai' 'websocket' resumes a rejected tool exactly once 2964ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.native-error fails without fabricated completion 2157ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.incomplete fails without fabricated completion 2109ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'http' resumes a rejected tool exactly once 3960ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > parks an unattended critical budget under explicit contain without auto-granting and retains completed tool evidence 4960ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > openai-websocket.abnormal-close fails without fabricated completion 1864ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > retains unknown-model work after structured provider overflow without retrying 1946ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.native-error fails without fabricated completion 2099ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > 'codex' 'websocket' resumes a rejected tool exactly once 3724ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.incomplete fails without fabricated completion 1537ms
+ ✓ scripts/provider-black-box/provider-ordinary-safety.blackbox.ts > completes a tiny small-model request with real fresh and reloaded settings 3224ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts request secrets and canonicalizes IDs inside response payloads 6ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts plaintext model reasoning while preserving response protocol structure 1ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > does not flag relative provider URL paths and redacts opaque thought signatures 1ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts Google thought text while preserving the thought part shape 0ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts Anthropic thinking deltas while preserving event structure 0ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts chat reasoning deltas and provider fingerprints 0ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > redacts provider identifiers in response headers and canonicalizes request IDs 1ms
+ ✓ scripts/provider-black-box/fixture-sanitizer.test.ts > fixture sanitizer > canonicalizes Responses reasoning and function item IDs and removes encrypted content 1ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider WebSocket resilience > codex-websocket.abnormal-close fails without fabricated completion 1712ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > validates ordered sends and replays receives 34ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a reordered send 6ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > does not pass vacuously when no session ever connects 50ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a non-WebSocket fixture before starting a vacuous replay server 1ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a empty turn without a meaningful exchange 1ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a receive-only turn without a meaningful exchange 1ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a send-only turn without a meaningful exchange 0ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects a turn containing non-WebSocket frames instead of filtering them 1ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > fails validation when a client closes before the replay cursor completes 54ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic success scenario with ordered, non-empty frames 4ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic native-error scenario with ordered, non-empty frames 3ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic incomplete scenario with ordered, non-empty frames 2ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > drives the deterministic abnormal-close scenario with ordered, non-empty frames 2ms
+ ✓ scripts/provider-black-box/fake-provider-websocket-server.test.ts > fixture WebSocket replay > rejects an outbound ordering mismatch in a generated scenario 2ms
+ ↓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned WebSocket response-side reasoning > openai-websocket.reasoning preserves response-side reasoning and final output 1259ms [openai-websocket: no application-owned response traffic was persisted]
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses lifecycle through the shipped CLI > OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification 3185ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned WebSocket response-side reasoning > codex-websocket.reasoning preserves response-side reasoning and final output 1464ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'http' surfaces native terminal failure 1644ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'websocket' surfaces native terminal failure 1427ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider restart continuity > resumes a completed conversation from full history, then establishes fresh chaining 3224ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'http' surfaces native terminal failure 2659ms
+ ✓ scripts/provider-black-box/conversation-loop.blackbox.ts > edits and retracts pending steering while one turn crosses two manual approvals, then handles release and cancellation without duplicate fallback 7667ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned provider restart continuity > settles an interrupted approval-pending tool into the resumed history without an orphan or stale response id 2963ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'websocket' surfaces native terminal failure 2549ms
+ ✓ scripts/provider-black-box/nested-hide.blackbox.ts > P1 nested hide result chain > approves a hidden nested editor through the scripted adapter and preserves result-chain identity 209ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'http' rejects an incomplete stream 1699ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned context compaction black-box lifecycle > persists a compaction item and sends it after save/resume 3446ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs a bounded handoff through the real supervisor, private pipe, and built CLI 1507ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'websocket' rejects an incomplete stream 1647ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > rejects excessive input before the shipped CLI makes any provider request 1375ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned context compaction black-box lifecycle > sends the next Codex turn after native compaction 2012ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > applies the supervised output profile on the actual wire while allowing useful work 1255ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'http' rejects an incomplete stream 2665ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > runs the shipped CLI through a runtime provider and captures a complete request 1387ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned context compaction black-box lifecycle > refuses a switched-provider request when native compaction coverage is unknown 3228ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'websocket' rejects an incomplete stream 2896ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'http' stops runaway streamed output 1643ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > application-owned context compaction black-box lifecycle > does not re-execute a tool after its turn is replaced by compaction 3418ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' 'websocket' stops runaway streamed output 1461ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > Codex WebSocket corrupt-history recovery > codex-websocket.orphan-chain-recovery (standard model) sends paired full history after a stale resume chain 1615ms
+ ✓ scripts/provider-black-box/provider-session-resilience.blackbox.ts > Codex WebSocket corrupt-history recovery > codex-websocket.orphan-chain-recovery (Responses Lite (gpt-5.6-luna)) sends paired full history after a stale resume chain 1443ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'http' stops runaway streamed output 2488ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' 'websocket' stops runaway streamed output 2402ms
+ ✓ scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > loads a TypeScript user hook and delivers status.change in non-interactive mode 1351ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'openai' websocket rejects an abnormal close without a fabricated completion 1432ms
+ ✓ scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > loads a TypeScript user hook and delivers status.change in interactive mode 1627ms
+ ✓ scripts/provider-black-box/public-hooks.blackbox.ts > public hooks through the packaged CLI > runs TypeScript user hooks before trusted project hooks in deterministic order 1366ms
+ ✓ scripts/provider-black-box/provider-session-responses.blackbox.ts > application-owned Responses terminal failure lifecycle > 'codex' websocket rejects an abnormal close without a fabricated completion 2542ms
+ ✓ scripts/provider-black-box/openai-base-url.test.ts > OpenAI endpoint redirection > proves the installed OpenAI client honors OPENAI_BASE_URL without fetch rewriting 145ms
+ ✓ scripts/provider-black-box/openai-base-url.test.ts > OpenAI endpoint redirection > routes the application-owned OpenAI provider to OPENAI_BASE_URL 24ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > declares every target route with transport, lifecycle, and required scenarios 6ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > unit-tests the accounting primitive with representative execution entries 2ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > accounts the real lifecycle ledgers without importing their test modules 0ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > fails when a row has neither an executed scenario nor a documented exclusion 0ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > accepts an exclusion only when it carries a reason and evidence 1ms
+ ✓ scripts/provider-black-box/provider-capability-matrix.test.ts > provider capability matrix > rejects an execution that does not belong to the row required-scenario set 0ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > compares requests semantically and ignores transport/SDK churn fields 2ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > compares JSON tool arguments independent of whitespace 0ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > reports a canonicalized request mutation 0ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > treats a redacted expected header value as matching any actual value 0ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > ignores SDK platform headers that vary across recording environments 0ms
+ ✓ scripts/provider-black-box/fixture-comparator.test.ts > still compares nonvolatile recorded headers 0ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > prints terminal-only response text exactly once 1227ms
+ ✓ scripts/provider-black-box/provider-cli.blackbox.ts > assembled provider CLI black-box > reports provider errors without fabricating successful output 13162ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > validates all frame kinds and cross-frame placeholders 2ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > parses JSON envelopes 0ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects placeholder collisions 1ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects unmapped placeholder references 0ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > accepts ordinary angle-bracketed text in frames 0ms
+ ✓ scripts/provider-black-box/fixture-envelope.test.ts > fixture envelope > rejects non-monotonic frame order 0ms
+ ✓ scripts/provider-black-box/fixture-drift.test.ts > fixture transport SDK drift > fails loudly when a fixture major/minor differs from the installed SDK 10ms
+ ✓ scripts/provider-black-box/fixture-recorder.test.ts > fixture recorder > parses logical SSE events, including multiline data and DONE 2ms
+ ✓ scripts/provider-black-box/fixture-recorder.test.ts > fixture recorder > captures request, response head, and response events without consuming response 22ms
+ ✓ scripts/provider-black-box/fixture-security.test.ts > committed fixture security > rejects common secret forms 2ms
+ ✓ scripts/provider-black-box/fixture-security.test.ts > committed fixture security > does not flag benign prose or URLs as high-entropy secrets 0ms
+ ✓ scripts/provider-black-box/fixture-security.test.ts > committed fixture security > contains no likely secrets in committed fixture JSON 39ms
+ ✓ scripts/provider-black-box/fake-provider-http-server.fixture.test.ts > fixture HTTP replay > replays a recorded response and validates the outbound request 38ms
+ ✓ scripts/provider-black-box/fake-provider-http-server.fixture.test.ts > fixture HTTP replay > exposes a canonical diff for a request mutation 6ms
+ ✓ scripts/provider-black-box/fixture-self-validation.test.ts > record-from-fake self-validation (plan D4) > records from the fake provider, replays to identity, and writes an honestly-labeled envelope 56ms
+ ✓ scripts/provider-black-box/provider-record-security.test.ts > provider recorder credential isolation > refuses an Anthropic credential for the OpenCode provider 682ms
+ ✓ scripts/provider-black-box/turn-decisions.blackbox.ts > resumes an answered question once and settles a cancelled question before accepting the next turn 4668ms
+
+ Test Files  24 passed (24)
+      Tests  204 passed | 1 skipped (205)
+   Start at  22:06:17
+   Duration  110.67s (transform 3.94s, setup 0ms, import 7.73s, tests 317.80s, environment 5ms)

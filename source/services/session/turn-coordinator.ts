@@ -6,7 +6,7 @@ import { TurnStatusMachine, type TurnCommand, type TurnLease, type TurnOutcome }
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { getToolInfoFromInterruption } from '../interruption-info.js';
-import type { TurnWorkflow } from './turn-workflow.js';
+import type { SessionTurnAdapter } from './session-turn-adapter.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
 import { randomUUID } from 'node:crypto';
@@ -19,19 +19,12 @@ import type { AutomaticMemoryCanary } from '../memory/automatic-memory-canary.js
 
 export type TurnStartOptions = Pick<
   InitialTurnRunOptions,
-  | 'skipUserMessage'
-  | 'replayFromHistory'
-  | 'retries'
-  | 'maxModelRetries'
-  | 'signal'
-  | 'resumeState'
-  | 'resumePreviousResponseId'
-  | 'inputSurgeApproval'
+  'skipUserMessage' | 'replayFromHistory' | 'retries' | 'maxModelRetries' | 'signal' | 'inputSurgeApproval'
 > & { origin?: 'user' | 'queued'; modelOnlyInput?: boolean };
 
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
-  turnWorkflow: TurnWorkflow;
+  turnAdapter: SessionTurnAdapter;
   approvalFlow: ApprovalFlowCoordinator;
   providerContinuity: ProviderContinuity;
   shellAutoApproval: ShellAutoApprovalResolver;
@@ -66,15 +59,15 @@ export class TurnCoordinator {
     // Before the hooks, the input preparation and the provider's own start-up:
     // a message steered during any of that belongs to this turn, and only this
     // method knows the turn exists that early.
-    this.deps.turnWorkflow.openTurn?.();
+    this.deps.turnAdapter.openTurn?.();
     const turnId = this.deps.hookLifecycle && this.deps.hookEvents ? randomUUID() : undefined;
     this.#activeTurnId = turnId;
     this.#activeTurnStartedAt = turnId ? Date.now() : 0;
-    this.deps.turnWorkflow.setHookTurnId?.(turnId);
+    this.deps.turnAdapter.setHookTurnId?.(turnId);
     if (turnId) await this.#emitTurnStart(input, options.origin ?? 'user', turnId);
     let processed = false;
     try {
-      const forwarded = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
+      const forwarded = yield* this.#forwardOwned(this.deps.turnAdapter.executeInitial(input, options), lease);
       const turnOutcome = forwarded.outcome;
       processed = true;
 
@@ -121,11 +114,11 @@ export class TurnCoordinator {
     }
     this.#recordManualShellDecision(answer);
     const lease = this.deps.statusMachine.beginContinuation();
-    this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
+    this.deps.turnAdapter.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
       const forwarded = yield* this.#forwardOwned(
-        this.deps.turnWorkflow.executeContinuation(
+        this.deps.turnAdapter.executeContinuation(
           this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason, stopAfterApprovalResolution),
         ),
         lease,
@@ -156,10 +149,10 @@ export class TurnCoordinator {
       throw new Error('No pending approval to continue.');
     }
     const lease = this.deps.statusMachine.beginContinuation();
-    this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
+    this.deps.turnAdapter.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
-      const forwarded = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
+      const forwarded = yield* this.#forwardOwned(this.deps.turnAdapter.continuePostExecute(), lease);
       const turnOutcome = forwarded.outcome;
       processed = true;
       await this.#emitTurnEnd(turnOutcome);
@@ -179,11 +172,11 @@ export class TurnCoordinator {
   }
 
   abort(): Promise<void> {
-    const completion = this.deps.turnWorkflow.abortLiveRun();
+    const completion = this.deps.turnAdapter.abortLiveRun();
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
     this.deps.providerContinuity.clear();
-    this.deps.turnWorkflow.closeTurn?.();
+    this.deps.turnAdapter.closeTurn?.();
     void this.#emitTurnEnd({ kind: 'failed' });
     return completion;
   }
@@ -202,17 +195,17 @@ export class TurnCoordinator {
    * likely to be typing in — the approval pause is the visible gap in a turn.
    */
   steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
-    return this.deps.turnWorkflow.steer(items, options);
+    return this.deps.turnAdapter.steer(items, options);
   }
 
   /** Drop a still-waiting steer. False when it was already admitted. */
   retractSteer(id: string): boolean {
-    return this.deps.turnWorkflow.retractSteer(id);
+    return this.deps.turnAdapter.retractSteer(id);
   }
 
   /** Replace a waiting steer's items in place, keeping its position. */
   editSteer(id: string, items: readonly ProviderInputItem[]): boolean {
-    return this.deps.turnWorkflow.editSteer(id, items);
+    return this.deps.turnAdapter.editSteer(id, items);
   }
 
   // ── Private helpers ──────────────────────────────────────────
@@ -264,7 +257,7 @@ export class TurnCoordinator {
    * coming.
    */
   #closeTurnIfSettled(): void {
-    if (this.deps.statusMachine.is('idle')) this.deps.turnWorkflow.closeTurn?.();
+    if (this.deps.statusMachine.is('idle')) this.deps.turnAdapter.closeTurn?.();
   }
 
   /** Records the human's shell/bash approval so later auto-approval evaluations can weigh it as precedent. */
@@ -289,17 +282,21 @@ export class TurnCoordinator {
     lease: TurnLease,
   ): AsyncGenerator<ConversationEvent, ForwardedTurnOutcome, void> {
     let sawAuthoritativeTerminal = false;
-    while (true) {
-      const next = await events.next();
-      if (!this.deps.statusMachine.owns(lease)) {
-        await events.return({ kind: 'stale' });
-        return { outcome: { kind: 'stale' }, sawAuthoritativeTerminal };
+    try {
+      while (true) {
+        const next = await events.next();
+        if (!this.deps.statusMachine.owns(lease)) {
+          await events.return({ kind: 'stale' });
+          return { outcome: { kind: 'stale' }, sawAuthoritativeTerminal };
+        }
+        if (next.done) return { outcome: next.value, sawAuthoritativeTerminal };
+        if (next.value.type === 'final' || next.value.type === 'approval_required' || next.value.type === 'error') {
+          sawAuthoritativeTerminal = true;
+        }
+        yield next.value;
       }
-      if (next.done) return { outcome: next.value, sawAuthoritativeTerminal };
-      if (next.value.type === 'final' || next.value.type === 'approval_required' || next.value.type === 'error') {
-        sawAuthoritativeTerminal = true;
-      }
-      yield next.value;
+    } finally {
+      await events.return({ kind: 'stale' });
     }
   }
 
@@ -358,13 +355,13 @@ export class TurnCoordinator {
       if (shouldClear) {
         this.#activeTurnId = undefined;
         this.#activeTurnStartedAt = 0;
-        this.deps.turnWorkflow.setHookTurnId?.(undefined);
+        this.deps.turnAdapter.setHookTurnId?.(undefined);
       }
       await this.#emit(event);
     } else if (shouldClear) {
       this.#activeTurnId = undefined;
       this.#activeTurnStartedAt = 0;
-      this.deps.turnWorkflow.setHookTurnId?.(undefined);
+      this.deps.turnAdapter.setHookTurnId?.(undefined);
     }
   }
 

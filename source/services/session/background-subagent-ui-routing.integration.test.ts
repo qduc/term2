@@ -3,6 +3,7 @@ import type { Message } from '../../types/message.js';
 import { splitStaticHistory } from '../../components/message/MessageList.js';
 import { createConversationEventHandler } from '../../utils/conversation/conversation-event-handler.js';
 import { createStreamingState } from '../../utils/conversation/conversation-utils.js';
+import type { ConversationTurnSession } from '../conversation-agent-client.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createConversationRuntime } from '../conversation/conversation-runtime-factory.js';
@@ -78,6 +79,9 @@ it('projects background lifecycle without making the foreground message history 
   });
 
   const client = {
+    async runTurn(session: ConversationTurnSession) {
+      if (await session.prepare(new AbortController().signal)) await session.consume(await client.startStream(''));
+    },
     async startStream() {
       await bridge.runSubagentAsync({ role: 'explorer', task: 'inspect the project' });
       return createAgentStream({

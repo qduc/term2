@@ -52,7 +52,7 @@ import type { ClassifiedFailure } from '../retry/retry-contracts.js';
 import { GenerationGuard } from '../generation-guard.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
-import { TurnWorkflow } from './turn-workflow.js';
+import { SessionTurnAdapter } from './session-turn-adapter.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
@@ -174,7 +174,7 @@ export type SessionRuntimeInternals = {
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
   turnAccumulator: TurnItemAccumulator;
-  turnWorkflow: TurnWorkflow;
+  turnAdapter: SessionTurnAdapter;
   freshStartRetriesAllowed: boolean;
   /** Stable assistant-output journal created during composition. */
   journal: AssistantTurnJournal;
@@ -913,7 +913,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     provider: agentClient?.getProvider?.(),
   });
 
-  const turnWorkflow = new TurnWorkflow({
+  const turnAdapter = new SessionTurnAdapter({
     agentClient,
     logger,
     sessionId: identity,
@@ -943,7 +943,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const turnCoordinator = new TurnCoordinator({
     statusMachine: appState.statusMachine,
-    turnWorkflow,
+    turnAdapter,
     approvalFlow,
     providerContinuity,
     shellAutoApproval,
@@ -1009,7 +1009,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     disposed = true;
     backgroundCheckInScheduler.dispose();
     getMethod<[scheduler: undefined], void>(agentClient, 'setBackgroundCheckInScheduler')?.call(agentClient, undefined);
-    turnWorkflow.abortLiveRun();
+    turnAdapter.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
@@ -1273,7 +1273,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryClassifier,
     retryEventPresenter,
     turnAccumulator: resolvedTurnAccumulator,
-    turnWorkflow,
+    turnAdapter,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     journal,
     resolvedAskUserAnswerSink,

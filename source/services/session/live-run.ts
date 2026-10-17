@@ -1,3 +1,4 @@
+import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 
 export type LiveRunState<Event, Result> =
@@ -6,13 +7,14 @@ export type LiveRunState<Event, Result> =
       kind: 'post_execute_approval_required';
       entries: readonly import('./post-execute-pending-registry.js').PostExecutePendingEntry[];
     }
+  | { kind: 'approval_required'; terminal: ConversationTerminal }
   | { kind: 'completed'; result: Result }
   | { kind: 'cancelled' };
 
 /**
- * One foreground stream's ownership boundary. The consumer is started exactly
- * once and remains alive while an application post-execute gate holds a tool
- * promise. Callers only observe buffered events, gates, or its terminal result.
+ * The observation mailbox for one foreground turn. Its consumer starts once
+ * and stays alive through approval and post-execute waits. Callers observe
+ * buffered events, pending decisions, or the runtime's terminal result.
  */
 export class LiveRun<Event, Result> {
   readonly #events: Event[] = [];
@@ -22,6 +24,7 @@ export class LiveRun<Event, Result> {
   #error: unknown;
   #finished = false;
   #cancelled = false;
+  #approval: ConversationTerminal | undefined;
 
   constructor(
     readonly runId: string,
@@ -29,7 +32,10 @@ export class LiveRun<Event, Result> {
     consume: (emit: (event: Event) => void) => Promise<Result>,
   ) {
     this.#completion = Promise.resolve()
-      .then(() => consume((event) => this.#emit(event)))
+      .then(() => {
+        if (this.#cancelled) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+        return consume((event) => this.#emit(event));
+      })
       .then(
         (result) => {
           if (this.#cancelled) return result;
@@ -65,6 +71,7 @@ export class LiveRun<Event, Result> {
       if (this.#error !== undefined) throw this.#error;
       if (this.#finished) return { kind: 'completed', result: this.#result as Result };
 
+      if (this.#approval) return { kind: 'approval_required', terminal: this.#approval };
       const entries = this.pending.entriesForRun(this.runId);
       if (entries.length > 0) return { kind: 'post_execute_approval_required', entries };
       if (this.pending.snapshot().closed) throw new Error('Post-execute live run closed');
@@ -79,6 +86,16 @@ export class LiveRun<Event, Result> {
         pendingChange.unsubscribe();
       }
     }
+  }
+
+  pause(terminal: ConversationTerminal): void {
+    this.#approval = terminal;
+    this.#changed();
+  }
+
+  resume(): void {
+    this.#approval = undefined;
+    this.#changed();
   }
 
   #emit(event: Event): void {

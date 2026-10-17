@@ -25,7 +25,7 @@ export const sessionRolloverParameters = z
 
 export function createSessionRolloverToolDefinition(
   requestRollover: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome,
-): ToolDefinition<typeof sessionRolloverParameters> {
+): ToolDefinition<typeof sessionRolloverParameters, 'session_rollover'> {
   return {
     name: 'session_rollover',
     description:

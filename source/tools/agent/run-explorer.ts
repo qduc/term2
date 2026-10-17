@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
@@ -36,11 +36,12 @@ const formatRunExplorerCommandMessage: FormatCommandMessage = (item, index, tool
   ];
 };
 
-export function createRunExplorerToolDefinition(runExplorer: ExplorerRunner): ToolDefinition {
+export function createRunExplorerToolDefinition(runExplorer: ExplorerRunner): ScriptedToolDefinition {
   return {
     name: 'run_explorer',
     description:
       'Start a read-only explorer subagent to collect evidence for one bounded question. The explorer sees none of your context and returns an evidence report, not conclusions. Independent calls may run in parallel.',
+    scriptedReturnSchema: z.string(),
     parameters: runExplorerSchema,
     parallelSafe: () => true,
     needsApproval: () => false,

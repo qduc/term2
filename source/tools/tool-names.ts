@@ -12,3 +12,26 @@ export const TOOL_NAME_MEMORY_SEARCH = 'memory_search';
 export const TOOL_NAME_MEMORY_CREATE = 'memory_create';
 export const TOOL_NAME_MEMORY_UPDATE = 'memory_update';
 export const TOOL_NAME_MEMORY_DELETE = 'memory_delete';
+
+/**
+ * Tool names policy withholds from `run_code` scripts.
+ *
+ * The union is the compile-time half of the withholding decision; the runtime
+ * half is `RUN_CODE_PROHIBITED_TOOLS` in
+ * `tools/system/run-code/run-code-runtime.ts`, which is built from this list
+ * and fails to compile if it gains a name the union does not have. Registry
+ * types reference the union so a tool definition cannot claim to be withheld
+ * under a name that is not actually withheld.
+ */
+export type ProhibitedToolName =
+  | 'ask_user'
+  | 'run_subagent'
+  | 'run_agent_workflow'
+  | 'run_code'
+  | 'ask_mentor'
+  | 'session_rollover'
+  | 'goal_check'
+  | 'shell'
+  | 'bash'
+  | 'enter_worktree'
+  | 'exit_worktree';

@@ -4,7 +4,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import util from 'util';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   createBaseMessage,
   getCallIdFromItem,
@@ -17,6 +17,7 @@ import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
 import { isScriptedToolCall } from '../../utils/output/bound-tool-result.js';
 import {
+  DeclarationKind,
   DeclEntry,
   ImportEntry,
   ExportEntry,
@@ -122,15 +123,78 @@ const RELATION_DISPLAY_ORDER: RelationToken[] = [
   'same_directory',
 ];
 
+const relationTokens = [
+  'imports_target',
+  'imported_by_target',
+  'barrel_export',
+  'likely_test',
+  'likely_source_for_test',
+  'same_directory',
+  'package_entry',
+  'config_reference',
+] as const satisfies readonly RelationToken[];
+
+const declarationKinds = [
+  'function',
+  'async function',
+  'class',
+  'interface',
+  'type',
+  'enum',
+  'const',
+  'let',
+  'var',
+  'method',
+  'unknown',
+] as const satisfies readonly DeclarationKind[];
+
+/**
+ * The exact value a script receives. Successful searches return a typed
+ * envelope; unavailable tooling, an unsupported language, and an unsafe symbol
+ * still return the prose line the direct lane shows.
+ */
+const codeContextSearchScriptedReturnSchema = z.union([
+  z
+    .object({
+      queryType: z.literal('related'),
+      path: z.string(),
+      results: z.array(z.object({ filePath: z.string(), tokens: z.array(z.enum(relationTokens)) }).strict()),
+      truncated: z.boolean(),
+      partial: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      queryType: z.literal('symbol'),
+      symbol: z.string(),
+      matches: z.array(
+        z
+          .object({
+            name: z.string(),
+            kind: z.enum(declarationKinds),
+            line: z.number(),
+            exported: z.boolean(),
+            filePath: z.string(),
+          })
+          .strict(),
+      ),
+      truncated: z.boolean(),
+      partial: z.boolean(),
+    })
+    .strict(),
+  z.string(),
+]);
+
 export const createReadCodeOutlineToolDefinition = (
   deps: { executionContext?: ExecutionContext; settingsService?: ISettingsService } = {},
-): ToolDefinition<typeof readCodeOutlineParametersSchema> => {
+): ScriptedToolDefinition<typeof readCodeOutlineParametersSchema> => {
   const { executionContext, settingsService } = deps;
   return {
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     scriptedReturnShape:
       'string: formatted code outline of the target file, "WARNING target_too_large", or an empty-outline note; operational failures (e.g. missing file) reject so handle with try/catch or Promise.allSettled',
+    scriptedReturnSchema: z.string(),
     parameters: readCodeOutlineParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,
@@ -194,13 +258,14 @@ export const createCodeContextSearchToolDefinition = (
     /** Overrides the host ripgrep probe so tests can pin either search lane. */
     hasRipgrep?: () => Promise<boolean>;
   } = {},
-): ToolDefinition<typeof codeContextSearchParametersSchema> => {
+): ScriptedToolDefinition<typeof codeContextSearchParametersSchema> => {
   const { executionContext, globAvailable = true, settingsService, hasRipgrep } = deps;
   return {
     name: 'code_context_search',
     scriptedReturnShape:
       "{ queryType: 'symbol'|'related', matches|results: object[], truncated: boolean, partial: boolean }; operational failures reject so handle with try/catch or Promise.allSettled",
     description: buildCodeContextSearchDescription(globAvailable),
+    scriptedReturnSchema: codeContextSearchScriptedReturnSchema,
     parameters: codeContextSearchParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,

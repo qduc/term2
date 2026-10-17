@@ -1,7 +1,7 @@
 import type { ISettingsService } from '../service-interfaces.js';
 import { FileMemoryStore } from './memory-store.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { AnyScriptedToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
 import { projectScopeKey } from '../../utils/project-scope.js';
 import path from 'node:path';
@@ -12,7 +12,7 @@ export type MemoryCapabilitySubject = { kind: 'main' } | { kind: 'subagent'; rol
 
 export type MemoryCapability = {
   access: MemoryAccess;
-  tools: ToolDefinition[];
+  tools: AnyScriptedToolDefinition[];
   guidance: string;
   context: string;
 };

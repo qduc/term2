@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -72,7 +72,7 @@ export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, 
 export const createWebFetchToolDefinition = (deps: {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
-}): ToolDefinition<typeof webFetchSchema> => {
+}): ScriptedToolDefinition<typeof webFetchSchema> => {
   const { loggingService } = deps;
 
   return {
@@ -80,6 +80,7 @@ export const createWebFetchToolDefinition = (deps: {
     description: WEB_FETCH_DESCRIPTION,
     scriptedReturnShape:
       'string: "Title: \u2026\nURL: \u2026" plus page markdown and truncation/continuation notes; "Error: \u2026" on failure',
+    scriptedReturnSchema: z.string(),
     parameters: webFetchSchema,
     parallelSafe: true,
     needsApproval: () => false,

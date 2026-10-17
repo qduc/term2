@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import path from 'path';
-import type { ToolDefinition } from '../types.js';
+import type { DirectToolDefinition, ToolDefinition } from '../types.js';
 import type { ExecutionContext } from '../../services/execution-context.js';
 import type { GitWorktree } from '../../services/workspace/parse-worktree-list.js';
 import { listGitWorktrees, type ListWorktrees } from '../../services/workspace/worktree-inventory.js';
@@ -57,12 +57,12 @@ function busyMessage(action: string, jobs: RunningJob[]): string {
 }
 
 export function createWorktreeToolDefinitions(dependencies: WorktreeToolDependencies): {
-  enter: ToolDefinition<typeof enterWorktreeSchema>;
-  exit: ToolDefinition<typeof exitWorktreeSchema>;
+  enter: DirectToolDefinition<'enter_worktree'>;
+  exit: DirectToolDefinition<'exit_worktree'>;
 } {
   const { executionContext, listWorktrees = listGitWorktrees, getRunningJobs } = dependencies;
 
-  const enter: ToolDefinition<typeof enterWorktreeSchema> = {
+  const enter: ToolDefinition<typeof enterWorktreeSchema, 'enter_worktree'> = {
     name: 'enter_worktree',
     description: ENTER_WORKTREE_DESCRIPTION,
     parameters: enterWorktreeSchema,
@@ -149,7 +149,7 @@ export function createWorktreeToolDefinitions(dependencies: WorktreeToolDependen
     },
   };
 
-  const exit: ToolDefinition<typeof exitWorktreeSchema> = {
+  const exit: ToolDefinition<typeof exitWorktreeSchema, 'exit_worktree'> = {
     name: 'exit_worktree',
     description: EXIT_WORKTREE_DESCRIPTION,
     parameters: exitWorktreeSchema,

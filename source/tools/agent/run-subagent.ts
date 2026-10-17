@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { DirectToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -465,7 +465,7 @@ export function createRunSubagentToolDefinition(
   callbacks:
     | RunSubagentToolCallbacks
     | ((params: ForegroundRunSubagentParams, context?: unknown, details?: unknown) => Promise<NestedSubagentResult>),
-): ToolDefinition {
+): DirectToolDefinition<'run_subagent'> {
   // Keep the factory's direct-test call shape temporarily compatible. The
   // model-facing schema always requires execution; only legacy direct callers
   // bypass schema normalization and take this foreground fallback.

@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import { homedir } from 'node:os';
 import util from 'util';
 import { trimOutput } from '../../utils/output/output-trim.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
@@ -186,7 +186,7 @@ export const createGrepToolDefinition = (
     /** Overrides the host ripgrep probe so tests can pin either search lane. */
     hasRipgrep?: () => Promise<boolean>;
   } = {},
-): ToolDefinition<typeof searchParametersSchema> => {
+): ScriptedToolDefinition<typeof searchParametersSchema> => {
   const {
     executionContext,
     orchestratorMode = false,
@@ -202,6 +202,7 @@ export const createGrepToolDefinition = (
     description: buildGrepDescription(globAvailable, orchestratorMode),
     scriptedReturnShape:
       'string: newline-delimited "path:line: text" match lines; "No matches found." when none; a trailing "Note:" line when the result was capped',
+    scriptedReturnSchema: z.string(),
     parameters: searchParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,

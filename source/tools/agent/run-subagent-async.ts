@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, ToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -263,7 +263,7 @@ export function createGetSubagentResultToolDefinition(
     context?: unknown,
     details?: unknown,
   ) => SubagentRunStatus | SubagentRunStatus[],
-): ToolDefinition<typeof getSubagentResultSchema> {
+): ScriptedToolDefinition<typeof getSubagentResultSchema> {
   return {
     name: 'get_subagent_result',
     scriptedReturnShape:
@@ -273,6 +273,7 @@ export function createGetSubagentResultToolDefinition(
       'Provide the runId returned by that background launch. Active background runs are refused rather than awaited. ' +
       'When a run is still active, end the current turn and wait for its completion notification instead of calling this tool again. ' +
       'The completion notification already inlines the full result, so you normally will not need this tool at all; use it only if you need to re-fetch a result you already saw.',
+    scriptedReturnSchema: z.string(),
     parameters: getSubagentResultSchema,
     parallelSafe: true,
     needsApproval: () => false,
@@ -419,7 +420,7 @@ export function createGetSubagentStatusToolDefinition(
     details?: unknown,
   ) => SubagentRunStatus | SubagentRunStatus[],
   now: () => number = Date.now,
-): ToolDefinition<typeof getSubagentStatusSchema> {
+): ScriptedToolDefinition<typeof getSubagentStatusSchema> {
   return {
     name: 'get_subagent_status',
     scriptedReturnShape:
@@ -430,6 +431,7 @@ export function createGetSubagentStatusToolDefinition(
       'Returns status, elapsed, liveness evidence, last tool, and tool counts only — never the final report or diff evidence. ' +
       'For a finished or settled run, the completion notification inlines the full result; inside run_code, use tools.get_subagent_result(...) only to re-fetch one you already saw. ' +
       'This call never blocks and never awaits a run.',
+    scriptedReturnSchema: z.string(),
     parameters: getSubagentStatusSchema,
     parallelSafe: true,
     needsApproval: () => false,
@@ -510,7 +512,7 @@ export const formatCancelRunCommandMessage: FormatCommandMessage = (item, index,
 /** Parent-only, non-blocking control channel for an active async execution run. */
 export function createSendMessageToolDefinition(
   sendMessage: (params: SendMessageParams) => SendMessageAcknowledgement,
-): ToolDefinition<typeof sendMessageSchema> {
+): ScriptedToolDefinition<typeof sendMessageSchema> {
   return {
     name: 'send_message',
     scriptedReturnShape:
@@ -523,6 +525,7 @@ export function createSendMessageToolDefinition(
       'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
       'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: inside run_code, answer it with tools.send_message(...) or use tools.cancel_run(...). ' +
       'The mentor role does not support steering. Inside run_code, use tools.cancel_run(...) to stop a run instead of sending a correction that must not continue.',
+    scriptedReturnSchema: z.string(),
     parameters: sendMessageSchema,
     needsApproval: () => false,
     execute: (params) => JSON.stringify(sendMessage(params)),
@@ -533,7 +536,7 @@ export function createSendMessageToolDefinition(
 /** Parent-only, non-blocking request for two-phase async run cancellation. */
 export function createCancelRunToolDefinition(
   cancelRun: (params: CancelRunParams) => CancelRunAcknowledgement,
-): ToolDefinition<typeof cancelRunSchema> {
+): ScriptedToolDefinition<typeof cancelRunSchema> {
   return {
     name: 'cancel_run',
     scriptedReturnShape:
@@ -543,6 +546,7 @@ export function createCancelRunToolDefinition(
       'It returns cancelling immediately; the runner later settles through the normal completion path with truthful partial work, tool, diff, and validation evidence. ' +
       'Do not immediately call tools.get_subagent_result(...) inside run_code after this acknowledgement; the completion notification inlines the full result. ' +
       'Inside run_code, use tools.send_message(...) to steer productive execution; use tools.cancel_run(...) when the run should stop.',
+    scriptedReturnSchema: z.string(),
     parameters: cancelRunSchema,
     needsApproval: () => false,
     execute: (params) => JSON.stringify(cancelRun(params)),

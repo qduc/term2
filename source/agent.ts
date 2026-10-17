@@ -34,7 +34,7 @@ import {
 } from './tools/agent/configure-task-check-in.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
-import type { AnyToolDefinition, RequestSnapshot, ToolRegistry } from './tools/types.js';
+import type { RequestSnapshot, RegistryToolDefinition, ToolRegistry } from './tools/types.js';
 import type {
   NestedSubagentResult,
   SubagentResult,
@@ -479,7 +479,7 @@ export const getAgentDefinition = (
     readOnly,
     allowUnsandboxed: deps.allowUnsandboxed,
   });
-  const tools: AnyToolDefinition[] = [];
+  const tools: RegistryToolDefinition[] = [];
   if (hasCapability('shell')) tools.push(shellTool);
   if (hasCapability('web')) {
     tools.push(

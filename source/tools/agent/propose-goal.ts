@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../tool-names.js';
 import { createDurableGoal } from '../../services/conversation/durable-goal.js';
 import type { DurableGoal } from '../../services/logging/conversation-log-events.js';
@@ -58,11 +58,14 @@ export const formatProposeGoalCommandMessage: FormatCommandMessage = (item, inde
   ];
 };
 
-export function createProposeGoalToolDefinition(deps: ProposeGoalDeps): ToolDefinition<typeof proposeGoalSchema> {
+export function createProposeGoalToolDefinition(
+  deps: ProposeGoalDeps,
+): ScriptedToolDefinition<typeof proposeGoalSchema> {
   const isEligible = () => deps.getGoal() === undefined && !deps.hasPriorProposal();
   return {
     name: TOOL_NAME_PROPOSE_GOAL,
     description: PROPOSE_GOAL_DESCRIPTION,
+    scriptedReturnSchema: z.string(),
     parameters: proposeGoalSchema,
     // Eligibility is checked before prompting: an ineligible proposal must not
     // reach the user's approval surface at all.

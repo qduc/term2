@@ -1,4 +1,5 @@
 import type { z, ZodTypeAny } from 'zod';
+import type { ProhibitedToolName } from './tool-names.js';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 import type { DeniedReadMetadata, PostExecuteDecision } from '../contracts/conversation.js';
 import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
@@ -121,8 +122,8 @@ export interface PostExecutePauseCapability {
  * schema>`) or the {@link ToolDefinition} conditional alias, which resolves to
  * this form for concrete schema type arguments.
  */
-export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
-  name: string;
+export interface SchemaToolDefinition<TSchema extends ZodTypeAny, TName extends string = string> {
+  name: TName;
   description: string;
   parameters: TSchema;
   /** Canonical runtime schema preserved when provider substitution replaces `parameters`. */
@@ -193,7 +194,49 @@ export function isZodToolParameterSchema(schema: unknown): schema is ZodTypeAny 
  * The application-owned tool contract. A schema is always the source of truth:
  * executor and approval parameters derive from it and results are `unknown`.
  */
-export type ToolDefinition<TSchema extends ZodTypeAny = ZodTypeAny> = SchemaToolDefinition<TSchema>;
+export type ToolDefinition<
+  TSchema extends ZodTypeAny = ZodTypeAny,
+  TName extends string = string,
+> = SchemaToolDefinition<TSchema, TName>;
+
+/**
+ * A tool definition a `run_code` script can reach.
+ *
+ * The script-visible return contract is required rather than optional: a script
+ * call validates the post-normalization value against `scriptedReturnSchema`
+ * before it crosses into the script realm, and the same schema is what the
+ * script catalogue renders as the tool's return type. A tool that scripts can
+ * call therefore cannot be registered without declaring what it returns.
+ */
+export type ScriptedToolDefinition<
+  TSchema extends ZodTypeAny = ZodTypeAny,
+  TName extends string = string,
+> = SchemaToolDefinition<TSchema, TName> & { scriptedReturnSchema: ZodTypeAny };
+
+/**
+ * A tool definition withheld from scripts by policy.
+ *
+ * The name must be one of {@link ProhibitedToolName}, so a newly added tool
+ * cannot avoid declaring a scripted contract by claiming to be withheld.
+ */
+export type DirectToolDefinition<TName extends ProhibitedToolName = ProhibitedToolName> = AnyToolDefinition & {
+  name: TName;
+};
+
+/**
+ * Erased form of {@link ScriptedToolDefinition} for assembled registries.
+ *
+ * A registry holds definitions with different schema-derived parameter types in
+ * one list, so the scripted lane is erased the same way {@link AnyToolDefinition}
+ * erases the model-facing lane. The return contract stays required, so a tool
+ * cannot be registered as script-exposed without declaring what it returns.
+ */
+export interface AnyScriptedToolDefinition extends AnyToolDefinition {
+  scriptedReturnSchema: ZodTypeAny;
+}
+
+/** One slot in an assembled tool registry: script-exposed with a contract, or withheld by policy. */
+export type RegistryToolDefinition = AnyScriptedToolDefinition | DirectToolDefinition;
 
 /**
  * Explicitly erased entry for heterogeneous registries. The union honestly

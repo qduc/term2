@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import type { ToolDefinition } from '../types.js';
+import { z, type ZodTypeAny } from 'zod';
+import type { AnyScriptedToolDefinition, ScriptedToolDefinition } from '../types.js';
 import {
   MAX_SESSION_BROWSER_CHARS,
   type Kind,
@@ -20,7 +20,118 @@ const limit = z.number().int().min(1).max(50).optional();
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
 const sessionKind = z.enum(['user', 'assistant', 'reasoning', 'system', 'tool', 'subagent'] satisfies Kind[]);
 
-export function createSessionBrowserToolDefinitions(browser: SessionBrowser): ToolDefinition[] {
+const sessionBrowserErrorSchema = z
+  .object({
+    error: z
+      .object({
+        code: z.enum([
+          'not_found',
+          'ambiguous_reference',
+          'session_unavailable',
+          'invalid_cursor',
+          'stale_cursor',
+          'output_budget_exceeded',
+        ]),
+        message: z.string(),
+        candidates: z.array(z.object({ id: z.string(), shortRef: z.string() }).strict()).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const sessionListScriptedReturnSchema = z.union([
+  z
+    .object({
+      sessions: z.array(
+        z
+          .object({
+            id: z.string(),
+            shortRef: z.string(),
+            createdAt: z.string(),
+            updatedAt: z.string(),
+            firstUserMessage: z.string().optional(),
+            model: z.string().optional(),
+            provider: z.string().optional(),
+            messageCount: z.number(),
+          })
+          .strict(),
+      ),
+      scope: z.string(),
+      total: z.number(),
+      omitted: z.number(),
+      unavailable: z.number(),
+      charsUsed: z.number(),
+    })
+    .strict(),
+  sessionBrowserErrorSchema,
+]);
+
+const sessionSearchScriptedReturnSchema = z.union([
+  z
+    .object({
+      results: z.array(
+        z
+          .object({
+            sessionId: z.string(),
+            shortRef: z.string(),
+            kind: sessionKind,
+            messageIndex: z.number(),
+            snippet: z.object({ text: z.string(), truncated: z.boolean() }).strict(),
+            updatedAt: z.string(),
+          })
+          .strict(),
+      ),
+      scope: z.string(),
+      total: z.number(),
+      omitted: z.number(),
+      unavailable: z.number(),
+      skippedMessageCount: z.number(),
+      charsUsed: z.number(),
+    })
+    .strict(),
+  sessionBrowserErrorSchema,
+]);
+
+const sessionReadScriptedReturnSchema = z.union([
+  z
+    .object({
+      scope: z.string(),
+      session: z
+        .object({
+          id: z.string(),
+          shortRef: z.string(),
+          createdAt: z.string(),
+          updatedAt: z.string(),
+          model: z.string().optional(),
+          provider: z.string().optional(),
+        })
+        .strict(),
+      items: z.array(
+        z
+          .object({
+            index: z.number(),
+            kind: sessionKind,
+            toolName: z.string().optional(),
+            text: z.string(),
+            textOffset: z.number(),
+            totalTextChars: z.number(),
+            complete: z.boolean(),
+            truncated: z.boolean().optional(),
+          })
+          .strict(),
+      ),
+      nextCursor: z.string().optional(),
+      total: z.number(),
+      matched: z.number().optional(),
+      omitted: z.number(),
+      skippedMessageCount: z.number(),
+      charsUsed: z.number(),
+    })
+    .strict(),
+  sessionBrowserErrorSchema,
+]);
+
+export function createSessionBrowserToolDefinitions(browser: SessionBrowser): AnyScriptedToolDefinition[] {
   return [
     definition(
       'session_list',
@@ -28,6 +139,7 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
       z.object({ limit, maxChars }).strict(),
       (params) => browser.list(params),
       '{ sessions: { id: string, shortRef: string, createdAt: string, updatedAt: string, firstUserMessage?: string, model?: string, provider?: string, messageCount: number }[], scope: string, total: number, omitted: number, unavailable: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
+      sessionListScriptedReturnSchema,
     ),
     definition(
       'session_search',
@@ -42,6 +154,7 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
         .strict(),
       (params) => browser.search(params),
       '{ results: { sessionId: string, shortRef: string, kind: string, messageIndex: number, snippet: { text: string, truncated: boolean }, updatedAt: string }[], scope: string, total: number, omitted: number, unavailable: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
+      sessionSearchScriptedReturnSchema,
     ),
     definition(
       'session_read',
@@ -72,22 +185,25 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
         }),
       (params) => browser.read(params),
       '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, toolName?: string, text: string, textOffset: number, totalTextChars: number, complete: boolean, truncated?: boolean }[], nextCursor?: string, total: number, matched?: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
+      sessionReadScriptedReturnSchema,
     ),
   ];
 }
 
-function definition<S extends z.ZodTypeAny>(
+function definition<S extends z.ZodObject<any>>(
   name: string,
   description: string,
   parameters: S,
   execute: (params: z.infer<S>) => unknown,
   scriptedReturnShape: string,
-): ToolDefinition<S> {
+  scriptedReturnSchema: ZodTypeAny,
+): ScriptedToolDefinition<S> {
   return {
     name,
     description,
     parameters,
     scriptedReturnShape,
+    scriptedReturnSchema,
     preserveSerializedOutput: true,
     needsApproval: () => false,
     execute: async (params, context) => {

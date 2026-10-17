@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { relaxedNumber } from '../utils.js';
-import type { ToolDefinition, FormatCommandMessage } from '../types.js';
+import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -57,7 +57,7 @@ export const configureTaskCheckInScriptedReturnSchema = z.string();
 
 export function createConfigureTaskCheckInToolDefinition(
   configureTaskCheckIn: (params: ConfigureTaskCheckInParams) => ConfigureTaskCheckInResult,
-): ToolDefinition {
+): ScriptedToolDefinition {
   return {
     name: 'configure_task_check_in',
     scriptedReturnShape: 'JSON string (JSON.parse first): { ok: true, message? } | { ok: false, error }',

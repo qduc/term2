@@ -25,7 +25,7 @@ import {
   scriptedReturnContractJsonSchema,
   validateScriptedReturn,
 } from '../../scripted-return-contract.js';
-import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
+import { WORKFLOW_PROHIBITED_TOOL_NAMES } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import type { AgentSpecAuthoritySnapshot } from '../../../services/agent-runtime/permission-boundary.js';
 import {
   createRunCodeAgentCapability,
@@ -34,7 +34,7 @@ import {
 } from './run-code-agent-capability.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_GOAL_CHECK } from '../../tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_GOAL_CHECK, type ProhibitedToolName } from '../../tool-names.js';
 import { saveOutputArtifact } from '../../../utils/shell/shell-output.js';
 import { getRunCodeExecutionResult } from './run-code-execution.js';
 import type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
@@ -62,9 +62,13 @@ export const RUN_CODE_LIMITS = {
   maxConsoleBytes: 262_144,
 } as const;
 
-/** Tools that are structurally unavailable from a script. */
-export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
-  ...WORKFLOW_PROHIBITED_TOOLS,
+/**
+ * Every name policy withholds from a script, annotated with the union in
+ * `tools/tool-names.ts` so a name added here that the union lacks fails to
+ * compile instead of silently changing what a script can reach.
+ */
+const PROHIBITED_TOOL_NAMES: readonly ProhibitedToolName[] = [
+  ...WORKFLOW_PROHIBITED_TOOL_NAMES,
   TOOL_NAME_RUN_CODE,
   'ask_mentor',
   'session_rollover',
@@ -74,7 +78,10 @@ export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   'bash',
   'enter_worktree',
   'exit_worktree',
-]);
+];
+
+/** Tools that are structurally unavailable from a script. */
+export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set(PROHIBITED_TOOL_NAMES);
 
 /** Static semantic adapters for action tools whose result contract is known. */
 export const ACTION_SEMANTICS: Record<string, (raw: unknown) => { outcome: RunCodeActionOutcome; reason?: string }> = {

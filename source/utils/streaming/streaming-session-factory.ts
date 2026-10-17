@@ -190,6 +190,9 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       // whatever comes next; reset so the next request's speed is measured from zero instead of
       // being diluted by tool latency or averaged together with this request.
       speedTracker.reset(now());
+      // Clear the shown rate too: left in place, it labels the wait for the
+      // next request as "generating" at the previous request's speed.
+      deps.setStreamingSpeed?.(null);
     } else if (event.type === 'usage_update') {
       if (event.usage.completion_tokens) {
         speedTracker.recordUsageTokens(event.usage.completion_tokens, now());

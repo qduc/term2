@@ -10,6 +10,7 @@ import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmation
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
 import { useSkin } from '../../skins/SkinContext.js';
+import type { WorkingIndicatorView } from '../../skins/types.js';
 import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
@@ -252,6 +253,18 @@ const BottomArea: FC<BottomAreaProps> = ({
     return () => clearInterval(interval);
   }, [isProcessing]);
 
+  const workingPhase: WorkingIndicatorView['phase'] = toolCallStreamingInfo
+    ? 'tool_call'
+    : thinkingStartedAt != null
+    ? 'thinking'
+    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+    ? 'generating'
+    : 'processing';
+  // The clock times the current step, not the turn: a turn-long count under
+  // "Calling tool X" or "Processing" blames the slow part on the wrong step.
+  const workingStepKey =
+    workingPhase === 'tool_call' ? `tool_call:${toolCallStreamingInfo?.toolName ?? ''}` : workingPhase;
+
   useEffect(() => {
     if (!isProcessing) {
       workStartedAtRef.current = null;
@@ -260,13 +273,13 @@ const BottomArea: FC<BottomAreaProps> = ({
       return;
     }
 
-    workStartedAtRef.current = thinkingStartedAt ?? Date.now();
+    workStartedAtRef.current = Date.now();
     const updateElapsed = () =>
       setWorkingElapsedSeconds(Math.max(0, Math.floor((Date.now() - (workStartedAtRef.current ?? Date.now())) / 1000)));
     updateElapsed();
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
-  }, [isProcessing, thinkingStartedAt]);
+  }, [isProcessing, workingStepKey]);
 
   useEffect(() => {
     if (thinkingStartedAt == null) {
@@ -370,13 +383,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             )}
             {isProcessing && !toolCallStreamingInfo && (
               <WorkingIndicator
-                phase={
-                  thinkingStartedAt != null
-                    ? 'thinking'
-                    : liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                    ? 'generating'
-                    : 'processing'
-                }
+                phase={workingPhase}
                 elapsedSeconds={thinkingStartedAt != null ? thinkingElapsedSeconds : workingElapsedSeconds}
                 tokensPerSecond={liveStreamingSpeed?.tps}
                 toolName={undefined}

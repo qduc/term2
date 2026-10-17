@@ -57,6 +57,10 @@ const getHeadersSource = (source: unknown): HeaderSource | undefined => {
     return headers as HeaderSource;
   }
 
+  if ('responseHeaders' in source) {
+    return getHeadersSource((source as { responseHeaders?: unknown }).responseHeaders);
+  }
+
   return source as HeaderSource;
 };
 
@@ -82,12 +86,53 @@ const getHeaderValue = (source: unknown, name: string): string | undefined => {
 
 export const getRetryAfterMs = (source: unknown): number | undefined => {
   const retryAfter = getHeaderValue(source, 'retry-after');
-  if (retryAfter === undefined) return undefined;
-  const retryAfterSeconds = parseInt(retryAfter, 10);
-  return Number.isFinite(retryAfterSeconds) ? retryAfterSeconds * 1000 : undefined;
+  const headerDelay = parseSeconds(retryAfter);
+  if (headerDelay !== undefined) return headerDelay;
+  if (!source || typeof source !== 'object') return undefined;
+
+  // AI SDK retains Google's raw error body; its validated error data omits
+  // google.rpc.RetryInfo. Read that structured hint before the message fallback.
+  const responseBody = (source as { responseBody?: unknown }).responseBody;
+  if (typeof responseBody === 'string') {
+    try {
+      const body = JSON.parse(responseBody);
+      const details: unknown = body?.error?.details;
+      if (Array.isArray(details)) {
+        for (const detail of details) {
+          if (detail?.['@type'] === 'type.googleapis.com/google.rpc.RetryInfo') {
+            const delay = parseSeconds(detail.retryDelay, true);
+            if (delay !== undefined) return delay;
+          }
+        }
+      }
+    } catch {
+      // Malformed error bodies must not hide the original provider error.
+    }
+  }
+  const message = getMessage(source);
+  if (message.includes('https://ai.google.dev/')) {
+    return parseSeconds(/Please retry in (\d+(?:\.\d+)?)s\./.exec(message)?.[1]);
+  }
+  return undefined;
 };
 
+function parseSeconds(value: unknown, duration = false): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const match = (duration ? /^(\d+(?:\.\d+)?)s$/ : /^(\d+(?:\.\d+)?)$/).exec(value.trim());
+  if (!match) return undefined;
+  const milliseconds = Math.ceil(Number(match[1]) * 1000);
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+
 export function classifyUpstreamRetryableError(error: unknown): UpstreamRetryClassification {
+  const classification = classifyUpstreamError(error);
+  if (classification.status === 429 && (classification.retryAfterMs ?? 0) > 60_000) {
+    return { ...classification, retryable: false, reason: 'long-retry-delay' };
+  }
+  return classification;
+}
+
+function classifyUpstreamError(error: unknown): UpstreamRetryClassification {
   if (error instanceof LongRetryDelayError) {
     // Retry-after > 60s — don't retry, the user would wait too long
     return { retryable: false, reason: 'long-retry-delay' };

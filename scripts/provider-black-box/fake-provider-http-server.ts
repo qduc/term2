@@ -36,6 +36,7 @@ export async function startFakeProviderHttpServer(options: {
   protocol?: FakeProviderProtocol;
   fixture?: FixtureEnvelopeV1;
   port?: number;
+  googleRateLimit?: { retryDelay?: string; message?: string; retryAfter?: string };
 }): Promise<FakeProviderHttpServer> {
   if (!options.scenario && !options.fixture) throw new Error('Fake provider server needs a scenario or fixture');
   const requests: CapturedHttpRequest[] = [];
@@ -60,6 +61,25 @@ export async function startFakeProviderHttpServer(options: {
       return;
     }
     const scenario = options.scenario!;
+    if (options.googleRateLimit && requests.length === 1) {
+      const { retryDelay, message, retryAfter } = options.googleRateLimit;
+      res.writeHead(429, {
+        'content-type': 'application/json',
+        ...(retryAfter !== undefined ? { 'retry-after': retryAfter } : {}),
+      });
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 429,
+            status: 'RESOURCE_EXHAUSTED',
+            message: message ?? 'Quota exceeded. Please retry later.',
+            details:
+              retryDelay === undefined ? [] : [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay }],
+          },
+        }),
+      );
+      return;
+    }
     if (scenario === 'error') {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Injected provider failure' } }));

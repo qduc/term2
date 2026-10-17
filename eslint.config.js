@@ -101,6 +101,12 @@ export default tseslint.config(
       parserOptions: { project: ['./experiments/conversation-actor/tsconfig.json'] },
     },
   },
+  {
+    files: ['experiments/conversation-actor/v2/*.ts'],
+    languageOptions: {
+      parserOptions: { project: ['./experiments/conversation-actor/v2/tsconfig.json'] },
+    },
+  },
   // Production code is held to a higher standard: unused vars are an error.
   // Test files under source/ are excluded by the test override below.
   {

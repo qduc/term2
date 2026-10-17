@@ -1,0 +1,10 @@
+$ cross-env NODE_ENV=test node scripts/run-test.mjs
+
+ RUN  v4.1.9 /home/qduc/term2/.worktrees/conversation-design
+
+
+ Test Files  7 passed (7)
+      Tests  28 passed (28)
+   Start at  21:13:25
+   Duration  1.79s (transform 1.18s, setup 107ms, import 103ms, tests 2.60s, environment 1ms)
+

@@ -12,6 +12,8 @@ import type { SessionIdSource } from '../session/session-identity.js';
 import { projectProviderHistory, projectImportedState, projectSnapshot } from './conversation-state-projector.js';
 import { buildToolLedgerFromJournalEvents } from './journal-to-ledger.js';
 import { ImportedConversationStateSchema } from './conversation-state-schema.js';
+import type { ProviderContinuity } from '../provider-continuity.js';
+import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import type { RecoveryPlan, RecoveryState, CommittedToolContinuation } from '../retry/retry-contracts.js';
 
 export type RecordAcceptanceReceipt = {
@@ -34,9 +36,21 @@ export class ConversationRecord {
   #segmentBaseline: ReturnType<ConversationStore['getProviderHistorySnapshot']> | undefined;
   #lastPersistence: RecordAcceptanceReceipt['persistence'] = 'unconfigured';
   #pendingReasoningText = '';
+  #segmentSource: StreamHistorySource = 'startStream';
+  #recoveryBaselines: Record<'initial' | 'decision', AssistantJournalItemLogEvent[]> = { initial: [], decision: [] };
+  readonly #providerContext?: ProviderContinuity;
+  readonly #checkpointObserver?: OpenAIRootCheckpointLifecycleObserver;
 
-  constructor(options: { logger?: ILoggingService } = {}) {
+  constructor(
+    options: {
+      logger?: ILoggingService;
+      providerContext?: ProviderContinuity;
+      checkpointObserver?: OpenAIRootCheckpointLifecycleObserver;
+    } = {},
+  ) {
     this.#logger = options.logger;
+    this.#providerContext = options.providerContext;
+    this.#checkpointObserver = options.checkpointObserver;
     this.#attachUserTurnCount();
     this.#journal = new AssistantTurnJournal({ getCurrentTurnId: () => this.getCurrentTurnId() });
   }
@@ -50,6 +64,18 @@ export class ConversationRecord {
     this.#journalSink = sink;
     this.#journal.setSink(sink ? (event) => this.#deliverJournalEvent(event) : null);
     if (!sink) this.#lastPersistence = 'unconfigured';
+  }
+
+  /** Preserve the pre-attempt recovery baseline without exporting journal state. */
+  beginAttempt(): void {
+    this.#recoveryBaselines.initial = this.#snapshotJournal();
+    this.#segmentSource = 'startStream';
+  }
+
+  /** A decision changes the segment view, never the execution position. */
+  beginDecisionResolution(source: 'continueRunStream' | 'abortResolution' = 'continueRunStream'): void {
+    this.#recoveryBaselines.decision = this.#snapshotJournal();
+    this.#segmentSource = source;
   }
 
   beginTurn(): void {
@@ -78,7 +104,7 @@ export class ConversationRecord {
   listRewindTargets() {
     return this.#store.listRewindTargets();
   }
-  getJournalEvents(): AssistantJournalItemLogEvent[] {
+  #snapshotJournal(): AssistantJournalItemLogEvent[] {
     return structuredClone(this.#journal.getEvents());
   }
   getCurrentTurnItems() {
@@ -160,7 +186,7 @@ export class ConversationRecord {
   }
 
   /** Accept one observed provider item into both evidence representations before publication. */
-  acceptObservedItem(item: unknown, options: { persistToolResult?: boolean } = {}): RecordAcceptanceReceipt {
+  acceptObservedItem(item: unknown): RecordAcceptanceReceipt {
     this.#lastPersistence = this.#journalSink ? 'not_requested' : 'unconfigured';
     // Journal deduplication is independent of execution occurrence: a real new
     // invocation may reuse a provider call id within this logical turn.
@@ -171,7 +197,7 @@ export class ConversationRecord {
         this.#ledger.recordFunctionCall(item);
       } else if (normalized.type === 'tool_result') {
         this.#ledger.recordFunctionResult(item);
-        if (options.persistToolResult && this.#journalSink) {
+        if (this.#segmentSource !== 'startStream' && this.#journalSink) {
           const entry = this.#ledger.export().find((candidate) => candidate.callId === normalized.callId);
           this.#deliverJournalEvent({
             type: 'tool_result',
@@ -199,25 +225,27 @@ export class ConversationRecord {
   acceptSegment(
     stream: AgentStream,
     inputMode: 'delta' | 'full_history',
-    source: StreamHistorySource,
     diagnostics: { logger: ILoggingService; sessionId: SessionIdSource },
   ) {
     const selected = selectAcceptedStreamHistory({
       stream,
       history: this.#segmentBaseline ? [...this.#segmentBaseline.history] : this.#store.getHistory(),
       inputMode,
-      source,
+      source: this.#segmentSource,
       ...diagnostics,
     });
     const before = this.#segmentBaseline?.revision ?? this.#store.getProviderHistoryIdentity().revision;
     if (selected.history) this.#store.replaceHistory(selected.history);
     const snapshot = this.#store.getProviderHistorySnapshot();
-    return {
+    const accepted = {
       kind: selected.terminal ? ('committed' as const) : ('partial' as const),
       snapshot,
       historyCommitted: snapshot.revision !== before,
       lastResponseId: selected.lastResponseId,
+      unsettledToolCallIds: this.unsettledToolCallIdsForCurrentTurn(),
     };
+    this.#providerContext?.acceptSegment(accepted, this.#checkpointObserver);
+    return accepted;
   }
 
   snapshot(metadata: { previousResponseId: string | null; model?: string; provider?: string }) {
@@ -244,7 +272,10 @@ export class ConversationRecord {
 
   /** Apply a policy-selected recovery transition without exposing representation precedence. */
   recover(plan: RecoveryPlan, state: RecoveryState): ReturnType<ToolExecutionLedger['getRecoverySummary']> {
-    const snapshot = buildToolLedgerFromJournalEvents(state.journalSnapshot ?? [], new Date().toISOString());
+    const snapshot = buildToolLedgerFromJournalEvents(
+      this.#recoveryBaselines[state.baseline],
+      new Date().toISOString(),
+    );
     if (plan.kind === 'replay_turn') {
       this.#ledger.import(snapshot);
       if (plan.rollbackUserMessage) this.#store.removeLastUserMessage();
@@ -284,6 +315,8 @@ export class ConversationRecord {
     this.#segmentBaseline = undefined;
     this.#pendingReasoningText = '';
     this.#ledger = new ToolExecutionLedger();
+    this.#recoveryBaselines = { initial: [], decision: [] };
+    this.#segmentSource = 'startStream';
     this.#attachUserTurnCount();
     this.#journal.clear();
   }

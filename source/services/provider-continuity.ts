@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import type { OpenAIRootCheckpointLifecycleObserver } from './openai-root-checkpoint-lifecycle-observer.js';
 
 export type ProviderCheckpointIdentity = {
   provider: string;
@@ -55,6 +56,15 @@ export type ProviderCheckpoint = ProviderCheckpointBinding & {
    */
   successorProof?: ProviderCheckpointSuccessorProof;
   retirement?: ProviderCheckpointRetirement;
+};
+
+/** An authoritative Record fact, incorporated before another request is prepared. */
+export type AcceptedProviderSegment = {
+  kind: 'committed' | 'partial';
+  lastResponseId: string | null;
+  historyCommitted: boolean;
+  snapshot: ProviderCheckpointSuccessorProof;
+  unsettledToolCallIds: readonly string[];
 };
 
 /**
@@ -124,6 +134,38 @@ export class ProviderContinuity {
     this.#outstandingToolCallIds = unique;
   }
 
+  /** A new user request cannot leave the preceding response's tool debt unpaid. */
+  prepareNewTurn(historyLength: number): boolean {
+    const hadDebt = this.hasOutstandingToolDebt();
+    if (hadDebt && this.#previousResponseId) this.clear();
+    return !hadDebt && this.isChainingAvailable(historyLength);
+  }
+
+  /** Keep response identity and lineage encoding inside their protocol owner. */
+  prepareRequest<T extends object>(
+    options: T,
+    view:
+      | { kind: 'initial'; inputMode: 'delta' | 'full_history'; disableChaining?: boolean }
+      | { kind: 'continuation' },
+  ) {
+    const request = {
+      ...options,
+      previousResponseId:
+        view.kind === 'continuation'
+          ? this.#previousResponseId
+          : view.disableChaining
+          ? undefined
+          : view.inputMode === 'delta'
+          ? this.#previousResponseId
+          : null,
+    };
+    Object.defineProperty(request, 'providerContinuityLineage', {
+      value: this.#lineage,
+      enumerable: this.#lineage !== 0,
+    });
+    return request;
+  }
+
   /**
    * Records a provider response observed before its terminal history is
    * committed. This deliberately does not update previousResponseId: existing
@@ -190,6 +232,28 @@ export class ProviderContinuity {
       this.#attachSuccessorProof(postCommitSnapshot);
     }
     return promoted;
+  }
+
+  /**
+   * Synchronous, in-memory protocol update. Record acceptance has already
+   * happened; diagnostics cannot undo it or turn it into a replayable failure.
+   */
+  acceptSegment(segment: AcceptedProviderSegment, observer?: OpenAIRootCheckpointLifecycleObserver): void {
+    const hadCandidate = this.#checkpoint?.state === 'candidate';
+    let promoted = false;
+    if (segment.kind === 'committed') {
+      promoted = this.publishTerminalResponse(segment.lastResponseId, segment.historyCommitted, segment.snapshot);
+    } else this.update(segment.lastResponseId);
+    this.replaceOutstandingToolCallIds(segment.unsettledToolCallIds);
+    if (segment.kind === 'committed' && hadCandidate) {
+      try {
+        observer?.publication(
+          !segment.historyCommitted ? 'history_not_committed' : promoted ? 'promoted' : 'candidate_not_promoted',
+        );
+      } catch {
+        // Observability must not reject an accepted external effect.
+      }
+    }
   }
 
   /**

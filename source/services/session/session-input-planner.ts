@@ -260,10 +260,7 @@ export class SessionInputPlanner {
     // Unpaid tool debt means previous_response_id still requires function_call
     // outputs. A text-only delta would 400 ("No tool output found for function
     // call …"). Drop the chain and send self-contained full history instead.
-    const hasUnsettledChainDebt = this.#providerContinuity.hasOutstandingToolDebt();
-    if (hasUnsettledChainDebt && this.#providerContinuity.previousResponseId) {
-      this.#providerContinuity.clear();
-    }
+    const continuityAvailable = this.#providerContinuity.prepareNewTurn(outgoingHistory.length);
     // A held previous_response_id was minted by whatever model produced it.
     // If the user switched models since that turn, the anchor still passes
     // every other chaining check locally but the provider 400s
@@ -273,12 +270,7 @@ export class SessionInputPlanner {
     const currentModel = this.#getModelForGuard();
     const hasModelMismatch =
       this.#lastDispatchModel !== null && currentModel !== null && this.#lastDispatchModel !== currentModel;
-    const useChaining =
-      supportsChaining &&
-      !hasMalformedArgs &&
-      !hasUnsettledChainDebt &&
-      !hasModelMismatch &&
-      this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
+    const useChaining = supportsChaining && !hasMalformedArgs && !hasModelMismatch && continuityAvailable;
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 

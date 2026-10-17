@@ -51,26 +51,14 @@ export class SessionStreamProcessor {
       return acc;
     }
 
-    const workingToolArguments = options.preserveExistingToolArgs
-      ? new Map(this.deps.toolTracker.argumentsById)
-      : new Map<string, unknown>();
-    const workingInvalidPackets = new Set(this.deps.toolTracker.invalidPackets);
-    const commitWorkingCaches = (): void => {
-      this.deps.toolTracker.argumentsById.clear();
-      for (const [callId, args] of workingToolArguments) {
-        this.deps.toolTracker.argumentsById.set(callId, args);
-      }
-      for (const packet of workingInvalidPackets) {
-        this.deps.toolTracker.invalidPackets.add(packet);
-      }
-    };
+    const projection = this.deps.toolTracker.beginProjection(options.preserveExistingToolArgs);
 
     const generator = processStreamEvents(
       stream,
       acc,
       {
-        toolCallArgumentsById: workingToolArguments,
-        emittedInvalidToolCallPackets: workingInvalidPackets,
+        toolCallArgumentsById: projection.argumentsById,
+        emittedInvalidToolCallPackets: projection.invalidPackets,
         preserveExistingToolArgs: true,
         markerStore: this.#toolCallMarkers,
         onFunctionResultItem: (item) => {
@@ -99,12 +87,12 @@ export class SessionStreamProcessor {
           return acc;
         }
         if (next.done) {
-          this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
+          this.deps.generationGuard.runIfCurrent(options.gen, projection.commit);
           closed = true;
           return acc;
         }
 
-        this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
+        this.deps.generationGuard.runIfCurrent(options.gen, projection.commit);
         const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
         if (filtered) {
           // An admitted tool_started is a new execution. If the provider reused the id of an earlier,

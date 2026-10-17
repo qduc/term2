@@ -5,7 +5,7 @@ The evidence below records that baseline; ownership references describe the curr
 `ToolCallExecution` (response-scoped planning and ordered call/result emission),
 `ConversationRecord` (private tool ledger, journal and provider-history acceptance),
 `ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput` (`chained-input-filter.ts`),
-`SessionTurnAdapter.#acceptSegment` (continuity publication and debt sync), and retry/recovery policy
+`ConversationRecord.acceptSegment` → `ProviderContinuity.acceptSegment` (synchronous continuity publication and debt sync), and retry/recovery policy
 (`retry-classifier`, `recovery-policy`, `DefaultRecoveryExecutor`).
 
 ## 1. Contract
@@ -33,8 +33,8 @@ The evidence below records that baseline; ownership references describe the curr
   pairing and replacement boundaries); `ProviderContinuity` (chain and debt);
   `SessionInputPlanner` (chain vs full-history decision); `filterChainedModelInput`
   in `source/lib/chained-input-filter.ts` (delta validation);
-  `SessionTurnAdapter.#acceptSegment` (`publishTerminalResponse` and debt sync
-  after Record acceptance); retry classification/policy. `ApplicationRunLoop`
+  `ProviderContinuity.acceptSegment` (response/checkpoint publication and debt sync
+  within Record acceptance); retry classification/policy. `ApplicationRunLoop`
   invokes root session acceptance synchronously before publishing observed events;
   `SessionStreamProcessor` retains presentation state, not history mutation authority.
 - **C2.6 request admission (enforcement):** `SessionInputPlanner.build` detects foreign opaque history before chained/full-history dispatch. `InitialInputPreparer` restores the unsubmitted user turn and surfaces actionable recovery guidance. Adapter-level non-serialization remains independently enforced.
@@ -103,8 +103,9 @@ The evidence below records that baseline; ownership references describe the curr
 
 - **Success:** `ConversationRecord.acceptObservedItem` accepts items before runtime
   publication. `ConversationRecord.acceptSegment` reconciles the segment's terminal
-  history view, then `SessionTurnAdapter.#acceptSegment` calls
-  `ProviderContinuity.publishTerminalResponse` and syncs outstanding tool debt.
+  history view, then synchronously supplies the authoritative segment fact to
+  `ProviderContinuity.acceptSegment`, which publishes response/checkpoint identity
+  and synchronizes outstanding tool debt before another request can be prepared.
   `ConversationLogger` does not replay log events into live history.
 - **Failure before dispatch:** undispatched open calls -> `aborted` with a
   synthetic result equal to the failure reason; dispatched calls -> `unknown`
@@ -178,7 +179,7 @@ Current root callers use `ConversationRecord.snapshot`, `exportState` and
 - `DefaultRecoveryExecutor` (replay/retry/terminate) and `ConversationRecord.recover` —
   `recovery-executor.test.ts`.
 - `ConversationRecord.acceptSegment` (history acceptance) and
-  `SessionTurnAdapter.#acceptSegment` (continuity + debt sync); historical
+  `ProviderContinuity.acceptSegment` (continuity + debt sync); historical
   finalization coverage — `session-stream-processor.test.ts`.
 - Local compaction boundaries — `local-context-compactor.test.ts`.
 - Retry classification/policy — `retry-classifier.test.ts`,

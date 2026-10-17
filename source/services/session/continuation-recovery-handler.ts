@@ -74,7 +74,7 @@ export class ContinuationRecoveryHandler {
       const terminateResult = this.deps.recoveryExecutor.apply({
         plan: { kind: 'terminate', events: [] },
         state: {
-          journalSnapshot: state.journalSnapshot,
+          baseline: 'decision',
           addedUserMessage: false,
           stream: retryStream,
         },
@@ -125,7 +125,7 @@ export class ContinuationRecoveryHandler {
     });
 
     const recoveryState: RecoveryState = {
-      journalSnapshot: state.journalSnapshot,
+      baseline: 'decision',
       addedUserMessage: false,
       stream: retryStream,
     };

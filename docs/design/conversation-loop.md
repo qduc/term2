@@ -33,9 +33,11 @@ illustrative `recordResponse` step or presentation consumption.
 | --- | --- | --- |
 | Conversation | `ConversationAdapter.submitMessage`, `TurnCoordinator`, `LiveRun` | Admit executable input, own one live turn, expose status and commands, and apply retained queue/pause rules. |
 | Execution | `ApplicationRunLoop.#runTurn`, `#prepareRequest`, `#askModel`, `#executeTools`, `#finishTurn` | Advance the model–tool cycle, await addressed decisions and apply selected recovery. |
-| Session acceptance bridge | `ApplicationTurnSession`, `SessionTurnAdapter.#acceptEvent`, `#acceptSegment` | Route runtime facts into Record before observation; publish provider continuity from the accepted segment receipt. |
-| Accepted conversation | `ConversationRecord.acceptObservedItem`, `markDispatched`, `acceptSegment`, `recover` | Own provider history, tool evidence, journal delivery and reconstruction. |
+| Session acceptance bridge | `ApplicationTurnSession`, `SessionTurnAdapter.#acceptEvent`, `#acceptSegment` | Route runtime facts into Record before observation; no caller-managed persistence flags or continuity publication sequence. |
+| Accepted conversation | `ConversationRecord.acceptObservedItem`, `markDispatched`, `acceptSegment`, `recover` | Own provider history, tool evidence, persistence selection, private recovery baselines and reconstruction; synchronously notify provider context. |
 | Presentation | `SessionTurnAdapter.#consume`, `SessionStreamProcessor.process`, `TurnProjectionState`, `SessionToolTracker` | Project events, deduplicate rendered commands/starts, accumulate usage and retain presentation caches. |
+| Provider context | `ProviderContinuity.acceptSegment`, `prepareRequest`, `prepareNewTurn` | Incorporate accepted history facts, publish response/checkpoint identity, settle debt and encode request continuity. |
+| Session lifecycle | `SessionLifecycle` | Complete undo/retry/rewind/reset/import operations, including retirement, dependent resets and appropriate logging. |
 | Logging | `ConversationLogger.log`, `dispatchEventToLog` | Deliver observational log events. No callback replays logs into the live provider-history store. |
 
 For the root session, `ApplicationRunLoop` supplies synchronous acceptance through
@@ -61,7 +63,7 @@ objects.
   uses that baseline with `selectAcceptedStreamHistory` so a terminal full-history
   view or delta can replace the streamed representation without doubling it.
 - `recover` applies a policy-selected reconstruction: it combines the journal
-  snapshot with live settled evidence, distinguishes unstarted from dispatched
+  baseline, retained privately at attempt/decision boundaries, with live settled evidence; it distinguishes unstarted from dispatched
   calls with unknown outcomes, and handles the relevant input rollback.
 - Rewind, retry, reset and import operations keep accepted history and evidence
   changes together. Session lifecycle still owns generation invalidation,
@@ -70,7 +72,11 @@ objects.
 Record does not construct model requests, classify retry errors, choose a retry
 budget, execute a tool or stop a child process. `SessionInputPlanner` and request
 preparation consume its history views. Provider continuity remains a session-owned
-protocol concern; its terminal publication follows Record's segment acceptance.
+protocol concern. Record calls `ProviderContinuity.acceptSegment` synchronously
+with terminal/partial status, response identity, accepted history snapshot and
+unsettled calls. Context finishes response publication, checkpoint promotion and
+debt synchronization before the next request. Diagnostics cannot revoke acceptance
+or create a replayable execution failure.
 
 The root runtime still has request-local `state.input`, `state.history` and
 continuation state. Provider delta construction, native compaction and approval
@@ -78,6 +84,22 @@ suspension need those views. Their existence is not evidence of competing
 acceptance authority, but changing their synchronization still requires care.
 Nested/subagent histories have their own callers; this boundary does not claim a
 repository-wide elimination of `ConversationStore`.
+
+## Caller obligations removed
+
+Approval contexts retain runtime decision handles and policy evidence, not display
+argument maps or command-ID snapshots. Presentation retains its own detached,
+generation-guarded caches across waits. `TurnProjectionState` no longer mirrors a
+continuation handle, current tool-call list, journal snapshot or response-ID copy.
+The root session's unconsumed continuation call-ID reconstruction has been deleted.
+
+`SessionLifecycle` absorbs the former `SessionManager`: callers invoke one complete
+history operation, rather than mutate Record and then remember cleanup and logging.
+Invalid/stale rewind targets and empty undo targets return without cleanup/logging.
+An accepted history operation performs its mutation and retirement/reset/logging
+synchronously, without an await where an old callback could interleave. Retry keeps
+the original provider input and existing discarded-history log shape. Physical job
+cancellation remains governed by the existing runtime and registry policy.
 
 ## Contracts that remain load-bearing
 
@@ -96,6 +118,7 @@ starts. Interrupting an await does not prove that an external effect stopped.
 **Persistence acknowledgement.** Journal delivery preserves the existing session
 sink's log-and-continue behavior on failure. `RecordAcceptanceReceipt` distinguishes
 memory acceptance from callback acknowledgement, failure or no requested write.
+Memory acceptance precedes event publication; a failed sink cannot undo it.
 Callback acknowledgement does not claim a durable write. `ConversationLogWriter`
 retains event-specific fsync and failure behavior, and direct durable gates outside
 the session logger remain separate. There is no atomic transaction spanning tool
@@ -103,7 +126,9 @@ effects and log writes, and no new universal fail-stop persistence rule.
 
 **Approval and recovery policy.** Approval modules own authorization decisions;
 retry modules own classification, limits and recovery plans. An approval answer
-resolves the pending runtime wait. A recovery plan invokes Record reconstruction
+must match the exact runtime interruption and generation before it can consume
+the single-use pending wait. A duplicate, stale or structurally cloned address
+cannot resolve a different wait; cancellation/reset retires the old callback. A recovery plan invokes Record reconstruction
 and returns to the same execution owner. The completed-effect case must not
 redispatch work merely because provider continuity was rejected or a write lacked
 acknowledgement.
@@ -159,3 +184,6 @@ verification and provider-testing policies. Earlier evidence in
 [WORK.md](../research/single-turn-owner/WORK.md) and the v2 simulations should be
 read with their own scope; they are not proof of this acceptance boundary or of
 improved human comprehension.
+
+Current boundary-refactor evidence is retained in
+[session-boundaries/WORK.md](../research/session-boundaries/WORK.md).

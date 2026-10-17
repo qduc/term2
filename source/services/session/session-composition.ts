@@ -35,13 +35,12 @@ import type {
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { SessionLifecycle } from './session-lifecycle.js';
+import { SessionLifecycle, type SessionState } from './session-lifecycle.js';
 import { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
 import { BackgroundCheckInScheduler } from './background-check-in-scheduler.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
-import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
 import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
@@ -148,7 +147,7 @@ export type SessionRuntimeInternals = {
   appState: { statusMachine: TurnStatusMachine };
   turnCoordinator: TurnCoordinator;
   /** Facade for state/persistence/undo/snapshot operations. */
-  stateFacade: SessionManager;
+  stateFacade: SessionState;
   /** Controller for runtime model/provider/retry settings. */
   runtimeController: SessionRuntimeController;
   /**
@@ -327,7 +326,7 @@ export type SessionRuntime = {
     editSteer: (id: string, items: readonly ProviderInputItem[]) => boolean;
   };
   /** Facade for state/persistence/undo/snapshot operations. */
-  state: SessionManager;
+  state: SessionState;
   /** Controller for runtime model/provider/retry settings. */
   settings: SessionRuntimeController;
   compactContext: (options?: {
@@ -536,7 +535,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const postExecutePending =
     suppliedPostExecutePending ?? new PostExecutePendingRegistry({ sessionId: identity, epoch: crypto.randomUUID() });
 
-  const record = new ConversationRecord({ logger });
+  const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
+  const record = new ConversationRecord({
+    logger,
+    providerContext: providerContinuity,
+    checkpointObserver: openAIRootCheckpointLifecycleObserver,
+  });
   const approvalState = new ApprovalState();
   const pendingInteraction = new PendingInteractionState();
   const nestedApprovalOwner = new NestedApprovalOwner(identity);
@@ -554,8 +558,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const appState = { statusMachine: new TurnStatusMachine() };
   const hookEvents = suppliedHookEvents ?? (hookLifecycle ? new HookEventFactory({ sessionId: identity }) : undefined);
-  const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
-
   const inputPlanner = new SessionInputPlanner({
     record,
     settingsService,
@@ -735,6 +737,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   // eslint-disable-next-line prefer-const
   let terminateActiveTurn: (() => void) | undefined;
   const state = new SessionLifecycle({
+    conversationLogger,
+    agentClient,
+    settingsService,
     inputPlanner,
     record,
     logger,
@@ -863,8 +868,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     record,
     approvalFlow,
     toolTracker,
-    logger,
-    sessionId: identity,
   });
 
   const continuationRecoveryHandler = new ContinuationRecoveryHandler({
@@ -882,7 +885,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const turnAdapter = new SessionTurnAdapter({
-    openAIRootCheckpointLifecycleObserver,
     agentClient,
     logger,
     sessionId: identity,
@@ -926,14 +928,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
   terminateActiveTurn = () => turnCoordinator.terminate();
 
-  const stateFacade = new SessionManager({
-    record,
-    state,
-    conversationLogger,
-    agentClient,
-    settingsService,
-    inputPlanner,
-  });
+  const stateFacade = state;
 
   const runtimeController = new SessionRuntimeController({
     agentClient,

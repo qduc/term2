@@ -46,6 +46,8 @@ export interface ContinuationPlan {
 
 export type ApprovalDecisionInput = {
   kind: 'approval_decision';
+  /** Runtime-issued interruption identity; not an authorization or presentation snapshot. */
+  decisionAddress: unknown;
   answer: string;
   rejectionReason?: string;
   generation: number;
@@ -87,6 +89,7 @@ export class ApprovalFlowCoordinator {
   ): ApprovalDecisionInput {
     return {
       kind: 'approval_decision',
+      decisionAddress: this.deps.approvalState.getPending()?.interruption,
       answer,
       rejectionReason,
       generation: this.deps.approvalState.getPending()?.token ?? 0,

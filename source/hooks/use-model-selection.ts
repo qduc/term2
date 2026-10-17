@@ -256,8 +256,9 @@ export const useModelSelection = (deps: {
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
-    // Synchronize selectedIndex with filteredModels: clamp to bounds and,
-    // when opening or switching provider, preselect the current model.
+    // Keep the selection and viewport together when results change.
+    // Opening the picker still preselects the current model.
+    setScrollOffset(0);
     if (filteredModels.length === 0) {
       setSelectedIndex(0);
       return;
@@ -284,14 +285,10 @@ export const useModelSelection = (deps: {
       }
     }
 
-    setSelectedIndex((prev) => Math.min(prev, filteredModels.length - 1));
+    // Retaining a lower selection would make auto-scroll undo the reset.
+    setSelectedIndex(0);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [filteredModels, loading, modelSettingConfig, settingsService]);
-
-  // Reset scroll to top when query changes (filtering)
-  useEffect(() => {
-    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [query]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {

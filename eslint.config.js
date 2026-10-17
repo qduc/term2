@@ -95,6 +95,12 @@ export default tseslint.config(
       'react-hooks/error-boundaries': 'warn',
     },
   },
+  {
+    files: ['experiments/conversation-actor/*.ts'],
+    languageOptions: {
+      parserOptions: { project: ['./experiments/conversation-actor/tsconfig.json'] },
+    },
+  },
   // Production code is held to a higher standard: unused vars are an error.
   // Test files under source/ are excluded by the test override below.
   {

@@ -1,0 +1,3270 @@
+{"scenario":"mutable-background-port","result":"PASS","events":12}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "job-started",
+    "detail": {
+      "id": "1/job",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "job",
+      "outcome": "background:1/job"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "type": "job-completed",
+    "detail": {
+      "id": "1/job",
+      "origin": 1,
+      "outcome": {
+        "kind": "known",
+        "value": "ok"
+      }
+    }
+  }
+]
+{"scenario":"mutable-foreground-port","result":"PASS","events":11}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/effect",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "effect",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"approval-cancel-order-matrix","result":"PASS","events":22}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "cancel-first"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "cancel-first"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "cancel-first"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-needed",
+    "detail": {
+      "token": 3,
+      "call": "cancel-first"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "cancel-first",
+      "outcome": "not-executed"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "cancel-first",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "type": "stale",
+    "detail": {
+      "command": "approve",
+      "token": 3
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "approve-first"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-started",
+    "detail": {
+      "id": "approve-first"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 4,
+    "type": "consumed",
+    "detail": {
+      "id": "approve-first"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 4,
+    "type": "model-requested",
+    "detail": {
+      "token": 5,
+      "chained": false,
+      "items": 4
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 4,
+    "type": "model-completed",
+    "detail": {
+      "token": 5,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 4,
+    "type": "approval-needed",
+    "detail": {
+      "token": 6,
+      "call": "approve-first"
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 4,
+    "type": "approval-resolved",
+    "detail": {
+      "token": 6,
+      "allow": true
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "turn": 4,
+    "type": "tool-started",
+    "detail": {
+      "id": "4/approve-first",
+      "token": 7
+    }
+  },
+  {
+    "seq": 19,
+    "session": 1,
+    "turn": 4,
+    "type": "tool-settled",
+    "detail": {
+      "call": "approve-first",
+      "outcome": "unknown"
+    }
+  },
+  {
+    "seq": 20,
+    "session": 1,
+    "turn": 4,
+    "type": "settled",
+    "detail": {
+      "id": "approve-first",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 21,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 22,
+    "session": 1,
+    "type": "stale",
+    "detail": {
+      "command": "tool-result",
+      "token": 7
+    }
+  }
+]
+{"scenario":"background-rollover-order-matrix","result":"PASS","events":26}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "session-1"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "session-1"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "session-1"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "job-started",
+    "detail": {
+      "id": "1/job-1",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "job-1",
+      "outcome": "background:1/job-1"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "session-1",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "type": "job-completed",
+    "detail": {
+      "id": "1/job-1",
+      "origin": 1,
+      "outcome": {
+        "kind": "known",
+        "value": "ok"
+      }
+    }
+  },
+  {
+    "seq": 13,
+    "session": 2,
+    "type": "rollover",
+    "detail": {}
+  },
+  {
+    "seq": 14,
+    "session": 2,
+    "type": "accepted",
+    "detail": {
+      "id": "session-2"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 2,
+    "turn": 5,
+    "type": "turn-started",
+    "detail": {
+      "id": "session-2"
+    }
+  },
+  {
+    "seq": 16,
+    "session": 2,
+    "turn": 5,
+    "type": "consumed",
+    "detail": {
+      "id": "session-2"
+    }
+  },
+  {
+    "seq": 17,
+    "session": 2,
+    "turn": 5,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 18,
+    "session": 2,
+    "turn": 5,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 19,
+    "session": 2,
+    "turn": 5,
+    "type": "job-started",
+    "detail": {
+      "id": "5/job-2",
+      "token": 7
+    }
+  },
+  {
+    "seq": 20,
+    "session": 2,
+    "turn": 5,
+    "type": "tool-settled",
+    "detail": {
+      "call": "job-2",
+      "outcome": "background:5/job-2"
+    }
+  },
+  {
+    "seq": 21,
+    "session": 2,
+    "turn": 5,
+    "type": "model-requested",
+    "detail": {
+      "token": 8,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 22,
+    "session": 2,
+    "turn": 5,
+    "type": "model-completed",
+    "detail": {
+      "token": 8,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 23,
+    "session": 2,
+    "turn": 5,
+    "type": "settled",
+    "detail": {
+      "id": "session-2",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 24,
+    "session": 2,
+    "turn": 5,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 25,
+    "session": 3,
+    "type": "rollover",
+    "detail": {}
+  },
+  {
+    "seq": 26,
+    "session": 3,
+    "type": "job-completed",
+    "detail": {
+      "id": "5/job-2",
+      "origin": 2,
+      "outcome": {
+        "kind": "known",
+        "value": "ok"
+      }
+    }
+  }
+]
+{"scenario":"fatal-provider-failure","result":"PASS","events":14}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "provider-failed",
+    "detail": {
+      "message": "Error: invalid credentials"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "failed"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "failed"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": false,
+      "items": 2
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"ordinary-multiple-tools","result":"PASS","events":15}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 2
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/one",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "one",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-needed",
+    "detail": {
+      "token": 4,
+      "call": "two"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-resolved",
+    "detail": {
+      "token": 4,
+      "allow": true
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/two",
+      "token": 5
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "two",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": true,
+      "items": 4
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"cancel-during-approval","result":"PASS","events":10}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-needed",
+    "detail": {
+      "token": 3,
+      "call": "one"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "one",
+      "outcome": "not-executed"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "type": "stale",
+    "detail": {
+      "command": "approve",
+      "token": 3
+    }
+  }
+]
+{"scenario":"steer-during-provider-retry","result":"PASS","events":15}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "retry-needed",
+    "detail": {
+      "token": 3,
+      "cause": "transient",
+      "message": "offline"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b",
+      "target": 1
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": false,
+      "items": 2
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "retry-needed",
+    "detail": {
+      "token": 5,
+      "cause": "transient",
+      "message": "again"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": false,
+      "items": 2
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "stale",
+    "detail": {
+      "command": "retry",
+      "token": 3
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"steer-at-next-boundary","result":"PASS","events":14}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b",
+      "target": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/one",
+      "token": 3
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "one",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 4
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"steer-before-finish","result":"PASS","events":15}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b",
+      "target": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "steer-returned",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"late-provider-response","result":"PASS","events":15}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": false,
+      "items": 2
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 3,
+    "type": "stale",
+    "detail": {
+      "command": "model-result",
+      "token": 2
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 3,
+    "type": "stale",
+    "detail": {
+      "command": "cancel",
+      "turn": 1
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"retract-and-edit-queued","result":"PASS","events":19}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "edited",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "retracted"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "d",
+      "target": 1
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "d",
+      "status": "retracted"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "c",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 19,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"background-after-turn","result":"PASS","events":19}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "job-started",
+    "detail": {
+      "id": "1/job",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "job",
+      "outcome": "background:1/job"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "type": "job-completed",
+    "detail": {
+      "id": "1/job",
+      "origin": 1,
+      "outcome": {
+        "kind": "known",
+        "value": "background result"
+      }
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 5,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 5,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 5,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": true,
+      "items": 6
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 5,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "turn": 5,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 19,
+    "session": 1,
+    "turn": 5,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"background-after-rollover","result":"PASS","events":17}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 2
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "job-started",
+    "detail": {
+      "id": "1/survive",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "survive",
+      "outcome": "background:1/survive"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "job-started",
+    "detail": {
+      "id": "1/detach",
+      "token": 4
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "detach",
+      "outcome": "background:1/detach"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 5,
+      "chained": true,
+      "items": 4
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 2,
+    "type": "job-detached",
+    "detail": {
+      "id": "1/detach",
+      "token": 4,
+      "outcome": "unknown",
+      "origin": 1
+    }
+  },
+  {
+    "seq": 14,
+    "session": 2,
+    "type": "rollover",
+    "detail": {}
+  },
+  {
+    "seq": 15,
+    "session": 2,
+    "type": "stale",
+    "detail": {
+      "command": "job-result",
+      "token": 4
+    }
+  },
+  {
+    "seq": 16,
+    "session": 2,
+    "type": "job-completed",
+    "detail": {
+      "id": "1/survive",
+      "origin": 1,
+      "outcome": {
+        "kind": "known",
+        "value": "successor result"
+      }
+    }
+  },
+  {
+    "seq": 17,
+    "session": 2,
+    "type": "stale",
+    "detail": {
+      "command": "model-result",
+      "token": 5
+    }
+  }
+]
+{"scenario":"unknown-tool-outcome","result":"PASS","events":17}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 2
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/write",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "reconciliation-needed",
+    "detail": {
+      "token": 4,
+      "call": "write",
+      "reason": "Error: connection lost after effect"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "stale",
+    "detail": {
+      "command": "retry",
+      "token": 4
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "reconciled",
+    "detail": {
+      "token": 4,
+      "outcome": "effect verified externally"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "write",
+      "outcome": "effect verified externally"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/read",
+      "token": 5
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "stale",
+    "detail": {
+      "command": "reconcile",
+      "token": 4
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "read",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": false,
+      "items": 4
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"invalid-provider-chain","result":"PASS","events":16}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 1
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/write",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "write",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "retry-needed",
+    "detail": {
+      "token": 5,
+      "cause": "invalid-chain",
+      "message": "anchor disappeared"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b",
+      "target": 1
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": false,
+      "items": 4
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"cancel-during-tools","result":"PASS","events":18}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 2
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/one",
+      "token": 3
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "one",
+      "outcome": "unknown"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "two",
+      "outcome": "not-executed"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "cancelled"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 4,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 4,
+    "type": "model-requested",
+    "detail": {
+      "token": 5,
+      "chained": false,
+      "items": 5
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 4,
+    "type": "stale",
+    "detail": {
+      "command": "tool-result",
+      "token": 3
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 4,
+    "type": "model-completed",
+    "detail": {
+      "token": 5,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 4,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "turn": 4,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"concurrent-arrivals","result":"PASS","events":29}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "d"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "rejected",
+    "detail": {
+      "command": "submit",
+      "id": "b",
+      "reason": "duplicate-id"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 15,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 16,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 17,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 18,
+    "session": 1,
+    "turn": 5,
+    "type": "turn-started",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 19,
+    "session": 1,
+    "turn": 5,
+    "type": "consumed",
+    "detail": {
+      "id": "c"
+    }
+  },
+  {
+    "seq": 20,
+    "session": 1,
+    "turn": 5,
+    "type": "model-requested",
+    "detail": {
+      "token": 6,
+      "chained": true,
+      "items": 5
+    }
+  },
+  {
+    "seq": 21,
+    "session": 1,
+    "turn": 5,
+    "type": "model-completed",
+    "detail": {
+      "token": 6,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 22,
+    "session": 1,
+    "turn": 5,
+    "type": "settled",
+    "detail": {
+      "id": "c",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 23,
+    "session": 1,
+    "turn": 5,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 24,
+    "session": 1,
+    "turn": 7,
+    "type": "turn-started",
+    "detail": {
+      "id": "d"
+    }
+  },
+  {
+    "seq": 25,
+    "session": 1,
+    "turn": 7,
+    "type": "consumed",
+    "detail": {
+      "id": "d"
+    }
+  },
+  {
+    "seq": 26,
+    "session": 1,
+    "turn": 7,
+    "type": "model-requested",
+    "detail": {
+      "token": 8,
+      "chained": true,
+      "items": 7
+    }
+  },
+  {
+    "seq": 27,
+    "session": 1,
+    "turn": 7,
+    "type": "model-completed",
+    "detail": {
+      "token": 8,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 28,
+    "session": 1,
+    "turn": 7,
+    "type": "settled",
+    "detail": {
+      "id": "d",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 29,
+    "session": 1,
+    "turn": 7,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"observer-isolation","result":"PASS","events":14}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-started",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 3,
+    "type": "consumed",
+    "detail": {
+      "id": "b"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 3,
+    "type": "model-requested",
+    "detail": {
+      "token": 4,
+      "chained": true,
+      "items": 3
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 3,
+    "type": "model-completed",
+    "detail": {
+      "token": 4,
+      "calls": 0
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 3,
+    "type": "settled",
+    "detail": {
+      "id": "b",
+      "status": "completed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 3,
+    "type": "turn-finished",
+    "detail": {
+      "status": "completed"
+    }
+  }
+]
+{"scenario":"approval-denial-and-repeat-call","result":"PASS","events":14}
+[
+  {
+    "seq": 1,
+    "session": 1,
+    "type": "accepted",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 2,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-started",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 3,
+    "session": 1,
+    "turn": 1,
+    "type": "consumed",
+    "detail": {
+      "id": "a"
+    }
+  },
+  {
+    "seq": 4,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 2,
+      "chained": false,
+      "items": 1
+    }
+  },
+  {
+    "seq": 5,
+    "session": 1,
+    "turn": 1,
+    "type": "model-completed",
+    "detail": {
+      "token": 2,
+      "calls": 2
+    }
+  },
+  {
+    "seq": 6,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-needed",
+    "detail": {
+      "token": 3,
+      "call": "one"
+    }
+  },
+  {
+    "seq": 7,
+    "session": 1,
+    "turn": 1,
+    "type": "approval-resolved",
+    "detail": {
+      "token": 3,
+      "allow": false
+    }
+  },
+  {
+    "seq": 8,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "one",
+      "outcome": "denied"
+    }
+  },
+  {
+    "seq": 9,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-started",
+    "detail": {
+      "id": "1/two",
+      "token": 4
+    }
+  },
+  {
+    "seq": 10,
+    "session": 1,
+    "turn": 1,
+    "type": "tool-settled",
+    "detail": {
+      "call": "two",
+      "outcome": "ok"
+    }
+  },
+  {
+    "seq": 11,
+    "session": 1,
+    "turn": 1,
+    "type": "model-requested",
+    "detail": {
+      "token": 5,
+      "chained": true,
+      "items": 4
+    }
+  },
+  {
+    "seq": 12,
+    "session": 1,
+    "turn": 1,
+    "type": "provider-failed",
+    "detail": {
+      "message": "duplicate call IDs in model response"
+    }
+  },
+  {
+    "seq": 13,
+    "session": 1,
+    "turn": 1,
+    "type": "settled",
+    "detail": {
+      "id": "a",
+      "status": "failed"
+    }
+  },
+  {
+    "seq": 14,
+    "session": 1,
+    "turn": 1,
+    "type": "turn-finished",
+    "detail": {
+      "status": "failed"
+    }
+  }
+]

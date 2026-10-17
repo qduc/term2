@@ -33,6 +33,7 @@ type FixtureMode =
   | 'multi-turn'
   | 'approval'
   | 'session-search'
+  | 'nested-shell'
   | 'background-shell'
   | 'native-error'
   | 'incomplete'
@@ -304,6 +305,39 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     expect(child.getVisibleOutput()).toContain('fixture rejection');
   });
 
+  it.each(['y', 'n'] as const)(
+    'shipped CLI resolves nested shell approval %s and returns one outer tool result',
+    async (answer) => {
+      const server = await startResponsesFixtureServer({ mode: 'nested-shell' });
+      activeServer = server;
+      const workspace = await createWorkspace(server, { provider: 'openai', transport: 'http' }, 'nested-shell');
+      activeWorkspace = workspace;
+      const child = await startCli(workspace);
+      activeChild = child;
+      await child.waitForIdleInput();
+      await writePrompt(child, 'run shell inside the script');
+      await child.waitForVisibleOutput('Allow this action?');
+      expect(toolResultRequests(server.requests)).toHaveLength(0);
+      await writeApprovalShortcut(child, answer);
+      if (answer === 'n') {
+        await child.waitForVisibleOutput('Why?');
+        await writePrompt(child, 'fixture rejection');
+      }
+      await child.waitForVisibleOutput(answer === 'y' ? 'APPROVED-FINAL' : 'REJECTED-FINAL');
+      const requests = normalRequests(server.requests);
+      expect(requests).toHaveLength(2);
+      const results = toolResultItems(requests[1]);
+      expect(results).toHaveLength(1);
+      expect(results[0]?.call_id).toBe(TOOL_CALL_ID);
+      const output = toolResultText(requests[1]!);
+      if (answer === 'y') expect(output).toContain(workspace.root);
+      else {
+        expect(output).toContain('fixture rejection');
+        expect(output).not.toContain('exit 0');
+      }
+    },
+  );
+
   it('OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification', async () => {
     const providerCase: ProviderTransportCase = { provider: 'openai', transport: 'http' };
     const server = await startResponsesFixtureServer({ mode: 'background-shell' });
@@ -474,7 +508,7 @@ async function createWorkspace(
               websocketInterFrameTimeoutMs: 2_000,
             },
           },
-          app: { liteMode: true },
+          app: { liteMode: mode !== 'nested-shell' },
           shell: { autoApproveMode: 'off' },
           sandbox: { enabled: mode !== 'background-shell', allowNetworking: false },
         }),
@@ -770,10 +804,19 @@ async function serveResponse(
     return;
   }
 
-  if ((mode === 'approval' || mode === 'session-search') && !hasToolResult) {
+  if ((mode === 'approval' || mode === 'session-search' || mode === 'nested-shell') && !hasToolResult) {
     const responseId = TOOL_RESPONSE_ID;
     await pushFrames(
-      mode === 'session-search'
+      mode === 'nested-shell'
+        ? toolCallFrames(
+            responseId,
+            'run_code',
+            JSON.stringify({
+              description: 'Run nested shell',
+              code: `try { return await tools.shell(${TOOL_ARGUMENTS}); } catch (e) { return e.message; }`,
+            }),
+          )
+        : mode === 'session-search'
         ? toolCallFrames(
             responseId,
             'run_code',
@@ -801,9 +844,13 @@ async function serveResponse(
   }
 
   const responseId =
-    mode === 'approval' ? TOOL_RESUMED_RESPONSE_ID : normalIndex === 0 ? FIRST_RESPONSE_ID : SECOND_RESPONSE_ID;
+    mode === 'approval' || mode === 'nested-shell'
+      ? TOOL_RESUMED_RESPONSE_ID
+      : normalIndex === 0
+      ? FIRST_RESPONSE_ID
+      : SECOND_RESPONSE_ID;
   const text =
-    mode === 'approval'
+    mode === 'approval' || mode === 'nested-shell'
       ? hasToolResult && toolResultText(request).includes('fixture rejection')
         ? 'REJECTED-FINAL'
         : 'APPROVED-FINAL'

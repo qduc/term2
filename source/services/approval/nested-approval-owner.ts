@@ -1,3 +1,4 @@
+import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { SessionIdSource } from '../session/session-identity.js';
 import { resolveSessionId } from '../session/session-identity.js';
@@ -150,7 +151,12 @@ export class NestedApprovalOwner {
   }
 
   async #finishDecision(requestId: string, entry: Entry, decision: NestedApprovalDecision): Promise<void> {
-    if (decision.answer !== 'y' && !decision.answer.startsWith('allow-') && !decision.answer.startsWith('docker-')) {
+    if (
+      decision.answer !== 'y' &&
+      !decision.answer.startsWith('allow-') &&
+      !decision.answer.startsWith('docker-') &&
+      !(entry.request.approval.deniedRead && isDeniedReadApproveAnswer(decision.answer))
+    ) {
       this.#settle(requestId, denial(decision.rejectionReason));
       return;
     }

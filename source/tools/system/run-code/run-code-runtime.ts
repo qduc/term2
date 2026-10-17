@@ -1,3 +1,4 @@
+import { isDeniedReadApproveAnswer, type PostExecuteDecision } from '../../../contracts/conversation.js';
 import { appendFileSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +16,7 @@ import type { ToolInvocationContext } from '../../../services/agent-runtime/tool
 import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
 import { applyApprovalGrant } from '../../../services/approval/approval-grant-executor.js';
+import { isDockerHostControlShellApproval } from '../../../services/approval/shell-sandbox-approval.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
 import { isZodToolParameterSchema, type AnyToolDefinition, type ToolRegistry } from '../../types.js';
@@ -74,7 +76,6 @@ const PROHIBITED_TOOL_NAMES: readonly ProhibitedToolName[] = [
   'session_rollover',
   // The goal stop check must be a direct, top-level call so the stop guard sees it in history.
   TOOL_NAME_GOAL_CHECK,
-  'shell',
   'bash',
   'enter_worktree',
   'exit_worktree',
@@ -135,7 +136,7 @@ export const clipReason = (reason: string): string =>
   reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
 
 export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boolean {
-  return RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
+  return tool.name === 'shell' || RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
 }
 
 function createUnknownToolHints(
@@ -853,6 +854,86 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       lane: (prepared) => (prepared.parallelSafe ? 'default' : 'serial'),
       invoke: async (prepared, callContext): Promise<CapabilityOutcome> => {
         const callId = `${bridgeRunId}:${callContext.callId}`;
+        const nestedContext = withAbortSignal(input.context, mergeAbortSignals(callerSignal, callContext.signal), {
+          scripted: true,
+        }) as ToolInvocationContext;
+        const revalidateAuthority = async () => {
+          const currentRoot = options.getCwd();
+          const authority = await bindPreparedAuthority(
+            prepared.tool.name,
+            prepared.originalParams,
+            currentRoot,
+            options.executionContext,
+          );
+          return (
+            authority.kind === 'bound' &&
+            currentRoot === prepared.authorityRoot &&
+            JSON.stringify(authority) === prepared.authorityMeaning
+          );
+        };
+        const revalidate = async () =>
+          (
+            await approvalRegistry.evaluate({
+              toolName: prepared.tool.name,
+              args: prepared.params,
+              context: input.context,
+            })
+          ).kind;
+        // The factory leaves scripted post-execute pauses to this owner, so
+        // approval waits participate in the worker clock and cancellation.
+        const executePrepared = async () => {
+          const details = { toolCall: { callId } };
+          const executeAgain = async () => {
+            if (nestedContext.signal?.aborted) throw new Error('Tool execution was cancelled.');
+            return prepared.tool.execute(prepared.params, nestedContext, details);
+          };
+          const result = await executeAgain();
+          const pause = prepared.tool.postExecutePause;
+          const descriptor = pause?.describe(prepared.params, result, details);
+          if (!pause || !descriptor) return result;
+          const context = { params: prepared.params, result, details, executeAgain };
+          const reject = () => (pause.resolve ? pause.resolve(context, 'reject') : result);
+          if (!options.nestedApprovalOwner) return reject();
+          let postDecision: PostExecuteDecision = 'reject';
+          tools.onWaiting?.(callContext);
+          try {
+            const resolution = await options.nestedApprovalOwner.request({
+              requestId: `${callId}:post-execute`,
+              sessionId: sessionId ?? 'unknown',
+              graphIdentity: options.graphIdentity ?? options.registry,
+              outerRunId: bridgeRunId,
+              nestedCallId: callId,
+              toolName: prepared.tool.name,
+              preparedArguments: prepared.params,
+              authorityContext: input.context,
+              approval: {
+                agentName: 'Nested run_code',
+                ...descriptor,
+                rawInterruption: null,
+                callId,
+                workspaceRoot: prepared.authorityRoot,
+              },
+              signal: nestedContext.signal!,
+              revalidateAuthority,
+              revalidate,
+              grant: ({ answer }) => {
+                if (descriptor.deniedRead && isDeniedReadApproveAnswer(answer)) postDecision = answer;
+                else if (!descriptor.deniedRead && answer === 'y') postDecision = 'approve';
+                else throw new Error('Tool execution was not approved.');
+              },
+              dispatch: async () => {
+                tools.onResumed?.(callContext);
+                return pause.resolve ? pause.resolve(context, postDecision) : executeAgain();
+              },
+            });
+            if (resolution.kind === 'approved') return resolution.result;
+            await reject();
+            if (resolution.kind === 'failed') throw resolution.error;
+            return result;
+          } finally {
+            tools.onResumed?.(callContext);
+          }
+        };
         const decision = await approvalRegistry.evaluate({
           toolName: prepared.tool.name,
           args: prepared.params,
@@ -860,9 +941,6 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
         });
         if (decision.kind !== 'auto_approve') {
           if (decision.kind === 'prompt' && options.nestedApprovalOwner) {
-            const nestedContext = withAbortSignal(input.context, mergeAbortSignals(callerSignal, callContext.signal), {
-              scripted: true,
-            }) as ToolInvocationContext;
             tools.onWaiting?.(callContext);
             try {
               const resolution = await options.nestedApprovalOwner.request({
@@ -881,6 +959,13 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
                   rawInterruption: null,
                   callId,
                   workspaceRoot: prepared.authorityRoot,
+                  dockerHostControl: isDockerHostControlShellApproval(
+                    prepared.tool.name,
+                    prepared.params,
+                    sessionId ?? 'unknown',
+                    options.sessionAccess,
+                    options.nestedCompatibility,
+                  ),
                   outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
                     prepared.tool.name,
                     prepared.params,
@@ -888,28 +973,8 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
                   ),
                 },
                 signal: nestedContext.signal as AbortSignal,
-                revalidateAuthority: async () => {
-                  const currentRoot = options.getCwd();
-                  const authority = await bindPreparedAuthority(
-                    prepared.tool.name,
-                    prepared.originalParams,
-                    currentRoot,
-                    options.executionContext,
-                  );
-                  return (
-                    authority.kind === 'bound' &&
-                    currentRoot === prepared.authorityRoot &&
-                    JSON.stringify(authority) === prepared.authorityMeaning
-                  );
-                },
-                revalidate: async () =>
-                  (
-                    await approvalRegistry.evaluate({
-                      toolName: prepared.tool.name,
-                      args: prepared.params,
-                      context: input.context,
-                    })
-                  ).kind,
+                revalidateAuthority,
+                revalidate,
                 grant: (nestedDecision) => {
                   if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
                   const applied = applyApprovalGrant(
@@ -928,7 +993,10 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
                   );
                   if (!applied.isApproved) throw new Error('Tool execution was not approved.');
                 },
-                dispatch: async () => prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } }),
+                dispatch: async () => {
+                  tools.onResumed?.(callContext);
+                  return executePrepared();
+                },
               });
               if (resolution.kind === 'approved') return settleResolved(prepared, resolution.result, callId);
               const message = 'message' in resolution ? resolution.message : String(resolution.error);
@@ -979,15 +1047,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
           return failed(message);
         }
         try {
-          return settleResolved(
-            prepared,
-            await prepared.tool.execute(
-              prepared.params,
-              withAbortSignal(input.context, mergeAbortSignals(callerSignal, callContext.signal), { scripted: true }),
-              { toolCall: { callId } },
-            ),
-            callId,
-          );
+          return settleResolved(prepared, await executePrepared(), callId);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           record(prepared.tool.name, 'error', prepared.started, undefined, callId, 'nested_tool_failure', message);

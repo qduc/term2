@@ -3546,3 +3546,31 @@ depth. Scope: non-interactive mode only; the interactive prompt and the
 continuation applier are unchanged. Red proof: the `pause` case of
 `runNonInteractive --auto-approve never grants a run-budget extension` failed on
 the unchanged code (exit 0 after two auto-granted extensions).
+
+
+### Shell calls inside run_code
+
+User-authorized scope expansion: shell now joins the script catalogue while
+retaining direct calls. The existing shell sandbox and pre-execution approval
+policy remain authoritative. Post-execute denied-read recovery uses
+`NestedApprovalOwner` for script calls, including authority/policy revalidation
+and fail-closed missing-owner/cancellation settlement. It applies the same
+one-retry descriptor used by direct calls; unrelated earlier effects are not
+replayed. No new security grant, setting, default, clamping or migration.
+
+Guard classes: existing script containment clocks and shell process deadlines.
+Enforcement remains `SandboxedCodeHostImpl` and the shell execution owner;
+recovery remains the invoking script/session. Approval waiting is direct state
+evidence and pauses only the existing work clock. Dispatch signals resumed
+before approved execution, so approval-required foreground shell commands still
+consume the script budget. Host cancellation propagates to foreground children;
+explicitly backgrounded/adopted jobs retain session ownership and cancellation.
+Long-stop, call/concurrency/output/retention budgets are unchanged. Observability
+uses existing nested call records and shell registry events; rollback is the
+shell script exposure and scripted post-execute routing together.
+
+Evidence: `shell.integration.test.ts` exercises real child processes on caller
+abort and script timeout, refusal without spawning, and background survival.
+`provider-session-responses.blackbox.ts` exercises approval and rejection through
+the built CLI. No OS sandbox confinement claim derives from the deterministic
+sandbox-runner fixture.

@@ -21,7 +21,7 @@ export function getScriptPrimaryToolsAddendum(editorSurface: ScriptEditorSurface
     ...editorBullets,
     '- For multiline edit text or data containing quotes, backticks, or `${...}`, pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.',
     '- Web: `tools.web_search` and `tools.web_fetch`.',
-    '- `shell` is a direct tool for terminal commands, builds, git, and scripts; `tools.shell` does not exist inside `run_code`. Do not use Python to read files when `tools.read_file` is available.',
+    '- `shell` is available directly and as `tools.shell(...)` inside `run_code` for terminal commands, builds, git, and scripts. Both paths use the same approvals and sandbox. Do not use Python to read files when `tools.read_file` is available.',
   ];
   const toolsIntro = editorSurface === 'none' ? 'File, search, and web tools' : 'File, search, web, and edit tools';
   return `${header}\n\n${toolsIntro} are not on your direct tool list. Call them as \`tools.<name>(params)\` inside \`run_code\`. Use \`tools.describe(name)\` when you need a schema.\n\n${bullets.join(

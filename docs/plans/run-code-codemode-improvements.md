@@ -477,7 +477,8 @@ Usage evidence remains low:
 - Every tool named in a resent `Script failed: Unknown tool "X"` output —
   `grep` 9, `shell` 7, `glob` 3, `create_file` 3, `search_replace` 2, and one
   ambiguous `missing` — was deliberately absent from that invocation's script
-  surface. `shell` is prohibited in scripts, `grep`/`glob` are hidden when
+  surface at the time of that measurement. Shell is now available in scripts;
+  `grep`/`glob` are hidden when
   `searchViaShell` is on, and `create_file`/`search_replace` are hidden for
   patch-editing models. None was a catalog member that discovery failed to
   surface.
@@ -732,3 +733,31 @@ This plan is complete when:
    shallow pass-through modules; and
 8. TypeScript, OpenAPI, and any stronger isolation mechanism remain separate,
    evidence-gated decisions.
+
+## Shell on both tool surfaces
+
+The shell exclusion caused agents to guess `tools.shell` after learning the
+ordinary script-tool convention. `isDirectlyCallable` now keeps shell directly
+available while `createRunCodeRuntime` also exposes it in the script catalogue.
+`createShellToolDefinition` declares its script result as a string, including
+serialized background-job acknowledgements.
+
+Both paths use the factory-wrapped executor and its sandbox, interceptors,
+read-only restrictions and approval policy. For scripted calls, the runtime
+owns the post-execute descriptor instead of registering a root-session gate.
+Sandbox denied-read choices therefore wait in `NestedApprovalOwner`, revalidate
+workspace and approval policy, and retry once using the shell descriptor's
+call-scoped override. Missing approval ownership fails closed. Background
+sandbox denials still require an explicit foreground retry.
+
+Approval waits use the existing shared-host waiting signals; execution resumes
+its work clock before an approved command starts. The merged caller/host abort
+signal reaches foreground processes. Explicit background launches and adopted
+foreground jobs retain session-registry ownership after the script returns.
+No timeout defaults, concurrency limits or retention settings change.
+
+Evidence lives in `shell.integration.test.ts` (wrapped registry, disposable
+worker and real child processes) and the shipped-CLI nested-shell approval
+cases in `provider-session-responses.blackbox.ts`. The integration sandbox
+runner fixture checks denied-read recovery deterministically; it does not claim
+OS sandbox confinement.

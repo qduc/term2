@@ -31,7 +31,6 @@ export type ProhibitedToolName =
   | 'ask_mentor'
   | 'session_rollover'
   | 'goal_check'
-  | 'shell'
   | 'bash'
   | 'enter_worktree'
   | 'exit_worktree';

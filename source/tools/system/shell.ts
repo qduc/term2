@@ -9,12 +9,7 @@ import { logValidationError as logValidationErrorUtil } from '../../utils/shell/
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
 import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
-import type {
-  PostExecutePauseDescriptor,
-  SchemaToolDefinition,
-  ScriptedToolDefinition,
-  FormatCommandMessage,
-} from '../types.js';
+import type { PostExecutePauseDescriptor, ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
   coerceToText,
@@ -140,7 +135,7 @@ export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandb
   background?: boolean;
 };
 export type ShellToolDefinition = Omit<
-  SchemaToolDefinition<typeof shellParametersSchema, 'shell'>,
+  ScriptedToolDefinition<typeof shellParametersSchema, 'shell'>,
   'execute' | 'needsApproval' | 'postExecutePause'
 > & {
   needsApproval: (params: ShellToolParams, context?: unknown) => Promise<boolean> | boolean;
@@ -750,6 +745,7 @@ export function createShellToolDefinition(deps: {
 
   return {
     name: 'shell',
+    scriptedReturnSchema: z.string(),
     description: shellDescription,
     parameters: shellParametersSchema,
     needsApproval: async (params, context) => {

@@ -1,43 +1,23 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import { buildToolLedgerFromJournalEvents } from '../conversation/journal-to-ledger.js';
 import type { NextRunInstruction, RecoveryResult, RecoveryExecutor, RecoveryExecutorInput } from './retry-contracts.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
-import type { SessionToolTracker } from '../session/session-tool-tracker.js';
-import { projectProviderHistory } from '../conversation/conversation-state-projector.js';
-
-const journalSnapshotToLedger = (
-  snapshot: import('../logging/conversation-log-events.js').AssistantJournalItemLogEvent[] | undefined,
-): SavedToolExecution[] => {
-  if (!snapshot || snapshot.length === 0) return [];
-  return buildToolLedgerFromJournalEvents(snapshot, new Date().toISOString());
-};
 
 export type RecoveryExecutorDeps = {
-  toolTracker: SessionToolTracker;
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   providerContinuity: ProviderContinuity;
 };
 
+/** Applies policy-selected retry settings; Record owns acceptance and reconstruction. */
 export class DefaultRecoveryExecutor implements RecoveryExecutor {
   constructor(private deps: RecoveryExecutorDeps) {}
 
   apply(input: RecoveryExecutorInput): RecoveryResult {
     const { plan, state, retryCounts, maxModelRetries } = input;
+    this.deps.providerContinuity.clear();
+    const recoverySummary = this.deps.record.recover(plan, state);
     switch (plan.kind) {
       case 'replay_turn': {
-        this.deps.providerContinuity.clear();
-        this.deps.toolTracker.import(journalSnapshotToLedger(state.journalSnapshot));
-
-        if (plan.rollbackUserMessage) {
-          this.deps.conversationStore.removeLastUserMessage();
-        }
-
-        if (plan.errorContext) {
-          this.deps.conversationStore.addErrorContext(plan.errorContext);
-        }
-
         const instruction: NextRunInstruction = {
           skipUserMessage: !plan.rollbackUserMessage,
           retryCounts,
@@ -45,27 +25,7 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         };
         return { kind: 'run', instruction, events: [] };
       }
-
       case 'retry_fresh': {
-        if (state.stream) {
-          this.deps.providerContinuity.clear();
-          // Settle open calls before restoring the snapshot: never-dispatched
-          // calls become aborted; dispatched-but-unobserved become unknown so
-          // the model is told to verify before retrying non-idempotent work.
-          this.deps.toolTracker.settleOpenCallsOnStreamFailure('Stream failed');
-          this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
-          const projected = projectProviderHistory({
-            history: this.deps.conversationStore.getHistory(),
-            toolLedger: this.deps.toolTracker.export(),
-          });
-          if (projected.warnings.length > 0) {
-            this.deps.conversationStore.replaceHistory(projected.history);
-          }
-        } else {
-          this.deps.providerContinuity.clear();
-          this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
-        }
-
         const instruction: NextRunInstruction = {
           skipUserMessage: true,
           retryCounts,
@@ -80,44 +40,17 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
           events: [],
         };
       }
-
       case 'terminate': {
-        const events: ConversationEvent[] = [];
-
-        if (state.addedUserMessage && !state.stream) {
-          this.deps.conversationStore.removeLastUserMessage();
-        }
-
-        if (state.stream) {
-          // Inject synthetic results for open calls when possible so full-history
-          // replay stays self-contained, then drop any leftovers that never got a
-          // call item recorded. Dispatched calls settle as unknown (not failed).
-          this.deps.toolTracker.settleOpenCallsOnStreamFailure('Stream failed');
-          this.deps.toolTracker.markOpenCallsAborted('Stream failed');
-          const projected = projectProviderHistory({
-            history: this.deps.conversationStore.getHistory(),
-            toolLedger: this.deps.toolTracker.export(),
-          });
-          if (projected.warnings.length > 0) {
-            this.deps.conversationStore.replaceHistory(projected.history);
-          }
-        }
-
-        // Chain settlement: a terminated stream must not leave previousResponseId
-        // pointing at a response that still requires tool outputs. The next user
-        // turn ("continue") would otherwise send a text-only delta and get a 400.
-        this.deps.providerContinuity.clear();
-
-        const recoverySummary = this.deps.toolTracker.getRecoverySummary();
-        if (recoverySummary) {
-          events.push({
-            type: 'tool_recovery',
-            recoveredCallIds: recoverySummary.recoveredCallIds,
-            droppedCallIds: recoverySummary.droppedCallIds,
-            message: recoverySummary.message,
-          });
-        }
-
+        const events: ConversationEvent[] = recoverySummary
+          ? [
+              {
+                type: 'tool_recovery',
+                recoveredCallIds: recoverySummary.recoveredCallIds,
+                droppedCallIds: recoverySummary.droppedCallIds,
+                message: recoverySummary.message,
+              },
+            ]
+          : [];
         return { kind: 'terminated', events: [...plan.events, ...events] };
       }
     }

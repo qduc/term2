@@ -1,5 +1,5 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { LLMAdvisory } from '../../contracts/conversation.js';
 import {
   evaluateShellAutoApprovalAdvisories,
@@ -119,7 +119,7 @@ const parseUnsandboxedFlag = (rawArguments: unknown): boolean => {
 import type { SessionAccessState } from '../session/session-access-state.js';
 
 export interface ShellAutoApprovalResolverDeps {
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   settingsService?: ISettingsService;
@@ -218,7 +218,7 @@ export class ShellAutoApprovalResolver {
     if (unevaluated.length > 0) {
       const results = await evaluateShellAutoApprovalAdvisories({
         commands: unevaluated,
-        history: this.deps.conversationStore.getHistory(),
+        history: this.deps.record.getHistory(),
         manualDecisions: this.manualDecisions,
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient,
@@ -255,7 +255,7 @@ export class ShellAutoApprovalResolver {
               }),
         },
       ],
-      history: this.deps.conversationStore.getHistory(),
+      history: this.deps.record.getHistory(),
       manualDecisions: this.manualDecisions,
       settingsService: this.deps.settingsService,
       agentClient: this.deps.agentClient,

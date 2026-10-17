@@ -1,7 +1,7 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { stripMemoryRecall } from '../../prompts/memory-recall-notice.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
@@ -14,7 +14,6 @@ import { classifyProviderFailure, isClassifiedCancellation } from '../retry/prov
 import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
-import type { SessionToolTracker } from './session-tool-tracker.js';
 import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
@@ -26,7 +25,7 @@ export type InitialTurnRecoveryResult =
 
 export type InitialTurnRecoveryHandlerDeps = {
   breakChaining?: (reason: Extract<ClassifiedFailure, { kind: 'chain_recovery' }>['cause']) => void;
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   freshStartRetriesAllowed: boolean;
   generationGuard: GenerationGuard;
   inputPlanner: SessionInputPlanner;
@@ -37,7 +36,6 @@ export type InitialTurnRecoveryHandlerDeps = {
   retryEventPresenter: RetryEventPresenter;
   sessionId: SessionIdSource;
   provider?: string;
-  toolTracker?: Pick<SessionToolTracker, 'inspectCommittedToolContinuation' | 'reconcileAndUpdateHistory'>;
 };
 
 export class InitialTurnRecoveryHandler {
@@ -59,8 +57,7 @@ export class InitialTurnRecoveryHandler {
     // for the initial path too: a mid-turn tool continuation that fails while
     // the run loop is still draining the initial stream reaches this handler
     // with completed pairs that may not yet be committed.
-    this.deps.toolTracker?.reconcileAndUpdateHistory?.();
-    const committedToolContinuation = this.deps.toolTracker?.inspectCommittedToolContinuation();
+    const committedToolContinuation = this.deps.record.inspectCommittedToolContinuation();
     let classified = this.deps.retryClassifier.classify({
       error,
       retryCounts: attempt.retryCounts,
@@ -122,7 +119,7 @@ export class InitialTurnRecoveryHandler {
         maxModelRetries: attempt.maxModelRetries,
       });
 
-      this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
+      this.deps.inputPlanner.recordSuccess(this.deps.record.getHistory(), {
         kind: 'full_history',
         previousInput: attempt.streamInput,
       });

@@ -1,7 +1,7 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ProviderInput, ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 import { InputSurgeGuard, type InputSurgeInputKind, type InputSurgeDecision } from '../input-surge-guard.js';
@@ -80,7 +80,7 @@ type OutgoingSizeCache = {
 export class SessionInputPlanner {
   #settingsService?: ISettingsService;
   #agentClient: ConversationAgentClient;
-  #toolTracker: SessionToolTracker;
+  #record: ConversationRecord;
   #providerContinuity: ProviderContinuity;
   #providerRegistry?: ProviderRegistry;
   #getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
@@ -95,7 +95,7 @@ export class SessionInputPlanner {
   constructor(deps: {
     settingsService?: ISettingsService;
     agentClient: ConversationAgentClient;
-    toolTracker: SessionToolTracker;
+    record: ConversationRecord;
     providerContinuity: ProviderContinuity;
     providerRegistry?: ProviderRegistry;
     getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
@@ -103,7 +103,7 @@ export class SessionInputPlanner {
   }) {
     this.#settingsService = deps.settingsService;
     this.#agentClient = deps.agentClient;
-    this.#toolTracker = deps.toolTracker;
+    this.#record = deps.record;
     this.#providerContinuity = deps.providerContinuity;
     this.#providerRegistry = deps.providerRegistry;
     this.#getProviderHistorySnapshot = deps.getProviderHistorySnapshot;
@@ -209,7 +209,7 @@ export class SessionInputPlanner {
     const supportsChaining = dynamicSupportsChaining
       ? dynamicSupportsChaining.call(this.#agentClient)
       : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
-    const history = this.#toolTracker.getReconciledHistory();
+    const history = this.#record.getReconciledHistory();
     const targetProvider = provider;
     const targetOpaqueLane =
       targetProvider === 'openai'
@@ -395,7 +395,7 @@ export class SessionInputPlanner {
     const supportsChaining = dynamicSupportsChaining
       ? dynamicSupportsChaining.call(this.#agentClient)
       : getProvider(provider, this.#providerRegistry)?.capabilities?.supportsConversationChaining ?? false;
-    const history = this.#toolTracker.getReconciledHistory();
+    const history = this.#record.getReconciledHistory();
     // The draft user turn is never a function_call, so malformed-arg detection
     // on history alone matches build(includeTurn: true).
     const hasMalformedArgs = hasMalformedToolCallArguments(history);

@@ -80,7 +80,21 @@ it('projects background lifecycle without making the foreground message history 
 
   const client = {
     async runTurn(session: ConversationTurnSession) {
-      if (await session.prepare(new AbortController().signal)) await session.consume(await client.startStream(''));
+      if (!(await session.prepare(new AbortController().signal))) return;
+      const stream = await client.startStream('');
+      session.beginSegment(stream);
+      const observed = createAgentStream({
+        ...stream,
+        async *[Symbol.asyncIterator]() {
+          for await (const event of stream) {
+            session.acceptEvent(event);
+            yield event;
+          }
+        },
+      });
+      await session.consume(observed);
+      session.acceptSegment(stream);
+      await session.completed(stream);
     },
     async startStream() {
       await bridge.runSubagentAsync({ role: 'explorer', task: 'inspect the project' });

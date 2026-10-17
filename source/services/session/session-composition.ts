@@ -10,8 +10,7 @@ import {
 } from '../agent-runtime/context-compaction/local-context-compactor.js';
 import { estimateContext, type ContextEstimate } from '../agent-runtime/context-compaction/index.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
-import { ConversationStore } from '../conversation/conversation-store.js';
-import { replayEvents } from '../conversation/conversation-replay.js';
+import { ConversationRecord } from '../conversation/conversation-record.js';
 import {
   createCheckpointSourceDigest,
   resolveCheckpointSourceRefs,
@@ -57,7 +56,6 @@ import { TurnStatusMachine } from './turn-status-machine.js';
 import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
-import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { SessionContinuityReset } from './session-continuity-reset.js';
 import { SessionIdentity } from './session-identity.js';
 import {
@@ -135,7 +133,7 @@ export type SessionRuntimeInternals = {
   identity: SessionIdentity;
   sessionStartedAt: string;
   logger: ILoggingService;
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
   getUnsettledToolExecutions: () => { callId: string; toolName: string; status: string }[];
@@ -176,8 +174,6 @@ export type SessionRuntimeInternals = {
   turnAccumulator: TurnItemAccumulator;
   turnAdapter: SessionTurnAdapter;
   freshStartRetriesAllowed: boolean;
-  /** Stable assistant-output journal created during composition. */
-  journal: AssistantTurnJournal;
   /** @internal Resolved ask-user-answer sink (derived from option or agent client). */
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
   /** @internal Session-owned sink facade; background registration observes lifecycle events. */
@@ -252,7 +248,7 @@ export type ConversationSessionBundle = Pick<
   | 'toolTracker'
   | 'inputPlanner'
   | 'dispose'
-  | 'journal'
+  | 'record'
 >;
 
 export type SessionApprovalQuery = {
@@ -540,22 +536,15 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const postExecutePending =
     suppliedPostExecutePending ?? new PostExecutePendingRegistry({ sessionId: identity, epoch: crypto.randomUUID() });
 
-  const conversationStore = new ConversationStore();
+  const record = new ConversationRecord({ logger });
   const approvalState = new ApprovalState();
   const pendingInteraction = new PendingInteractionState();
   const nestedApprovalOwner = new NestedApprovalOwner(identity);
   if (enableNestedApproval) agentClient?.setNestedApprovalOwner?.(nestedApprovalOwner);
-  const toolTracker = new SessionToolTracker(conversationStore);
-
-  // Mark ledger dispatch when the run loop enters a tool body so stream recovery
-  // can distinguish never-dispatched (aborted) from unobserved outcome (unknown).
-  getMethod<[handler: ((callId: string) => void) | undefined], void>(agentClient, 'setOnToolDispatch')?.call(
-    agentClient,
-    (callId) => toolTracker.markDispatched(callId),
-  );
+  const toolTracker = new SessionToolTracker();
 
   const shellAutoApproval = new DelegatingShellAutoApprovalResolver({
-    conversationStore,
+    record,
     agentClient,
     logger,
     settingsService,
@@ -568,17 +557,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const providerContinuity = suppliedProviderContinuity ?? new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
+    record,
     settingsService,
     agentClient,
-    toolTracker,
     providerContinuity,
     providerRegistry,
-    getProviderHistorySnapshot: () => conversationStore.getProviderHistorySnapshot(),
-    getHistoryIdentity: () => conversationStore.getProviderHistoryIdentity().identity,
-  });
-
-  const journal = new AssistantTurnJournal({
-    getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
+    getProviderHistorySnapshot: () => record.getProviderHistorySnapshot(),
+    getHistoryIdentity: () => record.getProviderHistoryIdentity().identity,
   });
 
   const conversationLogger = new ConversationLogger({
@@ -594,14 +579,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         ...(provider ? { provider } : {}),
       } satisfies AssistantTurnState;
     },
-    getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
-    getToolLedger: () => toolTracker.export(),
-    journal,
-    onProviderHistoryReplay: (envelopes) => {
-      conversationStore.replaceHistory(
-        replayEvents(envelopes as import('../conversation/conversation-decoder.js').PersistedLogEnvelope[]).history,
-      );
-    },
+    getCurrentTurnId: () => record.getCurrentTurnId(),
+    getToolLedger: () => record.exportToolEvidence(),
   });
   const appendLocalCheckpoint = (input: {
     history: readonly ProviderInputItem[];
@@ -730,11 +709,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   )?.call(agentClient, backgroundCheckInScheduler);
 
   const approvalFlow = new ApprovalFlowCoordinator({
+    record,
     agentClient,
     approvalState,
     logger,
     sessionId: identity,
-    toolTracker,
     generationGuard,
     toolOwnership,
     sessionAccess,
@@ -757,8 +736,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   let terminateActiveTurn: (() => void) | undefined;
   const state = new SessionLifecycle({
     inputPlanner,
-    toolTracker,
-    conversationStore,
+    record,
     logger,
     sessionId: identity,
     appState,
@@ -766,7 +744,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     continuityReset,
     sessionAccess,
-    journal,
     pendingInteraction,
     terminateActiveTurn: () => terminateActiveTurn?.(),
   });
@@ -820,12 +797,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     logger,
     sessionId: identity,
     toolTracker,
-    conversationStore,
-    conversationLogger,
-    providerContinuity,
-    openAIRootCheckpointLifecycleObserver,
     generationGuard,
-    journal,
     abortStream: () => agentClient.abort(),
     toolCallMarkers,
   });
@@ -845,8 +817,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   const recoveryPolicy = new DefaultConversationRecoveryPolicy();
   const recoveryExecutor = new DefaultRecoveryExecutor({
-    toolTracker,
-    conversationStore,
+    record,
     providerContinuity,
   });
   const retryClassifier = new DefaultRetryClassifier(agentClient);
@@ -860,15 +831,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   };
   const attemptFactory = new TurnAttemptFactory({
     agentClient,
-    conversationStore,
+    record,
     generationGuard,
-    toolTracker,
     state,
     resolveRetryLimit,
-    journal,
   });
   const inputPreparer = new InitialInputPreparer({
-    conversationStore,
+    record,
     generationGuard,
     inputPlanner,
     logger,
@@ -877,7 +846,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
   const recoveryHandler = new InitialTurnRecoveryHandler({
     breakChaining,
-    conversationStore,
+    record,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     generationGuard,
     inputPlanner,
@@ -888,18 +857,18 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryEventPresenter,
     sessionId: identity,
     provider: agentClient?.getProvider?.(),
-    toolTracker,
   });
 
   const planApplier = new ContinuationPlanApplier({
+    record,
     approvalFlow,
     toolTracker,
     logger,
     sessionId: identity,
-    journal,
   });
 
   const continuationRecoveryHandler = new ContinuationRecoveryHandler({
+    record,
     breakChaining,
     logger,
     sessionId: identity,
@@ -909,11 +878,11 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     recoveryExecutor,
     retryEventPresenter,
     resolveRetryLimit,
-    toolTracker,
     provider: agentClient?.getProvider?.(),
   });
 
   const turnAdapter = new SessionTurnAdapter({
+    openAIRootCheckpointLifecycleObserver,
     agentClient,
     logger,
     sessionId: identity,
@@ -925,9 +894,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     inputPreparer,
     streamProcessor,
     recoveryHandler,
-    journal,
     inputPlanner,
-    conversationStore,
+    record,
     approvalFlow,
     planApplier,
     continuationRecoveryHandler,
@@ -959,8 +927,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   terminateActiveTurn = () => turnCoordinator.terminate();
 
   const stateFacade = new SessionManager({
-    conversationStore,
-    toolTracker,
+    record,
     state,
     conversationLogger,
     agentClient,
@@ -1075,7 +1042,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     onStarted?: () => void | Promise<void>;
   }): Promise<LocalCompactionOutcome | { kind: 'busy' } | { kind: 'stale' } | NativeCompactionFailure> => {
     if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
-    const snapshot = conversationStore.getProviderHistorySnapshot();
+    const snapshot = record.getProviderHistorySnapshot();
     const provider =
       getMethod<[], string>(agentClient, 'getProvider')?.call(agentClient) ??
       settingsService?.get('agent.modelSelection').provider ??
@@ -1122,7 +1089,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
             { kind: 'failed', reason: 'native_failed', estimate: before, provider: remote.provider }
           : { kind: 'not_needed', estimate: before };
       }
-      if (!conversationStore.replaceHistoryAtRevision(snapshot.revision, remote.history)) {
+      if (!record.replaceHistoryAtRevision(snapshot.revision, remote.history)) {
         return { kind: 'stale' };
       }
       providerContinuity.clear();
@@ -1218,11 +1185,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     }).length;
     const preservedUsers = hotUsers === 0 ? genuineUsers : genuineUsers.slice(0, -hotUsers);
     if (
-      !conversationStore.replaceHistoryAtRevision(snapshot.revision, [
-        ...preservedUsers,
-        outcome.checkpoint,
-        ...outcome.hotTail,
-      ])
+      !record.replaceHistoryAtRevision(snapshot.revision, [...preservedUsers, outcome.checkpoint, ...outcome.hotTail])
     ) {
       return { kind: 'stale' };
     }
@@ -1238,14 +1201,14 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       return identity.startedAt;
     },
     getUnsettledToolExecutions: () => {
-      const unsettled = new Set(toolTracker.unsettledToolCallIdsForCurrentTurn());
-      return toolTracker
-        .export()
+      const unsettled = new Set(record.unsettledToolCallIdsForCurrentTurn());
+      return record
+        .exportToolEvidence()
         .filter((entry) => unsettled.has(entry.callId))
         .map(({ callId, toolName, status }) => ({ callId, toolName, status }));
     },
     logger,
-    conversationStore,
+    record,
     approvalState,
     toolTracker,
     toolCallMarkers,
@@ -1275,7 +1238,6 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     turnAccumulator: resolvedTurnAccumulator,
     turnAdapter,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
-    journal,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost: resolvedSubagentEventSinkHost
       ? {
@@ -1316,7 +1278,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     stateFacade,
     runtimeController,
     conversationLogger,
-    journal,
+    record,
     dispose,
     approvalFlow,
     resolvedAskUserAnswerSink,
@@ -1353,21 +1315,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     logs: {
       setLogSink: (sink) => {
         conversationLogger.setLogSink(sink);
-        journal.setSink(
-          sink
-            ? (event) => {
-                try {
-                  sink(event);
-                } catch (err) {
-                  internals.logger.warn('Journal sink threw', {
-                    eventType: 'conversation_log.sink_failed',
-                    category: 'persistence',
-                    errorMessage: err instanceof Error ? err.message : String(err),
-                  });
-                }
-              }
-            : null,
-        );
+        record.setJournalSink(sink);
       },
       dispatchEventToLog: conversationLogger.dispatchEventToLog.bind(conversationLogger),
       log: conversationLogger.log.bind(conversationLogger),

@@ -1,13 +1,11 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import { normalizeUserTurn } from '../../types/user-turn.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
-import type { SessionToolTracker } from './session-tool-tracker.js';
-import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { TurnAttempt } from './turn-attempt.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
@@ -27,12 +25,10 @@ export type InitialTurnRunOptions = {
 
 export type TurnAttemptFactoryDeps = {
   agentClient: ConversationAgentClient;
-  conversationStore: ConversationStore;
+  record: ConversationRecord;
   generationGuard: GenerationGuard;
-  toolTracker: SessionToolTracker;
   state: SessionLifecycle;
   resolveRetryLimit: () => number;
-  journal: AssistantTurnJournal;
 };
 
 export type TurnAttemptCreationResult = { kind: 'created'; attempt: TurnAttempt } | { kind: 'stale' };
@@ -48,7 +44,7 @@ export class TurnAttemptFactory {
 
     if (!turn.text && options.skipUserMessage && !options.replayFromHistory) {
       try {
-        turn = { ...turn, text: this.deps.conversationStore.getLastUserMessage() };
+        turn = { ...turn, text: this.deps.record.getLastUserMessage() };
       } catch {
         // A fresh-start retry can legitimately have no previous user message.
       }
@@ -64,7 +60,7 @@ export class TurnAttemptFactory {
         submittedTurn: normalized,
         token,
         initialRetryCounts: this.#normalizeRetryCounts(options.retries),
-        initialJournalSnapshot: this.deps.journal.getEvents(),
+        initialJournalSnapshot: this.deps.record.getJournalEvents(),
         maxTransientRetries: this.deps.resolveRetryLimit(),
         maxModelRetries: options.maxModelRetries,
         recoveryBudget: options.recoveryBudget,

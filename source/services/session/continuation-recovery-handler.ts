@@ -1,3 +1,4 @@
+import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { GenerationGuard } from '../generation-guard.js';
@@ -7,7 +8,6 @@ import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { ClassifiedFailure, RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
 import type { TurnProjectionState } from './turn-projection-state.js';
-import type { SessionToolTracker } from './session-tool-tracker.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
 import type { SessionIdSource } from './session-identity.js';
@@ -23,7 +23,7 @@ export type ContinuationRecoveryHandlerDeps = {
   recoveryExecutor: DefaultRecoveryExecutor;
   retryEventPresenter: RetryEventPresenter;
   resolveRetryLimit: () => number;
-  toolTracker: SessionToolTracker;
+  record: ConversationRecord;
   provider?: string;
 };
 
@@ -54,8 +54,7 @@ export class ContinuationRecoveryHandler {
     // first lets the admission gate see them where the projection permits, and
     // leaves the full-history rebuild self-contained. Open/unknown calls are
     // unaffected and stay guarded by allToolsCompleted.
-    this.deps.toolTracker.reconcileAndUpdateHistory?.();
-    const committedToolContinuation = this.deps.toolTracker.inspectCommittedToolContinuation?.();
+    const committedToolContinuation = this.deps.record.inspectCommittedToolContinuation();
     const classified = this.deps.retryClassifier.classify({
       error,
       retryCounts: state.retryCounts,

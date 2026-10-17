@@ -165,7 +165,6 @@ export class AgentClient {
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
-  #onToolDispatch?: (callId: string) => void;
   #localCheckpointSink?: (input: {
     history: readonly ProviderInputItem[];
     hotTail: readonly ProviderInputItem[];
@@ -827,7 +826,6 @@ export class AgentClient {
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
       ...(decisionShadowObserver ? { decisionShadowObserver } : {}),
-      getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
       resolveMaxParallelToolCalls: () => deps.settings.get('agent.maxParallelToolCalls'),
       logDiagnostic: (message, meta, options: ApplicationRunLoopDiagnosticOptions = {}) => {
@@ -927,9 +925,6 @@ export class AgentClient {
    * Wire session tool-ledger dispatch marking. Called after composition creates
    * the tracker so mid-tool stream recovery can settle as `unknown`.
    */
-  setOnToolDispatch(handler: ((callId: string) => void) | undefined): void {
-    this.#onToolDispatch = handler;
-  }
 
   setLocalCheckpointSink(
     sink:
@@ -1522,11 +1517,16 @@ export class AgentClient {
         const prepared = await this.#prepareApplicationTurn(start.input, start.options);
         return prepared;
       },
+      beginSegment: (stream) => session.beginSegment(stream),
+      acceptEvent: (event) => session.acceptEvent(event),
+      acceptToolDispatch: (callId) => session.acceptToolDispatch(callId),
+      acceptSegment: (stream) => session.acceptSegment(stream),
+      completed: (stream) => session.completed(stream),
       consume: async (stream) => {
         this.#observeCompletion(stream, stream.state, this.#agentConfig.getProvider(), this.#agentConfig.getModel());
         await session.consume(stream);
       },
-      interrupted: async () => this.#applicationOptions(await session.interrupted()),
+      interrupted: async (stream) => this.#applicationOptions(await session.interrupted(stream)),
       recover: (error) => session.recover(error),
     });
   }

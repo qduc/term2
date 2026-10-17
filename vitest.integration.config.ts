@@ -18,6 +18,7 @@ export default defineConfig({
     include: ['source/**/*.integration.{test,spec}.{ts,tsx}', 'scripts/**/*.integration.{test,spec}.{ts,tsx}'],
     environment: 'node',
     globals: false,
+    globalSetup: ['./source/test-helpers/vitest-cache-global-setup.ts'],
     setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,
     testTimeout: 10_000,

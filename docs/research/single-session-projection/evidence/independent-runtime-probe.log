@@ -28,4 +28,3 @@ stdout | source/services/session/projection-independent.tmp.test.ts > independen
       Tests  3 passed (3)
    Start at  22:33:57
    Duration  3.94s (transform 1.88s, setup 40ms, import 2.54s, tests 1.06s, environment 0ms)
-

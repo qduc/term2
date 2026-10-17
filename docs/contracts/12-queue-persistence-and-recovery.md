@@ -59,7 +59,7 @@ confirmed retain-current by the President).
 - The live sidecar path is `path.join(getConversationsDir(), `${sessionId}.queue.json`)`.
 - `PersistedQueueV1` contains `version: 1`, `nextSequence`, `queue[]`, and optional `pause` and `active` records.
 - Each `PersistedQueueItem` contains `id`, `text`, `sequence`, `submittedAt`, and optional `steer` and `preflight` fields. `QueueController` writes no executable rich-turn payload.
-- The adapter’s active snapshot is `{ requestId, recovered? }`; `#messagesById` does not cross the process boundary.
+- The adapter’s active snapshot is `{ requestId, recovered? }`; `#submissions` does not cross the process boundary.
 - Recovery kinds are `recovered_interrupted` with `interruptedExecutionId`, `invalid_persisted_queue` with detail, and `persistence_failed` with detail.
 - An interrupted active snapshot and item are not restored as active controller state. Only its execution id remains as a diagnostic.
 - A persisted preflight action id is reminted on restore when no evaluator is installed, so an old action token is not reused.
@@ -78,7 +78,7 @@ confirmed retain-current by the President).
 
 - `QueueController.state()` exposes `recovery` and, when paused, `reason`.
 - The adapter queue-state observer exposes queue length, state kind, and pause reason. It does not forward `recovery.kind`.
-- The recovered-start observer receives `{ requestId, input, suppressUserMessageDisplay? }`. Recovered text has no corresponding `#messagesById` entry.
+- The recovered-start observer receives `{ requestId, input, suppressUserMessageDisplay? }`. Recovered text has no corresponding `#submissions` entry.
 - The UI presents a generic pause for `recovered_interrupted`; this contract does not expand that presentation surface.
 - Diagnosis signals include a leftover sidecar, a pause after `--resume`, and `state().recovery` in controller tests. No structured queue-persistence log is claimed.
 

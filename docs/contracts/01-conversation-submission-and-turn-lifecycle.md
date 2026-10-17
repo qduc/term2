@@ -47,7 +47,7 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
   also the queue `ItemId` and the display id of the pending row
   (`conversation-adapter.ts:492-496`, `:86-89`).
 - Queue snapshot carries only `{ requestId, recovered? }`; the adapter resolves
-  the executable payload from `#messagesById` at start (`:227-235`).
+  the executable payload from `#submissions` at start (`:227-235`).
 - Branded identities `ItemId`, `ExecutionId`, `ActionId`
   (`queue-controller.ts:1-3`).
 - Turn lease: `beginTurn` returns a lease; only the owning lease may

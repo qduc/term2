@@ -613,6 +613,12 @@ export class ConversationService {
     this.#clientHandle.dispose();
   }
 
+  submitMessage(
+    ...args: Parameters<ConversationAdapter['submitMessage']>
+  ): ReturnType<ConversationAdapter['submitMessage']> {
+    return this.#adapter.submitMessage(...args);
+  }
+
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {
     return this.#adapter.sendMessage(input, options);
   }

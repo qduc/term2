@@ -310,6 +310,8 @@ export type ApplicationRunLoopDiagnosticOptions = {
 export type SteerOutcome = 'admitted' | 'released' | 'retracted';
 
 type RunState = {
+  /** One live computation; continuation handles only reconnect its event view. */
+  live?: RunContext;
   inputUsageInvalidatedByCompaction?: boolean;
   agent: ApplicationAgent;
   recoveryBudget?: RetryRecoveryBudget;
@@ -355,8 +357,6 @@ type RunState = {
   runBudgetInteractionDecision?: 'continue' | 'stop';
   /** Whether the current interaction's finite extension has already been taken. */
   runBudgetGrantConsumed?: boolean;
-  /** A critical check-in already counted the next model request before pausing. */
-  requestBoundaryReady?: boolean;
   /** Cumulative model-request cost records for this run, preserved across continuation. */
   costRecords?: ModelRequestCost[];
   /** Keep provider response IDs out of requests for providers that do not support them. */
@@ -379,6 +379,30 @@ type RunState = {
   hookScope?: Term2HookScope;
   approve?: (_interruption?: unknown) => void;
   reject?: (_interruption?: unknown, options?: { message?: string }) => void;
+};
+
+type ModelToolCall = Extract<StreamedModelTurnEvent, { type: 'tool_call' }>;
+type RunContext = {
+  state: RunState;
+  stream: AgentStream & { finalOutput?: string };
+  queue: EventQueue;
+  options: ApplicationRunLoopOptions;
+  toolContext: ToolInvocationContext;
+  requestAbortController: AbortController;
+  generation: number;
+  resolveSegment: (value: unknown) => void;
+  rejectSegment: (error: unknown) => void;
+  resume?: () => void;
+};
+type ModelExchange = {
+  streamedToolCalls: ModelToolCall[];
+  completion?: Extract<StreamedModelTurnEvent, { type: 'completion' }>;
+  sawToolCall: boolean;
+  activeRequestId: string;
+  activeRequest?: StreamedModelTurnRequest;
+  pendingNativeReasoning?: PendingNativeReasoning;
+  deferredNativeReasoning: PendingNativeReasoning[];
+  criticalWrapUp: boolean;
 };
 
 class EventQueue {
@@ -692,14 +716,7 @@ export class ApplicationRunLoop {
     if (!state || typeof state !== 'object' || !('agent' in state) || !('input' in state)) {
       throw new Error('Invalid application continuation state');
     }
-    // Handles created before the ledger existed cannot resume meaningfully;
-    // give them a fresh ledger rather than crashing on `approvals` access.
-    if (!state.approvals) state.approvals = new ApprovalLedger();
-    // A continuation handle from before approval batching carried only the
-    // current pending item. Normalize it into the queue used by current runs.
-    if (!state.toolExecution) state.toolExecution = this.#createToolCallExecution();
-    // Handles created before cost accounting existed have no record list.
-    if (!state.costRecords) state.costRecords = [];
+    if (!state.live?.resume) throw new Error('Application turn is not waiting for continuation');
     if (!state.runBudget && options.runBudget) {
       state.runBudget = new RunBudget(options.runBudget);
     }
@@ -730,12 +747,7 @@ export class ApplicationRunLoop {
     // same one rather than starting over after every approval pause.
     if (typeof state.turnCount !== 'number') state.turnCount = 0;
     if (state.maxTurns === undefined) state.maxTurns = options.maxTurns;
-    if (typeof state.supportsConversationChaining !== 'boolean') {
-      state.supportsConversationChaining = options.supportsConversationChaining === true;
-    } else {
-      // AgentClient supplies the current provider capability on every resume.
-      state.supportsConversationChaining = options.supportsConversationChaining === true;
-    }
+    state.supportsConversationChaining = options.supportsConversationChaining === true;
     // A continuation receives a fresh immutable snapshot from the session;
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
@@ -756,7 +768,7 @@ export class ApplicationRunLoop {
   #run(state: RunState, options: ApplicationRunLoopOptions): AgentStream {
     const queue = new EventQueue();
     const segmentGeneration = ++this.#segmentGeneration;
-    this.abortSegment();
+    if (!state.live) this.abortSegment();
     const controller = new AbortController();
     this.#activeAbortController = controller;
     this.#turnInputMailbox.startSegment();
@@ -806,42 +818,110 @@ export class ApplicationRunLoop {
       },
     });
 
-    let exitError: unknown;
-    stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext, controller)
-      .catch((error) => {
-        exitError = error;
-        stream.cancelled = error instanceof Error && error.name === 'AbortError';
-        queue.close(error);
-        throw error;
-      })
-      .finally(() => {
-        state.runBudget?.pause();
-        if (segmentGeneration !== this.#segmentGeneration) return;
-        if (this.#activeAbortController === controller) this.#activeAbortController = null;
-        // A segment that ends holding approvals has paused the turn, not ended
-        // it: the caller resumes through continueRunStream, which offers
-        // another request boundary. Injections wait for it. Only a segment
-        // that ends with nothing outstanding has truly finished the turn, and
-        // then anything still waiting has to be sent as its own turn instead.
-        const pendingApprovals = state.toolExecution.pendingApprovals.length;
-        const pendingBudgetInteraction = state.pendingRunBudgetInteraction !== undefined;
-        const cancelled = stream.cancelled === true;
-        const turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
-        this.#turnInputMailbox.settleSegment({
-          paused: turnPaused,
-          reason: {
-            pendingApprovals,
-            pendingBudgetInteraction,
-            cancelled,
-            error: exitError instanceof Error ? exitError.name : exitError ? String(exitError) : undefined,
-            turnCount: state.turnCount,
-          },
-        });
-        if (turnPaused) return;
-        if (this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
-      });
+    let resolveSegment!: (value: unknown) => void;
+    let rejectSegment!: (error: unknown) => void;
+    stream.completed = new Promise((resolve, reject) => {
+      resolveSegment = resolve;
+      rejectSegment = reject;
+    });
+    // The iterator may report a failure before the caller observes completed.
+    void stream.completed.catch(() => undefined);
+    const current = {
+      state,
+      stream,
+      queue,
+      options: effectiveOptions,
+      toolContext,
+      requestAbortController: controller,
+      generation: segmentGeneration,
+      resolveSegment,
+      rejectSegment,
+    };
+    if (state.live) {
+      const resume = state.live.resume!;
+      Object.assign(state.live, current, { resume: undefined });
+      state.runBudget?.resume();
+      resume();
+    } else {
+      const context: RunContext = current;
+      state.live = context;
+      void this.#runTurn(context).then(
+        (value) => this.#settleSegment(context, value),
+        (error) => this.#settleSegment(context, undefined, error),
+      );
+    }
     this.#activeRunBudgetState = state.runBudget ? state : undefined;
     return stream;
+  }
+
+  /** Complete an event view; a pause leaves the owning async task alive. */
+  #settleSegment(context: RunContext, value: unknown, error?: unknown): void {
+    const { state, stream, queue, generation } = context;
+    state.runBudget?.pause();
+    const cancelled = error instanceof Error && error.name === 'AbortError';
+    const paused = context.resume !== undefined && !cancelled && error === undefined;
+    if (error !== undefined) {
+      stream.cancelled = cancelled;
+      queue.close(error);
+      context.rejectSegment(error);
+    } else {
+      context.resolveSegment(value);
+    }
+    if (generation !== this.#segmentGeneration) return;
+    if (!paused && this.#activeAbortController === context.requestAbortController) this.#activeAbortController = null;
+    this.#turnInputMailbox.settleSegment({
+      paused,
+      reason: {
+        pendingApprovals: state.toolExecution.pendingApprovals.length,
+        pendingBudgetInteraction: state.pendingRunBudgetInteraction !== undefined,
+        cancelled,
+        error: error instanceof Error ? error.name : error ? String(error) : undefined,
+        turnCount: state.turnCount,
+      },
+    });
+    if (!paused && this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
+  }
+
+  /** Publish a paused view and suspend here until its owner reconnects or cancels. */
+  async #waitForDecision(context: RunContext): Promise<void> {
+    const { state, stream, queue, options } = context;
+    await new Promise<void>((resolve, reject) => {
+      const signal = options.signal;
+      const abort = () => {
+        context.resume = undefined;
+        reject(Object.assign(new Error('Operation aborted'), { name: 'AbortError' }));
+      };
+      context.resume = () => {
+        signal?.removeEventListener('abort', abort);
+        resolve();
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      this.#settleSegment(context, finish(stream, state, queue));
+    });
+  }
+
+  /** A budget decision resumes this exact boundary without recounting it. */
+  async #waitForBudget(context: RunContext): Promise<boolean> {
+    const { state } = context;
+    while (state.pendingRunBudgetInteraction) {
+      if (state.runBudgetInteractionDecision === 'stop') {
+        state.pendingRunBudgetInteraction = undefined;
+        state.runBudgetInteractionDecision = undefined;
+        return true;
+      }
+      if (state.runBudgetInteractionDecision === 'continue') {
+        state.pendingRunBudgetInteraction = undefined;
+        state.runBudgetInteractionDecision = undefined;
+        return false;
+      }
+      context.stream.interruptions = [state.pendingRunBudgetInteraction];
+      await this.#waitForDecision(context);
+    }
+    return false;
   }
 
   /** Route boundary advice through the same admission lane as mode notices. */
@@ -857,767 +937,756 @@ export class ApplicationRunLoop {
     }, state.turnCount);
   }
 
-  async #execute(
-    state: RunState,
-    stream: AgentStream & { finalOutput?: string },
-    queue: EventQueue,
-    options: ApplicationRunLoopOptions,
-    toolContext: ToolInvocationContext,
-    requestAbortController: AbortController,
-  ): Promise<unknown> {
+  /** The single model → tools → model cycle, shared by root and nested turns. */
+  async #runTurn(context: RunContext): Promise<unknown> {
     while (true) {
-      if (options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+      this.#assertLive(context);
+      if (await this.#prepareRequest(context)) return finish(context.stream, context.state, context.queue);
+      const response = await this.#askModel(context);
+      this.#assertLive(context);
+      const calls = this.#recordResponse(context, response);
+      if (await this.#executeTools(context, response, calls))
+        return finish(context.stream, context.state, context.queue);
+      if (calls.length === 0 && this.#finishTurn(context)) return finish(context.stream, context.state, context.queue);
+    }
+  }
 
-      if (state.pendingRunBudgetInteraction) {
-        if (state.runBudgetInteractionDecision === 'stop') {
-          state.pendingRunBudgetInteraction = undefined;
-          state.runBudgetInteractionDecision = undefined;
-          return finish(stream, state, queue);
-        }
-        if (state.runBudgetInteractionDecision === 'continue') {
-          state.pendingRunBudgetInteraction = undefined;
-          state.runBudgetInteractionDecision = undefined;
-        } else {
-          return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        }
-      }
+  #assertLive(context: RunContext): void {
+    if (context.options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+  }
 
-      if (state.toolExecution.pendingApprovals.length > 0 && state.approvalDecision) {
-        state.toolExecution.resolveApproval(
-          { callId: state.approvalDecisionCallId, interruption: state.approvalDecisionInterruption },
-          state.approvalDecision,
-          state.approvalMessage,
-          state.approvals,
-        );
-        state.approvalDecision = undefined;
-        state.approvalDecisionCallId = undefined;
-        state.approvalDecisionInterruption = undefined;
-        state.approvalMessage = undefined;
-        await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
-        stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
-        if (state.toolExecution.pendingApprovals.length > 0) {
-          return finish(stream, state, queue);
-        }
-        // Nothing is outstanding, so this segment is terminal — see
-        // `stopAfterApprovalResolution`. Stopping here rather than at the
-        // request boundary below is what keeps the just-recorded tool result
-        // in the committed history.
-        if (options.stopAfterApprovalResolution) return finish(stream, state, queue);
-      }
+  /** Admit input and prepare context once for the next logical model round. */
+  async #prepareRequest(context: RunContext): Promise<boolean> {
+    let { state, stream, queue, options } = context;
+    // The request boundary: every tool result of the previous round is in
+    // history, and the next request has not been built. A user message
+    // admitted here reaches the model in sequence, mid-turn.
+    this.#admitPendingSteers(state, stream, queue);
+    this.#evaluateRunBudget(state, stream, queue);
+    if (await this.#waitForBudget(context)) return true;
+    ({ state, stream, queue, options } = context);
+    const compactionHistoryResult = state.usesDeltaHistory
+      ? state.compactionHistory
+        ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+        : { kind: 'skipped' as const, reason: 'missing_snapshot' as const }
+      : { kind: 'ready' as const, history: state.history };
+    const boundaryDecision = options.onRequestBoundary?.(
+      compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : state.history,
+      (text) => this.#queuePendingSystemNotice(text),
+      {
+        ...(state.lastCompletedInputTokens !== undefined
+          ? { lastCompletedInputTokens: state.lastCompletedInputTokens }
+          : {}),
+        ...(compactionHistoryResult.kind === 'skipped' ? { compactionSkipReason: compactionHistoryResult.reason } : {}),
+      },
+    );
 
-      // A budget interaction can park a response after its tool calls are
-      // recorded but before any body runs. Resume those retained calls only
-      // after processing an ordinary approval decision for that same plan.
-      if (state.toolExecution.hasPlan) {
-        await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
-        if (state.toolExecution.pendingApprovals.length) {
-          stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
-          return finish(stream, state, queue);
-        }
-      }
-
-      // The request boundary: every tool result of the previous round is in
-      // history, and the next request has not been built. A user message
-      // admitted here reaches the model in sequence, mid-turn.
-      if (!state.requestBoundaryReady) {
-        this.#admitPendingSteers(state, stream, queue);
-        this.#evaluateRunBudget(state, stream, queue);
-        if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        const compactionHistoryResult = state.usesDeltaHistory
-          ? state.compactionHistory
-            ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
-            : { kind: 'skipped' as const, reason: 'missing_snapshot' as const }
-          : { kind: 'ready' as const, history: state.history };
-        const boundaryDecision = options.onRequestBoundary?.(
-          compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : state.history,
-          (text) => this.#queuePendingSystemNotice(text),
-          {
-            ...(state.lastCompletedInputTokens !== undefined
-              ? { lastCompletedInputTokens: state.lastCompletedInputTokens }
-              : {}),
-            ...(compactionHistoryResult.kind === 'skipped'
-              ? { compactionSkipReason: compactionHistoryResult.reason }
-              : {}),
-          },
-        );
-
-        const compactionHistory =
-          compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : undefined;
-        if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
-          const compactionStartedAt = Date.now();
-          let costsRecordedLive = false;
-          const compaction = await options.boundaryCompaction.compact({
-            history: compactionHistory,
-            instructions: state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions,
-            tools: toModelTools(state.agent.tools),
-            recordCostRecords: (records) => {
-              if (records.length) {
-                costsRecordedLive = true;
-                state.costRecords ??= [];
-                state.costRecords.push(...records);
-                for (const record of records) queue.push({ type: 'cost_update', record });
-                this.#evaluateRunBudget(state, stream, queue);
-              }
-              return !state.pendingRunBudgetInteraction && !state.criticalWrapUpPending;
-            },
-            automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
-            lastCompletedInputTokens: state.lastCompletedInputTokens,
-            signal: options.signal,
-            onStarted: (provider) =>
-              outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
-          });
-          if (compaction.kind !== 'unchanged' && !costsRecordedLive && compaction.costRecords?.length) {
+    const compactionHistory = compactionHistoryResult.kind === 'ready' ? compactionHistoryResult.history : undefined;
+    if (options.boundaryCompaction && compactionHistory && !boundaryDecision?.deferCompaction) {
+      const compactionStartedAt = Date.now();
+      let costsRecordedLive = false;
+      const compaction = await options.boundaryCompaction.compact({
+        history: compactionHistory,
+        instructions: state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions,
+        tools: toModelTools(state.agent.tools),
+        recordCostRecords: (records) => {
+          if (records.length) {
+            costsRecordedLive = true;
             state.costRecords ??= [];
-            state.costRecords.push(...compaction.costRecords);
+            state.costRecords.push(...records);
+            for (const record of records) queue.push({ type: 'cost_update', record });
+            this.#evaluateRunBudget(state, stream, queue);
           }
-          if (compaction.kind === 'compacted') {
-            state.inputUsageInvalidatedByCompaction = true;
-            state.lastCompletedInputTokens = undefined;
-            state.compactedDuringRun = true;
-            state.history.splice(0, state.history.length, ...compaction.history);
-            state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
-            state.responseId = undefined;
-            state.responseProviderId = undefined;
-            state.usesDeltaHistory = false;
-            state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
-            outputPush(stream, queue, {
-              type: 'context_compaction_completed',
-              provider: state.currentProviderId ?? 'unknown',
-              strategy: 'local',
-              durationMs: Math.max(0, Date.now() - compactionStartedAt),
-            });
-          } else if (compaction.kind === 'failed') {
-            outputPush(stream, queue, {
-              type: 'context_compaction_failed',
-              provider: compaction.provider,
-              strategy: 'local',
-              durationMs: Math.max(0, Date.now() - compactionStartedAt),
-            });
-            if (compaction.error) throw compaction.error;
-          } else if (compaction.notice && compaction.notice !== state.compactionNotice) {
-            state.compactionNotice = compaction.notice;
-            this.#queuePendingSystemNotice(compaction.notice);
-          }
-
-          // Summarization is an asynchronous part of this same request
-          // boundary. Admit anything that arrived while it was in flight after
-          // applying a replacement, so the steer cannot be overwritten by the
-          // checkpoint or miss a terminal model request.
-          this.#admitPendingSteers(state, stream, queue);
-          this.#evaluateRunBudget(state, stream, queue);
-          if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        }
-
-        this.#admitPendingSteers(state, stream, queue);
-
-        state.turnCount += 1;
-        this.#evaluateRunBudget(state, stream, queue);
-        if (state.pendingRunBudgetInteraction) {
-          state.requestBoundaryReady = true;
-          return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        }
-        // Retain the legacy error only for callers that have not adopted staged
-        // budgets. A configured run budget turns the same count into critical
-        // evidence and lets the decision surface choose what happens next.
-        if (!state.runBudget && state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
-          throw new MaxTurnsExceededError(state.maxTurns);
-        }
-      } else {
-        state.requestBoundaryReady = undefined;
+          return !state.pendingRunBudgetInteraction && !state.criticalWrapUpPending;
+        },
+        automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
+        lastCompletedInputTokens: state.lastCompletedInputTokens,
+        signal: options.signal,
+        onStarted: (provider) =>
+          outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
+      });
+      if (compaction.kind !== 'unchanged' && !costsRecordedLive && compaction.costRecords?.length) {
+        state.costRecords ??= [];
+        state.costRecords.push(...compaction.costRecords);
+      }
+      if (compaction.kind === 'compacted') {
+        state.inputUsageInvalidatedByCompaction = true;
+        state.lastCompletedInputTokens = undefined;
+        state.compactedDuringRun = true;
+        state.history.splice(0, state.history.length, ...compaction.history);
+        state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
+        state.responseId = undefined;
+        state.responseProviderId = undefined;
+        state.usesDeltaHistory = false;
+        state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
+        outputPush(stream, queue, {
+          type: 'context_compaction_completed',
+          provider: state.currentProviderId ?? 'unknown',
+          strategy: 'local',
+          durationMs: Math.max(0, Date.now() - compactionStartedAt),
+        });
+      } else if (compaction.kind === 'failed') {
+        outputPush(stream, queue, {
+          type: 'context_compaction_failed',
+          provider: compaction.provider,
+          strategy: 'local',
+          durationMs: Math.max(0, Date.now() - compactionStartedAt),
+        });
+        if (compaction.error) throw compaction.error;
+      } else if (compaction.notice && compaction.notice !== state.compactionNotice) {
+        state.compactionNotice = compaction.notice;
+        this.#queuePendingSystemNotice(compaction.notice);
       }
 
-      const model = await this.#deps.resolveModel(state.agent.model);
-      const maxRetries = state.agent.modelSettings?.retry?.maxRetries ?? 0;
-      let attempt = 0;
-      let streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
-      let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
-      let sawToolCall = false;
-      let activeRequestId = '';
-      let activeRequest: StreamedModelTurnRequest | undefined;
-      let pendingNativeReasoning: PendingNativeReasoning | undefined;
-      let deferredNativeReasoning: PendingNativeReasoning[] = [];
-      let criticalWrapUp = false;
+      // Summarization is an asynchronous part of this same request
+      // boundary. Admit anything that arrived while it was in flight after
+      // applying a replacement, so the steer cannot be overwritten by the
+      // checkpoint or miss a terminal model request.
+      this.#admitPendingSteers(state, stream, queue);
+      this.#evaluateRunBudget(state, stream, queue);
+      if (await this.#waitForBudget(context)) return true;
+      ({ state, stream, queue, options } = context);
+    }
 
-      while (true) {
-        streamedToolCalls = [];
-        completion = undefined;
-        sawToolCall = false;
-        pendingNativeReasoning = undefined;
-        deferredNativeReasoning = [];
-        // Stable process-unique request id, allocated immediately before dispatch
-        // so a cost record can be settled exactly once (success or failure).
-        activeRequestId = this.#nextRequestId();
-        const requestId = activeRequestId;
-        const outputLengthBefore = stream.output.length;
-        const newItemsLengthBefore = stream.newItems.length;
-        const inputLengthBefore = state.input.length;
-        const historyLengthBefore = state.history.length;
-        const criticalWrapUpDispatchedBefore = state.criticalWrapUpDispatched;
-        let provisionalTextCharacters = 0;
-        let provisionalReasoningCharacters = 0;
-        let provisionalTextDeltas = 0;
-        let provisionalReasoningDeltas = 0;
-        let lastTextPartId: string | undefined;
+    this.#admitPendingSteers(state, stream, queue);
 
-        criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
-        if (criticalWrapUp) state.criticalWrapUpDispatched = true;
-        const disableChaining = state.disableChainingForAttempt === true;
-        if (disableChaining) {
-          state.disableChainingForAttempt = false;
-          state.responseId = undefined;
-          state.responseProviderId = undefined;
-        }
-        // A per-request signal lets a recoverable guard trip cancel only this
-        // provider request; the segment signal still cancels everything.
-        const requestSignal = new AbortController();
-        const abortRequest = (): void => requestSignal.abort();
-        if (options.signal?.aborted) requestSignal.abort();
-        else options.signal?.addEventListener('abort', abortRequest, { once: true });
-        const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
-        // Same synchronous step as the instructions above, so the snapshot is
-        // exactly the state the model is shown in this request.
-        state.requestSnapshot = state.agent.resolveRequestSnapshot?.();
-        const requestCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
-        const effectiveOutput = resolveRequestOutput(requestCatalog, state.agent.modelSettings?.maxTokens);
-        const request: StreamedModelTurnRequest = {
-          instructions: criticalWrapUp
-            ? `${requestInstructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
-            : requestInstructions,
-          ...(state.supportsConversationChaining &&
-          !disableChaining &&
-          state.responseId &&
-          state.responseProviderId !== undefined &&
-          state.responseProviderId === state.currentProviderId
-            ? { previousResponseId: state.responseId }
-            : {}),
-          ...(disableChaining ? { disableChaining: true } : {}),
-          input: projectModelRequestHistory(state.input) as StreamedModelTurnInput[],
-          tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
-          applicationTools: criticalWrapUp ? [] : state.agent.tools,
-          ...(state.agent.modelSettings?.temperature !== undefined
-            ? { temperature: state.agent.modelSettings.temperature as number }
-            : {}),
-          ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
-          ...(effectiveOutput !== undefined ? { maxTokens: effectiveOutput } : {}),
-          ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
-          ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
-          ...(state.agent.modelSettings?.providerData
-            ? {
-                providerOptions: this.#contextCompactionSessionState.disabled
-                  ? Object.fromEntries(
-                      Object.entries(state.agent.modelSettings.providerData).filter(
-                        ([key]) => key !== 'contextCompaction',
-                      ),
-                    )
-                  : state.agent.modelSettings.providerData,
-              }
-            : {}),
-          signal: requestSignal.signal,
-          ...(state.recoveryBudget ? { recoveryBudget: state.recoveryBudget } : {}),
-        };
-        activeRequest = request;
-        const generationGuard = new GenerationGuard({
-          maxOutputCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-          maxTextCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-          maxReasoningCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-          maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-          maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-          requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
-          maxStreamIdleMs: state.agent.modelSettings?.maxModelStreamIdleMs,
-          ...options.generationGuard,
-        });
-        const consume = async (): Promise<void> => {
-          const deadline = new GenerationStreamDeadlines(
-            { totalMs: generationGuard.requestDeadlineMs, idleMs: generationGuard.maxStreamIdleMs },
-            () => requestAbortController.abort(),
-            () => generationGuard.progress,
-          );
-          const toolArgumentRunaway = isLunaChainedRequest(state, request)
-            ? new ToolArgumentRunawayGuard(
-                {
-                  ...DEFAULT_TOOL_ARGUMENT_RUNAWAY_SIGNATURE,
-                  timeoutMs: generationGuard.toolArgumentRunawayMs,
-                },
-                () => requestAbortController.abort(),
-              )
-            : undefined;
-          let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
-          let iteratorFinished = false;
-          try {
-            iterator = model.stream(request)[Symbol.asyncIterator]();
-            while (true) {
-              const nextOperation = iterator.next();
-              const next = await deadline.wait(
-                toolArgumentRunaway ? toolArgumentRunaway.wait(nextOperation) : nextOperation,
-              );
-              if (next.done) {
-                iteratorFinished = true;
-                return;
-              }
-              // Any streamed event is transport activity: re-arm the inactivity
-              // window so long legitimate reasoning is never mistaken for a stall.
-              deadline.recordActivity();
-              const event = next.value;
-              if (event.type === 'completion') {
-                toolArgumentRunaway?.observeToolCallCompleted();
-                generationGuard.observeCompletion(event.output);
-                completion = event;
-                continue;
-              }
-              if (event.type === 'text_delta') {
-                const startsNewPart =
-                  event.partId !== undefined &&
-                  lastTextPartId !== undefined &&
-                  event.partId !== lastTextPartId &&
-                  event.text.length > 0;
-                if (event.partId !== undefined && event.text.length > 0) lastTextPartId = event.partId;
-                const text = startsNewPart ? `${ASSISTANT_TEXT_PART_SEPARATOR}${event.text}` : event.text;
-                toolArgumentRunaway?.observeText();
-                generationGuard.observeText(text);
-                provisionalTextCharacters += text.length;
-                provisionalTextDeltas++;
-                outputPush(stream, queue, { type: 'text_delta', text });
-                continue;
-              }
-              if (event.type === 'codex_rate_limits') {
-                outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
-                continue;
-              }
-              if (event.type === 'reasoning_delta') {
-                const accepted = generationGuard.observeReasoning(event.text);
-                if (!accepted) continue;
-                const forwarded = accepted === event.text ? event : { ...event, text: accepted };
-                pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
-                provisionalReasoningCharacters += accepted.length;
-                provisionalReasoningDeltas++;
-                outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
-                continue;
-              }
-              if (event.type === 'tool_call_streaming_delta') {
-                toolArgumentRunaway?.observeToolArgumentProgress(event.argumentCharCount);
-                generationGuard.observeToolArgumentProgress(event.argumentCharCount);
-                outputPush(stream, queue, event);
-                continue;
-              }
-              if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
-                outputPush(stream, queue, event);
-                continue;
-              }
-              if (event.type === 'tool_call') {
-                toolArgumentRunaway?.observeToolCallCompleted();
-                generationGuard.observeToolCall(event.arguments);
-                // The authoritative completion may introduce a native
-                // replacement boundary before this call's reasoning.
-                if (pendingNativeReasoning) deferredNativeReasoning.push(pendingNativeReasoning);
-                pendingNativeReasoning = undefined;
-                sawToolCall = true;
-                streamedToolCalls.push(event);
-              }
+    state.turnCount += 1;
+    this.#evaluateRunBudget(state, stream, queue);
+    if (await this.#waitForBudget(context)) return true;
+    ({ state, stream, queue, options } = context);
+    // Retain the legacy error only for callers that have not adopted staged
+    // budgets. A configured run budget turns the same count into critical
+    // evidence and lets the decision surface choose what happens next.
+    if (!state.runBudget && state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
+      throw new MaxTurnsExceededError(state.maxTurns);
+    }
+
+    return false;
+  }
+
+  /** Own streaming and safe request attempts; never dispatch tools here. */
+  async #askModel(context: RunContext): Promise<ModelExchange> {
+    const { state, stream, queue, options, requestAbortController } = context;
+    const model = await this.#deps.resolveModel(state.agent.model);
+    const maxRetries = state.agent.modelSettings?.retry?.maxRetries ?? 0;
+    let attempt = 0;
+    let streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
+    let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
+    let sawToolCall = false;
+    let activeRequestId = '';
+    let activeRequest: StreamedModelTurnRequest | undefined;
+    let pendingNativeReasoning: PendingNativeReasoning | undefined;
+    let deferredNativeReasoning: PendingNativeReasoning[] = [];
+    let criticalWrapUp = false;
+
+    while (true) {
+      streamedToolCalls = [];
+      completion = undefined;
+      sawToolCall = false;
+      pendingNativeReasoning = undefined;
+      deferredNativeReasoning = [];
+      // Stable process-unique request id, allocated immediately before dispatch
+      // so a cost record can be settled exactly once (success or failure).
+      activeRequestId = this.#nextRequestId();
+      const requestId = activeRequestId;
+      const outputLengthBefore = stream.output.length;
+      const newItemsLengthBefore = stream.newItems.length;
+      const inputLengthBefore = state.input.length;
+      const historyLengthBefore = state.history.length;
+      const criticalWrapUpDispatchedBefore = state.criticalWrapUpDispatched;
+      let provisionalTextCharacters = 0;
+      let provisionalReasoningCharacters = 0;
+      let provisionalTextDeltas = 0;
+      let provisionalReasoningDeltas = 0;
+      let lastTextPartId: string | undefined;
+
+      criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
+      if (criticalWrapUp) state.criticalWrapUpDispatched = true;
+      const disableChaining = state.disableChainingForAttempt === true;
+      if (disableChaining) {
+        state.disableChainingForAttempt = false;
+        state.responseId = undefined;
+        state.responseProviderId = undefined;
+      }
+      // A per-request signal lets a recoverable guard trip cancel only this
+      // provider request; the segment signal still cancels everything.
+      const requestSignal = new AbortController();
+      const abortRequest = (): void => requestSignal.abort();
+      if (options.signal?.aborted) requestSignal.abort();
+      else options.signal?.addEventListener('abort', abortRequest, { once: true });
+      const requestInstructions = state.agent.resolveInstructionsForRequest?.() ?? state.agent.instructions;
+      // Same synchronous step as the instructions above, so the snapshot is
+      // exactly the state the model is shown in this request.
+      state.requestSnapshot = state.agent.resolveRequestSnapshot?.();
+      const requestCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
+      const effectiveOutput = resolveRequestOutput(requestCatalog, state.agent.modelSettings?.maxTokens);
+      const request: StreamedModelTurnRequest = {
+        instructions: criticalWrapUp
+          ? `${requestInstructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
+          : requestInstructions,
+        ...(state.supportsConversationChaining &&
+        !disableChaining &&
+        state.responseId &&
+        state.responseProviderId !== undefined &&
+        state.responseProviderId === state.currentProviderId
+          ? { previousResponseId: state.responseId }
+          : {}),
+        ...(disableChaining ? { disableChaining: true } : {}),
+        input: projectModelRequestHistory(state.input) as StreamedModelTurnInput[],
+        tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
+        applicationTools: criticalWrapUp ? [] : state.agent.tools,
+        ...(state.agent.modelSettings?.temperature !== undefined
+          ? { temperature: state.agent.modelSettings.temperature as number }
+          : {}),
+        ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
+        ...(effectiveOutput !== undefined ? { maxTokens: effectiveOutput } : {}),
+        ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
+        ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
+        ...(state.agent.modelSettings?.providerData
+          ? {
+              providerOptions: this.#contextCompactionSessionState.disabled
+                ? Object.fromEntries(
+                    Object.entries(state.agent.modelSettings.providerData).filter(
+                      ([key]) => key !== 'contextCompaction',
+                    ),
+                  )
+                : state.agent.modelSettings.providerData,
             }
-          } finally {
-            deadline.dispose();
-            toolArgumentRunaway?.dispose();
-            if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
-          }
-        };
-        const dispatch = async (): Promise<void> => {
-          state.requestPreparation?.prepare(request);
-          // A response ID can be established after a self-contained request.
-          // It does not make this run's full history a delta needing a snapshot.
-          const needsChainedSnapshot = Boolean(request.previousResponseId && state.usesDeltaHistory);
-          const fullContext =
-            needsChainedSnapshot && state.compactionHistory
-              ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
-              : undefined;
-          const contextCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
-          enforceRequestInputLimit({
-            contextWindow: contextCatalog?.contextWindow,
-            maxOutputTokens: request.maxTokens,
-            limit: state.requestInputLimit
-              ? state.requestInputLimit()
-              : state.agent.modelSettings?.maxRequestInputTokens,
-            history:
-              fullContext?.kind === 'ready'
-                ? fullContext.history
-                : needsChainedSnapshot
-                ? [...(state.compactionHistory ?? []), ...request.input]
-                : request.input,
-            instructions: request.instructions ?? '',
-            tools: request.tools,
-            lastCompletedInputTokens: state.inputUsageInvalidatedByCompaction
-              ? undefined
-              : state.lastCompletedInputTokens,
-            chainedContextKnown: !needsChainedSnapshot || fullContext?.kind === 'ready',
-          });
-          await consume();
-        };
+          : {}),
+        signal: requestSignal.signal,
+        ...(state.recoveryBudget ? { recoveryBudget: state.recoveryBudget } : {}),
+      };
+      activeRequest = request;
+      const generationGuard = new GenerationGuard({
+        maxOutputCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxTextCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxReasoningCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
+        maxStreamIdleMs: state.agent.modelSettings?.maxModelStreamIdleMs,
+        ...options.generationGuard,
+      });
+      const consume = async (): Promise<void> => {
+        const deadline = new GenerationStreamDeadlines(
+          { totalMs: generationGuard.requestDeadlineMs, idleMs: generationGuard.maxStreamIdleMs },
+          () => requestAbortController.abort(),
+          () => generationGuard.progress,
+        );
+        const toolArgumentRunaway = isLunaChainedRequest(state, request)
+          ? new ToolArgumentRunawayGuard(
+              {
+                ...DEFAULT_TOOL_ARGUMENT_RUNAWAY_SIGNATURE,
+                timeoutMs: generationGuard.toolArgumentRunawayMs,
+              },
+              () => requestAbortController.abort(),
+            )
+          : undefined;
+        let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
+        let iteratorFinished = false;
         try {
-          if (state.requestPreparation) await state.requestPreparation.run(dispatch);
-          else await dispatch();
-          break;
-        } catch (error) {
-          if (error instanceof RequestInputLimitError) {
-            this.#deps.logDiagnostic?.('Request input admission refused', {
-              code: error.code,
-              action: error.action,
-              reason: error.reason,
-              guardClass: 'admission',
-              setting: 'agent.maxRequestInputTokens',
-              executionScope: state.hookScope ?? 'root',
-              recovery: 'retained_work',
-              limit: error.limit,
-              estimatedTokens: error.estimatedTokens,
-              observedTokens: error.observedTokens,
-              capacity: error.capacity,
-              outputReserve: error.outputReserve,
-              estimationReserve: error.estimationReserve,
-            });
-            throw error;
-          }
-          if (isProviderContextOverflow(error)) {
-            this.#observeTerminalFailure(error, {
-              requestId: activeRequestId,
-              provider: state.currentProviderId,
-              model: state.agent.model,
-              tier: resolveServiceTier(request),
-            });
-            throw new ProviderContextOverflowError(error);
-          }
-          const recoverOversizedToolArgument =
-            isOversizedToolArgumentTrip(error) &&
-            (state.oversizedToolArgumentRecoveries ?? 0) < MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES &&
-            !options.signal?.aborted;
-          if (recoverOversizedToolArgument) requestSignal.abort();
-          else if (error instanceof GenerationGuardError) requestAbortController.abort();
-
-          const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
-            previousResponseId: activeRequest?.previousResponseId,
-          });
-          const rollbackProvisionalAttempt = (): void => {
-            stream.output.splice(outputLengthBefore);
-            if (stream.newItems !== stream.output) {
-              stream.newItems.splice(newItemsLengthBefore);
+          iterator = model.stream(request)[Symbol.asyncIterator]();
+          while (true) {
+            const nextOperation = iterator.next();
+            const next = await deadline.wait(
+              toolArgumentRunaway ? toolArgumentRunaway.wait(nextOperation) : nextOperation,
+            );
+            if (next.done) {
+              iteratorFinished = true;
+              return;
             }
-            if (provisionalTextDeltas > 0 || provisionalReasoningDeltas > 0) {
-              queue.push({
-                type: 'model_attempt_rollback',
-                textCharacters: provisionalTextCharacters,
-                reasoningCharacters: provisionalReasoningCharacters,
-                textDeltas: provisionalTextDeltas,
-                reasoningDeltas: provisionalReasoningDeltas,
-              });
+            // Any streamed event is transport activity: re-arm the inactivity
+            // window so long legitimate reasoning is never mistaken for a stall.
+            deadline.recordActivity();
+            const event = next.value;
+            if (event.type === 'completion') {
+              toolArgumentRunaway?.observeToolCallCompleted();
+              generationGuard.observeCompletion(event.output);
+              completion = event;
+              continue;
             }
-          };
-
-          if (recoverOversizedToolArgument) {
-            // No tool ran: a call is dispatched only after its arguments
-            // complete. Discard the partial response and ask for smaller calls.
-            state.oversizedToolArgumentRecoveries = (state.oversizedToolArgumentRecoveries ?? 0) + 1;
-            state.input.splice(inputLengthBefore);
-            state.history.splice(historyLengthBefore);
-            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
-            rollbackProvisionalAttempt();
-            this.#deps.logDiagnostic?.('Recovering oversized tool argument in run loop', {
-              code: (error as GenerationGuardError).code,
-              recovery: state.oversizedToolArgumentRecoveries,
-              maxRecoveries: MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES,
-            });
-            this.#queuePendingSystemNotice(oversizedToolArgumentNotice((error as GenerationGuardError).message));
-            this.#admitPendingSteers(state, stream, queue);
-            continue;
-          }
-
-          if (decision.retryable && !options.signal?.aborted) {
-            attempt++;
-            state.input.splice(inputLengthBefore);
-            state.history.splice(historyLengthBefore);
-            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
-            rollbackProvisionalAttempt();
-            if (decision.kind === 'chain_recovery') {
-              state.disableChainingForAttempt = true;
-              state.responseId = undefined;
-              state.responseProviderId = undefined;
+            if (event.type === 'text_delta') {
+              const startsNewPart =
+                event.partId !== undefined &&
+                lastTextPartId !== undefined &&
+                event.partId !== lastTextPartId &&
+                event.text.length > 0;
+              if (event.partId !== undefined && event.text.length > 0) lastTextPartId = event.partId;
+              const text = startsNewPart ? `${ASSISTANT_TEXT_PART_SEPARATOR}${event.text}` : event.text;
+              toolArgumentRunaway?.observeText();
+              generationGuard.observeText(text);
+              provisionalTextCharacters += text.length;
+              provisionalTextDeltas++;
+              outputPush(stream, queue, { type: 'text_delta', text });
+              continue;
             }
-            this.#deps.logDiagnostic?.('Retrying model request in run loop', {
-              attempt,
-              maxRetries,
-              kind: decision.kind,
-              delayMs: decision.delayMs,
-              error: describeError(error),
-            });
-            await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
-            continue;
+            if (event.type === 'codex_rate_limits') {
+              outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
+              continue;
+            }
+            if (event.type === 'reasoning_delta') {
+              const accepted = generationGuard.observeReasoning(event.text);
+              if (!accepted) continue;
+              const forwarded = accepted === event.text ? event : { ...event, text: accepted };
+              pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
+              provisionalReasoningCharacters += accepted.length;
+              provisionalReasoningDeltas++;
+              outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
+              continue;
+            }
+            if (event.type === 'tool_call_streaming_delta') {
+              toolArgumentRunaway?.observeToolArgumentProgress(event.argumentCharCount);
+              generationGuard.observeToolArgumentProgress(event.argumentCharCount);
+              outputPush(stream, queue, event);
+              continue;
+            }
+            if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
+              outputPush(stream, queue, event);
+              continue;
+            }
+            if (event.type === 'tool_call') {
+              toolArgumentRunaway?.observeToolCallCompleted();
+              generationGuard.observeToolCall(event.arguments);
+              // The authoritative completion may introduce a native
+              // replacement boundary before this call's reasoning.
+              if (pendingNativeReasoning) deferredNativeReasoning.push(pendingNativeReasoning);
+              pendingNativeReasoning = undefined;
+              sawToolCall = true;
+              streamedToolCalls.push(event);
+            }
           }
-
-          // Session recovery owns full-history rebuild for a chained delta.
-          // Retract this cycle's provisional tokens so a later chain_recovery
-          // does not append a second answer after a half-sentence.
-          if (!decision.retryable && decision.reason === 'chained_delta_not_self_contained') {
-            rollbackProvisionalAttempt();
-          }
-
-          // Dispatch began, but no terminal completion was accepted. Record an
-          // unpriced marker so the summary stays honest (partial) rather than
-          // appearing exact. Observational only: the error still propagates.
-          const cancelled = error instanceof Error && error.name === 'AbortError';
-          const record = this.#appendCostRecord(state, {
-            requestId,
-            provider: state.currentProviderId,
-            model: state.agent.model,
-            tier: resolveServiceTier(request),
-            outcome: cancelled ? 'cancelled' : 'failed',
-          });
-          // Only the live queue sees cost records: `output`/`newItems` feed
-          // persistence and replay, and a cost event must never become a
-          // restored history item.
-          queue.push({ type: 'cost_update', record });
-          this.#evaluateRunBudget(state, stream, queue);
-          this.#observeTerminalFailure(error, {
-            requestId,
-            provider: state.currentProviderId,
-            model: state.agent.model,
-            tier: resolveServiceTier(request),
+        } finally {
+          deadline.dispose();
+          toolArgumentRunaway?.dispose();
+          if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
+        }
+      };
+      const dispatch = async (): Promise<void> => {
+        state.requestPreparation?.prepare(request);
+        // A response ID can be established after a self-contained request.
+        // It does not make this run's full history a delta needing a snapshot.
+        const needsChainedSnapshot = Boolean(request.previousResponseId && state.usesDeltaHistory);
+        const fullContext =
+          needsChainedSnapshot && state.compactionHistory
+            ? mergeChainedCompactionHistory(state.compactionHistory, state.history)
+            : undefined;
+        const contextCatalog = getCatalogModel(state.currentProviderId ?? 'openai', state.agent.model);
+        enforceRequestInputLimit({
+          contextWindow: contextCatalog?.contextWindow,
+          maxOutputTokens: request.maxTokens,
+          limit: state.requestInputLimit ? state.requestInputLimit() : state.agent.modelSettings?.maxRequestInputTokens,
+          history:
+            fullContext?.kind === 'ready'
+              ? fullContext.history
+              : needsChainedSnapshot
+              ? [...(state.compactionHistory ?? []), ...request.input]
+              : request.input,
+          instructions: request.instructions ?? '',
+          tools: request.tools,
+          lastCompletedInputTokens: state.inputUsageInvalidatedByCompaction
+            ? undefined
+            : state.lastCompletedInputTokens,
+          chainedContextKnown: !needsChainedSnapshot || fullContext?.kind === 'ready',
+        });
+        await consume();
+      };
+      try {
+        if (state.requestPreparation) await state.requestPreparation.run(dispatch);
+        else await dispatch();
+        break;
+      } catch (error) {
+        if (error instanceof RequestInputLimitError) {
+          this.#deps.logDiagnostic?.('Request input admission refused', {
+            code: error.code,
+            action: error.action,
+            reason: error.reason,
+            guardClass: 'admission',
+            setting: 'agent.maxRequestInputTokens',
+            executionScope: state.hookScope ?? 'root',
+            recovery: 'retained_work',
+            limit: error.limit,
+            estimatedTokens: error.estimatedTokens,
+            observedTokens: error.observedTokens,
+            capacity: error.capacity,
+            outputReserve: error.outputReserve,
+            estimationReserve: error.estimationReserve,
           });
           throw error;
-        } finally {
-          options.signal?.removeEventListener('abort', abortRequest);
         }
-      }
-
-      if (!completion) {
-        // A few application-owned model fixtures (and legacy adapters) end a
-        // tool-call stream immediately after the call and use the next request
-        // as the continuation boundary. Preserve that contract while routing
-        // the calls through the same ordered dispatcher. An empty stream still
-        // fails closed as an incomplete model turn.
-        if (streamedToolCalls.length === 0) {
-          const error = new Error('Application model turn ended without completion');
+        if (isProviderContextOverflow(error)) {
           this.#observeTerminalFailure(error, {
             requestId: activeRequestId,
             provider: state.currentProviderId,
             model: state.agent.model,
-            tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
+            tier: resolveServiceTier(request),
           });
-          throw error;
+          throw new ProviderContextOverflowError(error);
         }
-        if (criticalWrapUp) {
-          return finish(stream, state, queue);
-        }
-        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
-        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-        await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
-        if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
-        if (state.toolExecution.pendingApprovals.length > 0) {
-          stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
-          return finish(stream, state, queue);
-        }
-        continue;
-      }
-      const finalCompletion = completion as Extract<StreamedModelTurnEvent, { type: 'completion' }>;
-      // A terminal response ends recovery, unlike partial tokens or tool
-      // activity. Later failures must not inherit an old episode's deadline.
-      state.recoveryBudget?.noteModelResponseCompleted();
-      // Commit the authoritative terminal state before handling terminal-only
-      // tool calls. Approval may pause immediately after this point, and the
-      // continuation must still carry the response that produced the calls.
-      // Response IDs are provider-chain state, not generic run metadata. Keep
-      // them out of continuation handles for providers that do not support
-      // chaining, while still exposing the completed provider response on the
-      // current stream for diagnostics.
-      if (state.supportsConversationChaining && state.currentProviderId !== undefined) {
-        state.responseId = finalCompletion.responseId;
-        state.responseProviderId = state.currentProviderId;
-      } else {
-        state.responseId = undefined;
-        state.responseProviderId = undefined;
-      }
-      let normalizedCompletionUsage: ReturnType<typeof normalizeModelUsage>;
-      const upstreamProvider = extractAiSdkUpstreamProvider(finalCompletion.providerMetadata);
-      if (finalCompletion.usage !== undefined) {
-        normalizedCompletionUsage = normalizeModelUsage(finalCompletion.usage);
-        if (upstreamProvider) {
-          if (normalizedCompletionUsage) {
-            normalizedCompletionUsage.upstream_provider = upstreamProvider;
-          } else {
-            normalizedCompletionUsage = { upstream_provider: upstreamProvider };
+        const recoverOversizedToolArgument =
+          isOversizedToolArgumentTrip(error) &&
+          (state.oversizedToolArgumentRecoveries ?? 0) < MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES &&
+          !options.signal?.aborted;
+        if (recoverOversizedToolArgument) requestSignal.abort();
+        else if (error instanceof GenerationGuardError) requestAbortController.abort();
+
+        const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
+          previousResponseId: activeRequest?.previousResponseId,
+        });
+        const rollbackProvisionalAttempt = (): void => {
+          stream.output.splice(outputLengthBefore);
+          if (stream.newItems !== stream.output) {
+            stream.newItems.splice(newItemsLengthBefore);
           }
-        }
-        if (normalizedCompletionUsage) {
-          if (normalizedCompletionUsage.prompt_tokens !== undefined) {
-            state.lastCompletedInputTokens = normalizedCompletionUsage.prompt_tokens;
-            state.inputUsageInvalidatedByCompaction = false;
+          if (provisionalTextDeltas > 0 || provisionalReasoningDeltas > 0) {
+            queue.push({
+              type: 'model_attempt_rollback',
+              textCharacters: provisionalTextCharacters,
+              reasoningCharacters: provisionalReasoningCharacters,
+              textDeltas: provisionalTextDeltas,
+              reasoningDeltas: provisionalReasoningDeltas,
+            });
           }
-          const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
-          state.usage = {
-            ...(accumulated.prompt_tokens !== undefined ? { inputTokens: accumulated.prompt_tokens } : {}),
-            ...(accumulated.completion_tokens !== undefined ? { outputTokens: accumulated.completion_tokens } : {}),
-            // `total_tokens` is the billable normalized total, including cache
-            // creation tokens. Keep it alongside the application aliases so the
-            // authoritative run accumulator never reconstructs a smaller total.
-            ...(accumulated.total_tokens !== undefined ? { totalTokens: accumulated.total_tokens } : {}),
-            ...(accumulated.cache_read_tokens !== undefined
-              ? { cachedInputTokens: accumulated.cache_read_tokens }
-              : {}),
-            ...(accumulated.cache_creation_tokens !== undefined
-              ? { cacheWriteTokens: accumulated.cache_creation_tokens }
-              : {}),
-          };
-        } else {
-          // Providers may carry a future/opaque usage shape. Preserve the old
-          // pass-through behavior when normalization cannot recognize it.
-          state.usage = finalCompletion.usage;
-        }
-      } else if (upstreamProvider) {
-        normalizedCompletionUsage = { upstream_provider: upstreamProvider };
-      } else {
-        normalizedCompletionUsage = undefined;
-      }
-      // Attribute cost while the dispatched request's identity is still known.
-      // Emit it immediately so the UI can show this request's cost before the
-      // run ends; the terminal result re-delivers the cumulative record list
-      // and the session accumulator ignores the duplicates by request id.
-      // Only the live queue sees the event: `output`/`newItems` feed
-      // persistence and replay, and a cost event must never become a restored
-      // history item.
-      const record = this.#appendCostRecord(state, {
-        requestId: activeRequestId,
-        provider: state.currentProviderId,
-        model: state.agent.model,
-        tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
-        outcome: 'completed',
-        usage: normalizedCompletionUsage,
-        providerUsd: finalCompletion.costUsd,
-      });
-      queue.push({ type: 'cost_update', record });
-      // Cost and usage arrive in the same completion metadata, so surface both
-      // live. The footer is a per-request indicator: emit this request's own
-      // usage, never the run accumulator in `state.usage`.
-      if (normalizedCompletionUsage) queue.push({ type: 'usage_update', usage: normalizedCompletionUsage });
-      this.#evaluateRunBudget(state, stream, queue);
-      stream.lastResponseId = finalCompletion.responseId;
-      stream.rawResponses?.push(finalCompletion);
-      // Some provider adapters report function calls only in the terminal
-      // completion rather than as separate stream events. Their reasoning may
-      // likewise be terminal-only, so associate it before replaying calls.
-      const toolCalls = [...streamedToolCalls];
-      const hasTerminalReasoning = finalCompletion.output.some(
-        (item) => item.type === 'reasoning' && appendNativeReasoning(undefined, item) !== undefined,
-      );
-      if (hasTerminalReasoning) {
-        // Terminal output supplies native ordering and authoritative metadata.
-        // Streamed fragments have already been displayed, but are not history.
-        pendingNativeReasoning = undefined;
-      } else {
-        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
-      }
-      for (const item of finalCompletion.output) {
-        if (item.type === 'reasoning') {
-          // Each terminal native item is independently replayable; encrypted
-          // reasoning cannot be concatenated or overwritten by its sibling.
-          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-          pendingNativeReasoning = appendNativeReasoning(undefined, item);
-          continue;
-        }
-        if (item.type === 'tool_call') {
-          pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-          if (!sawToolCall) toolCalls.push(item);
-          continue;
-        }
-        if (item.type !== 'provider_opaque') continue;
-        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-        const historyItem: ProviderInputItem = {
-          ...item.item,
-          providerOpaque: {
-            provider: item.provider,
-            ...(item.sourceProvider ? { sourceProvider: item.sourceProvider } : {}),
-          },
         };
-        state.history.push(historyItem);
-        state.input.push(item);
-        if (isOpenAICompaction(item)) {
-          // Completion usage describes the request before native replacement.
-          // Retain billed usage/costs; invalidate only the next admission hint.
-          state.lastCompletedInputTokens = undefined;
-          state.inputUsageInvalidatedByCompaction = true;
-        }
-        outputPush(stream, queue, { type: 'item', item });
-      }
-      sawToolCall = toolCalls.length > 0;
-      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
 
-      const assistantText = finalCompletion.output
-        .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')
-        .flatMap((item) => item.content)
-        // Whitespace-only output (e.g. a background-notification acknowledgment)
-        // must not enter the canonical history: the truthy check used to let
-        // "\n\n" through, accumulating junk in model context.
-        .map((part) => part.text)
-        .filter((text) => text.length > 0)
-        .join(ASSISTANT_TEXT_PART_SEPARATOR)
-        .trim();
-      if (assistantText) {
-        stream.finalOutput = assistantText;
-        const item: ProviderInputItem = {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: assistantText }],
-        };
-        state.history.push(item);
-        outputPush(stream, queue, { type: 'item', item });
-        state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
-      }
-
-      // Tool calls are dispatched only after the reasoning, provider-opaque,
-      // and assistant-text items from the same completion are committed. A
-      // response that carries both prose and a tool call must serialize as
-      // text -> function_call -> function_call_result; dispatching first left
-      // the text stranded after its own tool result, where the assistant
-      // message merger glued it onto the *next* turn's tool call and every
-      // request ended with a bare assistant message. Models read that as a
-      // turn truncated mid-sentence and restart instead of progressing.
-      if (!state.criticalWrapUpPending && toolCalls.length > 0) {
-        await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
-      }
-
-      if (state.toolExecution.terminateAfterExecution) return finish(stream, state, queue);
-
-      // A critical subagent gets exactly this final tool-free model call.
-      if (criticalWrapUp) return finish(stream, state, queue);
-
-      if (state.pendingRunBudgetInteraction && toolCalls.length > 0) {
-        return this.#pauseForRunBudgetInteraction(state, stream, queue);
-      }
-
-      if (state.toolExecution.pendingApprovals.length > 0) {
-        stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
-        return finish(stream, state, queue);
-      }
-      if (!sawToolCall) {
-        // The normal stop seam. A stop policy may keep the same run going; the
-        // reminder is admitted at the next request boundary, where pending
-        // budget evidence pauses first and turn accounting applies as usual.
-        const stopDecision =
-          options.onNormalStop && !options.signal?.aborted && !state.criticalWrapUpPending
-            ? options.onNormalStop(state.history, state.agent)
-            : undefined;
-        if (stopDecision) {
-          this.#deps.logDiagnostic?.(
-            'Normal stop policy decided',
-            { action: stopDecision.action, turnCount: state.turnCount, ...stopDecision.diagnostics },
-            { severity: 'debug', eventType: 'run_loop.normal_stop_policy' },
-          );
-        }
-        if (stopDecision?.action === 'continue') {
-          this.#queuePendingSystemNotice(stopDecision.reminder);
+        if (recoverOversizedToolArgument) {
+          // No tool ran: a call is dispatched only after its arguments
+          // complete. Discard the partial response and ask for smaller calls.
+          state.oversizedToolArgumentRecoveries = (state.oversizedToolArgumentRecoveries ?? 0) + 1;
+          state.input.splice(inputLengthBefore);
+          state.history.splice(historyLengthBefore);
+          state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
+          rollbackProvisionalAttempt();
+          this.#deps.logDiagnostic?.('Recovering oversized tool argument in run loop', {
+            code: (error as GenerationGuardError).code,
+            recovery: state.oversizedToolArgumentRecoveries,
+            maxRecoveries: MAX_OVERSIZED_TOOL_ARGUMENT_RECOVERIES,
+          });
+          this.#queuePendingSystemNotice(oversizedToolArgumentNotice((error as GenerationGuardError).message));
+          this.#admitPendingSteers(state, stream, queue);
           continue;
         }
-        if (stopDecision?.terminalCause) state.terminalCause = stopDecision.terminalCause;
-        // Evidence discovered when a response has already completed needs no
-        // human boundary: there is no later request or tool to block.
-        state.pendingRunBudgetInteraction = undefined;
-        return finish(stream, state, queue);
+
+        if (decision.retryable && !options.signal?.aborted) {
+          attempt++;
+          state.input.splice(inputLengthBefore);
+          state.history.splice(historyLengthBefore);
+          state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
+          rollbackProvisionalAttempt();
+          if (decision.kind === 'chain_recovery') {
+            state.disableChainingForAttempt = true;
+            state.responseId = undefined;
+            state.responseProviderId = undefined;
+          }
+          this.#deps.logDiagnostic?.('Retrying model request in run loop', {
+            attempt,
+            maxRetries,
+            kind: decision.kind,
+            delayMs: decision.delayMs,
+            error: describeError(error),
+          });
+          await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
+          continue;
+        }
+
+        // Session recovery owns full-history rebuild for a chained delta.
+        // Retract this cycle's provisional tokens so a later chain_recovery
+        // does not append a second answer after a half-sentence.
+        if (!decision.retryable && decision.reason === 'chained_delta_not_self_contained') {
+          rollbackProvisionalAttempt();
+        }
+
+        // Dispatch began, but no terminal completion was accepted. Record an
+        // unpriced marker so the summary stays honest (partial) rather than
+        // appearing exact. Observational only: the error still propagates.
+        const cancelled = error instanceof Error && error.name === 'AbortError';
+        const record = this.#appendCostRecord(state, {
+          requestId,
+          provider: state.currentProviderId,
+          model: state.agent.model,
+          tier: resolveServiceTier(request),
+          outcome: cancelled ? 'cancelled' : 'failed',
+        });
+        // Only the live queue sees cost records: `output`/`newItems` feed
+        // persistence and replay, and a cost event must never become a
+        // restored history item.
+        queue.push({ type: 'cost_update', record });
+        this.#evaluateRunBudget(state, stream, queue);
+        this.#observeTerminalFailure(error, {
+          requestId,
+          provider: state.currentProviderId,
+          model: state.agent.model,
+          tier: resolveServiceTier(request),
+        });
+        throw error;
+      } finally {
+        options.signal?.removeEventListener('abort', abortRequest);
       }
     }
+
+    return {
+      streamedToolCalls,
+      completion,
+      sawToolCall,
+      activeRequestId,
+      activeRequest,
+      pendingNativeReasoning,
+      deferredNativeReasoning,
+      criticalWrapUp,
+    };
+  }
+
+  /** Accept response facts before any tool from that response can execute. */
+  #recordResponse(context: RunContext, response: ModelExchange): ModelToolCall[] {
+    const { state, stream, queue } = context;
+    const {
+      streamedToolCalls,
+      completion,
+      sawToolCall,
+      activeRequestId,
+      activeRequest,
+      deferredNativeReasoning,
+      criticalWrapUp,
+    } = response;
+    let { pendingNativeReasoning } = response;
+    if (!completion) {
+      if (streamedToolCalls.length === 0) {
+        const error = new Error('Application model turn ended without completion');
+        this.#observeTerminalFailure(error, {
+          requestId: activeRequestId,
+          provider: state.currentProviderId,
+          model: state.agent.model,
+          tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
+        });
+        throw error;
+      }
+      if (!criticalWrapUp) {
+        for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
+        commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+      }
+      return criticalWrapUp ? [] : streamedToolCalls;
+    }
+    const finalCompletion = completion as Extract<StreamedModelTurnEvent, { type: 'completion' }>;
+    // A terminal response ends recovery, unlike partial tokens or tool
+    // activity. Later failures must not inherit an old episode's deadline.
+    state.recoveryBudget?.noteModelResponseCompleted();
+    // Commit the authoritative terminal state before handling terminal-only
+    // tool calls. Approval may pause immediately after this point, and the
+    // continuation must still carry the response that produced the calls.
+    // Response IDs are provider-chain state, not generic run metadata. Keep
+    // them out of continuation handles for providers that do not support
+    // chaining, while still exposing the completed provider response on the
+    // current stream for diagnostics.
+    if (state.supportsConversationChaining && state.currentProviderId !== undefined) {
+      state.responseId = finalCompletion.responseId;
+      state.responseProviderId = state.currentProviderId;
+    } else {
+      state.responseId = undefined;
+      state.responseProviderId = undefined;
+    }
+    let normalizedCompletionUsage: ReturnType<typeof normalizeModelUsage>;
+    const upstreamProvider = extractAiSdkUpstreamProvider(finalCompletion.providerMetadata);
+    if (finalCompletion.usage !== undefined) {
+      normalizedCompletionUsage = normalizeModelUsage(finalCompletion.usage);
+      if (upstreamProvider) {
+        if (normalizedCompletionUsage) {
+          normalizedCompletionUsage.upstream_provider = upstreamProvider;
+        } else {
+          normalizedCompletionUsage = { upstream_provider: upstreamProvider };
+        }
+      }
+      if (normalizedCompletionUsage) {
+        if (normalizedCompletionUsage.prompt_tokens !== undefined) {
+          state.lastCompletedInputTokens = normalizedCompletionUsage.prompt_tokens;
+          state.inputUsageInvalidatedByCompaction = false;
+        }
+        const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
+        state.usage = {
+          ...(accumulated.prompt_tokens !== undefined ? { inputTokens: accumulated.prompt_tokens } : {}),
+          ...(accumulated.completion_tokens !== undefined ? { outputTokens: accumulated.completion_tokens } : {}),
+          // `total_tokens` is the billable normalized total, including cache
+          // creation tokens. Keep it alongside the application aliases so the
+          // authoritative run accumulator never reconstructs a smaller total.
+          ...(accumulated.total_tokens !== undefined ? { totalTokens: accumulated.total_tokens } : {}),
+          ...(accumulated.cache_read_tokens !== undefined ? { cachedInputTokens: accumulated.cache_read_tokens } : {}),
+          ...(accumulated.cache_creation_tokens !== undefined
+            ? { cacheWriteTokens: accumulated.cache_creation_tokens }
+            : {}),
+        };
+      } else {
+        // Providers may carry a future/opaque usage shape. Preserve the old
+        // pass-through behavior when normalization cannot recognize it.
+        state.usage = finalCompletion.usage;
+      }
+    } else if (upstreamProvider) {
+      normalizedCompletionUsage = { upstream_provider: upstreamProvider };
+    } else {
+      normalizedCompletionUsage = undefined;
+    }
+    // Attribute cost while the dispatched request's identity is still known.
+    // Emit it immediately so the UI can show this request's cost before the
+    // run ends; the terminal result re-delivers the cumulative record list
+    // and the session accumulator ignores the duplicates by request id.
+    // Only the live queue sees the event: `output`/`newItems` feed
+    // persistence and replay, and a cost event must never become a restored
+    // history item.
+    const record = this.#appendCostRecord(state, {
+      requestId: activeRequestId,
+      provider: state.currentProviderId,
+      model: state.agent.model,
+      tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
+      outcome: 'completed',
+      usage: normalizedCompletionUsage,
+      providerUsd: finalCompletion.costUsd,
+    });
+    queue.push({ type: 'cost_update', record });
+    // Cost and usage arrive in the same completion metadata, so surface both
+    // live. The footer is a per-request indicator: emit this request's own
+    // usage, never the run accumulator in `state.usage`.
+    if (normalizedCompletionUsage) queue.push({ type: 'usage_update', usage: normalizedCompletionUsage });
+    this.#evaluateRunBudget(state, stream, queue);
+    stream.lastResponseId = finalCompletion.responseId;
+    stream.rawResponses?.push(finalCompletion);
+    // Some provider adapters report function calls only in the terminal
+    // completion rather than as separate stream events. Their reasoning may
+    // likewise be terminal-only, so associate it before replaying calls.
+    const toolCalls = [...streamedToolCalls];
+    const hasTerminalReasoning = finalCompletion.output.some(
+      (item) => item.type === 'reasoning' && appendNativeReasoning(undefined, item) !== undefined,
+    );
+    if (hasTerminalReasoning) {
+      // Terminal output supplies native ordering and authoritative metadata.
+      // Streamed fragments have already been displayed, but are not history.
+      pendingNativeReasoning = undefined;
+    } else {
+      for (const reasoning of deferredNativeReasoning) commitPendingNativeReasoning(state, stream, queue, reasoning);
+    }
+    for (const item of finalCompletion.output) {
+      if (item.type === 'reasoning') {
+        // Each terminal native item is independently replayable; encrypted
+        // reasoning cannot be concatenated or overwritten by its sibling.
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+        pendingNativeReasoning = appendNativeReasoning(undefined, item);
+        continue;
+      }
+      if (item.type === 'tool_call') {
+        pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+        if (!sawToolCall) toolCalls.push(item);
+        continue;
+      }
+      if (item.type !== 'provider_opaque') continue;
+      pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+      const historyItem: ProviderInputItem = {
+        ...item.item,
+        providerOpaque: {
+          provider: item.provider,
+          ...(item.sourceProvider ? { sourceProvider: item.sourceProvider } : {}),
+        },
+      };
+      state.history.push(historyItem);
+      state.input.push(item);
+      if (isOpenAICompaction(item)) {
+        // Completion usage describes the request before native replacement.
+        // Retain billed usage/costs; invalidate only the next admission hint.
+        state.lastCompletedInputTokens = undefined;
+        state.inputUsageInvalidatedByCompaction = true;
+      }
+      outputPush(stream, queue, { type: 'item', item });
+    }
+    pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+
+    const assistantText = finalCompletion.output
+      .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')
+      .flatMap((item) => item.content)
+      // Whitespace-only output (e.g. a background-notification acknowledgment)
+      // must not enter the canonical history: the truthy check used to let
+      // "\n\n" through, accumulating junk in model context.
+      .map((part) => part.text)
+      .filter((text) => text.length > 0)
+      .join(ASSISTANT_TEXT_PART_SEPARATOR)
+      .trim();
+    if (assistantText) {
+      stream.finalOutput = assistantText;
+      const item: ProviderInputItem = {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: assistantText }],
+      };
+      state.history.push(item);
+      outputPush(stream, queue, { type: 'item', item });
+      state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
+    }
+
+    return toolCalls;
+  }
+
+  /** Execute and settle one tool plan; approvals suspend this operation in place. */
+  async #executeTools(context: RunContext, response: ModelExchange, calls: readonly ModelToolCall[]): Promise<boolean> {
+    let { state, stream, queue, options, toolContext } = context;
+    if (response.criticalWrapUp) return true;
+    if (!state.criticalWrapUpPending && calls.length > 0) {
+      await this.#dispatchToolCalls(state, stream, queue, calls, toolContext);
+    }
+    if (state.toolExecution.terminateAfterExecution) return true;
+    if (calls.length === 0) return false;
+    while (state.pendingRunBudgetInteraction || state.toolExecution.pendingApprovals.length > 0) {
+      if (await this.#waitForBudget(context)) return true;
+      ({ state, stream, queue, options, toolContext } = context);
+      let answeredApproval = false;
+      if (state.toolExecution.pendingApprovals.length > 0) {
+        stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
+        await this.#waitForDecision(context);
+        ({ state, stream, queue, options, toolContext } = context);
+        if (state.approvalDecision) {
+          state.toolExecution.resolveApproval(
+            { callId: state.approvalDecisionCallId, interruption: state.approvalDecisionInterruption },
+            state.approvalDecision,
+            state.approvalMessage,
+            state.approvals,
+          );
+          state.approvalDecision = undefined;
+          state.approvalDecisionCallId = undefined;
+          state.approvalDecisionInterruption = undefined;
+          state.approvalMessage = undefined;
+          answeredApproval = true;
+        }
+      }
+      this.#assertLive(context);
+      if (state.toolExecution.hasPlan) {
+        await state.toolExecution.settle(this.#toolCallContext(state, stream, queue, toolContext));
+      }
+      stream.interruptions = state.toolExecution.pendingApprovals.map((item) => item.interruption);
+      if (answeredApproval && options.stopAfterApprovalResolution && stream.interruptions.length === 0) return true;
+      if (state.toolExecution.terminateAfterExecution) return true;
+    }
+    return false;
+  }
+
+  /** Normal no-tool completion; only an explicit stop-policy continuation repeats. */
+  #finishTurn(context: RunContext): boolean {
+    const { state, options } = context;
+    // The normal stop seam. A stop policy may keep the same run going; the
+    // reminder is admitted at the next request boundary, where pending
+    // budget evidence pauses first and turn accounting applies as usual.
+    const stopDecision =
+      options.onNormalStop && !options.signal?.aborted && !state.criticalWrapUpPending
+        ? options.onNormalStop(state.history, state.agent)
+        : undefined;
+    if (stopDecision) {
+      this.#deps.logDiagnostic?.(
+        'Normal stop policy decided',
+        { action: stopDecision.action, turnCount: state.turnCount, ...stopDecision.diagnostics },
+        { severity: 'debug', eventType: 'run_loop.normal_stop_policy' },
+      );
+    }
+    if (stopDecision?.action === 'continue') {
+      this.#queuePendingSystemNotice(stopDecision.reminder);
+      return false;
+    }
+    if (stopDecision?.terminalCause) state.terminalCause = stopDecision.terminalCause;
+    // Evidence discovered when a response has already completed needs no
+    // human boundary: there is no later request or tool to block.
+    state.pendingRunBudgetInteraction = undefined;
+    return true;
   }
 
   async #dispatchToolCalls(
@@ -1788,13 +1857,6 @@ export class ApplicationRunLoop {
 
   #requiresHumanBudgetDecision(event: RunBudgetEvent): boolean {
     return event.type === 'tool_stall' || (event.type === 'budget_stage' && event.stage !== 'soft');
-  }
-
-  #pauseForRunBudgetInteraction(state: RunState, stream: AgentStream, queue: EventQueue): unknown {
-    const interaction = state.pendingRunBudgetInteraction;
-    if (!interaction) return finish(stream, state, queue);
-    stream.interruptions = [interaction];
-    return finish(stream, state, queue);
   }
 }
 

@@ -120,6 +120,13 @@ export interface TurnWorkflowDeps {
   toolCallMarkers?: ToolCallMarkerStore;
 }
 
+type TurnDecision =
+  | { kind: 'approval'; init: ContinuationInit; policy?: ApprovalDecisionPolicy }
+  | { kind: 'post_execute' };
+type TurnPause = { type: 'turn_wait'; outcome: TurnOutcome };
+type WorkflowOperation<Result> = AsyncGenerator<ConversationEvent | TurnPause, Result, void>;
+type TurnTask = WorkflowOperation<TurnOutcome>;
+
 export class TurnWorkflow {
   /**
    * Graph registry pinned for the active turn. Re-resolved from the client at
@@ -132,6 +139,8 @@ export class TurnWorkflow {
   readonly #toolCallMarkers: ToolCallMarkerStore;
   readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
   #liveRun: LiveRun<ConversationEvent, LiveRunResult> | null = null;
+  #turnTask: TurnTask | null = null;
+  #decision: TurnDecision | undefined;
   #nextLiveRunId = 0;
   #hookTurnId: string | undefined;
   /**
@@ -235,14 +244,16 @@ export class TurnWorkflow {
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    // Fresh-turn boundary: follow a mid-session rebuild. Continuations
-    // deliberately do not re-sync — a pending approval resolves against the
-    // graph that produced its interruption.
     this.#syncPolicyRegistry();
+    if (this.#turnTask) throw new Error('A conversation turn is already active');
+    this.#turnTask = this.#runConversationTurn(attemptOrInput, options);
+    return yield* this.#observeTurn();
+  }
+
+  /** One logical turn stays on this stack while observers answer its gates. */
+  async *#runConversationTurn(input: TurnAttempt | string | UserTurn, options: InitialTurnRunOptions): TurnTask {
     try {
-      const outcome = yield* this.#executeInitialBody(attemptOrInput, options);
-      // A returned outcome ends the failure episode even when the turn itself
-      // failed; only a thrown error keeps the episode (and the suppression) alive.
+      const outcome = yield* this.#executeInitialBody(input, options);
       this.#compactionFailureNotified = false;
       return outcome;
     } catch (error) {
@@ -255,46 +266,81 @@ export class TurnWorkflow {
     }
   }
 
+  /** Public calls reconnect to the task; they never reconstruct its position. */
+  async *#observeTurn(decision?: TurnDecision): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    const task = this.#turnTask;
+    if (!task) throw new Error('No conversation turn is waiting');
+    let waiting = false;
+    try {
+      this.#decision = decision;
+      let next = await task.next();
+      while (!next.done) {
+        if (next.value.type === 'turn_wait') {
+          waiting = true;
+          this.#compactionFailureNotified = false;
+          return next.value.outcome;
+        }
+        yield next.value;
+        next = await task.next();
+      }
+      return next.value;
+    } finally {
+      // A returned approval view leaves its frame alive. An abandoned observer
+      // closes it, just as yield* used to close the delegated operation.
+      if (!waiting && this.#turnTask === task) {
+        this.#turnTask = null;
+        await task.return({ kind: 'stale' });
+      }
+    }
+  }
+
+  async *#waitForApproval(outcome: TurnOutcome): WorkflowOperation<TurnDecision> {
+    yield { type: 'turn_wait', outcome };
+    const decision = this.#decision;
+    this.#decision = undefined;
+    if (!decision) throw new Error('A waiting turn requires a decision');
+    return decision;
+  }
+
   async *#executeInitialBody(
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+  ): WorkflowOperation<TurnOutcome> {
     let currentInput: TurnAttempt | string | UserTurn = attemptOrInput;
     let currentOptions = options;
 
     while (true) {
-      const initialOutcome = yield* this.executeInitialAttempt(currentInput, currentOptions);
-
-      if (initialOutcome.kind !== 'abort_resolution_required' && initialOutcome.kind !== 'auto_approval_required') {
-        return initialOutcome as TurnOutcome;
-      }
-
-      const generation = initialOutcome.generation;
-      let driveResult: InternalTurnOutcome;
-      if (initialOutcome.kind === 'abort_resolution_required') {
-        driveResult = yield* this.executeContinuationAttempt(
-          {
+      let driveResult = yield* this.executeInitialAttempt(currentInput, currentOptions);
+      let generation = 'generation' in driveResult ? driveResult.generation : currentOptions.token;
+      while (
+        driveResult.kind === 'abort_resolution_required' ||
+        driveResult.kind === 'auto_approval_required' ||
+        driveResult.kind === 'approval_required'
+      ) {
+        let init: ContinuationInit;
+        let policy: ApprovalDecisionPolicy | undefined;
+        if (driveResult.kind === 'approval_required') {
+          const decision = yield* this.#waitForApproval(driveResult);
+          if (decision.kind === 'post_execute') {
+            driveResult = yield* this.#continuePostExecuteRun();
+            continue;
+          }
+          init = decision.init;
+          policy = decision.policy;
+        } else if (driveResult.kind === 'abort_resolution_required') {
+          init = {
             kind: 'abort_resolution',
-            abortedContext: initialOutcome.abortedContext,
-            userText: initialOutcome.userText,
-            generation,
-          },
-          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-        );
-      } else {
-        driveResult = yield* this.executeContinuationAttempt(
-          {
-            kind: 'approval_decision',
-            answer: 'y',
-            generation,
-          },
-          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-        );
+            abortedContext: driveResult.abortedContext,
+            userText: driveResult.userText,
+            generation: driveResult.generation,
+          };
+        } else {
+          init = { kind: 'approval_decision', answer: 'y', generation: driveResult.generation };
+        }
+        generation = init.generation;
+        driveResult = yield* this.executeContinuationAttempt(init, policy);
       }
-
-      if (driveResult.kind !== 'fresh_start_required') {
-        return driveResult as TurnOutcome;
-      }
+      if (driveResult.kind !== 'fresh_start_required') return driveResult;
 
       currentInput = { text: '' };
       currentOptions = {
@@ -313,40 +359,12 @@ export class TurnWorkflow {
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    try {
-      const outcome = yield* this.#executeContinuationBodyImpl(init, policy);
-      // A returned outcome ends the failure episode (see executeInitial).
-      this.#compactionFailureNotified = false;
-      return outcome;
-    } catch (error) {
-      const failure = contextCompactionFailureCategory(error);
-      if (failure) {
-        const event = this.#compactionFailureEvent(failure);
-        if (event) yield event;
-      }
-      throw error;
-    }
-  }
-
-  async *#executeContinuationBodyImpl(
-    init: ContinuationInit,
-    policy?: ApprovalDecisionPolicy,
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    if (this.#liveRun) {
-      return yield* this.#continuePostExecuteRun();
-    }
-    const driveResult = yield* this.executeContinuationAttempt(init, policy);
-
-    if (driveResult.kind !== 'fresh_start_required') {
-      return driveResult as TurnOutcome;
-    }
-
-    return yield* this.#replayFromFreshStart(init.generation, driveResult);
+    return yield* this.#observeTurn({ kind: 'approval', init, policy });
   }
 
   /** Re-observe an already-running post-execute stream without involving SDK approvals. */
   async *continuePostExecute(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    return yield* this.#continuePostExecuteRun();
+    return yield* this.#observeTurn({ kind: 'post_execute' });
   }
 
   #freshStartReplayOptions(
@@ -367,14 +385,15 @@ export class TurnWorkflow {
   async *#replayFromFreshStart(
     generation: number,
     result: Extract<InternalTurnOutcome, { kind: 'fresh_start_required' }>,
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    return yield* this.executeInitial({ text: '' }, this.#freshStartReplayOptions(generation, result));
+  ): WorkflowOperation<TurnOutcome> {
+    this.#syncPolicyRegistry();
+    return yield* this.#executeInitialBody({ text: '' }, this.#freshStartReplayOptions(generation, result));
   }
 
   async *executeInitialAttempt(
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
-  ): AsyncGenerator<ConversationEvent, InternalTurnOutcome, void> {
+  ): WorkflowOperation<InternalTurnOutcome> {
     let attempt: TurnAttempt;
     if (attemptOrInput instanceof TurnAttempt) {
       attempt = attemptOrInput;
@@ -738,7 +757,7 @@ export class TurnWorkflow {
     ];
   }
 
-  async *#continuePostExecuteRun(): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+  async *#continuePostExecuteRun(): WorkflowOperation<TurnOutcome> {
     const liveRun = this.#liveRun;
     if (!liveRun) {
       throw new Error('No live post-execute run active to continue.');
@@ -875,11 +894,27 @@ export class TurnWorkflow {
     });
   }
 
+  async *#answerPendingApproval(
+    outcome: TurnOutcome,
+    state: ContinuationState,
+  ): WorkflowOperation<{ init: ContinuationInit; policy?: ApprovalDecisionPolicy }> {
+    const decision = yield* this.#waitForApproval(outcome);
+    if (decision.kind !== 'approval') throw new Error('Expected a tool or budget decision');
+    const prepared = this.deps.planApplier.prepareInit(decision.init);
+    state.currentState = prepared.state;
+    state.source = prepared.source;
+    state.inputMode = prepared.inputMode ?? state.inputMode;
+    state.previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
+    state.currentCallIds = this.#activeCallIdsForInit(decision.init, prepared);
+    yield* this.deps.planApplier.applyInitialSetup(prepared, state);
+    return { init: decision.init, policy: decision.policy };
+  }
+
   async *executeContinuationAttempt(
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
-  ): AsyncGenerator<ConversationEvent, InternalTurnOutcome, void> {
-    const activePolicy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
+  ): WorkflowOperation<InternalTurnOutcome> {
+    let activePolicy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
 
     if (!this.deps.generationGuard.isCurrent(init.generation)) {
       return { kind: 'stale' };
@@ -903,7 +938,13 @@ export class TurnWorkflow {
             return { kind: 'stale' };
           }
           if (batchDecision.kind === 'approval_required') {
-            return { kind: 'approval_required', terminal: batchDecision.terminal };
+            const answer = yield* this.#answerPendingApproval(
+              { kind: 'approval_required', terminal: batchDecision.terminal },
+              state,
+            );
+            init = answer.init;
+            activePolicy = answer.policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
+            continue;
           }
 
           const previousInputForSurge =
@@ -939,7 +980,11 @@ export class TurnWorkflow {
             previousInputForSurge,
           );
           if (approvalResult.action === 'return') {
-            return approvalResult.result;
+            if (approvalResult.result.kind !== 'approval_required') return approvalResult.result;
+            const answer = yield* this.#answerPendingApproval(approvalResult.result, state);
+            init = answer.init;
+            activePolicy = answer.policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
+            continue;
           }
           if (approvalResult.action === 'loop') {
             yield* this.deps.planApplier.applyNextPlan(
@@ -1313,16 +1358,16 @@ export class TurnWorkflow {
   }
 
   abortLiveRun(): Promise<void> {
+    const task = this.#turnTask;
+    this.#turnTask = null;
+    // Return closes a suspended approval frame. In-flight work still needs its
+    // existing provider/tool cancellation proof before replacement may start.
+    const taskCompletion = task?.return({ kind: 'stale' });
     const liveRun = this.#liveRun;
     this.#liveRun = null;
     liveRun?.cancel();
     this.deps.setActivePostExecuteRunId?.(null);
-    return (
-      liveRun?.completion.then(
-        () => undefined,
-        () => undefined,
-      ) ?? Promise.resolve()
-    );
+    return Promise.allSettled([taskCompletion, liveRun?.completion]).then(() => undefined);
   }
 
   get activePostExecuteRunId(): string | null {

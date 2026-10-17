@@ -1505,8 +1505,9 @@ export class AgentClient {
 
   async continueRunStream(state: ContinuationHandle, options: ChainedRunOptions = {}): Promise<AgentStream> {
     this.#subagentBridge?.resetAbortController();
-    // The turn is resuming, not ending: keep anything waiting for this segment.
-    this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
+    // Reconnect to the suspended task. Transport cleanup may reset client
+    // bookkeeping, but aborting the loop here would destroy its approval wait.
+    this.#abortActiveWork(() => undefined);
     const provider = this.#agentConfig.getProvider();
     if (options.sessionId) this.#lastLogicalSessionId = options.sessionId;
     const supportsChaining = this.supportsConversationChaining();

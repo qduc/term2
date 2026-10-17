@@ -3,12 +3,12 @@
 ## Resume here
 
 **Status: COMPLETE — compile-time enforcement, runtime exercise, suites and
-independent verification all done; committed.**
-Branch `rc-tool-schemas`, worktree `.worktrees/rc-tool-schemas`.
-`pnpm typecheck` is clean (0 errors, was 43 at the enforcement checkpoint) and
-`pnpm exec prettier --check .` is clean; `pnpm lint` reports 0 errors / 31
-pre-existing warnings. 24 files modified (including this doc), nothing committed
-yet (branch head is the WIP commit `77add90d`).
+independent verification all done; merged into `main`.**
+Commit `26ac5635` on `rc-tool-schemas` (34 files), merged as `ef99e3ac`; the
+worktree and branch are removed. `pnpm typecheck` is clean (0 errors, was 43 at
+the enforcement checkpoint) and `pnpm exec prettier --check .` is clean;
+`pnpm lint` reports 0 errors / 31 pre-existing warnings. Re-verified on `main`
+after the merge.
 
 **Goal (user's words).** `run_code` must tell the agent the input *and* output
 schema of every tool available, so the agent does not misuse tools; and a tool
@@ -16,8 +16,7 @@ must expose its schema to `run_code` such that adding or changing a tool cannot
 silently omit it — **the compiler fails loudly**. Method is the implementer's
 choice. The work must be finished, not just designed.
 
-**Remaining step: integrate the branch** (commit is in place). Record of what
-was verified, in order:
+Record of what was verified, in order:
 
 1. **Runtime exercise — DONE (passed).** See "Runtime exercise evidence" below.
 2. **Suites — DONE.** `pnpm test:provider-black-box`: 22 files, 202 passed,
@@ -29,10 +28,12 @@ was verified, in order:
    and unrelated (shell approval heuristic classification of `rm`: "command is
    YELLOW (suspicious) and no auto-approve model is configured"). Not addressed
    here.
-3. Independent verifier for schema-vs-behaviour accuracy (high-risk change per
-   the repo policy); record the verdict here.
-4. Commit on the branch (standing user preference), then integrate and clean up
-   the worktree per `docs/agent-context.md#parallel-work-isolation`.
+3. **Independent verifier — DONE (passed, with a recorded caveat).** See
+   "Independent verifier verdict" below.
+4. **Commit and integrate — DONE.** Committed as `26ac5635`, merged into `main`
+   as `ef99e3ac` with `--no-ff`, then `git worktree remove` and
+   `git branch -d rc-tool-schemas` per
+   `docs/agent-context.md#parallel-work-isolation`.
 
 ## Design as implemented (settled — do not re-derive)
 

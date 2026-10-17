@@ -1,5 +1,53 @@
 # Term2 Guard Ledger and Remediation Plan
 
+## Gemini rate-limit retry hints (2026-10-17)
+
+Incident: the 17:08 local log records Gemini asking for 39.676606339 seconds,
+while in-loop recovery waited 454ms and 903ms and exhausted its two retries.
+The shared policy read `headers`, but the Google AI SDK exposes
+`responseHeaders` and raw `responseBody` containing `google.rpc.RetryInfo`.
+
+Contract: `getRetryAfterMs` normalizes numeric Retry-After response headers,
+then structured Google RetryInfo, then a Google-documentation-linked retry
+message. Nonnegative finite seconds round upward to safe integer milliseconds;
+malformed hints retain existing backoff. `classifyUpstreamRetryableError`
+applies the existing 60-second reasonable-wait ceiling to classified HTTP 429
+errors across SDK/generic/provider-status paths. Exactly 60 seconds is eligible;
+greater delays are refused, not shortened. Transient classification must not
+override that refusal through its generic status fallback.
+
+Class: retry containment/recovery. Enforcement owner: shared upstream policy;
+recovery owners: RetryingModel, in-loop recovery and session retry classifier.
+The provider delay is direct scheduling evidence, not proof of a permanent
+billing failure. Legitimate longer cooldowns surface the original error for
+later manual retry. No new configuration, precedence, clamping, persisted
+migration, fallback or provider-continuity change. Existing retry counts,
+remaining recovery-time checks, cancellation and committed-output protections
+remain authoritative. No tool effect is replayed by this normalization.
+Existing retry diagnostics expose attempt and effective delay; no new payload
+logging is introduced. Rollback is the shared hint parsing/cap and the transient
+refusal check together.
+
+Red proof: focused `provider-contract.test.ts` baseline passed 26 tests; the
+added loopback HTTP/real Google SDK matrix failed seven of nine cases before
+the production repair. After repair, all 35 focused tests and typecheck passed,
+independently repeated by a separate verifier. Cases cover fractional hints,
+59.999/60/60.001 seconds, 120 seconds, invalid/negative hints, message fallback
+and SDK response headers. Sleep injection checks scheduling without a real
+minute-long wait. Cancellation/budget/partial-output safeguards were inspected,
+not newly fault-injected. Broader gate outcomes are recorded in the experiment
+task ledger.
+
+Retro: preventable boundary-contract gap, origin unknown. Header-only delay
+extraction silently discarded the SDK's scheduling metadata. Timing assumptions
+and a missing real-Google-error regression made rapid retries look correct.
+One shared normalization point and a category matrix protect both the run-loop
+and provider wrapper; all shared classification callers were inspected. No
+duplicate setting/state, implicit persistence coupling or migration applies.
+Static typing alone cannot validate external error bodies. Existing retry logs
+made the mismatch observable once inspected; no additional broad mechanism is
+needed for this bounded repair.
+
 Opt-in workflow evolution decision admission is documented in
 [workflow-evolution.md](../workflow-evolution.md), with enforcement in
 `applyEvent` in `services/workflow-evolution/experiment.ts`. It retains the

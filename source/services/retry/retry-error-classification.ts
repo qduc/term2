@@ -454,6 +454,9 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
   }
 
   const upstream = classifyUpstreamRetryableError(error);
+  if (upstream.reason === 'long-retry-delay') {
+    return false;
+  }
   if (upstream.retryable) {
     return true;
   }

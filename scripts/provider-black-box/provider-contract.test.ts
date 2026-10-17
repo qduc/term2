@@ -9,6 +9,8 @@ import {
 import '../../source/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../source/providers/openai-compatible.provider.js';
 import { RetryingModel } from '../../source/providers/retrying-model.js';
+import { classifyInLoopModelRetry } from '../../source/services/retry/in-loop-model-retry.js';
+import { isTransientRetryableError } from '../../source/services/retry/retry-error-classification.js';
 import type { ILoggingService, ISettingsService } from '../../source/services/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { readFixtureEnvelope } from './fixture-envelope.js';
@@ -88,6 +90,82 @@ afterEach(async () => {
 });
 
 describe('provider boundary contracts through the registry', () => {
+  it.each([
+    { retryDelay: '39.676606339s', expected: 39677 },
+    { retryDelay: '59.999s', expected: 59999 },
+    { retryDelay: '60s', expected: 60000 },
+    { retryDelay: '60.001s', expected: undefined },
+    { retryDelay: '120s', expected: undefined },
+    { retryDelay: '-1s', expected: 500 },
+    { retryDelay: 'not-a-duration', expected: 500 },
+    {
+      message: 'Quota exceeded. https://ai.google.dev/gemini-api/docs/rate-limits. Please retry in 9.592042673s.',
+      expected: 9593,
+    },
+    { retryAfter: '2.5', expected: 2500 },
+  ])('honors bounded Google quota delays through the real SDK: %j', async ({ expected, ...googleRateLimit }) => {
+    const providerCase = providerCases[3]!;
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'google', googleRateLimit });
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const providerModel = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    let failure: unknown;
+    try {
+      await collect(providerModel.stream(requestFor(providerCase)));
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeDefined();
+    const decision = classifyInLoopModelRetry(failure, 0, 2, () => 0.5);
+    expect(isTransientRetryableError(failure)).toBe(expected !== undefined);
+    if (expected === undefined) {
+      expect(decision.retryable).toBe(false);
+      const model = new RetryingModel(
+        {
+          ...providerModel,
+          async *stream() {
+            throw failure;
+          },
+        },
+        {
+          retryAttempts: 1,
+          sleep: async () => {
+            throw new Error('must not sleep');
+          },
+        },
+      );
+      await expect(collect(model.stream(requestFor(providerCase)))).rejects.toBe(failure);
+      expect(server.requests).toHaveLength(1);
+      return;
+    }
+    expect(decision).toMatchObject({ retryable: true, delayMs: expected });
+    const delays: number[] = [];
+    let attempts = 0;
+    const model = new RetryingModel(
+      {
+        ...providerModel,
+        async *stream(request) {
+          if (attempts++ === 0) throw failure;
+          yield* providerModel.stream(request);
+        },
+      },
+      {
+        retryAttempts: 1,
+        random: () => 0,
+        sleep: async (ms) => {
+          delays.push(ms);
+        },
+      },
+    );
+    const events = await collect(model.stream(requestFor(providerCase)));
+    // Invalid hints retain the provider wrapper's existing randomized fallback.
+    expect(delays).toEqual([expected === 500 ? 0 : expected]);
+    expect(events.at(-1)).toMatchObject({ type: 'completion' });
+    expect(server.requests).toHaveLength(2);
+  });
   it('keeps the built-in registry surface available', () => {
     for (const id of ['openai', 'openrouter']) {
       expect(getProvider(id)?.createStreamedModel, id).toBeTypeOf('function');

@@ -80,7 +80,7 @@ Final ownership/cancellation boundary:
 Final rebuilt provider matrix: **204 passed, 1 skipped** (24 files). Final rebuilt
 e2e: **31 passed**. Static guards: **28 passed**. Typecheck, build, lint and
 no-unit-tests gate pass; lint retains 31 existing warnings. Final source hashes
-match the independent manifest. Integration final rerun is recorded below.
+match the independent manifest. Final integration rerun: **121 passed, 1 skipped** (15 passed files, 1 skipped). All final suites cover the source identified by the independent manifest. Logs have only trailing blank lines normalized.
 
 Two intermediate reruns failed: provider-error CLI timeout during concurrent
 checks, and a first-frame timeout assertion in the fake Codex e2e. A later e2e
